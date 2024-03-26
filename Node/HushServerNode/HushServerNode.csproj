@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.26.0" />
+    <PackageReference Include="Grpc" Version="2.46.6" />
+    <PackageReference Include="Grpc.Core" Version="2.46.6" />
+    <PackageReference Include="Grpc.Tools" Version="2.62.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="7.0.0" />
+    <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="7.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="ApplicationSettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="..\..\Protos\hushBlockchain.proto" GrpcServices="Server" />
+    <Protobuf Include="..\..\Protos\hushProfile.proto" GrpcServices="Server" />
+    <Protobuf Include="..\..\Protos\greet.proto" GrpcServices="Server" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
+    <ProjectReference Include="..\Modules\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
+    <ProjectReference Include="..\Modules\Olimpo.TcpServerManager\TcpServerManager.csproj" />
+    <ProjectReference Include="..\Services\HushServerNode.ApplicationSettingsService\HushServerNode.ApplicationSettingsService.csproj" />
+    <ProjectReference Include="..\Services\HushServerNode.ServerService\HushServerNode.ServerService.csproj" />
+    <ProjectReference Include="..\Modules\Olimpo.SigningManager\SigningManager.csproj" />
+    <ProjectReference Include="..\Modules\Olimpo.EncryptingManager\EncryptingManager.csproj" />
+    <ProjectReference Include="..\Services\HushServerNode.Blockchain\HushServerNode.Blockchain.csproj" />
+    <ProjectReference Include="..\Services\HushServerNode.BlockchainService\HushServerNode.BlockchainService.csproj" />
+    <ProjectReference Include="..\Services\HushServerNode.ApplicationSettings\HushServerNode.ApplicationSettingsService.csproj" />
+    <ProjectReference Include="..\Modules\HushEcosystem.RpcModel\HushEcosystem.RpcModel.csproj" />
+    <ProjectReference Include="..\Services\HushServerNode.RpcManager\HushServerNode.RpcManager.csproj" />
+  </ItemGroup>
+
+</Project>

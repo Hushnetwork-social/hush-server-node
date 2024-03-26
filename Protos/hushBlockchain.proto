@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option csharp_namespace = "HushNetwork";
+
+package rpcHush;
+
+// The greeting service definition.
+service HushBlockchain {
+  // Sends a greeting
+  rpc GetBlockchainHeight (GetBlockchainHeightRequest) returns (GetBlockchainHeightReply);
+}
+
+// The request message for the blockchain height.
+message GetBlockchainHeightRequest { }
+
+// The response message containing the last BlockIndex.
+message GetBlockchainHeightReply {
+  double Index = 1;
+}
