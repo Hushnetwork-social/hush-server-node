@@ -1,0 +1,54 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushServerNode", "HushServerNode\HushServerNode.csproj", "{CEDD26FB-44C2-4CF2-B221-6925EA511E82}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Services", "Services", "{2D578FAD-684F-456D-9698-C6BD28A9EA6E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushServerNode.ApplicationSettingsService", "Services\HushServerNode.ApplicationSettings\HushServerNode.ApplicationSettingsService.csproj", "{026310C8-AA0F-431B-8F32-4D3069983970}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushServerNode.Blockchain", "Services\HushServerNode.Blockchain\HushServerNode.Blockchain.csproj", "{372A19A5-BC1E-48C7-82F2-07DD87271AF5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushServerNode.RpcManager", "Services\HushServerNode.RpcManager\HushServerNode.RpcManager.csproj", "{2D1B82F6-E698-4C6F-95FC-BD780BE5A858}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushServerNode.ServerService", "Services\HushServerNode.ServerService\HushServerNode.ServerService.csproj", "{6EB6C411-0B07-46A5-867C-2CC8B15E6795}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CEDD26FB-44C2-4CF2-B221-6925EA511E82}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CEDD26FB-44C2-4CF2-B221-6925EA511E82}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CEDD26FB-44C2-4CF2-B221-6925EA511E82}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CEDD26FB-44C2-4CF2-B221-6925EA511E82}.Release|Any CPU.Build.0 = Release|Any CPU
+		{026310C8-AA0F-431B-8F32-4D3069983970}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{026310C8-AA0F-431B-8F32-4D3069983970}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{026310C8-AA0F-431B-8F32-4D3069983970}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{026310C8-AA0F-431B-8F32-4D3069983970}.Release|Any CPU.Build.0 = Release|Any CPU
+		{372A19A5-BC1E-48C7-82F2-07DD87271AF5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{372A19A5-BC1E-48C7-82F2-07DD87271AF5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{372A19A5-BC1E-48C7-82F2-07DD87271AF5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{372A19A5-BC1E-48C7-82F2-07DD87271AF5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2D1B82F6-E698-4C6F-95FC-BD780BE5A858}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2D1B82F6-E698-4C6F-95FC-BD780BE5A858}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2D1B82F6-E698-4C6F-95FC-BD780BE5A858}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2D1B82F6-E698-4C6F-95FC-BD780BE5A858}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6EB6C411-0B07-46A5-867C-2CC8B15E6795}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6EB6C411-0B07-46A5-867C-2CC8B15E6795}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6EB6C411-0B07-46A5-867C-2CC8B15E6795}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6EB6C411-0B07-46A5-867C-2CC8B15E6795}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{026310C8-AA0F-431B-8F32-4D3069983970} = {2D578FAD-684F-456D-9698-C6BD28A9EA6E}
+		{372A19A5-BC1E-48C7-82F2-07DD87271AF5} = {2D578FAD-684F-456D-9698-C6BD28A9EA6E}
+		{2D1B82F6-E698-4C6F-95FC-BD780BE5A858} = {2D578FAD-684F-456D-9698-C6BD28A9EA6E}
+		{6EB6C411-0B07-46A5-867C-2CC8B15E6795} = {2D578FAD-684F-456D-9698-C6BD28A9EA6E}
+	EndGlobalSection
+EndGlobal

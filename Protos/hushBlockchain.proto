@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option csharp_namespace = "HushNetwork";
+option csharp_namespace = "HushNetwork.proto";
 
 package rpcHush;
 

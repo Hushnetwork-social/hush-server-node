@@ -1,4 +1,5 @@
 using Grpc.Core;
+using HushNetwork.proto;
 
 namespace HushServerNode;
 

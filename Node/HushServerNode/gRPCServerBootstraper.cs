@@ -1,10 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reactive.Subjects;
-using System.Threading.Tasks;
 using Grpc.Core;
-using HushNetwork;
+using HushNetwork.proto;
 using HushServerNode.Blockchain;
 using Olimpo;
 

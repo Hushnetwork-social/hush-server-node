@@ -1,4 +1,4 @@
-using HushNetwork;
+using HushNetwork.proto;
 using HushServerNode.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

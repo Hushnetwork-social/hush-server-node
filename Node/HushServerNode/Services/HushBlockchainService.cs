@@ -1,5 +1,5 @@
 using Grpc.Core;
-using HushNetwork;
+using HushNetwork.proto;
 using HushServerNode.Blockchain;
 
 namespace HushServerNode.Services;

@@ -25,9 +25,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="..\..\Protos\hushBlockchain.proto" GrpcServices="Server" />
-    <Protobuf Include="..\..\Protos\hushProfile.proto" GrpcServices="Server" />
-    <Protobuf Include="..\..\Protos\greet.proto" GrpcServices="Server" />
+    <Protobuf Include="hushBlockchain.proto" GrpcServices="Server" ProtoRoot="../../Protos/" />
+    <Protobuf Include="hushProfile.proto" GrpcServices="Server" ProtoRoot="../../Protos/" />
+    <Protobuf Include="greet.proto" GrpcServices="Server" ProtoRoot="../../Protos/" />
   </ItemGroup>
 
   <ItemGroup>
