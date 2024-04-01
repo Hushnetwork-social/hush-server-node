@@ -7,11 +7,12 @@ package rpcHush;
 service HushProfile {
   rpc SetProfile (SetProfileRequest) returns (SetProfileReply);
   rpc LoadProfile (LoadProfileRequest) returns (LoadProfileReply);
+  rpc ProfileExists (ProfileExistsRequest) returns (ProfileExistsReply);
 }
 
 message SetProfileRequest {
   
-  message UserProfile {
+  message gRpcUserProfile {
     string Id = 1;
     string Issuer = 2;
     string UserPublicSigningAddress = 3;
@@ -22,12 +23,13 @@ message SetProfileRequest {
     string Signature = 8;
   }
 
-  UserProfile Profile = 1;
+  gRpcUserProfile Profile = 1;
 }
 
 message SetProfileReply {
   bool Successfull = 1;
-  string Message = 2;
+  int32 ResultType = 2;
+  string Message = 3;
 }
 
 message LoadProfileRequest {
@@ -44,4 +46,14 @@ message LoadProfileReply {
   }
 
   UserProfile Profile = 1;
+  bool Successfull = 2;
+  string Message = 4;
+}
+
+message ProfileExistsRequest {
+  string ProfilePublicKey = 1;
+}
+
+message ProfileExistsReply {
+  bool Exists = 1;
 }

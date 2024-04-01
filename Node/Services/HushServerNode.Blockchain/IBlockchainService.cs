@@ -17,5 +17,5 @@ public interface IBlockchainService
 
     double GetBalanceForAddress(string address);
 
-    UserProfile GetUserProfile(string publicAddress);
+    HushUserProfile GetUserProfile(string publicAddress);
 }

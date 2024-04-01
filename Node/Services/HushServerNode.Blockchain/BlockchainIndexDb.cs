@@ -10,7 +10,7 @@ public class BlockchainIndexDb : IBlockchainIndexDb
 
     public IDictionary<string, List<VerifiedTransaction>> GroupedTransactions { get; set; }
 
-    public IList<UserProfile> Profiles { get; set; }
+    public IList<HushUserProfile> Profiles { get; set; }
     
     public IList<IFeedDefinition> Feeds { get; set; }
 
@@ -22,7 +22,7 @@ public class BlockchainIndexDb : IBlockchainIndexDb
     {
         this.AddressBalance = new Dictionary<string, double>();
         this.GroupedTransactions = new Dictionary<string, List<VerifiedTransaction>>();
-        this.Profiles = new List<UserProfile>();
+        this.Profiles = new List<HushUserProfile>();
         this.Feeds = new List<IFeedDefinition>();
         this.FeedMessages = new Dictionary<string, List<FeedMessageDefinition>>();
         this.FeedsOfParticipant = new Dictionary<string, List<string>>();

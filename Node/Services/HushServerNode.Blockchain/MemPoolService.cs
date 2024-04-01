@@ -4,9 +4,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
-using HushEcosystem.Model.Builders;
 using HushEcosystem.Model.GlobalEvents;
 using HushServerNode.ApplicationSettings;
+using HushServerNode.Blockchain.Events;
 using Microsoft.Extensions.Logging;
 using Olimpo;
 
@@ -16,7 +16,8 @@ public class MemPoolService:
     IMemPoolService,
     IHandle<NewFeedRequestedEvent>,
     IHandle<SendFeedMessageRequestedEvent>,
-    IHandle<UserProfileRequestedEvent>
+    IHandle<UserProfileRequestedEvent>,
+    IHandle<AddTrasactionToMemPoolEvent>
 {
     private readonly IBlockchainService _blockchainService;
     private readonly IApplicationSettingsService _applicationSettingsService;
@@ -93,21 +94,8 @@ public class MemPoolService:
                 BlockIndex = this._blockchainService.CurrentBlockIndex
             };
 
-            var hashJsonOptions = new JsonSerializerOptionsBuilder()
-                .WithTransactionBaseConverter(this._transactionBaseConverter)
-                .WithModifierExcludeSignature()
-                .WithModifierExcludeBlockIndex()
-                .WithModifierExcludeHash()
-                .Build();
-
-            var signJsonOptions = new JsonSerializerOptionsBuilder()
-                .WithTransactionBaseConverter(this._transactionBaseConverter)
-                .WithModifierExcludeSignature()
-                .WithModifierExcludeBlockIndex()
-                .Build();
-
-            verifiedTransaction.HashObject(hashJsonOptions);
-            verifiedTransaction.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, signJsonOptions);
+            verifiedTransaction.HashObject(this._transactionBaseConverter);
+            verifiedTransaction.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, this._transactionBaseConverter);
 
             this._nextBlockTransactionsCandidate.Add(verifiedTransaction);
         }
@@ -124,21 +112,8 @@ public class MemPoolService:
             BlockIndex = this._blockchainService.CurrentBlockIndex
         };
 
-        var hashJsonOptions = new JsonSerializerOptionsBuilder()
-            .WithTransactionBaseConverter(this._transactionBaseConverter)
-            .WithModifierExcludeSignature()
-            .WithModifierExcludeBlockIndex()
-            .WithModifierExcludeHash()
-            .Build();
-
-        var signJsonOptions = new JsonSerializerOptionsBuilder()
-            .WithTransactionBaseConverter(this._transactionBaseConverter)
-            .WithModifierExcludeSignature()
-            .WithModifierExcludeBlockIndex()
-            .Build();
-
-        verifiedTransaction.HashObject(hashJsonOptions);
-        verifiedTransaction.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, signJsonOptions);
+        verifiedTransaction.HashObject(this._transactionBaseConverter);
+        verifiedTransaction.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, this._transactionBaseConverter);
 
         this._nextBlockTransactionsCandidate.Add(verifiedTransaction);
     }
@@ -152,21 +127,23 @@ public class MemPoolService:
             BlockIndex = this._blockchainService.CurrentBlockIndex
         };
         
-        var hashJsonOptions = new JsonSerializerOptionsBuilder()
-            .WithTransactionBaseConverter(this._transactionBaseConverter)
-            .WithModifierExcludeSignature()
-            .WithModifierExcludeBlockIndex()
-            .WithModifierExcludeHash()
-            .Build();
+        verifiedTransaction.HashObject(this._transactionBaseConverter);
+        verifiedTransaction.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, this._transactionBaseConverter);
 
-        var signJsonOptions = new JsonSerializerOptionsBuilder()
-            .WithTransactionBaseConverter(this._transactionBaseConverter)
-            .WithModifierExcludeSignature()
-            .WithModifierExcludeBlockIndex()
-            .Build();
+        this._nextBlockTransactionsCandidate.Add(verifiedTransaction);
+    }
 
-        verifiedTransaction.HashObject(hashJsonOptions);
-        verifiedTransaction.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, signJsonOptions);
+    public void Handle(AddTrasactionToMemPoolEvent message)
+    {
+        var verifiedTransaction = new VerifiedTransaction
+        {
+            SpecificTransaction = message.Transaction,
+            ValidatorAddress = this._applicationSettingsService.StackerInfo.PublicSigningAddress,
+            BlockIndex = this._blockchainService.CurrentBlockIndex
+        };
+        
+        verifiedTransaction.HashObject(this._transactionBaseConverter);
+        verifiedTransaction.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, this._transactionBaseConverter);
 
         this._nextBlockTransactionsCandidate.Add(verifiedTransaction);
     }

@@ -15,7 +15,7 @@ public class UserProfileIndexStrategy : IIndexStrategy
 
     public bool CanHandle(VerifiedTransaction verifiedTransaction)
     {
-        if (verifiedTransaction.SpecificTransaction.Id == UserProfile.TransactionGuid)
+        if (verifiedTransaction.SpecificTransaction.Id == HushUserProfile.TransactionGuid)
         {
             return true;
         }
@@ -25,7 +25,7 @@ public class UserProfileIndexStrategy : IIndexStrategy
 
     public Task Handle(VerifiedTransaction verifiedTransaction)
     {
-        var userProfile = (UserProfile)verifiedTransaction.SpecificTransaction;
+        var userProfile = (HushUserProfile)verifiedTransaction.SpecificTransaction;
 
         var existingProfile = this._blockchainIndexDb.Profiles.SingleOrDefault(x => x.UserPublicSigningAddress == userProfile.UserPublicSigningAddress);
         if (existingProfile == null)

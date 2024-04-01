@@ -10,7 +10,7 @@ public interface IBlockchainIndexDb
 
     IDictionary<string, List<VerifiedTransaction>> GroupedTransactions { get; set; }
 
-    IList<UserProfile> Profiles { get; set; }
+    IList<HushUserProfile> Profiles { get; set; }
 
     IList<IFeedDefinition> Feeds { get; set; }
 

@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+option csharp_namespace = "HushNetwork.proto";
+
+package rpcHush;
+
+service HushFeed {
+  rpc GetFeedByAddress (GetFeedByAddressRequest) returns (GetFeedByAddressReply);
+}
+
+message GetFeedByAddressRequest {
+  string ProfilePublicKey = 1;
+}
+
+message GetFeedByAddressReply {
+
+  message Feed {
+    string FeedId = 1;
+    string FeedTitle = 2;
+    string FeedOWner = 3;
+    int32 FeedType = 4;
+    int64 BlockIndex = 5;
+  }
+
+  repeated Feed Feeds = 1; 
+}

@@ -49,25 +49,12 @@ public class BlockBuilder : IBlockBuilder
 
     public IBlockBuilder WithRewardBeneficiary(StackerInfo stackerInfo, double blockHeight)
     {
-        var hashTransactionJsonOptions = new JsonSerializerOptionsBuilder()
-            .WithTransactionBaseConverter(this._transactionBaseConverter)
-            .WithModifierExcludeSignature()
-            .WithModifierExcludeBlockIndex()
-            .WithModifierExcludeHash()
-            .Build();
-
-        var signTransactionJsonOptions = new JsonSerializerOptionsBuilder()
-            .WithTransactionBaseConverter(this._transactionBaseConverter)
-            .WithModifierExcludeSignature()
-            .WithModifierExcludeBlockIndex()
-            .Build();
-
         this._rewardTransaction = new BlockCreationTransactionBuilder()
             .WithIssuerAddress(stackerInfo.PublicSigningAddress)
             .Build();
 
-        this._rewardTransaction.HashObject(hashTransactionJsonOptions);
-        this._rewardTransaction.Sign(stackerInfo.PrivateSigningKey, signTransactionJsonOptions);
+        this._rewardTransaction.HashObject(this._transactionBaseConverter);
+        this._rewardTransaction.Sign(stackerInfo.PrivateSigningKey, this._transactionBaseConverter);
         
         this._verifiedRewardTransaction = new VerifiedTransaction
         {
@@ -76,8 +63,8 @@ public class BlockBuilder : IBlockBuilder
             BlockIndex = this._blockIndex
         };
 
-        this._verifiedRewardTransaction.HashObject(hashTransactionJsonOptions);
-        this._verifiedRewardTransaction.Sign(stackerInfo.PrivateSigningKey, signTransactionJsonOptions);
+        this._verifiedRewardTransaction.HashObject(this._transactionBaseConverter);
+        this._verifiedRewardTransaction.Sign(stackerInfo.PrivateSigningKey, this._transactionBaseConverter);
 
         this._stackerInfo = stackerInfo;
 
@@ -112,12 +99,7 @@ public class BlockBuilder : IBlockBuilder
 
         newBlock.FinalizeBlock();
 
-        var jsonOptions = new JsonSerializerOptionsBuilder()
-            .WithTransactionBaseConverter(this._transactionBaseConverter)
-            .WithModifierExcludeSignature()
-            .WithModifierExcludeBlockIndex()
-            .Build();
-        newBlock.Sign(this._stackerInfo.PrivateSigningKey, jsonOptions);
+        newBlock.Sign(this._stackerInfo.PrivateSigningKey, this._transactionBaseConverter);
 
         return newBlock;
     }

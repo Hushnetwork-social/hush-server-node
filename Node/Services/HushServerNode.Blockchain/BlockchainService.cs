@@ -123,7 +123,7 @@ public class BlockchainService :
         return 0;
     }
 
-    public UserProfile GetUserProfile(string publicAddress)
+    public HushUserProfile GetUserProfile(string publicAddress)
     {
         return this._blockchainIndexDb.Profiles
             .SingleOrDefault(x => x.UserPublicSigningAddress == publicAddress);

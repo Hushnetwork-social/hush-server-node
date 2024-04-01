@@ -53,7 +53,7 @@ public class BlockGeneratorService :
     public async Task HandleAsync(BlockchainInitializedEvent message)
     {
         // Create a profile for the Stacker
-        var userProfile = new UserProfile
+        var userProfile = new HushUserProfile
         {
             UserName ="AboimPinto Staker",
             Issuer = this._applicationSettingsService.StackerInfo.PublicSigningAddress,
@@ -75,8 +75,8 @@ public class BlockGeneratorService :
             .WithModifierExcludeBlockIndex()
             .Build();
 
-        userProfile.HashObject(hashJsonOptions);
-        userProfile.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, signJsonOptions);
+        userProfile.HashObject(this._transactionBaseConverter);
+        userProfile.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, this._transactionBaseConverter);
         // End create profile
 
         var userProfileRequestedEvent = new UserProfileRequestedEvent(string.Empty, new UserProfileRequest
