@@ -12,7 +12,7 @@ public interface IBlockBuilder
 
     IBlockBuilder WithNextBlockId(string nextBlockId);
 
-    IBlockBuilder WithBlockIndex(double blockIndex);
+    IBlockBuilder WithBlockIndex(long blockIndex);
 
     IBlockBuilder WithRewardBeneficiary(StackerInfo stackerInfo, double blockHeight);
 

@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
-using HushEcosystem.Model.Builders;
 using HushServerNode.ApplicationSettings.Model;
 
 namespace HushServerNode.Blockchain.Builders;
@@ -11,7 +10,7 @@ public class BlockBuilder : IBlockBuilder
     private string _blockId = string.Empty;
     private string _previousBlockId = string.Empty;
     private string _nextBlockId = string.Empty;
-    private double _blockIndex;
+    private long _blockIndex;
     private TransactionBase _rewardTransaction;
     private VerifiedTransaction _verifiedRewardTransaction;
     private StackerInfo _stackerInfo;
@@ -41,7 +40,7 @@ public class BlockBuilder : IBlockBuilder
         return this;
     }
 
-    public IBlockBuilder WithBlockIndex(double blockIndex)
+    public IBlockBuilder WithBlockIndex(long blockIndex)
     {
         this._blockIndex = blockIndex;
         return this;

@@ -6,6 +6,7 @@ package rpcHush;
 
 service HushFeed {
   rpc GetFeedByAddress (GetFeedByAddressRequest) returns (GetFeedByAddressReply);
+  rpc CreateFeed (CreateFeedRequest) returns (CreateFeedReply);
 }
 
 message GetFeedByAddressRequest {
@@ -23,4 +24,20 @@ message GetFeedByAddressReply {
   }
 
   repeated Feed Feeds = 1; 
+}
+
+message CreateFeedRequest {
+  string FeedId = 1;
+  int32 FeedType = 2;
+  string Issuer = 3;
+  string FeedParticipantPublicAddress = 4;
+  string FeedPublicEncriptAddress = 5;
+  string FeedPrivateEncriptAddress = 6;
+  string Hash = 7;
+  string Signature = 8;
+}
+
+message CreateFeedReply {
+  bool Successfull = 1;
+  string Message = 2;
 }

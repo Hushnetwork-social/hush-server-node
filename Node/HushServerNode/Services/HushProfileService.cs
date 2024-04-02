@@ -1,6 +1,5 @@
 using Grpc.Core;
 using HushEcosystem.Model.Blockchain;
-using HushEcosystem.Model.GlobalEvents;
 using HushNetwork.proto;
 using HushServerNode.Blockchain;
 using HushServerNode.Blockchain.Events;
@@ -11,7 +10,7 @@ namespace HushServerNode.Services;
 public class HushProfileService : HushProfile.HushProfileBase
 {
     private readonly IBlockchainIndexDb _blockchainIndexDb;
-        private readonly IEventAggregator _eventAggregator;
+    private readonly IEventAggregator _eventAggregator;
 
     public HushProfileService(
         IBlockchainIndexDb blockchainIndexDb,
@@ -28,10 +27,9 @@ public class HushProfileService : HushProfile.HushProfileBase
         
         if (profile == null)
         {
-            // sends the UserProgile to MemPool 
-            this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent
-            {
-                Transaction = new HushUserProfile
+            // sends the UserProfile to MemPool 
+            this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(
+                new HushUserProfile
                 {
                     Id = request.Profile.Id,
                     Issuer = request.Profile.Issuer,
@@ -42,7 +40,7 @@ public class HushProfileService : HushProfile.HushProfileBase
                     Hash = request.Profile.Hash,
                     Signature = request.Profile.Signature
                 }
-            });
+            ));
 
             return Task.FromResult(new SetProfileReply
             {
@@ -52,9 +50,10 @@ public class HushProfileService : HushProfile.HushProfileBase
             });
         }
 
+        // TODO [AboimPinto] here should be update the ProfileName and IsPublic flag
         return Task.FromResult(new SetProfileReply
         {
-            Message = "Hello " //+ request.Name
+            Message = "???"
         });
     }
 

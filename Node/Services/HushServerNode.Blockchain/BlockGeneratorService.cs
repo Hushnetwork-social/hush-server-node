@@ -79,11 +79,7 @@ public class BlockGeneratorService :
         userProfile.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, this._transactionBaseConverter);
         // End create profile
 
-        var userProfileRequestedEvent = new UserProfileRequestedEvent(string.Empty, new UserProfileRequest
-        {
-            UserProfile = userProfile
-        });
-        await this._eventAggregator.PublishAsync(userProfileRequestedEvent);
+        await this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(userProfile));
 
         this._blockGeneratorLoop.Subscribe(async x => 
         {

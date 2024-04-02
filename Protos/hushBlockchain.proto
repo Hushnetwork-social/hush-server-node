@@ -15,5 +15,5 @@ message GetBlockchainHeightRequest { }
 
 // The response message containing the last BlockIndex.
 message GetBlockchainHeightReply {
-  double Index = 1;
+  int64 Index = 1;
 }

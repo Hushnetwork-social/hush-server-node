@@ -7,7 +7,7 @@ namespace HushServerNode.Blockchain;
 public interface IBlockchainService
 {
     string CurrentBlockId { get; }
-    double CurrentBlockIndex { get; }
+    long CurrentBlockIndex { get; }
     string CurrentNextBlockId { get; }
     string CurrentPreviousBlockId { get; }
 

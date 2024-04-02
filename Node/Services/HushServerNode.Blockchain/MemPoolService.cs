@@ -16,7 +16,7 @@ public class MemPoolService:
     IMemPoolService,
     IHandle<NewFeedRequestedEvent>,
     IHandle<SendFeedMessageRequestedEvent>,
-    IHandle<UserProfileRequestedEvent>,
+    // IHandle<UserProfileRequestedEvent>,
     IHandle<AddTrasactionToMemPoolEvent>
 {
     private readonly IBlockchainService _blockchainService;
@@ -118,20 +118,20 @@ public class MemPoolService:
         this._nextBlockTransactionsCandidate.Add(verifiedTransaction);
     }
 
-    public void Handle(UserProfileRequestedEvent message)
-    {
-        var verifiedTransaction = new VerifiedTransaction
-        {
-            SpecificTransaction = message.UserProfileRequest.UserProfile,
-            ValidatorAddress = this._applicationSettingsService.StackerInfo.PublicSigningAddress,
-            BlockIndex = this._blockchainService.CurrentBlockIndex
-        };
+    // public void Handle(UserProfileRequestedEvent message)
+    // {
+    //     var verifiedTransaction = new VerifiedTransaction
+    //     {
+    //         SpecificTransaction = message.UserProfileRequest.UserProfile,
+    //         ValidatorAddress = this._applicationSettingsService.StackerInfo.PublicSigningAddress,
+    //         BlockIndex = this._blockchainService.CurrentBlockIndex
+    //     };
         
-        verifiedTransaction.HashObject(this._transactionBaseConverter);
-        verifiedTransaction.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, this._transactionBaseConverter);
+    //     verifiedTransaction.HashObject(this._transactionBaseConverter);
+    //     verifiedTransaction.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, this._transactionBaseConverter);
 
-        this._nextBlockTransactionsCandidate.Add(verifiedTransaction);
-    }
+    //     this._nextBlockTransactionsCandidate.Add(verifiedTransaction);
+    // }
 
     public void Handle(AddTrasactionToMemPoolEvent message)
     {

@@ -13,6 +13,7 @@ public static class RegisterGrpcServer
         {
             services.AddSingleton<HushProfile.HushProfileBase, HushProfileService>();
             services.AddSingleton<HushBlockchain.HushBlockchainBase, HushBlockchainService>();
+            services.AddSingleton<HushFeed.HushFeedBase, HushFeedService>();
         });
 
         return builder;

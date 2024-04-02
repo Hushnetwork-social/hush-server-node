@@ -33,7 +33,7 @@ public class BlockchainService :
     private Block _currentBlock;
 
     public string CurrentBlockId { get => this._currentBlock.BlockId; }
-    public double CurrentBlockIndex { get => this._currentBlock.Index; }
+    public long CurrentBlockIndex { get => this._currentBlock.Index; }
     public string CurrentPreviousBlockId { get => this._currentBlock.PreviousBlockId; }
     public string CurrentNextBlockId { get => this._currentBlock.NextBlockId; }
 

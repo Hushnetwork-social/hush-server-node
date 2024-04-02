@@ -47,7 +47,7 @@ message LoadProfileReply {
 
   UserProfile Profile = 1;
   bool Successfull = 2;
-  string Message = 4;
+  string Message = 3;
 }
 
 message ProfileExistsRequest {

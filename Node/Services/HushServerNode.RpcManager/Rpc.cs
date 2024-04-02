@@ -1,12 +1,9 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using HushEcosystem;
 using HushEcosystem.Model;
 using HushEcosystem.Model.GlobalEvents;
-using HushEcosystem.Model.Rpc.Blockchain;
 using HushEcosystem.Model.Rpc.Feeds;
-using HushEcosystem.Model.Rpc.Handshake;
 using HushEcosystem.Model.Rpc.Profiles;
 using HushEcosystem.Model.Rpc.Transactions;
 using HushServerNode.Blockchain;
@@ -17,8 +14,8 @@ namespace HushServerNode.RpcManager;
 
 public class Rpc :
     IRpc,
-    IHandle<HandshakeRequestedEvent>,
-    IHandle<BlockchainHeightRequestedEvent>,
+    // IHandle<HandshakeRequestedEvent>,
+    // IHandle<BlockchainHeightRequestedEvent>,
     IHandle<TransactionsWithAddressRequestedEvent>,
     IHandle<BalanceByAddressRequestedEvent>,
     IHandle<SearchAccountByPublicKeyRequestedEvent>,
@@ -47,41 +44,41 @@ public class Rpc :
         this._eventAggregator.Subscribe(this);
     }
 
-    public void Handle(HandshakeRequestedEvent message)
-    {
-        // TODO [AboimPinto] Implement the rules that will accept the Handshake Request or not.
+    // public void Handle(HandshakeRequestedEvent message)
+    // {
+    //     // TODO [AboimPinto] Implement the rules that will accept the Handshake Request or not.
 
-        var handshakeResponse = new HandshakeResponseBuilder()
-            .WithResult(true)
-            .WithFailureReason(string.Empty)
-            .Build();
+    //     var handshakeResponse = new HandshakeResponseBuilder()
+    //         .WithResult(true)
+    //         .WithFailureReason(string.Empty)
+    //         .Build();
 
-        var jsonOptions = new JsonSerializerOptions
-        {
-            Converters = { this._transactionBaseConverter }
-        };
+    //     var jsonOptions = new JsonSerializerOptions
+    //     {
+    //         Converters = { this._transactionBaseConverter }
+    //     };
 
-        this._tcpServerService
-            .SendThroughChannel(message.ChannelId, handshakeResponse.ToJson(jsonOptions).Compress());
-    }
+    //     this._tcpServerService
+    //         .SendThroughChannel(message.ChannelId, handshakeResponse.ToJson(jsonOptions).Compress());
+    // }
 
-    public void Handle(BlockchainHeightRequestedEvent message)
-    {
-        var height =  this._blockchainService.CurrentBlockIndex;
+    // public void Handle(BlockchainHeightRequestedEvent message)
+    // {
+    //     var height =  this._blockchainService.CurrentBlockIndex;
 
-        var blockchainHeightResponse = new BlockchainHeightResponse
-        { 
-            Height = height 
-        };
+    //     var blockchainHeightResponse = new BlockchainHeightResponse
+    //     { 
+    //         Height = height 
+    //     };
 
-        var jsonOptions = new JsonSerializerOptions
-        {
-            Converters = { this._transactionBaseConverter }
-        };
+    //     var jsonOptions = new JsonSerializerOptions
+    //     {
+    //         Converters = { this._transactionBaseConverter }
+    //     };
 
-        this._tcpServerService
-            .SendThroughChannel(message.ChannelId, blockchainHeightResponse.ToJson(jsonOptions).Compress());
-    }
+    //     this._tcpServerService
+    //         .SendThroughChannel(message.ChannelId, blockchainHeightResponse.ToJson(jsonOptions).Compress());
+    // }
 
     public void Handle(TransactionsWithAddressRequestedEvent message)
     {

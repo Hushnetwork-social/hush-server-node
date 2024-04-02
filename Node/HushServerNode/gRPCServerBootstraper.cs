@@ -11,6 +11,7 @@ public class gRPCServerBootstraper : IBootstrapper
     private readonly IBlockchainService _blockchainService;
     private readonly HushProfile.HushProfileBase _hushProfileBase;
     private readonly HushBlockchain.HushBlockchainBase _hushBlockchainBase;
+    private readonly HushFeed.HushFeedBase _hushFeedBase;
 
     public Subject<bool> BootstrapFinished { get; }
 
@@ -20,11 +21,13 @@ public class gRPCServerBootstraper : IBootstrapper
     public gRPCServerBootstraper(
         IBlockchainService blockchainService,
         HushProfile.HushProfileBase hushProfileBase,
-        HushBlockchain.HushBlockchainBase hushBlockchainBase)
+        HushBlockchain.HushBlockchainBase hushBlockchainBase,
+        HushFeed.HushFeedBase hushFeedBase)
     {
         this._blockchainService = blockchainService;
         this._hushProfileBase = hushProfileBase;
         this._hushBlockchainBase = hushBlockchainBase;
+        this._hushFeedBase = hushFeedBase;
 
         this.BootstrapFinished = new Subject<bool>();
     }
@@ -41,7 +44,8 @@ public class gRPCServerBootstraper : IBootstrapper
             { 
                 Greeter.BindService(new GreeterService()),
                 HushProfile.BindService(this._hushProfileBase),
-                HushBlockchain.BindService(this._hushBlockchainBase)
+                HushBlockchain.BindService(this._hushBlockchainBase),
+                HushFeed.BindService(this._hushFeedBase)
             },
             Ports = {new ServerPort("localhost", 5000, ServerCredentials.Insecure)}
         };
