@@ -40,7 +40,7 @@ public class FeedIndexStrategy : IIndexStrategy
         return Task.CompletedTask;
     }
 
-    private void HandlesPersonalFeed(Feed feed, double blockIndex)
+    private void HandlesPersonalFeed(Feed feed, long blockIndex)
     {
         var feedParticipantProfile = this._blockchainIndexDb.Profiles.SingleOrDefault(x => x.Issuer == feed.Issuer);
         var feedName = string.Empty;
@@ -61,14 +61,16 @@ public class FeedIndexStrategy : IIndexStrategy
             // list all feed for the user
             var feedIds = this._blockchainIndexDb.FeedsOfParticipant[feed.FeedParticipantPublicAddress];
 
-            var feeds = this._blockchainIndexDb.Feeds.Where(x => feedIds.Contains(x.Id));
+            var feeds = this._blockchainIndexDb.Feeds.Where(x => feedIds.Contains(x.FeedId));
 
-            if (feeds.Any(x => x.FeedType == FeedTypeEnum.Personal))
+            var hasPersonalFeed = feeds.Any(x => x.FeedType == FeedTypeEnum.Personal);
+            if (hasPersonalFeed)
             {
                 // already have a personal feed
                 var personalFeed = feeds.Single(x => x.FeedType == FeedTypeEnum.Personal);
                 personalFeed.FeedTitle = feedName;
             }
+            else
             {
                 // don't have personal feed
                 var newPersonalFeed = new PersonalFeedDefinition

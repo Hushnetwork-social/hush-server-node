@@ -1,19 +1,24 @@
 syntax = "proto3";
 
+import "google/protobuf/timestamp.proto";
+
 option csharp_namespace = "HushNetwork.proto";
 
 package rpcHush;
 
 service HushFeed {
-  rpc GetFeedByAddress (GetFeedByAddressRequest) returns (GetFeedByAddressReply);
+  rpc GetFeedsForAddress (GetFeedForAddressRequest) returns (GetFeedForAddressReply);
   rpc CreateFeed (CreateFeedRequest) returns (CreateFeedReply);
+  rpc GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest) returns (GetFeedMessagesForAddressReply);
+  rpc SendMessage(SendMessageRequest) returns (SendMessageReply);
 }
 
-message GetFeedByAddressRequest {
+message GetFeedForAddressRequest {
   string ProfilePublicKey = 1;
+  int64 BlockIndex = 2;
 }
 
-message GetFeedByAddressReply {
+message GetFeedForAddressReply {
 
   message Feed {
     string FeedId = 1;
@@ -38,6 +43,41 @@ message CreateFeedRequest {
 }
 
 message CreateFeedReply {
+  bool Successfull = 1;
+  string Message = 2;
+}
+
+message GetFeedMessagesForAddressRequest {
+  string ProfilePublicKey = 1;
+  int64 BlockIndex = 2;
+}
+
+message GetFeedMessagesForAddressReply {
+
+  message FeedMessage {
+    string FeedId = 1;
+    string FeedMessageId = 2;
+    string MessageContent = 3;
+    string IssuerPublicAddress = 4;
+    string IssuerName = 5;
+    google.protobuf.Timestamp TimeStamp = 6;
+    int64 BlockIndex = 7;
+  }
+
+  repeated FeedMessage Messages = 1;
+}
+
+message SendMessageRequest {
+  string FeedMessageId = 1;
+  string FeedId = 2;
+  string Issuer = 3;
+  string Message = 4;
+  google.protobuf.Timestamp TimeStamp = 5;
+  string Hash = 6;
+  string Signature = 7;
+}
+
+message SendMessageReply {
   bool Successfull = 1;
   string Message = 2;
 }

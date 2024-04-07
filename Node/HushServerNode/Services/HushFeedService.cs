@@ -1,3 +1,4 @@
+using System.Formats.Tar;
 using Grpc.Core;
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
@@ -21,27 +22,36 @@ public class HushFeedService : HushFeed.HushFeedBase
         this._eventAggregator = eventAggregator;
     }
 
-    public override Task<GetFeedByAddressReply> GetFeedByAddress(GetFeedByAddressRequest request, ServerCallContext context)
+    public override Task<GetFeedForAddressReply> GetFeedsForAddress(GetFeedForAddressRequest request, ServerCallContext context)
     {
         var userHasFeeds = this._blockchainIndexDb.FeedsOfParticipant.ContainsKey(request.ProfilePublicKey);
 
-        var reply = new GetFeedByAddressReply();
+        var reply = new GetFeedForAddressReply();
 
         if (userHasFeeds)
         {
             var feedIdsForUser = this._blockchainIndexDb.FeedsOfParticipant[request.ProfilePublicKey];
             foreach(var feedGuid in feedIdsForUser)
             {
-                var feedDefinition =  this._blockchainIndexDb.Feeds.Single(x => x.FeedId == feedGuid);
+                var feedDefinition =  this._blockchainIndexDb.Feeds
+                    .SingleOrDefault(x => x.FeedId == feedGuid && x.BlockIndex > request.BlockIndex);
 
-                var newFeed = new GetFeedByAddressReply.Types.Feed
+                if (feedDefinition == null)
                 {
-                    FeedId = feedDefinition.FeedId,
-                    FeedTitle = feedDefinition.FeedTitle,
-                    FeedType = (int)feedDefinition.FeedType,
-                    BlockIndex = (long)feedDefinition.BlockIndex
-                };
-                reply.Feeds.Add(newFeed);
+
+                }
+                else
+                {
+                    var newFeed = new GetFeedForAddressReply.Types.Feed
+                    {
+                        FeedId = feedDefinition.FeedId,
+                        FeedTitle = feedDefinition.FeedTitle,
+                        FeedType = (int)feedDefinition.FeedType,
+                        BlockIndex = (long)feedDefinition.BlockIndex
+                    };
+                    reply.Feeds.Add(newFeed);
+                }
+                
             }
         }
 
@@ -69,5 +79,62 @@ public class HushFeedService : HushFeed.HushFeedBase
             Successfull = true,
             Message = "Feed validated and added to the Mempool"
         });
+    }
+
+    public override Task<GetFeedMessagesForAddressReply> GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest request, ServerCallContext context)
+    {
+        var reply = new GetFeedMessagesForAddressReply();
+        var feedsForAddress = this._blockchainIndexDb.FeedsOfParticipant
+            .Single(x => x.Key == request.ProfilePublicKey)
+            .Value;
+
+        foreach (var feed in feedsForAddress)
+        {
+            if (!this._blockchainIndexDb.FeedMessages.Any() || !this._blockchainIndexDb.FeedMessages[feed].Any())
+            {
+                // this means, in the feed there is no message
+                continue;
+            }
+
+            var newMessagesInFeeds = this._blockchainIndexDb.FeedMessages[feed]
+                .Where(x => x.BlockIndex > request.BlockIndex);   
+
+            foreach (var newMessageInFeed in newMessagesInFeeds)
+            {
+                reply.Messages.Add(new GetFeedMessagesForAddressReply.Types.FeedMessage
+                {
+                    FeedId = newMessageInFeed.FeedId,
+                    FeedMessageId = newMessageInFeed.FeedMessageId,
+                    MessageContent = newMessageInFeed.MessageContent,
+                    IssuerPublicAddress = newMessageInFeed.IssuerPublicAddress,
+                    IssuerName = newMessageInFeed.IssuerName,
+                    BlockIndex = newMessageInFeed.BlockIndex,
+                    TimeStamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.SpecifyKind(newMessageInFeed.TimeStamp, DateTimeKind.Utc)),
+                });
+            }
+        }
+
+        return Task.FromResult(reply);
+    }
+    public override async Task<SendMessageReply> SendMessage(SendMessageRequest request, ServerCallContext context)
+    {
+        await this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(
+            new FeedMessage
+            {
+                FeedMessageId = request.FeedMessageId,
+                FeedId = request.FeedId,
+                Issuer = request.Issuer,
+                Message = request.Message,
+                TimeStamp = request.TimeStamp.ToDateTime(),
+                Hash = request.Hash,
+                Signature = request.Signature
+            }
+        ));
+
+        return new SendMessageReply
+        {
+            Successfull = true,
+            Message = "Feed message validated and added to the Mempool"
+        };
     }
 }

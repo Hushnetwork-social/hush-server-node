@@ -86,7 +86,7 @@ public class MemPoolService:
         
         if (string.IsNullOrEmpty(refuseMessage))
         {    
-            // Add the valid transaction to the MemPool 
+            // Add the valid transaction to the MemPool Inde
             var verifiedTransaction = new VerifiedTransaction
             {
                 SpecificTransaction = message.NewFeedRequest.Feed,
