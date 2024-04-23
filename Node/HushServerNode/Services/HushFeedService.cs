@@ -1,4 +1,3 @@
-using System.Formats.Tar;
 using Grpc.Core;
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
@@ -34,7 +33,10 @@ public class HushFeedService : HushFeed.HushFeedBase
             foreach(var feedGuid in feedIdsForUser)
             {
                 var feedDefinition =  this._blockchainIndexDb.Feeds
-                    .SingleOrDefault(x => x.FeedId == feedGuid && x.BlockIndex > request.BlockIndex);
+                    .SingleOrDefault(x => 
+                        x.FeedId == feedGuid && 
+                        x.BlockIndex > request.BlockIndex &&
+                        x.FeedParticipant == request.ProfilePublicKey);
 
                 if (feedDefinition == null)
                 {
@@ -58,23 +60,62 @@ public class HushFeedService : HushFeed.HushFeedBase
         return Task.FromResult(reply);
     }
 
-    public override Task<CreateFeedReply> CreateFeed(CreateFeedRequest request, ServerCallContext context)
+    public override Task<CreatePersonalFeedReply> CreatePersonalFeed(CreatePersonalFeedRequest request, ServerCallContext context)
     {
         this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(
-                new Feed
-                {
-                    FeedId = request.FeedId,
-                    FeedType = request.FeedType.ToFeedTypeEnum(),
-                    Issuer = request.Issuer,
-                    FeedParticipantPublicAddress = request.FeedParticipantPublicAddress,
-                    FeedPublicEncriptAddress = request.FeedPublicEncriptAddress,
-                    FeedPrivateEncriptAddress = request.FeedPrivateEncriptAddress,
-                    Hash = request.Hash,
-                    Signature = request.Signature
-                }
-            ));
+            new Feed
+            {
+                FeedId = request.PersonalFeed.FeedId,
+                FeedType = request.PersonalFeed.FeedType.ToFeedTypeEnum(),
+                Issuer = request.PersonalFeed.Issuer,
+                FeedParticipantPublicAddress = request.PersonalFeed.FeedParticipantPublicAddress,
+                FeedPublicEncriptAddress = request.PersonalFeed.FeedPublicEncriptAddress,
+                FeedPrivateEncriptAddress = request.PersonalFeed.FeedPrivateEncriptAddress,
+                Hash = request.PersonalFeed.Hash,
+                Signature = request.PersonalFeed.Signature
+            }
+        ));
 
-        return Task.FromResult(new CreateFeedReply
+        return Task.FromResult(new CreatePersonalFeedReply
+        {
+            Successfull = true,
+            Message = "Feed validated and added to the Mempool"
+        });
+    }
+
+    public override Task<CreateChatFeedReply> CreateChatFeed(CreateChatFeedRequest request, ServerCallContext context)
+    {
+        // TODO [AboimPinto] Need to validate if the feed can be created. If the any of the participants had blocked the other or other rules.
+
+        this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(
+            new Feed
+            {
+                FeedId = request.ParticipantOne.FeedId,
+                FeedType = request.ParticipantOne.FeedType.ToFeedTypeEnum(),
+                Issuer = request.ParticipantOne.Issuer,
+                FeedParticipantPublicAddress = request.ParticipantOne.FeedParticipantPublicAddress,
+                FeedPublicEncriptAddress = request.ParticipantOne.FeedPublicEncriptAddress,
+                FeedPrivateEncriptAddress = request.ParticipantOne.FeedPrivateEncriptAddress,
+                Hash = request.ParticipantOne.Hash,
+                Signature = request.ParticipantOne.Signature
+            }
+        ));
+
+        this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(
+            new Feed
+            {
+                FeedId = request.ParticipantTwo.FeedId,
+                FeedType = request.ParticipantTwo.FeedType.ToFeedTypeEnum(),
+                Issuer = request.ParticipantTwo.Issuer,
+                FeedParticipantPublicAddress = request.ParticipantTwo.FeedParticipantPublicAddress,
+                FeedPublicEncriptAddress = request.ParticipantTwo.FeedPublicEncriptAddress,
+                FeedPrivateEncriptAddress = request.ParticipantTwo.FeedPrivateEncriptAddress,
+                Hash = request.ParticipantTwo.Hash,
+                Signature = request.ParticipantTwo.Signature
+            }
+        ));
+
+        return Task.FromResult(new CreateChatFeedReply
         {
             Successfull = true,
             Message = "Feed validated and added to the Mempool"
@@ -90,6 +131,11 @@ public class HushFeedService : HushFeed.HushFeedBase
 
         foreach (var feed in feedsForAddress)
         {
+            if (!this._blockchainIndexDb.FeedMessages.Any(x => x.Key == feed))
+            {
+                continue;
+            }
+
             if (!this._blockchainIndexDb.FeedMessages.Any() || !this._blockchainIndexDb.FeedMessages[feed].Any())
             {
                 // this means, in the feed there is no message

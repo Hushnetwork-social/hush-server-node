@@ -101,4 +101,24 @@ public class HushProfileService : HushProfile.HushProfileBase
             }
         });
     }
+
+    public override Task<SearchProfileReply> SearchProfileByPublicKey(SearchProfileRequest request, ServerCallContext context)
+    {
+        var profiles = this._blockchainIndexDb.Profiles
+            .Where(x => x.UserPublicSigningAddress == request.ProfilePublicKey);
+
+        var reply = new SearchProfileReply();
+
+        foreach (var profile in profiles)
+        {
+            reply.SeachedProfiles.Add(new SearchProfileReply.Types.SeachedProfile
+            {
+                UserName = profile.UserName,
+                UserPublicSigningAddress = profile.UserPublicSigningAddress,
+                UserPublicEncryptAddress = profile.UserPublicEncryptAddress
+            });
+        }
+
+        return Task.FromResult(reply);
+    }
 }

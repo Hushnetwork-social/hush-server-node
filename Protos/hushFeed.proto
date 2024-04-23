@@ -8,7 +8,8 @@ package rpcHush;
 
 service HushFeed {
   rpc GetFeedsForAddress (GetFeedForAddressRequest) returns (GetFeedForAddressReply);
-  rpc CreateFeed (CreateFeedRequest) returns (CreateFeedReply);
+  rpc CreatePersonalFeed (CreatePersonalFeedRequest) returns (CreatePersonalFeedReply);
+  rpc CreateChatFeed (CreateChatFeedRequest) returns (CreateChatFeedReply);
   rpc GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest) returns (GetFeedMessagesForAddressReply);
   rpc SendMessage(SendMessageRequest) returns (SendMessageReply);
 }
@@ -42,7 +43,21 @@ message CreateFeedRequest {
   string Signature = 8;
 }
 
-message CreateFeedReply {
+message CreatePersonalFeedRequest {
+  CreateFeedRequest PersonalFeed = 1;
+}
+
+message CreatePersonalFeedReply {
+  bool Successfull = 1;
+  string Message = 2;
+}
+
+message CreateChatFeedRequest {
+  CreateFeedRequest ParticipantOne = 1;
+  CreateFeedRequest ParticipantTwo = 2;
+}
+
+message CreateChatFeedReply {
   bool Successfull = 1;
   string Message = 2;
 }

@@ -8,6 +8,7 @@ service HushProfile {
   rpc SetProfile (SetProfileRequest) returns (SetProfileReply);
   rpc LoadProfile (LoadProfileRequest) returns (LoadProfileReply);
   rpc ProfileExists (ProfileExistsRequest) returns (ProfileExistsReply);
+  rpc SearchProfileByPublicKey (SearchProfileRequest) returns (SearchProfileReply);
 }
 
 message SetProfileRequest {
@@ -56,4 +57,19 @@ message ProfileExistsRequest {
 
 message ProfileExistsReply {
   bool Exists = 1;
+}
+
+message SearchProfileRequest {
+  string ProfilePublicKey = 1;
+}
+
+message SearchProfileReply {
+
+  message SeachedProfile {
+    string UserName = 1;
+    string UserPublicSigningAddress = 2;
+    string UserPublicEncryptAddress = 3;
+  }
+
+  repeated SeachedProfile SeachedProfiles = 1;
 }

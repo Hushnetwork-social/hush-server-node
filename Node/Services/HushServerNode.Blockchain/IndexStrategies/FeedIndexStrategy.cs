@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using HushEcosystem.Model.Blockchain;
-using HushEcosystem.Model.Builders;
 using HushEcosystem.Model.Rpc.Feeds;
 
 namespace HushServerNode.Blockchain.IndexStrategies;
@@ -34,6 +33,9 @@ public class FeedIndexStrategy : IIndexStrategy
         {
             case FeedTypeEnum.Personal:
                 this.HandlesPersonalFeed(feed, verifiedTransaction.BlockIndex);
+                break;
+            case FeedTypeEnum.Chat:
+                this.HandlesChatFeed(feed, verifiedTransaction.BlockIndex);
                 break;
         }
 
@@ -76,7 +78,7 @@ public class FeedIndexStrategy : IIndexStrategy
                 var newPersonalFeed = new PersonalFeedDefinition
                 {
                     FeedId = feed.FeedId,
-                    FeedOwner = feed.FeedParticipantPublicAddress,
+                    FeedParticipant = feed.FeedParticipantPublicAddress,
                     FeedTitle = feedName,
                     BlockIndex = blockIndex
                 };
@@ -91,7 +93,7 @@ public class FeedIndexStrategy : IIndexStrategy
             var newPersonalFeed = new PersonalFeedDefinition
             {
                 FeedId = feed.FeedId,
-                FeedOwner = feed.FeedParticipantPublicAddress,
+                FeedParticipant = feed.FeedParticipantPublicAddress,
                 FeedTitle = feedName,
                 BlockIndex = blockIndex
             };
@@ -99,35 +101,86 @@ public class FeedIndexStrategy : IIndexStrategy
             this._blockchainIndexDb.Feeds.Add(newPersonalFeed);
             this._blockchainIndexDb.FeedsOfParticipant.Add(feed.FeedParticipantPublicAddress, new List<string> { feed.FeedId });
         }
+    }
+
+    private void HandlesChatFeed(Feed feed, long blockIndex)
+    {
+        // check if the feed already existis
+        var feedExists = this._blockchainIndexDb.Feeds.Any(x => x.FeedId == feed.FeedId);
+
+        if (feedExists)
+        {
+            // get the other participant of the feed if is already in the Blockchain
+            var feedParticipants = this._blockchainIndexDb.FeedsOfParticipant
+                .Where(x => x.Value.Contains(feed.FeedId))
+                .Select(x => x.Key);
+
+            if (feedParticipants.Contains(feed.FeedParticipantPublicAddress))
+            {
+                // participant is alreayd in the feed as participant
+            }
+            else
+            {
+                // update the tittle of the other participant title
+                var otherFeedDefinition = this._blockchainIndexDb.Feeds
+                    .OfType<ChatFeedDefinition>()
+                    .Single(x => x.FeedId == feed.FeedId);
+                var otherParticipantProfile = this._blockchainIndexDb.Profiles
+                    .SingleOrDefault(x => x.UserPublicSigningAddress == otherFeedDefinition.FeedParticipant);
+                if(otherParticipantProfile != null)
+                {
+                    otherFeedDefinition.FeedTitle = otherParticipantProfile.UserName;
+                }
+
+                var thisParticipantProfile = this._blockchainIndexDb.Profiles
+                    .Single(x => x.UserPublicSigningAddress == feedParticipants.Single());
+
+                // add the new participant in the feed 
+                var newChatFeed = new ChatFeedDefinition
+                {
+                    FeedId = feed.FeedId,
+                    FeedParticipant = feed.FeedParticipantPublicAddress,
+                    FeedTitle = thisParticipantProfile.UserName,
+                    BlockIndex = blockIndex
+                };
+
+                this._blockchainIndexDb.Feeds.Add(newChatFeed);
+                // TODO [AboimPinto] assuming the participant already has a Personal Feed.
+
+                if (this._blockchainIndexDb.FeedsOfParticipant.ContainsKey(feed.FeedParticipantPublicAddress))
+                {
+                    this._blockchainIndexDb.FeedsOfParticipant[feed.FeedParticipantPublicAddress].Add(feed.FeedId);
+                }
+                else
+                {
+                    this._blockchainIndexDb.FeedsOfParticipant.Add(feed.FeedParticipantPublicAddress, new List<string> { feed.FeedId });
+                }
+
+                
+            }
+        }
+        else
+        {
+            // feed doesn't exist. Tipical situation, it's a new feed
+            var newChatFeed = new ChatFeedDefinition
+                {
+                    FeedId = feed.FeedId,
+                    FeedParticipant = feed.FeedParticipantPublicAddress,
+                    FeedTitle = "Anonymous",
+                    BlockIndex = blockIndex
+                };
+
+                this._blockchainIndexDb.Feeds.Add(newChatFeed);
+                
+                if (this._blockchainIndexDb.FeedsOfParticipant.ContainsKey(feed.FeedParticipantPublicAddress))
+                {
+                    this._blockchainIndexDb.FeedsOfParticipant[feed.FeedParticipantPublicAddress].Add(feed.FeedId);
+                }
+                else
+                {
+                    this._blockchainIndexDb.FeedsOfParticipant.Add(feed.FeedParticipantPublicAddress, new List<string> { feed.FeedId });
+                }
+        }
         
-        
-
-        // // Check if there is already a Personal Feed for the user
-        // var hasPersonalFeed = this._blockchainIndexDb.Feeds.Values
-        //     .SelectMany(x => x)
-        //     .Where(x => x.FeedType == FeedTypeEnum.Personal)
-        //     .Any();
-
-        // if (hasPersonalFeed)
-        // {
-        //     var personalFeed = this._blockchainIndexDb.Feeds[feed.FeedParticipantPublicAddress]
-        //         .Single(x => x.FeedType == FeedTypeEnum.Personal);
-            
-        //     personalFeed.FeedTitle = feedName;
-        //     personalFeed.BlockIndex = blockIndex;
-        // }
-        // else
-        // {
-        //     var newPersonalFeed = new PersonalFeedDefinition
-        //     {
-        //         FeedId = feed.FeedId,
-        //         FeedOwner = feed.FeedParticipantPublicAddress,
-        //         FeedTitle = feedName,
-        //         BlockIndex = blockIndex
-        //     };
-
-        //     this._blockchainIndexDb.Feeds.Add(feed.FeedId, new List<IFeedDefinition> { newPersonalFeed });
-        //     this._blockchainIndexDb.FeedsOfParticipant.Add(feed.FeedParticipantPublicAddress, new List<string> { feed.FeedId });
-        // }
     }
 }
