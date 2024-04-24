@@ -53,7 +53,9 @@ public class HushProfileService : HushProfile.HushProfileBase
         // TODO [AboimPinto] here should be update the ProfileName and IsPublic flag
         return Task.FromResult(new SetProfileReply
         {
-            Message = "???"
+            Successfull = false,
+            ResultType = 2,
+            Message = "User Profile already in the blockchain"
         });
     }
 
