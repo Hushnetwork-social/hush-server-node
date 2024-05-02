@@ -17,4 +17,6 @@ public interface IBlockchainIndexDb
     IDictionary<string, List<FeedMessageDefinition>> FeedMessages { get; set; }
 
     IDictionary<string, List<string>> FeedsOfParticipant { get; set; }
+
+    IDictionary<string, List<string>> ParticipantsOfFeed { get; set; }
 }

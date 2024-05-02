@@ -18,6 +18,8 @@ public class BlockchainIndexDb : IBlockchainIndexDb
 
     public IDictionary<string, List<string>> FeedsOfParticipant { get; set; }
 
+    public IDictionary<string, List<string>> ParticipantsOfFeed { get; set; }
+
     public BlockchainIndexDb()
     {
         this.AddressBalance = new Dictionary<string, double>();
@@ -26,5 +28,6 @@ public class BlockchainIndexDb : IBlockchainIndexDb
         this.Feeds = new List<IFeedDefinition>();
         this.FeedMessages = new Dictionary<string, List<FeedMessageDefinition>>();
         this.FeedsOfParticipant = new Dictionary<string, List<string>>();
+        this.ParticipantsOfFeed = new Dictionary<string, List<string>>();
     }
 }

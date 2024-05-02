@@ -85,6 +85,7 @@ public class FeedIndexStrategy : IIndexStrategy
 
                 this._blockchainIndexDb.Feeds.Add(newPersonalFeed);
                 this._blockchainIndexDb.FeedsOfParticipant.Add(feed.FeedParticipantPublicAddress, new List<string> { feed.FeedId });
+                this._blockchainIndexDb.ParticipantsOfFeed.Add(feed.FeedId, new List<string> { feed.FeedParticipantPublicAddress });
             }
         }
         else
@@ -100,6 +101,7 @@ public class FeedIndexStrategy : IIndexStrategy
 
             this._blockchainIndexDb.Feeds.Add(newPersonalFeed);
             this._blockchainIndexDb.FeedsOfParticipant.Add(feed.FeedParticipantPublicAddress, new List<string> { feed.FeedId });
+            this._blockchainIndexDb.ParticipantsOfFeed.Add(feed.FeedId, new List<string> { feed.FeedParticipantPublicAddress });
         }
     }
 
@@ -117,7 +119,7 @@ public class FeedIndexStrategy : IIndexStrategy
 
             if (feedParticipants.Contains(feed.FeedParticipantPublicAddress))
             {
-                // participant is alreayd in the feed as participant
+                // participant is already in the feed as participant
             }
             else
             {
@@ -156,7 +158,14 @@ public class FeedIndexStrategy : IIndexStrategy
                     this._blockchainIndexDb.FeedsOfParticipant.Add(feed.FeedParticipantPublicAddress, new List<string> { feed.FeedId });
                 }
 
-                
+                if (this._blockchainIndexDb.ParticipantsOfFeed.ContainsKey(feed.FeedParticipantPublicAddress))
+                {
+                    this._blockchainIndexDb.ParticipantsOfFeed[feed.FeedId].Add(feed.FeedParticipantPublicAddress);
+                }
+                else
+                {
+                    this._blockchainIndexDb.ParticipantsOfFeed.Add(feed.FeedId, new List<string> { feed.FeedParticipantPublicAddress});
+                }
             }
         }
         else

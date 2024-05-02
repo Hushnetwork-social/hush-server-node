@@ -1,6 +1,7 @@
 using Grpc.Core;
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
+using HushEcosystem.Model.Rpc.Feeds;
 using HushNetwork.proto;
 using HushServerNode.Blockchain;
 using HushServerNode.Blockchain.Events;
@@ -44,13 +45,29 @@ public class HushFeedService : HushFeed.HushFeedBase
                 }
                 else
                 {
+                    var feedTittle = string.Empty;
+
+                    if (feedDefinition.FeedType == FeedTypeEnum.Personal)
+                    {
+                        feedTittle = feedDefinition.FeedTitle;
+                    }
+                    else if(feedDefinition.FeedType == FeedTypeEnum.Chat)
+                    {
+                        // get the name of the other participant in the feed
+                        feedTittle = string.Empty;
+                    }
+
+                    var participantsForFeed = this._blockchainIndexDb.ParticipantsOfFeed[feedDefinition.FeedId];
+
                     var newFeed = new GetFeedForAddressReply.Types.Feed
                     {
                         FeedId = feedDefinition.FeedId,
                         FeedTitle = feedDefinition.FeedTitle,
                         FeedType = (int)feedDefinition.FeedType,
-                        BlockIndex = (long)feedDefinition.BlockIndex
+                        BlockIndex = (long)feedDefinition.BlockIndex,
                     };
+                    newFeed.Participants.AddRange(participantsForFeed);
+                    
                     reply.Feeds.Add(newFeed);
                 }
                 
@@ -162,6 +179,7 @@ public class HushFeedService : HushFeed.HushFeedBase
 
         return Task.FromResult(reply);
     }
+    
     public override async Task<SendMessageReply> SendMessage(SendMessageRequest request, ServerCallContext context)
     {
         await this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(

@@ -27,6 +27,8 @@ message GetFeedForAddressReply {
     string FeedOWner = 3;
     int32 FeedType = 4;
     int64 BlockIndex = 5;
+
+    repeated string Participants = 6;
   }
 
   repeated Feed Feeds = 1; 
