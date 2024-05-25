@@ -8,5 +8,7 @@ public interface IApplicationSettingsService
 
     StackerInfo StackerInfo { get; }
 
+    string ConnectionString { get; }
+
     void LoadSettings();
 }

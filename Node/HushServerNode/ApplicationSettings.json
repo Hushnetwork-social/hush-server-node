@@ -8,6 +8,8 @@
 
     "ServerInfo": {
         "ListeningPort": 4665
-    }
+    },
+
+    "ConnectionString": "Host=localhost; Database=HushNetwork; Username=aboimpinto; Password=paulo97"
 }
 

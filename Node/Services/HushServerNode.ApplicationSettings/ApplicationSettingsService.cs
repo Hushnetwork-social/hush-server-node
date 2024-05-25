@@ -26,6 +26,8 @@ public class ApplicationSettingsService : IApplicationSettingsService, IBootstra
 
     public Subject<bool> BootstrapFinished { get; }
 
+    public string ConnectionString { get; private set;} = string.Empty;
+
     public ApplicationSettingsService(
         ILogger<ApplicationSettingsService> logger)
     {
@@ -57,6 +59,7 @@ public class ApplicationSettingsService : IApplicationSettingsService, IBootstra
 
         this.LoadServerInfo(config);
         this.LoadStakerInfo(config);
+        this.LoadConnectionString(config);
     }
 
     private void LoadServerInfo(IConfigurationRoot config)
@@ -85,6 +88,15 @@ public class ApplicationSettingsService : IApplicationSettingsService, IBootstra
         }
 
         this._stackerInfo = stackerInfo;
+    }
+
+    private void LoadConnectionString(IConfigurationRoot config)
+    {
+        var connectionString = config
+            .GetRequiredSection("ConnectionString")
+            .Get<string>();
+
+        this.ConnectionString = connectionString;
     }
 
     public Task Startup()
