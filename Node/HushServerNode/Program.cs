@@ -31,6 +31,7 @@ public class Program
             .RegisterEventAggregatorManager()
             .RegisterTcpServer()
             .RegisterApplicationSettingsService()
+            .RegisterBlockchainCacheService()
             .RegisterBlockchainService()
             .RegisterServerService()
             .RegisterRpcModel()

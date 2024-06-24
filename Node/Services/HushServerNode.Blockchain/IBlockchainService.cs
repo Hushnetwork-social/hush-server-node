@@ -1,15 +1,13 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using HushEcosystem.Model.Blockchain;
+using HushServerNode.CacheService;
 
 namespace HushServerNode.Blockchain;
 
 public interface IBlockchainService
 {
-    string CurrentBlockId { get; }
-    long CurrentBlockIndex { get; }
-    string CurrentNextBlockId { get; }
-    string CurrentPreviousBlockId { get; }
+    BlockchainState BlockchainState { get; set; }
 
     Task InitializeBlockchainAsync();
 
@@ -18,4 +16,6 @@ public interface IBlockchainService
     double GetBalanceForAddress(string address);
 
     HushUserProfile GetUserProfile(string publicAddress);
+
+    Task UpdateBlockchainState();
 }

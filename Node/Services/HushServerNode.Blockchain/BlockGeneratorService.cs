@@ -4,8 +4,6 @@ using System.Threading.Tasks;
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
 using HushEcosystem.Model.Builders;
-using HushEcosystem.Model.GlobalEvents;
-using HushEcosystem.Model.Rpc.Profiles;
 using HushServerNode.ApplicationSettings;
 using HushServerNode.Blockchain.Builders;
 using HushServerNode.Blockchain.Events;
@@ -85,18 +83,23 @@ public class BlockGeneratorService :
         {
             var transactions = this._memPoolService.GetNextBlockTransactionsCandidate();
 
-            var newBlockHeight = this._blockchainService.CurrentBlockIndex + 1; 
+            this._blockchainService.BlockchainState.LastBlockIndex ++; 
+            this._blockchainService.BlockchainState.CurrentPreviousBlockId = this._blockchainService.BlockchainState.CurrentBlockId;
+            this._blockchainService.BlockchainState.CurrentBlockId = this._blockchainService.BlockchainState.CurrentNextBlockId;
+            this._blockchainService.BlockchainState.CurrentNextBlockId = Guid.NewGuid().ToString();
+
 
             // TODO [AboimPinto] Add the transactions to the block
             var block = this._blockBuilder
-                .WithBlockIndex(newBlockHeight)
-                .WithBlockId(this._blockchainService.CurrentNextBlockId)
-                .WithPreviousBlockId(this._blockchainService.CurrentBlockId)
-                .WithNextBlockId(Guid.NewGuid().ToString())
-                .WithRewardBeneficiary(this._applicationSettingsService.StackerInfo, newBlockHeight)
+                .WithBlockIndex(this._blockchainService.BlockchainState.LastBlockIndex)
+                .WithBlockId(this._blockchainService.BlockchainState.CurrentBlockId)
+                .WithPreviousBlockId(this._blockchainService.BlockchainState.CurrentPreviousBlockId)
+                .WithNextBlockId(this._blockchainService.BlockchainState.CurrentNextBlockId)
+                .WithRewardBeneficiary(this._applicationSettingsService.StackerInfo, this._blockchainService.BlockchainState.LastBlockIndex)
                 .WithTransactions(transactions)
                 .Build();
 
+            await this._blockchainService.UpdateBlockchainState();
             await this._eventAggregator.PublishAsync(this._blockCreatedEventFactory.GetInstance(block));
         });
     }

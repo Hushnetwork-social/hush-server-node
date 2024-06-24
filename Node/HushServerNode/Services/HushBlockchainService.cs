@@ -17,7 +17,7 @@ public class HushBlockchainService : HushBlockchain.HushBlockchainBase
     {
         return Task.FromResult(new GetBlockchainHeightReply
         {
-            Index = this._blockchainService.CurrentBlockIndex
+            Index = this._blockchainService.BlockchainState.LastBlockIndex
         });
     }
 }

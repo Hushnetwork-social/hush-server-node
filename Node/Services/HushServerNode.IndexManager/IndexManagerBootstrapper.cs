@@ -7,7 +7,7 @@ public class IndexManagerBootstrapper : IBootstrapper
 {
     public Subject<bool> BootstrapFinished { get; }
 
-    public int Priority { get; set; }
+    public int Priority { get; set; } = 10;
 
     public IndexManagerBootstrapper()
     {

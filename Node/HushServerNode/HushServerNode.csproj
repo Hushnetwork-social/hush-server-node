@@ -47,6 +47,7 @@
     <ProjectReference Include="..\Services\HushServerNode.ApplicationSettings\HushServerNode.ApplicationSettingsService.csproj" />
     <ProjectReference Include="..\Modules\HushEcosystem.RpcModel\HushEcosystem.RpcModel.csproj" />
     <ProjectReference Include="..\Services\HushServerNode.RpcManager\HushServerNode.RpcManager.csproj" />
+    <ProjectReference Include="..\Services\HushServerNode.CacheService\HushServerNode.CacheService.csproj" />
   </ItemGroup>
 
 </Project>

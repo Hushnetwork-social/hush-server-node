@@ -85,7 +85,7 @@ public class Rpc :
         var transactions = this._blockchainService
             .ListTransactionsForAddress(message.TransationsWithAddressRequest.Address, message.TransationsWithAddressRequest.LastHeightSynched);
 
-        var currentBlockHeight = this._blockchainService.CurrentBlockIndex;
+        var currentBlockHeight = this._blockchainService.BlockchainState.LastBlockIndex;
 
         var transactionsWithAddressResponse = new TransactionsWithAddressResponseBuilder()
             .WithTransactions(transactions)

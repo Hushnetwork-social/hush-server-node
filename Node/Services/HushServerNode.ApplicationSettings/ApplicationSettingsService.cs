@@ -92,11 +92,12 @@ public class ApplicationSettingsService : IApplicationSettingsService, IBootstra
 
     private void LoadConnectionString(IConfigurationRoot config)
     {
-        var connectionString = config
-            .GetRequiredSection("ConnectionString")
-            .Get<string>();
+        var host = Environment.GetEnvironmentVariable("POSTGRES_HOST");
+        var db = Environment.GetEnvironmentVariable("POSTGRES_DB");
+        var user = Environment.GetEnvironmentVariable("POSTGRES_USER");
+        var password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
 
-        this.ConnectionString = connectionString;
+        this.ConnectionString = string.Format("Host={0}; Database={1}; Username={2}; Password={3}", host, db, user, password);
     }
 
     public Task Startup()

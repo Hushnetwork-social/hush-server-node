@@ -42,7 +42,7 @@ public class FeedIndexStrategy : IIndexStrategy
         return Task.CompletedTask;
     }
 
-    private void HandlesPersonalFeed(Feed feed, long blockIndex)
+    private void HandlesPersonalFeed(Feed feed, double blockIndex)
     {
         var feedParticipantProfile = this._blockchainIndexDb.Profiles.SingleOrDefault(x => x.Issuer == feed.Issuer);
         var feedName = string.Empty;
@@ -105,7 +105,7 @@ public class FeedIndexStrategy : IIndexStrategy
         }
     }
 
-    private void HandlesChatFeed(Feed feed, long blockIndex)
+    private void HandlesChatFeed(Feed feed, double blockIndex)
     {
         // check if the feed already existis
         var feedExists = this._blockchainIndexDb.Feeds.Any(x => x.FeedId == feed.FeedId);
