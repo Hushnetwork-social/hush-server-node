@@ -99,7 +99,6 @@ public class BlockGeneratorService :
                 .WithTransactions(transactions)
                 .Build();
 
-            await this._blockchainService.UpdateBlockchainState();
             await this._eventAggregator.PublishAsync(this._blockCreatedEventFactory.GetInstance(block));
         });
     }

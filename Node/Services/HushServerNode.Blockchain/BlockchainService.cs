@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Subjects;
+using System.Text.Json;
 using System.Threading.Tasks;
+using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
 using HushServerNode.ApplicationSettings;
 using HushServerNode.Blockchain.Builders;
@@ -17,13 +19,10 @@ namespace HushServerNode.Blockchain;
 public class BlockchainService : 
     IBootstrapper, 
     IBlockchainService,
-    IHandle<BlockCreatedEvent>
+    IHandleAsync<BlockCreatedEvent>
 {
     private readonly ILogger<BlockchainService> _logger;
 
-    private double _lastBlockIndex;
-
-    private string _lastBlockId = string.Empty;
     private readonly IEventAggregator _eventAggregator;
     private readonly IBlockBuilder _blockBuilder;
     private readonly IApplicationSettingsService _applicationSettingsService;
@@ -31,13 +30,9 @@ public class BlockchainService :
     private readonly IBlockchainDb _blockchainDb;
     private readonly IBlockchainCache _blockchainCache;
     private readonly IBlockchainIndexDb _blockchainIndexDb;
+    private readonly TransactionBaseConverter _transactionBaseConverter;
     private readonly IEnumerable<IIndexStrategy> _indexStrategies;
     private Block _currentBlock;
-
-    // public string CurrentBlockId { get => this._currentBlock.BlockId; }
-    // public long CurrentBlockIndex { get => this._currentBlock.Index; }
-    // public string CurrentPreviousBlockId { get => this._currentBlock.PreviousBlockId; }
-    // public string CurrentNextBlockId { get => this._currentBlock.NextBlockId; }
 
     public BlockchainState BlockchainState { get; set; }
 
@@ -49,6 +44,7 @@ public class BlockchainService :
         IBlockchainDb blockchainDb,
         IBlockchainCache blockchainCache,
         IBlockchainIndexDb blockchainIndexDb,
+        TransactionBaseConverter transactionBaseConverter,
         IEnumerable<IIndexStrategy> indexStrategies, 
         ILogger<BlockchainService> logger)
     {
@@ -59,6 +55,7 @@ public class BlockchainService :
         this._blockchainDb = blockchainDb;
         this._blockchainCache = blockchainCache;
         this._blockchainIndexDb = blockchainIndexDb;
+        this._transactionBaseConverter = transactionBaseConverter;
         this._indexStrategies = indexStrategies;
         this._logger = logger;
 
@@ -73,10 +70,6 @@ public class BlockchainService :
     {
         this._logger.LogInformation("Initializing Blockchain...");
 
-        // HACK [AboimPinto]: Initialize blockchain from genesis 
-        // Check local blockchain last block hash.
-        this._lastBlockIndex = 0;
-
         this.BlockchainState = await this._blockchainCache.GetBlockchainStateAsync();
         if (this.BlockchainState == null)
         {
@@ -89,14 +82,7 @@ public class BlockchainService :
                 CurrentPreviousBlockId = string.Empty,
                 CurrentNextBlockId = Guid.NewGuid().ToString(),
             };
-        }
-        else
-        {
-            // initialize the blockchain from specific block height.
-        }
 
-        if (this._lastBlockIndex == 0)
-        {
             var genesisBlock = this._blockBuilder
                 .WithBlockIndex(this.BlockchainState.LastBlockIndex)
                 .WithBlockId(this.BlockchainState.CurrentBlockId)
@@ -108,15 +94,12 @@ public class BlockchainService :
             this._currentBlock = genesisBlock;
             this._logger.LogInformation("Creating Genesis Block - {0} | Next Block - {1}", this.BlockchainState.CurrentBlockId, this.BlockchainState.CurrentNextBlockId);
 
-            this.IndexBlock(genesisBlock);
             await this.UpdateBlockchainState();
+            await this.SaveBlock(genesisBlock);
+            this.IndexBlock(genesisBlock);
+        }
 
-            await this._eventAggregator.PublishAsync(new BlockchainInitializedEvent(this.BlockchainState.CurrentBlockId, this.BlockchainState.CurrentNextBlockId, this.BlockchainState.LastBlockIndex));
-        }
-        else
-        {
-            throw new NotImplementedException("Working with a persistent Blockchain is not implemented yet.");
-        }
+        await this._eventAggregator.PublishAsync(new BlockchainInitializedEvent(this.BlockchainState.CurrentBlockId, this.BlockchainState.CurrentNextBlockId, this.BlockchainState.LastBlockIndex));
     }
 
     public IEnumerable<VerifiedTransaction> ListTransactionsForAddress(string address, double lastHeightSynched)
@@ -135,18 +118,20 @@ public class BlockchainService :
 
     public double GetBalanceForAddress(string address)
     {
-        if (this._blockchainIndexDb.AddressBalance.ContainsKey(address))
-        {
-            return this._blockchainIndexDb.AddressBalance[address];
-        }
-
-        return 0;
+        return this._blockchainCache.GetBalance(address);
     }
 
     public HushUserProfile GetUserProfile(string publicAddress)
     {
-        return this._blockchainIndexDb.Profiles
-            .SingleOrDefault(x => x.UserPublicSigningAddress == publicAddress);
+        var profileEntity = this._blockchainCache.GetProfile(publicAddress);
+
+        return new HushUserProfile
+        {
+            UserName = profileEntity.UserName,
+            UserPublicSigningAddress = profileEntity.PublicSigningAddress,
+            UserPublicEncryptAddress = profileEntity.PublicEncryptAddress,
+            IsPublic = profileEntity.IsPublic
+        };
     }
 
     public void Shutdown()
@@ -158,10 +143,13 @@ public class BlockchainService :
         await this.InitializeBlockchainAsync();
     }
 
-    public void Handle(BlockCreatedEvent message)
+    public async Task HandleAsync(BlockCreatedEvent message)
     {
         if (this._blockVerifier.IsBlockValid(message.Block))
         {
+            await this.UpdateBlockchainState();
+            await this.SaveBlock(message.Block);
+
             this._blockchainDb.AddBlock(message.Block);
             this._currentBlock = message.Block;
 
@@ -183,6 +171,22 @@ public class BlockchainService :
     public async Task UpdateBlockchainState()
     {
         await this._blockchainCache.UpdateBlockchainState(this.BlockchainState);
+    }
+
+    public async Task SaveBlock(Block block)
+    {
+        var jsonOptions = new JsonSerializerOptions
+        {
+            Converters = { this._transactionBaseConverter }
+        };
+
+        await this._blockchainCache.SaveBlockAsync(
+            block.BlockId, 
+            block.Index, 
+            block.PreviousBlockId, 
+            block.NextBlockId, 
+            block.Hash, 
+            block.ToJson(jsonOptions));
     }
 
     private void IndexBlock(Block block)

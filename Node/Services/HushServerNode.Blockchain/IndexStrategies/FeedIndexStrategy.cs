@@ -3,16 +3,19 @@ using System.Linq;
 using System.Threading.Tasks;
 using HushEcosystem.Model.Blockchain;
 using HushEcosystem.Model.Rpc.Feeds;
+using HushServerNode.CacheService;
 
 namespace HushServerNode.Blockchain.IndexStrategies;
 
 public class FeedIndexStrategy : IIndexStrategy
 {
     private readonly IBlockchainIndexDb _blockchainIndexDb;
+    private readonly IBlockchainCache _blockchainCache;
 
-    public FeedIndexStrategy(IBlockchainIndexDb blockchainIndexDb)
+    public FeedIndexStrategy(IBlockchainIndexDb blockchainIndexDb, IBlockchainCache blockchainCache)
     {
         this._blockchainIndexDb = blockchainIndexDb;
+        this._blockchainCache = blockchainCache;
     }
 
     public bool CanHandle(VerifiedTransaction verifiedTransaction)
@@ -44,7 +47,9 @@ public class FeedIndexStrategy : IIndexStrategy
 
     private void HandlesPersonalFeed(Feed feed, double blockIndex)
     {
-        var feedParticipantProfile = this._blockchainIndexDb.Profiles.SingleOrDefault(x => x.Issuer == feed.Issuer);
+        // var feedParticipantProfile = this._blockchainIndexDb.Profiles.SingleOrDefault(x => x.Issuer == feed.Issuer);
+        var feedParticipantProfile = this._blockchainCache.GetProfile(feed.Issuer);
+
         var feedName = string.Empty;
         if (feedParticipantProfile == null)
         {
@@ -127,15 +132,15 @@ public class FeedIndexStrategy : IIndexStrategy
                 var otherFeedDefinition = this._blockchainIndexDb.Feeds
                     .OfType<ChatFeedDefinition>()
                     .Single(x => x.FeedId == feed.FeedId);
-                var otherParticipantProfile = this._blockchainIndexDb.Profiles
-                    .SingleOrDefault(x => x.UserPublicSigningAddress == otherFeedDefinition.FeedParticipant);
+                
+                var otherParticipantProfile = this._blockchainCache.GetProfile(otherFeedDefinition.FeedParticipant);
+
                 if(otherParticipantProfile != null)
                 {
                     otherFeedDefinition.FeedTitle = otherParticipantProfile.UserName;
                 }
 
-                var thisParticipantProfile = this._blockchainIndexDb.Profiles
-                    .Single(x => x.UserPublicSigningAddress == feedParticipants.Single());
+                var thisParticipantProfile = this._blockchainCache.GetProfile(feedParticipants.Single());
 
                 // add the new participant in the feed 
                 var newChatFeed = new ChatFeedDefinition

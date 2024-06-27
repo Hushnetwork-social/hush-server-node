@@ -18,4 +18,6 @@ public interface IBlockchainService
     HushUserProfile GetUserProfile(string publicAddress);
 
     Task UpdateBlockchainState();
+
+    Task SaveBlock(Block block);
 }

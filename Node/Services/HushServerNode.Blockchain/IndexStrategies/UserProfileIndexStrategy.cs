@@ -1,16 +1,17 @@
-using System.Linq;
 using System.Threading.Tasks;
 using HushEcosystem.Model.Blockchain;
+using HushServerNode.Blockchain.ExtensionMethods;
+using HushServerNode.CacheService;
 
 namespace HushServerNode.Blockchain.IndexStrategies;
 
 public class UserProfileIndexStrategy : IIndexStrategy
 {
-    private readonly IBlockchainIndexDb _blockchainIndexDb;
-        
-    public UserProfileIndexStrategy(IBlockchainIndexDb blockchainIndexDb)
+    private readonly IBlockchainCache _blockchainCache;
+
+    public UserProfileIndexStrategy(IBlockchainCache blockchainCache)
     {
-        this._blockchainIndexDb = blockchainIndexDb;
+        this._blockchainCache = blockchainCache;
     }
 
     public bool CanHandle(VerifiedTransaction verifiedTransaction)
@@ -23,21 +24,9 @@ public class UserProfileIndexStrategy : IIndexStrategy
         return false;
     }
 
-    public Task Handle(VerifiedTransaction verifiedTransaction)
+    public async Task Handle(VerifiedTransaction verifiedTransaction)
     {
         var userProfile = (HushUserProfile)verifiedTransaction.SpecificTransaction;
-
-        var existingProfile = this._blockchainIndexDb.Profiles.SingleOrDefault(x => x.UserPublicSigningAddress == userProfile.UserPublicSigningAddress);
-        if (existingProfile == null)
-        {
-            this._blockchainIndexDb.Profiles.Add(userProfile);
-        }
-        else
-        {
-            existingProfile.UserName = userProfile.UserName;
-            existingProfile.IsPublic = userProfile.IsPublic;
-        }
-
-        return Task.CompletedTask;
+        await this._blockchainCache.UpdateProfile(userProfile.ToProfile());
     }
 }

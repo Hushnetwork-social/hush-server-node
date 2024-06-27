@@ -1,29 +1,28 @@
 using Grpc.Core;
 using HushEcosystem.Model.Blockchain;
 using HushNetwork.proto;
-using HushServerNode.Blockchain;
 using HushServerNode.Blockchain.Events;
+using HushServerNode.CacheService;
 using Olimpo;
 
 namespace HushServerNode.Services;
 
 public class HushProfileService : HushProfile.HushProfileBase
 {
-    private readonly IBlockchainIndexDb _blockchainIndexDb;
+    private readonly IBlockchainCache _blockchainCacheService;
     private readonly IEventAggregator _eventAggregator;
 
     public HushProfileService(
-        IBlockchainIndexDb blockchainIndexDb,
+        IBlockchainCache blockchainCacheService,
         IEventAggregator eventAggregator)
     {
-        this._blockchainIndexDb = blockchainIndexDb;
+        this._blockchainCacheService = blockchainCacheService;
         this._eventAggregator = eventAggregator;
     }
 
     public override Task<SetProfileReply> SetProfile(SetProfileRequest request, ServerCallContext context)
     {
-        var profile = this._blockchainIndexDb.Profiles
-            .SingleOrDefault(x => x.UserPublicSigningAddress == request.Profile.UserPublicSigningAddress);
+        var profile = this._blockchainCacheService.GetProfile(request.Profile.UserPublicSigningAddress);
         
         if (profile == null)
         {
@@ -61,8 +60,7 @@ public class HushProfileService : HushProfile.HushProfileBase
 
     public override Task<ProfileExistsReply> ProfileExists(ProfileExistsRequest request, ServerCallContext context)
     {
-        var profile = this._blockchainIndexDb.Profiles
-            .SingleOrDefault(x => x.UserPublicSigningAddress == request.ProfilePublicKey);
+        var profile = this._blockchainCacheService.GetProfile(request.ProfilePublicKey);
 
         if (profile == null)
         {
@@ -80,8 +78,7 @@ public class HushProfileService : HushProfile.HushProfileBase
 
     public override Task<LoadProfileReply> LoadProfile(LoadProfileRequest request, ServerCallContext context)
     {
-        var profile = this._blockchainIndexDb.Profiles
-            .SingleOrDefault(x => x.UserPublicSigningAddress == request.ProfilePublicKey);
+        var profile = this._blockchainCacheService.GetProfile(request.ProfilePublicKey);
 
         if (profile == null)
         {
@@ -96,8 +93,8 @@ public class HushProfileService : HushProfile.HushProfileBase
         {
             Profile = new LoadProfileReply.Types.UserProfile
             {
-                UserPublicSigningAddress = profile.UserPublicEncryptAddress,
-                UserPublicEncryptAddress = profile.UserPublicEncryptAddress,
+                UserPublicSigningAddress = profile.PublicSigningAddress,
+                UserPublicEncryptAddress = profile.PublicEncryptAddress,
                 UserName = profile.UserName,
                 IsPublic = profile.IsPublic
             }
@@ -106,20 +103,16 @@ public class HushProfileService : HushProfile.HushProfileBase
 
     public override Task<SearchProfileReply> SearchProfileByPublicKey(SearchProfileRequest request, ServerCallContext context)
     {
-        var profiles = this._blockchainIndexDb.Profiles
-            .Where(x => x.UserPublicSigningAddress == request.ProfilePublicKey);
+        var profile = this._blockchainCacheService.GetProfile(request.ProfilePublicKey);
 
         var reply = new SearchProfileReply();
 
-        foreach (var profile in profiles)
+        reply.SeachedProfiles.Add(new SearchProfileReply.Types.SeachedProfile
         {
-            reply.SeachedProfiles.Add(new SearchProfileReply.Types.SeachedProfile
-            {
-                UserName = profile.UserName,
-                UserPublicSigningAddress = profile.UserPublicSigningAddress,
-                UserPublicEncryptAddress = profile.UserPublicEncryptAddress
-            });
-        }
+            UserName = profile.UserName,
+            UserPublicSigningAddress = profile.PublicSigningAddress,
+            UserPublicEncryptAddress = profile.PublicEncryptAddress
+        });
 
         return Task.FromResult(reply);
     }

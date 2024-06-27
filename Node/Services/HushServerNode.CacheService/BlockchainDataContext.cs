@@ -8,6 +8,12 @@ namespace HushServerNode.CacheService
     {
         public DbSet<BlockchainState> BlockchainState { get; set; }
 
+        public DbSet<BlockEntity> BlockEntities { get; set; }
+
+        public DbSet<AddressBalance> AddressesBalance { get; set; }
+
+        public DbSet<Profile> Profiles { get; set; }
+
         private readonly IApplicationSettingsService _applicationSettingsService;
 
         public BlockchainDataContext(IApplicationSettingsService applicationSettingsService)
@@ -33,6 +39,27 @@ namespace HushServerNode.CacheService
                 .Entity<BlockchainState>()
                 .ToTable("BlockchainState")
                 .HasKey(x => x.BlockchainStateId);
+
+            modelBuilder
+                .Entity<BlockEntity>()
+                .ToTable("BlockEntity")
+                .HasKey(x => x.BlockId);
+
+            modelBuilder
+                .Entity<BlockEntity>()
+                .Property(x => x.BlockJson)
+                .HasColumnType("jsonb")
+                .IsRequired();
+
+            modelBuilder
+                .Entity<AddressBalance>()
+                .ToTable("AddressBalance")
+                .HasKey(x => x.Address);
+
+            modelBuilder
+                .Entity<Profile>()
+                .ToTable("Profile")
+                .HasKey(x => x.PublicSigningAddress);
 
             base.OnModelCreating(modelBuilder);
         }

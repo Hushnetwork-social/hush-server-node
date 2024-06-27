@@ -1,15 +1,16 @@
 using System.Threading.Tasks;
 using HushEcosystem.Model.Blockchain;
+using HushServerNode.CacheService;
 
 namespace HushServerNode.Blockchain.IndexStrategies;
 
 public class ValueableTransactionIndexStrategy : IIndexStrategy
 {
-    private readonly IBlockchainIndexDb _blockchainIndexDb;
+    private readonly IBlockchainCache _blockchainCache;
         
-    public ValueableTransactionIndexStrategy(IBlockchainIndexDb blockchainIndexDb)
+    public ValueableTransactionIndexStrategy(IBlockchainCache blockchainCache)
     {
-        this._blockchainIndexDb = blockchainIndexDb;
+        this._blockchainCache = blockchainCache;
     }
 
     public bool CanHandle(VerifiedTransaction verifiedTransaction)
@@ -22,20 +23,12 @@ public class ValueableTransactionIndexStrategy : IIndexStrategy
         return false;
     }
 
-    public Task Handle(VerifiedTransaction verifiedTransaction)
+    public async Task Handle(VerifiedTransaction verifiedTransaction)
     {
-        if (verifiedTransaction.SpecificTransaction is IValueableTransaction valueableTransaction)
-        {
-            if (this._blockchainIndexDb.AddressBalance.ContainsKey(verifiedTransaction.SpecificTransaction.Issuer))
-            {
-                this._blockchainIndexDb.AddressBalance[verifiedTransaction.SpecificTransaction.Issuer] += valueableTransaction.Value;
-            }
-            else
-            {
-                this._blockchainIndexDb.AddressBalance.Add(verifiedTransaction.SpecificTransaction.Issuer, valueableTransaction.Value);
-            }
-        }
+        var valueableTransaction = verifiedTransaction.SpecificTransaction as IValueableTransaction;
 
-        return Task.CompletedTask;
+        await this._blockchainCache.UpdateBalanceAsync(
+            verifiedTransaction.SpecificTransaction.Issuer,
+            valueableTransaction.Value);
     }
 }

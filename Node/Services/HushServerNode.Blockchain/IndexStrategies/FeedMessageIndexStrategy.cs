@@ -3,16 +3,19 @@ using System.Linq;
 using System.Threading.Tasks;
 using HushEcosystem.Model.Blockchain;
 using HushEcosystem.Model.Rpc.Feeds;
+using HushServerNode.CacheService;
 
 namespace HushServerNode.Blockchain.IndexStrategies;
 
 public class FeedMessageIndexStrategy : IIndexStrategy
 {
     private readonly IBlockchainIndexDb _blockchainIndexDb;
+    private readonly IBlockchainCache _blockchainCache;
 
-    public FeedMessageIndexStrategy(IBlockchainIndexDb blockchainIndexDb)
+    public FeedMessageIndexStrategy(IBlockchainIndexDb blockchainIndexDb, IBlockchainCache blockchainCache)
     {
         this._blockchainIndexDb = blockchainIndexDb;
+        this._blockchainCache = blockchainCache;
     }
 
     public bool CanHandle(VerifiedTransaction verifiedTransaction)
@@ -41,7 +44,8 @@ public class FeedMessageIndexStrategy : IIndexStrategy
             return Task.CompletedTask;    
         }
 
-        var  issuerProfile = this._blockchainIndexDb.Profiles.SingleOrDefault(x => x.Issuer == feedMessage.Issuer);
+        // var  issuerProfile = this._blockchainIndexDb.Profiles.SingleOrDefault(x => x.Issuer == feedMessage.Issuer);
+        var  issuerProfile = this._blockchainCache.GetProfile(feedMessage.Issuer);
         var profileName = feedMessage.Issuer.Substring(0, 10);
         if (issuerProfile != null)
         {
