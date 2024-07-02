@@ -14,6 +14,10 @@ namespace HushServerNode.CacheService
 
         public DbSet<Profile> Profiles { get; set; }
 
+        public DbSet<FeedEntity> FeedEntities { get; set; }
+
+        public DbSet<FeedParticipants> FeedParticipants { get; set; }
+
         private readonly IApplicationSettingsService _applicationSettingsService;
 
         public BlockchainDataContext(IApplicationSettingsService applicationSettingsService)
@@ -60,6 +64,25 @@ namespace HushServerNode.CacheService
                 .Entity<Profile>()
                 .ToTable("Profile")
                 .HasKey(x => x.PublicSigningAddress);
+
+            modelBuilder
+                .Entity<FeedEntity>()
+                .ToTable("FeedEntity")
+                .HasKey(x => x.FeedId);
+            modelBuilder
+                .Entity<FeedEntity>()
+                .HasMany(x => x.FeedParticipants)
+                .WithOne(x => x.Feed)
+                .HasForeignKey(x => x.FeedId);
+
+            modelBuilder
+                .Entity<FeedParticipants>()
+                .ToTable("FeedParticipants")
+                .HasKey(x => new 
+                {
+                    x.FeedId,
+                    x.ParticipantPublicAddress
+                });
 
             base.OnModelCreating(modelBuilder);
         }

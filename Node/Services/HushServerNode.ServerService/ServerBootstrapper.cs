@@ -34,11 +34,12 @@ namespace HushServerNode.ServerService
             this._logger.LogInformation("Stopping TCP Server...");
         }
 
-        public async Task Startup()
+        public Task Startup()
         {
             this._logger.LogInformation("Starting TCP Server...");
             this.BootstrapFinished.OnNext(true);
-            await this._server.Start(IPAddress.Any, this._applicationSettingsService.ServerInfo.ListeningPort);
+            // await this._server.Start(IPAddress.Any, this._applicationSettingsService.ServerInfo.ListeningPort);
+            return Task.CompletedTask;
         }
     }
 }

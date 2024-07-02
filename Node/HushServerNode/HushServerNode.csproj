@@ -35,7 +35,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
+    <!-- <ProjectReference Include="..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" /> -->
     <ProjectReference Include="..\Modules\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
     <ProjectReference Include="..\Modules\Olimpo.TcpServerManager\TcpServerManager.csproj" />
     <ProjectReference Include="..\Services\HushServerNode.ApplicationSettingsService\HushServerNode.ApplicationSettingsService.csproj" />
@@ -48,6 +48,7 @@
     <ProjectReference Include="..\Modules\HushEcosystem.RpcModel\HushEcosystem.RpcModel.csproj" />
     <ProjectReference Include="..\Services\HushServerNode.RpcManager\HushServerNode.RpcManager.csproj" />
     <ProjectReference Include="..\Services\HushServerNode.CacheService\HushServerNode.CacheService.csproj" />
+    <ProjectReference Include="..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
   </ItemGroup>
 
 </Project>

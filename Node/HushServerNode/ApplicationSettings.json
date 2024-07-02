@@ -8,6 +8,13 @@
 
     "ServerInfo": {
         "ListeningPort": 4665
+    },
+
+    "DbSettings": {
+        "Host": "localhost",
+        "Db": "HushNetworkDb",
+        "User": "HushNetworkDb_USER",
+        "Password": "HushNetworkDb_PASSWORD"
     }
 }
 

@@ -66,11 +66,11 @@ public class MemPoolService:
 
         var refuseMessage = string.Empty;
 
-        if (message.NewFeedRequest.Feed.FeedType == FeedTypeEnum.Personal)
+        if (message.NewFeedRequest.Feed.FeedType == (int)FeedTypeEnum.Personal)
         {
             var anyPersonalFeed = this._blockchainService
                 .ListTransactionsForAddress(message.NewFeedRequest.Feed.FeedParticipantPublicAddress, 0)
-                .Any(x => x.SpecificTransaction.Id == Feed.TypeCode && ((Feed)x.SpecificTransaction).FeedType == FeedTypeEnum.Personal);
+                .Any(x => x.SpecificTransaction.Id == Feed.TypeCode && ((Feed)x.SpecificTransaction).FeedType == (int)FeedTypeEnum.Personal);
 
             if (anyPersonalFeed)
             {

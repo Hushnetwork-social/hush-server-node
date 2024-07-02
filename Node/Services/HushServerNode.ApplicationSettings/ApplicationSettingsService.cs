@@ -92,12 +92,21 @@ public class ApplicationSettingsService : IApplicationSettingsService, IBootstra
 
     private void LoadConnectionString(IConfigurationRoot config)
     {
-        var host = Environment.GetEnvironmentVariable("POSTGRES_HOST");
-        var db = Environment.GetEnvironmentVariable("POSTGRES_DB");
-        var user = Environment.GetEnvironmentVariable("POSTGRES_USER");
-        var password = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
+        var dbSettings = config
+            .GetRequiredSection("DbSettings")
+            .Get<DbSettings>();
 
-        this.ConnectionString = string.Format("Host={0}; Database={1}; Username={2}; Password={3}", host, db, user, password);
+        if (dbSettings == null)
+        {
+            throw new InvalidOperationException("Missing DbSettings information in ApplicationSetting.json");
+        }
+
+        this.ConnectionString = string.Format(
+            "Host={0}; Database={1}; Username={2}; Password={3}", 
+            dbSettings.Host, 
+            dbSettings.Db, 
+            dbSettings.User, 
+            dbSettings.Password);
     }
 
     public Task Startup()

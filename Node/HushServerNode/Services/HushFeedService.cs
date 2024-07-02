@@ -83,7 +83,7 @@ public class HushFeedService : HushFeed.HushFeedBase
             new Feed
             {
                 FeedId = request.PersonalFeed.FeedId,
-                FeedType = request.PersonalFeed.FeedType.ToFeedTypeEnum(),
+                FeedType = (int)request.PersonalFeed.FeedType,
                 Issuer = request.PersonalFeed.Issuer,
                 FeedParticipantPublicAddress = request.PersonalFeed.FeedParticipantPublicAddress,
                 FeedPublicEncriptAddress = request.PersonalFeed.FeedPublicEncriptAddress,
@@ -108,7 +108,7 @@ public class HushFeedService : HushFeed.HushFeedBase
             new Feed
             {
                 FeedId = request.ParticipantOne.FeedId,
-                FeedType = request.ParticipantOne.FeedType.ToFeedTypeEnum(),
+                FeedType = (int)request.ParticipantOne.FeedType,
                 Issuer = request.ParticipantOne.Issuer,
                 FeedParticipantPublicAddress = request.ParticipantOne.FeedParticipantPublicAddress,
                 FeedPublicEncriptAddress = request.ParticipantOne.FeedPublicEncriptAddress,
@@ -122,7 +122,7 @@ public class HushFeedService : HushFeed.HushFeedBase
             new Feed
             {
                 FeedId = request.ParticipantTwo.FeedId,
-                FeedType = request.ParticipantTwo.FeedType.ToFeedTypeEnum(),
+                FeedType = (int)request.ParticipantTwo.FeedType,
                 Issuer = request.ParticipantTwo.Issuer,
                 FeedParticipantPublicAddress = request.ParticipantTwo.FeedParticipantPublicAddress,
                 FeedPublicEncriptAddress = request.ParticipantTwo.FeedPublicEncriptAddress,

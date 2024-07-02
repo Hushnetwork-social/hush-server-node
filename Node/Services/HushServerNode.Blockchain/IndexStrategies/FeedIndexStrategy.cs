@@ -34,10 +34,10 @@ public class FeedIndexStrategy : IIndexStrategy
 
         switch(feed.FeedType)
         {
-            case FeedTypeEnum.Personal:
+            case (int)FeedTypeEnum.Personal:
                 this.HandlesPersonalFeed(feed, verifiedTransaction.BlockIndex);
                 break;
-            case FeedTypeEnum.Chat:
+            case (int)FeedTypeEnum.Chat:
                 this.HandlesChatFeed(feed, verifiedTransaction.BlockIndex);
                 break;
         }
