@@ -7,5 +7,9 @@ public class FeedParticipants
 
     public int ParticipantType { get; set; }
 
+    public string PublicEncryptAddress { get; set; } = string.Empty;
+
+    public string PrivateEncryptKey { get; set; } = string.Empty;
+
     public FeedEntity Feed { get; set; }
 }

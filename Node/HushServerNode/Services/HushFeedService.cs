@@ -5,71 +5,106 @@ using HushEcosystem.Model.Rpc.Feeds;
 using HushNetwork.proto;
 using HushServerNode.Blockchain;
 using HushServerNode.Blockchain.Events;
+using HushServerNode.CacheService;
 using Olimpo;
 
 namespace HushServerNode.Services;
 
 public class HushFeedService : HushFeed.HushFeedBase
 {
-    private readonly IBlockchainIndexDb _blockchainIndexDb;
-        private readonly IEventAggregator _eventAggregator;
+    private readonly IBlockchainCache _blockchainCache;
+    // private readonly IBlockchainIndexDb _blockchainIndexDb;
+    private readonly IEventAggregator _eventAggregator;
 
     public HushFeedService(
-        IBlockchainIndexDb blockchainIndexDb,
+        IBlockchainCache blockchainCache,
         IEventAggregator eventAggregator)
     {
-        this._blockchainIndexDb = blockchainIndexDb;
+        this._blockchainCache = blockchainCache;
+        // this._blockchainIndexDb = blockchainIndexDb;
         this._eventAggregator = eventAggregator;
     }
 
     public override Task<GetFeedForAddressReply> GetFeedsForAddress(GetFeedForAddressRequest request, ServerCallContext context)
     {
-        var userHasFeeds = this._blockchainIndexDb.FeedsOfParticipant.ContainsKey(request.ProfilePublicKey);
+        // var userHasFeeds = this._blockchainIndexDb.FeedsOfParticipant.ContainsKey(request.ProfilePublicKey);
+        var userHasFeeds = this._blockchainCache.UserHasFeeds(request.ProfilePublicKey);
 
         var reply = new GetFeedForAddressReply();
 
         if (userHasFeeds)
         {
-            var feedIdsForUser = this._blockchainIndexDb.FeedsOfParticipant[request.ProfilePublicKey];
-            foreach(var feedGuid in feedIdsForUser)
+            var feedIdsForUser = this._blockchainCache.GetUserFeeds(request.ProfilePublicKey);
+            foreach(var feed in feedIdsForUser)
             {
-                var feedDefinition =  this._blockchainIndexDb.Feeds
-                    .SingleOrDefault(x => 
-                        x.FeedId == feedGuid && 
-                        x.BlockIndex > request.BlockIndex &&
-                        x.FeedParticipant == request.ProfilePublicKey);
-
-                if (feedDefinition == null)
+                var newFeed = new GetFeedForAddressReply.Types.Feed
                 {
+                    FeedId = feed.FeedId,
+                    FeedTitle = feed.Title,
+                    FeedType = feed.FeedType,
+                    BlockIndex = (long)feed.BlockIndex
+                };
 
-                }
-                else
+                foreach(var participant in feed.FeedParticipants)
                 {
-                    var feedTittle = string.Empty;
-
-                    if (feedDefinition.FeedType == FeedTypeEnum.Personal)
+                    var feedParticipant = new GetFeedForAddressReply.Types.FeedParticipant
                     {
-                        feedTittle = feedDefinition.FeedTitle;
-                    }
-                    else if(feedDefinition.FeedType == FeedTypeEnum.Chat)
-                    {
-                        // get the name of the other participant in the feed
-                        feedTittle = string.Empty;
-                    }
-
-                    var participantsForFeed = this._blockchainIndexDb.ParticipantsOfFeed[feedDefinition.FeedId];
-
-                    var newFeed = new GetFeedForAddressReply.Types.Feed
-                    {
-                        FeedId = feedDefinition.FeedId,
-                        FeedTitle = feedDefinition.FeedTitle,
-                        FeedType = (int)feedDefinition.FeedType,
-                        BlockIndex = (long)feedDefinition.BlockIndex,
+                        ParticipantPublicAddress = participant.ParticipantPublicAddress,
+                        ParticipantType = participant.ParticipantType.ToString(),
+                        PublicEncryptAddress = participant.PublicEncryptAddress,
+                        PrivateEncryptKey = participant.PrivateEncryptKey,
                     };
-                    newFeed.Participants.AddRange(participantsForFeed);
-                    
-                    reply.Feeds.Add(newFeed);
+
+                    newFeed.FeedParticipants.Add(feedParticipant);
+
+                    // newFeed.FeedParticipants.AddRange(new GetFeedForAddressReply.Types.FeedParticipant
+                    // {
+                    //     ParticipantPublicAddress = participant.ParticipantPublicAddress,
+                    // });
                 }
+
+
+                // newFeed.Participants.AddRange(participantsForFeed);
+                
+                reply.Feeds.Add(newFeed);
+
+                // var feedDefinition =  this._blockchainCache.GetFeed()
+                    // .SingleOrDefault(x => 
+                    //     x.FeedId == feed.FeedId && 
+                    //     x.BlockIndex > request.BlockIndex &&
+                    //     x.FeedParticipant == request.ProfilePublicKey);
+
+                // if (feedDefinition == null)
+                // {
+
+                // }
+                // else
+                // {
+                //     var feedTittle = string.Empty;
+
+                //     if (feedDefinition.FeedType == FeedTypeEnum.Personal)
+                //     {
+                //         feedTittle = feedDefinition.FeedTitle;
+                //     }
+                //     else if(feedDefinition.FeedType == FeedTypeEnum.Chat)
+                //     {
+                //         // get the name of the other participant in the feed
+                //         feedTittle = string.Empty;
+                //     }
+
+                //     var participantsForFeed = this._blockchainIndexDb.ParticipantsOfFeed[feedDefinition.FeedId];
+
+                //     var newFeed = new GetFeedForAddressReply.Types.Feed
+                //     {
+                //         FeedId = feedDefinition.FeedId,
+                //         FeedTitle = feedDefinition.FeedTitle,
+                //         FeedType = (int)feedDefinition.FeedType,
+                //         BlockIndex = (long)feedDefinition.BlockIndex,
+                //     };
+                //     newFeed.Participants.AddRange(participantsForFeed);
+                    
+                //     reply.Feeds.Add(newFeed);
+                // }
                 
             }
         }
@@ -142,40 +177,40 @@ public class HushFeedService : HushFeed.HushFeedBase
     public override Task<GetFeedMessagesForAddressReply> GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest request, ServerCallContext context)
     {
         var reply = new GetFeedMessagesForAddressReply();
-        var feedsForAddress = this._blockchainIndexDb.FeedsOfParticipant
-            .Single(x => x.Key == request.ProfilePublicKey)
-            .Value;
+        // var feedsForAddress = this._blockchainIndexDb.FeedsOfParticipant
+        //     .Single(x => x.Key == request.ProfilePublicKey)
+        //     .Value;
 
-        foreach (var feed in feedsForAddress)
-        {
-            if (!this._blockchainIndexDb.FeedMessages.Any(x => x.Key == feed))
-            {
-                continue;
-            }
+        // foreach (var feed in feedsForAddress)
+        // {
+        //     if (!this._blockchainIndexDb.FeedMessages.Any(x => x.Key == feed))
+        //     {
+        //         continue;
+        //     }
 
-            if (!this._blockchainIndexDb.FeedMessages.Any() || !this._blockchainIndexDb.FeedMessages[feed].Any())
-            {
-                // this means, in the feed there is no message
-                continue;
-            }
+        //     if (!this._blockchainIndexDb.FeedMessages.Any() || !this._blockchainIndexDb.FeedMessages[feed].Any())
+        //     {
+        //         // this means, in the feed there is no message
+        //         continue;
+        //     }
 
-            var newMessagesInFeeds = this._blockchainIndexDb.FeedMessages[feed]
-                .Where(x => x.BlockIndex > request.BlockIndex);   
+        //     var newMessagesInFeeds = this._blockchainIndexDb.FeedMessages[feed]
+        //         .Where(x => x.BlockIndex > request.BlockIndex);   
 
-            foreach (var newMessageInFeed in newMessagesInFeeds)
-            {
-                reply.Messages.Add(new GetFeedMessagesForAddressReply.Types.FeedMessage
-                {
-                    FeedId = newMessageInFeed.FeedId,
-                    FeedMessageId = newMessageInFeed.FeedMessageId,
-                    MessageContent = newMessageInFeed.MessageContent,
-                    IssuerPublicAddress = newMessageInFeed.IssuerPublicAddress,
-                    IssuerName = newMessageInFeed.IssuerName,
-                    BlockIndex = newMessageInFeed.BlockIndex,
-                    TimeStamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.SpecifyKind(newMessageInFeed.TimeStamp, DateTimeKind.Utc)),
-                });
-            }
-        }
+        //     foreach (var newMessageInFeed in newMessagesInFeeds)
+        //     {
+        //         reply.Messages.Add(new GetFeedMessagesForAddressReply.Types.FeedMessage
+        //         {
+        //             FeedId = newMessageInFeed.FeedId,
+        //             FeedMessageId = newMessageInFeed.FeedMessageId,
+        //             MessageContent = newMessageInFeed.MessageContent,
+        //             IssuerPublicAddress = newMessageInFeed.IssuerPublicAddress,
+        //             IssuerName = newMessageInFeed.IssuerName,
+        //             BlockIndex = newMessageInFeed.BlockIndex,
+        //             TimeStamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.SpecifyKind(newMessageInFeed.TimeStamp, DateTimeKind.Utc)),
+        //         });
+        //     }
+        // }
 
         return Task.FromResult(reply);
     }

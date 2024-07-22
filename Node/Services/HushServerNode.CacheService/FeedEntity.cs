@@ -10,6 +10,8 @@ public class FeedEntity
 
     public int FeedType { get; set; }
 
+    public double BlockIndex { get; set; }
+
     public ICollection<FeedParticipants> FeedParticipants { get; set; }
 
     public FeedEntity()

@@ -25,8 +25,18 @@ namespace HushServerNode.CacheService
             this._applicationSettingsService = applicationSettingsService;
         }
 
+        // #if DEBUG
+        // public BlockchainDataContext()
+        // {
+        // }
+        // #endif
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
+            #if DEBUG
+            optionsBuilder.UseNpgsql("Host=localhost; Database=HushNetworkDb; Username=HushNetworkDb_USER; Password=HushNetworkDb_PASSWORD;");
+            #elif RELEASE
+
             if (!string.IsNullOrEmpty(this._applicationSettingsService.ConnectionString))
             {
                 optionsBuilder.UseNpgsql(this._applicationSettingsService.ConnectionString);
@@ -35,6 +45,7 @@ namespace HushServerNode.CacheService
             {
                 throw new InvalidOperationException($"Cannot connect to local database with connection string: {this._applicationSettingsService.ConnectionString}.");
             }
+            #endif
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

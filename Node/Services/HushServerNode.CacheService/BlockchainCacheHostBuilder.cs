@@ -13,7 +13,8 @@ public static class BlockchainCacheHostBuilder
         {
             services.AddSingleton<IBootstrapper, BlockchainCacheBootstrapper>();
 
-            services.AddDbContext<BlockchainDataContext>();
+            // services.AddDbContext<BlockchainDataContext>();
+            services.AddDbContextFactory<BlockchainDataContext>();
 
             services.AddSingleton<IBlockchainCache, BlockchainCache>();
         });

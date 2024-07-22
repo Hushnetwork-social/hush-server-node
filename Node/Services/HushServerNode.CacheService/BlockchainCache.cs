@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -6,36 +7,45 @@ namespace HushServerNode.CacheService;
 
 public class BlockchainCache : IBlockchainCache  
 {
-    private readonly BlockchainDataContext _blockchainDataContext;
+    private readonly IDbContextFactory<BlockchainDataContext> _contextFactory;
 
-    public BlockchainCache(BlockchainDataContext blockchainDataContext)
+    public BlockchainCache(IDbContextFactory<BlockchainDataContext> contextFactory)
     {
-        this._blockchainDataContext = blockchainDataContext;
+        this._contextFactory = contextFactory;
     }
 
     public void ConnectPersistentDatabase()
     {
-        this._blockchainDataContext.Database.EnsureCreated();
-        this._blockchainDataContext.Database.Migrate();
+        using (var context = _contextFactory.CreateDbContext())
+        {
+            context.Database.EnsureCreated();
+            // this._blockchainDataContext.Database.Migrate();
+        }
     }
 
     public async Task<BlockchainState> GetBlockchainStateAsync()
     {
-        return await this._blockchainDataContext.BlockchainState.SingleOrDefaultAsync();
+        using (var context = _contextFactory.CreateDbContext())
+        {
+            return await context.BlockchainState.SingleOrDefaultAsync();
+        }
     }
 
     public async Task UpdateBlockchainState(BlockchainState blockchainState)
     {
-        if (this._blockchainDataContext.BlockchainState.Any())
+        using (var context = _contextFactory.CreateDbContext())
         {
-            this._blockchainDataContext.BlockchainState.Update(blockchainState);
-        }
-        else
-        {
-            this._blockchainDataContext.BlockchainState.Add(blockchainState);
-        }
+            if (context.BlockchainState.Any())
+            {
+                context.BlockchainState.Update(blockchainState);
+            }
+            else
+            {
+                context.BlockchainState.Add(blockchainState);
+            }
 
-        await this._blockchainDataContext.SaveChangesAsync();
+            await context.SaveChangesAsync();
+        }
     }
 
     public async Task SaveBlockAsync(
@@ -56,70 +66,156 @@ public class BlockchainCache : IBlockchainCache
             BlockJson = blockJson
         };
 
-        this._blockchainDataContext.BlockEntities.Add(block);
-        await this._blockchainDataContext.SaveChangesAsync();
+        using (var context = _contextFactory.CreateDbContext())
+        {
+            context.BlockEntities.Add(block);
+            await context.SaveChangesAsync();
+        }
     }
 
     public async Task UpdateBalanceAsync(string address, double value)
     {
-        var addressBalance = this._blockchainDataContext.AddressesBalance
-            .SingleOrDefault(a => a.Address == address);
-
-        if (addressBalance == null)
+        using (var context = _contextFactory.CreateDbContext())
         {
-            addressBalance = new AddressBalance
+            var addressBalance = context.AddressesBalance
+                .SingleOrDefault(a => a.Address == address);
+
+            if (addressBalance == null)
             {
-                Address = address,
-                Balance = value
-            };
+                addressBalance = new AddressBalance
+                {
+                    Address = address,
+                    Balance = value
+                };
 
-            this._blockchainDataContext.AddressesBalance.Add(addressBalance);
-        }
-        else
-        {
-            addressBalance.Balance += value;
-            this._blockchainDataContext.AddressesBalance.Update(addressBalance);
-        }
+                context.AddressesBalance.Add(addressBalance);
+            }
+            else
+            {
+                addressBalance.Balance += value;
+                context.AddressesBalance.Update(addressBalance);
+            }
 
-        await this._blockchainDataContext.SaveChangesAsync();
+            await context.SaveChangesAsync();
+        }
     }
 
     public double GetBalance(string address)
     {
-        var addressBalance = this._blockchainDataContext.AddressesBalance
-            .SingleOrDefault(a => a.Address == address);
-
-        if (addressBalance == null)
+        using (var context = _contextFactory.CreateDbContext())
         {
-            return 0;
-        }
+            var addressBalance = context.AddressesBalance
+                .SingleOrDefault(a => a.Address == address);
 
-        return addressBalance.Balance;
+            if (addressBalance == null)
+            {
+                return 0;
+            }
+
+            return addressBalance.Balance;
+        }
     }
 
     public async Task UpdateProfile(Profile profile)
     {
-        var profileEntity = this._blockchainDataContext.Profiles
-            .SingleOrDefault(p => p.PublicSigningAddress == profile.PublicSigningAddress);
-
-        if (profileEntity == null)
+        using (var context = _contextFactory.CreateDbContext())
         {
-            this._blockchainDataContext.Profiles.Add(profile);
-        }
-        else
-        {
-            // TOOD [AboimPinto]: The system should only update the profile if the profile has changed in order to avoid unnecessary writes to the database.
-            this._blockchainDataContext.Profiles.Update(profile);
-        }
+            var profileEntity = context.Profiles
+                .SingleOrDefault(p => p.PublicSigningAddress == profile.PublicSigningAddress);
 
-        await this._blockchainDataContext.SaveChangesAsync();
+            if (profileEntity == null)
+            {
+                context.Profiles.Add(profile);
+            }
+            else
+            {
+                // TOOD [AboimPinto]: The system should only update the profile if the profile has changed in order to avoid unnecessary writes to the database.
+                context.Profiles.Update(profile);
+            }
+
+            await context.SaveChangesAsync();
+        }
     }
 
     public Profile GetProfile(string address)
     {
-        var profile = this._blockchainDataContext.Profiles
-            .SingleOrDefault(p => p.PublicSigningAddress == address);
+        using (var context = _contextFactory.CreateDbContext())
+        {    
+            var profile = context.Profiles
+                .SingleOrDefault(p => p.PublicSigningAddress == address);
 
-        return profile;
+            return profile;
+        }
+    }
+
+    public bool UserHasFeeds(string address)
+    {
+        using (var context = _contextFactory.CreateDbContext())
+        {
+            return context.FeedParticipants
+                .Any(x => 
+                    x.ParticipantPublicAddress == address &&
+                    x.ParticipantType == 0);
+        }
+    }
+
+    public bool UserHasPersonalFeed(string address)
+    {
+        using (var context = _contextFactory.CreateDbContext())
+        {
+            return context.FeedParticipants
+                .Any(x => 
+                    x.ParticipantPublicAddress == address &&
+                    x.ParticipantType == 0);
+        }
+    }
+
+    public async Task CreatePersonalFeed(
+        string feedTitle,
+        string feedId,
+        int feedType,
+        string personalFeedOwnerAddress,
+        string publicEncryptAddress,
+        string privateEncryptKey,
+        double blockIndex)
+    {
+        // TODO [AboimPinto]: The meaning of the BlockIndex could have several meanings here:
+        // 1. In the FeedEntity, the BlockIndex is the block index of the first block of the feed.
+        // 2. In the FeedParticipants, the BlockIndex is the block index since when the credentials are valid
+        // NOTE: If a participant is removed from the feed, for all other participant a new valid credentials are created. 
+        // How the user know that was kicked out of the feed?
+
+        var participantFeedEntity = new FeedParticipants
+        {
+            FeedId = feedId,
+            ParticipantPublicAddress = personalFeedOwnerAddress,
+            ParticipantType = 0,
+            PublicEncryptAddress = publicEncryptAddress,
+            PrivateEncryptKey = privateEncryptKey
+        };
+
+        var personlFeedEntity = new FeedEntity
+        {
+            FeedId = feedId,
+            FeedType = feedType,
+            Title = feedTitle,
+            BlockIndex = blockIndex,
+            FeedParticipants = new List<FeedParticipants> { participantFeedEntity },
+        };
+
+        using var context = _contextFactory.CreateDbContext();
+        context.FeedEntities.Add(personlFeedEntity);
+        await context.SaveChangesAsync();
+    }
+
+    public IEnumerable<FeedEntity> GetUserFeeds(string address)
+    {
+        using (var context = _contextFactory.CreateDbContext())
+        {
+            return context.FeedEntities
+                .Include(x => x.FeedParticipants)
+                .Where(x => x.FeedParticipants.Any(p => p.ParticipantPublicAddress == address))
+                .ToList();
+        }
     }
 }

@@ -21,6 +21,14 @@ message GetFeedForAddressRequest {
 
 message GetFeedForAddressReply {
 
+  message FeedParticipant {
+    string ParticipantPublicAddress = 1;
+    string ParticipantType = 2;
+    string PublicEncryptAddress = 3;
+    string PrivateEncryptKey = 4;
+    int64 BlockIndex = 5;
+  }
+
   message Feed {
     string FeedId = 1;
     string FeedTitle = 2;
@@ -28,7 +36,7 @@ message GetFeedForAddressReply {
     int32 FeedType = 4;
     int64 BlockIndex = 5;
 
-    repeated string Participants = 6;
+    repeated FeedParticipant FeedParticipants = 6;
   }
 
   repeated Feed Feeds = 1; 

@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace HushServerNode.CacheService;
 
@@ -10,7 +11,12 @@ public interface IBlockchainCache
 
     Task UpdateBlockchainState(BlockchainState blockchainState);
 
-    Task SaveBlockAsync(string blockId, long blockHeight, string previousBlockId, string nextBlockId, string blockHash, string blockJson);
+    Task SaveBlockAsync(string blockId,
+        long blockHeight,
+        string previousBlockId,
+        string nextBlockId,
+        string blockHash,
+        string blockJson);
 
     Task UpdateBalanceAsync(string address, double value);
 
@@ -19,4 +25,18 @@ public interface IBlockchainCache
     Task UpdateProfile(Profile profile);
 
     Profile GetProfile(string address);
+
+    bool UserHasFeeds(string address);
+
+    bool UserHasPersonalFeed(string address);
+
+    Task CreatePersonalFeed(string feedTitle,
+        string feedId,
+        int feedType,
+        string personalFeedOwnerAddress,
+        string publicEncryptAddress,
+        string privateEncryptKey,
+        double blockIndex);
+
+    IEnumerable<FeedEntity> GetUserFeeds(string address);
 }
