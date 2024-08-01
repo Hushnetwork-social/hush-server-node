@@ -16,8 +16,8 @@ public static class BlockchainHostBuilder
         {
             services.AddTransient<IBlockBuilder, BlockBuilder>();
 
-            services.AddSingleton<IBlockchainDb, BlockchainDb>();
-            services.AddSingleton<IBlockchainIndexDb, BlockchainIndexDb>();                 // TODO [AboimPinto] this is a local database but in the future need to be a presistent database.
+            // services.AddSingleton<IBlockchainDb, BlockchainDb>();
+            // services.AddSingleton<IBlockchainIndexDb, BlockchainIndexDb>();
 
             services.AddSingleton<IBootstrapper, BlockchainBootstrapper>();
             services.AddSingleton<IBlockchainService, BlockchainService>();

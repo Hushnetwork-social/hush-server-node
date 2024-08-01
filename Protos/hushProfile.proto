@@ -6,6 +6,7 @@ package rpcHush;
 
 service HushProfile {
   rpc SetProfile (SetProfileRequest) returns (SetProfileReply);
+  rpc GetProfile (GetProfileRequest) returns (GetProfileReply);
   rpc LoadProfile (LoadProfileRequest) returns (LoadProfileReply);
   rpc ProfileExists (ProfileExistsRequest) returns (ProfileExistsReply);
   rpc SearchProfileByPublicKey (SearchProfileRequest) returns (SearchProfileReply);
@@ -31,6 +32,18 @@ message SetProfileReply {
   bool Successfull = 1;
   int32 ResultType = 2;
   string Message = 3;
+}
+
+message GetProfileRequest {
+  string ProfilePublicSigningAddress = 1;
+}
+
+message GetProfileReply {
+  string UserName = 1;
+  string ProfilePublicSigningAddress = 2;
+  string ProfilePublicEncryptAddress = 3;
+  bool Successfull = 4;
+  string Message = 5;
 }
 
 message LoadProfileRequest {

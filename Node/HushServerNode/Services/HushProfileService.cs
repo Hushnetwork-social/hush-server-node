@@ -58,6 +58,29 @@ public class HushProfileService : HushProfile.HushProfileBase
         });
     }
 
+    public override Task<GetProfileReply> GetProfile(GetProfileRequest request, ServerCallContext context)
+    {
+        var profile = this._blockchainCacheService.GetProfile(request.ProfilePublicSigningAddress);
+
+        if (profile == null)
+        {
+            return Task.FromResult(new GetProfileReply
+            {
+                Successfull = false,
+                Message = "Could not find the profile in Blockchain"
+            });
+        }
+
+        return Task.FromResult(new GetProfileReply
+        {
+            UserName = profile.UserName,
+            ProfilePublicSigningAddress = profile.PublicSigningAddress,
+            ProfilePublicEncryptAddress = profile.PublicEncryptAddress,
+            Successfull = true,
+            Message = string.Empty
+        });
+    }
+
     public override Task<ProfileExistsReply> ProfileExists(ProfileExistsRequest request, ServerCallContext context)
     {
         var profile = this._blockchainCacheService.GetProfile(request.ProfilePublicKey);

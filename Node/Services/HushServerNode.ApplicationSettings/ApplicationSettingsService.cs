@@ -26,7 +26,11 @@ public class ApplicationSettingsService : IApplicationSettingsService, IBootstra
 
     public Subject<bool> BootstrapFinished { get; }
 
+    #if DEBUG
+    public string ConnectionString { get; private set;} = "Host=localhost; Database=HushNetworkDb; Username=HushNetworkDb_USER; Password=HushNetworkDb_PASSWORD;";
+    #elif RELEASE
     public string ConnectionString { get; private set;} = string.Empty;
+    #endif
 
     public ApplicationSettingsService(
         ILogger<ApplicationSettingsService> logger)

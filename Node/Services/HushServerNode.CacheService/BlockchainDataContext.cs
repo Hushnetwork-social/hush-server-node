@@ -18,6 +18,8 @@ namespace HushServerNode.CacheService
 
         public DbSet<FeedParticipants> FeedParticipants { get; set; }
 
+        public DbSet<FeedMessageEntity> FeedMessages { get; set; }
+
         private readonly IApplicationSettingsService _applicationSettingsService;
 
         public BlockchainDataContext(IApplicationSettingsService applicationSettingsService)
@@ -33,9 +35,9 @@ namespace HushServerNode.CacheService
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            #if DEBUG
-            optionsBuilder.UseNpgsql("Host=localhost; Database=HushNetworkDb; Username=HushNetworkDb_USER; Password=HushNetworkDb_PASSWORD;");
-            #elif RELEASE
+            // #if DEBUG
+            // optionsBuilder.UseNpgsql("Host=localhost; Database=HushNetworkDb; Username=HushNetworkDb_USER; Password=HushNetworkDb_PASSWORD;");
+            // #elif RELEASE
 
             if (!string.IsNullOrEmpty(this._applicationSettingsService.ConnectionString))
             {
@@ -45,7 +47,7 @@ namespace HushServerNode.CacheService
             {
                 throw new InvalidOperationException($"Cannot connect to local database with connection string: {this._applicationSettingsService.ConnectionString}.");
             }
-            #endif
+            // #endif
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -94,6 +96,11 @@ namespace HushServerNode.CacheService
                     x.FeedId,
                     x.ParticipantPublicAddress
                 });
+
+            modelBuilder
+                .Entity<FeedMessageEntity>()
+                .ToTable("FeedMessageEntity")
+                .HasKey(x => x.FeedMessageId);
 
             base.OnModelCreating(modelBuilder);
         }

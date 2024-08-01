@@ -24,20 +24,17 @@ public class Rpc :
 {
     private readonly ITcpServerService _tcpServerService;
     private readonly IBlockchainService _blockchainService;
-    private readonly IBlockchainIndexDb _blockchainIndexDb;
     private readonly TransactionBaseConverter _transactionBaseConverter;
     private readonly IEventAggregator _eventAggregator;
 
     public Rpc(
         ITcpServerService tcpServerService,
         IBlockchainService blockchainService,
-        IBlockchainIndexDb blockchainIndexDb,
         TransactionBaseConverter transactionBaseConverter,
         IEventAggregator eventAggregator)
     {
         this._tcpServerService = tcpServerService;
         this._blockchainService = blockchainService;
-        this._blockchainIndexDb = blockchainIndexDb;
         this._transactionBaseConverter = transactionBaseConverter;
         this._eventAggregator = eventAggregator;
 
@@ -161,26 +158,26 @@ public class Rpc :
 
     public void Handle(FeedsForAddressRequestedEvent message)
     {
-        var userHasFeeds = this._blockchainIndexDb.FeedsOfParticipant.ContainsKey(message.FeedsForAddressRequest.Address);
+        // var userHasFeeds = this._blockchainIndexDb.FeedsOfParticipant.ContainsKey(message.FeedsForAddressRequest.Address);
 
-        var response = new FeedsForAddressResponse();
-        var feedsResponse = new List<IFeedDefinition>();
-        if (userHasFeeds)
-        {
-            var feedIdsForUser = this._blockchainIndexDb.FeedsOfParticipant[message.FeedsForAddressRequest.Address];
+        // var response = new FeedsForAddressResponse();
+        // var feedsResponse = new List<IFeedDefinition>();
+        // if (userHasFeeds)
+        // {
+        //     var feedIdsForUser = this._blockchainIndexDb.FeedsOfParticipant[message.FeedsForAddressRequest.Address];
 
-            // var feeds = this._blockchainIndexDb.Feeds.Where(x => x.Key)
-            foreach(var feedId in feedIdsForUser)
-            {
-                // var feed = this._blockchainIndexDb.Feeds[feedId];
-                // feedsResponse.Add(feed);
-            }
+        //     // var feeds = this._blockchainIndexDb.Feeds.Where(x => x.Key)
+        //     foreach(var feedId in feedIdsForUser)
+        //     {
+        //         // var feed = this._blockchainIndexDb.Feeds[feedId];
+        //         // feedsResponse.Add(feed);
+        //     }
 
-        }
-        else
-        {
-            response.FeedDefinitions = feedsResponse;
-        }
+        // }
+        // else
+        // {
+        //     response.FeedDefinitions = feedsResponse;
+        // }
 
 
 
@@ -194,12 +191,12 @@ public class Rpc :
         //     FeedDefinitions = feeds.ToList()
         // };
 
-        this._tcpServerService
-                .SendThroughChannel(
-                    message.ChannelId, 
-                    response
-                        .ToJson(new JsonSerializerOptions { Converters = { this._transactionBaseConverter } })
-                        .Compress());
+        // this._tcpServerService
+        //         .SendThroughChannel(
+        //             message.ChannelId, 
+        //             response
+        //                 .ToJson(new JsonSerializerOptions { Converters = { this._transactionBaseConverter } })
+        //                 .Compress());
     }
 
     public void Handle(FeedMessagesForAddressRequestedEvent message)

@@ -10,6 +10,7 @@ service HushFeed {
   rpc GetFeedsForAddress (GetFeedForAddressRequest) returns (GetFeedForAddressReply);
   rpc CreatePersonalFeed (CreatePersonalFeedRequest) returns (CreatePersonalFeedReply);
   rpc CreateChatFeed (CreateChatFeedRequest) returns (CreateChatFeedReply);
+  rpc GetChatFeedParticipants (GetChatFeedParticipantsRequest) returns (GetChatFeedParticipantsReply);
   rpc GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest) returns (GetFeedMessagesForAddressReply);
   rpc SendMessage(SendMessageRequest) returns (SendMessageReply);
 }
@@ -22,11 +23,12 @@ message GetFeedForAddressRequest {
 message GetFeedForAddressReply {
 
   message FeedParticipant {
-    string ParticipantPublicAddress = 1;
-    string ParticipantType = 2;
-    string PublicEncryptAddress = 3;
-    string PrivateEncryptKey = 4;
-    int64 BlockIndex = 5;
+    string UserName = 1;
+    string ParticipantPublicAddress = 2;
+    string ParticipantType = 3;
+    string PublicEncryptAddress = 4;
+    string PrivateEncryptKey = 5;
+    int64 BlockIndex = 6;
   }
 
   message Feed {
@@ -70,6 +72,20 @@ message CreateChatFeedRequest {
 message CreateChatFeedReply {
   bool Successfull = 1;
   string Message = 2;
+}
+
+message GetChatFeedParticipantsRequest {
+  string FeedId = 1;
+}
+
+message GetChatFeedParticipantsReply {
+  message ChatParticipant {
+    string PublicSigningAddress = 1;
+    string PublicEncryptAddress = 2;
+    int32 FeedParticipantType = 3;
+  }
+
+  repeated ChatParticipant ChatParticipants = 1;
 }
 
 message GetFeedMessagesForAddressRequest {

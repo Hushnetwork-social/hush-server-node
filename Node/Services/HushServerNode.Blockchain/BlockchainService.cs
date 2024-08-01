@@ -27,9 +27,9 @@ public class BlockchainService :
     private readonly IBlockBuilder _blockBuilder;
     private readonly IApplicationSettingsService _applicationSettingsService;
     private readonly IBlockVerifier _blockVerifier;
-    private readonly IBlockchainDb _blockchainDb;
+    // private readonly IBlockchainDb _blockchainDb;
     private readonly IBlockchainCache _blockchainCache;
-    private readonly IBlockchainIndexDb _blockchainIndexDb;
+    // private readonly IBlockchainIndexDb _blockchainIndexDb;
     private readonly TransactionBaseConverter _transactionBaseConverter;
     private readonly IEnumerable<IIndexStrategy> _indexStrategies;
     private Block _currentBlock;
@@ -41,9 +41,7 @@ public class BlockchainService :
         IBlockBuilder blockBuilder,
         IApplicationSettingsService applicationSettingsService,
         IBlockVerifier blockVerifier,
-        IBlockchainDb blockchainDb,
         IBlockchainCache blockchainCache,
-        IBlockchainIndexDb blockchainIndexDb,
         TransactionBaseConverter transactionBaseConverter,
         IEnumerable<IIndexStrategy> indexStrategies, 
         ILogger<BlockchainService> logger)
@@ -52,9 +50,7 @@ public class BlockchainService :
         this._blockBuilder = blockBuilder;
         this._applicationSettingsService = applicationSettingsService;
         this._blockVerifier = blockVerifier;
-        this._blockchainDb = blockchainDb;
         this._blockchainCache = blockchainCache;
-        this._blockchainIndexDb = blockchainIndexDb;
         this._transactionBaseConverter = transactionBaseConverter;
         this._indexStrategies = indexStrategies;
         this._logger = logger;
@@ -90,9 +86,11 @@ public class BlockchainService :
                 .WithRewardBeneficiary(this._applicationSettingsService.StackerInfo, this.BlockchainState.LastBlockIndex)
                 .Build();
 
-            this._blockchainDb.AddBlock(genesisBlock);
+
+            // this._blockchainDb.AddBlock(genesisBlock);
             this._currentBlock = genesisBlock;
             this._logger.LogInformation("Creating Genesis Block - {0} | Next Block - {1}", this.BlockchainState.CurrentBlockId, this.BlockchainState.CurrentNextBlockId);
+
 
             await this.UpdateBlockchainState();
             await this.SaveBlock(genesisBlock);
@@ -104,14 +102,14 @@ public class BlockchainService :
 
     public IEnumerable<VerifiedTransaction> ListTransactionsForAddress(string address, double lastHeightSynched)
     {
-        if (this._blockchainIndexDb.GroupedTransactions.ContainsKey(address))
-        {
-            return this._blockchainIndexDb.GroupedTransactions[address]
-                .Where(x => 
-                    x.SpecificTransaction.Issuer == address && 
-                    x.BlockIndex > lastHeightSynched)
-                .OrderBy(x => x.BlockIndex);
-        }
+        // if (this._blockchainIndexDb.GroupedTransactions.ContainsKey(address))
+        // {
+        //     return this._blockchainIndexDb.GroupedTransactions[address]
+        //         .Where(x => 
+        //             x.SpecificTransaction.Issuer == address && 
+        //             x.BlockIndex > lastHeightSynched)
+        //         .OrderBy(x => x.BlockIndex);
+        // }
 
         return new List<VerifiedTransaction>();
     }
@@ -150,7 +148,7 @@ public class BlockchainService :
             await this.UpdateBlockchainState();
             await this.SaveBlock(message.Block);
 
-            this._blockchainDb.AddBlock(message.Block);
+            // this._blockchainDb.AddBlock(message.Block);
             this._currentBlock = message.Block;
 
             this.IndexBlock(message.Block);
