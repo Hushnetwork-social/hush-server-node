@@ -1,4 +1,5 @@
 using HushServerNode.CacheService;
+using HushServerNode.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Olimpo;
@@ -15,6 +16,10 @@ public static class BlockchainCacheHostBuilder
 
             // services.AddDbContext<BlockchainDataContext>();
             services.AddDbContextFactory<BlockchainDataContext>();
+
+            services.AddSingleton<IDbContextConfigurator, CacheServiceConfigurator>();
+            services.AddSingleton<CacheServiceConfigurator>();
+
 
             services.AddSingleton<IBlockchainCache, BlockchainCache>();
         });
