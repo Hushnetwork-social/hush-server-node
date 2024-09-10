@@ -7,16 +7,16 @@ public interface IBlockchainCache
 {
     void ConnectPersistentDatabase();
 
-    Task<BlockchainState> GetBlockchainStateAsync();
+    // Task<BlockchainState> GetBlockchainStateAsync();
 
-    Task UpdateBlockchainState(BlockchainState blockchainState);
+    // Task UpdateBlockchainState(BlockchainState blockchainState);
 
-    Task SaveBlockAsync(string blockId,
-        long blockHeight,
-        string previousBlockId,
-        string nextBlockId,
-        string blockHash,
-        string blockJson);
+    // Task SaveBlockAsync(string blockId,
+    //     long blockHeight,
+    //     string previousBlockId,
+    //     string nextBlockId,
+    //     string blockHash,
+    //     string blockJson);
 
     Task UpdateBalanceAsync(string address, double value);
 

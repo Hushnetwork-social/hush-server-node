@@ -27,19 +27,19 @@ public class Rpc :
     private readonly TransactionBaseConverter _transactionBaseConverter;
     private readonly IEventAggregator _eventAggregator;
 
-    public Rpc(
-        ITcpServerService tcpServerService,
-        IBlockchainService blockchainService,
-        TransactionBaseConverter transactionBaseConverter,
-        IEventAggregator eventAggregator)
-    {
-        this._tcpServerService = tcpServerService;
-        this._blockchainService = blockchainService;
-        this._transactionBaseConverter = transactionBaseConverter;
-        this._eventAggregator = eventAggregator;
+    // public Rpc(
+    //     ITcpServerService tcpServerService,
+    //     IBlockchainService blockchainService,
+    //     TransactionBaseConverter transactionBaseConverter,
+    //     IEventAggregator eventAggregator)
+    // {
+    //     this._tcpServerService = tcpServerService;
+    //     this._blockchainService = blockchainService;
+    //     this._transactionBaseConverter = transactionBaseConverter;
+    //     this._eventAggregator = eventAggregator;
 
-        this._eventAggregator.Subscribe(this);
-    }
+    //     this._eventAggregator.Subscribe(this);
+    // }
 
     // public void Handle(HandshakeRequestedEvent message)
     // {
@@ -79,81 +79,81 @@ public class Rpc :
 
     public void Handle(TransactionsWithAddressRequestedEvent message)
     {
-        var transactions = this._blockchainService
-            .ListTransactionsForAddress(message.TransationsWithAddressRequest.Address, message.TransationsWithAddressRequest.LastHeightSynched);
+        // var transactions = this._blockchainService
+        //     .ListTransactionsForAddress(message.TransationsWithAddressRequest.Address, message.TransationsWithAddressRequest.LastHeightSynched);
 
-        var currentBlockHeight = this._blockchainService.BlockchainState.LastBlockIndex;
+        // var currentBlockHeight = this._blockchainService.BlockchainState.LastBlockIndex;
 
-        var transactionsWithAddressResponse = new TransactionsWithAddressResponseBuilder()
-            .WithTransactions(transactions)
-            .WithBlockHeightSyncPoint(currentBlockHeight)
-            .Build();
+        // var transactionsWithAddressResponse = new TransactionsWithAddressResponseBuilder()
+        //     .WithTransactions(transactions)
+        //     .WithBlockHeightSyncPoint(currentBlockHeight)
+        //     .Build();
 
-        var jsonOptions = new JsonSerializerOptions
-        {
-            Converters = { this._transactionBaseConverter }
-        };
+        // var jsonOptions = new JsonSerializerOptions
+        // {
+        //     Converters = { this._transactionBaseConverter }
+        // };
 
-        this._tcpServerService
-            .SendThroughChannel(
-                message.ChannelId, 
-                transactionsWithAddressResponse
-                    .ToJson(jsonOptions)
-                    .Compress());
+        // this._tcpServerService
+        //     .SendThroughChannel(
+        //         message.ChannelId, 
+        //         transactionsWithAddressResponse
+        //             .ToJson(jsonOptions)
+        //             .Compress());
     }
 
     public void Handle(BalanceByAddressRequestedEvent message)
     {
-        var balance = this._blockchainService
-            .GetBalanceForAddress(message.BalanceByAddressRequest.Address);
+        // var balance = this._blockchainService
+        //     .GetBalanceForAddress(message.BalanceByAddressRequest.Address);
 
-        var balanceByAddressResponse = new BalanceByAddressResponseBuilder()
-            .WithBalance(balance)
-            .Build();
+        // var balanceByAddressResponse = new BalanceByAddressResponseBuilder()
+        //     .WithBalance(balance)
+        //     .Build();
 
-        var jsonOptions = new JsonSerializerOptions
-        {
-            Converters = { this._transactionBaseConverter }
-        };
+        // var jsonOptions = new JsonSerializerOptions
+        // {
+        //     Converters = { this._transactionBaseConverter }
+        // };
 
-        this._tcpServerService
-            .SendThroughChannel(message.ChannelId, balanceByAddressResponse.ToJson(jsonOptions).Compress());
+        // this._tcpServerService
+        //     .SendThroughChannel(message.ChannelId, balanceByAddressResponse.ToJson(jsonOptions).Compress());
     }
 
     public void Handle(SearchAccountByPublicKeyRequestedEvent message)
     {
-        SearchAccountByPublicKeyResponse searchAccountByPublicKeyResponse;
+        // SearchAccountByPublicKeyResponse searchAccountByPublicKeyResponse;
 
-        if (string.IsNullOrEmpty(message.SearchAccountByPublicKeyRequest.UserPublicKey))
-        {
-            searchAccountByPublicKeyResponse = new SearchAccountByPublicKeyResponseBuilder()
-                .WithFailureReason("Profile user public key is empty")
-                .Build();
-        }
-        else
-        {
-            var userProfile = this._blockchainService.GetUserProfile(message.SearchAccountByPublicKeyRequest.UserPublicKey);
+        // if (string.IsNullOrEmpty(message.SearchAccountByPublicKeyRequest.UserPublicKey))
+        // {
+        //     searchAccountByPublicKeyResponse = new SearchAccountByPublicKeyResponseBuilder()
+        //         .WithFailureReason("Profile user public key is empty")
+        //         .Build();
+        // }
+        // else
+        // {
+        //     var userProfile = this._blockchainService.GetUserProfile(message.SearchAccountByPublicKeyRequest.UserPublicKey);
 
-            if (userProfile == null)
-            {
-                searchAccountByPublicKeyResponse = new SearchAccountByPublicKeyResponseBuilder()
-                    .WithFailureReason("User not found")
-                    .Build();
-            }
-            else
-            {
-                searchAccountByPublicKeyResponse = new SearchAccountByPublicKeyResponseBuilder()
-                    .WithUserProfile(userProfile)
-                    .Build();
-            }   
-        }
+        //     if (userProfile == null)
+        //     {
+        //         searchAccountByPublicKeyResponse = new SearchAccountByPublicKeyResponseBuilder()
+        //             .WithFailureReason("User not found")
+        //             .Build();
+        //     }
+        //     else
+        //     {
+        //         searchAccountByPublicKeyResponse = new SearchAccountByPublicKeyResponseBuilder()
+        //             .WithUserProfile(userProfile)
+        //             .Build();
+        //     }   
+        // }
 
-        this._tcpServerService
-                .SendThroughChannel(
-                    message.ChannelId, 
-                    searchAccountByPublicKeyResponse
-                        .ToJson(new JsonSerializerOptions { Converters = { this._transactionBaseConverter } })
-                        .Compress());
+        // this._tcpServerService
+        //         .SendThroughChannel(
+        //             message.ChannelId, 
+        //             searchAccountByPublicKeyResponse
+        //                 .ToJson(new JsonSerializerOptions { Converters = { this._transactionBaseConverter } })
+        //                 .Compress());
     }
 
     public void Handle(FeedsForAddressRequestedEvent message)

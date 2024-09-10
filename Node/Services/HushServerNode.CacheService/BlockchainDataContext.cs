@@ -6,11 +6,11 @@ namespace HushServerNode.CacheService
 {
     public class BlockchainDataContext : BaseDbContext
     {
-        public DbSet<BlockchainState> BlockchainState { get; set; }
+        // public DbSet<BlockchainState> BlockchainState { get; set; }
 
-        public DbSet<BlockEntity> BlockEntities { get; set; }
+        // public DbSet<BlockEntity> BlockEntities { get; set; }
 
-        public DbSet<AddressBalance> AddressesBalance { get; set; }
+        // public DbSet<AddressBalance> AddressesBalance { get; set; }
 
         public DbSet<Profile> Profiles { get; set; }
 
@@ -30,7 +30,7 @@ namespace HushServerNode.CacheService
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            this._cacheServiceConfigurator.Configure(modelBuilder);
+            // this._cacheServiceConfigurator.Configure(modelBuilder);
 
             // modelBuilder
             //     .Entity<BlockchainState>()

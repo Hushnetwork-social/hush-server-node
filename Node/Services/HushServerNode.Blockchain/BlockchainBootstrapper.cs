@@ -16,12 +16,12 @@ public class BlockchainBootstrapper : IBootstrapper
 
     public BlockchainBootstrapper(
         IBlockchainService blockchainService,
-        IMemPoolService memPoolService,
-        IBlockGeneratorService blockGeneratorService)
+        IMemPoolService memPoolService)
+        // IBlockGeneratorService blockGeneratorService)
     {
         this._blockchainService = blockchainService;
         this._memPoolService = memPoolService;
-        this._blockGeneratorService = blockGeneratorService;
+        // this._blockGeneratorService = blockGeneratorService;
 
         this.BootstrapFinished = new Subject<bool>();
     }
@@ -32,7 +32,7 @@ public class BlockchainBootstrapper : IBootstrapper
 
     public async Task Startup()
     {
-        await this._blockchainService.InitializeBlockchainAsync();
+        // await this._blockchainService.InitializeBlockchainAsync();
         await this._memPoolService.InitializeMemPool();
 
         this.BootstrapFinished.OnNext(true);

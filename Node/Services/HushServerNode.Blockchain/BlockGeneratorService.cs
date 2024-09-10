@@ -1,105 +1,105 @@
-using System;
-using System.Reactive.Linq;
-using System.Threading.Tasks;
-using HushEcosystem.Model;
-using HushEcosystem.Model.Blockchain;
-using HushEcosystem.Model.Builders;
-using HushServerNode.ApplicationSettings;
-using HushServerNode.Blockchain.Builders;
-using HushServerNode.Blockchain.Events;
-using HushServerNode.Blockchain.Factories;
-using Olimpo;
+// using System;
+// using System.Reactive.Linq;
+// using System.Threading.Tasks;
+// using HushEcosystem.Model;
+// using HushEcosystem.Model.Blockchain;
+// using HushEcosystem.Model.Builders;
+// using HushServerNode.ApplicationSettings;
+// using HushServerNode.Blockchain.Builders;
+// using HushServerNode.Blockchain.Events;
+// using HushServerNode.Blockchain.Factories;
+// using Olimpo;
 
-namespace HushServerNode.Blockchain;
+// namespace HushServerNode.Blockchain;
 
-public class BlockGeneratorService :
-    IBlockGeneratorService,
-    IHandleAsync<BlockchainInitializedEvent>
-{
-    private readonly IBlockBuilder _blockBuilder;
-    private readonly IBlockchainService _blockchainService;
-    private readonly IMemPoolService _memPoolService;
-    private readonly IBlockCreatedEventFactory _blockCreatedEventFactory;
-    private readonly TransactionBaseConverter _transactionBaseConverter;
-    private readonly IApplicationSettingsService _applicationSettingsService;
-    private readonly IEventAggregator _eventAggregator;
+// public class BlockGeneratorService :
+//     IBlockGeneratorService,
+//     IHandleAsync<BlockchainInitializedEvent>
+// {
+//     private readonly IBlockBuilder _blockBuilder;
+//     private readonly IBlockchainService _blockchainService;
+//     private readonly IMemPoolService _memPoolService;
+//     private readonly IBlockCreatedEventFactory _blockCreatedEventFactory;
+//     private readonly TransactionBaseConverter _transactionBaseConverter;
+//     private readonly IApplicationSettingsService _applicationSettingsService;
+//     private readonly IEventAggregator _eventAggregator;
 
-    private IObservable<long> _blockGeneratorLoop;
+//     private IObservable<long> _blockGeneratorLoop;
 
-    public BlockGeneratorService(
-        IBlockBuilder blockBuilder,
-        IBlockchainService blockchainService,
-        IMemPoolService memPoolService,
-        IBlockCreatedEventFactory blockCreatedEventFactory,
-        TransactionBaseConverter transactionBaseConverter,
-        IApplicationSettingsService applicationSettingsService,
-        IEventAggregator eventAggregator)
-    {
-        this._blockBuilder = blockBuilder;
-        this._blockchainService = blockchainService;
-        this._memPoolService = memPoolService;
-        this._blockCreatedEventFactory = blockCreatedEventFactory;
-        this._transactionBaseConverter = transactionBaseConverter;
-        this._applicationSettingsService = applicationSettingsService;
-        this._eventAggregator = eventAggregator;
+//     public BlockGeneratorService(
+//         IBlockBuilder blockBuilder,
+//         IBlockchainService blockchainService,
+//         IMemPoolService memPoolService,
+//         IBlockCreatedEventFactory blockCreatedEventFactory,
+//         TransactionBaseConverter transactionBaseConverter,
+//         IApplicationSettingsService applicationSettingsService,
+//         IEventAggregator eventAggregator)
+//     {
+//         this._blockBuilder = blockBuilder;
+//         this._blockchainService = blockchainService;
+//         this._memPoolService = memPoolService;
+//         this._blockCreatedEventFactory = blockCreatedEventFactory;
+//         this._transactionBaseConverter = transactionBaseConverter;
+//         this._applicationSettingsService = applicationSettingsService;
+//         this._eventAggregator = eventAggregator;
 
-        this._eventAggregator.Subscribe(this);
+//         this._eventAggregator.Subscribe(this);
 
-        this._blockGeneratorLoop = Observable.Interval(TimeSpan.FromSeconds(3));
-    }
+//         this._blockGeneratorLoop = Observable.Interval(TimeSpan.FromSeconds(3));
+//     }
 
-    public async Task HandleAsync(BlockchainInitializedEvent message)
-    {
-        // Create a profile for the Stacker
-        var userProfile = new HushUserProfile
-        {
-            UserName ="AboimPinto Staker",
-            Issuer = this._applicationSettingsService.StackerInfo.PublicSigningAddress,
-            UserPublicSigningAddress = this._applicationSettingsService.StackerInfo.PublicSigningAddress,
-            UserPublicEncryptAddress = this._applicationSettingsService.StackerInfo.PublicEncryptAddress,
-            IsPublic = false
-        };
+//     public async Task HandleAsync(BlockchainInitializedEvent message)
+//     {
+//         // Create a profile for the Stacker
+//         var userProfile = new HushUserProfile
+//         {
+//             UserName ="AboimPinto Staker",
+//             Issuer = this._applicationSettingsService.StackerInfo.PublicSigningAddress,
+//             UserPublicSigningAddress = this._applicationSettingsService.StackerInfo.PublicSigningAddress,
+//             UserPublicEncryptAddress = this._applicationSettingsService.StackerInfo.PublicEncryptAddress,
+//             IsPublic = false
+//         };
 
-        var hashJsonOptions = new JsonSerializerOptionsBuilder()
-            .WithTransactionBaseConverter(this._transactionBaseConverter)
-            .WithModifierExcludeSignature()
-            .WithModifierExcludeBlockIndex()
-            .WithModifierExcludeHash()
-            .Build();
+//         var hashJsonOptions = new JsonSerializerOptionsBuilder()
+//             .WithTransactionBaseConverter(this._transactionBaseConverter)
+//             .WithModifierExcludeSignature()
+//             .WithModifierExcludeBlockIndex()
+//             .WithModifierExcludeHash()
+//             .Build();
 
-        var signJsonOptions = new JsonSerializerOptionsBuilder()
-            .WithTransactionBaseConverter(this._transactionBaseConverter)
-            .WithModifierExcludeSignature()
-            .WithModifierExcludeBlockIndex()
-            .Build();
+//         var signJsonOptions = new JsonSerializerOptionsBuilder()
+//             .WithTransactionBaseConverter(this._transactionBaseConverter)
+//             .WithModifierExcludeSignature()
+//             .WithModifierExcludeBlockIndex()
+//             .Build();
 
-        userProfile.HashObject(this._transactionBaseConverter);
-        userProfile.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, this._transactionBaseConverter);
-        // End create profile
+//         userProfile.HashObject(this._transactionBaseConverter);
+//         userProfile.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, this._transactionBaseConverter);
+//         // End create profile
 
-        await this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(userProfile));
+//         await this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(userProfile));
 
-        this._blockGeneratorLoop.Subscribe(async x => 
-        {
-            var transactions = this._memPoolService.GetNextBlockTransactionsCandidate();
+//         this._blockGeneratorLoop.Subscribe(async x => 
+//         {
+//             var transactions = this._memPoolService.GetNextBlockTransactionsCandidate();
 
-            this._blockchainService.BlockchainState.LastBlockIndex ++; 
-            this._blockchainService.BlockchainState.CurrentPreviousBlockId = this._blockchainService.BlockchainState.CurrentBlockId;
-            this._blockchainService.BlockchainState.CurrentBlockId = this._blockchainService.BlockchainState.CurrentNextBlockId;
-            this._blockchainService.BlockchainState.CurrentNextBlockId = Guid.NewGuid().ToString();
+//             this._blockchainService.BlockchainState.LastBlockIndex ++; 
+//             this._blockchainService.BlockchainState.CurrentPreviousBlockId = this._blockchainService.BlockchainState.CurrentBlockId;
+//             this._blockchainService.BlockchainState.CurrentBlockId = this._blockchainService.BlockchainState.CurrentNextBlockId;
+//             this._blockchainService.BlockchainState.CurrentNextBlockId = Guid.NewGuid().ToString();
 
 
-            // TODO [AboimPinto] Add the transactions to the block
-            var block = this._blockBuilder
-                .WithBlockIndex(this._blockchainService.BlockchainState.LastBlockIndex)
-                .WithBlockId(this._blockchainService.BlockchainState.CurrentBlockId)
-                .WithPreviousBlockId(this._blockchainService.BlockchainState.CurrentPreviousBlockId)
-                .WithNextBlockId(this._blockchainService.BlockchainState.CurrentNextBlockId)
-                .WithRewardBeneficiary(this._applicationSettingsService.StackerInfo, this._blockchainService.BlockchainState.LastBlockIndex)
-                .WithTransactions(transactions)
-                .Build();
+//             // TODO [AboimPinto] Add the transactions to the block
+//             var block = this._blockBuilder
+//                 .WithBlockIndex(this._blockchainService.BlockchainState.LastBlockIndex)
+//                 .WithBlockId(this._blockchainService.BlockchainState.CurrentBlockId)
+//                 .WithPreviousBlockId(this._blockchainService.BlockchainState.CurrentPreviousBlockId)
+//                 .WithNextBlockId(this._blockchainService.BlockchainState.CurrentNextBlockId)
+//                 .WithRewardBeneficiary(this._applicationSettingsService.StackerInfo, this._blockchainService.BlockchainState.LastBlockIndex)
+//                 .WithTransactions(transactions)
+//                 .Build();
 
-            await this._eventAggregator.PublishAsync(this._blockCreatedEventFactory.GetInstance(block));
-        });
-    }
-}
+//             await this._eventAggregator.PublishAsync(this._blockCreatedEventFactory.GetInstance(block));
+//         });
+//     }
+// }

@@ -21,91 +21,94 @@ public class BlockchainCache : IBlockchainCache
         // this._blockchainDataContext.Database.Migrate();
     }
 
-    public async Task<BlockchainState> GetBlockchainStateAsync()
+    // public async Task<BlockchainState> GetBlockchainStateAsync()
+    // {
+    //     using var context = _contextFactory.CreateDbContext();
+    //     return await context.BlockchainState.SingleOrDefaultAsync();
+    // }
+
+    // public async Task UpdateBlockchainState(BlockchainState blockchainState)
+    // {
+    //     using var context = _contextFactory.CreateDbContext();
+    //     if (context.BlockchainState.Any())
+    //     {
+    //         context.BlockchainState.Update(blockchainState);
+    //     }
+    //     else
+    //     {
+    //         context.BlockchainState.Add(blockchainState);
+    //     }
+
+    //     await context.SaveChangesAsync();
+    // }
+
+    // public async Task SaveBlockAsync(
+    //     string blockId, 
+    //     long blockHeight, 
+    //     string previousBlockId, 
+    //     string nextBlockId, 
+    //     string blockHash, 
+    //     string blockJson)
+    // {
+    //     var block = new BlockEntity
+    //     {
+    //         BlockId = blockId,
+    //         Height = blockHeight,
+    //         PreviousBlockId = previousBlockId,
+    //         NextBlockId = nextBlockId,
+    //         Hash = blockHash,
+    //         BlockJson = blockJson
+    //     };
+
+    //     using (var context = _contextFactory.CreateDbContext())
+    //     {
+    //         context.BlockEntities.Add(block);
+    //         await context.SaveChangesAsync();
+    //     }
+    // }
+
+    public Task UpdateBalanceAsync(string address, double value)
     {
-        using var context = _contextFactory.CreateDbContext();
-        return await context.BlockchainState.SingleOrDefaultAsync();
-    }
+        return Task.CompletedTask;
+        // using (var context = _contextFactory.CreateDbContext())
+        // {
+        //     var addressBalance = context.AddressesBalance
+        //         .SingleOrDefault(a => a.Address == address);
 
-    public async Task UpdateBlockchainState(BlockchainState blockchainState)
-    {
-        using var context = _contextFactory.CreateDbContext();
-        if (context.BlockchainState.Any())
-        {
-            context.BlockchainState.Update(blockchainState);
-        }
-        else
-        {
-            context.BlockchainState.Add(blockchainState);
-        }
+        //     if (addressBalance == null)
+        //     {
+        //         addressBalance = new AddressBalance
+        //         {
+        //             Address = address,
+        //             Balance = value
+        //         };
 
-        await context.SaveChangesAsync();
-    }
+        //         context.AddressesBalance.Add(addressBalance);
+        //     }
+        //     else
+        //     {
+        //         addressBalance.Balance += value;
+        //         context.AddressesBalance.Update(addressBalance);
+        //     }
 
-    public async Task SaveBlockAsync(
-        string blockId, 
-        long blockHeight, 
-        string previousBlockId, 
-        string nextBlockId, 
-        string blockHash, 
-        string blockJson)
-    {
-        var block = new BlockEntity
-        {
-            BlockId = blockId,
-            Height = blockHeight,
-            PreviousBlockId = previousBlockId,
-            NextBlockId = nextBlockId,
-            Hash = blockHash,
-            BlockJson = blockJson
-        };
-
-        using (var context = _contextFactory.CreateDbContext())
-        {
-            context.BlockEntities.Add(block);
-            await context.SaveChangesAsync();
-        }
-    }
-
-    public async Task UpdateBalanceAsync(string address, double value)
-    {
-        using (var context = _contextFactory.CreateDbContext())
-        {
-            var addressBalance = context.AddressesBalance
-                .SingleOrDefault(a => a.Address == address);
-
-            if (addressBalance == null)
-            {
-                addressBalance = new AddressBalance
-                {
-                    Address = address,
-                    Balance = value
-                };
-
-                context.AddressesBalance.Add(addressBalance);
-            }
-            else
-            {
-                addressBalance.Balance += value;
-                context.AddressesBalance.Update(addressBalance);
-            }
-
-            await context.SaveChangesAsync();
-        }
+        //     await context.SaveChangesAsync();
+        // }
     }
 
     public double GetBalance(string address)
     {
-        using var context = _contextFactory.CreateDbContext();
-        var addressBalance = context.AddressesBalance
-            .SingleOrDefault(a => a.Address == address);
+    //     using var context = _contextFactory.CreateDbContext();
+    //     var addressBalance = context.AddressesBalance
+    //         .SingleOrDefault(a => a.Address == address);
 
-        if (addressBalance == null)
-        {
-            return 0;
-        }
+    //     if (addressBalance == null)
+    //     {
+    //         return 0;
+    //     }
 
-        return addressBalance.Balance;
+    //     return addressBalance.Balance;
+
+        return 0;
     }
 
     public async Task UpdateProfile(Profile profile)

@@ -3,11 +3,9 @@ using Microsoft.Extensions.Hosting;
 using Olimpo;
 using HushEcosystem;
 using Microsoft.Extensions.Configuration;
+using HushServerNode.InternalModule.Blockchain;
 using HushServerNode.DbModel;
-using HushServerNode.Cache.Authentication;
-using HushServerNode.Cache.Bank;
-using HushServerNode.Cache.Feed;
-using HushServerNode.Cache.Blockchain;
+using HushServerNode.InternalModule.Bank;
 
 namespace HushServerNode;
 
@@ -41,17 +39,13 @@ public class Program
             .RegisterTcpServer()
             .RegisterApplicationSettingsService()
 
-            .RegisterBlockchainCacheService()
-            .RegisterCacheBlockchainContext()           // The registration of the modules should be done by AutoDiscover and not HARDCODED
-            .RegisterCacheAuthenticationContext()
-            .RegisterCacheBankContext()
-            .RegisterCacheFeedContext()
-            
-            .RegisterBlockchainService()
-            .RegisterServerService()
-            .RegisterRpcModel()
-            .RegisterRpcManager()
-            .RegisterGrpc();
+            .RegisterInternalModuleBlockchain()
+            .RegisterInternalModuleBank()
+            // .RegisterBlockchainService()
+            // .RegisterServerService()
+            .RegisterRpcModel();
+            // .RegisterRpcManager()
+            // .RegisterGrpc();
 
         public static IConfigurationBuilder ConfigureConfigurationBuilder(IConfigurationBuilder configurationBuilder)
         {

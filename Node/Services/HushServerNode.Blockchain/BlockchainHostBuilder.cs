@@ -25,7 +25,7 @@ public static class BlockchainHostBuilder
             services.AddSingleton<IBlockVerifier, BlockVerifier>();
 
             services.AddSingleton<IMemPoolService, MemPoolService>();
-            services.AddSingleton<IBlockGeneratorService, BlockGeneratorService>();
+            // services.AddSingleton<IBlockGeneratorService, BlockGeneratorService>();
 
             services.AddSingleton<IBlockCreatedEventFactory, BlockCreatedEventFactory>();
 

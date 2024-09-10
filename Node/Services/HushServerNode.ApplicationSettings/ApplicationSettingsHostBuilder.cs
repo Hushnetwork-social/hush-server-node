@@ -12,17 +12,17 @@ public static class ApplicationSettingsHostBuilder
     {
         builder.ConfigureServices((hostContext, services) =>
         {
-            services.AddSingleton<IApplicationSettingsService, ApplicationSettingsService>();
+            // services.AddSingleton<IApplicationSettingsService, ApplicationSettingsService>();
             
-            services.AddSingleton<IBootstrapper>(x => 
-            {
-                if (x.GetService<IApplicationSettingsService>() is not IBootstrapper bootstrapper)
-                {
-                    throw new InvalidOperationException("ApplicationSettings doesn't implement IBootstrapper interface");
-                }
+            // services.AddSingleton<IBootstrapper>(x => 
+            // {
+            //     if (x.GetService<IApplicationSettingsService>() is not IBootstrapper bootstrapper)
+            //     {
+            //         throw new InvalidOperationException("ApplicationSettings doesn't implement IBootstrapper interface");
+            //     }
 
-                return bootstrapper;
-            });
+            //     return bootstrapper;
+            // });
         });
 
         return builder;

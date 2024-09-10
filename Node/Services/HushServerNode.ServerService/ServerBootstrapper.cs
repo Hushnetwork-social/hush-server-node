@@ -9,7 +9,6 @@ namespace HushServerNode.ServerService
 {
     public class ServerBootstrapper : IBootstrapper
     {
-        private readonly IApplicationSettingsService _applicationSettingsService;
         private readonly IServer _server;
         private readonly ILogger<ServerBootstrapper> _logger;
 
@@ -18,11 +17,9 @@ namespace HushServerNode.ServerService
         public int Priority { get; set; } = 10;
 
         public ServerBootstrapper(
-            IApplicationSettingsService applicationSettingsService,
             IServer server,
             ILogger<ServerBootstrapper> logger)
         {
-            this._applicationSettingsService = applicationSettingsService;
             this._server = server;
             this._logger = logger;
 
@@ -38,7 +35,6 @@ namespace HushServerNode.ServerService
         {
             this._logger.LogInformation("Starting TCP Server...");
             this.BootstrapFinished.OnNext(true);
-            // await this._server.Start(IPAddress.Any, this._applicationSettingsService.ServerInfo.ListeningPort);
             return Task.CompletedTask;
         }
     }

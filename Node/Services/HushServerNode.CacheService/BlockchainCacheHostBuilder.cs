@@ -12,16 +12,16 @@ public static class BlockchainCacheHostBuilder
     {
         return builder.ConfigureServices(services =>
         {
-            services.AddSingleton<IBootstrapper, BlockchainCacheBootstrapper>();
+            // services.AddSingleton<IBootstrapper, BlockchainCacheBootstrapper>();
 
-            // services.AddDbContext<BlockchainDataContext>();
-            services.AddDbContextFactory<BlockchainDataContext>();
+            // // services.AddDbContext<BlockchainDataContext>();
+            // services.AddDbContextFactory<BlockchainDataContext>();
 
-            services.AddSingleton<IDbContextConfigurator, CacheServiceConfigurator>();
-            services.AddSingleton<CacheServiceConfigurator>();
+            // services.AddSingleton<IDbContextConfigurator, CacheServiceConfigurator>();
+            // services.AddSingleton<CacheServiceConfigurator>();
 
 
-            services.AddSingleton<IBlockchainCache, BlockchainCache>();
+            // services.AddSingleton<IBlockchainCache, BlockchainCache>();
         });
     }
 }

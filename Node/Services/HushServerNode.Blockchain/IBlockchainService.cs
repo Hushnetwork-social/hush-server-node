@@ -9,7 +9,7 @@ public interface IBlockchainService
 {
     BlockchainState BlockchainState { get; set; }
 
-    Task InitializeBlockchainAsync();
+    // Task InitializeBlockchainAsync();
 
     IEnumerable<VerifiedTransaction> ListTransactionsForAddress(string address, double lastHeightSynched);
 
@@ -17,7 +17,7 @@ public interface IBlockchainService
 
     HushUserProfile GetUserProfile(string publicAddress);
 
-    Task UpdateBlockchainState();
+    // Task UpdateBlockchainState();
 
-    Task SaveBlock(Block block);
+    // Task SaveBlock(Block block);
 }
