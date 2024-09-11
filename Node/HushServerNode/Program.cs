@@ -7,6 +7,7 @@ using HushServerNode.InternalModule.Blockchain;
 using HushServerNode.DbModel;
 using HushServerNode.InternalModule.Bank;
 using HushServerNode.InternalModule.MemPool;
+using HushServerNode.InternalModule.Authentication;
 
 namespace HushServerNode;
 
@@ -42,6 +43,7 @@ public class Program
 
             .RegisterInternalModuleBlockchain()
             .RegisterInternalModuleBank()
+            .RegisterInternalModuleAuthentication()
             .RegisterInternalModuleMemPool()
             // .RegisterBlockchainService()
             // .RegisterServerService()

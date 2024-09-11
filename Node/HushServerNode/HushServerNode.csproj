@@ -48,20 +48,15 @@
     <ProjectReference Include="..\Services\HushServerNode.ServerService\HushServerNode.ServerService.csproj" />
     <ProjectReference Include="..\Modules\Olimpo.SigningManager\SigningManager.csproj" />
     <ProjectReference Include="..\Modules\Olimpo.EncryptingManager\EncryptingManager.csproj" />
-    <ProjectReference Include="..\Services\HushServerNode.Blockchain\HushServerNode.Blockchain.csproj" />
-    <ProjectReference Include="..\Services\HushServerNode.BlockchainService\HushServerNode.BlockchainService.csproj" />
     <ProjectReference Include="..\Services\HushServerNode.ApplicationSettings\HushServerNode.ApplicationSettingsService.csproj" />
     <ProjectReference Include="..\Modules\HushEcosystem.RpcModel\HushEcosystem.RpcModel.csproj" />
     <ProjectReference Include="..\Services\HushServerNode.RpcManager\HushServerNode.RpcManager.csproj" />
-    <ProjectReference Include="..\Services\HushServerNode.CacheService\HushServerNode.CacheService.csproj" />
     <ProjectReference Include="..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\Services\HushServerNode.Interfaces\HushServerNode.Interfaces.csproj" />
-    <ProjectReference Include="..\Services\HushServerNode.Cache.Authentication\HushServerNode.Cache.Authentication.csproj" />
-    <ProjectReference Include="..\Services\HushServerNode.Cache.Bank\HushServerNode.Cache.Bank.csproj" />
-    <ProjectReference Include="..\Services\HushServerNode.Cache.Feed\HushServerNode.Cache.Feed.csproj" />
     <ProjectReference Include="..\InternalModules\Blockchain\HushServerNode.InternalModule.Blockchain\HushServerNode.InternalModule.Blockchain.csproj" />
     <ProjectReference Include="..\InternalModules\Bank\HushServerNode.InternalModule.Bank\HushServerNode.InternalModule.Bank.csproj" />
     <ProjectReference Include="..\InternalModules\MemPool\HushServerNode.InternalModule.MemPool\HushServerNode.InternalModule.MemPool.csproj" />
+    <ProjectReference Include="..\InternalModules\Authentication\HushServerNode.InternalModule.Authentication\HushServerNode.InternalModule.Authentication.csproj" />
   </ItemGroup>
 
 </Project>

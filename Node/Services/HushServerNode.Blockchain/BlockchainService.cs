@@ -114,23 +114,23 @@ public class BlockchainService :
         return new List<VerifiedTransaction>();
     }
 
-    public double GetBalanceForAddress(string address)
-    {
-        return this._blockchainCache.GetBalance(address);
-    }
+    // public double GetBalanceForAddress(string address)
+    // {
+    //     return this._blockchainCache.GetBalance(address);
+    // }
 
-    public HushUserProfile GetUserProfile(string publicAddress)
-    {
-        var profileEntity = this._blockchainCache.GetProfile(publicAddress);
+    // public HushUserProfile GetUserProfile(string publicAddress)
+    // {
+    //     var profileEntity = this._blockchainCache.GetProfile(publicAddress);
 
-        return new HushUserProfile
-        {
-            UserName = profileEntity.UserName,
-            UserPublicSigningAddress = profileEntity.PublicSigningAddress,
-            UserPublicEncryptAddress = profileEntity.PublicEncryptAddress,
-            IsPublic = profileEntity.IsPublic
-        };
-    }
+    //     return new HushUserProfile
+    //     {
+    //         UserName = profileEntity.UserName,
+    //         UserPublicSigningAddress = profileEntity.PublicSigningAddress,
+    //         UserPublicEncryptAddress = profileEntity.PublicEncryptAddress,
+    //         IsPublic = profileEntity.IsPublic
+    //     };
+    // }
 
     // public void Shutdown()
     // {

@@ -1,7 +1,7 @@
 using HushServerNode.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
-namespace HushServerNode.Cache.Authentication;
+namespace HushServerNode.InternalModule.Authentication.Cache;
 
 public class CacheAuthenticationDbContextConfigurator : IDbContextConfigurator
 {

@@ -13,9 +13,9 @@ public interface IBlockchainService
 
     IEnumerable<VerifiedTransaction> ListTransactionsForAddress(string address, double lastHeightSynched);
 
-    double GetBalanceForAddress(string address);
+    // double GetBalanceForAddress(string address);
 
-    HushUserProfile GetUserProfile(string publicAddress);
+    // HushUserProfile GetUserProfile(string publicAddress);
 
     // Task UpdateBlockchainState();
 
