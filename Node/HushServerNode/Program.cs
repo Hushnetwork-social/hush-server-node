@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using HushServerNode.InternalModule.Blockchain;
 using HushServerNode.DbModel;
 using HushServerNode.InternalModule.Bank;
+using HushServerNode.InternalModule.MemPool;
 
 namespace HushServerNode;
 
@@ -41,6 +42,7 @@ public class Program
 
             .RegisterInternalModuleBlockchain()
             .RegisterInternalModuleBank()
+            .RegisterInternalModuleMemPool()
             // .RegisterBlockchainService()
             // .RegisterServerService()
             .RegisterRpcModel();

@@ -2,7 +2,7 @@ using HushServerNode.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
-namespace HushServerNode.Cache.Blockchain;
+namespace HushServerNode.InternalModule.Blockchain.Cache;
 
 public class CacheBlockchainDbContext : BaseDbContext
 {

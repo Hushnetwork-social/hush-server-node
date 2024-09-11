@@ -11,7 +11,7 @@ public class BlockBuilder : IBlockBuilder
     private string _previousBlockId = string.Empty;
     private string _nextBlockId = string.Empty;
     private long _blockIndex;
-    private string _publicSigningAddress;
+    private string _privateSigningKey;
     private TransactionBase _rewardTransaction;
     private VerifiedTransaction _verifiedRewardTransaction;
     private IEnumerable<VerifiedTransaction> _verifiedTransactions;
@@ -51,7 +51,7 @@ public class BlockBuilder : IBlockBuilder
         string privateSigningKey,
         double blockHeight)
     {
-        this._publicSigningAddress = publicSigningAddress;
+        this._privateSigningKey = privateSigningKey;
 
         this._rewardTransaction = new BlockCreationTransactionBuilder()
             .WithIssuerAddress(publicSigningAddress)
@@ -68,7 +68,7 @@ public class BlockBuilder : IBlockBuilder
         };
 
         this._verifiedRewardTransaction.HashObject(this._transactionBaseConverter);
-        this._verifiedRewardTransaction.Sign(publicSigningAddress, this._transactionBaseConverter);
+        this._verifiedRewardTransaction.Sign(privateSigningKey, this._transactionBaseConverter);
 
         return this;
     }
@@ -101,7 +101,7 @@ public class BlockBuilder : IBlockBuilder
 
         newBlock.FinalizeBlock();
 
-        newBlock.Sign(this._publicSigningAddress, this._transactionBaseConverter);
+        newBlock.Sign(this._privateSigningKey, this._transactionBaseConverter);
 
         return newBlock;
     }

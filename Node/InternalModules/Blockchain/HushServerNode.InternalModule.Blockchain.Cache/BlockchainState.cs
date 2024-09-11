@@ -1,4 +1,4 @@
-namespace HushServerNode.Cache.Blockchain;
+namespace HushServerNode.InternalModule.Blockchain.Cache;
 
 public class BlockchainState
 {

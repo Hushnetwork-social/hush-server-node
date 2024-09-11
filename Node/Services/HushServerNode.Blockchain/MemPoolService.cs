@@ -15,9 +15,9 @@ namespace HushServerNode.Blockchain;
 public class MemPoolService: 
     IMemPoolService,
     IHandle<NewFeedRequestedEvent>,
-    IHandle<SendFeedMessageRequestedEvent>,
+    IHandle<SendFeedMessageRequestedEvent>
     // IHandle<UserProfileRequestedEvent>,
-    IHandle<AddTrasactionToMemPoolEvent>
+    // IHandle<AddTrasactionToMemPoolEvent>
 {
     private readonly IBlockchainService _blockchainService;
     private readonly IApplicationSettingsService _applicationSettingsService;
@@ -133,18 +133,18 @@ public class MemPoolService:
     //     this._nextBlockTransactionsCandidate.Add(verifiedTransaction);
     // }
 
-    public void Handle(AddTrasactionToMemPoolEvent message)
-    {
-        var verifiedTransaction = new VerifiedTransaction
-        {
-            SpecificTransaction = message.Transaction,
-            ValidatorAddress = this._applicationSettingsService.StackerInfo.PublicSigningAddress,
-            BlockIndex = this._blockchainService.BlockchainState.LastBlockIndex
-        };
+    // public void Handle(AddTrasactionToMemPoolEvent message)
+    // {
+    //     var verifiedTransaction = new VerifiedTransaction
+    //     {
+    //         SpecificTransaction = message.Transaction,
+    //         ValidatorAddress = this._applicationSettingsService.StackerInfo.PublicSigningAddress,
+    //         BlockIndex = this._blockchainService.BlockchainState.LastBlockIndex
+    //     };
         
-        verifiedTransaction.HashObject(this._transactionBaseConverter);
-        verifiedTransaction.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, this._transactionBaseConverter);
+    //     verifiedTransaction.HashObject(this._transactionBaseConverter);
+    //     verifiedTransaction.Sign(this._applicationSettingsService.StackerInfo.PrivateSigningKey, this._transactionBaseConverter);
 
-        this._nextBlockTransactionsCandidate.Add(verifiedTransaction);
-    }
+    //     this._nextBlockTransactionsCandidate.Add(verifiedTransaction);
+    // }
 }

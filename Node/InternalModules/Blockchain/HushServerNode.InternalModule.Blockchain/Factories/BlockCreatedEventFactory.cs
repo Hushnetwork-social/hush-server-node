@@ -1,6 +1,6 @@
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
-using HushServerNode.Cache.Blockchain;
+using HushServerNode.InternalModule.Blockchain.Cache;
 using HushServerNode.InternalModule.Blockchain.Events;
 
 namespace HushServerNode.InternalModule.Blockchain.Factories;

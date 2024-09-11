@@ -1,7 +1,7 @@
 using System.Text.Json;
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
-using HushServerNode.Cache.Blockchain;
+using HushServerNode.InternalModule.Blockchain.Cache;
 
 namespace HushServerNode.InternalModule.Blockchain.Events;
 

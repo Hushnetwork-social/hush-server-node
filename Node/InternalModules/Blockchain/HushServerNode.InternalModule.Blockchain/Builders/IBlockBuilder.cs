@@ -13,10 +13,7 @@ public interface IBlockBuilder
 
     IBlockBuilder WithBlockIndex(long blockIndex);
 
-    IBlockBuilder WithRewardBeneficiary(
-        string publicSigningAddress,
-        string privateSigningKey,
-        double blockHeight);
+    IBlockBuilder WithRewardBeneficiary(string publicSigningAddress, string privateSigningKey, double blockHeight);
 
     IBlockBuilder WithTransactions(IEnumerable<VerifiedTransaction> verifiedTransactions);
 

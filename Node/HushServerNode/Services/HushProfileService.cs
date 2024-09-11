@@ -3,6 +3,7 @@ using HushEcosystem.Model.Blockchain;
 using HushNetwork.proto;
 using HushServerNode.Blockchain.Events;
 using HushServerNode.CacheService;
+using HushServerNode.InternalModule.MemPool.Events;
 using Olimpo;
 
 namespace HushServerNode.Services;

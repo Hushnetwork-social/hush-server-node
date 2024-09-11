@@ -1,4 +1,4 @@
-using HushServerNode.Cache.Blockchain;
+using HushServerNode.InternalModule.Blockchain.Cache;
 using Microsoft.EntityFrameworkCore;
 
 namespace HushServerNode.InternalModule.Blockchain;

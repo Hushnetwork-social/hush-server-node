@@ -1,6 +1,6 @@
-﻿using HushServerNode.Cache.Blockchain;
-using HushServerNode.Interfaces;
+﻿using HushServerNode.Interfaces;
 using HushServerNode.InternalModule.Blockchain.Builders;
+using HushServerNode.InternalModule.Blockchain.Cache;
 using HushServerNode.InternalModule.Blockchain.Factories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -23,19 +23,18 @@ public static class BlockchainHostBuilder
 
             services.AddSingleton<IBlockCreatedEventFactory, BlockCreatedEventFactory>();
 
+            services.AddSingleton<IBlockVerifier, BlockVerifier>();
 
+            // Register Blockchain Cache 
             services.AddDbContextFactory<CacheBlockchainDbContext>();
             services.AddSingleton<IDbContextConfigurator, CacheBlockchainDbContextConfigurator>();
             services.AddSingleton<CacheBlockchainDbContextConfigurator>();
-
 
             // services.AddSingleton<IBlockchainDb, BlockchainDb>();
             // services.AddSingleton<IBlockchainIndexDb, BlockchainIndexDb>();
 
             // services.AddSingleton<IBootstrapper, BlockchainBootstrapper>();
             // services.AddSingleton<IBlockchainService, BlockchainService>();
-
-            // services.AddSingleton<IBlockVerifier, BlockVerifier>();
 
             // services.AddSingleton<IMemPoolService, MemPoolService>();
             // services.AddSingleton<IBlockGeneratorService, BlockGeneratorService>();

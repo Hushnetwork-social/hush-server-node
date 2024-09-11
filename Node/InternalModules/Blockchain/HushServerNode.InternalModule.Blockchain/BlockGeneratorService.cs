@@ -1,7 +1,7 @@
 using System.Reactive.Linq;
 using HushEcosystem.Model.Blockchain;
-using HushServerNode.Cache.Blockchain;
 using HushServerNode.InternalModule.Blockchain.Builders;
+using HushServerNode.InternalModule.Blockchain.Cache;
 using HushServerNode.InternalModule.Blockchain.Events;
 using HushServerNode.InternalModule.Blockchain.Factories;
 using Microsoft.Extensions.Configuration;

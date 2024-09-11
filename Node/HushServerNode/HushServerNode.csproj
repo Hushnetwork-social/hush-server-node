@@ -59,9 +59,9 @@
     <ProjectReference Include="..\Services\HushServerNode.Cache.Authentication\HushServerNode.Cache.Authentication.csproj" />
     <ProjectReference Include="..\Services\HushServerNode.Cache.Bank\HushServerNode.Cache.Bank.csproj" />
     <ProjectReference Include="..\Services\HushServerNode.Cache.Feed\HushServerNode.Cache.Feed.csproj" />
-    <ProjectReference Include="..\InternalModules\Blockchain\HushServerNode.Cache.Blockchain\HushServerNode.Cache.Blockchain.csproj" />
     <ProjectReference Include="..\InternalModules\Blockchain\HushServerNode.InternalModule.Blockchain\HushServerNode.InternalModule.Blockchain.csproj" />
     <ProjectReference Include="..\InternalModules\Bank\HushServerNode.InternalModule.Bank\HushServerNode.InternalModule.Bank.csproj" />
+    <ProjectReference Include="..\InternalModules\MemPool\HushServerNode.InternalModule.MemPool\HushServerNode.InternalModule.MemPool.csproj" />
   </ItemGroup>
 
 </Project>
