@@ -57,6 +57,7 @@
     <ProjectReference Include="..\InternalModules\Bank\HushServerNode.InternalModule.Bank\HushServerNode.InternalModule.Bank.csproj" />
     <ProjectReference Include="..\InternalModules\MemPool\HushServerNode.InternalModule.MemPool\HushServerNode.InternalModule.MemPool.csproj" />
     <ProjectReference Include="..\InternalModules\Authentication\HushServerNode.InternalModule.Authentication\HushServerNode.InternalModule.Authentication.csproj" />
+    <ProjectReference Include="..\InternalModules\Feed\HushServerNode.InternalModule.Feed\HushServerNode.InternalModule.Feed.csproj" />
   </ItemGroup>
 
 </Project>

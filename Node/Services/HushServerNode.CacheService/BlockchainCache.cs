@@ -150,9 +150,11 @@ public class BlockchainCache : IBlockchainCache
 
     public bool FeedExists(string feedId)
     {
-        using var context = _contextFactory.CreateDbContext();
-        return context.FeedEntities
-            .Any(f => f.FeedId == feedId);
+        // using var context = _contextFactory.CreateDbContext();
+        // return context.FeedEntities
+        //     .Any(f => f.FeedId == feedId);
+
+        return false;
     }
 
     public bool UserHasFeeds(string address)
@@ -185,33 +187,33 @@ public class BlockchainCache : IBlockchainCache
         string privateEncryptKey,
         double blockIndex)
     {
-        // TODO [AboimPinto]: The meaning of the BlockIndex could have several meanings here:
-        // 1. In the FeedEntity, the BlockIndex is the block index of the first block of the feed.
-        // 2. In the FeedParticipants, the BlockIndex is the block index since when the credentials are valid
-        // NOTE: If a participant is removed from the feed, for all other participant a new valid credentials are created. 
-        // How the user know that was kicked out of the feed?
+        // // TODO [AboimPinto]: The meaning of the BlockIndex could have several meanings here:
+        // // 1. In the FeedEntity, the BlockIndex is the block index of the first block of the feed.
+        // // 2. In the FeedParticipants, the BlockIndex is the block index since when the credentials are valid
+        // // NOTE: If a participant is removed from the feed, for all other participant a new valid credentials are created. 
+        // // How the user know that was kicked out of the feed?
 
-        var participantFeedEntity = new FeedParticipants
-        {
-            FeedId = feedId,
-            ParticipantPublicAddress = personalFeedOwnerAddress,
-            ParticipantType = 0,
-            PublicEncryptAddress = publicEncryptAddress,
-            PrivateEncryptKey = privateEncryptKey
-        };
+        // var participantFeedEntity = new FeedParticipants
+        // {
+        //     FeedId = feedId,
+        //     ParticipantPublicAddress = personalFeedOwnerAddress,
+        //     ParticipantType = 0,
+        //     PublicEncryptAddress = publicEncryptAddress,
+        //     PrivateEncryptKey = privateEncryptKey
+        // };
 
-        var personlFeedEntity = new FeedEntity
-        {
-            FeedId = feedId,
-            FeedType = feedType,
-            Title = feedTitle,
-            BlockIndex = blockIndex,
-            FeedParticipants = new List<FeedParticipants> { participantFeedEntity },
-        };
+        // var personlFeedEntity = new FeedEntity
+        // {
+        //     FeedId = feedId,
+        //     FeedType = feedType,
+        //     Title = feedTitle,
+        //     BlockIndex = blockIndex,
+        //     FeedParticipants = new List<FeedParticipants> { participantFeedEntity },
+        // };
 
-        using var context = _contextFactory.CreateDbContext();
-        context.FeedEntities.Add(personlFeedEntity);
-        await context.SaveChangesAsync();
+        // using var context = _contextFactory.CreateDbContext();
+        // context.FeedEntities.Add(personlFeedEntity);
+        // await context.SaveChangesAsync();
     }
 
     public async Task CreateChatFeed(
@@ -222,36 +224,36 @@ public class BlockchainCache : IBlockchainCache
         string chatParticipantPrivateEncryptKey,
         double blockIndex)
     {
-        // TODO [AboimPinto]: The meaning of the BlockIndex could have several meanings here:
-        // 1. In the FeedEntity, the BlockIndex is the block index of the first block of the feed.
-        // 2. In the FeedParticipants, the BlockIndex is the block index since when the credentials are valid
-        // NOTE: If a participant is removed from the feed, for all other participant a new valid credentials are created. 
-        // How the user know that was kicked out of the feed?
+        // // TODO [AboimPinto]: The meaning of the BlockIndex could have several meanings here:
+        // // 1. In the FeedEntity, the BlockIndex is the block index of the first block of the feed.
+        // // 2. In the FeedParticipants, the BlockIndex is the block index since when the credentials are valid
+        // // NOTE: If a participant is removed from the feed, for all other participant a new valid credentials are created. 
+        // // How the user know that was kicked out of the feed?
 
-        var chatParticipantFeedEntity = new FeedParticipants
-        {
-            FeedId = feedId,
-            ParticipantPublicAddress = chatParticipantAddress,
-            ParticipantType = 0,
-            PublicEncryptAddress = chatParticipantPublicEncryptAddress,
-            PrivateEncryptKey = chatParticipantPrivateEncryptKey
-        };
+        // var chatParticipantFeedEntity = new FeedParticipants
+        // {
+        //     FeedId = feedId,
+        //     ParticipantPublicAddress = chatParticipantAddress,
+        //     ParticipantType = 0,
+        //     PublicEncryptAddress = chatParticipantPublicEncryptAddress,
+        //     PrivateEncryptKey = chatParticipantPrivateEncryptKey
+        // };
 
-        var personlFeedEntity = new FeedEntity
-        {
-            FeedId = feedId,
-            FeedType = feedType,
-            Title = "n/a",
-            BlockIndex = blockIndex,
-            FeedParticipants = new List<FeedParticipants> 
-            { 
-                chatParticipantFeedEntity
-            }, 
-        };
+        // var personlFeedEntity = new FeedEntity
+        // {
+        //     FeedId = feedId,
+        //     FeedType = feedType,
+        //     Title = "n/a",
+        //     BlockIndex = blockIndex,
+        //     FeedParticipants = new List<FeedParticipants> 
+        //     { 
+        //         chatParticipantFeedEntity
+        //     }, 
+        // };
 
-        using var context = _contextFactory.CreateDbContext();
-        context.FeedEntities.Add(personlFeedEntity);
-        await context.SaveChangesAsync();
+        // using var context = _contextFactory.CreateDbContext();
+        // context.FeedEntities.Add(personlFeedEntity);
+        // await context.SaveChangesAsync();
     }
 
     public async Task AddParticipantToChatFeed(
@@ -261,35 +263,39 @@ public class BlockchainCache : IBlockchainCache
         string chatParticipantPrivateEncryptKey,
         double blockIndex)
     {
-        var chatParticipantFeedEntity = new FeedParticipants
-        {
-            FeedId = feedId,
-            ParticipantPublicAddress = chatParticipantAddress,
-            ParticipantType = 0,
-            PublicEncryptAddress = chatParticipantPublicEncryptAddress,
-            PrivateEncryptKey = chatParticipantPrivateEncryptKey
-        };
+        // var chatParticipantFeedEntity = new FeedParticipants
+        // {
+        //     FeedId = feedId,
+        //     ParticipantPublicAddress = chatParticipantAddress,
+        //     ParticipantType = 0,
+        //     PublicEncryptAddress = chatParticipantPublicEncryptAddress,
+        //     PrivateEncryptKey = chatParticipantPrivateEncryptKey
+        // };
 
-        using var context = _contextFactory.CreateDbContext();
-        context.FeedParticipants.Add(chatParticipantFeedEntity);
-        await context.SaveChangesAsync();
+        // using var context = _contextFactory.CreateDbContext();
+        // context.FeedParticipants.Add(chatParticipantFeedEntity);
+        // await context.SaveChangesAsync();
     }
 
     public IEnumerable<FeedEntity> GetUserFeeds(string address)
     {
-        using var context = _contextFactory.CreateDbContext();
-        return context.FeedEntities
-            .Include(x => x.FeedParticipants)
-            .Where(x => x.FeedParticipants.Any(p => p.ParticipantPublicAddress == address))
-            .ToList();
+        // using var context = _contextFactory.CreateDbContext();
+        // return context.FeedEntities
+        //     .Include(x => x.FeedParticipants)
+        //     .Where(x => x.FeedParticipants.Any(p => p.ParticipantPublicAddress == address))
+        //     .ToList();
+
+        return null;
     }
 
     public IEnumerable<FeedMessageEntity> GetFeedMessages(string feedId, double blockIndex)
     {
-        using var context = this._contextFactory.CreateDbContext();
-        return context.FeedMessages
-            .Where(x => x.FeedId == feedId && x.BlockIndex > blockIndex)
-            .ToList();
+        // using var context = this._contextFactory.CreateDbContext();
+        // return context.FeedMessages
+        //     .Where(x => x.FeedId == feedId && x.BlockIndex > blockIndex)
+        //     .ToList();
+
+        return null;
     }
 
     public async Task SaveMessageAsync(FeedMessageEntity feedMessage)
