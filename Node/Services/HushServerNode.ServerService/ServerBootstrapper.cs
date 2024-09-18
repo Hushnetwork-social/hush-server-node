@@ -1,7 +1,6 @@
 using System.Net;
 using System.Reactive.Subjects;
 using System.Threading.Tasks;
-using HushServerNode.ApplicationSettings;
 using Microsoft.Extensions.Logging;
 using Olimpo;
 

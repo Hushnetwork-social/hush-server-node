@@ -1,12 +1,5 @@
-using System.Collections.Generic;
-using System.Text.Json;
-using HushEcosystem;
 using HushEcosystem.Model;
 using HushEcosystem.Model.GlobalEvents;
-using HushEcosystem.Model.Rpc.Feeds;
-using HushEcosystem.Model.Rpc.Profiles;
-using HushEcosystem.Model.Rpc.Transactions;
-using HushServerNode.Blockchain;
 using HushServerNode.ServerService;
 using Olimpo;
 
@@ -23,7 +16,7 @@ public class Rpc :
     IHandle<FeedMessagesForAddressRequestedEvent>
 {
     private readonly ITcpServerService _tcpServerService;
-    private readonly IBlockchainService _blockchainService;
+    // private readonly IBlockchainService _blockchainService;
     private readonly TransactionBaseConverter _transactionBaseConverter;
     private readonly IEventAggregator _eventAggregator;
 

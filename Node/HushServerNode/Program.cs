@@ -40,7 +40,6 @@ public class Program
             .RegisterBootstrapperManager()
             .RegisterEventAggregatorManager()
             .RegisterTcpServer()
-            .RegisterApplicationSettingsService()
 
             .RegisterInternalModuleBlockchain()
             .RegisterInternalModuleBank()
