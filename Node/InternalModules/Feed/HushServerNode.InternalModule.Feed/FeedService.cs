@@ -54,6 +54,26 @@ public class FeedService : IFeedService
         }
     }
 
+    public bool UserHasFeeds(string address)
+    {
+        return this._feedDbAccess.UserHasFeeds(address);
+    }
+
+    public IEnumerable<FeedEntity> GetUserFeeds(string address)
+    {
+        return this._feedDbAccess.GetUserFeeds(address);
+    }
+
+    public FeedEntity? GetFeed(string feedId)
+    {
+        return this._feedDbAccess.GetFeed(feedId);
+    }
+
+    public IEnumerable<FeedMessageEntity> GetFeedMessages(string feedId, double blockIndex)
+    {
+        return this._feedDbAccess.GetFeedMessages(feedId, blockIndex);
+    }
+
     private async Task HandlesPersonalFeed(HushEcosystem.Model.Blockchain.Feed feed, double blockIndex)
     {
         var feedParticipantProfile = this._authenticationService.GetUserProfile(feed.Issuer);

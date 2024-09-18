@@ -1,8 +1,7 @@
 using Grpc.Core;
 using HushEcosystem.Model.Blockchain;
 using HushNetwork.proto;
-using HushServerNode.Blockchain.Events;
-using HushServerNode.CacheService;
+using HushServerNode.InternalModule.Authentication;
 using HushServerNode.InternalModule.MemPool.Events;
 using Olimpo;
 
@@ -10,25 +9,26 @@ namespace HushServerNode.Services;
 
 public class HushProfileService : HushProfile.HushProfileBase
 {
-    private readonly IBlockchainCache _blockchainCacheService;
+    private readonly IAuthenticationService _authenticationService;
+
     private readonly IEventAggregator _eventAggregator;
 
     public HushProfileService(
-        IBlockchainCache blockchainCacheService,
+        IAuthenticationService authenticationService,
         IEventAggregator eventAggregator)
     {
-        this._blockchainCacheService = blockchainCacheService;
+        this._authenticationService = authenticationService;
         this._eventAggregator = eventAggregator;
     }
 
-    public override Task<SetProfileReply> SetProfile(SetProfileRequest request, ServerCallContext context)
+    public override async Task<SetProfileReply> SetProfile(SetProfileRequest request, ServerCallContext context)
     {
-        var profile = this._blockchainCacheService.GetProfile(request.Profile.UserPublicSigningAddress);
+        var profile = this._authenticationService.GetUserProfile(request.Profile.UserPublicSigningAddress);
         
         if (profile == null)
         {
             // sends the UserProfile to MemPool 
-            this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(
+            await this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(
                 new HushUserProfile
                 {
                     Id = request.Profile.Id,
@@ -42,26 +42,26 @@ public class HushProfileService : HushProfile.HushProfileBase
                 }
             ));
 
-            return Task.FromResult(new SetProfileReply
+            return new SetProfileReply
             {
                 Successfull = true,
                 ResultType = 1,
                 Message = "User Profile added to blockchain"
-            });
+            };
         }
 
         // TODO [AboimPinto] here should be update the ProfileName and IsPublic flag
-        return Task.FromResult(new SetProfileReply
+        return new SetProfileReply
         {
             Successfull = false,
             ResultType = 2,
             Message = "User Profile already in the blockchain"
-        });
+        };
     }
 
     public override Task<GetProfileReply> GetProfile(GetProfileRequest request, ServerCallContext context)
     {
-        var profile = this._blockchainCacheService.GetProfile(request.ProfilePublicSigningAddress);
+        var profile = this._authenticationService.GetUserProfile(request.ProfilePublicSigningAddress);
 
         if (profile == null)
         {
@@ -75,8 +75,8 @@ public class HushProfileService : HushProfile.HushProfileBase
         return Task.FromResult(new GetProfileReply
         {
             UserName = profile.UserName,
-            ProfilePublicSigningAddress = profile.PublicSigningAddress,
-            ProfilePublicEncryptAddress = profile.PublicEncryptAddress,
+            ProfilePublicSigningAddress = profile.UserPublicSigningAddress,
+            ProfilePublicEncryptAddress = profile.UserPublicEncryptAddress,
             Successfull = true,
             Message = string.Empty
         });
@@ -84,7 +84,7 @@ public class HushProfileService : HushProfile.HushProfileBase
 
     public override Task<ProfileExistsReply> ProfileExists(ProfileExistsRequest request, ServerCallContext context)
     {
-        var profile = this._blockchainCacheService.GetProfile(request.ProfilePublicKey);
+        var profile = this._authenticationService.GetUserProfile(request.ProfilePublicKey);
 
         if (profile == null)
         {
@@ -102,7 +102,7 @@ public class HushProfileService : HushProfile.HushProfileBase
 
     public override Task<LoadProfileReply> LoadProfile(LoadProfileRequest request, ServerCallContext context)
     {
-        var profile = this._blockchainCacheService.GetProfile(request.ProfilePublicKey);
+        var profile = this._authenticationService.GetUserProfile(request.ProfilePublicKey);
 
         if (profile == null)
         {
@@ -117,8 +117,8 @@ public class HushProfileService : HushProfile.HushProfileBase
         {
             Profile = new LoadProfileReply.Types.UserProfile
             {
-                UserPublicSigningAddress = profile.PublicSigningAddress,
-                UserPublicEncryptAddress = profile.PublicEncryptAddress,
+                UserPublicSigningAddress = profile.UserPublicSigningAddress,
+                UserPublicEncryptAddress = profile.UserPublicEncryptAddress,
                 UserName = profile.UserName,
                 IsPublic = profile.IsPublic
             }
@@ -127,15 +127,15 @@ public class HushProfileService : HushProfile.HushProfileBase
 
     public override Task<SearchProfileReply> SearchProfileByPublicKey(SearchProfileRequest request, ServerCallContext context)
     {
-        var profile = this._blockchainCacheService.GetProfile(request.ProfilePublicKey);
+        var profile = this._authenticationService.GetUserProfile(request.ProfilePublicKey);
 
         var reply = new SearchProfileReply();
 
         reply.SeachedProfiles.Add(new SearchProfileReply.Types.SeachedProfile
         {
             UserName = profile.UserName,
-            UserPublicSigningAddress = profile.PublicSigningAddress,
-            UserPublicEncryptAddress = profile.PublicEncryptAddress
+            UserPublicSigningAddress = profile.UserPublicSigningAddress,
+            UserPublicEncryptAddress = profile.UserPublicEncryptAddress
         });
 
         return Task.FromResult(reply);

@@ -158,4 +158,13 @@ public class FeedDbAccess : IFeedDbAccess
         context.FeedMessages.Add(feedMessage);
         await context.SaveChangesAsync();
     }
+
+    public bool UserHasFeeds(string address)
+    {
+        using var context = this._dbContextFactory.CreateDbContext();
+        return context.FeedParticipants
+            .Any(x =>
+                x.ParticipantPublicAddress == address &&
+                x.ParticipantType == 0);
+    }
 }

@@ -1,4 +1,6 @@
 using HushEcosystem.Model.Blockchain;
+using HushEcosystem.Model.Builders;
+using HushServerNode.InternalModule.Authentication.Cache;
 
 namespace HushServerNode.InternalModule.Authentication;
 
@@ -20,12 +22,21 @@ public class AuthenticationService : IAuthenticationService
             return default;
         }
         
-        return new HushUserProfile
+        return profileEntity.ToHushUserProfile();
+    }
+
+    public async Task UpdateProfile(HushUserProfile profile)
+    {
+        var profileEntity = this._authenticationDbAccess.GetProfile(profile.UserPublicSigningAddress);
+
+        if (profileEntity == null)
         {
-            UserName = profileEntity.UserName,
-            UserPublicSigningAddress = profileEntity.PublicSigningAddress,
-            UserPublicEncryptAddress = profileEntity.PublicEncryptAddress,
-            IsPublic = profileEntity.IsPublic
-        };
+            await this._authenticationDbAccess.AddProfile(profile.ToProfile());
+        }
+        else
+        {
+            // TOOD [AboimPinto]: The system should only update the profile if the profile has changed in order to avoid unnecessary writes to the database.
+            await this._authenticationDbAccess.UpdateProfile(profile.ToProfile());
+        }
     }
 }

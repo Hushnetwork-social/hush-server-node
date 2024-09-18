@@ -20,4 +20,20 @@ public class AuthenticationDbAccess : IAuthenticationDbAccess
 
         return profile;
     }
+
+    public async Task AddProfile(Profile profile)
+    {
+        using var context = this._dbContextFactory.CreateDbContext();
+        await context.Profiles.AddAsync(profile);
+
+        await context.SaveChangesAsync();
+    }
+
+    public async Task UpdateProfile(Profile profile)
+    {
+        using var context = this._dbContextFactory.CreateDbContext();
+        context.Profiles.Update(profile);
+
+        await context.SaveChangesAsync();
+    }
 }

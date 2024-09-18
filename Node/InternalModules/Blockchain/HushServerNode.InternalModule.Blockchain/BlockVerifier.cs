@@ -1,7 +1,6 @@
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
 using HushEcosystem.Model.Builders;
-using HushServerNode.InternalModule.Blockchain.ExtensionMethods;
 
 namespace HushServerNode.InternalModule.Blockchain;
 

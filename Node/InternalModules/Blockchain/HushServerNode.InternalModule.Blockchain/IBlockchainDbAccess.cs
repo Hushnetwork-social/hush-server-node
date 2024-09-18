@@ -4,14 +4,9 @@ namespace HushServerNode.InternalModule.Blockchain;
 
 public interface IBlockchainDbAccess
 {
-    Task<BlockchainState?> GetBlockchainStateAsync();
+    Task<BlockchainState> GetBlockchainStateAsync();
 
-    Task UpdateBlockchainState(BlockchainState blockchainState);
+    Task<bool> HasBlockchainStateAsync();
 
-    Task SaveBlockAsync(string blockId,
-        long blockHeight,
-        string previousBlockId,
-        string nextBlockId,
-        string blockHash,
-        string blockJson);
+    Task SaveBlockAndBlockchainStateAsync(BlockEntity block, BlockchainState blockchainState);
 }

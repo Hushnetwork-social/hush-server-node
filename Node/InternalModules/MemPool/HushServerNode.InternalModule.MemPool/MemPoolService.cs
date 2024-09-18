@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
-using HushServerNode.InternalModule.Blockchain;
 using HushServerNode.InternalModule.MemPool.Events;
 using Microsoft.Extensions.Configuration;
 using Olimpo;
@@ -14,17 +13,17 @@ public class MemPoolService :
 {
     private ConcurrentBag<VerifiedTransaction> _nextBlockTransactionsCandidate;
     private readonly IConfiguration _configuration;
-    private readonly IBlockchainService _blockchainService;
+    private readonly IBlockchainStatus _blockchainStatus;
     private readonly TransactionBaseConverter _transactionBaseConverter;
 
     public MemPoolService(
         IConfiguration configuration,
-        IBlockchainService blockchainService,
+        IBlockchainStatus blockchainStatus,
         TransactionBaseConverter transactionBaseConverter,
         IEventAggregator eventAggregator)
     {
         this._configuration = configuration;
-        this._blockchainService = blockchainService;
+        this._blockchainStatus = blockchainStatus;
         this._transactionBaseConverter = transactionBaseConverter;
 
         this._nextBlockTransactionsCandidate = new ConcurrentBag<VerifiedTransaction>();
@@ -54,12 +53,12 @@ public class MemPoolService :
         var verifiedTransaction = new VerifiedTransaction
         {
             SpecificTransaction = message.Transaction,
-            ValidatorAddress = this._configuration["StackerInfo:PublicSigningAddress"],
-            BlockIndex = this._blockchainService.BlockchainState.LastBlockIndex
+            ValidatorAddress = this._blockchainStatus.PublicSigningAddress,
+            BlockIndex = this._blockchainStatus.BlockIndex
         };
         
         verifiedTransaction.HashObject(this._transactionBaseConverter);
-        verifiedTransaction.Sign(this._configuration["StackerInfo:PrivateSigningKey"], this._transactionBaseConverter);
+        verifiedTransaction.Sign(this._blockchainStatus.PrivateSigningKey, this._transactionBaseConverter);
 
         this._nextBlockTransactionsCandidate.Add(verifiedTransaction);
     }

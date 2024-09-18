@@ -1,4 +1,5 @@
-﻿using HushServerNode.Interfaces;
+﻿using HushEcosystem.Model.Blockchain;
+using HushServerNode.Interfaces;
 using HushServerNode.InternalModule.Blockchain.Builders;
 using HushServerNode.InternalModule.Blockchain.Cache;
 using HushServerNode.InternalModule.Blockchain.Factories;
@@ -25,25 +26,12 @@ public static class BlockchainHostBuilder
 
             services.AddSingleton<IBlockVerifier, BlockVerifier>();
 
+            services.AddSingleton<IBlockchainStatus, BlockchainStatus>();
+
             // Register Blockchain Cache 
             services.AddDbContextFactory<CacheBlockchainDbContext>();
             services.AddSingleton<IDbContextConfigurator, CacheBlockchainDbContextConfigurator>();
             services.AddSingleton<CacheBlockchainDbContextConfigurator>();
-
-            // services.AddSingleton<IBlockchainDb, BlockchainDb>();
-            // services.AddSingleton<IBlockchainIndexDb, BlockchainIndexDb>();
-
-            // services.AddSingleton<IBootstrapper, BlockchainBootstrapper>();
-            // services.AddSingleton<IBlockchainService, BlockchainService>();
-
-            // services.AddSingleton<IMemPoolService, MemPoolService>();
-            // services.AddSingleton<IBlockGeneratorService, BlockGeneratorService>();
-
-            // services.AddTransient<IIndexStrategy, ValueableTransactionIndexStrategy>();
-            // services.AddTransient<IIndexStrategy, GroupTransactionsByAddressIndexStrategy>();
-            // services.AddTransient<IIndexStrategy, UserProfileIndexStrategy>();
-            // services.AddTransient<IIndexStrategy, FeedIndexStrategy>();
-            // services.AddTransient<IIndexStrategy, FeedMessageIndexStrategy>();
         });
 
         return builder;

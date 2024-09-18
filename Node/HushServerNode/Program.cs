@@ -8,6 +8,7 @@ using HushServerNode.DbModel;
 using HushServerNode.InternalModule.Bank;
 using HushServerNode.InternalModule.MemPool;
 using HushServerNode.InternalModule.Authentication;
+using HushServerNode.InternalModule.Feed;
 
 namespace HushServerNode;
 
@@ -45,11 +46,12 @@ public class Program
             .RegisterInternalModuleBank()
             .RegisterInternalModuleAuthentication()
             .RegisterInternalModuleMemPool()
+            .RegisterInternalModuleFeed()
             // .RegisterBlockchainService()
             // .RegisterServerService()
-            .RegisterRpcModel();
+            .RegisterRpcModel()
             // .RegisterRpcManager()
-            // .RegisterGrpc();
+            .RegisterGrpc();
 
         public static IConfigurationBuilder ConfigureConfigurationBuilder(IConfigurationBuilder configurationBuilder)
         {

@@ -7,7 +7,7 @@ namespace HushServerNode.Blockchain;
 
 public interface IBlockchainService
 {
-    BlockchainState BlockchainState { get; set; }
+    // BlockchainState BlockchainState { get; set; }
 
     // Task InitializeBlockchainAsync();
 

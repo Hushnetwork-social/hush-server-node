@@ -1,6 +1,6 @@
 using HushEcosystem.Model.Blockchain;
 
-namespace HushServerNode.InternalModule.Blockchain.ExtensionMethods;
+namespace HushServerNode.InternalModule.Blockchain;
 
 public static class TransactionExtensionMethods
 {

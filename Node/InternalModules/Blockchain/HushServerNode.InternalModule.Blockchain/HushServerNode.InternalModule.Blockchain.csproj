@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\HushServerNode.Interfaces\HushServerNode.Interfaces.csproj" />
     <ProjectReference Include="..\HushServerNode.InternalModule.Blockchain.Cache\HushServerNode.InternalModule.Blockchain.Cache.csproj" />
+    <ProjectReference Include="..\..\MemPool\HushServerNode.InternalModule.MemPool\HushServerNode.InternalModule.MemPool.csproj" />
   </ItemGroup>
 
 </Project>

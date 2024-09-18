@@ -1,23 +1,23 @@
 using Grpc.Core;
+using HushEcosystem.Model.Blockchain;
 using HushNetwork.proto;
-using HushServerNode.Blockchain;
 
 namespace HushServerNode.Services;
 
 public class HushBlockchainService : HushBlockchain.HushBlockchainBase
 {
-    private readonly IBlockchainService _blockchainService;
+    private readonly IBlockchainStatus _blockchainStatus;
 
-    public HushBlockchainService(IBlockchainService blockchainService)
+    public HushBlockchainService(IBlockchainStatus blockchainStatus)
     {
-        this._blockchainService = blockchainService; 
+        this._blockchainStatus = blockchainStatus;
     }
 
     public override Task<GetBlockchainHeightReply> GetBlockchainHeight(GetBlockchainHeightRequest request, ServerCallContext context)
     {
         return Task.FromResult(new GetBlockchainHeightReply
         {
-            Index = this._blockchainService.BlockchainState.LastBlockIndex
+            Index = this._blockchainStatus.BlockIndex
         });
     }
 }

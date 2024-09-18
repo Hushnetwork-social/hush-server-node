@@ -1,7 +1,8 @@
 using Grpc.Core;
 using HushEcosystem.Model.Blockchain;
 using HushNetwork.proto;
-using HushServerNode.CacheService;
+using HushServerNode.InternalModule.Authentication;
+using HushServerNode.InternalModule.Feed;
 using HushServerNode.InternalModule.MemPool.Events;
 using Olimpo;
 
@@ -9,27 +10,29 @@ namespace HushServerNode.Services;
 
 public class HushFeedService : HushFeed.HushFeedBase
 {
-    private readonly IBlockchainCache _blockchainCache;
+    private readonly IAuthenticationService _authenticationService;
+    private readonly IFeedService _feedService;
     private readonly IEventAggregator _eventAggregator;
 
     public HushFeedService(
-        IBlockchainCache blockchainCache,
+        IAuthenticationService authenticationService,
+        IFeedService feedService,
         IEventAggregator eventAggregator)
     {
-        this._blockchainCache = blockchainCache;
+        this._authenticationService = authenticationService;
+        this._feedService = feedService;
         this._eventAggregator = eventAggregator;
     }
 
     public override Task<GetFeedForAddressReply> GetFeedsForAddress(GetFeedForAddressRequest request, ServerCallContext context)
     {
-        // var userHasFeeds = this._blockchainIndexDb.FeedsOfParticipant.ContainsKey(request.ProfilePublicKey);
-        var userHasFeeds = this._blockchainCache.UserHasFeeds(request.ProfilePublicKey);
+        var userHasFeeds = this._feedService.UserHasFeeds(request.ProfilePublicKey);
 
         var reply = new GetFeedForAddressReply();
 
         if (userHasFeeds)
         {
-            var feedIdsForUser = this._blockchainCache.GetUserFeeds(request.ProfilePublicKey);
+            var feedIdsForUser = this._feedService.GetUserFeeds(request.ProfilePublicKey);
             foreach(var feed in feedIdsForUser)
             {
                 var newFeed = new GetFeedForAddressReply.Types.Feed
@@ -42,7 +45,7 @@ public class HushFeedService : HushFeed.HushFeedBase
 
                 foreach(var participant in feed.FeedParticipants)
                 {
-                    var participantProfile = this._blockchainCache.GetProfile(participant.ParticipantPublicAddress);
+                    var participantProfile = this._authenticationService.GetUserProfile(participant.ParticipantPublicAddress);
 
                     var feedParticipant = new GetFeedForAddressReply.Types.FeedParticipant
                     {
@@ -129,7 +132,7 @@ public class HushFeedService : HushFeed.HushFeedBase
     {
         var reply = new GetChatFeedParticipantsReply();
 
-        var feed = this._blockchainCache.GetFeed(request.FeedId);
+        var feed = this._feedService.GetFeed(request.FeedId);
 
         foreach (var participant in feed.FeedParticipants)
         {
@@ -144,15 +147,17 @@ public class HushFeedService : HushFeed.HushFeedBase
         return Task.FromResult(reply);
     }
 
-    public override Task<GetFeedMessagesForAddressReply> GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest request, ServerCallContext context)
+    public override Task<GetFeedMessagesForAddressReply> GetFeedMessagesForAddress(
+        GetFeedMessagesForAddressRequest request, 
+        ServerCallContext context)
     {
         var reply = new GetFeedMessagesForAddressReply();
 
-        var feedsForAddress = this._blockchainCache.GetUserFeeds(request.ProfilePublicKey);
+        var feedsForAddress = this._feedService.GetUserFeeds(request.ProfilePublicKey);
 
         foreach (var feed in feedsForAddress)
         {
-            var feedMessages = this._blockchainCache.GetFeedMessages(feed.FeedId, request.BlockIndex);
+            var feedMessages = this._feedService.GetFeedMessages(feed.FeedId, request.BlockIndex);
 
             foreach (var feedMessage in feedMessages)
             {

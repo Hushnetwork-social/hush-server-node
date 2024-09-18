@@ -39,4 +39,6 @@ public interface IFeedDbAccess
     IEnumerable<FeedMessageEntity> GetFeedMessages(string feedId, double blockIndex);
 
     Task SaveMessageAsync(FeedMessageEntity feedMessage);
+
+    bool UserHasFeeds(string address);
 }

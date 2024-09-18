@@ -1,13 +1,11 @@
-using System.Text.Json;
+using Olimpo;
+using Microsoft.Extensions.Logging;
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
 using HushServerNode.Interfaces;
 using HushServerNode.InternalModule.Blockchain.Builders;
 using HushServerNode.InternalModule.Blockchain.Cache;
 using HushServerNode.InternalModule.Blockchain.Events;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using Olimpo;
 
 namespace HushServerNode.InternalModule.Blockchain;
 
@@ -18,30 +16,28 @@ public class BlockchainService :
     private readonly IBlockchainDbAccess _blockchainDbAccess;
     private readonly IBlockBuilder _blockBuilder;
     private readonly IBlockVerifier _blockVerifier;
+    private readonly IBlockchainStatus _blockchainStatus;
     private readonly TransactionBaseConverter _transactionBaseConverter;
     private readonly IEnumerable<IIndexStrategy> _indexStrategies;
-    private readonly IConfiguration _configuration;
     private readonly IEventAggregator _eventAggregator;
     private readonly ILogger<BlockchainService> _logger;
-
-    public BlockchainState BlockchainState { get; private set; }
 
     public BlockchainService(
         IBlockchainDbAccess blockchainDbAccess,
         IBlockBuilder blockBuilder,
         IBlockVerifier blockVerifier,
+        IBlockchainStatus blockchainStatus,
         TransactionBaseConverter transactionBaseConverter,
         IEnumerable<IIndexStrategy> indexStrategies, 
-        IConfiguration configuration,
         IEventAggregator eventAggregator,
         ILogger<BlockchainService> logger)
     {
         this._blockchainDbAccess = blockchainDbAccess;
         this._blockBuilder = blockBuilder;
         this._blockVerifier = blockVerifier;
+        this._blockchainStatus = blockchainStatus;
         this._transactionBaseConverter = transactionBaseConverter;
         this._indexStrategies = indexStrategies;
-        this._configuration = configuration;
         this._eventAggregator = eventAggregator;
         this._logger = logger;
 
@@ -52,35 +48,38 @@ public class BlockchainService :
     {
         this._logger.LogInformation("Initializing Blockchain...");
 
-        this.BlockchainState = await this._blockchainDbAccess.GetBlockchainStateAsync();
-        if (this.BlockchainState == null)
+        var hasBlockchainState = await this._blockchainDbAccess.HasBlockchainStateAsync();
+        if (!hasBlockchainState)
         {
             // initialize the blockchain from genesis block.
-            this.BlockchainState = new BlockchainState()
+
+            var blockchainState = new BlockchainState
             {
                 BlockchainStateId = Guid.NewGuid(),
                 LastBlockIndex = 1,
-                CurrentBlockId = Guid.NewGuid().ToString(),
                 CurrentPreviousBlockId = string.Empty,
+                CurrentBlockId = Guid.NewGuid().ToString(),
                 CurrentNextBlockId = Guid.NewGuid().ToString(),
             };
 
             var genesisBlock = this._blockBuilder
-                .WithBlockIndex(this.BlockchainState.LastBlockIndex)
-                .WithBlockId(this.BlockchainState.CurrentBlockId)
-                .WithNextBlockId(this.BlockchainState.CurrentNextBlockId)
+                .WithBlockIndex(blockchainState.LastBlockIndex)
+                .WithBlockId(blockchainState.CurrentBlockId)
+                .WithNextBlockId(blockchainState.CurrentNextBlockId)
                 .WithRewardBeneficiary(
-                    this._configuration["StackerInfo:PublicSigningAddress"], 
-                    this._configuration["StackerInfo:PrivateSigningKey"], 
-                    this.BlockchainState.LastBlockIndex)
+                    this._blockchainStatus.PublicSigningAddress,
+                    this._blockchainStatus.PrivateSigningKey,
+                    this._blockchainStatus.BlockIndex)
                 .Build();
 
-            this._logger.LogInformation("Creating Genesis Block - {0} | Next Block - {1}", this.BlockchainState.CurrentBlockId, this.BlockchainState.CurrentNextBlockId);
+            this._logger.LogInformation("Creating Genesis Block - {0} | Next Block - {1}", this._blockchainStatus.BlockId, this._blockchainStatus.NextBlockId);
 
             if (this._blockVerifier.IsBlockValid(genesisBlock))
             {
-                await this._blockchainDbAccess.UpdateBlockchainState(this.BlockchainState);
-                await this.SaveBlock(genesisBlock);
+                await this._blockchainDbAccess.SaveBlockAndBlockchainStateAsync(
+                    genesisBlock.ToBlockEntity(this._transactionBaseConverter), 
+                    blockchainState);
+                
                 this.IndexBlock(genesisBlock);
             }
             else
@@ -89,39 +88,25 @@ public class BlockchainService :
             }
         }
 
-        await this._eventAggregator.PublishAsync(new BlockchainInitializedEvent(this.BlockchainState));
-    }
-
-    public async Task SaveBlock(Block block)
-    {
-        var jsonOptions = new JsonSerializerOptions
-        {
-            Converters = { this._transactionBaseConverter }
-        };
-
-        await this._blockchainDbAccess.SaveBlockAsync(
-            block.BlockId, 
-            block.Index, 
-            block.PreviousBlockId, 
-            block.NextBlockId, 
-            block.Hash, 
-            block.ToJson(jsonOptions));
+        await this._blockchainStatus.LoadBlockchainStatus();
+        await this._eventAggregator.PublishAsync(new BlockchainInitializedEvent());
     }
 
     public async Task HandleAsync(BlockCreatedEvent message)
     {
         if (this._blockVerifier.IsBlockValid(message.Block))
         {
-            this.BlockchainState = message.BlockchainState;
-            await this._blockchainDbAccess.UpdateBlockchainState(this.BlockchainState);
-            await this.SaveBlock(message.Block);
+            // await this.SaveBlock(message.Block);
+            await this._blockchainDbAccess.SaveBlockAndBlockchainStateAsync(
+                    message.Block.ToBlockEntity(this._transactionBaseConverter), 
+                    message.BlockchainState);
 
             this.IndexBlock(message.Block);
 
             this._logger.LogInformation("Creating Block: {0} | Previous Block: {1} | Next Block: {2}", 
-                this.BlockchainState.CurrentBlockId, 
-                this.BlockchainState.CurrentPreviousBlockId,  
-                this.BlockchainState.CurrentNextBlockId);
+                this._blockchainStatus.BlockId, 
+                this._blockchainStatus.PreviousBlockId,  
+                this._blockchainStatus.NextBlockId);
 
             // TODO [AboimPinto]: Signal the MemPool the created event to remove the transactions from the MemPool.
         }

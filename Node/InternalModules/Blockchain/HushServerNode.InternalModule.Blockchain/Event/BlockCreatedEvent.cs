@@ -9,7 +9,7 @@ public class BlockCreatedEvent
 {
     public Block Block { get; }
 
-    public BlockchainState BlockchainState { get; }
+    public BlockchainState BlockchainState { get;}
 
     private readonly TransactionBaseConverter _transactionBaseConverter;
 

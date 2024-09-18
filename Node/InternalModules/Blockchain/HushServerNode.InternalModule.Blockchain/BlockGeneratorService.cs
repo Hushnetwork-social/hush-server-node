@@ -1,10 +1,9 @@
 using System.Reactive.Linq;
 using HushEcosystem.Model.Blockchain;
 using HushServerNode.InternalModule.Blockchain.Builders;
-using HushServerNode.InternalModule.Blockchain.Cache;
 using HushServerNode.InternalModule.Blockchain.Events;
 using HushServerNode.InternalModule.Blockchain.Factories;
-using Microsoft.Extensions.Configuration;
+using HushServerNode.InternalModule.MemPool;
 using Microsoft.Extensions.Logging;
 using Olimpo;
 
@@ -16,22 +15,24 @@ public class BlockGeneratorService :
 {
     private readonly IBlockBuilder _blockBuilder;
     private readonly IBlockCreatedEventFactory _blockCreatedEventFactory;
-    private readonly IConfiguration _configuration;
+    private readonly IMemPoolService _memPoolService;
+    private readonly IBlockchainStatus _blockchainStatus;
     private readonly IEventAggregator _eventAggregator;
     private readonly ILogger<BlockGeneratorService> _logger;
     private IObservable<long> _blockGeneratorLoop;
-    private BlockchainState _blockchainState;
 
     public BlockGeneratorService(
         IBlockBuilder blockBuilder,
         IBlockCreatedEventFactory blockCreatedEventFactory,
-        IConfiguration configuration,
+        IMemPoolService memPoolService,
+        IBlockchainStatus blockchainStatus,
         IEventAggregator eventAggregator,
         ILogger<BlockGeneratorService> logger)
     {
         this._blockBuilder = blockBuilder;
         this._blockCreatedEventFactory = blockCreatedEventFactory;
-        this._configuration = configuration;
+        this._memPoolService = memPoolService;
+        this._blockchainStatus = blockchainStatus;
         this._eventAggregator = eventAggregator;
         this._logger = logger;
 
@@ -42,33 +43,31 @@ public class BlockGeneratorService :
 
     public void Handle(BlockchainInitializedEvent message)
     {
-        this._blockchainState = message.BlockchainState;
-
         this._blockGeneratorLoop.Subscribe(async x => 
         {
-            // var transactions = this._memPoolService.GetNextBlockTransactionsCandidate();
-            var transactions = new List<VerifiedTransaction>();
+            var transactions = this._memPoolService.GetNextBlockTransactionsCandidate();
 
-            this._blockchainState.LastBlockIndex ++; 
-            this._blockchainState.CurrentPreviousBlockId = this._blockchainState.CurrentBlockId;
-            this._blockchainState.CurrentBlockId = this._blockchainState.CurrentNextBlockId;
-            this._blockchainState.CurrentNextBlockId = Guid.NewGuid().ToString();
+            this._blockchainStatus.UpdateBlockchainStatus(
+                this._blockchainStatus.BlockIndex + 1,
+                this._blockchainStatus.BlockId,
+                this._blockchainStatus.NextBlockId,
+                Guid.NewGuid().ToString());
 
 
             // TODO [AboimPinto] Add the transactions to the block
             var block = this._blockBuilder
-                .WithBlockIndex(this._blockchainState.LastBlockIndex)
-                .WithBlockId(this._blockchainState.CurrentBlockId)
-                .WithPreviousBlockId(this._blockchainState.CurrentPreviousBlockId)
-                .WithNextBlockId(this._blockchainState.CurrentNextBlockId)
+                .WithBlockIndex(this._blockchainStatus.BlockIndex)
+                .WithBlockId(this._blockchainStatus.BlockId)
+                .WithPreviousBlockId(this._blockchainStatus.PreviousBlockId)
+                .WithNextBlockId(this._blockchainStatus.NextBlockId)
                 .WithRewardBeneficiary(
-                    this._configuration["StackerInfo:PublicSigningAddress"], 
-                    this._configuration["StackerInfo:PrivateSigningKey"], 
-                    this._blockchainState.LastBlockIndex)
+                    this._blockchainStatus.PublicSigningAddress,
+                    this._blockchainStatus.PrivateSigningKey,
+                    this._blockchainStatus.BlockIndex)
                 .WithTransactions(transactions)
                 .Build();
 
-            await this._eventAggregator.PublishAsync(this._blockCreatedEventFactory.GetInstance(block, this._blockchainState));
+            await this._eventAggregator.PublishAsync(this._blockCreatedEventFactory.GetInstance(block, this._blockchainStatus.ToBlockchainState()));
         });
     }
 }

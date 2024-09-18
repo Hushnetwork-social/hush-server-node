@@ -9,7 +9,7 @@ public class CacheFeedDbContextConfigurator : IDbContextConfigurator
     {
             modelBuilder
                 .Entity<FeedEntity>()
-                .ToTable("FeedEntity")
+                .ToTable("FEED_FeedEntity")
                 .HasKey(x => x.FeedId);
             modelBuilder
                 .Entity<FeedEntity>()
@@ -19,7 +19,7 @@ public class CacheFeedDbContextConfigurator : IDbContextConfigurator
 
             modelBuilder
                 .Entity<FeedParticipants>()
-                .ToTable("FeedParticipants")
+                .ToTable("FEED_FeedParticipants")
                 .HasKey(x => new 
                 {
                     x.FeedId,
@@ -28,7 +28,7 @@ public class CacheFeedDbContextConfigurator : IDbContextConfigurator
 
             modelBuilder
                 .Entity<FeedMessageEntity>()
-                .ToTable("FeedMessageEntity")
+                .ToTable("FEED_FeedMessageEntity")
                 .HasKey(x => x.FeedMessageId);
     }
 }

@@ -12,40 +12,23 @@ public class BlockchainDbAccess : IBlockchainDbAccess
         this._dbContextFactory = dbContextFactory;
     }
 
-    public async Task<BlockchainState?> GetBlockchainStateAsync()
+    public async Task<bool> HasBlockchainStateAsync()
     {
         using var context = this._dbContextFactory.CreateDbContext();
-        return await context.BlockchainState.SingleOrDefaultAsync();
+        return await context.BlockchainState.AnyAsync();
     }
 
-    public async Task SaveBlockAsync(
-        string blockId, 
-        long blockHeight, 
-        string previousBlockId, 
-        string nextBlockId, 
-        string blockHash, 
-        string blockJson)
-    {
-        var block = new BlockEntity
-        {
-            BlockId = blockId,
-            Height = blockHeight,
-            PreviousBlockId = previousBlockId,
-            NextBlockId = nextBlockId,
-            Hash = blockHash,
-            BlockJson = blockJson
-        };
-
-        using (var context = this._dbContextFactory.CreateDbContext())
-        {
-            context.BlockEntities.Add(block);
-            await context.SaveChangesAsync();
-        }
-    }
-
-    public async Task UpdateBlockchainState(BlockchainState blockchainState)
+    public async Task<BlockchainState> GetBlockchainStateAsync()
     {
         using var context = this._dbContextFactory.CreateDbContext();
+        return await context.BlockchainState.SingleAsync();
+    }
+
+    public async Task SaveBlockAndBlockchainStateAsync(BlockEntity block, BlockchainState blockchainState)
+    {
+        using var context = this._dbContextFactory.CreateDbContext();
+        var transaction = context.Database.BeginTransaction();
+
         if (context.BlockchainState.Any())
         {
             context.BlockchainState.Update(blockchainState);
@@ -54,7 +37,11 @@ public class BlockchainDbAccess : IBlockchainDbAccess
         {
             context.BlockchainState.Add(blockchainState);
         }
-
         await context.SaveChangesAsync();
+
+        context.BlockEntities.Add(block);
+        await context.SaveChangesAsync();
+
+        await transaction.CommitAsync();
     }
 }

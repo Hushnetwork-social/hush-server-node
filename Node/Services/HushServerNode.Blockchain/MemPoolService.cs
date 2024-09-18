@@ -91,7 +91,7 @@ public class MemPoolService:
             {
                 SpecificTransaction = message.NewFeedRequest.Feed,
                 ValidatorAddress = this._applicationSettingsService.StackerInfo.PublicSigningAddress,
-                BlockIndex = this._blockchainService.BlockchainState.LastBlockIndex
+                // BlockIndex = this._blockchainService.BlockchainState.LastBlockIndex
             };
 
             verifiedTransaction.HashObject(this._transactionBaseConverter);
@@ -109,7 +109,7 @@ public class MemPoolService:
         {
             SpecificTransaction = message.SendMessageRequest.FeedMessage,
             ValidatorAddress = this._applicationSettingsService.StackerInfo.PublicSigningAddress,
-            BlockIndex = this._blockchainService.BlockchainState.LastBlockIndex
+            // BlockIndex = this._blockchainService.BlockchainState.LastBlockIndex
         };
 
         verifiedTransaction.HashObject(this._transactionBaseConverter);
