@@ -1,5 +1,7 @@
-﻿using HushServerNode.Interfaces;
+﻿using HushServerNode.Blockchain.IndexStrategies;
+using HushServerNode.Interfaces;
 using HushServerNode.InternalModule.Feed.Cache;
+using HushServerNode.InternalModule.Feed.IndexStrategies;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -19,6 +21,9 @@ public static class FeedHostBuilder
             services.AddSingleton<IDbContextConfigurator, CacheFeedDbContextConfigurator>();
             services.AddSingleton<CacheFeedDbContextConfigurator>();
 
+            // IndexStrategies
+            services.AddTransient<IIndexStrategy, FeedIndexStrategy>();
+            services.AddTransient<IIndexStrategy, FeedMessageIndexStrategy>();
         });
 
         return builder;
