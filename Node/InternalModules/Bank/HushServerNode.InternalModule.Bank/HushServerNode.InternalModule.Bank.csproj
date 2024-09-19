@@ -22,7 +22,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\HushServerNode.Interfaces\HushServerNode.Interfaces.csproj" />
     <ProjectReference Include="..\..\..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\HushServerNode.InternalModule.Bank.Cache\HushServerNode.InternalModule.Bank.Cache.csproj" />
   </ItemGroup>

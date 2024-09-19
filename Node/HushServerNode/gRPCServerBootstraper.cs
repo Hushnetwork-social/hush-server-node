@@ -1,7 +1,6 @@
 using System.Reactive.Subjects;
 using Grpc.Core;
 using HushNetwork.proto;
-using HushServerNode.Blockchain;
 using Olimpo;
 
 namespace HushServerNode;

@@ -1,9 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <ItemGroup>
-    <ProjectReference Include="..\HushServerNode.InternalModule.Authentication.Cache\HushServerNode.InternalModule.Authentication.Cache.csproj" />
-  </ItemGroup>
-
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -11,6 +7,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.26.0" />
+    <PackageReference Include="Grpc" Version="2.46.6" />
+    <PackageReference Include="Grpc.Core" Version="2.46.6" />
+    <PackageReference Include="Grpc.Tools" Version="2.62.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -26,9 +30,20 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\HushServerNode.Interfaces\HushServerNode.Interfaces.csproj" />
+    <ProjectReference Include="..\HushServerNode.InternalModule.Authentication.Cache\HushServerNode.InternalModule.Authentication.Cache.csproj" />
     <ProjectReference Include="..\..\..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\..\..\Modules\HushEcosystem.Model\HushEcosystem.Model.csproj" />
+  </ItemGroup>
+
+    <ItemGroup>
+    <!-- 
+    <Protobuf Include="hushBlockchain.proto" GrpcServices="Server" ProtoRoot="../../Protos/" />
+    <Protobuf Include="hushProfile.proto" GrpcServices="Server" ProtoRoot="../../Protos/" />
+    <Protobuf Include="greet.proto" GrpcServices="Server" ProtoRoot="../../Protos/" />
+    -->
+
+    <!-- <Protobuf Include="..\..\Protos\*.proto" GrpcServices="Server" ProtoRoot="..\..\Protos\" /> -->
+    <Protobuf Include="..\..\..\..\Protos\hushProfile.proto" GrpcServices="Server" ProtoRoot="..\..\..\..\Protos\" />
   </ItemGroup>
 
 </Project>

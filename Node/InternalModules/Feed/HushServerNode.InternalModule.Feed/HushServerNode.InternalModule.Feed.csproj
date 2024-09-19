@@ -22,8 +22,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
-    <ProjectReference Include="..\HushServerNode.Interfaces\HushServerNode.Interfaces.csproj" />
+    <ProjectReference Include="..\..\..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
+    <ProjectReference Include="..\..\..\..\Modules\HushEcosystem.Model\HushEcosystem.Model.csproj" />
     <ProjectReference Include="..\HushServerNode.InternalModule.Feed.Cache\HushServerNode.InternalModule.Feed.Cache.csproj" />
     <ProjectReference Include="..\..\Authentication\HushServerNode.InternalModule.Authentication\HushServerNode.InternalModule.Authentication.csproj" />
   </ItemGroup>
