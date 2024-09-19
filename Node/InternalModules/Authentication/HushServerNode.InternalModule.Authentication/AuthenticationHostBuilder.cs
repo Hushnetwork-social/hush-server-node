@@ -1,5 +1,6 @@
 using HushServerNode.Interfaces;
 using HushServerNode.InternalModule.Authentication.Cache;
+using HushServerNode.InternalModule.Authentication.IndexStrategies;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -11,8 +12,6 @@ public static class AuthenticationHostBuilder
     {
         return hostBuilder.ConfigureServices(services =>
         {
-            // services.AddSingleton<IBootstrapper, BankBootstrapper>();
-
             services.AddDbContextFactory<CacheAuthenticationDbContext>();
             services.AddSingleton<IDbContextConfigurator, CacheAuthenticationDbContextConfigurator>();
             services.AddSingleton<CacheAuthenticationDbContextConfigurator>();
@@ -20,7 +19,7 @@ public static class AuthenticationHostBuilder
             services.AddSingleton<IAuthenticationService, AuthenticationService>();
             services.AddSingleton<IAuthenticationDbAccess, AuthenticationDbAccess>();
 
-            // services.AddSingleton<IIndexStrategy, RewardIndexStrategy>();
+            services.AddSingleton<IIndexStrategy, UserProfileIndexStrategy>();
         });
     }
 }
