@@ -2,19 +2,18 @@ using Grpc.Core;
 using HushEcosystem.Model.Blockchain;
 using HushNetwork.proto;
 using HushServerNode.InternalModule.Authentication;
-using HushServerNode.InternalModule.Feed;
 using HushServerNode.InternalModule.MemPool.Events;
 using Olimpo;
 
-namespace HushServerNode.Services;
+namespace HushServerNode.InternalModule.Feed;
 
-public class HushFeedService : HushFeed.HushFeedBase
+public class FeedGrpcService : HushFeed.HushFeedBase
 {
     private readonly IAuthenticationService _authenticationService;
     private readonly IFeedService _feedService;
     private readonly IEventAggregator _eventAggregator;
 
-    public HushFeedService(
+    public FeedGrpcService(
         IAuthenticationService authenticationService,
         IFeedService feedService,
         IEventAggregator eventAggregator)
@@ -69,7 +68,7 @@ public class HushFeedService : HushFeed.HushFeedBase
     public override Task<CreatePersonalFeedReply> CreatePersonalFeed(CreatePersonalFeedRequest request, ServerCallContext context)
     {
         this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(
-            new Feed
+            new HushEcosystem.Model.Blockchain.Feed
             {
                 FeedId = request.PersonalFeed.FeedId,
                 FeedType = (int)request.PersonalFeed.FeedType,
@@ -94,7 +93,7 @@ public class HushFeedService : HushFeed.HushFeedBase
         // TODO [AboimPinto] Need to validate if the feed can be created. If the any of the participants had blocked the other or other rules.
 
         this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(
-            new Feed
+            new HushEcosystem.Model.Blockchain.Feed
             {
                 FeedId = request.ParticipantOne.FeedId,
                 FeedType = (int)request.ParticipantOne.FeedType,
@@ -108,7 +107,7 @@ public class HushFeedService : HushFeed.HushFeedBase
         ));
 
         this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(
-            new Feed
+            new HushEcosystem.Model.Blockchain.Feed
             {
                 FeedId = request.ParticipantTwo.FeedId,
                 FeedType = (int)request.ParticipantTwo.FeedType,

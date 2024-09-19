@@ -1,3 +1,4 @@
+using HushNetwork.proto;
 using HushServerNode.Interfaces;
 using HushServerNode.InternalModule.Authentication.Cache;
 using HushServerNode.InternalModule.Authentication.IndexStrategies;
@@ -20,6 +21,9 @@ public static class AuthenticationHostBuilder
             services.AddSingleton<IAuthenticationDbAccess, AuthenticationDbAccess>();
 
             services.AddSingleton<IIndexStrategy, UserProfileIndexStrategy>();
+
+            services.AddSingleton<IGrpcDefinition, AuthenticationGrpcServiceDefinition>();
+            services.AddSingleton<HushProfile.HushProfileBase, AuthenticationGrpcService>();
         });
     }
 }

@@ -1,4 +1,5 @@
-﻿using HushServerNode.Blockchain.IndexStrategies;
+﻿using HushNetwork.proto;
+using HushServerNode.Blockchain.IndexStrategies;
 using HushServerNode.Interfaces;
 using HushServerNode.InternalModule.Feed.Cache;
 using HushServerNode.InternalModule.Feed.IndexStrategies;
@@ -24,6 +25,9 @@ public static class FeedHostBuilder
             // IndexStrategies
             services.AddTransient<IIndexStrategy, FeedIndexStrategy>();
             services.AddTransient<IIndexStrategy, FeedMessageIndexStrategy>();
+
+            services.AddSingleton<IGrpcDefinition, FeedGrpcServiceDefinition>();
+            services.AddSingleton<HushFeed.HushFeedBase, FeedGrpcService>();
         });
 
         return builder;

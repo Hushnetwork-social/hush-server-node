@@ -31,8 +31,6 @@ public class Program
             })
             .ConfigureServices((hostContext, services) => 
             {
-                services.AddSingleton<IBootstrapper, gRPCServerBootstraper>();
-
                 services.AddDbContextFactory<HushNodeDbContext>();
 
                 services.AddHostedService<Worker>();
@@ -46,11 +44,7 @@ public class Program
             .RegisterInternalModuleAuthentication()
             .RegisterInternalModuleMemPool()
             .RegisterInternalModuleFeed()
-            // .RegisterBlockchainService()
-            // .RegisterServerService()
-            .RegisterRpcModel()
-            // .RegisterRpcManager()
-            .RegisterGrpc();
+            .RegisterRpcModel();
 
         public static IConfigurationBuilder ConfigureConfigurationBuilder(IConfigurationBuilder configurationBuilder)
         {

@@ -2,13 +2,13 @@ using Grpc.Core;
 using HushEcosystem.Model.Blockchain;
 using HushNetwork.proto;
 
-namespace HushServerNode.Services;
+namespace HushServerNode.InternalModule.Blockchain;
 
-public class HushBlockchainService : HushBlockchain.HushBlockchainBase
+public class BlockchainGrpcService : HushBlockchain.HushBlockchainBase
 {
     private readonly IBlockchainStatus _blockchainStatus;
 
-    public HushBlockchainService(IBlockchainStatus blockchainStatus)
+    public BlockchainGrpcService(IBlockchainStatus blockchainStatus)
     {
         this._blockchainStatus = blockchainStatus;
     }

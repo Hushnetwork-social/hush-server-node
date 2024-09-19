@@ -1,59 +1,56 @@
-using System.Reactive.Subjects;
-using Grpc.Core;
-using HushNetwork.proto;
-using Olimpo;
+// using System.Reactive.Subjects;
+// using Grpc.Core;
+// using HushNetwork.proto;
+// using HushServerNode.Interfaces;
+// using Olimpo;
 
-namespace HushServerNode;
+// namespace HushServerNode;
 
-public class gRPCServerBootstraper : IBootstrapper
-{
-    private readonly HushProfile.HushProfileBase _hushProfileBase;
-    private readonly HushBlockchain.HushBlockchainBase _hushBlockchainBase;
-    private readonly HushFeed.HushFeedBase _hushFeedBase;
+// public class gRPCServerBootstraper : IBootstrapper
+// {
+//     private readonly IEnumerable<IGrpcDefinition> _grpcDefinitions;
 
-    public Subject<bool> BootstrapFinished { get; }
+//     public Subject<bool> BootstrapFinished { get; }
 
-    public int Priority { get; set; } = 10;
+//     public int Priority { get; set; } = 10;
         
 
-    public gRPCServerBootstraper(
-        HushProfile.HushProfileBase hushProfileBase,
-        HushBlockchain.HushBlockchainBase hushBlockchainBase,
-        HushFeed.HushFeedBase hushFeedBase)
-    {
-        this._hushProfileBase = hushProfileBase;
-        this._hushBlockchainBase = hushBlockchainBase;
-        this._hushFeedBase = hushFeedBase;
+//     public gRPCServerBootstraper(
+//         IEnumerable<IGrpcDefinition> grpcDefinitions)
+//     {
+//         this._grpcDefinitions = grpcDefinitions;
 
-        this.BootstrapFinished = new Subject<bool>();
-    }
+//         this.BootstrapFinished = new Subject<bool>();
+//     }
 
-    public gRPCServerBootstraper()
-    {
-        this.BootstrapFinished = new Subject<bool>();
-    }
+//     public gRPCServerBootstraper()
+//     {
+//         this.BootstrapFinished = new Subject<bool>();
+//     }
 
-    public void Shutdown()
-    {
-    }
+//     public void Shutdown()
+//     {
+//     }
 
-    public Task Startup()
-    {
-        var rcpServer = new Grpc.Core.Server
-        {
-            Services = 
-            { 
-                Greeter.BindService(new GreeterService()),
-                HushProfile.BindService(this._hushProfileBase),
-                HushBlockchain.BindService(this._hushBlockchainBase),
-                HushFeed.BindService(this._hushFeedBase)
-            },
-            Ports = {new ServerPort("localhost", 5000, ServerCredentials.Insecure)}
-        };
+//     public Task Startup()
+//     {
+//         var rcpServer = new Grpc.Core.Server
+//         {
+//             Services = 
+//             { 
+//                 Greeter.BindService(new GreeterService()),
+//             },
+//             Ports = {new ServerPort("localhost", 5000, ServerCredentials.Insecure)}
+//         };
 
-        rcpServer.Start();
+//         foreach (var grpcDefinition in this._grpcDefinitions)
+//         {
+//             grpcDefinition.AddGrpcService(rcpServer);
+//         }
 
-        this.BootstrapFinished.OnNext(true);
-        return Task.CompletedTask;
-    }
-}
+//         rcpServer.Start();
+
+//         this.BootstrapFinished.OnNext(true);
+//         return Task.CompletedTask;
+//     }
+// }

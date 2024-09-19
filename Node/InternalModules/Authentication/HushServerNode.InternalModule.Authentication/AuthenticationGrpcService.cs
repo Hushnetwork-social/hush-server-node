@@ -1,21 +1,18 @@
 using Grpc.Core;
 using HushEcosystem.Model.Blockchain;
 using HushNetwork.proto;
-using HushServerNode.InternalModule.Authentication;
 using HushServerNode.InternalModule.MemPool.Events;
 using Olimpo;
 
-namespace HushServerNode.Services;
+namespace HushServerNode.InternalModule.Authentication;
 
-public class HushProfileService : HushProfile.HushProfileBase
+public class AuthenticationGrpcService : HushProfile.HushProfileBase
 {
     private readonly IAuthenticationService _authenticationService;
 
     private readonly IEventAggregator _eventAggregator;
 
-    public HushProfileService(
-        IAuthenticationService authenticationService,
-        IEventAggregator eventAggregator)
+    public AuthenticationGrpcService(IAuthenticationService authenticationService, IEventAggregator eventAggregator)
     {
         this._authenticationService = authenticationService;
         this._eventAggregator = eventAggregator;

@@ -33,16 +33,10 @@
     <ProjectReference Include="..\HushServerNode.InternalModule.Authentication.Cache\HushServerNode.InternalModule.Authentication.Cache.csproj" />
     <ProjectReference Include="..\..\..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\..\..\Modules\HushEcosystem.Model\HushEcosystem.Model.csproj" />
+    <ProjectReference Include="..\..\MemPool\HushServerNode.InternalModule.MemPool\HushServerNode.InternalModule.MemPool.csproj" />
   </ItemGroup>
 
-    <ItemGroup>
-    <!-- 
-    <Protobuf Include="hushBlockchain.proto" GrpcServices="Server" ProtoRoot="../../Protos/" />
-    <Protobuf Include="hushProfile.proto" GrpcServices="Server" ProtoRoot="../../Protos/" />
-    <Protobuf Include="greet.proto" GrpcServices="Server" ProtoRoot="../../Protos/" />
-    -->
-
-    <!-- <Protobuf Include="..\..\Protos\*.proto" GrpcServices="Server" ProtoRoot="..\..\Protos\" /> -->
+  <ItemGroup>
     <Protobuf Include="..\..\..\..\Protos\hushProfile.proto" GrpcServices="Server" ProtoRoot="..\..\..\..\Protos\" />
   </ItemGroup>
 

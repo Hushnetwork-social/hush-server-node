@@ -1,4 +1,5 @@
 ﻿using HushEcosystem.Model.Blockchain;
+using HushNetwork.proto;
 using HushServerNode.Interfaces;
 using HushServerNode.InternalModule.Blockchain.Builders;
 using HushServerNode.InternalModule.Blockchain.Cache;
@@ -32,6 +33,9 @@ public static class BlockchainHostBuilder
             services.AddDbContextFactory<CacheBlockchainDbContext>();
             services.AddSingleton<IDbContextConfigurator, CacheBlockchainDbContextConfigurator>();
             services.AddSingleton<CacheBlockchainDbContextConfigurator>();
+
+            services.AddSingleton<IGrpcDefinition, BlockchainGrpcServiceDefinition>();
+            services.AddSingleton<HushBlockchain.HushBlockchainBase, BlockchainGrpcService>();
         });
 
         return builder;
