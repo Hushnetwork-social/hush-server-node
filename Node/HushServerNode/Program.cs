@@ -37,14 +37,13 @@ public class Program
             })
             .RegisterBootstrapperManager()
             .RegisterEventAggregatorManager()
-            .RegisterTcpServer()
 
             .RegisterInternalModuleBlockchain()
             .RegisterInternalModuleBank()
             .RegisterInternalModuleAuthentication()
             .RegisterInternalModuleMemPool()
             .RegisterInternalModuleFeed()
-            .RegisterRpcModel();
+            .RegisterTransactionDeserializerModel();
 
         public static IConfigurationBuilder ConfigureConfigurationBuilder(IConfigurationBuilder configurationBuilder)
         {
