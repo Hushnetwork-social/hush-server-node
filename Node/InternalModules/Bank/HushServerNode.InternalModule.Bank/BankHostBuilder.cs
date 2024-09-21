@@ -1,4 +1,5 @@
-﻿using HushServerNode.Interfaces;
+﻿using HushNetwork.proto;
+using HushServerNode.Interfaces;
 using HushServerNode.InternalModule.Bank.Cache;
 using HushServerNode.InternalModule.Bank.IndexStrategies;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,9 @@ public static class BankHostBuilder
                services.AddSingleton<CacheBankDbContextConfigurator>();
 
                services.AddSingleton<IBankService, BankService>();
+
+               services.AddSingleton<IGrpcDefinition, BankGrpcServiceDefinition>();
+               services.AddSingleton<HushBank.HushBankBase, BankGrpcService>();
 
                services.AddSingleton<IIndexStrategy, RewardIndexStrategy>();
           });

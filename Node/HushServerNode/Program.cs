@@ -31,6 +31,8 @@ public class Program
             })
             .ConfigureServices((hostContext, services) => 
             {
+                services.AddSingleton<IBootstrapper, gRPCServerBootstraper>();
+
                 services.AddDbContextFactory<HushNodeDbContext>();
 
                 services.AddHostedService<Worker>();

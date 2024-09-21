@@ -14,5 +14,5 @@ message GetAddressBalanceRequest {
 }
 
 message GetAddressBalanceReply {
-    int64 Balance = 1;
+    string Balance = 1;
 }

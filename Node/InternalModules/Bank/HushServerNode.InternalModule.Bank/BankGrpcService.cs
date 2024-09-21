@@ -1,4 +1,5 @@
 using Grpc.Core;
+using HushEcosystem;
 using HushNetwork.proto;
 
 namespace HushServerNode.InternalModule.Bank;
@@ -18,7 +19,7 @@ public class BankGrpcService : HushBank.HushBankBase
 
         return Task.FromResult(new GetAddressBalanceReply
         {
-            // Balance = balance
+            Balance = balance.DoubleToString()
         });
     }
 }
