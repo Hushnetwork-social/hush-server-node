@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option csharp_namespace = "HushNetwork.proto";
+
+package rpcHush;
+
+service HushBank {
+  rpc GetAddressBalance (GetAddressBalanceRequest) returns (GetAddressBalanceReply);
+}
+
+message GetAddressBalanceRequest {
+    string Token = 1;
+    string Address = 2;
+}
+
+message GetAddressBalanceReply {
+    int64 Balance = 1;
+}

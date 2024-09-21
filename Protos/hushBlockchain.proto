@@ -4,9 +4,7 @@ option csharp_namespace = "HushNetwork.proto";
 
 package rpcHush;
 
-// The greeting service definition.
 service HushBlockchain {
-  // Sends a greeting
   rpc GetBlockchainHeight (GetBlockchainHeightRequest) returns (GetBlockchainHeightReply);
 }
 

@@ -5,6 +5,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <OutputPath>../Release</OutputPath> 
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath> 
   </PropertyGroup>
 
   <ItemGroup>
@@ -41,16 +43,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- <ProjectReference Include="..\Modules\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" /> -->
-    <!-- <ProjectReference Include="..\Modules\Olimpo.TcpServerManager\TcpServerManager.csproj" /> -->
-    <!-- <ProjectReference Include="..\Services\HushServerNode.ApplicationSettingsService\HushServerNode.ApplicationSettingsService.csproj" /> -->
     <ProjectReference Include="..\Services\HushServerNode.ServerService\HushServerNode.ServerService.csproj" />
-    <!-- <ProjectReference Include="..\Modules\Olimpo.SigningManager\SigningManager.csproj" /> -->
-    <!-- <ProjectReference Include="..\Modules\Olimpo.EncryptingManager\EncryptingManager.csproj" /> -->
-    <!-- <ProjectReference Include="..\Services\HushServerNode.ApplicationSettings\HushServerNode.ApplicationSettingsService.csproj" /> -->
-    <!-- <ProjectReference Include="..\Modules\HushEcosystem.RpcModel\HushEcosystem.RpcModel.csproj" /> -->
-    <!-- <ProjectReference Include="..\Services\HushServerNode.RpcManager\HushServerNode.RpcManager.csproj" /> -->
-    <!-- <ProjectReference Include="..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" /> -->
     <ProjectReference Include="..\Services\HushServerNode.Interfaces\HushServerNode.Interfaces.csproj" />
     <ProjectReference Include="..\InternalModules\Blockchain\HushServerNode.InternalModule.Blockchain\HushServerNode.InternalModule.Blockchain.csproj" />
     <ProjectReference Include="..\InternalModules\Bank\HushServerNode.InternalModule.Bank\HushServerNode.InternalModule.Bank.csproj" />
@@ -58,5 +51,7 @@
     <ProjectReference Include="..\InternalModules\Authentication\HushServerNode.InternalModule.Authentication\HushServerNode.InternalModule.Authentication.csproj" />
     <ProjectReference Include="..\InternalModules\Feed\HushServerNode.InternalModule.Feed\HushServerNode.InternalModule.Feed.csproj" />
   </ItemGroup>
+
+
 
 </Project>

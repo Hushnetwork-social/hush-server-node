@@ -7,6 +7,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.26.0" />
+    <PackageReference Include="Grpc" Version="2.46.6" />
+    <PackageReference Include="Grpc.Core" Version="2.46.6" />
+    <PackageReference Include="Grpc.Tools" Version="2.62.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -24,6 +32,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\HushServerNode.InternalModule.Bank.Cache\HushServerNode.InternalModule.Bank.Cache.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="..\..\..\..\Protos\hushBank.proto" GrpcServices="Server" ProtoRoot="..\..\..\..\Protos\" />
   </ItemGroup>
 
 </Project>
