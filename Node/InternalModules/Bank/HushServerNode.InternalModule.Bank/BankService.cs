@@ -1,5 +1,6 @@
-using HushServerNode.InternalModule.Bank.Cache;
 using Microsoft.EntityFrameworkCore;
+using HushEcosystem;
+using HushServerNode.InternalModule.Bank.Cache;
 
 namespace HushServerNode.InternalModule.Bank;
 
@@ -24,14 +25,14 @@ public class BankService : IBankService
                 addressBalance = new AddressBalance
                 {
                     Address = address,
-                    Balance = value
+                    Balance = value.DoubleToString()
                 };
 
                 context.AddressesBalance.Add(addressBalance);
             }
             else
             {
-                addressBalance.Balance += value;
+                addressBalance.Balance = (addressBalance.Balance.StringToDouble() + value).DoubleToString();
                 context.AddressesBalance.Update(addressBalance);
             }
 
@@ -50,6 +51,6 @@ public class BankService : IBankService
             return 0;
         }
 
-        return addressBalance.Balance;
+        return addressBalance.Balance.StringToDouble();
     }
 }
