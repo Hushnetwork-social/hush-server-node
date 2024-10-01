@@ -1,4 +1,4 @@
-using HushEcosystem.Model.Blockchain;
+using HushEcosystem.Model;
 
 namespace HushServerNode.InternalModule.MemPool.Events;
 

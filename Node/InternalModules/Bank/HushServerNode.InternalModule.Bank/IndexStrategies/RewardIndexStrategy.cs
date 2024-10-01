@@ -1,3 +1,4 @@
+using HushEcosystem.Model.Bank;
 using HushEcosystem.Model.Blockchain;
 using HushServerNode.Interfaces;
 

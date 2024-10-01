@@ -22,4 +22,9 @@ public class BankGrpcService : HushBank.HushBankBase
             Balance = balance.DoubleToString()
         });
     }
+
+    public override Task<TransferFundsReply> TransferFunds(TransferFundsRequest request, ServerCallContext context)
+    {
+        return base.TransferFunds(request, context);
+    }
 }

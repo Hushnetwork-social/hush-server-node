@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using HushEcosystem.Model.Blockchain;
 
 namespace HushServerNode.InternalModule.Blockchain.Builders;

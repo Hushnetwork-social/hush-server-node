@@ -6,6 +6,8 @@ package rpcHush;
 
 service HushBank {
   rpc GetAddressBalance (GetAddressBalanceRequest) returns (GetAddressBalanceReply);
+
+  rpc TransferFunds (TransferFundsRequest) returns (TransferFundsReply);
 }
 
 message GetAddressBalanceRequest {
@@ -15,4 +17,18 @@ message GetAddressBalanceRequest {
 
 message GetAddressBalanceReply {
     string Balance = 1;
+}
+
+message TransferFundsRequest {
+  string Token = 1;
+  string FromAddress = 2;
+  string ToAddress = 3;
+  string Amount = 4;
+  string Hash = 7;
+  string Signature = 8;
+}
+
+message TransferFundsReply {
+  bool Successfull = 1;
+  string Message = 2;
 }

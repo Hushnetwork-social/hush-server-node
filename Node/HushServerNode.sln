@@ -41,6 +41,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushServerNode.InternalModu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushServerNode.InternalModule.Feed.Cache", "InternalModules\Feed\HushServerNode.InternalModule.Feed.Cache\HushServerNode.InternalModule.Feed.Cache.csproj", "{F502612C-B81C-4211-AFD3-DE8BC11E5B41}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushEcosystem.Model", "..\Modules\HushEcosystem.Model\HushEcosystem.Model.csproj", "{3FA374EC-77EA-4358-A920-B22F80B3785C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -98,6 +100,10 @@ Global
 		{F502612C-B81C-4211-AFD3-DE8BC11E5B41}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F502612C-B81C-4211-AFD3-DE8BC11E5B41}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F502612C-B81C-4211-AFD3-DE8BC11E5B41}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3FA374EC-77EA-4358-A920-B22F80B3785C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3FA374EC-77EA-4358-A920-B22F80B3785C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3FA374EC-77EA-4358-A920-B22F80B3785C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3FA374EC-77EA-4358-A920-B22F80B3785C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{6EB6C411-0B07-46A5-867C-2CC8B15E6795} = {2D578FAD-684F-456D-9698-C6BD28A9EA6E}
