@@ -9,7 +9,7 @@ public class BaseDbContext : DbContext
 
     public BaseDbContext(IConfiguration configuration)
     {
-        _configuration = configuration;
+        this._configuration = configuration;
     }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

@@ -1,7 +1,6 @@
-using System.Collections.Generic;
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
-using HushServerNode.Blockchain.Builders;
+using HushServerNode.Bank.Builders;
 
 namespace HushServerNode.InternalModule.Blockchain.Builders;
 
@@ -53,7 +52,7 @@ public class BlockBuilder : IBlockBuilder
     {
         this._privateSigningKey = privateSigningKey;
 
-        this._rewardTransaction = new BlockCreationTransactionBuilder()
+        this._rewardTransaction = new RewardTransactionBuilder()
             .WithIssuerAddress(publicSigningAddress)
             .Build();
 

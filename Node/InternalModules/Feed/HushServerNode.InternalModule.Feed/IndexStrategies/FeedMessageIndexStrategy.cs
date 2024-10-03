@@ -1,6 +1,5 @@
 using HushEcosystem.Model.Blockchain;
 using HushServerNode.Interfaces;
-using HushServerNode.InternalModule.Authentication;
 using HushServerNode.InternalModule.Feed;
 
 namespace HushServerNode.Blockchain.IndexStrategies;
@@ -8,14 +7,10 @@ namespace HushServerNode.Blockchain.IndexStrategies;
 public class FeedMessageIndexStrategy : IIndexStrategy
 {
     private readonly IFeedService _feedService;
-    private readonly IAuthenticationService _authenticationService;
 
-    public FeedMessageIndexStrategy(
-        IFeedService feedService,
-        IAuthenticationService authenticationService)
+    public FeedMessageIndexStrategy(IFeedService feedService)
     {
         this._feedService = feedService;
-        this._authenticationService = authenticationService;
     }
 
     public bool CanHandle(VerifiedTransaction verifiedTransaction)

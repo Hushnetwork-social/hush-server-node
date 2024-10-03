@@ -43,6 +43,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushServerNode.InternalModu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushEcosystem.Model", "..\Modules\HushEcosystem.Model\HushEcosystem.Model.csproj", "{3FA374EC-77EA-4358-A920-B22F80B3785C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EncryptingManager", "..\Modules\Olimpo.EncryptingManager\EncryptingManager.csproj", "{BEBF0605-BDA9-4C79-95A8-AB612A4BE39C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -104,6 +106,10 @@ Global
 		{3FA374EC-77EA-4358-A920-B22F80B3785C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3FA374EC-77EA-4358-A920-B22F80B3785C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3FA374EC-77EA-4358-A920-B22F80B3785C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BEBF0605-BDA9-4C79-95A8-AB612A4BE39C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BEBF0605-BDA9-4C79-95A8-AB612A4BE39C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BEBF0605-BDA9-4C79-95A8-AB612A4BE39C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BEBF0605-BDA9-4C79-95A8-AB612A4BE39C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{6EB6C411-0B07-46A5-867C-2CC8B15E6795} = {2D578FAD-684F-456D-9698-C6BD28A9EA6E}

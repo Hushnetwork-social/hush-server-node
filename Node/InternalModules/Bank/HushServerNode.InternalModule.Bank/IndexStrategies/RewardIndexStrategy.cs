@@ -16,7 +16,7 @@ public class RewardIndexStrategy : IIndexStrategy
 
     public bool CanHandle(VerifiedTransaction verifiedTransaction)
     {
-        if (verifiedTransaction.SpecificTransaction is IValueableTransaction)
+        if (verifiedTransaction.SpecificTransaction is RewardTransaction)
         {
             return true;
         }
@@ -26,7 +26,7 @@ public class RewardIndexStrategy : IIndexStrategy
 
     public async Task Handle(VerifiedTransaction verifiedTransaction)
     {
-        var valueableTransaction = verifiedTransaction.SpecificTransaction as IValueableTransaction;
+        var valueableTransaction = verifiedTransaction.SpecificTransaction as RewardTransaction;
 
         await this._bankService.UpdateBalanceAsync(
             verifiedTransaction.SpecificTransaction.Issuer,

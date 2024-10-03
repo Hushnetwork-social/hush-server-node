@@ -15,29 +15,73 @@ public class BankService : IBankService
 
     public async Task UpdateBalanceAsync(string address, double value)
     {
-        using (var context = this._dbContextFactory.CreateDbContext())
+        using var context = this._dbContextFactory.CreateDbContext();
+        var addressBalance = context.AddressesBalance
+            .SingleOrDefault(a => a.Address == address);
+
+        if (addressBalance == null)
         {
-            var addressBalance = context.AddressesBalance
-                .SingleOrDefault(a => a.Address == address);
-
-            if (addressBalance == null)
+            addressBalance = new AddressBalance
             {
-                addressBalance = new AddressBalance
-                {
-                    Address = address,
-                    Balance = value.DoubleToString()
-                };
+                Address = address,
+                Balance = value.DoubleToString()
+            };
 
-                context.AddressesBalance.Add(addressBalance);
-            }
-            else
-            {
-                addressBalance.Balance = (addressBalance.Balance.StringToDouble() + value).DoubleToString();
-                context.AddressesBalance.Update(addressBalance);
-            }
-
-            await context.SaveChangesAsync();
+            context.AddressesBalance.Add(addressBalance);
         }
+        else
+        {
+            addressBalance.Balance = (addressBalance.Balance.StringToDouble() + value).DoubleToString();
+            context.AddressesBalance.Update(addressBalance);
+        }
+
+        await context.SaveChangesAsync();
+    }
+
+    public async Task UpdateFromAndToBalancesAsync(string fromAddress, double fromValue, string toAddress, double toValue)
+    {
+        using var context = this._dbContextFactory.CreateDbContext();
+        var transaction = context.Database.BeginTransaction();
+
+        var fromAddressBalance = context.AddressesBalance.SingleOrDefault(x => x.Address == fromAddress);
+        if (fromAddressBalance == null)
+        {
+            fromAddressBalance = new AddressBalance
+            {
+                Address = fromAddress,
+                Balance = fromValue.DoubleToString()
+            };
+
+            context.AddressesBalance.Add(fromAddressBalance);
+        }
+        else
+        {
+            fromAddressBalance.Balance = (fromAddressBalance.Balance.StringToDouble() + fromValue).DoubleToString();
+            context.AddressesBalance.Update(fromAddressBalance);
+        }
+
+        // await context.SaveChangesAsync();
+
+        var toAddressBalance = context.AddressesBalance.SingleOrDefault(x => x.Address == toAddress);
+        if (toAddressBalance == null)
+        {
+            toAddressBalance = new AddressBalance
+            {
+                Address = toAddress,
+                Balance = toValue.DoubleToString()
+            };
+
+            context.AddressesBalance.Add(toAddressBalance);
+        }
+        else
+        {
+            toAddressBalance.Balance = (toAddressBalance.Balance.StringToDouble() + toValue).DoubleToString();
+            context.AddressesBalance.Update(toAddressBalance);
+        }
+
+        await context.SaveChangesAsync();
+
+        await transaction.CommitAsync();
     }
 
     public double GetBalance(string address)

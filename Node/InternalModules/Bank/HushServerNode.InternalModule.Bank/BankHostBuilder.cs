@@ -26,6 +26,7 @@ public static class BankHostBuilder
                services.AddSingleton<HushBank.HushBankBase, BankGrpcService>();
 
                services.AddSingleton<IIndexStrategy, RewardIndexStrategy>();
+               services.AddSingleton<IIndexStrategy, TransferFundsIndexStrategy>();
           });
      }
 }

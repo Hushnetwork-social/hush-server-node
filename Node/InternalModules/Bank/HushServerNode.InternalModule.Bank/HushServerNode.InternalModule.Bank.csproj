@@ -33,6 +33,10 @@
     <ProjectReference Include="..\..\..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\HushServerNode.InternalModule.Bank.Cache\HushServerNode.InternalModule.Bank.Cache.csproj" />
     <ProjectReference Include="..\..\..\..\Modules\HushEcosystem.Model\HushEcosystem.Model.csproj" />
+    <ProjectReference Include="..\..\MemPool\HushServerNode.InternalModule.MemPool\HushServerNode.InternalModule.MemPool.csproj" />
+    <ProjectReference Include="..\..\Feed\HushServerNode.InternalModule.Feed\HushServerNode.InternalModule.Feed.csproj" />
+    <ProjectReference Include="..\..\..\..\Modules\Olimpo.EncryptingManager\EncryptingManager.csproj" />
+    <ProjectReference Include="..\..\Authentication\HushServerNode.InternalModule.Authentication\HushServerNode.InternalModule.Authentication.csproj" />
   </ItemGroup>
 
   <ItemGroup>

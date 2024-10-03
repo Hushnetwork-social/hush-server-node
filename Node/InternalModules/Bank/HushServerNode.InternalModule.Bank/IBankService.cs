@@ -4,5 +4,7 @@ public interface IBankService
 {
     Task UpdateBalanceAsync(string address, double value);
 
+    Task UpdateFromAndToBalancesAsync(string fromAddress, double fromValue, string toAddress, double toValue);
+
     double GetBalance(string address);
 }

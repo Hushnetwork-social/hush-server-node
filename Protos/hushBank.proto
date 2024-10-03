@@ -20,12 +20,15 @@ message GetAddressBalanceReply {
 }
 
 message TransferFundsRequest {
-  string Token = 1;
-  string FromAddress = 2;
-  string ToAddress = 3;
-  string Amount = 4;
+  string Id = 1;
+  string FeedId = 2;
+  string Token = 3;
+  string FromAddress = 4;
+  string ToAddress = 5;
+  string Amount = 6;
   string Hash = 7;
   string Signature = 8;
+  string FeedPublicEncriptAddress = 9;
 }
 
 message TransferFundsReply {
