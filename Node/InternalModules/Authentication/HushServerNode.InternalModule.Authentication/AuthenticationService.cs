@@ -25,6 +25,18 @@ public class AuthenticationService : IAuthenticationService
         return profileEntity.ToHushUserProfile();
     }
 
+    public HushUserProfile? GetUserProfileByUserName(string UserName)
+    {
+        var profileEntity = this._authenticationDbAccess.GetProfileByUserName(UserName);
+
+        if (profileEntity == null)
+        {
+            return default;
+        }
+        
+        return profileEntity.ToHushUserProfile();
+    }
+
     public async Task UpdateProfile(HushUserProfile profile)
     {
         var profileEntity = this._authenticationDbAccess.GetProfile(profile.UserPublicSigningAddress);

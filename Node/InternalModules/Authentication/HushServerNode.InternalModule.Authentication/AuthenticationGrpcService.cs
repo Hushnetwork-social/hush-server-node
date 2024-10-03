@@ -122,18 +122,37 @@ public class AuthenticationGrpcService : HushProfile.HushProfileBase
         });
     }
 
-    public override Task<SearchProfileReply> SearchProfileByPublicKey(SearchProfileRequest request, ServerCallContext context)
+    public override Task<SearchProfileByPublicKeyReply> SearchProfileByPublicKey(SearchProfileByPublicKeyRequest request, ServerCallContext context)
     {
         var profile = this._authenticationService.GetUserProfile(request.ProfilePublicKey);
 
-        var reply = new SearchProfileReply();
+        var reply = new SearchProfileByPublicKeyReply();
 
-        reply.SeachedProfiles.Add(new SearchProfileReply.Types.SeachedProfile
+        reply.SeachedProfiles.Add(new SearchProfileByPublicKeyReply.Types.SeachedProfile
         {
             UserName = profile.UserName,
             UserPublicSigningAddress = profile.UserPublicSigningAddress,
             UserPublicEncryptAddress = profile.UserPublicEncryptAddress
         });
+
+        return Task.FromResult(reply);
+    }
+
+    public override Task<SearchProfileByUserNameReply> SearchProfileByUserName(SearchProfileByUserNameRequest request, ServerCallContext context)
+    {
+        var profile = this._authenticationService.GetUserProfileByUserName(request.UserName);
+
+        var reply = new SearchProfileByUserNameReply();
+
+        if (profile != null)
+        {
+            reply.SeachedProfiles.Add(new SearchProfileByUserNameReply.Types.SeachedProfile
+            {
+                UserName = profile.UserName,
+                UserPublicSigningAddress = profile.UserPublicSigningAddress,
+                UserPublicEncryptAddress = profile.UserPublicEncryptAddress
+            });
+        }
 
         return Task.FromResult(reply);
     }

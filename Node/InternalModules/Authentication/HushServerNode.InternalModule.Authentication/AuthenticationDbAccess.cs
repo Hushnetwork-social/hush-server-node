@@ -21,6 +21,15 @@ public class AuthenticationDbAccess : IAuthenticationDbAccess
         return profile;
     }
 
+    public Profile? GetProfileByUserName(string userName)
+    {
+        using var context = this._dbContextFactory.CreateDbContext();
+        var profile = context.Profiles
+            .SingleOrDefault(p => p.UserName.ToLower().Contains(userName.ToLower()) && p.IsPublic);
+
+        return profile;
+    }
+
     public async Task AddProfile(Profile profile)
     {
         using var context = this._dbContextFactory.CreateDbContext();
