@@ -16,5 +16,10 @@ public class CacheBlockchainDbContextConfigurator : IDbContextConfigurator
             .Entity<BlockEntity>()
             .ToTable("BLOCKCHAIN_BlockEntity")
             .HasKey(x => x.BlockId);
+
+        modelBuilder
+            .Entity<SettingsEntity>()
+            .ToTable("BLOCKCHAIN_SettingsEntity")
+            .HasKey(x => new { x.SettingsId, x.SettingsType } );
 }
 }

@@ -4,6 +4,7 @@ using HushServerNode.Interfaces;
 using HushServerNode.InternalModule.Blockchain.Builders;
 using HushServerNode.InternalModule.Blockchain.Cache;
 using HushServerNode.InternalModule.Blockchain.Factories;
+using HushServerNode.InternalModule.Blockchain.IndexStrategies;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Olimpo;
@@ -22,12 +23,14 @@ public static class BlockchainHostBuilder
 
             services.AddSingleton<IBlockchainService, BlockchainService>();
             services.AddSingleton<IBlockGeneratorService, BlockGeneratorService>();
+            services.AddSingleton<ISettingsService, SettingsdService>();
 
             services.AddSingleton<IBlockCreatedEventFactory, BlockCreatedEventFactory>();
 
             services.AddSingleton<IBlockVerifier, BlockVerifier>();
-
             services.AddSingleton<IBlockchainStatus, BlockchainStatus>();
+
+            services.AddSingleton<IIndexStrategy, SettingsTransactionIndexStrategy>();
 
             // Register Blockchain Cache 
             services.AddDbContextFactory<CacheBlockchainDbContext>();

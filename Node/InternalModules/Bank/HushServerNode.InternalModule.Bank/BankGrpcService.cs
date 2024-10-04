@@ -3,7 +3,6 @@ using HushEcosystem;
 using HushNetwork.proto;
 using HushServerNode.InternalModule.MemPool.Events;
 using Olimpo;
-using Org.BouncyCastle.Asn1.IsisMtt.X509;
 
 namespace HushServerNode.InternalModule.Bank;
 

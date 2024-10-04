@@ -6,6 +6,7 @@ using HushServerNode.Interfaces;
 using HushServerNode.InternalModule.Blockchain.Builders;
 using HushServerNode.InternalModule.Blockchain.Cache;
 using HushServerNode.InternalModule.Blockchain.Events;
+using System.Runtime.CompilerServices;
 
 namespace HushServerNode.InternalModule.Blockchain;
 
@@ -70,6 +71,10 @@ public class BlockchainService :
                     this._blockchainStatus.PublicSigningAddress,
                     this._blockchainStatus.PrivateSigningKey,
                     this._blockchainStatus.BlockIndex)
+                .WithGenesisSettings(
+                    this._blockchainStatus.PublicSigningAddress,
+                    this._blockchainStatus.PrivateSigningKey,
+                    this._blockchainStatus.BlockIndex)
                 .Build();
 
             this._logger.LogInformation("Creating Genesis Block - {0} | Next Block - {1}", this._blockchainStatus.BlockId, this._blockchainStatus.NextBlockId);
@@ -90,6 +95,21 @@ public class BlockchainService :
 
         await this._blockchainStatus.LoadBlockchainStatus();
         await this._eventAggregator.PublishAsync(new BlockchainInitializedEvent());
+    }
+
+    public async Task SaveSettingsAsync(Settings settings)
+    {
+        var settingsEntity = new SettingsEntity
+        {
+            SettingsId = settings.SettingId,
+            SettingsType = settings.SettingsTable,
+            Key = settings.Key,
+            Value = settings.Value,
+            ValidSinceBlock = settings.ValidSinceBlock,
+            ValidUntilBlock = settings.ValidUntilBlock
+        };
+
+        await this._blockchainDbAccess.SaveSettingsAsync(settingsEntity);
     }
 
     public async Task HandleAsync(BlockCreatedEvent message)

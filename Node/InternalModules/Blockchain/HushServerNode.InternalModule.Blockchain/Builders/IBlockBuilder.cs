@@ -14,6 +14,8 @@ public interface IBlockBuilder
 
     IBlockBuilder WithRewardBeneficiary(string publicSigningAddress, string privateSigningKey, double blockHeight);
 
+    IBlockBuilder WithGenesisSettings(string publicSigningAddress, string privateSigningKey, double blockHeight);
+
     IBlockBuilder WithTransactions(IEnumerable<VerifiedTransaction> verifiedTransactions);
 
     Block Build();

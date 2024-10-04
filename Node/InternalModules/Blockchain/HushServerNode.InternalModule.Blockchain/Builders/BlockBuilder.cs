@@ -1,3 +1,4 @@
+using HushEcosystem;
 using HushEcosystem.Model;
 using HushEcosystem.Model.Blockchain;
 using HushServerNode.Bank.Builders;
@@ -13,12 +14,16 @@ public class BlockBuilder : IBlockBuilder
     private string _privateSigningKey;
     private TransactionBase _rewardTransaction;
     private VerifiedTransaction _verifiedRewardTransaction;
-    private IEnumerable<VerifiedTransaction> _verifiedTransactions;
+    private List<VerifiedTransaction> _verifiedTransactions;
+    private readonly IBlockchainDbAccess _blockchainDbAccess;
     private readonly TransactionBaseConverter _transactionBaseConverter;
 
-    public BlockBuilder(TransactionBaseConverter transactionBaseConverter)
+    public BlockBuilder(IBlockchainDbAccess blockchainDbAccess, TransactionBaseConverter transactionBaseConverter)
     {
+        this._blockchainDbAccess = blockchainDbAccess;
         this._transactionBaseConverter = transactionBaseConverter;
+
+        this._verifiedTransactions = new List<VerifiedTransaction>();
     }
 
     public IBlockBuilder WithBlockId(string blockId)
@@ -52,8 +57,11 @@ public class BlockBuilder : IBlockBuilder
     {
         this._privateSigningKey = privateSigningKey;
 
+        string hushBlockReward = this._blockchainDbAccess.GetSettings("SYSTEM", "HUSH_REWARD");
+
         this._rewardTransaction = new RewardTransactionBuilder()
             .WithIssuerAddress(publicSigningAddress)
+            .WithRewardValue(hushBlockReward.StringToDouble())
             .Build();
 
         this._rewardTransaction.HashObject(this._transactionBaseConverter);
@@ -74,7 +82,42 @@ public class BlockBuilder : IBlockBuilder
 
     public IBlockBuilder WithTransactions(IEnumerable<VerifiedTransaction> verifiedTransactions)
     {
-        this._verifiedTransactions = verifiedTransactions;
+        this._verifiedTransactions.AddRange(verifiedTransactions);
+        return this;
+    }
+
+    public IBlockBuilder WithGenesisSettings(
+        string publicSigningAddress,
+        string privateSigningKey,
+        double blockHeight)
+    {
+        this._privateSigningKey = privateSigningKey;
+
+        var genesisSettings = new SettingsBuilder()
+            .WithSettingsId(Guid.NewGuid())
+            .WithSetting("SYSTEM", "HUSH_REWARD", "0.5", this._blockIndex)
+            .Build();
+
+        genesisSettings.HashObject(this._transactionBaseConverter);
+        genesisSettings.Sign(privateSigningKey, this._transactionBaseConverter);
+
+        if (this._verifiedTransactions == null)
+        {
+            this._verifiedTransactions = new List<VerifiedTransaction>();
+        }
+
+        var verifiedGenesisSettings = new VerifiedTransaction
+        {
+            SpecificTransaction = genesisSettings,
+            ValidatorAddress = publicSigningAddress,
+            BlockIndex = this._blockIndex
+        };
+
+        verifiedGenesisSettings.HashObject(this._transactionBaseConverter);
+        verifiedGenesisSettings.Sign(privateSigningKey, this._transactionBaseConverter);
+
+        this._verifiedTransactions.Add(verifiedGenesisSettings);
+
         return this;
     }
 

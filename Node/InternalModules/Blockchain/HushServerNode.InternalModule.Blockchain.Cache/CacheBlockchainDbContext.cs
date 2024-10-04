@@ -12,6 +12,8 @@ public class CacheBlockchainDbContext : BaseDbContext
 
     public DbSet<BlockEntity> BlockEntities { get; set; }
 
+    public DbSet<SettingsEntity> SettingsEntities { get; set; }
+
     public CacheBlockchainDbContext(
         CacheBlockchainDbContextConfigurator cacheBlockchainDbContextConfigurator,
         IConfiguration configuration) : base(configuration)

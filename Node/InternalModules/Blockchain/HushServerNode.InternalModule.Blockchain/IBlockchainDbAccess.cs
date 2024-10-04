@@ -9,4 +9,8 @@ public interface IBlockchainDbAccess
     Task<bool> HasBlockchainStateAsync();
 
     Task SaveBlockAndBlockchainStateAsync(BlockEntity block, BlockchainState blockchainState);
+
+    Task SaveSettingsAsync(SettingsEntity settingsEntity);
+
+    string GetSettings(string table, string key);
 }
