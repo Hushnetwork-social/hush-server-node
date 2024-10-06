@@ -106,13 +106,17 @@ public class BankService : IBankService
             { 
                 NonFungibleTokenId = mintNonFungibleTokenTransaction.NonFungibleTokenId, 
                 MetadataKey = x.Key, 
-                MetadataValue = x.Value 
+                MetadataValue = x.Value
             });
 
         var nonFungibleToken = new NonFungibleTokenEntity
         {
             NonFungibleTokenId = mintNonFungibleTokenTransaction.NonFungibleTokenId,
-            OwnerPublicAddress = mintNonFungibleTokenTransaction.Issuer
+            OwnerPublicAddress = mintNonFungibleTokenTransaction.Issuer,
+            Title = mintNonFungibleTokenTransaction.Title,
+            Description = mintNonFungibleTokenTransaction.Description,
+            NonFungibleTokenType = mintNonFungibleTokenTransaction.Description,
+            EncryptedContent = false
         };
 
         context.NonFungibleTokenEntities.Add(nonFungibleToken);

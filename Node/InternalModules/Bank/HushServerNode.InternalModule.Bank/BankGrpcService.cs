@@ -66,6 +66,9 @@ public class BankGrpcService : HushBank.HushBankBase
             NonFungibleTokenId = request.NonFugibleTokenId,
             Issuer = request.PublicOwneAddress,
             Metadata = request.Metadata.ToDictionary(x => x.Key, x => x.Value),
+            Title = request.Title,
+            Description = request.Description,
+            NonFungibleTokenType = request.NonFugibleTokenType,
             Hash = request.Hash,
             Signature = request.Signature
         };

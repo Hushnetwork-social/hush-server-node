@@ -44,10 +44,14 @@ message MintNFTRequest {
 
   string NonFugibleTokenId = 1;
   string PublicOwneAddress = 2;
-  string Hash = 3;
-  string Signature = 4;
+  string Title = 3;
+  string Description = 4;
+  string NonFugibleTokenType = 5;
+  bool EncryptedContent = 6;
+  string Hash = 7;
+  string Signature = 8;
 
-  repeated MetadataEnttity Metadata = 5;
+  repeated MetadataEnttity Metadata = 9;
 }
 
 message MintNFTReply {
