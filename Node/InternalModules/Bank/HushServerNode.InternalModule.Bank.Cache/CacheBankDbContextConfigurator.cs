@@ -11,5 +11,19 @@ public class CacheBankDbContextConfigurator : IDbContextConfigurator
             .Entity<AddressBalance>()
             .ToTable("BANK_AddressBalance")
             .HasKey(x => x.Address);
+
+        modelBuilder
+            .Entity<NonFungibleTokenEntity>()
+            .ToTable("BANK_NFT")
+            .HasKey(x => x.NonFungibleTokenId);
+
+        modelBuilder
+            .Entity<NonFungibleTokenEntity>()
+            .HasIndex(x => x.OwnerPublicAddress);
+
+        modelBuilder
+            .Entity<NonFungibleTokenMetadata>()
+            .ToTable("BANK_NFT_Metadata")
+            .HasKey(x => x.MetadataKey);
     }
 }

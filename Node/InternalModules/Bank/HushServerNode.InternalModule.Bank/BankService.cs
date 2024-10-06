@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using HushEcosystem;
 using HushServerNode.InternalModule.Bank.Cache;
+using HushEcosystem.Model.Bank;
 
 namespace HushServerNode.InternalModule.Bank;
 
@@ -60,8 +61,6 @@ public class BankService : IBankService
             context.AddressesBalance.Update(fromAddressBalance);
         }
 
-        // await context.SaveChangesAsync();
-
         var toAddressBalance = context.AddressesBalance.SingleOrDefault(x => x.Address == toAddress);
         if (toAddressBalance == null)
         {
@@ -80,7 +79,6 @@ public class BankService : IBankService
         }
 
         await context.SaveChangesAsync();
-
         await transaction.CommitAsync();
     }
 
@@ -96,5 +94,31 @@ public class BankService : IBankService
         }
 
         return addressBalance.Balance.StringToDouble();
+    }
+
+    public async Task MintNonFungibleToken(MintNonFungibleToken mintNonFungibleTokenTransaction)
+    {
+        using var context = this._dbContextFactory.CreateDbContext();
+        var transaction = context.Database.BeginTransaction();
+
+        var metadata = mintNonFungibleTokenTransaction.Metadata
+            .Select(x => new NonFungibleTokenMetadata 
+            { 
+                NonFungibleTokenId = mintNonFungibleTokenTransaction.NonFungibleTokenId, 
+                MetadataKey = x.Key, 
+                MetadataValue = x.Value 
+            });
+
+        var nonFungibleToken = new NonFungibleTokenEntity
+        {
+            NonFungibleTokenId = mintNonFungibleTokenTransaction.NonFungibleTokenId,
+            OwnerPublicAddress = mintNonFungibleTokenTransaction.Issuer
+        };
+
+        context.NonFungibleTokenEntities.Add(nonFungibleToken);
+        context.NonFungibleTokenEntityMetadata.AddRange(metadata);
+
+        await context.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 }

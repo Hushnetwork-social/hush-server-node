@@ -1,8 +1,11 @@
 using Grpc.Core;
 using HushEcosystem;
+using HushEcosystem.Model.Bank;
 using HushNetwork.proto;
 using HushServerNode.InternalModule.MemPool.Events;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Olimpo;
+using Org.BouncyCastle.Asn1.Ntt;
 
 namespace HushServerNode.InternalModule.Bank;
 
@@ -50,6 +53,26 @@ public class BankGrpcService : HushBank.HushBankBase
         ));
 
         return new TransferFundsReply()
+        {
+            Successfull = true,
+            Message = string.Empty,
+        };
+    }
+
+    public override async Task<MintNFTReply> MintNFT(MintNFTRequest request, ServerCallContext context)
+    {
+        var nonFungibleTokenMintTrassaction = new MintNonFungibleToken
+        {
+            NonFungibleTokenId = request.NonFugibleTokenId,
+            Issuer = request.PublicOwneAddress,
+            Metadata = request.Metadata.ToDictionary(x => x.Key, x => x.Value),
+            Hash = request.Hash,
+            Signature = request.Signature
+        };
+
+        await this._eventAggregator.PublishAsync(new AddTrasactionToMemPoolEvent(nonFungibleTokenMintTrassaction));
+
+        return new MintNFTReply()
         {
             Successfull = true,
             Message = string.Empty,

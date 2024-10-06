@@ -7,6 +7,8 @@ namespace HushServerNode.InternalModule.Blockchain.Builders;
 
 public class BlockBuilder : IBlockBuilder
 {
+    public const string HUSH_REWARD = "0.5";
+
     private string _blockId = string.Empty;
     private string _previousBlockId = string.Empty;
     private string _nextBlockId = string.Empty;
@@ -15,12 +17,14 @@ public class BlockBuilder : IBlockBuilder
     private TransactionBase _rewardTransaction;
     private VerifiedTransaction _verifiedRewardTransaction;
     private List<VerifiedTransaction> _verifiedTransactions;
-    private readonly IBlockchainDbAccess _blockchainDbAccess;
+    private readonly ISettingsService _settingsService;
     private readonly TransactionBaseConverter _transactionBaseConverter;
 
-    public BlockBuilder(IBlockchainDbAccess blockchainDbAccess, TransactionBaseConverter transactionBaseConverter)
+    public BlockBuilder(
+        ISettingsService settingsService,
+        TransactionBaseConverter transactionBaseConverter)
     {
-        this._blockchainDbAccess = blockchainDbAccess;
+        this._settingsService = settingsService;
         this._transactionBaseConverter = transactionBaseConverter;
 
         this._verifiedTransactions = new List<VerifiedTransaction>();
@@ -57,7 +61,11 @@ public class BlockBuilder : IBlockBuilder
     {
         this._privateSigningKey = privateSigningKey;
 
-        string hushBlockReward = this._blockchainDbAccess.GetSettings("SYSTEM", "HUSH_REWARD");
+        string hushBlockReward = this._settingsService.GetSettings("SYSTEM", "HUSH_REWARD");
+        if(string.IsNullOrEmpty(hushBlockReward))
+        {
+            hushBlockReward = HUSH_REWARD;
+        }
 
         this._rewardTransaction = new RewardTransactionBuilder()
             .WithIssuerAddress(publicSigningAddress)
@@ -95,7 +103,7 @@ public class BlockBuilder : IBlockBuilder
 
         var genesisSettings = new SettingsBuilder()
             .WithSettingsId(Guid.NewGuid())
-            .WithSetting("SYSTEM", "HUSH_REWARD", "0.5", this._blockIndex)
+            .WithSetting("SYSTEM", "HUSH_REWARD", HUSH_REWARD, this._blockIndex)
             .Build();
 
         genesisSettings.HashObject(this._transactionBaseConverter);
@@ -142,8 +150,10 @@ public class BlockBuilder : IBlockBuilder
         }
 
         newBlock.FinalizeBlock();
-
         newBlock.Sign(this._privateSigningKey, this._transactionBaseConverter);
+
+        this._verifiedRewardTransaction = null;
+        this._verifiedTransactions = [];
 
         return newBlock;
     }

@@ -6,8 +6,8 @@ package rpcHush;
 
 service HushBank {
   rpc GetAddressBalance (GetAddressBalanceRequest) returns (GetAddressBalanceReply);
-
   rpc TransferFunds (TransferFundsRequest) returns (TransferFundsReply);
+  rpc MintNFT (MintNFTRequest) returns (MintNFTReply);
 }
 
 message GetAddressBalanceRequest {
@@ -32,6 +32,25 @@ message TransferFundsRequest {
 }
 
 message TransferFundsReply {
+  bool Successfull = 1;
+  string Message = 2;
+}
+
+message MintNFTRequest {
+  message MetadataEnttity {
+    string Key = 1;
+    string Value = 2;
+  }
+
+  string NonFugibleTokenId = 1;
+  string PublicOwneAddress = 2;
+  string Hash = 3;
+  string Signature = 4;
+
+  repeated MetadataEnttity Metadata = 5;
+}
+
+message MintNFTReply {
   bool Successfull = 1;
   string Message = 2;
 }

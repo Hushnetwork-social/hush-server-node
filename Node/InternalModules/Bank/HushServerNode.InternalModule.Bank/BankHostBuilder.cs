@@ -27,6 +27,7 @@ public static class BankHostBuilder
 
                services.AddSingleton<IIndexStrategy, RewardIndexStrategy>();
                services.AddSingleton<IIndexStrategy, TransferFundsIndexStrategy>();
+               services.AddSingleton<IIndexStrategy, MintNonFungibleTokenIndexStrategy>();
           });
      }
 }

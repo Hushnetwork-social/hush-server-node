@@ -37,11 +37,11 @@ public class BlockchainDbAccess : IBlockchainDbAccess
         {
             context.BlockchainState.Add(blockchainState);
         }
-        await context.SaveChangesAsync();
+        // await context.SaveChangesAsync();
 
         context.BlockEntities.Add(block);
+        
         await context.SaveChangesAsync();
-
         await transaction.CommitAsync();
     }
 
@@ -77,7 +77,8 @@ public class BlockchainDbAccess : IBlockchainDbAccess
         if (setting == null)
         {
             // TODO [AboimPinto]: What to do in this situation?
-            throw new InvalidOperationException($"the key {key} was not found in the settings table {table}");
+            // throw new InvalidOperationException($"the key {key} was not found in the settings table {table}");
+            return string.Empty;
         }
         else
         {

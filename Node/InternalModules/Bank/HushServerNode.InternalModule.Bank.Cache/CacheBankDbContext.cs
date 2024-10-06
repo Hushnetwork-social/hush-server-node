@@ -10,6 +10,10 @@ public class CacheBankDbContext : BaseDbContext
 
     public DbSet<AddressBalance> AddressesBalance { get; set; }
 
+    public DbSet<NonFungibleTokenEntity> NonFungibleTokenEntities { get; set; }
+
+    public DbSet<NonFungibleTokenMetadata> NonFungibleTokenEntityMetadata { get; set; }
+
     public CacheBankDbContext(
         CacheBankDbContextConfigurator cacheBankDbContextConfigurator,
         IConfiguration configuration) : base(configuration)
