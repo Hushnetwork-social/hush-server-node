@@ -19,7 +19,7 @@ public class FeedDbAccess : IFeedDbAccess
         string personalFeedOwnerAddress,
         string publicEncryptAddress,
         string privateEncryptKey,
-        double blockIndex)
+        long blockIndex)
     {
         // TODO [AboimPinto]: The meaning of the BlockIndex could have several meanings here:
         // 1. In the FeedEntity, the BlockIndex is the block index of the first block of the feed.
@@ -56,7 +56,7 @@ public class FeedDbAccess : IFeedDbAccess
         string chatParticipantAddress,
         string chatParticipantPublicEncryptAddress,
         string chatParticipantPrivateEncryptKey,
-        double blockIndex)
+        long blockIndex)
     {
         // TODO [AboimPinto]: The meaning of the BlockIndex could have several meanings here:
         // 1. In the FeedEntity, the BlockIndex is the block index of the first block of the feed.
@@ -95,7 +95,7 @@ public class FeedDbAccess : IFeedDbAccess
         string chatParticipantAddress,
         string chatParticipantPublicEncryptAddress,
         string chatParticipantPrivateEncryptKey,
-        double blockIndex)
+        long blockIndex)
     {
         var chatParticipantFeedEntity = new FeedParticipants
         {

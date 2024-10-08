@@ -1,5 +1,3 @@
-using System;
-
 namespace HushServerNode.InternalModule.Feed.Cache;
 
 public class FeedMessageEntity

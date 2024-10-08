@@ -17,7 +17,7 @@ public interface IFeedDbAccess
         string personalFeedOwnerAddress,
         string publicEncryptAddress,
         string privateEncryptKey,
-        double blockIndex);
+        long blockIndex);
 
     Task CreateChatFeed(
         string feedId,
@@ -25,14 +25,14 @@ public interface IFeedDbAccess
         string chatParticipantAddress,
         string chatParticipantPublicEncryptAddress,
         string chatParticipantPrivateEncryptKey,
-        double blockIndex);
+        long blockIndex);
 
     Task AddParticipantToChatFeed(
         string feedId,
         string chatParticipantAddress,
         string chatParticipantPublicEncryptAddress,
         string chatParticipantPrivateEncryptKey,
-        double blockIndex);
+        long blockIndex);
 
     IEnumerable<FeedEntity> GetUserFeeds(string address);
 

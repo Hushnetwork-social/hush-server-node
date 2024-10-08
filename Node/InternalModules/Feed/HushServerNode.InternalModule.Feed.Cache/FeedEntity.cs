@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace HushServerNode.InternalModule.Feed.Cache;
 
 public class FeedEntity
@@ -10,7 +8,7 @@ public class FeedEntity
 
     public int FeedType { get; set; }
 
-    public double BlockIndex { get; set; }
+    public long BlockIndex { get; set; }
 
     public ICollection<FeedParticipants> FeedParticipants { get; set; }
 

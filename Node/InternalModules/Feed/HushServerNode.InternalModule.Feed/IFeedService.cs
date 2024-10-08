@@ -15,5 +15,5 @@ public interface IFeedService
 
     FeedEntity? GetFeed(string feedId);
 
-    IEnumerable<FeedMessageEntity> GetFeedMessages(string feedId, double blockIndex);
+    IEnumerable<FeedMessageEntity> GetFeedMessages(string feedId, long blockIndex);
 }

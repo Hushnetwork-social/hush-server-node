@@ -69,12 +69,12 @@ public class FeedService : IFeedService
         return this._feedDbAccess.GetFeed(feedId);
     }
 
-    public IEnumerable<FeedMessageEntity> GetFeedMessages(string feedId, double blockIndex)
+    public IEnumerable<FeedMessageEntity> GetFeedMessages(string feedId, long blockIndex)
     {
         return this._feedDbAccess.GetFeedMessages(feedId, blockIndex);
     }
 
-    private async Task HandlesPersonalFeed(HushEcosystem.Model.Blockchain.Feed feed, double blockIndex)
+    private async Task HandlesPersonalFeed(HushEcosystem.Model.Blockchain.Feed feed, long blockIndex)
     {
         var feedParticipantProfile = this._authenticationService.GetUserProfile(feed.Issuer);
 
@@ -109,7 +109,7 @@ public class FeedService : IFeedService
         }
     }
 
-    private async Task HandlesChatFeed(HushEcosystem.Model.Blockchain.Feed feed, double blockIndex)
+    private async Task HandlesChatFeed(HushEcosystem.Model.Blockchain.Feed feed, long blockIndex)
     {
         // check if the feed already existis
         var feedExists = this._feedDbAccess.FeedExists(feed.FeedId);

@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore.Storage.ValueConversion.Internal;
-
 namespace HushServerNode.InternalModule.Bank.Cache;
 
 public class NonFungibleTokenEntity
@@ -15,4 +13,6 @@ public class NonFungibleTokenEntity
     public string NonFungibleTokenType { get; set; } = string.Empty;
 
     public bool EncryptedContent { get; set; }
+
+    public long BlockIndex { get; set; }
 }
