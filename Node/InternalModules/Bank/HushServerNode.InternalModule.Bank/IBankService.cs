@@ -10,5 +10,5 @@ public interface IBankService
 
     double GetBalance(string address);
 
-    Task MintNonFungibleToken(MintNonFungibleToken mintNonFungibleTokenTransaction);
+    Task MintNonFungibleToken(MintNonFungibleToken mintNonFungibleTokenTransaction, long blockIndex);
 }

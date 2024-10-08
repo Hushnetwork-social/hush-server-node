@@ -96,7 +96,7 @@ public class BankService : IBankService
         return addressBalance.Balance.StringToDouble();
     }
 
-    public async Task MintNonFungibleToken(MintNonFungibleToken mintNonFungibleTokenTransaction)
+    public async Task MintNonFungibleToken(MintNonFungibleToken mintNonFungibleTokenTransaction, long blockIndex)
     {
         using var context = this._dbContextFactory.CreateDbContext();
         var transaction = context.Database.BeginTransaction();
@@ -116,7 +116,8 @@ public class BankService : IBankService
             Title = mintNonFungibleTokenTransaction.Title,
             Description = mintNonFungibleTokenTransaction.Description,
             NonFungibleTokenType = mintNonFungibleTokenTransaction.Description,
-            EncryptedContent = false
+            EncryptedContent = false,
+            BlockIndex = blockIndex
         };
 
         context.NonFungibleTokenEntities.Add(nonFungibleToken);
