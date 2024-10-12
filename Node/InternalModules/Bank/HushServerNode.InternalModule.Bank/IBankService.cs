@@ -1,4 +1,5 @@
 using HushEcosystem.Model.Bank;
+using HushServerNode.InternalModule.Bank.Cache;
 
 namespace HushServerNode.InternalModule.Bank;
 
@@ -11,4 +12,8 @@ public interface IBankService
     double GetBalance(string address);
 
     Task MintNonFungibleToken(MintNonFungibleToken mintNonFungibleTokenTransaction, long blockIndex);
+
+    IEnumerable<NonFungibleTokenEntity> GetNonFungibleTokensByAddress(string address, long blockIndex);
+
+    IEnumerable<NonFungibleTokenMetadata> GetNonFungibleTokenMetadata(string nonFungibleTokenId);
 }

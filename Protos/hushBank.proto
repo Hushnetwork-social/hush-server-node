@@ -39,10 +39,11 @@ message TransferFundsReply {
 
 message GetNftsByAddressRequest {
   string Address = 1;
+  int64 BlockIndex = 2;
 }
 
 message GetNftsByAddressReply {
-  message MetadataEnttity {
+  message MetadataEntity {
     string Key = 1;
     string Value = 2;
   }
@@ -55,14 +56,14 @@ message GetNftsByAddressReply {
     string NonFugibleTokenType = 5;
     bool EncryptedContent = 6;
 
-    repeated MetadataEnttity Metadata = 7;
+    repeated MetadataEntity Metadata = 7;
   }
 
   repeated NftEntity Nfts = 1;
 }
 
 message MintNFTRequest {
-  message MetadataEnttity {
+  message MetadataEntity {
     string Key = 1;
     string Value = 2;
   }
@@ -76,7 +77,7 @@ message MintNFTRequest {
   string Hash = 7;
   string Signature = 8;
 
-  repeated MetadataEnttity Metadata = 9;
+  repeated MetadataEntity Metadata = 9;
 }
 
 message MintNFTReply {

@@ -126,4 +126,28 @@ public class BankService : IBankService
         await context.SaveChangesAsync();
         await transaction.CommitAsync();
     }
+
+    public IEnumerable<NonFungibleTokenEntity> GetNonFungibleTokensByAddress(string address, long blockIndex)
+    {
+        using var context = this._dbContextFactory.CreateDbContext();
+
+        var nfts = context.NonFungibleTokenEntities
+            .Where(x => 
+                x.OwnerPublicAddress == address && 
+                x.BlockIndex <= blockIndex)
+            .ToList();
+        
+        return nfts;
+    }
+
+    public IEnumerable<NonFungibleTokenMetadata> GetNonFungibleTokenMetadata(string nonFungibleTokenId)
+    {
+        using var context = this._dbContextFactory.CreateDbContext();
+
+        var metadata = context.NonFungibleTokenEntityMetadata
+            .Where(x => x.NonFungibleTokenId == nonFungibleTokenId)
+            .ToList();
+
+        return metadata;
+    }
 }

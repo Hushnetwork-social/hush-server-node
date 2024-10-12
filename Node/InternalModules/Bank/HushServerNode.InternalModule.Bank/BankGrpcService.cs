@@ -3,9 +3,8 @@ using HushEcosystem;
 using HushEcosystem.Model.Bank;
 using HushNetwork.proto;
 using HushServerNode.InternalModule.MemPool.Events;
-using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Olimpo;
-using Org.BouncyCastle.Asn1.Ntt;
+using static HushNetwork.proto.GetNftsByAddressReply.Types;
 
 namespace HushServerNode.InternalModule.Bank;
 
@@ -80,5 +79,40 @@ public class BankGrpcService : HushBank.HushBankBase
             Successfull = true,
             Message = string.Empty,
         };
+    }
+
+    public override Task<GetNftsByAddressReply> GetNftsByAddress(GetNftsByAddressRequest request, ServerCallContext context)
+    {
+        var reply = new GetNftsByAddressReply();
+
+        var nfts = this._bankService.GetNonFungibleTokensByAddress(request.Address, request.BlockIndex);
+
+        foreach (var nft in nfts)
+        {
+            var nftMetadata = this._bankService.GetNonFungibleTokenMetadata(nft.NonFungibleTokenId);
+
+            var entity = new NftEntity
+            {
+                NonFugibleTokenId = nft.NonFungibleTokenId,
+                PublicOwneAddress = nft.OwnerPublicAddress,
+                Title = nft.Title,
+                Description = nft.Description,
+                NonFugibleTokenType = nft.NonFungibleTokenType,
+                EncryptedContent = nft.EncryptedContent
+            };
+
+            foreach (var metadataItem in nftMetadata)
+            {
+                entity.Metadata.Add(new MetadataEntity
+                {
+                    Key = metadataItem.MetadataKey,
+                    Value = metadataItem.MetadataValue
+                });
+            }
+
+            reply.Nfts.Add(entity);
+        }
+
+        return Task.FromResult(reply);
     }
 }
