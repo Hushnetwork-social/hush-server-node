@@ -96,7 +96,7 @@ public class BankService : IBankService
         return addressBalance.Balance.StringToDouble();
     }
 
-    public async Task MintNonFungibleToken(MintNonFungibleToken mintNonFungibleTokenTransaction, long blockIndex)
+    public async Task MintNonFungibleTokenAwait(MintNonFungibleToken mintNonFungibleTokenTransaction, long blockIndex)
     {
         using var context = this._dbContextFactory.CreateDbContext();
         var transaction = context.Database.BeginTransaction();
@@ -134,7 +134,7 @@ public class BankService : IBankService
         var nfts = context.NonFungibleTokenEntities
             .Where(x => 
                 x.OwnerPublicAddress == address && 
-                x.BlockIndex <= blockIndex)
+                x.BlockIndex >= blockIndex)
             .ToList();
         
         return nfts;

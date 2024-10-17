@@ -24,6 +24,6 @@ public class CacheBankDbContextConfigurator : IDbContextConfigurator
         modelBuilder
             .Entity<NonFungibleTokenMetadata>()
             .ToTable("BANK_NFT_Metadata")
-            .HasKey(x => x.MetadataKey);
+            .HasKey(x => new { x.MetadataKey, x.NonFungibleTokenId });
     }
 }

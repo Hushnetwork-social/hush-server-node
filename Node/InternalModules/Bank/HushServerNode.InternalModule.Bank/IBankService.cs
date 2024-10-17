@@ -11,7 +11,7 @@ public interface IBankService
 
     double GetBalance(string address);
 
-    Task MintNonFungibleToken(MintNonFungibleToken mintNonFungibleTokenTransaction, long blockIndex);
+    Task MintNonFungibleTokenAwait(MintNonFungibleToken mintNonFungibleTokenTransaction, long blockIndex);
 
     IEnumerable<NonFungibleTokenEntity> GetNonFungibleTokensByAddress(string address, long blockIndex);
 

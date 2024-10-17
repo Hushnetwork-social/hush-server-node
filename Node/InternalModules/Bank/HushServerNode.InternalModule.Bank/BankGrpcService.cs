@@ -98,7 +98,8 @@ public class BankGrpcService : HushBank.HushBankBase
                 Title = nft.Title,
                 Description = nft.Description,
                 NonFugibleTokenType = nft.NonFungibleTokenType,
-                EncryptedContent = nft.EncryptedContent
+                EncryptedContent = nft.EncryptedContent,
+                BlockIndex = nft.BlockIndex
             };
 
             foreach (var metadataItem in nftMetadata)

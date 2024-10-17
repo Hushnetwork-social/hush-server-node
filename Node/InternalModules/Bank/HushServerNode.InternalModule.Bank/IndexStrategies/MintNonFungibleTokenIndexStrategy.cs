@@ -27,6 +27,6 @@ public class MintNonFungibleTokenIndexStrategy : IIndexStrategy
     {
         var mintNonFungibleTokenTransaction = verifiedTransaction.SpecificTransaction as MintNonFungibleToken;
 
-        await this._bankService.MintNonFungibleToken(mintNonFungibleTokenTransaction, verifiedTransaction.BlockIndex);
+        await this._bankService.MintNonFungibleTokenAwait(mintNonFungibleTokenTransaction, verifiedTransaction.BlockIndex);
     }
 }

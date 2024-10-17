@@ -55,8 +55,9 @@ message GetNftsByAddressReply {
     string Description = 4;
     string NonFugibleTokenType = 5;
     bool EncryptedContent = 6;
+    int64 BlockIndex = 7;
 
-    repeated MetadataEntity Metadata = 7;
+    repeated MetadataEntity Metadata = 8;
   }
 
   repeated NftEntity Nfts = 1;
