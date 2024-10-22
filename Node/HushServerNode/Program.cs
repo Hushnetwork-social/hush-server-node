@@ -19,7 +19,7 @@ public class Program
         CreateHostBuilder()
             .Build()
             .Run();
-    }
+    } 
 
     public static IHostBuilder CreateHostBuilder() => 
         Host.CreateDefaultBuilder()
