@@ -1,6 +1,4 @@
 using HushEcosystem.Model.Blockchain;
-using HushEcosystem.Model.Builders;
-using HushServerNode.InternalModule.Authentication.Cache;
 
 namespace HushServerNode.InternalModule.Authentication;
 
