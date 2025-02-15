@@ -1,14 +1,14 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Olimpo;
-using HushEcosystem;
+// using HushEcosystem;
 using Microsoft.Extensions.Configuration;
-using HushServerNode.InternalModule.Blockchain;
+// using HushServerNode.InternalModule.Blockchain;
 using HushServerNode.DbModel;
-using HushServerNode.InternalModule.Bank;
-using HushServerNode.InternalModule.MemPool;
-using HushServerNode.InternalModule.Authentication;
-using HushServerNode.InternalModule.Feed;
+// using HushServerNode.InternalModule.Bank;
+// using HushServerNode.InternalModule.MemPool;
+// using HushServerNode.InternalModule.Authentication;
+// using HushServerNode.InternalModule.Feed;
 
 namespace HushServerNode;
 
@@ -38,14 +38,14 @@ public class Program
                 services.AddHostedService<Worker>();
             })
             .RegisterBootstrapperManager()
-            .RegisterEventAggregatorManager()
+            .RegisterEventAggregatorManager();
 
-            .RegisterInternalModuleBlockchain()
-            .RegisterInternalModuleBank()
-            .RegisterInternalModuleAuthentication()
-            .RegisterInternalModuleMemPool()
-            .RegisterInternalModuleFeed()
-            .RegisterTransactionDeserializerModel();
+            // .RegisterInternalModuleBlockchain()
+            // .RegisterInternalModuleBank()
+            // .RegisterInternalModuleAuthentication()
+            // .RegisterInternalModuleMemPool()
+            // .RegisterInternalModuleFeed()
+            // .RegisterTransactionDeserializerModel();
 
         public static IConfigurationBuilder ConfigureConfigurationBuilder(IConfigurationBuilder configurationBuilder)
         {

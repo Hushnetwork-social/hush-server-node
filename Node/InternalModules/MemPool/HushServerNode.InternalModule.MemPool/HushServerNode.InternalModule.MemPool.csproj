@@ -7,24 +7,24 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.8" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="*">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.8" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="8.0.1" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.4" />
-    <PackageReference Include="System.Reactive" Version="6.0.1" />
-    <PackageReference Include="System.Reactive.Linq" Version="6.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="*" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="*" />
+    <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="*" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="*" />
+    <PackageReference Include="System.Reactive" Version="*" />
+    <PackageReference Include="System.Reactive.Linq" Version="*" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\..\..\Modules\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
-    <ProjectReference Include="..\..\..\..\Modules\HushEcosystem.Model\HushEcosystem.Model.csproj" />
+    <!-- <ProjectReference Include="..\..\..\..\Modules\HushEcosystem.Model\HushEcosystem.Model.csproj" /> -->
   </ItemGroup>
 
 </Project>

@@ -1,10 +1,10 @@
-using HushEcosystem.Model.Blockchain;
+// using HushEcosystem.Model.Blockchain;
 
-namespace HushServerNode.Interfaces;
+// namespace HushServerNode.Interfaces;
 
-public interface IIndexStrategy
-{
-    bool CanHandle(VerifiedTransaction verifiedTransaction);
+// public interface IIndexStrategy
+// {
+//     bool CanHandle(VerifiedTransaction verifiedTransaction);
 
-    Task Handle(VerifiedTransaction verifiedTransaction);    
-}
+//     Task Handle(VerifiedTransaction verifiedTransaction);    
+// }

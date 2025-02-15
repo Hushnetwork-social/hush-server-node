@@ -10,22 +10,22 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.8" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="*">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
 
-    <PackageReference Include="Google.Protobuf" Version="3.26.0" />
-    <PackageReference Include="Grpc" Version="2.46.6" />
-    <PackageReference Include="Grpc.Core" Version="2.46.6" />
-    <PackageReference Include="Grpc.Tools" Version="2.62.0">
+    <PackageReference Include="Google.Protobuf" Version="*" />
+    <PackageReference Include="Grpc" Version="*" />
+    <PackageReference Include="Grpc.Core" Version="*" />
+    <PackageReference Include="Grpc.Tools" Version="*">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="*" />
+    <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="*" />
   </ItemGroup>
 
   <ItemGroup>
@@ -43,13 +43,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Services\HushServerNode.ServerService\HushServerNode.ServerService.csproj" />
+    <!-- <ProjectReference Include="..\Services\HushServerNode.ServerService\HushServerNode.ServerService.csproj" /> -->
     <ProjectReference Include="..\Services\HushServerNode.Interfaces\HushServerNode.Interfaces.csproj" />
+    <ProjectReference Include="..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
+    <ProjectReference Include="..\..\Modules\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
+    <!-- 
     <ProjectReference Include="..\InternalModules\Blockchain\HushServerNode.InternalModule.Blockchain\HushServerNode.InternalModule.Blockchain.csproj" />
     <ProjectReference Include="..\InternalModules\Bank\HushServerNode.InternalModule.Bank\HushServerNode.InternalModule.Bank.csproj" />
     <ProjectReference Include="..\InternalModules\MemPool\HushServerNode.InternalModule.MemPool\HushServerNode.InternalModule.MemPool.csproj" />
     <ProjectReference Include="..\InternalModules\Authentication\HushServerNode.InternalModule.Authentication\HushServerNode.InternalModule.Authentication.csproj" />
-    <ProjectReference Include="..\InternalModules\Feed\HushServerNode.InternalModule.Feed\HushServerNode.InternalModule.Feed.csproj" />
+    <ProjectReference Include="..\InternalModules\Feed\HushServerNode.InternalModule.Feed\HushServerNode.InternalModule.Feed.csproj" /> 
+    -->
   </ItemGroup>
 
 

@@ -32,7 +32,7 @@
   <ItemGroup>
     <ProjectReference Include="..\HushServerNode.InternalModule.Authentication.Cache\HushServerNode.InternalModule.Authentication.Cache.csproj" />
     <ProjectReference Include="..\..\..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
-    <ProjectReference Include="..\..\..\..\Modules\HushEcosystem.Model\HushEcosystem.Model.csproj" />
+    <!-- <ProjectReference Include="..\..\..\..\Modules\HushEcosystem.Model\HushEcosystem.Model.csproj" /> -->
     <ProjectReference Include="..\..\MemPool\HushServerNode.InternalModule.MemPool\HushServerNode.InternalModule.MemPool.csproj" />
   </ItemGroup>
 

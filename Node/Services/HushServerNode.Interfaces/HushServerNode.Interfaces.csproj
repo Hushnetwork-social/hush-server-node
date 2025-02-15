@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Modules\HushEcosystem.Model\HushEcosystem.Model.csproj" />
+    <!-- <ProjectReference Include="..\..\..\Modules\HushEcosystem.Model\HushEcosystem.Model.csproj" /> -->
   </ItemGroup>
 
 </Project>
