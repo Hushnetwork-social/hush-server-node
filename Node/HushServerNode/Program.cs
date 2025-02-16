@@ -5,6 +5,7 @@ using Olimpo;
 using Microsoft.Extensions.Configuration;
 // using HushServerNode.InternalModule.Blockchain;
 using HushServerNode.DbModel;
+using HushNetwork.BlockchainWorkflows;
 // using HushServerNode.InternalModule.Bank;
 // using HushServerNode.InternalModule.MemPool;
 // using HushServerNode.InternalModule.Authentication;
@@ -38,8 +39,8 @@ public class Program
                 services.AddHostedService<Worker>();
             })
             .RegisterBootstrapperManager()
-            .RegisterEventAggregatorManager();
-
+            .RegisterEventAggregatorManager()
+            .RegisterBlockchainWorkflow();
             // .RegisterInternalModuleBlockchain()
             // .RegisterInternalModuleBank()
             // .RegisterInternalModuleAuthentication()
