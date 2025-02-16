@@ -45,8 +45,8 @@
   <ItemGroup>
     <!-- <ProjectReference Include="..\Services\HushServerNode.ServerService\HushServerNode.ServerService.csproj" /> -->
     <ProjectReference Include="..\Services\HushServerNode.Interfaces\HushServerNode.Interfaces.csproj" />
-    <ProjectReference Include="..\..\Modules\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
-    <ProjectReference Include="..\..\Modules\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
+    <ProjectReference Include="..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
+    <ProjectReference Include="..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
     <!-- 
     <ProjectReference Include="..\InternalModules\Blockchain\HushServerNode.InternalModule.Blockchain\HushServerNode.InternalModule.Blockchain.csproj" />
     <ProjectReference Include="..\InternalModules\Bank\HushServerNode.InternalModule.Bank\HushServerNode.InternalModule.Bank.csproj" />

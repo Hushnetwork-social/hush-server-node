@@ -7,7 +7,7 @@
 			"path": "../Protos"
 		},
 		{
-			"path": "../Modules"
+			"path": "../Shared"
 		}
 	],
 	"settings": {}
