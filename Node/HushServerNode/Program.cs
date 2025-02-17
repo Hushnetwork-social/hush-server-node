@@ -5,7 +5,8 @@ using Olimpo;
 using Microsoft.Extensions.Configuration;
 // using HushServerNode.InternalModule.Blockchain;
 using HushServerNode.DbModel;
-using HushNetwork.BlockchainWorkflows;
+using HushNode.Blockchain.Persistency.InMemory;
+using HushNode.Blockchain;
 // using HushServerNode.InternalModule.Bank;
 // using HushServerNode.InternalModule.MemPool;
 // using HushServerNode.InternalModule.Authentication;
@@ -40,7 +41,8 @@ public class Program
             })
             .RegisterBootstrapperManager()
             .RegisterEventAggregatorManager()
-            .RegisterBlockchainWorkflow();
+            .RegisterInMemoryPersistency()
+            .RegisterHushNodeBlockchain();
             // .RegisterInternalModuleBlockchain()
             // .RegisterInternalModuleBank()
             // .RegisterInternalModuleAuthentication()
