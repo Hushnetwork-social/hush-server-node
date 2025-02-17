@@ -8,6 +8,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
+    <ProjectReference Include="..\HushNode.Blockchain.Persistency.Abstractions\HushNode.Blockchain.Persistency.Abstractions.csproj" />
+    <ProjectReference Include="..\HushNode.Blockchain.Persistency.EntityFramework\HushNode.Blockchain.Persistency.EntityFramework.csproj" />
+    <ProjectReference Include="..\Model\HushNetwork.BlockModel\HushNetwork.BlockModel.csproj" />
+    <ProjectReference Include="..\Model\HushNetwork.TransactionModel\HushNetwork.TransactionModel.csproj" />
   </ItemGroup>
 
   <ItemGroup>

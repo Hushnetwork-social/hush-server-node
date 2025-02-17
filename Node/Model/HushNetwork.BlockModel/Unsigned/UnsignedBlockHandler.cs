@@ -1,7 +1,5 @@
-using HushNetwork.BlockModel;
 using HushNetwork.BlockModel.Signed;
 using HushNetwork.CommonModel;
-using HushNetwork.Shared.Model.Transaction;
 using HushNetwork.TransactionModel;
 
 namespace HushNetwork.BlockModel.Unsigned;
