@@ -1,6 +1,7 @@
 using HushNode.Blockchain.Persistency.Abstractions;
 using HushNode.Blockchain.Persistency.EntityFramework;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -14,7 +15,10 @@ public static class BlockchainPersistencyInMemoryHostBuilder
         {
             services.AddDbContext<BlockchainDbContext>(options =>
             {
-                options.UseInMemoryDatabase("HushNetworkDb");
+                options
+                    .UseInMemoryDatabase("HushNetworkDb")
+                    .ConfigureWarnings(warnings => 
+                        warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning));
             });
 
             services.AddScoped<IUnitOfWorkFactory, UnitOfWorkFactory>();

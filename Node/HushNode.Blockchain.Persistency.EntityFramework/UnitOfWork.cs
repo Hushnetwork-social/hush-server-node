@@ -14,11 +14,11 @@ public class UnitOfWork : IUnitOfWork
 
     public UnitOfWork(BlockchainDbContext dbContext)
     {
-        _dbContext = dbContext;
-        _contextTransaction = _dbContext.Database.BeginTransaction();
+        this._dbContext = dbContext;
+        this._contextTransaction = this._dbContext.Database.BeginTransaction();
 
-        BlockRepository = new BlockRepository(_dbContext);
-        BlockStateRepository = new BlockchainStateRepository(_dbContext);
+        this.BlockRepository = new BlockRepository(_dbContext);
+        this.BlockStateRepository = new BlockchainStateRepository(_dbContext);
     }
 
     public async Task CommitAsync()
@@ -29,12 +29,12 @@ public class UnitOfWork : IUnitOfWork
 
     public void Dispose()
     {
-        _contextTransaction.Dispose();
-        _dbContext.Dispose();
+        this._contextTransaction.Dispose();
+        this._dbContext.Dispose();
     }
 
     public async Task RollbackAsync()
     {
-        await _contextTransaction.RollbackAsync();
+        await this._contextTransaction.RollbackAsync();
     }
 }

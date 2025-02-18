@@ -8,7 +8,7 @@ public class BlockRepository(BlockchainDbContext dbContext) : IBlockRepository
 {
     private readonly BlockchainDbContext _dbContext = dbContext;
 
-    public async Task<Block> GetBlockByIdAsync(Guid blockId) => 
-        await _dbContext.Blocks
-            .SingleAsync(x => x.BlockId == blockId);
+    public Task<Block> GetBlockByIdAsync(Guid blockId) => throw new NotImplementedException();
+        // await _dbContext.Blocks
+        //     .SingleAsync(x => x.BlockId == blockId);
 }

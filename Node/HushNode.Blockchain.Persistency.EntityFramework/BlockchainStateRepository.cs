@@ -8,6 +8,14 @@ public class BlockchainStateRepository(BlockchainDbContext dbContext) : IBlockch
 {
     private readonly BlockchainDbContext _dbContext = dbContext;
 
-    public Task<BlockchainState> GetCurrentStateAsync() =>
-        _dbContext.BlockchainStates.SingleAsync();
+    public async Task<BlockchainState> GetCurrentStateAsync()
+    {
+        var currentBlockchainState = await this._dbContext.BlockchainStates.SingleOrDefaultAsync();
+
+        return currentBlockchainState switch
+        {
+            null => new GenesisBlockchainState(),
+            _ => currentBlockchainState
+        };
+    }
 }
