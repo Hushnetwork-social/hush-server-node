@@ -1,6 +1,5 @@
-using System.Security.Cryptography.X509Certificates;
-using System.Xml.Linq;
-using HushNode.Blockchain.Persistency.Abstractions.Model;
+using HushNode.Blockchain.Persistency.Abstractions.Models;
+using HushNode.Blockchain.Persistency.Abstractions.Models.Block;
 using Microsoft.EntityFrameworkCore;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;

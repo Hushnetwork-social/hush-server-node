@@ -1,5 +1,5 @@
 using HushNode.Blockchain.Persistency.Abstractions;
-using HushNode.Blockchain.Persistency.Abstractions.Model;
+using HushNode.Blockchain.Persistency.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 
 namespace HushNode.Blockchain.Services;
@@ -26,15 +26,13 @@ public class ChainFoundationService : IChainFoundationService
 
         var blockchainState = await this._unitOfWork.BlockStateRepository.GetCurrentStateAsync();
 
-        switch(blockchainState)
+        var handler = blockchainState switch
         {
-            case GenesisBlockchainState:
-                this.GenerateGenesisBlock();
-                break;
-            default: 
-                this.BlockchainInitializationFinished();
-                break;
+            GenesisBlockchainState => (Action)GenerateGenesisBlock,
+            _ => (Action)BlockchainInitializationFinished
         };
+        
+        handler.Invoke();
     }
 
     private void BlockchainInitializationFinished()

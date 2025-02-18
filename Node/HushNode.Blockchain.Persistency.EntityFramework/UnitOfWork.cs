@@ -1,4 +1,5 @@
 ﻿using HushNode.Blockchain.Persistency.Abstractions;
+using HushNode.Blockchain.Persistency.Abstractions.Repositories;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;

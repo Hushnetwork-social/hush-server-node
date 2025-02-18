@@ -1,6 +1,6 @@
-using HushNode.Blockchain.Persistency.Abstractions.Model;
+using HushNode.Blockchain.Persistency.Abstractions.Models;
 
-namespace HushNode.Blockchain.Persistency.Abstractions;
+namespace HushNode.Blockchain.Persistency.Abstractions.Repositories;
 
 public interface IBlockchainStateRepository
 {

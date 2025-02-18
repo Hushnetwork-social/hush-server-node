@@ -1,3 +1,5 @@
+using HushNode.Blockchain.Persistency.Abstractions.Repositories;
+
 namespace HushNode.Blockchain.Persistency.Abstractions;
 
 public interface IUnitOfWork : IDisposable

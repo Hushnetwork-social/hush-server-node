@@ -1,4 +1,4 @@
-namespace HushNode.Blockchain.Persistency.Abstractions.Model;
+namespace HushNode.Blockchain.Persistency.Abstractions.Models.Block;
 
 public static class BlockIdHandler
 {

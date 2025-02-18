@@ -1,4 +1,6 @@
-namespace HushNode.Blockchain.Persistency.Abstractions.Model;
+using HushNode.Blockchain.Persistency.Abstractions.Models.Block;
+
+namespace HushNode.Blockchain.Persistency.Abstractions.Models;
 
 public record BlockchainState(
     BlockchainStateId BlockchainStateId,

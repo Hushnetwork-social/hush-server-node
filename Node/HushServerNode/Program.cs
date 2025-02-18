@@ -1,16 +1,10 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Olimpo;
-// using HushEcosystem;
 using Microsoft.Extensions.Configuration;
-// using HushServerNode.InternalModule.Blockchain;
 using HushServerNode.DbModel;
 using HushNode.Blockchain.Persistency.InMemory;
 using HushNode.Blockchain;
-// using HushServerNode.InternalModule.Bank;
-// using HushServerNode.InternalModule.MemPool;
-// using HushServerNode.InternalModule.Authentication;
-// using HushServerNode.InternalModule.Feed;
 
 namespace HushServerNode;
 
