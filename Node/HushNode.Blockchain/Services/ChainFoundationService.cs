@@ -1,7 +1,6 @@
 using HushNode.Blockchain.Persistency.Abstractions;
 using HushNode.Blockchain.Persistency.Abstractions.Model;
 using Microsoft.Extensions.Logging;
-using Org.BouncyCastle.Asn1.X509.Qualified;
 
 namespace HushNode.Blockchain.Services;
 
