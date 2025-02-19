@@ -16,8 +16,6 @@ public static class BlockchainPersistencyPostgresHostBuilder
             {
                 options.UseNpgsql(hostContext.Configuration.GetConnectionString("HushNetworkDb"));
             });
-
-            // services.AddScoped<IUnitOfWorkFactory, UnitOfWorkFactory>();
         });
 
         return builder;

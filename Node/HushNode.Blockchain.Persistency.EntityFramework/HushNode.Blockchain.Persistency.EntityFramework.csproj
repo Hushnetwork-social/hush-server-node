@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\HushNode.Blockchain.Persistency.Abstractions\HushNode.Blockchain.Persistency.Abstractions.csproj" />
     <ProjectReference Include="..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
+    <ProjectReference Include="..\HushNode.Intefaces\HushNode.Intefaces.csproj" />
   </ItemGroup>
 
   <ItemGroup>

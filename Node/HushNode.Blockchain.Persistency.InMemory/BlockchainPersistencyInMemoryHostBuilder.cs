@@ -1,4 +1,5 @@
 using HushNode.Blockchain.Persistency.EntityFramework;
+using HushNode.Intefaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,8 +20,6 @@ public static class BlockchainPersistencyInMemoryHostBuilder
                     .ConfigureWarnings(warnings => 
                         warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning));
             });
-
-            // services.AddScoped<IUnitOfWorkFactory, UnitOfWorkFactory>();
         });
 
         return builder;
