@@ -1,4 +1,3 @@
-using HushNode.Blockchain.Persistency.Abstractions;
 using HushNode.Blockchain.Persistency.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -21,7 +20,7 @@ public static class BlockchainPersistencyInMemoryHostBuilder
                         warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning));
             });
 
-            services.AddScoped<IUnitOfWorkFactory, UnitOfWorkFactory>();
+            // services.AddScoped<IUnitOfWorkFactory, UnitOfWorkFactory>();
         });
 
         return builder;

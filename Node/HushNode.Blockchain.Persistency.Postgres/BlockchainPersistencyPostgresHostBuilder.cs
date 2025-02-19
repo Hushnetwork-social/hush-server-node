@@ -1,4 +1,3 @@
-using HushNode.Blockchain.Persistency.Abstractions;
 using HushNode.Blockchain.Persistency.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -18,7 +17,7 @@ public static class BlockchainPersistencyPostgresHostBuilder
                 options.UseNpgsql(hostContext.Configuration.GetConnectionString("HushNetworkDb"));
             });
 
-            services.AddScoped<IUnitOfWorkFactory, UnitOfWorkFactory>();
+            // services.AddScoped<IUnitOfWorkFactory, UnitOfWorkFactory>();
         });
 
         return builder;

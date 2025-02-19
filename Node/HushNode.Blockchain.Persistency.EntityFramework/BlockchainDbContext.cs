@@ -1,12 +1,13 @@
 using HushNode.Blockchain.Persistency.Abstractions.Models;
 using HushNode.Blockchain.Persistency.Abstractions.Models.Block;
+using HushNode.Blockchain.Persistency.Abstractions.Models.Block.States;
 using Microsoft.EntityFrameworkCore;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;
 
 public class BlockchainDbContext(DbContextOptions<BlockchainDbContext> options) : DbContext(options)
 {
-    // public DbSet<Block> Blocks { get; set; }
+    // public DbSet<FinalizedBlock> Blocks { get; set; }
     public DbSet<BlockchainState> BlockchainStates { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

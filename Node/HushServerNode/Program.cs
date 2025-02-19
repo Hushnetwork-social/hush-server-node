@@ -1,10 +1,11 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Olimpo;
 using Microsoft.Extensions.Configuration;
+using Olimpo;
 using HushServerNode.DbModel;
-using HushNode.Blockchain.Persistency.InMemory;
 using HushNode.Blockchain;
+using HushNode.Blockchain.Persistency.InMemory;
+using HushNode.Blockchain.Persistency.EntityFramework;
 
 namespace HushServerNode;
 
@@ -35,6 +36,7 @@ public class Program
             })
             .RegisterBootstrapperManager()
             .RegisterEventAggregatorManager()
+            .RegisterEntityFrameworkPersistency()
             .RegisterInMemoryPersistency()
             .RegisterHushNodeBlockchain();
             // .RegisterInternalModuleBlockchain()
