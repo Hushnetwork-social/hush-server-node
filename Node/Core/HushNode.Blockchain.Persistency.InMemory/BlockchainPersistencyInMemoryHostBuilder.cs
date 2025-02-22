@@ -1,5 +1,5 @@
 using HushNode.Blockchain.Persistency.EntityFramework;
-using HushNode.Intefaces;
+using HushNode.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;

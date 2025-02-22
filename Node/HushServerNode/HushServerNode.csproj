@@ -10,8 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="*" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="*">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.2">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -23,9 +23,9 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="*" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="*" />
-    <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="*" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="9.0.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -43,22 +43,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- <ProjectReference Include="..\Services\HushServerNode.ServerService\HushServerNode.ServerService.csproj" /> -->
-    <ProjectReference Include="..\Services\HushServerNode.Interfaces\HushServerNode.Interfaces.csproj" />
+    <!-- <ProjectReference Include="..\Services\HushServerNode.Interfaces\HushServerNode.Interfaces.csproj" /> -->
     <ProjectReference Include="..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
-    <ProjectReference Include="..\Workflows\HushNetwork.BlockchainWorkflows\HushNetwork.BlockchainWorkflows.csproj" />
-    <ProjectReference Include="..\HushNode.Blockchain.Persistency.InMemory\HushNode.Blockchain.Persistency.InMemory.csproj" />
-    <ProjectReference Include="..\HushNode.Blockchain\HushNode.Blockchain.csproj" />
-    <ProjectReference Include="..\HushNode.Blockchain.Persistency.EntityFramework\HushNode.Blockchain.Persistency.EntityFramework.csproj" />
-    <ProjectReference Include="..\HushNode.Credentials\HushNode.Credentials.csproj" />
-    <!-- 
-    <ProjectReference Include="..\InternalModules\Blockchain\HushServerNode.InternalModule.Blockchain\HushServerNode.InternalModule.Blockchain.csproj" />
-    <ProjectReference Include="..\InternalModules\Bank\HushServerNode.InternalModule.Bank\HushServerNode.InternalModule.Bank.csproj" />
-    <ProjectReference Include="..\InternalModules\MemPool\HushServerNode.InternalModule.MemPool\HushServerNode.InternalModule.MemPool.csproj" />
-    <ProjectReference Include="..\InternalModules\Authentication\HushServerNode.InternalModule.Authentication\HushServerNode.InternalModule.Authentication.csproj" />
-    <ProjectReference Include="..\InternalModules\Feed\HushServerNode.InternalModule.Feed\HushServerNode.InternalModule.Feed.csproj" /> 
-    -->
+    <ProjectReference Include="..\Core\HushNode.Blockchain.Persistency.InMemory\HushNode.Blockchain.Persistency.InMemory.csproj" />
+    <ProjectReference Include="..\Core\HushNode.Blockchain\HushNode.Blockchain.csproj" />
+    <ProjectReference Include="..\Core\HushNode.Blockchain.Persistency.EntityFramework\HushNode.Blockchain.Persistency.EntityFramework.csproj" />
   </ItemGroup>
 
 

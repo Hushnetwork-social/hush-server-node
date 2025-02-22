@@ -4,7 +4,7 @@ using HushNode.Blockchain.Persistency.Abstractions.Models;
 using HushNode.Blockchain.Persistency.Abstractions.Models.Block.States;
 using HushNode.Blockchain.Persistency.Abstractions.Models.Transaction.States;
 using HushNode.Credentials;
-using HushNode.Intefaces;
+using HushNode.Interfaces;
 using HushNode.InternalPayloads;
 using Olimpo;
 

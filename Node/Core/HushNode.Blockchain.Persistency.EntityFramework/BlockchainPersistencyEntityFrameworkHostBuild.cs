@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using HushNode.Blockchain.Persistency.Abstractions;
-using HushNode.Intefaces;
+using HushNode.Interfaces;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;
 

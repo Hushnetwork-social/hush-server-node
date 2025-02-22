@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 
-namespace HushNode.Intefaces;
+namespace HushNode.Interfaces;
 
 public interface IDbContextConfigurator
 {

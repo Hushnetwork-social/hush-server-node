@@ -29,7 +29,7 @@ public class Program
             })
             .ConfigureServices((hostContext, services) => 
             {
-                services.AddSingleton<IBootstrapper, gRPCServerBootstraper>();
+                // services.AddSingleton<IBootstrapper, gRPCServerBootstraper>();
 
                 services.AddDbContextFactory<HushNodeDbContext>();
 

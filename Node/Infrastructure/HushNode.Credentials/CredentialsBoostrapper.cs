@@ -8,8 +8,6 @@ public class CredentialsBoostrapper : IBootstrapper
 {
     private CredentialsProfile _credentials;
 
-    // private readonly IOptions<CredentialsProfile> _credentials;
-
     public Subject<bool> BootstrapFinished { get; } = new Subject<bool>();
 
     public int Priority { get; set; } = 5;

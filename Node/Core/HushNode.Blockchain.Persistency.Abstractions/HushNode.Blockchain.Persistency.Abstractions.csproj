@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Olimpo.DigitalSignature\SigningManager.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

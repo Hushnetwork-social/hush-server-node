@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using HushNode.Blockchain.Persistency.Abstractions.Models;
 using HushNode.Blockchain.Persistency.Abstractions.Models.Block;
-using HushNode.Intefaces;
+using HushNode.Interfaces;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;
 

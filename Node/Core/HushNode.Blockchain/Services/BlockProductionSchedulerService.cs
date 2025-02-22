@@ -7,9 +7,9 @@ public class BlockProductionSchedulerService :
     IBlockProductionSchedulerService,
     IHandleAsync<BlockCreatedEvent>
 {
-    private readonly EventAggregator eventAggregator;
+    private readonly IEventAggregator eventAggregator;
 
-    public BlockProductionSchedulerService(EventAggregator eventAggregator)
+    public BlockProductionSchedulerService(IEventAggregator eventAggregator)
     {
         this.eventAggregator = eventAggregator;
 
