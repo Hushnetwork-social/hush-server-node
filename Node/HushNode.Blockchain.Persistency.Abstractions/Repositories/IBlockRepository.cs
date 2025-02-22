@@ -1,4 +1,6 @@
-﻿namespace HushNode.Blockchain.Persistency.Abstractions.Repositories;
+﻿using HushNode.Blockchain.Persistency.Abstractions.Models;
+
+namespace HushNode.Blockchain.Persistency.Abstractions.Repositories;
 
 public interface IBlockRepository
 {
@@ -6,4 +8,5 @@ public interface IBlockRepository
     
     // Task SaveBlockAsync(Block block);
     
+    Task AddBlockchainBlockAsync(BlockchainBlock block);
 }

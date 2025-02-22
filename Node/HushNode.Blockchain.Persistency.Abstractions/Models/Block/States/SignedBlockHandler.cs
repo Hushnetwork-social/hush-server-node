@@ -39,4 +39,15 @@ public static class SignedBlockHandler
 
     public static bool CheckHash(this SignedBlock signedBlock, string hash) => 
         signedBlock.GetHashCode().ToString() == hash;
+
+    
+    public static BlockchainBlock ToBlockchainBlock(this FinalizedBlock finalizedBlock) =>
+        new(
+            finalizedBlock.BlockId,
+            finalizedBlock.BlockIndex,
+            finalizedBlock.PreviousBlockId,
+            finalizedBlock.NextBlockId,
+            finalizedBlock.Hash,
+            finalizedBlock.ToJson());
+        
 }

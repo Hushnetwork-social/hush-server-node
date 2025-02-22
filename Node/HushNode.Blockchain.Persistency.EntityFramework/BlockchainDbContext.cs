@@ -9,7 +9,7 @@ public class BlockchainDbContext(
 {
     private readonly BlockchainDbContextConfigurator _blockchainDbContextConfigurator = blockchainDbContextConfigurator;
 
-    // public DbSet<FinalizedBlock> Blocks { get; set; }
+    public DbSet<BlockchainBlock> Blocks { get; set; }
     public DbSet<BlockchainState> BlockchainStates { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

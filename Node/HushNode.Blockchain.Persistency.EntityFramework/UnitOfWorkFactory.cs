@@ -1,6 +1,5 @@
 using HushNode.Blockchain.Persistency.Abstractions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Internal;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework
 {
@@ -15,8 +14,6 @@ namespace HushNode.Blockchain.Persistency.EntityFramework
 
         public IUnitOfWork Create()
         {
-            // var context = new BlockchainDbContext(_options);
-
             return new UnitOfWork(this._dbContextFactory);
         }
     }

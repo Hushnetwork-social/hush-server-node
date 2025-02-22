@@ -51,6 +51,7 @@
     <ProjectReference Include="..\HushNode.Blockchain.Persistency.InMemory\HushNode.Blockchain.Persistency.InMemory.csproj" />
     <ProjectReference Include="..\HushNode.Blockchain\HushNode.Blockchain.csproj" />
     <ProjectReference Include="..\HushNode.Blockchain.Persistency.EntityFramework\HushNode.Blockchain.Persistency.EntityFramework.csproj" />
+    <ProjectReference Include="..\HushNode.Credentials\HushNode.Credentials.csproj" />
     <!-- 
     <ProjectReference Include="..\InternalModules\Blockchain\HushServerNode.InternalModule.Blockchain\HushServerNode.InternalModule.Blockchain.csproj" />
     <ProjectReference Include="..\InternalModules\Bank\HushServerNode.InternalModule.Bank\HushServerNode.InternalModule.Bank.csproj" />

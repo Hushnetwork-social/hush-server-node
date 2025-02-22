@@ -1,5 +1,6 @@
 using HushNode.Blockchain.Persistency.Abstractions;
 using HushNode.Blockchain.Persistency.Abstractions.Models;
+using HushNode.Blockchain.Workflows;
 using Microsoft.Extensions.Logging;
 
 namespace HushNode.Blockchain.Services;
@@ -7,13 +8,16 @@ namespace HushNode.Blockchain.Services;
 public class ChainFoundationService : IChainFoundationService
 {
     private readonly ILogger<ChainFoundationService> _logger;
+    private readonly IBlockAssemblerWorkflow _blockAssemblerWorkflow;
     private readonly IUnitOfWorkFactory _unitOfWorkFactory;
     private readonly IUnitOfWork _unitOfWork;
 
     public ChainFoundationService(
+        IBlockAssemblerWorkflow blockAssemblerWorkflow,
         IUnitOfWorkFactory unitOfWorkFactory,
         ILogger<ChainFoundationService> logger)
     {
+        this._blockAssemblerWorkflow = blockAssemblerWorkflow;
         this._unitOfWorkFactory = unitOfWorkFactory;
         this._logger = logger;
 
@@ -26,20 +30,22 @@ public class ChainFoundationService : IChainFoundationService
 
         var blockchainState = await this._unitOfWork.BlockStateRepository.GetCurrentStateAsync();
 
-        var handler = blockchainState switch
+        Func<BlockchainState, Task> handler = blockchainState switch
         {
-            GenesisBlockchainState => (Action)GenerateGenesisBlock,
-            _ => (Action)BlockchainInitializationFinished
+            GenesisBlockchainState => GenerateGenesisBlock,
+            _ => BlockchainInitializationFinished
         };
         
-        handler.Invoke();
+        await handler.Invoke(blockchainState);
     }
 
-    private void BlockchainInitializationFinished()
+    private Task BlockchainInitializationFinished(BlockchainState blockchainState)
     {
+        return Task.CompletedTask;
     }
 
-    private void GenerateGenesisBlock()
+    private async Task GenerateGenesisBlock(BlockchainState genesisBlockchainState)
     {
+        await this._blockAssemblerWorkflow.AssembleGenesisBlockAsync(genesisBlockchainState);
     }
 }

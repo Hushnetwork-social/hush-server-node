@@ -37,6 +37,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Blockchain.Persist
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Intefaces", "HushNode.Intefaces\HushNode.Intefaces.csproj", "{FD2F0240-7B5B-4CBC-A379-6C3048D4748D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.InternalPayloads", "HushNode.InternalPayloads\HushNode.InternalPayloads.csproj", "{94B0345B-D163-47EB-8DDF-F298D17D029D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Credentials", "HushNode.Credentials\HushNode.Credentials.csproj", "{CC94EA16-A481-488B-A2C8-BE9ADAB29645}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -106,6 +110,14 @@ Global
 		{FD2F0240-7B5B-4CBC-A379-6C3048D4748D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FD2F0240-7B5B-4CBC-A379-6C3048D4748D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FD2F0240-7B5B-4CBC-A379-6C3048D4748D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{94B0345B-D163-47EB-8DDF-F298D17D029D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{94B0345B-D163-47EB-8DDF-F298D17D029D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{94B0345B-D163-47EB-8DDF-F298D17D029D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{94B0345B-D163-47EB-8DDF-F298D17D029D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CC94EA16-A481-488B-A2C8-BE9ADAB29645}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CC94EA16-A481-488B-A2C8-BE9ADAB29645}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CC94EA16-A481-488B-A2C8-BE9ADAB29645}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CC94EA16-A481-488B-A2C8-BE9ADAB29645}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{2DF28E9D-A0A7-43FD-A0C7-6C1A307EE97D} = {2D578FAD-684F-456D-9698-C6BD28A9EA6E}

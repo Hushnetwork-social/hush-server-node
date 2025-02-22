@@ -12,4 +12,18 @@ public class BlockchainStateRepository(BlockchainDbContext dbContext) : IBlockch
         await this._dbContext.BlockchainStates.SingleOrDefaultAsync() is BlockchainState currentBlockchainState
             ? currentBlockchainState
             : new GenesisBlockchainState();
+
+    public async Task SetBlockchainStateAsync(BlockchainState blockchainState)
+    {
+        var currentBlockchainState = await this._dbContext.BlockchainStates.SingleOrDefaultAsync();
+
+        if (currentBlockchainState == null)
+        {
+            await this._dbContext.BlockchainStates.AddAsync(blockchainState);
+        }
+        else
+        {
+            this._dbContext.BlockchainStates.Update(blockchainState);
+        }
+    }
 }

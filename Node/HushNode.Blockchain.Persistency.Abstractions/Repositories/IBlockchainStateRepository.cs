@@ -5,5 +5,6 @@ namespace HushNode.Blockchain.Persistency.Abstractions.Repositories;
 public interface IBlockchainStateRepository
 {
     Task<BlockchainState> GetCurrentStateAsync();
-    // Task SaveStateAsync(BlockchainState state);
+    
+    Task SetBlockchainStateAsync(BlockchainState blockchainState);
 }

@@ -6,6 +6,7 @@ using HushServerNode.DbModel;
 using HushNode.Blockchain;
 using HushNode.Blockchain.Persistency.InMemory;
 using HushNode.Blockchain.Persistency.EntityFramework;
+using HushNode.Credentials;
 
 namespace HushServerNode;
 
@@ -37,6 +38,7 @@ public class Program
             .RegisterBootstrapperManager()
             .RegisterEventAggregatorManager()
             .RegisterEntityFrameworkPersistency()
+            .RegisterHushCredentials()
             .RegisterInMemoryPersistency()
             .RegisterHushNodeBlockchain();
             // .RegisterInternalModuleBlockchain()
