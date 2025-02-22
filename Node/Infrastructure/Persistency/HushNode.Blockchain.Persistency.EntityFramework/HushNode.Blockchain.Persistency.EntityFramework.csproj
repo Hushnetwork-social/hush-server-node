@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\HushNode.Blockchain.Persistency.Abstractions\HushNode.Blockchain.Persistency.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\Core\HushNode.Blockchain.Persistency.Abstractions\HushNode.Blockchain.Persistency.Abstractions.csproj" />
     <ProjectReference Include="..\..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
-    <ProjectReference Include="..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
+    <ProjectReference Include="..\..\HushNode.Interfaces\HushNode.Interfaces.csproj" />
   </ItemGroup>
 
   <ItemGroup>
