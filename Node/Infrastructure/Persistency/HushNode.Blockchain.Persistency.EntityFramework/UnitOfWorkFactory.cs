@@ -12,9 +12,10 @@ namespace HushNode.Blockchain.Persistency.EntityFramework
         private readonly IDbContextFactory<BlockchainDbContext> _dbContextFactory = dbContextFactory;
 
 
-        public IUnitOfWork Create()
-        {
-            return new UnitOfWork(this._dbContextFactory);
-        }
+        public IUnitOfWork Create() => 
+            new UnitOfWork(this._dbContextFactory);
+
+        public IReadOnlyUnitOfWork CreateReadOnly() => 
+            new ReadOnlyUnitOfWork(this._dbContextFactory);
     }
 }

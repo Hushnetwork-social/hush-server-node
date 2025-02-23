@@ -15,15 +15,21 @@ public class BlockchainStateRepository(BlockchainDbContext dbContext) : IBlockch
 
     public async Task SetBlockchainStateAsync(BlockchainState blockchainState)
     {
-        var currentBlockchainState = await this._dbContext.BlockchainStates.SingleOrDefaultAsync();
+        var currentBlockchainStateExists = await this._dbContext.BlockchainStates.AnyAsync();
 
-        if (currentBlockchainState == null)
+        if (currentBlockchainStateExists)
         {
-            await this._dbContext.BlockchainStates.AddAsync(blockchainState);
+            this._dbContext.BlockchainStates.Attach(blockchainState);
+            this._dbContext.Entry(blockchainState).State = EntityState.Modified;
         }
         else
         {
-            this._dbContext.BlockchainStates.Update(blockchainState);
+            await this._dbContext.BlockchainStates.AddAsync(blockchainState);
         }
+    }
+
+    public void AttachBlockchainState(BlockchainState blockchainState)
+    {
+        this._dbContext.BlockchainStates.Attach(blockchainState);
     }
 }

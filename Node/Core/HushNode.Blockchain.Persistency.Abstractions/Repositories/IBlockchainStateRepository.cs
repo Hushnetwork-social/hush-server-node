@@ -7,4 +7,6 @@ public interface IBlockchainStateRepository
     Task<BlockchainState> GetCurrentStateAsync();
     
     Task SetBlockchainStateAsync(BlockchainState blockchainState);
+
+    void AttachBlockchainState(BlockchainState blockchainState);
 }

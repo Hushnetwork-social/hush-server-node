@@ -14,7 +14,7 @@ public record GenesisBlockchainState : BlockchainState
     public GenesisBlockchainState() : base(
         BlockchainStateId.NewBlockchainStateId,
         BlockIndexHandler.CreateNew(1),
-        BlockId.NewBlockId,
+        BlockId.GenesisBlockId,
         BlockId.Empty,
         BlockId.NewBlockId) {}
 }

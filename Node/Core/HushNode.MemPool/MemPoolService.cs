@@ -10,9 +10,8 @@ public class MemPoolService : IMemPoolService
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<ValidatedTransaction<T>>> GetPendingValidatedTransactionsAsync<T>() 
-        where T : ITransactionPayloadKind => 
-            Task.FromResult((IReadOnlyList<ValidatedTransaction<T>>)new List<ValidatedTransaction<T>>().AsReadOnly());
+    public Task<IReadOnlyList<AbstractTransaction>> GetPendingValidatedTransactionsAsync() => 
+            Task.FromResult((IReadOnlyList<AbstractTransaction>)new List<AbstractTransaction>().AsReadOnly());
 
     public Task InitializeMemPoolAsync()
     {

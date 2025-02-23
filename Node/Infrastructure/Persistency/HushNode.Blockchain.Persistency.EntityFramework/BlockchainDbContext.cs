@@ -16,4 +16,9 @@ public class BlockchainDbContext(
     {
         this._blockchainDbContextConfigurator.Configure(modelBuilder);
     }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        optionsBuilder.EnableSensitiveDataLogging();
+    }
 }

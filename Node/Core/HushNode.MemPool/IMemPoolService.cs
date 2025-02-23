@@ -10,6 +10,5 @@ public interface IMemPoolService
     Task AddVerifiedTransactionAsync<T>(ValidatedTransaction<T> validatedTransaction) 
         where T : ITransactionPayloadKind;
 
-    Task<IReadOnlyList<ValidatedTransaction<T>>> GetPendingValidatedTransactionsAsync<T>()
-       where T : ITransactionPayloadKind;
+    Task<IReadOnlyList<AbstractTransaction>> GetPendingValidatedTransactionsAsync();
 }
