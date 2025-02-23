@@ -41,6 +41,8 @@ public class ChainFoundationService(
 
     private async Task GenerateGenesisBlock(BlockchainState genesisBlockchainState)
     {
+        this._logger.LogInformation("Generating Genesis Block...");
+
         await this._blockAssemblerWorkflow.AssembleGenesisBlockAsync(genesisBlockchainState);
         await this._eventAggregator.PublishAsync(new BlockchainInitializedEvent());
     }
