@@ -7,6 +7,7 @@ using HushNode.Blockchain;
 using HushNode.Blockchain.Persistency.InMemory;
 using HushNode.Blockchain.Persistency.EntityFramework;
 using HushNode.Credentials;
+using HushNode.MemPool;
 
 namespace HushServerNode;
 
@@ -38,6 +39,7 @@ public class Program
             .RegisterBootstrapperManager()
             .RegisterEventAggregatorManager()
             .RegisterEntityFrameworkPersistency()
+            .RegisterHushNodeMemPool()
             .RegisterHushCredentials()
             .RegisterInMemoryPersistency()
             .RegisterHushNodeBlockchain();
