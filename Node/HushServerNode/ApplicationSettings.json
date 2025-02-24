@@ -17,6 +17,10 @@
         "Password": "HushNetworkDb_PASSWORD"
     },
 
+    "ConnectionStrings": {
+        "HushNodeDb": "Host=localhost;Database=HushNetworkDb;Username=HushNetworkDb_USER;Password=HushNetworkDb_PASSWORD;"
+    },
+
     "CredentialsProfile": {
         "PublicSigningAddress":     "04f505dab724c28db882376ca25d470cbabdc188f15a20a2083f49756bc00dd12ac44679afc9f4d658df07310f68191a633e31cd80ccf407a6a065d5b18874433f",
         "PrivateSigningKey":        "f875393235cde1b7b13d19ae8380a378f3631de81e350023bdcb9b71dd9a7970",

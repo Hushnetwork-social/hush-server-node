@@ -12,7 +12,7 @@ public static class HushNodeBlockchainHostBuild
     {
         builder.ConfigureServices(services =>
         {
-            services.AddSingleton<IBootstrapper, HushNodeBlockchainBootstrapper>();
+            services.AddScoped<IBootstrapper, HushNodeBlockchainBootstrapper>();
 
             services.AddSingleton<IChainFoundationService, ChainFoundationService>();
             services.AddSingleton<IBlockProductionSchedulerService, BlockProductionSchedulerService>();

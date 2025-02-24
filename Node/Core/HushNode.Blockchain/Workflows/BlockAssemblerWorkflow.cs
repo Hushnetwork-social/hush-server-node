@@ -55,9 +55,9 @@ public class BlockAssemblerWorkflow(
             await unitOfWork.CommitAsync();
         }
 
-        this._logger.LogInformation($"Genesis block {finalizedGenegisBlock.BlockId} generated...");
+        this._logger.LogInformation("Genesis block {0} generated...", finalizedGenegisBlock.BlockId);
 
-        await this._eventAggregator.PublishAsync(new BlockCreatedEvent());
+        await this._eventAggregator.PublishAsync(new BlockCreatedEvent(finalizedGenegisBlock.BlockId));
     }
 
     public async Task AsembleBlockAsync(
@@ -103,9 +103,8 @@ public class BlockAssemblerWorkflow(
             await unitOfWork.CommitAsync();
         }
         
-        this._logger.LogInformation(
-            $"Block {finalizedBlock.BlockId} generated...");
+        this._logger.LogInformation($"Block {0} generated...", finalizedBlock.BlockId);
 
-        await this._eventAggregator.PublishAsync(new BlockCreatedEvent());
+        await this._eventAggregator.PublishAsync(new BlockCreatedEvent(finalizedBlock.BlockId));
     }
 }

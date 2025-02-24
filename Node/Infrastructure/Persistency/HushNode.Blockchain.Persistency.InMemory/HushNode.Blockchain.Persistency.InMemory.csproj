@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\HushNode.Blockchain.Persistency.Abstractions\HushNode.Blockchain.Persistency.Abstractions.csproj" />
     <ProjectReference Include="..\HushNode.Blockchain.Persistency.EntityFramework\HushNode.Blockchain.Persistency.EntityFramework.csproj" />
   </ItemGroup>
 

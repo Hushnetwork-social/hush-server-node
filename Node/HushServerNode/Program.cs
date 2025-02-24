@@ -4,10 +4,11 @@ using Microsoft.Extensions.Configuration;
 using Olimpo;
 using HushServerNode.DbModel;
 using HushNode.Blockchain;
-using HushNode.Blockchain.Persistency.InMemory;
 using HushNode.Blockchain.Persistency.EntityFramework;
 using HushNode.Credentials;
 using HushNode.MemPool;
+using HushNode.Blockchain.Persistency.Postgres;
+using Microsoft.EntityFrameworkCore;
 
 namespace HushServerNode;
 
@@ -32,7 +33,12 @@ public class Program
             {
                 // services.AddSingleton<IBootstrapper, gRPCServerBootstraper>();
 
-                services.AddDbContextFactory<HushNodeDbContext>();
+                // services.AddDbContextFactory<HushNodeDbContext>();
+
+                services.AddDbContext<HushNodeDbContext>(options =>
+                {
+                    options.UseNpgsql(hostContext.Configuration.GetConnectionString("HushNetworkDb"));
+                });
 
                 services.AddHostedService<Worker>();
             })
@@ -41,14 +47,9 @@ public class Program
             .RegisterEntityFrameworkPersistency()
             .RegisterHushNodeMemPool()
             .RegisterHushCredentials()
-            .RegisterInMemoryPersistency()
+            // .RegisterInMemoryPersistency()
+            .RegisterPostgresPersistency()
             .RegisterHushNodeBlockchain();
-            // .RegisterInternalModuleBlockchain()
-            // .RegisterInternalModuleBank()
-            // .RegisterInternalModuleAuthentication()
-            // .RegisterInternalModuleMemPool()
-            // .RegisterInternalModuleFeed()
-            // .RegisterTransactionDeserializerModel();
 
         public static IConfigurationBuilder ConfigureConfigurationBuilder(IConfigurationBuilder configurationBuilder)
         {

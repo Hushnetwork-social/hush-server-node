@@ -15,7 +15,7 @@ public static class BlockchainPersistencyEntityFrameworkHostBuild
             services.AddSingleton<IDbContextConfigurator, BlockchainDbContextConfigurator>();
             services.AddSingleton<BlockchainDbContextConfigurator>();
 
-            services.AddScoped<IUnitOfWorkFactory, UnitOfWorkFactory>();
+            services.AddSingleton<IUnitOfWorkFactory, UnitOfWorkFactory>();
         });
 
         return builder;
