@@ -9,6 +9,7 @@ using HushNode.Credentials;
 using HushNode.MemPool;
 using HushNode.Blockchain.Persistency.Postgres;
 using Microsoft.EntityFrameworkCore;
+using HushNode.Indexing;
 
 namespace HushServerNode;
 
@@ -49,7 +50,8 @@ public class Program
             .RegisterHushCredentials()
             // .RegisterInMemoryPersistency()
             .RegisterPostgresPersistency()
-            .RegisterHushNodeBlockchain();
+            .RegisterHushNodeBlockchain()
+            .RegisterHushNodeIndexing();
 
         public static IConfigurationBuilder ConfigureConfigurationBuilder(IConfigurationBuilder configurationBuilder)
         {
