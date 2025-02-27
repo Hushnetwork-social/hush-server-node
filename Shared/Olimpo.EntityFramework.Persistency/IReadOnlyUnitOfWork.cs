@@ -1,15 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace HushNode.Blockchain.Persistency.Abstractions;
+namespace Olimpo.EntityFramework.Persistency;
 
-public interface IWritableUnitOfWork<TContext> : IDisposable
+public interface IReadOnlyUnitOfWork<TContext> : IDisposable
     where TContext : DbContext
 {
     TContext Context { get; }
-    
-    Task CommitAsync();
-    
-    Task RollbackAsync();
 
     TRepository GetRepository<TRepository>() 
         where TRepository : IRepository;

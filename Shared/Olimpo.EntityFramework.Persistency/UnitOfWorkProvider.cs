@@ -1,7 +1,6 @@
-using HushNode.Blockchain.Persistency.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
-namespace HushNode.Blockchain.Persistency.EntityFramework;
+namespace Olimpo.EntityFramework.Persistency;
 
 public class UnitOfWorkProvider<TContext>(IServiceProvider serviceProvider) : IUnitOfWorkProvider<TContext>
     where TContext : DbContext

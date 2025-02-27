@@ -11,6 +11,7 @@ using HushNode.Interfaces;
 using HushNode.InternalPayloads;
 using Microsoft.Extensions.Logging;
 using Olimpo;
+using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Blockchain.Workflows;
 

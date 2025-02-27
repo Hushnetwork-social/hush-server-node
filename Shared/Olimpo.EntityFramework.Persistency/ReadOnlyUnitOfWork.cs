@@ -1,8 +1,7 @@
-using HushNode.Blockchain.Persistency.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace HushNode.Blockchain.Persistency.EntityFramework;
+namespace Olimpo.EntityFramework.Persistency;
 
 public sealed class ReadOnlyUnitOfWork<TContext> : IReadOnlyUnitOfWork<TContext> 
     where TContext : DbContext
@@ -13,8 +12,8 @@ public sealed class ReadOnlyUnitOfWork<TContext> : IReadOnlyUnitOfWork<TContext>
 
     public ReadOnlyUnitOfWork(IServiceProvider serviceProvider)
     {
-        this._serviceScope = serviceProvider.CreateScope();
-        this.Context = this._serviceScope.ServiceProvider.GetRequiredService<TContext>();
+        _serviceScope = serviceProvider.CreateScope();
+        Context = _serviceScope.ServiceProvider.GetRequiredService<TContext>();
 
         // Configure read-only behavior
         Context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
@@ -24,7 +23,7 @@ public sealed class ReadOnlyUnitOfWork<TContext> : IReadOnlyUnitOfWork<TContext>
     public TRepository GetRepository<TRepository>() 
         where TRepository : IRepository
     {
-        var repo = this._serviceScope.ServiceProvider.GetRequiredService<TRepository>();
+        var repo = _serviceScope.ServiceProvider.GetRequiredService<TRepository>();
 
         if (repo is IRepositoryWithContext<TContext> contextAwareRepo)
         {
@@ -36,6 +35,6 @@ public sealed class ReadOnlyUnitOfWork<TContext> : IReadOnlyUnitOfWork<TContext>
 
     public void Dispose()
     {
-        this._serviceScope?.Dispose();
+        _serviceScope?.Dispose();
     }
 }

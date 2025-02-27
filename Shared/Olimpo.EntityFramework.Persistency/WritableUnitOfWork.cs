@@ -1,9 +1,8 @@
-﻿using HushNode.Blockchain.Persistency.Abstractions;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace HushNode.Blockchain.Persistency.EntityFramework;
+namespace Olimpo.EntityFramework.Persistency;
 
 public sealed class WritableUnitOfWork<TContext> : IWritableUnitOfWork<TContext> 
     where TContext : DbContext
@@ -15,15 +14,15 @@ public sealed class WritableUnitOfWork<TContext> : IWritableUnitOfWork<TContext>
 
     public WritableUnitOfWork(IServiceProvider serviceProvider)     
     {
-        this._serviceScope = serviceProvider.CreateScope();
-        this.Context = this._serviceScope.ServiceProvider.GetRequiredService<TContext>();
-        this._transaction = this.Context.Database.BeginTransaction();
+        _serviceScope = serviceProvider.CreateScope();
+        Context = _serviceScope.ServiceProvider.GetRequiredService<TContext>();
+        _transaction = Context.Database.BeginTransaction();
     }
 
     public TRepository GetRepository<TRepository>() 
         where TRepository : IRepository
     {
-        var repo = this._serviceScope.ServiceProvider.GetRequiredService<TRepository>();
+        var repo = _serviceScope.ServiceProvider.GetRequiredService<TRepository>();
 
         if (repo is IRepositoryWithContext<TContext> contextAwareRepo)
         {
@@ -35,20 +34,20 @@ public sealed class WritableUnitOfWork<TContext> : IWritableUnitOfWork<TContext>
 
     public async Task CommitAsync()
     {
-        await this.Context.SaveChangesAsync();
-        await this._transaction!.CommitAsync();
+        await Context.SaveChangesAsync();
+        await _transaction!.CommitAsync();
     }
 
     public async Task RollbackAsync()
     {
-        await this._transaction.RollbackAsync();
-        this.Context.ChangeTracker.Clear();
+        await _transaction.RollbackAsync();
+        Context.ChangeTracker.Clear();
     }
 
     public void Dispose()
     {
-        this._transaction?.Dispose();
+        _transaction?.Dispose();
         Context?.Dispose();
-        this._serviceScope?.Dispose();
+        _serviceScope?.Dispose();
     }
 }

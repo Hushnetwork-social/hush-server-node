@@ -1,5 +1,6 @@
 using HushNode.Blockchain.Persistency.Abstractions.Models;
 using HushNode.Blockchain.Persistency.Abstractions.Repositories;
+using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;
 

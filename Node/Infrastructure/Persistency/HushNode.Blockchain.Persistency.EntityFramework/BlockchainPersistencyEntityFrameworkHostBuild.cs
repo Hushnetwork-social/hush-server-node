@@ -5,6 +5,7 @@ using HushNode.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using HushNode.Blockchain.Persistency.Abstractions.Repositories;
+using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;
 

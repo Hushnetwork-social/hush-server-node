@@ -1,4 +1,4 @@
-namespace HushNode.Blockchain.Persistency.Abstractions;
+namespace Olimpo.EntityFramework.Persistency;
 
 public interface IRepository { }
 

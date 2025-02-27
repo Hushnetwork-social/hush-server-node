@@ -6,6 +6,7 @@ using HushNode.Blockchain.Workflows;
 using HushNode.MemPool;
 using Microsoft.Extensions.Logging;
 using Olimpo;
+using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Blockchain.Services;
 

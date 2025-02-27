@@ -1,7 +1,6 @@
-using HushNode.Blockchain.Persistency.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
-namespace HushNode.Blockchain.Persistency.EntityFramework;
+namespace Olimpo.EntityFramework.Persistency;
 
 public abstract class RepositoryBase<TContext> : IRepositoryWithContext<TContext>
     where TContext : DbContext
@@ -10,6 +9,6 @@ public abstract class RepositoryBase<TContext> : IRepositoryWithContext<TContext
 
     public void SetContext(TContext context)
     {
-        this.Context = context ?? throw new ArgumentNullException(nameof(context));
+        Context = context ?? throw new ArgumentNullException(nameof(context));
     }
 }
