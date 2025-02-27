@@ -3,12 +3,10 @@ using HushNode.Blockchain.Persistency.Abstractions.Repositories;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;
 
-public class BlockRepository(BlockchainDbContext dbContext) : IBlockRepository
+public class BlockRepository : RepositoryBase<BlockchainDbContext>, IBlockRepository
 {
-    private readonly BlockchainDbContext _dbContext = dbContext;
-
     public async Task AddBlockchainBlockAsync(BlockchainBlock block) => 
-        await this._dbContext.Blocks.AddAsync(block);
+        await this.Context.Blocks.AddAsync(block);
 
     // public Task<Block> GetBlockByIdAsync(Guid blockId) => throw new NotImplementedException();
         // await _dbContext.Blocks

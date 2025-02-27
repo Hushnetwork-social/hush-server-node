@@ -4,18 +4,12 @@ using Olimpo;
 
 namespace HushServerNode;
 
-public class Worker : BackgroundService
+public class Worker(
+    IBootstrapperManager bootstrapperManager,
+    ILogger<Worker> logger) : BackgroundService
 {
-    private readonly IBootstrapperManager _bootstrapperManager;
-    private readonly ILogger<Worker> _logger;
-
-    public Worker(
-        IBootstrapperManager bootstrapperManager,
-        ILogger<Worker> logger)
-    {
-        this._bootstrapperManager = bootstrapperManager;
-        this._logger = logger;
-    }
+    private readonly IBootstrapperManager _bootstrapperManager = bootstrapperManager;
+    private readonly ILogger<Worker> _logger = logger;
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {

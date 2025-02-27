@@ -5,17 +5,17 @@ namespace HushNode.Indexing;
 
 public class IndexingBootstrapper : IBootstrapper
 {
-    public Subject<bool> BootstrapFinished => throw new NotImplementedException();
+    public Subject<bool> BootstrapFinished { get; } = new Subject<bool>();
 
-    public int Priority { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+    public int Priority { get; set; } = 10;
 
     public void Shutdown()
     {
-        throw new NotImplementedException();
     }
 
     public Task Startup()
     {
-        throw new NotImplementedException();
+        this.BootstrapFinished.OnNext(true);
+        return Task.CompletedTask;
     }
 }

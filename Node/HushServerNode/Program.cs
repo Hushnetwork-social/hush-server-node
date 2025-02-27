@@ -2,14 +2,14 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Olimpo;
-using HushServerNode.DbModel;
+// using HushServerNode.DbModel;
 using HushNode.Blockchain;
 using HushNode.Blockchain.Persistency.EntityFramework;
 using HushNode.Credentials;
 using HushNode.MemPool;
 using HushNode.Blockchain.Persistency.Postgres;
-using Microsoft.EntityFrameworkCore;
 using HushNode.Indexing;
+using Microsoft.EntityFrameworkCore;
 
 namespace HushServerNode;
 
@@ -26,19 +26,16 @@ public class Program
         Host.CreateDefaultBuilder()
             .UseSystemd()
             .ConfigureAppConfiguration(builder => ConfigureConfigurationBuilder(builder))
-            .ConfigureLogging(x => 
-            {
-
-            })
+            .ConfigureLogging(x => { })
             .ConfigureServices((hostContext, services) => 
             {
                 // services.AddSingleton<IBootstrapper, gRPCServerBootstraper>();
 
-                // services.AddDbContextFactory<HushNodeDbContext>();
-
-                services.AddDbContext<HushNodeDbContext>(options =>
+                services.AddDbContext<HushNodeDbContext>((provider, options) =>
                 {
                     options.UseNpgsql(hostContext.Configuration.GetConnectionString("HushNetworkDb"));
+                    options.EnableSensitiveDataLogging();  // For debugging
+                    options.EnableDetailedErrors();  // For debugging
                 });
 
                 services.AddHostedService<Worker>();

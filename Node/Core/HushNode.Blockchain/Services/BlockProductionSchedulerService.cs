@@ -1,6 +1,7 @@
 using System.Reactive.Linq;
 using HushNode.Blockchain.Events;
-using HushNode.Blockchain.Persistency.Abstractions;
+using HushNode.Blockchain.Persistency.Abstractions.Repositories;
+using HushNode.Blockchain.Persistency.EntityFramework;
 using HushNode.Blockchain.Workflows;
 using HushNode.MemPool;
 using Microsoft.Extensions.Logging;
@@ -10,26 +11,28 @@ namespace HushNode.Blockchain.Services;
 
 public class BlockProductionSchedulerService : 
     IBlockProductionSchedulerService,
-    IHandle<BlockchainInitializedEvent>
+    IHandle<BlockchainInitializedEvent>,
+    IHandle<BlockCreatedEvent>
 {
     private readonly IBlockAssemblerWorkflow _blockAssemblerWorkflow;
     private readonly IMemPoolService _memPool;
     private readonly IEventAggregator _eventAggregator;
+    private readonly IUnitOfWorkProvider<BlockchainDbContext> _unitOfWorkProvider;
     private readonly ILogger<BlockProductionSchedulerService> _logger;
-    private readonly IUnitOfWorkFactory _unitOfWorkFactory;
     private readonly IObservable<long> _blockGeneratorLoop;
+    private bool _canSchedule = true;
 
     public BlockProductionSchedulerService(
         IBlockAssemblerWorkflow blockAssemblerWorkflow,
         IMemPoolService memPool,
-        IUnitOfWorkFactory unitOfWorkFactory,
+        IUnitOfWorkProvider<BlockchainDbContext> unitOfWorkProvider,
         IEventAggregator eventAggregator,
         ILogger<BlockProductionSchedulerService> logger)
     {
         this._blockAssemblerWorkflow = blockAssemblerWorkflow;
         this._memPool = memPool;
+        this._unitOfWorkProvider = unitOfWorkProvider;
         this._eventAggregator = eventAggregator;
-        this._unitOfWorkFactory = unitOfWorkFactory;
         this._logger = logger;
 
         this._eventAggregator.Subscribe(this);
@@ -45,15 +48,29 @@ public class BlockProductionSchedulerService :
 
         this._blockGeneratorLoop.Subscribe(async x =>
         {
-            this._logger.LogInformation("Generating a block...");
+            if (!this._canSchedule)
+            {
+                this._logger.LogInformation("BlockAssembler is buzy. Cannot schedule a new block...");
+            }
+            else
+            {
+                this._canSchedule = false;
+                this._logger.LogInformation("Generating a block...");
 
-            var readonlyUnitOfWork = this._unitOfWorkFactory.Create();
-            var blockchainState = await readonlyUnitOfWork.BlockStateRepository.GetCurrentStateAsync();
+                var blockchainState = await this._unitOfWorkProvider.CreateReadOnly()
+                    .GetRepository<IBlockchainStateRepository>()
+                    .GetCurrentStateAsync();
 
-            var pendingTransactions = await this._memPool.GetPendingValidatedTransactionsAsync();
+                var pendingTransactions = await this._memPool.GetPendingValidatedTransactionsAsync();
 
-            await this._blockAssemblerWorkflow.AsembleBlockAsync(blockchainState, pendingTransactions);
+                await this._blockAssemblerWorkflow.AsembleBlockAsync(blockchainState, pendingTransactions);
+            }
         });
+    }
+
+    public void Handle(BlockCreatedEvent message)
+    {
+        this._canSchedule = true;
     }
 }
 

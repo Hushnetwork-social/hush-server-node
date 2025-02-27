@@ -1,10 +1,11 @@
 using HushNode.Blockchain.Events;
-using HushNode.Blockchain.Persistency.Abstractions;
 using HushNode.Blockchain.Persistency.Abstractions.Models;
 using HushNode.Blockchain.Persistency.Abstractions.Models.Block;
 using HushNode.Blockchain.Persistency.Abstractions.Models.Block.States;
 using HushNode.Blockchain.Persistency.Abstractions.Models.Transaction;
 using HushNode.Blockchain.Persistency.Abstractions.Models.Transaction.States;
+using HushNode.Blockchain.Persistency.Abstractions.Repositories;
+using HushNode.Blockchain.Persistency.EntityFramework;
 using HushNode.Credentials;
 using HushNode.Interfaces;
 using HushNode.InternalPayloads;
@@ -15,12 +16,12 @@ namespace HushNode.Blockchain.Workflows;
 
 public class BlockAssemblerWorkflow(
     ICredentialsProvider credentialsProvider,
-    IUnitOfWorkFactory unitOfWorkFactory,
+    IUnitOfWorkProvider<BlockchainDbContext> unitOfWorkProvider,
     IEventAggregator eventAggregator,
     ILogger<BlockAssemblerWorkflow> logger) : IBlockAssemblerWorkflow
 {
     private readonly ICredentialsProvider _credentialsProvider = credentialsProvider;
-    private readonly IUnitOfWorkFactory _unitOfWorkFactory = unitOfWorkFactory;
+    private readonly IUnitOfWorkProvider<BlockchainDbContext> _unitOfWorkProvider = unitOfWorkProvider;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly ILogger<BlockAssemblerWorkflow> _logger = logger;
 
@@ -48,12 +49,15 @@ public class BlockAssemblerWorkflow(
                 blockProducerCredentials.PrivateSigningKey)
             .FinalizeIt();
 
-        using (var unitOfWork = this._unitOfWorkFactory.Create())
-        {
-            await unitOfWork.BlockRepository.AddBlockchainBlockAsync(finalizedGenegisBlock.ToBlockchainBlock());
-            await unitOfWork.BlockStateRepository.SetBlockchainStateAsync(genesisBlockchainState);
-            await unitOfWork.CommitAsync();
-        }
+        var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+        await writableUnitOfWork
+            .GetRepository<IBlockRepository>()
+            .AddBlockchainBlockAsync(finalizedGenegisBlock.ToBlockchainBlock());
+
+        await writableUnitOfWork
+            .GetRepository<IBlockchainStateRepository>()
+            .SetBlockchainStateAsync(genesisBlockchainState);
+        await writableUnitOfWork.CommitAsync();
 
         this._logger.LogInformation("Genesis block {0} generated...", finalizedGenegisBlock.BlockId);
 
@@ -96,12 +100,15 @@ public class BlockAssemblerWorkflow(
                 blockProducerCredentials.PrivateSigningKey)
             .FinalizeIt();
 
-        using (var unitOfWork = this._unitOfWorkFactory.Create())
-        {
-            await unitOfWork.BlockRepository.AddBlockchainBlockAsync(finalizedBlock.ToBlockchainBlock());
-            await unitOfWork.BlockStateRepository.SetBlockchainStateAsync(newBlockchainState);
-            await unitOfWork.CommitAsync();
-        }
+        var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+        await writableUnitOfWork
+            .GetRepository<IBlockRepository>()
+            .AddBlockchainBlockAsync(finalizedBlock.ToBlockchainBlock());
+
+        await writableUnitOfWork
+            .GetRepository<IBlockchainStateRepository>()
+            .SetBlockchainStateAsync(newBlockchainState);
+        await writableUnitOfWork.CommitAsync();
         
         this._logger.LogInformation($"Block {0} generated...", finalizedBlock.BlockId);
 

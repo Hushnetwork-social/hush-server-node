@@ -1,24 +1,23 @@
-using HushNode.Blockchain.Persistency.Abstractions;
+﻿using HushNode.Blockchain.Persistency.Abstractions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;
 
-public sealed class ReadOnlyUnitOfWork<TContext> : IReadOnlyUnitOfWork<TContext> 
+public sealed class WritableUnitOfWork<TContext> : IWritableUnitOfWork<TContext> 
     where TContext : DbContext
 {
     private readonly IServiceScope _serviceScope;
-
+    private readonly IDbContextTransaction _transaction;
+    
     public TContext Context { get; }
 
-    public ReadOnlyUnitOfWork(IServiceProvider serviceProvider)
+    public WritableUnitOfWork(IServiceProvider serviceProvider)     
     {
         this._serviceScope = serviceProvider.CreateScope();
         this.Context = this._serviceScope.ServiceProvider.GetRequiredService<TContext>();
-
-        // Configure read-only behavior
-        Context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
-        Context.ChangeTracker.AutoDetectChangesEnabled = false;
+        this._transaction = this.Context.Database.BeginTransaction();
     }
 
     public TRepository GetRepository<TRepository>() 
@@ -34,8 +33,22 @@ public sealed class ReadOnlyUnitOfWork<TContext> : IReadOnlyUnitOfWork<TContext>
         return repo;
     }
 
+    public async Task CommitAsync()
+    {
+        await this.Context.SaveChangesAsync();
+        await this._transaction!.CommitAsync();
+    }
+
+    public async Task RollbackAsync()
+    {
+        await this._transaction.RollbackAsync();
+        this.Context.ChangeTracker.Clear();
+    }
+
     public void Dispose()
     {
+        this._transaction?.Dispose();
+        Context?.Dispose();
         this._serviceScope?.Dispose();
     }
 }

@@ -18,7 +18,7 @@
     },
 
     "ConnectionStrings": {
-        "HushNodeDb": "Host=localhost;Database=HushNetworkDb;Username=HushNetworkDb_USER;Password=HushNetworkDb_PASSWORD;"
+        "HushNetworkDb": "Host=localhost;Database=HushNetworkDb;Username=HushNetworkDb_USER;Password=HushNetworkDb_PASSWORD;"
     },
 
     "CredentialsProfile": {

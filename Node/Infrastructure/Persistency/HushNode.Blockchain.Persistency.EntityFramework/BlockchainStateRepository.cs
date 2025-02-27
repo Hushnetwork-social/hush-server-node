@@ -4,32 +4,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;
 
-public class BlockchainStateRepository(BlockchainDbContext dbContext) : IBlockchainStateRepository
+public class BlockchainStateRepository : RepositoryBase<BlockchainDbContext>, IBlockchainStateRepository
 {
-    private readonly BlockchainDbContext _dbContext = dbContext;
-
     public async Task<BlockchainState> GetCurrentStateAsync() => 
-        await this._dbContext.BlockchainStates.SingleOrDefaultAsync() is BlockchainState currentBlockchainState
-            ? currentBlockchainState
-            : new GenesisBlockchainState();
+        await this.Context.BlockchainStates.SingleOrDefaultAsync() ?? new GenesisBlockchainState();
 
     public async Task SetBlockchainStateAsync(BlockchainState blockchainState)
     {
-        var currentBlockchainStateExists = await this._dbContext.BlockchainStates.AnyAsync();
+        var currentBlockchainStateExists = await this.Context.BlockchainStates.AnyAsync();
 
         if (currentBlockchainStateExists)
         {
-            this._dbContext.BlockchainStates.Attach(blockchainState);
-            this._dbContext.Entry(blockchainState).State = EntityState.Modified;
+            this.Context
+                .Set<BlockchainState>()
+                .Update(blockchainState);
         }
         else
         {
-            await this._dbContext.BlockchainStates.AddAsync(blockchainState);
+            await this.Context.BlockchainStates.AddAsync(blockchainState);
         }
-    }
-
-    public void AttachBlockchainState(BlockchainState blockchainState)
-    {
-        this._dbContext.BlockchainStates.Attach(blockchainState);
     }
 }
