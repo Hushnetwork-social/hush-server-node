@@ -64,7 +64,7 @@ public class BlockProductionSchedulerService :
 
                 var pendingTransactions = await this._memPool.GetPendingValidatedTransactionsAsync();
 
-                await this._blockAssemblerWorkflow.AsembleBlockAsync(blockchainState, pendingTransactions);
+                await this._blockAssemblerWorkflow.AssembleBlockAsync(blockchainState, pendingTransactions);
             }
         });
     }

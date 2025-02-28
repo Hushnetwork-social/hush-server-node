@@ -24,7 +24,8 @@ public class ChainFoundationService(
     {
         this._logger.LogInformation("Initializion Blockchain...");
 
-        var blockchainState = await this._unitOfWorkProvider.CreateReadOnly()
+        using var unitOfWork = this._unitOfWorkProvider.CreateReadOnly();
+        var blockchainState = await unitOfWork
             .GetRepository<IBlockchainStateRepository>()
             .GetCurrentStateAsync();
 
@@ -39,14 +40,16 @@ public class ChainFoundationService(
 
     private async Task BlockchainInitializationFinished(BlockchainState blockchainState)
     {
+        this._logger.LogInformation("Blockchain initialization finished...");
         await this._eventAggregator.PublishAsync(new BlockchainInitializedEvent());
     }
 
     private async Task GenerateGenesisBlock(BlockchainState genesisBlockchainState)
     {
         this._logger.LogInformation("Generating Genesis Block...");
-
         await this._blockAssemblerWorkflow.AssembleGenesisBlockAsync(genesisBlockchainState);
+
+        this._logger.LogInformation("Blockchain initialization finished...");
         await this._eventAggregator.PublishAsync(new BlockchainInitializedEvent());
     }
 }

@@ -7,13 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\HushNode.Blockchain.Persistency.Abstractions\HushNode.Blockchain.Persistency.Abstractions.csproj" />
+    <ProjectReference Include="..\HushNode.InternalPayloads\HushNode.InternalPayloads.csproj" />
+    <ProjectReference Include="..\HushNode.MemPool\HushNode.MemPool.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\Persistency\HushNode.Blockchain.Persistency.EntityFramework\HushNode.Blockchain.Persistency.EntityFramework.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
-    <ProjectReference Include="..\HushNode.Blockchain.Persistency.Abstractions\HushNode.Blockchain.Persistency.Abstractions.csproj" />
-    <ProjectReference Include="..\..\Infrastructure\Persistency\HushNode.Blockchain.Persistency.EntityFramework\HushNode.Blockchain.Persistency.EntityFramework.csproj" />
-    <ProjectReference Include="..\HushNode.InternalPayloads\HushNode.InternalPayloads.csproj" />
-    <ProjectReference Include="..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
-    <ProjectReference Include="..\HushNode.MemPool\HushNode.MemPool.csproj" />
     <ProjectReference Include="..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />
   </ItemGroup>
 

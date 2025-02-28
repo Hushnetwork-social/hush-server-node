@@ -33,39 +33,26 @@ public class BlockAssemblerWorkflow(
             genesisBlockchainState.NextBlockId);
 
         var blockProducerCredentials = this._credentialsProvider.GetCredentials();
-
-        var validatedRewardTransaction = RewardPayloadHandler
-            .CreateRewardTransaction("HUSH", DecimalStringConverter.DecimalToString(5m))
-            .SignByUser(blockProducerCredentials.PublicSigningAddress, blockProducerCredentials.PrivateSigningKey)
-            .SignByValidator(blockProducerCredentials.PublicSigningAddress, blockProducerCredentials.PrivateSigningKey);
+        var validatedRewardTransaction = CreateAndSignRewardTransaction(blockProducerCredentials);
 
         var genesisBlockWithRewardTransactions = genesisUnsignedBlock with
         {
             Transactions = [..genesisUnsignedBlock.Transactions, validatedRewardTransaction]
         };
 
-        var finalizedGenegisBlock =genesisBlockWithRewardTransactions
-            .SignIt(
-                blockProducerCredentials.PublicSigningAddress, 
-                blockProducerCredentials.PrivateSigningKey)
-            .FinalizeIt();
+        var finalizedGenegisBlock = genesisBlockWithRewardTransactions
+            .SignAndFinalizeBlock(blockProducerCredentials);
 
-        var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
-        await writableUnitOfWork
-            .GetRepository<IBlockRepository>()
-            .AddBlockchainBlockAsync(finalizedGenegisBlock.ToBlockchainBlock());
-
-        await writableUnitOfWork
-            .GetRepository<IBlockchainStateRepository>()
-            .SetBlockchainStateAsync(genesisBlockchainState);
-        await writableUnitOfWork.CommitAsync();
+        await this.SaveBlockAndState(
+            finalizedGenegisBlock.ToBlockchainBlock(), 
+            genesisBlockchainState);
 
         this._logger.LogInformation("Genesis block {0} generated...", finalizedGenegisBlock.BlockId);
 
         await this._eventAggregator.PublishAsync(new BlockCreatedEvent(finalizedGenegisBlock.BlockId));
     }
 
-    public async Task AsembleBlockAsync(
+    public async Task AssembleBlockAsync(
         BlockchainState blockchainState,
         IReadOnlyList<AbstractTransaction> transactions)
     {
@@ -84,35 +71,44 @@ public class BlockAssemblerWorkflow(
             newBlockchainState.NextBlockId);
 
         var blockProducerCredentials = this._credentialsProvider.GetCredentials();
-
-        var validatedRewardTransaction = RewardPayloadHandler
-            .CreateRewardTransaction("HUSH", DecimalStringConverter.DecimalToString(5m))
-            .SignByUser(blockProducerCredentials.PublicSigningAddress, blockProducerCredentials.PrivateSigningKey)
-            .SignByValidator(blockProducerCredentials.PublicSigningAddress, blockProducerCredentials.PrivateSigningKey);
+        var validatedRewardTransaction = CreateAndSignRewardTransaction(blockProducerCredentials);
 
         var unsignedBlockWithTransactions = unsignedBlock with
         {
             Transactions = [..unsignedBlock.Transactions, validatedRewardTransaction, ..transactions]
         };
-
         var finalizedBlock = unsignedBlockWithTransactions
-            .SignIt(
-                blockProducerCredentials.PublicSigningAddress, 
-                blockProducerCredentials.PrivateSigningKey)
-            .FinalizeIt();
+            .SignAndFinalizeBlock(blockProducerCredentials);
 
-        var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
-        await writableUnitOfWork
-            .GetRepository<IBlockRepository>()
-            .AddBlockchainBlockAsync(finalizedBlock.ToBlockchainBlock());
+        await this.SaveBlockAndState(
+            finalizedBlock.ToBlockchainBlock(), 
+            newBlockchainState);
 
-        await writableUnitOfWork
-            .GetRepository<IBlockchainStateRepository>()
-            .SetBlockchainStateAsync(newBlockchainState);
-        await writableUnitOfWork.CommitAsync();
-        
         this._logger.LogInformation($"Block {0} generated...", finalizedBlock.BlockId);
 
         await this._eventAggregator.PublishAsync(new BlockCreatedEvent(finalizedBlock.BlockId));
     }
+
+    private async Task SaveBlockAndState(BlockchainBlock blockchainBlock, BlockchainState blockchainState)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+        await writableUnitOfWork
+            .GetRepository<IBlockRepository>()
+            .AddBlockchainBlockAsync(blockchainBlock);
+
+        await writableUnitOfWork
+            .GetRepository<IBlockchainStateRepository>()
+            .SetBlockchainStateAsync(blockchainState);
+        await writableUnitOfWork.CommitAsync();
+    }
+
+    private static AbstractTransaction CreateAndSignRewardTransaction(CredentialsProfile blockProducerCredentials) => 
+        RewardPayloadHandler
+            .CreateRewardTransaction("HUSH", DecimalStringConverter.DecimalToString(5m))
+            .SignByUser(
+                blockProducerCredentials.PublicSigningAddress, 
+                blockProducerCredentials.PrivateSigningKey)
+            .SignByValidator(
+                blockProducerCredentials.PublicSigningAddress, 
+                blockProducerCredentials.PrivateSigningKey);
 }

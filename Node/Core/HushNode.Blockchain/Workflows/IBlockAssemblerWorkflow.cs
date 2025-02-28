@@ -7,7 +7,7 @@ public interface IBlockAssemblerWorkflow
 {
     Task AssembleGenesisBlockAsync(BlockchainState genesisBlockchainState);
 
-    Task AsembleBlockAsync(
+    Task AssembleBlockAsync(
         BlockchainState blockchainState,
         IReadOnlyList<AbstractTransaction> transactions);
 }
