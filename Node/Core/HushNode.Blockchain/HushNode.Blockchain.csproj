@@ -15,6 +15,7 @@
     <ProjectReference Include="..\..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
     <ProjectReference Include="..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />
+    <ProjectReference Include="..\HushNode.Events\HushNode.Events.csproj" />
   </ItemGroup>
 
   <ItemGroup>

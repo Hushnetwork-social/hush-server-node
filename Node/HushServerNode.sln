@@ -41,6 +41,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Blockchain.Persist
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Olimpo.EntityFramework.Persistency", "..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj", "{70ABD056-21B5-4230-AF53-94BA4868587F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Events", "Core\HushNode.Events\HushNode.Events.csproj", "{14323FD4-7336-435D-A827-1A9FFB30526D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -111,6 +113,10 @@ Global
 		{70ABD056-21B5-4230-AF53-94BA4868587F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{70ABD056-21B5-4230-AF53-94BA4868587F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{70ABD056-21B5-4230-AF53-94BA4868587F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{14323FD4-7336-435D-A827-1A9FFB30526D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{14323FD4-7336-435D-A827-1A9FFB30526D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{14323FD4-7336-435D-A827-1A9FFB30526D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{14323FD4-7336-435D-A827-1A9FFB30526D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -127,5 +133,6 @@ Global
 		{B016CC8E-97E8-4A33-B3D5-C10D8DA70D6C} = {E205815F-3B3D-4B6F-BA1A-F8A941F68E9D}
 		{B5553694-C7B0-41E9-808A-836F793D380A} = {E205815F-3B3D-4B6F-BA1A-F8A941F68E9D}
 		{F2FC2CC7-63B7-47FF-BA51-53701A3FEC7C} = {A6E62DDE-3867-4A68-9F2E-630FABD344CB}
+		{14323FD4-7336-435D-A827-1A9FFB30526D} = {E205815F-3B3D-4B6F-BA1A-F8A941F68E9D}
 	EndGlobalSection
 EndGlobal

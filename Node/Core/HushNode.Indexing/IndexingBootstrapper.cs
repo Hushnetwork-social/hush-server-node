@@ -9,6 +9,11 @@ public class IndexingBootstrapper : IBootstrapper
 
     public int Priority { get; set; } = 10;
 
+    public IndexingBootstrapper(IIndexingDispatcherService indexingDispatcherService)
+    {
+        
+    }
+
     public void Shutdown()
     {
     }

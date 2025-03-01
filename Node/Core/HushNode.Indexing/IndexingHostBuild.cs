@@ -11,6 +11,8 @@ public static class IndexingHostBuild
         builder.ConfigureServices(services =>
         {
             services.AddSingleton<IBootstrapper, IndexingBootstrapper>();
+
+            services.AddSingleton<IIndexingDispatcherService, IndexingDispatcherService>();
         });
 
         return builder;

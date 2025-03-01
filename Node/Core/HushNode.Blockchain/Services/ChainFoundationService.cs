@@ -1,11 +1,11 @@
 using Microsoft.Extensions.Logging;
 using Olimpo;
-using HushNode.Blockchain.Events;
+using Olimpo.EntityFramework.Persistency;
 using HushNode.Blockchain.Persistency.Abstractions.Models;
 using HushNode.Blockchain.Workflows;
 using HushNode.Blockchain.Persistency.EntityFramework;
 using HushNode.Blockchain.Persistency.Abstractions.Repositories;
-using Olimpo.EntityFramework.Persistency;
+using HushNode.Events;
 
 namespace HushNode.Blockchain.Services;
 

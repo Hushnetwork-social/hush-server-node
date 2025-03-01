@@ -11,6 +11,7 @@
     <ProjectReference Include="..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
     <ProjectReference Include="..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\HushNode.Blockchain.Persistency.Abstractions\HushNode.Blockchain.Persistency.Abstractions.csproj" />
+    <ProjectReference Include="..\HushNode.Events\HushNode.Events.csproj" />
   </ItemGroup>
 
   <ItemGroup>

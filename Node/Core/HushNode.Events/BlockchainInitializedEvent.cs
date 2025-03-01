@@ -1,4 +1,4 @@
-namespace HushNode.Blockchain.Events;
+namespace HushNode.Events;
 
 public class BlockchainInitializedEvent
 {
