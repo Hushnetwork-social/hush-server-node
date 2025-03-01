@@ -1,8 +1,8 @@
-using HushNode.Blockchain.Persistency.Abstractions.Models.Block;
+using HushNode.Blockchain.Persistency.Abstractions.Models.Block.States;
 
 namespace HushNode.Events;
 
-public class BlockCreatedEvent(BlockId blockId)
+public class BlockCreatedEvent(FinalizedBlock block)
 {
-    public BlockId BlockId { get; private set; } = blockId;
+    public FinalizedBlock Block { get; private set; } = block;
 }

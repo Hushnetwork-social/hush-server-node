@@ -43,6 +43,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Olimpo.EntityFramework.Pers
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Events", "Core\HushNode.Events\HushNode.Events.csproj", "{14323FD4-7336-435D-A827-1A9FFB30526D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Olimpo.Common", "..\Shared\Olimpo.Common\Olimpo.Common.csproj", "{741E29D5-62D0-4141-AF4C-ECA5A315D33A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -117,6 +119,10 @@ Global
 		{14323FD4-7336-435D-A827-1A9FFB30526D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{14323FD4-7336-435D-A827-1A9FFB30526D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{14323FD4-7336-435D-A827-1A9FFB30526D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{741E29D5-62D0-4141-AF4C-ECA5A315D33A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{741E29D5-62D0-4141-AF4C-ECA5A315D33A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{741E29D5-62D0-4141-AF4C-ECA5A315D33A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{741E29D5-62D0-4141-AF4C-ECA5A315D33A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,15 +1,14 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
 using Olimpo;
-// using HushServerNode.DbModel;
 using HushNode.Blockchain;
 using HushNode.Blockchain.Persistency.EntityFramework;
-using HushNode.Credentials;
-using HushNode.MemPool;
 using HushNode.Blockchain.Persistency.Postgres;
+using HushNode.Credentials;
 using HushNode.Indexing;
-using Microsoft.EntityFrameworkCore;
+using HushNode.MemPool;
 
 namespace HushServerNode;
 
