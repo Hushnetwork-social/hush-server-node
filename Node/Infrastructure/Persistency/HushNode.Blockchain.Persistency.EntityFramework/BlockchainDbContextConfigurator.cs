@@ -17,7 +17,7 @@ public class BlockchainDbContextConfigurator : IDbContextConfigurator
     {
         modelBuilder
             .Entity<BlockchainBlock>()
-            .ToTable("BlockchainBlock");
+            .ToTable("BlockchainBlock", "Blockchain");
 
         modelBuilder
             .Entity<BlockchainBlock>()
@@ -60,7 +60,7 @@ public class BlockchainDbContextConfigurator : IDbContextConfigurator
     {
         modelBuilder
             .Entity<BlockchainState>()
-            .ToTable("BlockchainState");
+            .ToTable("BlockchainState", "Blockchain");
 
         modelBuilder
             .Entity<BlockchainState>()

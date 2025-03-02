@@ -49,7 +49,7 @@ public class BlockAssemblerWorkflow(
 
         this._logger.LogInformation("Genesis block {0} generated...", finalizedGenegisBlock.BlockId);
 
-        await this._eventAggregator.PublishAsync(new BlockCreatedEvent(finalizedGenegisBlock.BlockId));
+        await this._eventAggregator.PublishAsync(new BlockCreatedEvent(finalizedGenegisBlock));
     }
 
     public async Task AssembleBlockAsync(
@@ -86,7 +86,7 @@ public class BlockAssemblerWorkflow(
 
         this._logger.LogInformation($"Block {0} generated...", finalizedBlock.BlockId);
 
-        await this._eventAggregator.PublishAsync(new BlockCreatedEvent(finalizedBlock.BlockId));
+        await this._eventAggregator.PublishAsync(new BlockCreatedEvent(finalizedBlock));
     }
 
     private async Task SaveBlockAndState(BlockchainBlock blockchainBlock, BlockchainState blockchainState)
