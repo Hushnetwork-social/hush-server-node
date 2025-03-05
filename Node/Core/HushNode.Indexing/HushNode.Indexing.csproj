@@ -8,11 +8,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Olimpo.Common\Olimpo.Common.csproj" />
     <ProjectReference Include="..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
     <ProjectReference Include="..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\HushNode.Blockchain.Persistency.Abstractions\HushNode.Blockchain.Persistency.Abstractions.csproj" />
     <ProjectReference Include="..\HushNode.Events\HushNode.Events.csproj" />
-    <ProjectReference Include="..\..\..\Shared\Olimpo.Common\Olimpo.Common.csproj" />
+    <ProjectReference Include="..\HushNode.Indexing.Interfaces\HushNode.Indexing.Interfaces.csproj" />
   </ItemGroup>
 
   <ItemGroup>

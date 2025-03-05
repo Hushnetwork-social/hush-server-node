@@ -1,11 +1,11 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using HushNode.Blockchain.Persistency.Abstractions;
-using HushNode.Interfaces;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using HushNode.Blockchain.Persistency.Abstractions.Repositories;
 using Olimpo.EntityFramework.Persistency;
+using HushNode.Blockchain.Persistency.Abstractions.Repositories;
+using HushNode.Interfaces;
+
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;
 
