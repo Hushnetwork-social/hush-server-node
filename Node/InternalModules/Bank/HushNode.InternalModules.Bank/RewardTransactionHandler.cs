@@ -37,7 +37,7 @@ public class RewardTransactionHandler(
         this._handlerSemaphore.Release();
     }
 
-    private async Task UpdateTokenBalance(
+    private async Task CreateTokenBalance(
         AddressBalance addressBalance, 
         ValidatedTransaction<RewardPayload> rewardTransaction)
     {
@@ -55,7 +55,7 @@ public class RewardTransactionHandler(
         this._logger.LogInformation($"Reward for {rewardTransaction.UserSignature.Signatory} granted: {rewardTransaction.Payload.Amount}");
     }
 
-    private async Task CreateTokenBalance(
+    private async Task UpdateTokenBalance(
         AddressBalance addressBalance, 
         ValidatedTransaction<RewardPayload> rewardTransaction)
     {
