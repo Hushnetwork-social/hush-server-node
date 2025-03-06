@@ -10,6 +10,7 @@ using HushNode.Credentials;
 using HushNode.Indexing;
 using HushNode.MemPool;
 using HushNode.InternalModules.Bank;
+using HushNode.InternalModules.Identity;
 
 namespace HushServerNode;
 
@@ -49,7 +50,8 @@ public class Program
             .RegisterPostgresPersistency()
             .RegisterHushNodeBlockchain()
             .RegisterHushNodeIndexing()
-            .RegisterInternalModuleBank();
+            .RegisterInternalModuleBank()
+            .RegisterInternalModuleIdentity();
 
         public static IConfigurationBuilder ConfigureConfigurationBuilder(IConfigurationBuilder configurationBuilder)
         {
