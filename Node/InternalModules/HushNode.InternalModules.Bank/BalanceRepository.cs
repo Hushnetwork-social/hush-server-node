@@ -8,6 +8,7 @@ public class BalanceRepository : RepositoryBase<BankDbContext>, IBalanceReposito
 {
     public async Task<AddressBalance> GetCurrentTokenBalanceAsync(string publicAddress, string token) => 
         await this.Context.AddressBalances
+            .AsNoTracking()
             .SingleOrDefaultAsync(x => x.PublicAddress == publicAddress && x.Token == token) 
                 ?? new AddressNoBalance(publicAddress, token);
 

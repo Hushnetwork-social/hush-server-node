@@ -8,7 +8,8 @@ namespace HushNode.Blockchain.Persistency.EntityFramework;
 public class BlockchainStateRepository : RepositoryBase<BlockchainDbContext>, IBlockchainStateRepository
 {
     public async Task<BlockchainState> GetCurrentStateAsync() => 
-        await this.Context.BlockchainStates.SingleOrDefaultAsync() ?? new GenesisBlockchainState();
+        await this.Context.BlockchainStates
+            .SingleOrDefaultAsync() ?? new GenesisBlockchainState();
 
     public async Task SetBlockchainStateAsync(BlockchainState blockchainState)
     {

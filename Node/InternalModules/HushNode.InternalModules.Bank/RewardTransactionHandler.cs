@@ -21,10 +21,10 @@ public class RewardTransactionHandler(
         await this._handlerSemaphore.WaitAsync();
         using var readOnlyUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
         var addressBalance = await readOnlyUnitOfWork
-        .GetRepository<IBalanceRepository>()
-        .GetCurrentTokenBalanceAsync(
-            rewardTransaction.UserSignature.Signatory,
-            rewardTransaction.Payload.Token);
+            .GetRepository<IBalanceRepository>()
+            .GetCurrentTokenBalanceAsync(
+                rewardTransaction.UserSignature.Signatory,
+                rewardTransaction.Payload.Token);
         
         Func<AddressBalance, ValidatedTransaction<RewardPayload>, Task> handler =  addressBalance switch
         {
@@ -50,7 +50,8 @@ public class RewardTransactionHandler(
         await writableUnitOfWork
             .GetRepository<IBalanceRepository>()
             .CreateTokenBalanceAsync(newAddressBalance);
-        await writableUnitOfWork.CommitAsync();
+        await writableUnitOfWork
+            .CommitAsync();
 
         this._logger.LogInformation($"Reward for {rewardTransaction.UserSignature.Signatory} granted: {rewardTransaction.Payload.Amount}");
     }
@@ -60,8 +61,9 @@ public class RewardTransactionHandler(
         ValidatedTransaction<RewardPayload> rewardTransaction)
     {
         using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
-        var newBalance = DecimalStringConverter.StringToDecimal(rewardTransaction.Payload.Amount) + 
-                DecimalStringConverter.StringToDecimal(addressBalance.Balance);
+        var newBalance = 
+            DecimalStringConverter.StringToDecimal(rewardTransaction.Payload.Amount) + 
+            DecimalStringConverter.StringToDecimal(addressBalance.Balance);
 
         var newAddressBalance = addressBalance with
         {
