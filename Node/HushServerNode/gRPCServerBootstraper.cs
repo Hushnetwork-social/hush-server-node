@@ -1,7 +1,6 @@
 using System.Reactive.Subjects;
 using Grpc.Core;
 using Olimpo;
-using HushNetwork.proto;
 using HushNode.Interfaces;
 
 namespace HushServerNode;
@@ -31,10 +30,6 @@ public class gRPCServerBootstraper : IBootstrapper
     {
         var rcpServer = new Grpc.Core.Server
         {
-            Services = 
-            { 
-                Greeter.BindService(new GreeterService()),
-            },
             Ports = { new ServerPort("localhost", 5000, ServerCredentials.Insecure) }
         };
 
