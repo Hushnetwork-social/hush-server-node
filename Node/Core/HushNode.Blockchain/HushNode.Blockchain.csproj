@@ -27,8 +27,4 @@
     <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="9.0.2" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Protobuf Include="..\..\..\Protos\hushBlockchain.proto" GrpcServices="Server" ProtoRoot="..\..\..\Protos\" />
-  </ItemGroup>
-
 </Project>

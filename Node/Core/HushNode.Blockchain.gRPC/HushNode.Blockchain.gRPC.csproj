@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="*" />
+    <PackageReference Include="Grpc" Version="*" />
+    <PackageReference Include="Grpc.Core" Version="*" />
+    <PackageReference Include="Grpc.Tools" Version="*">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="9.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="..\..\..\Protos\hushBlockchain.proto" GrpcServices="Server" ProtoRoot="..\..\..\Protos\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HushNode.Blockchain\HushNode.Blockchain.csproj" />
+    <ProjectReference Include="..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
+  </ItemGroup>
+
+</Project>

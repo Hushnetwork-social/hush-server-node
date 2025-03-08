@@ -11,6 +11,7 @@ using HushNode.Indexing;
 using HushNode.MemPool;
 using HushNode.InternalModules.Bank;
 using HushNode.InternalModules.Identity;
+using HushNode.Blockchain.gRPC;
 
 namespace HushServerNode;
 
@@ -49,6 +50,7 @@ public class Program
             // .RegisterInMemoryPersistency()
             .RegisterPostgresPersistency()
             .RegisterHushNodeBlockchain()
+            .RegisterHushNodeBlockchaingRPC()
             .RegisterHushNodeIndexing()
             .RegisterInternalModuleBank()
             .RegisterInternalModuleIdentity();

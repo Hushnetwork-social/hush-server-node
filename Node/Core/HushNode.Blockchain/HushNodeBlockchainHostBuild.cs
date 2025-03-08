@@ -1,7 +1,5 @@
-using HushNetwork.proto;
 using HushNode.Blockchain.Services;
 using HushNode.Blockchain.Workflows;
-using HushNode.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Olimpo;
@@ -20,8 +18,8 @@ public static class HushNodeBlockchainHostBuild
             services.AddSingleton<IBlockProductionSchedulerService, BlockProductionSchedulerService>();
             services.AddSingleton<IBlockAssemblerWorkflow, BlockAssemblerWorkflow>();
 
-            services.AddSingleton<IGrpcDefinition, BlockchainGrpcServiceDefinition>();
-            services.AddSingleton<HushBlockchain.HushBlockchainBase, BlockchainGrpcService>();
+            // services.AddSingleton<IGrpcDefinition, BlockchainGrpcServiceDefinition>();
+            // services.AddSingleton<HushBlockchain.HushBlockchainBase, BlockchainGrpcService>();
         });
 
         return builder;

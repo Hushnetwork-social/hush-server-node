@@ -4,7 +4,7 @@ using HushNode.Blockchain.Persistency.Abstractions.Repositories;
 using HushNode.Blockchain.Persistency.EntityFramework;
 using Olimpo.EntityFramework.Persistency;
 
-namespace HushNode.Blockchain;
+namespace HushNode.Blockchain.gRPC;
 
 public class BlockchainGrpcService(IUnitOfWorkProvider<BlockchainDbContext> unitOfWorkProvider) : HushBlockchain.HushBlockchainBase
 {
@@ -14,7 +14,7 @@ public class BlockchainGrpcService(IUnitOfWorkProvider<BlockchainDbContext> unit
         GetBlockchainHeightRequest request, 
         ServerCallContext context)
     {
-        using var readableUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
+        using var readableUnitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var blockchainState = await readableUnitOfWork
             .GetRepository<IBlockchainStateRepository>()
             .GetCurrentStateAsync();

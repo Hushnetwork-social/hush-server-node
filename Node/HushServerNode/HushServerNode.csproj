@@ -45,6 +45,7 @@
     <ProjectReference Include="..\Infrastructure\Persistency\HushNode.Blockchain.Persistency.Postgres\HushNode.Blockchain.Persistency.Postgres.csproj" />
     <ProjectReference Include="..\Core\HushNode.Indexing\HushNode.Indexing.csproj" />
     <ProjectReference Include="..\InternalModules\HushNode.InternalModules.Identity\HushNode.InternalModules.Identity.csproj" />
+    <ProjectReference Include="..\Core\HushNode.Blockchain.gRPC\HushNode.Blockchain.gRPC.csproj" />
   </ItemGroup>
 
 
