@@ -26,12 +26,6 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.3" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-
   <ItemGroup>
     <Protobuf Include="..\..\..\Protos\hushProfile.proto" GrpcServices="Server" ProtoRoot="..\..\..\Protos\" />
   </ItemGroup>
