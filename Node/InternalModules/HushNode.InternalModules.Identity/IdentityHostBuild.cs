@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Olimpo.EntityFramework.Persistency;
 using HushNode.Interfaces;
+using HushNetwork.proto;
 
 namespace HushNode.InternalModules.Identity;
 
@@ -30,6 +31,9 @@ public static class IdentityHostBuild
 
             services.AddTransient<IDbContextConfigurator, IdentityDbContextConfigurator>();
             services.AddTransient<IdentityDbContextConfigurator>();
+
+            services.AddSingleton<IGrpcDefinition, IdentityGrpcServiceDefinition>();
+            services.AddSingleton<HushProfile.HushProfileBase, IdentityGrpcService>();
         });
 
         return builder;

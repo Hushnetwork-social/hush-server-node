@@ -30,7 +30,7 @@ public class Program
             .ConfigureLogging(x => { })
             .ConfigureServices((hostContext, services) => 
             {
-                // services.AddSingleton<IBootstrapper, gRPCServerBootstraper>();
+                services.AddSingleton<IBootstrapper, gRPCServerBootstraper>();
 
                 services.AddDbContext<HushNodeDbContext>((provider, options) =>
                 {

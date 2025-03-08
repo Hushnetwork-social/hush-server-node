@@ -7,6 +7,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.26.0" />
+    <PackageReference Include="Grpc" Version="2.46.6" />
+    <PackageReference Include="Grpc.Core" Version="2.46.6" />
+    <PackageReference Include="Grpc.Tools" Version="2.62.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.2" />
     <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="9.0.2" />
@@ -23,5 +31,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Protobuf Include="..\..\..\Protos\hushProfile.proto" GrpcServices="Server" ProtoRoot="..\..\..\Protos\" />
+  </ItemGroup>
 
 </Project>
