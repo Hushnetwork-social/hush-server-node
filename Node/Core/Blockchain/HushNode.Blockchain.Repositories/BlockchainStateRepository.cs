@@ -1,9 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Olimpo.EntityFramework.Persistency;
 using HushNode.Blockchain.Model;
-using HushNode.Blockchain.Persistency.Abstractions.Repositories;
 
-namespace HushNode.Blockchain.Persistency.EntityFramework;
+namespace HushNode.Blockchain.Repositories;
 
 public class BlockchainStateRepository : RepositoryBase<BlockchainDbContext>, IBlockchainStateRepository
 {

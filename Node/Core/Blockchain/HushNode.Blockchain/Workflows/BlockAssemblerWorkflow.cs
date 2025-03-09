@@ -1,8 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Olimpo;
 using Olimpo.EntityFramework.Persistency;
-using HushNode.Blockchain.Persistency.Abstractions.Repositories;
-using HushNode.Blockchain.Persistency.EntityFramework;
 using HushNode.Credentials;
 using HushNode.Events;
 using HushNode.Interfaces;
@@ -12,6 +10,7 @@ using HushNode.Blockchain.Model.Block;
 using HushNode.Blockchain.Model.Block.States;
 using HushNode.Blockchain.Model.Transaction;
 using HushNode.Blockchain.Model.Transaction.States;
+using HushNode.Blockchain.Repositories;
 
 namespace HushNode.Blockchain.Workflows;
 

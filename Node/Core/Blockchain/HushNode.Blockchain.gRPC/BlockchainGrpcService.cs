@@ -1,7 +1,6 @@
 using Grpc.Core;
 using HushNetwork.proto;
-using HushNode.Blockchain.Persistency.Abstractions.Repositories;
-using HushNode.Blockchain.Persistency.EntityFramework;
+using HushNode.Blockchain.Repositories;
 using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Blockchain.gRPC;

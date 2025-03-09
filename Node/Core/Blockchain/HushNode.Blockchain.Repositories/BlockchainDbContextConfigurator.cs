@@ -3,7 +3,7 @@ using HushNode.Interfaces;
 using HushNode.Blockchain.Model;
 using HushNode.Blockchain.Model.Block;
 
-namespace HushNode.Blockchain.Persistency.EntityFramework;
+namespace HushNode.Blockchain.Repositories;
 
 public class BlockchainDbContextConfigurator : IDbContextConfigurator
 {

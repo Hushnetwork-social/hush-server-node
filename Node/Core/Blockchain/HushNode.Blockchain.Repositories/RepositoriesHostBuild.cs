@@ -3,15 +3,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Olimpo.EntityFramework.Persistency;
-using HushNode.Blockchain.Persistency.Abstractions.Repositories;
 using HushNode.Interfaces;
 
 
-namespace HushNode.Blockchain.Persistency.EntityFramework;
+namespace HushNode.Blockchain.Repositories;
 
-public static class BlockchainPersistencyEntityFrameworkHostBuild
+public static class RepositoriesHostBuild
 {
-    public static IHostBuilder RegisterEntityFrameworkPersistency(this IHostBuilder builder)
+    public static IHostBuilder RegisterBlockchainRepositories(this IHostBuilder builder)
     {
         builder.ConfigureServices((hostContext, services) => 
         {

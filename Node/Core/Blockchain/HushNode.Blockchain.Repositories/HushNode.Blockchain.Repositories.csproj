@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Core\Blockchain\HushNode.Blockchain.Model\HushNode.Blockchain.Model.csproj" />
-    <ProjectReference Include="..\..\HushNode.Interfaces\HushNode.Interfaces.csproj" />
+    <ProjectReference Include="..\HushNode.Blockchain.Model\HushNode.Blockchain.Model.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />
   </ItemGroup>
 

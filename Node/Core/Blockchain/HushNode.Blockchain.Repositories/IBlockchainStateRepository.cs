@@ -1,7 +1,7 @@
-using HushNode.Blockchain.Model;
 using Olimpo.EntityFramework.Persistency;
+using HushNode.Blockchain.Model;
 
-namespace HushNode.Blockchain.Persistency.Abstractions.Repositories;
+namespace HushNode.Blockchain.Repositories;
 
 public interface IBlockchainStateRepository : IRepository
 {

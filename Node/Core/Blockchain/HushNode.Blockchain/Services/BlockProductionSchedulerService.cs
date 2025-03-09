@@ -2,11 +2,10 @@ using System.Reactive.Linq;
 using Microsoft.Extensions.Logging;
 using Olimpo;
 using Olimpo.EntityFramework.Persistency;
-using HushNode.Blockchain.Persistency.Abstractions.Repositories;
-using HushNode.Blockchain.Persistency.EntityFramework;
 using HushNode.Blockchain.Workflows;
 using HushNode.Events;
 using HushNode.MemPool;
+using HushNode.Blockchain.Repositories;
 
 namespace HushNode.Blockchain.Services;
 
