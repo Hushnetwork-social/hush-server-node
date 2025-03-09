@@ -1,4 +1,4 @@
-using HushNode.Blockchain.Persistency.Abstractions.Models;
+using HushNode.Blockchain.Model;
 using HushNode.Blockchain.Persistency.Abstractions.Repositories;
 using Olimpo.EntityFramework.Persistency;
 

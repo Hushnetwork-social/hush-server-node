@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using HushNode.Blockchain.Persistency.Abstractions.Models;
+using HushNode.Blockchain.Model;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;
 

@@ -1,4 +1,4 @@
-using HushNode.Blockchain.Persistency.Abstractions.Models.Transaction.States;
+using HushNode.Blockchain.Model.Transaction.States;
 using HushNode.InternalPayloads;
 
 namespace HushNode.InternalModules.Bank;

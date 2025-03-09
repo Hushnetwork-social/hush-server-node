@@ -1,5 +1,5 @@
-using HushNode.Blockchain.Persistency.Abstractions.Models;
-using HushNode.Blockchain.Persistency.Abstractions.Models.Transaction;
+using HushNode.Blockchain.Model;
+using HushNode.Blockchain.Model.Transaction;
 
 namespace HushNode.Blockchain.Workflows;
 

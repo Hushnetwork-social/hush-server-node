@@ -3,8 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Olimpo.EntityFramework.Persistency;
-using HushNode.Indexing;
 using HushNode.Interfaces;
+using HushNode.Indexing.Interfaces;
 
 namespace HushNode.InternalModules.Bank;
 

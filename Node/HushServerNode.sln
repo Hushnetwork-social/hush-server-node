@@ -55,7 +55,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Blockchain", "Core
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Blockchain.gRPC", "Core\Blockchain\HushNode.Blockchain.gRPC\HushNode.Blockchain.gRPC.csproj", "{D702945D-F1D9-4E26-9E5A-2A73E611B5BF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Blockchain.Persistency.Abstractions", "Core\Blockchain\HushNode.Blockchain.Persistency.Abstractions\HushNode.Blockchain.Persistency.Abstractions.csproj", "{06A9052A-80B9-496A-8BDD-B0E93517446E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Blockchain.Model", "Core\Blockchain\HushNode.Blockchain.Model\HushNode.Blockchain.Model.csproj", "{B67D5B1B-A6BA-4E54-A3A8-F8FD83532E48}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -147,10 +147,10 @@ Global
 		{D702945D-F1D9-4E26-9E5A-2A73E611B5BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D702945D-F1D9-4E26-9E5A-2A73E611B5BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D702945D-F1D9-4E26-9E5A-2A73E611B5BF}.Release|Any CPU.Build.0 = Release|Any CPU
-		{06A9052A-80B9-496A-8BDD-B0E93517446E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{06A9052A-80B9-496A-8BDD-B0E93517446E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{06A9052A-80B9-496A-8BDD-B0E93517446E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{06A9052A-80B9-496A-8BDD-B0E93517446E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B67D5B1B-A6BA-4E54-A3A8-F8FD83532E48}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B67D5B1B-A6BA-4E54-A3A8-F8FD83532E48}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B67D5B1B-A6BA-4E54-A3A8-F8FD83532E48}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B67D5B1B-A6BA-4E54-A3A8-F8FD83532E48}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -172,6 +172,6 @@ Global
 		{A2B89667-676A-4BD4-A3A9-A17335FC2234} = {E205815F-3B3D-4B6F-BA1A-F8A941F68E9D}
 		{4945C70E-3661-430A-AAB7-48D5430BCE34} = {A2B89667-676A-4BD4-A3A9-A17335FC2234}
 		{D702945D-F1D9-4E26-9E5A-2A73E611B5BF} = {A2B89667-676A-4BD4-A3A9-A17335FC2234}
-		{06A9052A-80B9-496A-8BDD-B0E93517446E} = {A2B89667-676A-4BD4-A3A9-A17335FC2234}
+		{B67D5B1B-A6BA-4E54-A3A8-F8FD83532E48} = {A2B89667-676A-4BD4-A3A9-A17335FC2234}
 	EndGlobalSection
 EndGlobal

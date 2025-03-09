@@ -1,4 +1,5 @@
 using HushNode.Events;
+using HushNode.Indexing.Interfaces;
 using Olimpo;
 
 namespace HushNode.Indexing;

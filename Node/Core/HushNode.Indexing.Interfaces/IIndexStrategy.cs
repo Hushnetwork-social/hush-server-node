@@ -1,6 +1,6 @@
-using HushNode.Blockchain.Persistency.Abstractions.Models.Transaction;
+using HushNode.Blockchain.Model.Transaction;
 
-namespace HushNode.Indexing;
+namespace HushNode.Indexing.Interfaces;
 
 public interface IIndexStrategy
 {

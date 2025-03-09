@@ -1,6 +1,6 @@
-﻿using HushNode.Blockchain.Persistency.Abstractions.Models;
-using HushNode.Blockchain.Persistency.Abstractions.Models.Transaction;
-using HushNode.Blockchain.Persistency.Abstractions.Models.Transaction.States;
+﻿using HushNode.Blockchain.Model;
+using HushNode.Blockchain.Model.Transaction;
+using HushNode.Blockchain.Model.Transaction.States;
 
 namespace HushNode.InternalPayloads
 {

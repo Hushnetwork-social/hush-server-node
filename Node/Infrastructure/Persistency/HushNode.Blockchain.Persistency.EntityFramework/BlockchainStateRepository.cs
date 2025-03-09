@@ -1,7 +1,7 @@
-using HushNode.Blockchain.Persistency.Abstractions.Models;
-using HushNode.Blockchain.Persistency.Abstractions.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Olimpo.EntityFramework.Persistency;
+using HushNode.Blockchain.Model;
+using HushNode.Blockchain.Persistency.Abstractions.Repositories;
 
 namespace HushNode.Blockchain.Persistency.EntityFramework;
 
