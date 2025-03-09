@@ -1,9 +1,0 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
-    <ProjectReference Include="..\..\..\Shared\Olimpo.DigitalSignature\SigningManager.csproj" />
-    <ProjectReference Include="..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />
-  </ItemGroup>
-
-</Project>

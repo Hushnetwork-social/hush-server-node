@@ -38,14 +38,14 @@
     <!-- <ProjectReference Include="..\Services\HushServerNode.Interfaces\HushServerNode.Interfaces.csproj" /> -->
     <ProjectReference Include="..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
-    <ProjectReference Include="..\Core\HushNode.Blockchain\HushNode.Blockchain.csproj" />
+    <ProjectReference Include="..\Core\Blockchain\HushNode.Blockchain\HushNode.Blockchain.csproj" />
     <ProjectReference Include="..\Infrastructure\Persistency\HushNode.Blockchain.Persistency.EntityFramework\HushNode.Blockchain.Persistency.EntityFramework.csproj" />
     <ProjectReference Include="..\Infrastructure\Persistency\HushNode.Blockchain.Persistency.InMemory\HushNode.Blockchain.Persistency.InMemory.csproj" />
     <ProjectReference Include="..\Core\HushNode.MemPool\HushNode.MemPool.csproj" />
     <ProjectReference Include="..\Infrastructure\Persistency\HushNode.Blockchain.Persistency.Postgres\HushNode.Blockchain.Persistency.Postgres.csproj" />
     <ProjectReference Include="..\Core\HushNode.Indexing\HushNode.Indexing.csproj" />
     <ProjectReference Include="..\InternalModules\HushNode.InternalModules.Identity\HushNode.InternalModules.Identity.csproj" />
-    <ProjectReference Include="..\Core\HushNode.Blockchain.gRPC\HushNode.Blockchain.gRPC.csproj" />
+    <ProjectReference Include="..\Core\Blockchain\HushNode.Blockchain.gRPC\HushNode.Blockchain.gRPC.csproj" />
   </ItemGroup>
 
 
