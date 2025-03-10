@@ -1,27 +1,26 @@
 using Microsoft.Extensions.Logging;
 using Olimpo;
-using Olimpo.EntityFramework.Persistency;
-using HushNode.Credentials;
-using HushNode.Events;
-using HushNode.Interfaces;
-using HushNode.InternalPayloads;
 using HushNode.Blockchain.Model;
 using HushNode.Blockchain.Model.Block;
 using HushNode.Blockchain.Model.Block.States;
 using HushNode.Blockchain.Model.Transaction;
 using HushNode.Blockchain.Model.Transaction.States;
-using HushNode.Blockchain.Repositories;
+using HushNode.Blockchain.Storage;
+using HushNode.Credentials;
+using HushNode.Events;
+using HushNode.Interfaces;
+using HushNode.InternalPayloads;
 
 namespace HushNode.Blockchain.Workflows;
 
 public class BlockAssemblerWorkflow(
     ICredentialsProvider credentialsProvider,
-    IUnitOfWorkProvider<BlockchainDbContext> unitOfWorkProvider,
+    IBlockchainStorageService blockchainStorageService,
     IEventAggregator eventAggregator,
     ILogger<BlockAssemblerWorkflow> logger) : IBlockAssemblerWorkflow
 {
     private readonly ICredentialsProvider _credentialsProvider = credentialsProvider;
-    private readonly IUnitOfWorkProvider<BlockchainDbContext> _unitOfWorkProvider = unitOfWorkProvider;
+    private readonly IBlockchainStorageService _blockchainStorageService = blockchainStorageService;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly ILogger<BlockAssemblerWorkflow> _logger = logger;
 
@@ -42,7 +41,7 @@ public class BlockAssemblerWorkflow(
         var finalizedGenegisBlock = genesisBlockWithRewardTransactions
             .SignAndFinalizeBlock(blockProducerCredentials);
 
-        await this.SaveBlockAndState(
+        await this._blockchainStorageService.PersisteBlockAndBlockState(
             finalizedGenegisBlock.ToBlockchainBlock(), 
             genesisBlockchainState);
 
@@ -79,26 +78,14 @@ public class BlockAssemblerWorkflow(
         var finalizedBlock = unsignedBlockWithTransactions
             .SignAndFinalizeBlock(blockProducerCredentials);
 
-        await this.SaveBlockAndState(
+        await this._blockchainStorageService.PersisteBlockAndBlockState(
             finalizedBlock.ToBlockchainBlock(), 
-            newBlockchainState);
+            newBlockchainState
+        );
 
         this._logger.LogInformation($"Block {0} generated...", finalizedBlock.BlockId);
 
         await this._eventAggregator.PublishAsync(new BlockCreatedEvent(finalizedBlock));
-    }
-
-    private async Task SaveBlockAndState(BlockchainBlock blockchainBlock, BlockchainState blockchainState)
-    {
-        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
-        await writableUnitOfWork
-            .GetRepository<IBlockRepository>()
-            .AddBlockchainBlockAsync(blockchainBlock);
-
-        await writableUnitOfWork
-            .GetRepository<IBlockchainStateRepository>()
-            .SetBlockchainStateAsync(blockchainState);
-        await writableUnitOfWork.CommitAsync();
     }
 
     private static AbstractTransaction CreateAndSignRewardTransaction(CredentialsProfile blockProducerCredentials) => 

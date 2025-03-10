@@ -1,11 +1,10 @@
 using System.Reactive.Linq;
 using Microsoft.Extensions.Logging;
 using Olimpo;
-using Olimpo.EntityFramework.Persistency;
 using HushNode.Blockchain.Workflows;
 using HushNode.Events;
 using HushNode.MemPool;
-using HushNode.Blockchain.Repositories;
+using HushNode.Blockchain.Storage;
 
 namespace HushNode.Blockchain.Services;
 
@@ -16,8 +15,8 @@ public class BlockProductionSchedulerService :
 {
     private readonly IBlockAssemblerWorkflow _blockAssemblerWorkflow;
     private readonly IMemPoolService _memPool;
+    private readonly IBlockchainStorageService _blockchainStorageService;
     private readonly IEventAggregator _eventAggregator;
-    private readonly IUnitOfWorkProvider<BlockchainDbContext> _unitOfWorkProvider;
     private readonly ILogger<BlockProductionSchedulerService> _logger;
     private readonly IObservable<long> _blockGeneratorLoop;
     private bool _canSchedule = true;
@@ -25,13 +24,13 @@ public class BlockProductionSchedulerService :
     public BlockProductionSchedulerService(
         IBlockAssemblerWorkflow blockAssemblerWorkflow,
         IMemPoolService memPool,
-        IUnitOfWorkProvider<BlockchainDbContext> unitOfWorkProvider,
+        IBlockchainStorageService blockchainStorageService,
         IEventAggregator eventAggregator,
         ILogger<BlockProductionSchedulerService> logger)
     {
         this._blockAssemblerWorkflow = blockAssemblerWorkflow;
         this._memPool = memPool;
-        this._unitOfWorkProvider = unitOfWorkProvider;
+        this._blockchainStorageService = blockchainStorageService;
         this._eventAggregator = eventAggregator;
         this._logger = logger;
 
@@ -57,9 +56,7 @@ public class BlockProductionSchedulerService :
                 this._canSchedule = false;
                 this._logger.LogInformation("Generating a block...");
 
-                var blockchainState = await this._unitOfWorkProvider.CreateReadOnly()
-                    .GetRepository<IBlockchainStateRepository>()
-                    .GetCurrentStateAsync();
+                var blockchainState = await this._blockchainStorageService.RetrieveCurrentBlockchainStateAsync();
 
                 var pendingTransactions = await this._memPool.GetPendingValidatedTransactionsAsync();
 

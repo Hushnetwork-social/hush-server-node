@@ -6,11 +6,11 @@ using Olimpo.EntityFramework.Persistency;
 using HushNode.Interfaces;
 
 
-namespace HushNode.Blockchain.Repositories;
+namespace HushNode.Blockchain.Storage;
 
-public static class RepositoriesHostBuild
+public static class StorageHostBuild
 {
-    public static IHostBuilder RegisterBlockchainRepositories(this IHostBuilder builder)
+    public static IHostBuilder RegisterBlockchainStorage(this IHostBuilder builder)
     {
         builder.ConfigureServices((hostContext, services) => 
         {
@@ -22,6 +22,8 @@ public static class RepositoriesHostBuild
             });
 
             services.AddTransient<IUnitOfWorkProvider<BlockchainDbContext>, UnitOfWorkProvider<BlockchainDbContext>>();
+
+            services.AddTransient<IBlockchainStorageService, BlockchainStorageService>();
 
             services.AddTransient<IBlockRepository, BlockRepository>();
             services.AddTransient<IBlockchainStateRepository, BlockchainStateRepository>();

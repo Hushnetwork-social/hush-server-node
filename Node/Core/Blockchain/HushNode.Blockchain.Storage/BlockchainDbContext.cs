@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using HushNode.Blockchain.Model;
 
-namespace HushNode.Blockchain.Repositories;
+namespace HushNode.Blockchain.Storage;
 
 public class BlockchainDbContext : DbContext
 {

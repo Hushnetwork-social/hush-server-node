@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\HushNode.Blockchain\HushNode.Blockchain.csproj" />
     <ProjectReference Include="..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
+    <ProjectReference Include="..\HushNode.Blockchain.Storage\HushNode.Blockchain.Storage.csproj" />
   </ItemGroup>
 
 </Project>

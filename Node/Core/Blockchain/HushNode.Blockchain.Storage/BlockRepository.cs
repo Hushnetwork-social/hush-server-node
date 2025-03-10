@@ -1,12 +1,12 @@
 using Olimpo.EntityFramework.Persistency;
 using HushNode.Blockchain.Model;
 
-namespace HushNode.Blockchain.Repositories;
+namespace HushNode.Blockchain.Storage;
 
 public class BlockRepository : RepositoryBase<BlockchainDbContext>, IBlockRepository
 {
     public async Task AddBlockchainBlockAsync(BlockchainBlock block) => 
-        await this.Context.Blocks.AddAsync(block);
+        await Context.Blocks.AddAsync(block);
 
     // public Task<Block> GetBlockByIdAsync(Guid blockId) => throw new NotImplementedException();
         // await _dbContext.Blocks

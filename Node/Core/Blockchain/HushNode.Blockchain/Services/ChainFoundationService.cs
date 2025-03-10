@@ -1,32 +1,28 @@
 using Microsoft.Extensions.Logging;
 using Olimpo;
-using Olimpo.EntityFramework.Persistency;
 using HushNode.Blockchain.Workflows;
 using HushNode.Events;
 using HushNode.Blockchain.Model;
-using HushNode.Blockchain.Repositories;
+using HushNode.Blockchain.Storage;
 
 namespace HushNode.Blockchain.Services;
 
 public class ChainFoundationService(
     IBlockAssemblerWorkflow blockAssemblerWorkflow,
-    IUnitOfWorkProvider<BlockchainDbContext> unitOfWorkProvider,
+    IBlockchainStorageService blockchainStorageService,
     IEventAggregator eventAggregator,
     ILogger<ChainFoundationService> logger) : IChainFoundationService
 {
     private readonly ILogger<ChainFoundationService> _logger = logger;
     private readonly IBlockAssemblerWorkflow _blockAssemblerWorkflow = blockAssemblerWorkflow;
-    private readonly IUnitOfWorkProvider<BlockchainDbContext> _unitOfWorkProvider = unitOfWorkProvider;
+    private readonly IBlockchainStorageService _blockchainStorageService = blockchainStorageService;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
 
     public async Task InitializeChain()
     {
         this._logger.LogInformation("Initializion Blockchain...");
 
-        using var unitOfWork = this._unitOfWorkProvider.CreateReadOnly();
-        var blockchainState = await unitOfWork
-            .GetRepository<IBlockchainStateRepository>()
-            .GetCurrentStateAsync();
+        var blockchainState = await this._blockchainStorageService.RetrieveCurrentBlockchainStateAsync();
 
         Func<BlockchainState, Task> handler = blockchainState switch
         {

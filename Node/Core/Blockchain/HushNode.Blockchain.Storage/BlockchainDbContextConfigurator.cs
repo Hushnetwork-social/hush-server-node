@@ -3,7 +3,7 @@ using HushNode.Interfaces;
 using HushNode.Blockchain.Model;
 using HushNode.Blockchain.Model.Block;
 
-namespace HushNode.Blockchain.Repositories;
+namespace HushNode.Blockchain.Storage;
 
 public class BlockchainDbContextConfigurator : IDbContextConfigurator
 {
