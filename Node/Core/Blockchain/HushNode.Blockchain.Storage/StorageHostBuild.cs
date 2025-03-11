@@ -10,28 +10,23 @@ namespace HushNode.Blockchain.Storage;
 
 public static class StorageHostBuild
 {
-    public static IHostBuilder RegisterBlockchainStorage(this IHostBuilder builder)
+    public static void RegisterBlockchainStorageServices(this IServiceCollection services, HostBuilderContext hostContext)
     {
-        builder.ConfigureServices((hostContext, services) => 
+        services.AddDbContext<BlockchainDbContext>((provider, options) => 
         {
-            services.AddDbContext<BlockchainDbContext>((provider, options) => 
-            {
-                options.UseNpgsql(hostContext.Configuration.GetConnectionString("HushNetworkDb"));
-                options.EnableSensitiveDataLogging();  // For debugging
-                options.EnableDetailedErrors();  // For debugging
-            });
-
-            services.AddTransient<IUnitOfWorkProvider<BlockchainDbContext>, UnitOfWorkProvider<BlockchainDbContext>>();
-
-            services.AddTransient<IBlockchainStorageService, BlockchainStorageService>();
-
-            services.AddTransient<IBlockRepository, BlockRepository>();
-            services.AddTransient<IBlockchainStateRepository, BlockchainStateRepository>();
-
-            services.AddTransient<IDbContextConfigurator, BlockchainDbContextConfigurator>();
-            services.AddTransient<BlockchainDbContextConfigurator>();
+            options.UseNpgsql(hostContext.Configuration.GetConnectionString("HushNetworkDb"));
+            options.EnableSensitiveDataLogging();  // For debugging
+            options.EnableDetailedErrors();  // For debugging
         });
 
-        return builder;
+        services.AddTransient<IUnitOfWorkProvider<BlockchainDbContext>, UnitOfWorkProvider<BlockchainDbContext>>();
+
+        services.AddTransient<IBlockchainStorageService, BlockchainStorageService>();
+
+        services.AddTransient<IBlockRepository, BlockRepository>();
+        services.AddTransient<IBlockchainStateRepository, BlockchainStateRepository>();
+
+        services.AddTransient<IDbContextConfigurator, BlockchainDbContextConfigurator>();
+        services.AddTransient<BlockchainDbContextConfigurator>();
     }
 }

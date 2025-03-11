@@ -1,4 +1,6 @@
+using HushNode.Blockchain.gRPC;
 using HushNode.Blockchain.Services;
+using HushNode.Blockchain.Storage;
 using HushNode.Blockchain.Workflows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -10,7 +12,7 @@ public static class HushNodeBlockchainHostBuild
 {
     public static IHostBuilder RegisterCoreModuleBlockchain(this IHostBuilder builder)
     {
-        builder.ConfigureServices(services =>
+        builder.ConfigureServices((hostContext, services) =>
         {
             services.AddSingleton<IBootstrapper, HushNodeBlockchainBootstrapper>();
 
@@ -18,8 +20,12 @@ public static class HushNodeBlockchainHostBuild
             services.AddSingleton<IBlockProductionSchedulerService, BlockProductionSchedulerService>();
             services.AddSingleton<IBlockAssemblerWorkflow, BlockAssemblerWorkflow>();
 
-            // services.AddSingleton<IGrpcDefinition, BlockchainGrpcServiceDefinition>();
-            // services.AddSingleton<HushBlockchain.HushBlockchainBase, BlockchainGrpcService>();
+            services.RegisterBlockchainStorageServices(hostContext);
+            services.RegisterBlockchaingRPCServices();
+
+
+            // builder.RegisterBlockchainStorage();
+            // builder.RegisterHushNodeBlockchaingRPC();
         });
 
         return builder;

@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\HushNode.Blockchain.Model\HushNode.Blockchain.Model.csproj" />
     <ProjectReference Include="..\HushNode.Blockchain.Storage\HushNode.Blockchain.Storage.csproj" />
+    <ProjectReference Include="..\HushNode.Blockchain.gRPC\HushNode.Blockchain.gRPC.csproj" />
     <ProjectReference Include="..\..\HushNode.MemPool\HushNode.MemPool.csproj" />
     <ProjectReference Include="..\..\HushNode.Events\HushNode.Events.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />

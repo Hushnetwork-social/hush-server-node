@@ -4,12 +4,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Olimpo;
 using HushNode.Blockchain;
-using HushNode.Blockchain.gRPC;
 using HushNode.Credentials;
 using HushNode.Indexing;
 using HushNode.InternalModules.Identity;
 using HushNode.MemPool;
-using HushNode.Blockchain.Storage;
 using HushNode.Bank;
 
 namespace HushServerNode;
@@ -43,15 +41,13 @@ public class Program
             })
             .RegisterBootstrapperManager()
             .RegisterEventAggregatorManager()
-            .RegisterBlockchainStorage()
-            .RegisterHushNodeMemPool()
             .RegisterHushCredentials()
             // .RegisterInMemoryPersistency()
             // .RegisterPostgresPersistency()
             .RegisterCoreModuleBlockchain()
             .RegisterCoreModuleBank()
-            .RegisterHushNodeBlockchaingRPC()
             .RegisterHushNodeIndexing()
+            .RegisterHushNodeMemPool()
             .RegisterInternalModuleIdentity();
 
         public static IConfigurationBuilder ConfigureConfigurationBuilder(IConfigurationBuilder configurationBuilder)
