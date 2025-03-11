@@ -1,7 +1,7 @@
-using HushNode.InternalModules.Bank.Model;
+using HushNode.Bank.Model;
 using Olimpo.EntityFramework.Persistency;
 
-namespace HushNode.InternalModules.Bank;
+namespace HushNode.Bank.Storage;
 
 public interface IBalanceRepository : IRepository
 {

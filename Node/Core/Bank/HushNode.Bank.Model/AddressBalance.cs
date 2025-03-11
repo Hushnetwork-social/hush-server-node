@@ -1,15 +1,11 @@
 using HushNode.Interfaces;
 
-namespace HushNode.InternalModules.Bank.Model;
+namespace HushNode.Bank.Model;
 
 public record AddressBalance(
     string PublicAddress,
     string Token,
-    string Balance)
-{
-    // public static AddressBalance NoBalance(string publicAddress, string token) =>  
-    //     new(publicAddress, token, DecimalStringConverter.DecimalToString(0m));
-}
+    string Balance);
 
 public record AddressNoBalance : AddressBalance
 {

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Olimpo;
+using HushNode.Bank;
 using HushNode.Blockchain.Model;
 using HushNode.Blockchain.Model.Block;
 using HushNode.Blockchain.Model.Block.States;
@@ -9,7 +10,6 @@ using HushNode.Blockchain.Storage;
 using HushNode.Credentials;
 using HushNode.Events;
 using HushNode.Interfaces;
-using HushNode.InternalPayloads;
 
 namespace HushNode.Blockchain.Workflows;
 

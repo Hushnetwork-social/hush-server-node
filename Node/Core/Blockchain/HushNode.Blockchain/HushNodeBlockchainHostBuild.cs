@@ -8,7 +8,7 @@ namespace HushNode.Blockchain;
 
 public static class HushNodeBlockchainHostBuild
 {
-    public static IHostBuilder RegisterHushNodeBlockchain(this IHostBuilder builder)
+    public static IHostBuilder RegisterCoreModuleBlockchain(this IHostBuilder builder)
     {
         builder.ConfigureServices(services =>
         {

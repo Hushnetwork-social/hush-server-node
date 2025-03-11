@@ -1,11 +1,11 @@
+using HushNode.Bank.Model;
+using HushNode.Bank.Storage;
 using HushNode.Blockchain.Model.Transaction.States;
 using HushNode.Interfaces;
-using HushNode.InternalModules.Bank.Model;
-using HushNode.InternalPayloads;
 using Microsoft.Extensions.Logging;
 using Olimpo.EntityFramework.Persistency;
 
-namespace HushNode.InternalModules.Bank;
+namespace HushNode.Bank;
 
 public class RewardTransactionHandler(
     IUnitOfWorkProvider<BankDbContext> unitOfWorkProvider,
@@ -18,8 +18,8 @@ public class RewardTransactionHandler(
 
     public async Task HandleRewardTransactionAsync(ValidatedTransaction<RewardPayload> rewardTransaction)
     {
-        await this._handlerSemaphore.WaitAsync();
-        using var readOnlyUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
+        await _handlerSemaphore.WaitAsync();
+        using var readOnlyUnitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var addressBalance = await readOnlyUnitOfWork
             .GetRepository<IBalanceRepository>()
             .GetCurrentTokenBalanceAsync(
@@ -34,14 +34,14 @@ public class RewardTransactionHandler(
 
         await handler.Invoke(addressBalance, rewardTransaction);
 
-        this._handlerSemaphore.Release();
+        _handlerSemaphore.Release();
     }
 
     private async Task CreateTokenBalance(
         AddressBalance addressBalance, 
         ValidatedTransaction<RewardPayload> rewardTransaction)
     {
-        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+        using var writableUnitOfWork = _unitOfWorkProvider.CreateWritable();
         var newAddressBalance = addressBalance with
         {
             Balance = rewardTransaction.Payload.Amount
@@ -53,14 +53,14 @@ public class RewardTransactionHandler(
         await writableUnitOfWork
             .CommitAsync();
 
-        this._logger.LogInformation($"Reward for {rewardTransaction.UserSignature.Signatory} granted: {rewardTransaction.Payload.Amount}");
+        _logger.LogInformation($"Reward for {rewardTransaction.UserSignature.Signatory} granted: {rewardTransaction.Payload.Amount}");
     }
 
     private async Task UpdateTokenBalance(
         AddressBalance addressBalance, 
         ValidatedTransaction<RewardPayload> rewardTransaction)
     {
-        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+        using var writableUnitOfWork = _unitOfWorkProvider.CreateWritable();
         var newBalance = 
             DecimalStringConverter.StringToDecimal(rewardTransaction.Payload.Amount) + 
             DecimalStringConverter.StringToDecimal(addressBalance.Balance);
@@ -75,6 +75,6 @@ public class RewardTransactionHandler(
             .UpdateTokenBalance(newAddressBalance);
         await writableUnitOfWork.CommitAsync();
 
-        this._logger.LogInformation($"Reward for {rewardTransaction.UserSignature.Signatory} granted: {rewardTransaction.Payload.Amount}");
+        _logger.LogInformation($"Reward for {rewardTransaction.UserSignature.Signatory} granted: {rewardTransaction.Payload.Amount}");
     }
 }

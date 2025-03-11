@@ -2,7 +2,7 @@
 using HushNode.Blockchain.Model.Transaction;
 using HushNode.Blockchain.Model.Transaction.States;
 
-namespace HushNode.InternalPayloads
+namespace HushNode.Bank
 {
     public record RewardPayload(string Token, int Precision, string Amount) : ITransactionPayloadKind;
 

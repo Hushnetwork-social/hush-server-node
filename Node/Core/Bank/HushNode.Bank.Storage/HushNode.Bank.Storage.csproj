@@ -1,9 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Core\HushNode.Indexing.Interfaces\HushNode.Indexing.Interfaces.csproj" />
-    <ProjectReference Include="..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />
-    <ProjectReference Include="..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />
+    <ProjectReference Include="..\HushNode.Bank.Model\HushNode.Bank.Model.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -17,5 +16,5 @@
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.3" />
   </ItemGroup>
-
+  
 </Project>

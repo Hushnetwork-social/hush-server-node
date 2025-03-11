@@ -1,7 +1,7 @@
-using HushNode.InternalModules.Bank.Model;
+using HushNode.Bank.Model;
 using Microsoft.EntityFrameworkCore;
 
-namespace HushNode.InternalModules.Bank;
+namespace HushNode.Bank.Storage;
 
 public class BankDbContext(
     BankDbContextConfigurator bankDbContextConfigurator,
@@ -13,6 +13,6 @@ public class BankDbContext(
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        this._bankDbContextConfigurator.Configure(modelBuilder);
+        _bankDbContextConfigurator.Configure(modelBuilder);
     }
 }

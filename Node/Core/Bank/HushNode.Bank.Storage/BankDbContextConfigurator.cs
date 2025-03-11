@@ -1,8 +1,8 @@
+using HushNode.Bank.Model;
 using HushNode.Interfaces;
-using HushNode.InternalModules.Bank.Model;
 using Microsoft.EntityFrameworkCore;
 
-namespace HushNode.InternalModules.Bank;
+namespace HushNode.Bank.Storage;
 
 public class BankDbContextConfigurator : IDbContextConfigurator
 {

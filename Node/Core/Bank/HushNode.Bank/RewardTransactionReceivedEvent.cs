@@ -1,7 +1,6 @@
 using HushNode.Blockchain.Model.Transaction.States;
-using HushNode.InternalPayloads;
 
-namespace HushNode.InternalModules.Bank;
+namespace HushNode.Bank;
 
 public class RewardTransactionReceivedEvent(ValidatedTransaction<RewardPayload> rewardTransaction)
 {

@@ -5,12 +5,13 @@ using Microsoft.Extensions.Configuration;
 using Olimpo.EntityFramework.Persistency;
 using HushNode.Interfaces;
 using HushNode.Indexing.Interfaces;
+using HushNode.Bank.Storage;
 
-namespace HushNode.InternalModules.Bank;
+namespace HushNode.Bank;
 
 public static class BankHostBuild
 {
-    public static IHostBuilder RegisterInternalModuleBank(this IHostBuilder builder)
+    public static IHostBuilder RegisterCoreModuleBank(this IHostBuilder builder)
     {
         builder.ConfigureServices((hostContext, services) =>
         {

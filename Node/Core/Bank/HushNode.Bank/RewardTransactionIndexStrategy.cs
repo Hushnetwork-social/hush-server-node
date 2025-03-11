@@ -1,9 +1,8 @@
 using HushNode.Blockchain.Model.Transaction;
 using HushNode.Blockchain.Model.Transaction.States;
 using HushNode.Indexing.Interfaces;
-using HushNode.InternalPayloads;
 
-namespace HushNode.InternalModules.Bank;
+namespace HushNode.Bank;
 
 public class RewardTransactionIndexStrategy(IRewardTransactionHandler rewardTransactionHandler) : IIndexStrategy
 {
@@ -15,7 +14,7 @@ public class RewardTransactionIndexStrategy(IRewardTransactionHandler rewardTran
 
     public async Task HandleAsync(AbstractTransaction transaction)
     {
-        await this._rewardTransactionHandler
+        await _rewardTransactionHandler
             .HandleRewardTransactionAsync((ValidatedTransaction<RewardPayload>)transaction);
     }
 }
