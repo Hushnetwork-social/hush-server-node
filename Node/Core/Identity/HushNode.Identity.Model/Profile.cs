@@ -1,4 +1,4 @@
-namespace HushNode.InternalModules.Identity.Model;
+namespace HushNode.Identity.Model;
 
 public record Profile(
     string PublicSigningAddress, 

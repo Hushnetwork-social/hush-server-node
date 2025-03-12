@@ -2,7 +2,7 @@ using Grpc.Core;
 using HushNetwork.proto;
 using HushNode.Interfaces;
 
-namespace HushNode.InternalModules.Identity;
+namespace HushNode.Identity.gRPC;
 
 public class IdentityGrpcServiceDefinition(HushProfile.HushProfileBase identityGrpcService) : IGrpcDefinition
 {
@@ -10,6 +10,6 @@ public class IdentityGrpcServiceDefinition(HushProfile.HushProfileBase identityG
 
     public void AddGrpcService(Server server)
     {
-        server.Services.Add(HushProfile.BindService(this._identityGrpcService));
+        server.Services.Add(HushProfile.BindService(_identityGrpcService));
     }
 }

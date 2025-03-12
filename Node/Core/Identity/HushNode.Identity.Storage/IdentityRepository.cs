@@ -1,4 +1,4 @@
-namespace HushNode.InternalModules.Identity;
+namespace HushNode.Identity.Storage;
 
 public class IdentityRepository : IIdentityRepository
 {

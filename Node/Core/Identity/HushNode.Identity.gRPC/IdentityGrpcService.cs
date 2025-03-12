@@ -1,7 +1,7 @@
 using Grpc.Core;
 using HushNetwork.proto;
 
-namespace HushNode.InternalModules.Identity;
+namespace HushNode.Identity.gRPC;
 
 public class IdentityGrpcService : HushProfile.HushProfileBase
 {

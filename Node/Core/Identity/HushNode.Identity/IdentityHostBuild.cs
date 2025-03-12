@@ -3,10 +3,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Olimpo.EntityFramework.Persistency;
+using HushNode.Identity.Storage;
 using HushNode.Interfaces;
-using HushNetwork.proto;
+using HushNode.Identity.gRPC;
 
-namespace HushNode.InternalModules.Identity;
+namespace HushNode.Identity;
 
 public static class IdentityHostBuild
 {
@@ -32,8 +33,7 @@ public static class IdentityHostBuild
             services.AddTransient<IDbContextConfigurator, IdentityDbContextConfigurator>();
             services.AddTransient<IdentityDbContextConfigurator>();
 
-            services.AddSingleton<IGrpcDefinition, IdentityGrpcServiceDefinition>();
-            services.AddSingleton<HushProfile.HushProfileBase, IdentityGrpcService>();
+            services.RegisterIdentitygRPCServices();
         });
 
         return builder;

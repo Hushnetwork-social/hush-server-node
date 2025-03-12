@@ -6,7 +6,7 @@ using Olimpo;
 using HushNode.Blockchain;
 using HushNode.Credentials;
 using HushNode.Indexing;
-using HushNode.InternalModules.Identity;
+using HushNode.Identity;
 using HushNode.MemPool;
 using HushNode.Bank;
 

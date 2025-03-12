@@ -1,8 +1,8 @@
+using HushNode.Identity.Model;
 using HushNode.Interfaces;
-using HushNode.InternalModules.Identity.Model;
 using Microsoft.EntityFrameworkCore;
 
-namespace HushNode.InternalModules.Identity
+namespace HushNode.Identity.Storage
 {
     public class IdentityDbContextConfigurator : IDbContextConfigurator
     {
