@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option csharp_namespace = "HushNetwork.proto";
+
+package rpcHush;
+
+service HushIdentity {
+    rpc GetIdentity (GetIdentityRequest) returns (GetIdentityReply);
+}
+
+message GetIdentityRequest {
+  string PublicSigningAddress = 1;
+}
+
+message GetIdentityReply {
+  bool Successfull = 1;
+  string Message = 2;
+  string JsonIdentity = 3; 
+}

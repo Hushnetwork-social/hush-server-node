@@ -4,12 +4,12 @@ using HushNode.Interfaces;
 
 namespace HushNode.Identity.gRPC;
 
-public class IdentityGrpcServiceDefinition(HushProfile.HushProfileBase identityGrpcService) : IGrpcDefinition
+public class IdentityGrpcServiceDefinition(HushIdentity.HushIdentityBase identityGrpcService) : IGrpcDefinition
 {
-    private readonly HushProfile.HushProfileBase _identityGrpcService = identityGrpcService;
+    private readonly HushIdentity.HushIdentityBase _identityGrpcService = identityGrpcService;
 
     public void AddGrpcService(Server server)
     {
-        server.Services.Add(HushProfile.BindService(_identityGrpcService));
+        server.Services.Add(HushIdentity.BindService(_identityGrpcService));
     }
 }

@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="..\..\..\..\Protos\hushProfile.proto" GrpcServices="Server" ProtoRoot="..\..\..\..\Protos\" />
+    <Protobuf Include="..\..\..\..\Protos\hushIdentity.proto" GrpcServices="Server" ProtoRoot="..\..\..\..\Protos\" />
   </ItemGroup>
 
 </Project>

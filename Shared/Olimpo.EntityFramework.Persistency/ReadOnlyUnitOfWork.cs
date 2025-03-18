@@ -12,18 +12,18 @@ public sealed class ReadOnlyUnitOfWork<TContext> : IReadOnlyUnitOfWork<TContext>
 
     public ReadOnlyUnitOfWork(IServiceProvider serviceProvider)
     {
-        _serviceScope = serviceProvider.CreateScope();
-        Context = _serviceScope.ServiceProvider.GetRequiredService<TContext>();
+        this._serviceScope = serviceProvider.CreateScope();
+        this.Context = this._serviceScope.ServiceProvider.GetRequiredService<TContext>();
 
         // Configure read-only behavior
-        Context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
-        Context.ChangeTracker.AutoDetectChangesEnabled = false;
+        this.Context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+        this.Context.ChangeTracker.AutoDetectChangesEnabled = false;
     }
 
     public TRepository GetRepository<TRepository>() 
         where TRepository : IRepository
     {
-        var repo = _serviceScope.ServiceProvider.GetRequiredService<TRepository>();
+        var repo = this._serviceScope.ServiceProvider.GetRequiredService<TRepository>();
 
         if (repo is IRepositoryWithContext<TContext> contextAwareRepo)
         {
@@ -35,6 +35,6 @@ public sealed class ReadOnlyUnitOfWork<TContext> : IReadOnlyUnitOfWork<TContext>
 
     public void Dispose()
     {
-        _serviceScope?.Dispose();
+        this._serviceScope?.Dispose();
     }
 }

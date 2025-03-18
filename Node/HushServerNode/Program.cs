@@ -28,6 +28,8 @@ public class Program
             .ConfigureLogging(x => { })
             .ConfigureServices((hostContext, services) => 
             {
+                // services.ConfigureOptions<>
+
                 services.AddSingleton<IBootstrapper, gRPCServerBootstraper>();
 
                 services.AddDbContext<HushNodeDbContext>((provider, options) =>

@@ -4,18 +4,13 @@ using Olimpo;
 
 namespace HushNode.Credentials;
 
-public class CredentialsBoostrapper : IBootstrapper
+public class CredentialsBoostrapper(IOptions<CredentialsProfile> credentials) : IBootstrapper
 {
-    private CredentialsProfile _credentials;
+    private readonly CredentialsProfile _credentials = credentials.Value;
 
     public Subject<bool> BootstrapFinished { get; } = new Subject<bool>();
 
     public int Priority { get; set; } = 5;
-
-    public CredentialsBoostrapper(IOptions<CredentialsProfile> credentials)
-    {
-        this._credentials = credentials.Value;
-    }
 
     public void Shutdown()
     {
