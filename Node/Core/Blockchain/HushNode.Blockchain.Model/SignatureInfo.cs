@@ -1,3 +1,3 @@
-namespace HushNode.Blockchain.Model.Transaction;
+namespace HushNode.Blockchain.Model;
 
 public record SignatureInfo(string Signatory, string Signature);

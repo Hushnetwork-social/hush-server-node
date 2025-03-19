@@ -1,5 +1,5 @@
 ﻿using Olimpo.EntityFramework.Persistency;
-using HushNode.Blockchain.Model;
+using HushNode.Blockchain.Storage.Model;
 
 namespace HushNode.Blockchain.Storage;
 

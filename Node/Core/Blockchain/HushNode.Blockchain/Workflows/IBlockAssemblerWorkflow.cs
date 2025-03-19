@@ -1,5 +1,5 @@
-using HushNode.Blockchain.Model;
 using HushNode.Blockchain.Model.Transaction;
+using HushNode.Blockchain.Storage.Model;
 
 namespace HushNode.Blockchain.Workflows;
 

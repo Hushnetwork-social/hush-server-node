@@ -1,14 +1,40 @@
 using Grpc.Core;
 using HushNetwork.proto;
+using HushNode.Identity.Model;
+using HushNode.Identity.Storage;
+using Microsoft.VisualBasic;
 
 namespace HushNode.Identity.gRPC;
 
-public class IdentityGrpcService : HushIdentity.HushIdentityBase
+public class IdentityGrpcService(IIdentityStorageService identityStorageService) : HushIdentity.HushIdentityBase
 {
-    public override Task<GetIdentityReply> GetIdentity(GetIdentityRequest request, ServerCallContext context)
+    private readonly IIdentityStorageService _identityStorageService = identityStorageService;
+
+    public override async Task<GetIdentityReply> GetIdentity(GetIdentityRequest request, ServerCallContext context)
     {
-        return base.GetIdentity(request, context);
-    }
+        var profileBase = await this._identityStorageService.RetrieveIdentityAsync(request.PublicSigningAddress);
+        
+        var reply = new GetIdentityReply();
+        if (profileBase is NonExistingProfile)
+        {
+            reply.Successfull = false;
+            reply.Message = "Identity not found in the Blockchain";
+        }
+        else
+        {
+            var profile = (Profile)profileBase;
+
+            reply.Successfull = true;
+            reply.Message = string.Empty;
+            reply.PublicSigningAddress = profile.PublicSigningAddress;
+            reply.PublicEncryptAddress = profile.PublicEncryptionKey;
+            reply.ProfileName = profile.Alias;
+            reply.IsPublic = profile.IsPublic;
+
+        }
+
+        return reply;
+     }
 
 
     // public override Task<GetProfileReply> GetProfile(GetProfileRequest request, ServerCallContext context)

@@ -2,8 +2,8 @@ using Microsoft.Extensions.Logging;
 using Olimpo;
 using HushNode.Blockchain.Workflows;
 using HushNode.Events;
-using HushNode.Blockchain.Model;
 using HushNode.Blockchain.Storage;
+using HushNode.Blockchain.Storage.Model;
 
 namespace HushNode.Blockchain.Services;
 

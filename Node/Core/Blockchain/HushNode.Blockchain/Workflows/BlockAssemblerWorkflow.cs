@@ -10,6 +10,7 @@ using HushNode.Blockchain.Storage;
 using HushNode.Credentials;
 using HushNode.Events;
 using HushNode.Interfaces;
+using HushNode.Blockchain.Storage.Model;
 
 namespace HushNode.Blockchain.Workflows;
 

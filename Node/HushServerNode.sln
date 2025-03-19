@@ -61,6 +61,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Identity.Storage",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Identity.gRPC", "Core\Identity\HushNode.Identity.gRPC\HushNode.Identity.gRPC.csproj", "{F0F7E951-C174-4BC3-B554-273F6B4A120F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Blockchain.BlockModel", "Core\Blockchain\HushNode.Blockchain.BlockModel\HushNode.Blockchain.BlockModel.csproj", "{67CAC293-F863-49A4-8476-C9A66767C828}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -163,6 +165,10 @@ Global
 		{F0F7E951-C174-4BC3-B554-273F6B4A120F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F0F7E951-C174-4BC3-B554-273F6B4A120F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F0F7E951-C174-4BC3-B554-273F6B4A120F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{67CAC293-F863-49A4-8476-C9A66767C828}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{67CAC293-F863-49A4-8476-C9A66767C828}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{67CAC293-F863-49A4-8476-C9A66767C828}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{67CAC293-F863-49A4-8476-C9A66767C828}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -188,5 +194,6 @@ Global
 		{D66AF62D-6042-400C-ACD5-E72B7F61AD77} = {CCF002F6-2C70-4CCC-92D9-9ED9F1BAC6F2}
 		{12BCE43D-3627-4D15-8FFA-175D4E695ED8} = {CCF002F6-2C70-4CCC-92D9-9ED9F1BAC6F2}
 		{F0F7E951-C174-4BC3-B554-273F6B4A120F} = {CCF002F6-2C70-4CCC-92D9-9ED9F1BAC6F2}
+		{67CAC293-F863-49A4-8476-C9A66767C828} = {A2B89667-676A-4BD4-A3A9-A17335FC2234}
 	EndGlobalSection
 EndGlobal

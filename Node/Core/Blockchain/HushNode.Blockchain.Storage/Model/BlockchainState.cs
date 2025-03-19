@@ -1,6 +1,6 @@
 using HushNode.Blockchain.Model.Block;
 
-namespace HushNode.Blockchain.Model;
+namespace HushNode.Blockchain.Storage.Model;
 
 public record BlockchainState
 {
