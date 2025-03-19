@@ -1,4 +1,4 @@
-namespace HushNode.Blockchain.Model.Block;
+namespace HushNode.Blockchain.BlockModel;
 
 public static class BlockIndexHandler
 {

@@ -1,7 +1,7 @@
-using HushNode.Blockchain.Model.Transaction;
-using Olimpo;
+using HushShared.Blockchain.Model;
+using HushShared.Blockchain.TransactionModel;
 
-namespace HushNode.Blockchain.Model.Block.States;
+namespace HushNode.Blockchain.BlockModel.States;
 
 public record SignedBlock : UnsignedBlock
 {
@@ -34,13 +34,13 @@ public record SignedBlock : UnsignedBlock
         this.BlockProducerSignature = BlockProducerSignature;
     }
 
-    public bool CheckSignature()
-    {
-        var unsignedBlock = this.ExtractUnsignedBlock();
+    // public bool CheckSignature()
+    // {
+    //     var unsignedBlock = this.ExtractUnsignedBlock();
 
-        return DigitalSignature.VerifySignature(
-            unsignedBlock.ToJson(),
-            BlockProducerSignature.Signature,
-            BlockProducerSignature.Signatory);
-    }
+    //     return DigitalSignature.VerifySignature(
+    //         unsignedBlock.ToJson(),
+    //         BlockProducerSignature.Signature,
+    //         BlockProducerSignature.Signatory);
+    // }
 }

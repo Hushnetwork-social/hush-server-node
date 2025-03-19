@@ -63,6 +63,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Identity.gRPC", "C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Blockchain.BlockModel", "Core\Blockchain\HushNode.Blockchain.BlockModel\HushNode.Blockchain.BlockModel.csproj", "{67CAC293-F863-49A4-8476-C9A66767C828}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushShared.Blockchain.TransactionModel", "..\Shared\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj", "{ECB83BD3-0AD0-40CB-AADF-5CCFBCC8BD12}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushShared.Blockchain.Model", "..\Shared\HushShared.Blockchain.Model\HushShared.Blockchain.Model.csproj", "{03A44639-160B-4259-81F2-F26506D5D1A4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -169,6 +173,14 @@ Global
 		{67CAC293-F863-49A4-8476-C9A66767C828}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{67CAC293-F863-49A4-8476-C9A66767C828}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{67CAC293-F863-49A4-8476-C9A66767C828}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ECB83BD3-0AD0-40CB-AADF-5CCFBCC8BD12}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ECB83BD3-0AD0-40CB-AADF-5CCFBCC8BD12}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ECB83BD3-0AD0-40CB-AADF-5CCFBCC8BD12}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ECB83BD3-0AD0-40CB-AADF-5CCFBCC8BD12}.Release|Any CPU.Build.0 = Release|Any CPU
+		{03A44639-160B-4259-81F2-F26506D5D1A4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{03A44639-160B-4259-81F2-F26506D5D1A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{03A44639-160B-4259-81F2-F26506D5D1A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{03A44639-160B-4259-81F2-F26506D5D1A4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

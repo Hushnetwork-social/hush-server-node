@@ -1,7 +1,8 @@
 using System.Text.Json.Serialization;
-using HushNode.Blockchain.Model.Transaction;
+using HushShared.Blockchain.Model;
+using HushShared.Blockchain.TransactionModel;
 
-namespace HushNode.Blockchain.Model.Block.States;
+namespace HushNode.Blockchain.BlockModel.States;
 
 public record FinalizedBlock : SignedBlock
 {

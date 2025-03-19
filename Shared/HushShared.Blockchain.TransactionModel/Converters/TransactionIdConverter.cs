@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace HushNode.Blockchain.Model.Transaction.Converters;
+namespace HushShared.Blockchain.TransactionModel.Converters;
 
 public class TransactionIdConverter : JsonConverter<TransactionId>
 {

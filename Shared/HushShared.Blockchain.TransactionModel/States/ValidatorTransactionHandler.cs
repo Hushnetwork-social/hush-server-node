@@ -1,4 +1,4 @@
-namespace HushNode.Blockchain.Model.Transaction.States;
+namespace HushShared.Blockchain.TransactionModel.States;
 
 public static class ValidatorTransactionHandler
 {

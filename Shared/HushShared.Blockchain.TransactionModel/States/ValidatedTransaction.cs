@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
+using HushShared.Blockchain.Model;
 
-namespace HushNode.Blockchain.Model.Transaction.States;
+namespace HushShared.Blockchain.TransactionModel.States;
 
 public record ValidatedTransaction<T>: SignedTransaction<T>
     where T: ITransactionPayloadKind
@@ -40,14 +41,14 @@ public record ValidatedTransaction<T>: SignedTransaction<T>
         this.ValidatorSignature = ValidatorSignature;
     }
 
-    public bool IsValidatorSignatureValid() => 
-        this
-            .ExtractSignedTransaction()
-            .CheckValidatorSignature();
+    // public bool IsValidatorSignatureValid() => 
+    //     this
+    //         .ExtractSignedTransaction()
+    //         .CheckValidatorSignature();
 
-    public bool IsUserSignatureValid() => 
-        this
-            .ExtractSignedTransaction()
-            .CheckUserSignature();
+    // public bool IsUserSignatureValid() => 
+    //     this
+    //         .ExtractSignedTransaction()
+    //         .CheckUserSignature();
 
 }

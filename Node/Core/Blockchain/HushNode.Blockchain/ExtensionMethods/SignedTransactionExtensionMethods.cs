@@ -1,6 +1,10 @@
-namespace HushNode.Blockchain.Model.Transaction.States;
+using HushShared.Blockchain.Model;
+using HushShared.Blockchain.TransactionModel;
+using HushShared.Blockchain.TransactionModel.States;
 
-public static class SignedTransactionHandler
+namespace HushNode.Blockchain;
+
+public static class SignedTransactionExtensionMethods
 {
     public static ValidatedTransaction<T> SignByValidator<T>(this SignedTransaction<T> signedTransaction, SignatureInfo validatorSignature)
         where T : ITransactionPayloadKind =>

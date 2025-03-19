@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
-using HushNode.Blockchain.Model.Converters;
+using HushShared.Blockchain.Model.Converters;
 
-namespace HushNode.Blockchain.Model;
+namespace HushShared.Blockchain.Model;
 
 [JsonConverter(typeof(TimestampConverter))]
 public record Timestamp(DateTime Value)

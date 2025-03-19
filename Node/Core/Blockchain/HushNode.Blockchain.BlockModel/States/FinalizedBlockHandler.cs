@@ -1,4 +1,4 @@
-namespace HushNode.Blockchain.Model.Block.States;
+namespace HushNode.Blockchain.BlockModel.States;
 
 public static class FinalizedBlockHandler
 {

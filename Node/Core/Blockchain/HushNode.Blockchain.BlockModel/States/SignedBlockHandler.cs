@@ -1,4 +1,4 @@
-namespace HushNode.Blockchain.Model.Block.States;
+namespace HushNode.Blockchain.BlockModel.States;
 
 public static class SignedBlockHandler
 {
@@ -18,25 +18,25 @@ public static class SignedBlockHandler
             signedBlock.NextBlockId,
             signedBlock.Transactions);
 
-    public static bool IsBlockValid(this FinalizedBlock finalizedBlock) => 
-        finalizedBlock.CheckBlockHashAndSignature() &&
-        finalizedBlock.Transactions
-            .All(transaction => transaction.CheckValidatorSignature() || transaction.CheckUserSignature());
+    // public static bool IsBlockValid(this FinalizedBlock finalizedBlock) => 
+    //     finalizedBlock.CheckBlockHashAndSignature() &&
+    //     finalizedBlock.Transactions
+    //         .All(transaction => transaction.CheckValidatorSignature() || transaction.CheckUserSignature());
 
-    private static bool CheckBlockHashAndSignature(this FinalizedBlock finalizedBlock) =>
-        finalizedBlock.IsBlockHashValid() &&
-        finalizedBlock.IsBlockSignatureValid();
+    // private static bool CheckBlockHashAndSignature(this FinalizedBlock finalizedBlock) =>
+    //     finalizedBlock.IsBlockHashValid() &&
+    //     finalizedBlock.IsBlockSignatureValid();
 
-    public static bool IsBlockHashValid(this FinalizedBlock finalizedBlock)
-    {
-        var (signedBlock, hash) = finalizedBlock.ExtractSignedBlock();
+    // public static bool IsBlockHashValid(this FinalizedBlock finalizedBlock)
+    // {
+    //     var (signedBlock, hash) = finalizedBlock.ExtractSignedBlock();
 
-        return signedBlock.CheckHash(hash);
-    }
+    //     return signedBlock.CheckHash(hash);
+    // }
 
-    public static bool IsBlockSignatureValid(this FinalizedBlock finalizedBlock) => 
-        finalizedBlock.ExtractSignedBlock().Item1.CheckSignature();
+    // public static bool IsBlockSignatureValid(this FinalizedBlock finalizedBlock) => 
+    //     finalizedBlock.ExtractSignedBlock().Item1.CheckSignature();
 
-    public static bool CheckHash(this SignedBlock signedBlock, string hash) => 
-        signedBlock.GetHashCode().ToString() == hash;
+    // public static bool CheckHash(this SignedBlock signedBlock, string hash) => 
+    //     signedBlock.GetHashCode().ToString() == hash;
 }

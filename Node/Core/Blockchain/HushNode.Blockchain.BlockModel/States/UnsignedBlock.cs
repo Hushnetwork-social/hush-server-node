@@ -1,8 +1,8 @@
 using System.Text.Json;
-using Olimpo;
-using HushNode.Blockchain.Model.Transaction;
+using HushShared.Blockchain.Model;
+using HushShared.Blockchain.TransactionModel;
 
-namespace HushNode.Blockchain.Model.Block.States;
+namespace HushNode.Blockchain.BlockModel.States;
 
 public record UnsignedBlock(
     BlockId BlockId,
@@ -14,7 +14,4 @@ public record UnsignedBlock(
 {
     public string ToJson() => 
         JsonSerializer.Serialize(this);
-
-    public string CreateSignature(string privateKey) => 
-        DigitalSignature.SignMessage(ToJson(), privateKey);
 }

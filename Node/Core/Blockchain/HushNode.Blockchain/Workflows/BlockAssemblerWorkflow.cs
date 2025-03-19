@@ -1,16 +1,15 @@
 using Microsoft.Extensions.Logging;
 using Olimpo;
 using HushNode.Bank;
-using HushNode.Blockchain.Model;
-using HushNode.Blockchain.Model.Block;
-using HushNode.Blockchain.Model.Block.States;
-using HushNode.Blockchain.Model.Transaction;
-using HushNode.Blockchain.Model.Transaction.States;
+using HushNode.Blockchain.BlockModel;
+using HushNode.Blockchain.BlockModel.States;
 using HushNode.Blockchain.Storage;
+using HushNode.Blockchain.Storage.Model;
 using HushNode.Credentials;
 using HushNode.Events;
 using HushNode.Interfaces;
-using HushNode.Blockchain.Storage.Model;
+using HushShared.Blockchain.TransactionModel;
+using HushShared.Blockchain.Model;
 
 namespace HushNode.Blockchain.Workflows;
 

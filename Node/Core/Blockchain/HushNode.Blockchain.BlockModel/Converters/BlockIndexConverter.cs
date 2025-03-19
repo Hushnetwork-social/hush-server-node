@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace HushNode.Blockchain.Model.Block.Converters;
+namespace HushNode.Blockchain.BlockModel.Converters;
 
 public class BlockIndexConverter : JsonConverter<BlockIndex>
 {

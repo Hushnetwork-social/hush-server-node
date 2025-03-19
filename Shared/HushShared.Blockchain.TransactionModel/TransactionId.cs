@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
-using HushNode.Blockchain.Model.Transaction.Converters;
+using HushShared.Blockchain.TransactionModel.Converters;
 
-namespace HushNode.Blockchain.Model.Transaction;
+namespace HushShared.Blockchain.TransactionModel;
 
 [JsonConverter(typeof(TransactionIdConverter))]
 public readonly record struct  TransactionId(Guid Value)

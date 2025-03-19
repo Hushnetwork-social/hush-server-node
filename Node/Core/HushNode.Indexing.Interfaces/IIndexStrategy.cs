@@ -1,4 +1,4 @@
-using HushNode.Blockchain.Model.Transaction;
+using HushShared.Blockchain.TransactionModel;
 
 namespace HushNode.Indexing.Interfaces;
 

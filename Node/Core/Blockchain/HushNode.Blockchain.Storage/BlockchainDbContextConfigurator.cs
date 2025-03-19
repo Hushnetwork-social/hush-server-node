@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using HushNode.Interfaces;
-using HushNode.Blockchain.Model.Block;
 using HushNode.Blockchain.Storage.Model;
+using HushNode.Blockchain.BlockModel;
 
 namespace HushNode.Blockchain.Storage;
 

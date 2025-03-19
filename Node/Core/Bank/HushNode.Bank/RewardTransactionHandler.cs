@@ -1,7 +1,7 @@
 using HushNode.Bank.Model;
 using HushNode.Bank.Storage;
-using HushNode.Blockchain.Model.Transaction.States;
 using HushNode.Interfaces;
+using HushShared.Blockchain.TransactionModel.States;
 using Microsoft.Extensions.Logging;
 using Olimpo.EntityFramework.Persistency;
 

@@ -1,7 +1,7 @@
 using System.Text.Json;
-using Olimpo;
+using HushShared.Blockchain.Model;
 
-namespace HushNode.Blockchain.Model.Transaction.States;
+namespace HushShared.Blockchain.TransactionModel.States;
 
 public record UnsignedTransaction<T> : AbstractTransaction
     where T: ITransactionPayloadKind
@@ -25,19 +25,19 @@ public record UnsignedTransaction<T> : AbstractTransaction
         PayloadSize = payloadSize;
     }
 
-    public override bool CheckUserSignature()
-    {
-        return true;
-    }
+    // public override bool CheckUserSignature()
+    // {
+    //     return true;
+    // }
 
-    public override bool CheckValidatorSignature()
-    {
-        return true;
-    }
+    // public override bool CheckValidatorSignature()
+    // {
+    //     return true;
+    // }
 
     public override string ToJson() => 
         JsonSerializer.Serialize(this);
 
-    public override string CreateSignature(string privateKey) => 
-        DigitalSignature.SignMessage(ToJson(), privateKey);
+    // public override string CreateSignature(string privateKey) => 
+    //     DigitalSignature.SignMessage(ToJson(), privateKey);
 }

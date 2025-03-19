@@ -1,6 +1,7 @@
 using System.Text.Json;
+using HushShared.Blockchain.Model;
 
-namespace HushNode.Blockchain.Model.Transaction.States;
+namespace HushShared.Blockchain.TransactionModel.States;
 
 public record SignedTransaction<T>: UnsignedTransaction<T>
     where T: ITransactionPayloadKind

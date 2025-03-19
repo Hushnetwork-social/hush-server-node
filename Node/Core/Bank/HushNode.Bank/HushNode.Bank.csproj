@@ -6,6 +6,7 @@
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
     <ProjectReference Include="..\HushNode.Bank.Model\HushNode.Bank.Model.csproj" />
     <ProjectReference Include="..\HushNode.Bank.Storage\HushNode.Bank.Storage.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
   </ItemGroup>
 
   <ItemGroup>

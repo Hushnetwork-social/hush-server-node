@@ -1,6 +1,6 @@
-using HushNode.Blockchain.Model.Transaction;
-using HushNode.Blockchain.Model.Transaction.States;
 using HushNode.Indexing.Interfaces;
+using HushShared.Blockchain.TransactionModel;
+using HushShared.Blockchain.TransactionModel.States;
 
 namespace HushNode.Bank;
 

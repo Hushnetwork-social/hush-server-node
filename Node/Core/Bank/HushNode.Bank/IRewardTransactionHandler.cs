@@ -1,4 +1,4 @@
-using HushNode.Blockchain.Model.Transaction.States;
+using HushShared.Blockchain.TransactionModel.States;
 
 namespace HushNode.Bank;
 

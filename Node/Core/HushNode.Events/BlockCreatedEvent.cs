@@ -1,4 +1,4 @@
-using HushNode.Blockchain.Model.Block.States;
+using HushNode.Blockchain.BlockModel.States;
 
 namespace HushNode.Events;
 
