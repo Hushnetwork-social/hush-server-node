@@ -6,6 +6,7 @@ using Olimpo.EntityFramework.Persistency;
 using HushNode.Interfaces;
 using HushNode.Indexing.Interfaces;
 using HushNode.Bank.Storage;
+using HushShared.Blockchain.TransactionModel;
 
 namespace HushNode.Bank;
 
@@ -32,6 +33,8 @@ public static class BankHostBuild
 
             services.AddTransient<IDbContextConfigurator, BankDbContextConfigurator>();
             services.AddTransient<BankDbContextConfigurator>();
+
+            services.AddTransient<ITransactionDeserializerStrategy, RewardTransactionDeserializerStrategy>();
         });
 
         return builder;

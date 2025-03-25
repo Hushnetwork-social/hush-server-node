@@ -1,0 +1,23 @@
+namespace HushShared.Blockchain.TransactionModel;
+
+public class TransactionDeserializerHandler
+{
+    private static TransactionDeserializerHandler _instance;
+
+    public readonly IEnumerable<ITransactionDeserializerStrategy> SpecificDeserializers = [];
+
+    public static TransactionDeserializerHandler Instance 
+    { 
+        get
+        {
+            return _instance;
+        }
+    }
+
+    public TransactionDeserializerHandler(IEnumerable<ITransactionDeserializerStrategy> specificDeserializers)
+    {
+        this.SpecificDeserializers = specificDeserializers;
+
+        _instance = this;
+    }
+}

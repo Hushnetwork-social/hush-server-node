@@ -2,6 +2,7 @@ using HushNode.Blockchain.gRPC;
 using HushNode.Blockchain.Services;
 using HushNode.Blockchain.Storage;
 using HushNode.Blockchain.Workflows;
+using HushShared.Blockchain.TransactionModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Olimpo;
@@ -23,6 +24,7 @@ public static class HushNodeBlockchainHostBuild
             services.RegisterBlockchainStorageServices(hostContext);
             services.RegisterBlockchaingRPCServices();
 
+            services.AddSingleton<TransactionDeserializerHandler>();
 
             // builder.RegisterBlockchainStorage();
             // builder.RegisterHushNodeBlockchaingRPC();

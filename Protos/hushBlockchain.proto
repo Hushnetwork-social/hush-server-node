@@ -6,6 +6,7 @@ package rpcHush;
 
 service HushBlockchain {
   rpc GetBlockchainHeight (GetBlockchainHeightRequest) returns (GetBlockchainHeightReply);
+  rpc SubmitSignedTransaction(SubmitSignedTransactionRequest) returns (SubmitSignedTransactionReply);
 }
 
 // The request message for the blockchain height.
@@ -14,4 +15,13 @@ message GetBlockchainHeightRequest { }
 // The response message containing the last BlockIndex.
 message GetBlockchainHeightReply {
   int64 Index = 1;
+}
+
+message SubmitSignedTransactionRequest {
+  string SignedTransaction = 1;
+}
+
+message SubmitSignedTransactionReply {
+  bool Successfull = 1;
+  string Message = 2;
 }

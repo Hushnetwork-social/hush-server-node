@@ -10,6 +10,7 @@ using HushNode.Events;
 using HushNode.Interfaces;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.Model;
+using System.Text.Json;
 
 namespace HushNode.Blockchain.Workflows;
 

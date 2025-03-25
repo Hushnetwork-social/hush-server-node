@@ -1,3 +1,4 @@
+using HushShared.Blockchain.TransactionModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Olimpo;
@@ -13,6 +14,8 @@ public static class MemPollHostBuild
             services.AddSingleton<IBootstrapper, MemPoolBoopstrapper>();
 
             services.AddSingleton<IMemPoolService, MemPoolService>();
+
+            services.AddSingleton<TransactionDeserializerHandler>();
         });
 
         return builder;

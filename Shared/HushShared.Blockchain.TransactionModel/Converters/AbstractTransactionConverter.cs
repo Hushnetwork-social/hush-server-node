@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using HushShared.Blockchain.TransactionModel.States;
 
 namespace HushShared.Blockchain.TransactionModel.Converters;
 
@@ -12,16 +13,22 @@ public class AbstractTransactionConverter : JsonConverter<AbstractTransaction>
         var payloadKindElement = jsonDocument.RootElement;
         var payloadKind = payloadKindElement.GetProperty("PayloadKind").GetString();
 
-        // TODO [AboimPinto]: Use the strategy pattern to deserialize each payload kind
+        payloadKindElement.TryGetProperty("ValidatorSignature", out var validatedSignature);
 
-        // if (payloadKind == RewardPayloadHandler.RewardPayloadKind.ToString())
-        // {
-        //     return JsonSerializer.Deserialize<ValidatedTransaction<RewardPayload>>(jsonDocument.RootElement.GetRawText());
-        // }
-        // else if (payloadKind == EmptyPayloadHandler.EmptyPayloadKind.ToString())
-        // {
-        //     return JsonSerializer.Deserialize<ValidatedTransaction<EmptyPayload>>(jsonDocument.RootElement.GetRawText());
-        // }
+        foreach (var item in TransactionDeserializerHandler.Instance.SpecificDeserializers)
+        {
+            if (item.CanDeserialize(payloadKind))
+            {
+                if (validatedSignature.ValueKind == JsonValueKind.Undefined)
+                {
+                    return item.DeserializeSignedTransaction(jsonDocument.RootElement.GetRawText());
+                }
+                else
+                {
+                    return item.DeserializeValidatedTransaction(jsonDocument.RootElement.GetRawText());
+                }
+            }
+        }
 
         throw new InvalidOperationException();
     }
