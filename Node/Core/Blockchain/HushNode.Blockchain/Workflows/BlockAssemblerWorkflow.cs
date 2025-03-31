@@ -8,9 +8,9 @@ using HushNode.Blockchain.Storage.Model;
 using HushNode.Credentials;
 using HushNode.Events;
 using HushNode.Interfaces;
+using HushShared.Blockchain;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.Model;
-using System.Text.Json;
 
 namespace HushNode.Blockchain.Workflows;
 
@@ -53,7 +53,7 @@ public class BlockAssemblerWorkflow(
 
     public async Task AssembleBlockAsync(
         BlockchainState blockchainState,
-        IReadOnlyList<AbstractTransaction> transactions)
+        IEnumerable<AbstractTransaction> transactions)
     {
         var newBlockchainState = new BlockchainState(
             blockchainState.BlockchainStateId,

@@ -9,5 +9,5 @@ public interface IBlockAssemblerWorkflow
 
     Task AssembleBlockAsync(
         BlockchainState blockchainState,
-        IReadOnlyList<AbstractTransaction> transactions);
+        IEnumerable<AbstractTransaction> transactions);
 }

@@ -58,7 +58,7 @@ public class BlockProductionSchedulerService :
 
                 var blockchainState = await this._blockchainStorageService.RetrieveCurrentBlockchainStateAsync();
 
-                var pendingTransactions = await this._memPool.GetPendingValidatedTransactionsAsync();
+                var pendingTransactions = this._memPool.GetPendingValidatedTransactionsAsync();
 
                 await this._blockAssemblerWorkflow.AssembleBlockAsync(blockchainState, pendingTransactions);
             }

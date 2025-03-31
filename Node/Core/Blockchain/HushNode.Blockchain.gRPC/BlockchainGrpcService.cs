@@ -1,7 +1,9 @@
+using System.Reflection.Metadata;
 using System.Text.Json;
 using Grpc.Core;
 using HushNetwork.proto;
 using HushNode.Blockchain.Storage;
+using HushNode.Credentials;
 using HushNode.MemPool;
 using HushShared.Blockchain.TransactionModel;
 
@@ -9,9 +11,11 @@ namespace HushNode.Blockchain.gRPC;
 
 public class BlockchainGrpcService(
     IBlockchainStorageService blockchainStorageService,
+    IEnumerable<ITransactionContentHandler> transactionContentHandlers,
     IMemPoolService memPoolService) : HushBlockchain.HushBlockchainBase
 {
     private readonly IBlockchainStorageService _blockchainStorageService = blockchainStorageService;
+    private readonly IEnumerable<ITransactionContentHandler> _transactionContentHandlers = transactionContentHandlers;
     private readonly IMemPoolService _memPoolService = memPoolService;
 
     public override async Task<GetBlockchainHeightReply> GetBlockchainHeight(
@@ -26,12 +30,51 @@ public class BlockchainGrpcService(
         };
     }
 
-    public override Task<SubmitSignedTransactionReply> SubmitSignedTransaction(
+    public override async Task<SubmitSignedTransactionReply> SubmitSignedTransaction(
         SubmitSignedTransactionRequest request, 
         ServerCallContext context)
     {
-        var abstractTransaction = JsonSerializer.Deserialize<AbstractTransaction>(request.SignedTransaction);
+        var message = string.Empty;
+        var successful = false;
+
+        var transaction = JsonSerializer.Deserialize<AbstractTransaction>(request.SignedTransaction) 
+            ?? throw new InvalidDataException("Transaction invalid or without handler");
         
-        return base.SubmitSignedTransaction(request, context);
+        if (this.ValidateUserSignature(transaction))
+        {
+            foreach (var item in this._transactionContentHandlers)
+            {
+                if (item.CanValidate(transaction.PayloadKind))
+                {
+                    var transactionSignedByValidator = item.ValidateAndSign(transaction);
+
+                    if (transactionSignedByValidator == null)
+                    {
+                        successful = false;
+                        message = "Transaction is invalid and was not added to the MemPool";
+                    }
+                    else
+                    {
+                        // add the transaction to the MemPool 
+                        this._memPoolService.AddVerifiedTransactionAsync(transactionSignedByValidator);
+                    }
+                    
+                    successful = true;
+                    message = "Transaction validated and added to MemPool";
+                    break;
+                }
+            }
+        }
+
+        return new SubmitSignedTransactionReply 
+        {
+            Successfull = successful,
+            Message = message
+        };
+    }
+
+    private bool ValidateUserSignature(AbstractTransaction transaction)
+    {
+        return true;
     }
 }

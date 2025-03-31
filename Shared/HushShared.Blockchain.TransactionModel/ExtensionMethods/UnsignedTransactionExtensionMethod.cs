@@ -3,7 +3,7 @@ using HushShared.Blockchain.Model;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
 
-namespace HushNode.Blockchain;
+namespace HushShared.Blockchain;
 
 public static class UnsignedTransactionExtensionMethod
 {

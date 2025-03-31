@@ -1,22 +1,28 @@
+using System.Collections.Concurrent;
 using HushShared.Blockchain.TransactionModel;
-using HushShared.Blockchain.TransactionModel.States;
 
 namespace HushNode.MemPool;
 
 public class MemPoolService : IMemPoolService
 {
-    public Task AddVerifiedTransactionAsync<T>(ValidatedTransaction<T> validatedTransaction) where T : ITransactionPayloadKind
+    private ConcurrentBag<AbstractTransaction> _nextBlockTransactionsCandidate;
+
+    public MemPoolService()
     {
-        return Task.CompletedTask;
+        this._nextBlockTransactionsCandidate = [];
     }
 
-    public Task<IReadOnlyList<AbstractTransaction>> GetPendingValidatedTransactionsAsync() => 
-            Task.FromResult((IReadOnlyList<AbstractTransaction>)new List<AbstractTransaction>().AsReadOnly());
+    public IEnumerable<AbstractTransaction> GetPendingValidatedTransactionsAsync() => 
+        this._nextBlockTransactionsCandidate.TakeAndRemove(1000);
+
+    public void AddVerifiedTransactionAsync(AbstractTransaction validatedTransaction) => 
+        this._nextBlockTransactionsCandidate.Add(validatedTransaction);
+    
 
     public Task InitializeMemPoolAsync()
     {
         // TODO [AboimPinto]: In case of beeing part of an established network, 
-        //                    the mempool should be initialized with the pendiging transactions from the other nodes.
+        //                    the mempool should be initialized with the pending transactions from the other nodes.
         return Task.CompletedTask;
     }
 }

@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 
-namespace HushServerNode.InternalModule.MemPool;
+namespace HushNode.MemPool;
 
 public static class ListExtensions
 {

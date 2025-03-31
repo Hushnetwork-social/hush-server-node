@@ -1,14 +1,12 @@
 using HushShared.Blockchain.TransactionModel;
-using HushShared.Blockchain.TransactionModel.States;
 
 namespace HushNode.MemPool;
 
 public interface IMemPoolService
 {
     Task InitializeMemPoolAsync();
+    
+    void AddVerifiedTransactionAsync(AbstractTransaction validatedTransaction);
 
-    Task AddVerifiedTransactionAsync<T>(ValidatedTransaction<T> validatedTransaction) 
-        where T : ITransactionPayloadKind;
-
-    Task<IReadOnlyList<AbstractTransaction>> GetPendingValidatedTransactionsAsync();
+    IEnumerable<AbstractTransaction> GetPendingValidatedTransactionsAsync();
 }
