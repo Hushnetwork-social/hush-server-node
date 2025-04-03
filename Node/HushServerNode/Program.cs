@@ -44,8 +44,6 @@ public class Program
             .RegisterBootstrapperManager()
             .RegisterEventAggregatorManager()
             .RegisterHushCredentials()
-            // .RegisterInMemoryPersistency()
-            // .RegisterPostgresPersistency()
             .RegisterCoreModuleBlockchain()
             .RegisterCoreModuleBank()
             .RegisterHushNodeIndexing()

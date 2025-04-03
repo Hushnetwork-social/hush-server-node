@@ -1,4 +1,4 @@
-using HushNode.Identity.Model;
+using HushShared.Identity.Model;
 using Microsoft.EntityFrameworkCore;
 
 namespace HushNode.Identity.Storage
@@ -13,7 +13,7 @@ namespace HushNode.Identity.Storage
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            _identityDbContextConfigurator.Configure(modelBuilder);
+            this._identityDbContextConfigurator.Configure(modelBuilder);
         }
     }
 }

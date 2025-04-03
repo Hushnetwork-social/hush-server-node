@@ -1,8 +1,7 @@
 using Grpc.Core;
 using HushNetwork.proto;
-using HushNode.Identity.Model;
 using HushNode.Identity.Storage;
-using Microsoft.VisualBasic;
+using HushShared.Identity.Model;
 
 namespace HushNode.Identity.gRPC;
 
@@ -27,10 +26,9 @@ public class IdentityGrpcService(IIdentityStorageService identityStorageService)
             reply.Successfull = true;
             reply.Message = string.Empty;
             reply.PublicSigningAddress = profile.PublicSigningAddress;
-            reply.PublicEncryptAddress = profile.PublicEncryptionKey;
+            reply.PublicEncryptAddress = profile.PublicEncryptAddress;
             reply.ProfileName = profile.Alias;
             reply.IsPublic = profile.IsPublic;
-
         }
 
         return reply;

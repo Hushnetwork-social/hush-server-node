@@ -1,4 +1,4 @@
-using HushNode.Identity.Model;
+using HushShared.Identity.Model;
 
 namespace HushNode.Identity.Storage;
 

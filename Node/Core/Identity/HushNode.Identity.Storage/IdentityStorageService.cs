@@ -1,4 +1,4 @@
-using HushNode.Identity.Model;
+using HushShared.Identity.Model;
 using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Identity.Storage;

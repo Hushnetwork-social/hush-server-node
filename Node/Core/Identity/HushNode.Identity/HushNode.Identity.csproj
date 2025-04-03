@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <!-- <ProjectReference Include="..\HushNode.Identity.Model\HushNode.Identity.Model.csproj" /> -->
     <ProjectReference Include="..\HushNode.Identity.Storage\HushNode.Identity.Storage.csproj" />
     <ProjectReference Include="..\HushNode.Identity.gRPC\HushNode.Identity.gRPC.csproj" />
     <ProjectReference Include="..\HushNode.Indexing.Interfaces\HushNode.Indexing.Interfaces.csproj" />

@@ -1,6 +1,6 @@
-using HushNode.Identity.Model;
-using HushNode.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using HushNode.Interfaces;
+using HushShared.Identity.Model;
 
 namespace HushNode.Identity.Storage
 {
