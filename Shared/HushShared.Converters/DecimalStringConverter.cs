@@ -1,4 +1,4 @@
-namespace HushNode.Interfaces;
+namespace HushShared.Converters;
 
 public static class DecimalStringConverter
 {

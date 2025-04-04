@@ -1,0 +1,19 @@
+<Project>
+    <PropertyGroup>
+        <ManagePackageVersionCentrally>True</ManagePackageVersionCentrally>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- 
+        <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
+        <PackageVersion Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.2" />
+        <PackageVersion Include="Microsoft.Extensions.logging.Abstractions" Version="9.0.2" />
+
+        <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="9.0.2" />
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.2" />
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.2" /> 
+         -->
+         
+        <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.3" /> 
+    </ItemGroup>
+</Project> 

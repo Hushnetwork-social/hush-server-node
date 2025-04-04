@@ -1,4 +1,4 @@
-using HushNode.Interfaces;
+using HushShared.Converters;
 
 namespace HushNode.Bank.Model;
 
