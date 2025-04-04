@@ -1,8 +1,0 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
-  <ItemGroup>
-    <ProjectReference Include="..\Blockchain\HushNode.Blockchain.Model\HushNode.Blockchain.Model.csproj" />
-    <ProjectReference Include="..\..\..\Shared\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
-  </ItemGroup>
-
-</Project>

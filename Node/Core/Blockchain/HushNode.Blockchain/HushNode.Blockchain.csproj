@@ -6,11 +6,11 @@
     <ProjectReference Include="..\HushNode.Blockchain.gRPC\HushNode.Blockchain.gRPC.csproj" />
     <ProjectReference Include="..\..\HushNode.MemPool\HushNode.MemPool.csproj" />
     <ProjectReference Include="..\..\HushNode.Events\HushNode.Events.csproj" />
+    <ProjectReference Include="..\..\Bank\HushNode.Bank\HushNode.Bank.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />
-    <ProjectReference Include="..\..\Bank\HushNode.Bank\HushNode.Bank.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
   </ItemGroup>
 
