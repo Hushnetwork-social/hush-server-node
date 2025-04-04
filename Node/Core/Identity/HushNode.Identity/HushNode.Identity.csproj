@@ -3,13 +3,12 @@
   <ItemGroup>
     <ProjectReference Include="..\HushNode.Identity.Storage\HushNode.Identity.Storage.csproj" />
     <ProjectReference Include="..\HushNode.Identity.gRPC\HushNode.Identity.gRPC.csproj" />
-    <ProjectReference Include="..\HushNode.Indexing.Interfaces\HushNode.Indexing.Interfaces.csproj" />
+    <ProjectReference Include="..\..\Blockchain\HushNode.Blockchain\HushNode.Blockchain.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Identity.Model\HushShared.Identity.Model.csproj" />
-    <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
-    <ProjectReference Include="..\..\Blockchain\HushNode.Blockchain\HushNode.Blockchain.csproj" />
   </ItemGroup>
 
   <ItemGroup>

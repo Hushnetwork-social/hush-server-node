@@ -20,7 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HushNode.Blockchain.Storage\HushNode.Blockchain.Storage.csproj" />
-    <ProjectReference Include="..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
+    <!-- <ProjectReference Include="..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" /> -->
     <ProjectReference Include="..\..\HushNode.MemPool\HushNode.MemPool.csproj" />
   </ItemGroup>
 
