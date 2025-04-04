@@ -1,10 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="Google.Protobuf" Version="*" />
-    <PackageReference Include="Grpc" Version="*" />
-    <PackageReference Include="Grpc.Core" Version="*" />
-    <PackageReference Include="Grpc.Tools" Version="*">
+    <PackageReference Include="Google.Protobuf" Version="3.26.0" />
+    <PackageReference Include="Grpc" Version="2.46.6" />
+    <PackageReference Include="Grpc.Core" Version="2.46.6" />
+    <PackageReference Include="Grpc.Tools" Version="2.62.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -20,7 +20,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HushNode.Blockchain.Storage\HushNode.Blockchain.Storage.csproj" />
-    <!-- <ProjectReference Include="..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" /> -->
     <ProjectReference Include="..\..\HushNode.MemPool\HushNode.MemPool.csproj" />
   </ItemGroup>
 

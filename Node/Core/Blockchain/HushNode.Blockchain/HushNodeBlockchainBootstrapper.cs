@@ -1,8 +1,8 @@
 using System.Reactive.Subjects;
+using Olimpo;
+using HushShared.Blockchain.TransactionModel;
 using HushNode.Blockchain.Services;
 using HushNode.Blockchain.Workflows;
-using HushShared.Blockchain.TransactionModel;
-using Olimpo;
 
 namespace HushNode.Blockchain;
 

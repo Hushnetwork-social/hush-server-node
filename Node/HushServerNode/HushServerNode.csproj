@@ -13,14 +13,6 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
 
-    <PackageReference Include="Google.Protobuf" Version="*" />
-    <PackageReference Include="Grpc" Version="*" />
-    <PackageReference Include="Grpc.Core" Version="*" />
-    <PackageReference Include="Grpc.Tools" Version="*">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.2" />
     <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="9.0.2" />
@@ -31,17 +23,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
-    <ProjectReference Include="..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
     <ProjectReference Include="..\Core\Blockchain\HushNode.Blockchain\HushNode.Blockchain.csproj" />
     <ProjectReference Include="..\Core\HushNode.MemPool\HushNode.MemPool.csproj" />
     <ProjectReference Include="..\Core\Indexing\HushNode.Indexing\HushNode.Indexing.csproj" />
     <ProjectReference Include="..\Core\Identity\HushNode.Identity\HushNode.Identity.csproj" />
-    <!-- <ProjectReference Include="..\Core\Blockchain\HushNode.Blockchain.gRPC\HushNode.Blockchain.gRPC.csproj" /> -->
-    <!-- <ProjectReference Include="..\Infrastructure\Persistency\HushNode.Blockchain.Persistency.EntityFramework\HushNode.Blockchain.Persistency.EntityFramework.csproj" /> -->
-    <!-- <ProjectReference Include="..\Infrastructure\Persistency\HushNode.Blockchain.Persistency.InMemory\HushNode.Blockchain.Persistency.InMemory.csproj" /> -->
-
-    <!-- <ProjectReference Include="..\InternalModules\HushNode.InternalModules.Identity\HushNode.InternalModules.Identity.csproj" /> -->
+    <ProjectReference Include="..\Core\Feeds\HushNode.Feeds\HushNode.Feeds.csproj" />
+    <ProjectReference Include="..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
+    <ProjectReference Include="..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
   </ItemGroup>
 
 </Project>

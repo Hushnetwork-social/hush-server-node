@@ -9,6 +9,7 @@ using HushNode.Indexing;
 using HushNode.Identity;
 using HushNode.MemPool;
 using HushNode.Bank;
+using HushNode.Feeds;
 
 namespace HushServerNode;
 
@@ -46,6 +47,7 @@ public class Program
             .RegisterHushCredentials()
             .RegisterCoreModuleBlockchain()
             .RegisterCoreModuleBank()
+            .RegisterCoreModuleFeeds()
             .RegisterHushNodeIndexing()
             .RegisterHushNodeMemPool()
             .RegisterInternalModuleIdentity();
