@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Olimpo;
 using HushNode.Identity.Storage;
 using HushNode.Identity.gRPC;
 using HushNode.Indexing.Interfaces;
@@ -13,6 +14,10 @@ public static class IdentityHostBuild
     {
         builder.ConfigureServices((hostContext, services) =>
         {
+            services.AddSingleton<IBootstrapper, IdentityBootstrapper>();
+
+            services.AddScoped<IIdentityInitializationWorkflow, IdentityInitializationWorkflow>();
+
             services.AddTransient<ITransactionDeserializerStrategy, FullIdentityDeserializerStrategy>();
             services.AddTransient<ITransactionContentHandler, FullIdentityContentHandler>();
             services.AddTransient<IIndexStrategy, FullIdentityIndexStrategy>();

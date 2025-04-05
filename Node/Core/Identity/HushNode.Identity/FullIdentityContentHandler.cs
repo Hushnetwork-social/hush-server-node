@@ -1,5 +1,4 @@
 using HushNode.Credentials;
-using HushNode.Blockchain;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Identity.Model;
