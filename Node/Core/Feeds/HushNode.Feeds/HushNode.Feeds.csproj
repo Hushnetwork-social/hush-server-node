@@ -2,6 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
   </ItemGroup>
 
   <ItemGroup>

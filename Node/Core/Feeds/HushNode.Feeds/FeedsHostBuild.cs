@@ -13,6 +13,8 @@ public static class FeedsHostBuild
         {
             services.AddSingleton<IBootstrapper, FeedsBootstrapper>();
 
+            services.AddSingleton<IFeedsInitializationWorkflow, FeedsInitializationWorkflow>();
+
             services.RegisterFeedsStorageServices(hostContext);
         });
 
