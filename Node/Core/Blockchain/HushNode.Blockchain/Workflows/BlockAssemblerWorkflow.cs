@@ -11,6 +11,7 @@ using HushShared.Blockchain;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.Model;
 using HushShared.Converters;
+using HushShared.Blockchain.BlockModel;
 
 namespace HushNode.Blockchain.Workflows;
 

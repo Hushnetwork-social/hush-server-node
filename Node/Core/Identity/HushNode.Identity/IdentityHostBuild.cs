@@ -16,13 +16,13 @@ public static class IdentityHostBuild
         {
             services.AddSingleton<IBootstrapper, IdentityBootstrapper>();
 
-            services.AddScoped<IIdentityInitializationWorkflow, IdentityInitializationWorkflow>();
+            services.AddSingleton<IIdentityInitializationWorkflow, IdentityInitializationWorkflow>();
 
             services.AddTransient<ITransactionDeserializerStrategy, FullIdentityDeserializerStrategy>();
             services.AddTransient<ITransactionContentHandler, FullIdentityContentHandler>();
             services.AddTransient<IIndexStrategy, FullIdentityIndexStrategy>();
 
-            services.AddScoped<IFullIdentityTransactionHandler, FullIdentityTransactionHandler>();
+            services.AddSingleton<IFullIdentityTransactionHandler, FullIdentityTransactionHandler>();
 
             services.RegisterIdentitygRPCServices();
             services.RegisterIdentityStorageServices(hostContext);

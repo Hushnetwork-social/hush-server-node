@@ -1,3 +1,4 @@
+using HushShared.Blockchain.BlockModel;
 using HushShared.Blockchain.Model;
 using HushShared.Blockchain.TransactionModel;
 

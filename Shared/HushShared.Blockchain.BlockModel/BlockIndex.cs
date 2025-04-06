@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
-using HushNode.Blockchain.BlockModel.Converters;
+using HushShared.Blockchain.BlockModel.Converters;
 
-namespace HushNode.Blockchain.BlockModel;
+namespace HushShared.Blockchain.BlockModel;
 
 [JsonConverter(typeof(BlockIndexConverter))]
 public record BlockIndex(long Value)

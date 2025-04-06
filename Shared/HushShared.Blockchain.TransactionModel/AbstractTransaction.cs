@@ -10,13 +10,5 @@ public abstract record AbstractTransaction(
     Guid PayloadKind, 
     Timestamp TransactionTimeStamp)
 {
-
-    // public abstract bool CheckValidatorSignature();
-
-    // public abstract bool CheckUserSignature();
-
     public abstract string ToJson();
-
-    // public abstract string CreateSignature(string privateKey);
-
 }

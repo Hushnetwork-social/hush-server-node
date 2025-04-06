@@ -1,4 +1,5 @@
 using HushNode.Blockchain.BlockModel;
+using HushShared.Blockchain.BlockModel;
 
 namespace HushNode.Blockchain.Storage.Model;
 

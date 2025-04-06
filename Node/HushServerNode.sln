@@ -81,6 +81,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushShared.Feeds.Model", ".
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushShared.Converters", "..\Shared\HushShared.Converters\HushShared.Converters.csproj", "{9ABAFCEB-8F3B-4A88-8F0E-1B7D584E520F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushShared.Blockchain.BlockModel", "..\Shared\HushShared.Blockchain.BlockModel\HushShared.Blockchain.BlockModel.csproj", "{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -475,6 +477,18 @@ Global
 		{9ABAFCEB-8F3B-4A88-8F0E-1B7D584E520F}.Release|x64.Build.0 = Release|Any CPU
 		{9ABAFCEB-8F3B-4A88-8F0E-1B7D584E520F}.Release|x86.ActiveCfg = Release|Any CPU
 		{9ABAFCEB-8F3B-4A88-8F0E-1B7D584E520F}.Release|x86.Build.0 = Release|Any CPU
+		{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}.Debug|x64.Build.0 = Debug|Any CPU
+		{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}.Debug|x86.Build.0 = Debug|Any CPU
+		{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}.Release|x64.ActiveCfg = Release|Any CPU
+		{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}.Release|x64.Build.0 = Release|Any CPU
+		{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}.Release|x86.ActiveCfg = Release|Any CPU
+		{1B7EF9C6-6CF2-4444-9C72-FE9D4E57B73A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

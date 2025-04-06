@@ -20,7 +20,7 @@ public static class StorageHostBuild
 
         services.AddTransient<IUnitOfWorkProvider<IdentityDbContext>, UnitOfWorkProvider<IdentityDbContext>>();
 
-        services.AddScoped<IIdentityStorageService, IdentityStorageService>();
+        services.AddSingleton<IIdentityStorageService, IdentityStorageService>();
         services.AddTransient<IIdentityRepository, IdentityRepository>();
 
         services.AddTransient<IDbContextConfigurator, IdentityDbContextConfigurator>();
