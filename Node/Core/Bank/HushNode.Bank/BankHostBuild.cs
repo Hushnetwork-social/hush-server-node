@@ -30,6 +30,7 @@ public static class BankHostBuild
             services.AddTransient<IUnitOfWorkProvider<BankDbContext>, UnitOfWorkProvider<BankDbContext>>();
 
             services.AddTransient<IBalanceRepository, BalanceRepository>();
+            services.AddTransient<IBankStorageService, BankStorageService>();
 
             services.AddTransient<IDbContextConfigurator, BankDbContextConfigurator>();
             services.AddTransient<BankDbContextConfigurator>();
