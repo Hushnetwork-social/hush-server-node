@@ -1,6 +1,6 @@
-using HushShared.Identity.Model;
 using Microsoft.EntityFrameworkCore;
 using Olimpo.EntityFramework.Persistency;
+using HushShared.Identity.Model;
 
 namespace HushNode.Identity.Storage;
 

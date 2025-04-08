@@ -10,6 +10,7 @@ using HushNode.Identity;
 using HushNode.MemPool;
 using HushNode.Bank;
 using HushNode.Feeds;
+using HushShared.Caching;
 
 namespace HushServerNode;
 
@@ -32,6 +33,8 @@ public class Program
                 // services.ConfigureOptions<>
 
                 services.AddSingleton<IBootstrapper, gRPCServerBootstraper>();
+
+                services.AddSingleton<IBlockchainCache, BlockchainCache>();
 
                 services.AddDbContext<HushNodeDbContext>((provider, options) =>
                 {

@@ -15,7 +15,7 @@ public class MemPoolService : IMemPoolService
     public IEnumerable<AbstractTransaction> GetPendingValidatedTransactionsAsync() => 
         this._nextBlockTransactionsCandidate.TakeAndRemove(1000);
 
-    public void AddVerifiedTransactionAsync(AbstractTransaction validatedTransaction) => 
+    public void AddVerifiedTransaction(AbstractTransaction validatedTransaction) => 
         this._nextBlockTransactionsCandidate.Add(validatedTransaction);
     
 

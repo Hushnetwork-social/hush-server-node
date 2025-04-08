@@ -6,6 +6,7 @@
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.BlockModel\HushShared.Blockchain.BlockModel.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Caching\HushShared.Caching.csproj" />
   </ItemGroup>
 
   <ItemGroup>

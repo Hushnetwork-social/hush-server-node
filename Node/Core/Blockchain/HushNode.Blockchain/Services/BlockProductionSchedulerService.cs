@@ -1,10 +1,11 @@
 using System.Reactive.Linq;
 using Microsoft.Extensions.Logging;
 using Olimpo;
+using HushNode.Blockchain.Storage;
 using HushNode.Blockchain.Workflows;
 using HushNode.Events;
 using HushNode.MemPool;
-using HushNode.Blockchain.Storage;
+using HushShared.Caching;
 
 namespace HushNode.Blockchain.Services;
 
@@ -16,6 +17,7 @@ public class BlockProductionSchedulerService :
     private readonly IBlockAssemblerWorkflow _blockAssemblerWorkflow;
     private readonly IMemPoolService _memPool;
     private readonly IBlockchainStorageService _blockchainStorageService;
+    private readonly IBlockchainCache _blockchainCache;
     private readonly IEventAggregator _eventAggregator;
     private readonly ILogger<BlockProductionSchedulerService> _logger;
     private readonly IObservable<long> _blockGeneratorLoop;
@@ -25,12 +27,14 @@ public class BlockProductionSchedulerService :
         IBlockAssemblerWorkflow blockAssemblerWorkflow,
         IMemPoolService memPool,
         IBlockchainStorageService blockchainStorageService,
+        IBlockchainCache blockchainCache,
         IEventAggregator eventAggregator,
         ILogger<BlockProductionSchedulerService> logger)
     {
         this._blockAssemblerWorkflow = blockAssemblerWorkflow;
         this._memPool = memPool;
         this._blockchainStorageService = blockchainStorageService;
+        this._blockchainCache = blockchainCache;
         this._eventAggregator = eventAggregator;
         this._logger = logger;
 
@@ -56,11 +60,21 @@ public class BlockProductionSchedulerService :
                 this._canSchedule = false;
                 this._logger.LogInformation("Generating a block...");
 
-                var blockchainState = await this._blockchainStorageService.RetrieveCurrentBlockchainStateAsync();
+                if (!this._blockchainCache.BlockchainStateInDatabase)
+                {
+                    var blockchainState = await this._blockchainStorageService.RetrieveCurrentBlockchainStateAsync();
+
+                    this._blockchainCache
+                        .IsBlockchainStateInDatabase()
+                        .SetBlockIndex(blockchainState.BlockIndex)
+                        .SetPreviousBlockId(blockchainState.PreviousBlockId)
+                        .SetCurrentBlockId(blockchainState.CurrentBlockId)
+                        .SetNextBlockId(blockchainState.NextBlockId);
+                }
 
                 var pendingTransactions = this._memPool.GetPendingValidatedTransactionsAsync();
 
-                await this._blockAssemblerWorkflow.AssembleBlockAsync(blockchainState, pendingTransactions);
+                await this._blockAssemblerWorkflow.AssembleBlockAsync(pendingTransactions);
             }
         });
     }

@@ -6,5 +6,5 @@ public interface IBlockchainStorageService
 {
     Task<BlockchainState> RetrieveCurrentBlockchainStateAsync();
 
-    Task PersisteBlockAndBlockState(BlockchainBlock blockchainBlock, BlockchainState blockchainState);
+    Task PersisteBlockAndBlockState(BlockchainBlock blockchainBlock);
 }

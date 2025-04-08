@@ -2,8 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HushShared.Blockchain.BlockModel\HushShared.Blockchain.BlockModel.csproj" />
-    <ProjectReference Include="..\HushShared.Blockchain.Model\HushShared.Blockchain.Model.csproj" />
-    <ProjectReference Include="..\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -1,4 +1,4 @@
-namespace HushNode.Blockchain.BlockModel;
+namespace HushShared.Blockchain.BlockModel;
 
 public static class BlockIdHandler
 {

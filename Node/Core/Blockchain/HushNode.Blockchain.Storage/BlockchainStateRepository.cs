@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using Olimpo.EntityFramework.Persistency;
 using HushNode.Blockchain.Storage.Model;
+using Olimpo.EntityFramework.Persistency;
+using HushShared.Caching;
+using HushShared.Blockchain.BlockModel;
 
 namespace HushNode.Blockchain.Storage;
 
@@ -10,19 +12,25 @@ public class BlockchainStateRepository : RepositoryBase<BlockchainDbContext>, IB
         await this.Context.BlockchainStates
             .SingleOrDefaultAsync() ?? new GenesisBlockchainState();
 
-    public async Task SetBlockchainStateAsync(BlockchainState blockchainState)
+    public async Task InsertBlockchainStateAsync(IBlockchainCache blockchainCache)
     {
-        var currentBlockchainStateExists = await Context.BlockchainStates.AnyAsync();
+        var blockchainState = new BlockchainState(
+            BlockchainStateId.NewBlockchainStateId,
+            blockchainCache.LastBlockIndex,
+            blockchainCache.CurrentBlockId,
+            blockchainCache.NextBlockId,
+            blockchainCache.NextBlockId);
 
-        if (currentBlockchainStateExists)
-        {
-            Context
-                .Set<BlockchainState>()
-                .Update(blockchainState);
-        }
-        else
-        {
-            await Context.BlockchainStates.AddAsync(blockchainState);
-        }
+        await Context.BlockchainStates.AddAsync(blockchainState);
+    }
+
+    public async Task UpdateBlockchainStateAsync(IBlockchainCache blockchainCache)
+    {
+        await this.Context.BlockchainStates
+            .ExecuteUpdateAsync(setter => setter
+                .SetProperty(x => x.PreviousBlockId, blockchainCache.PreviousBlockId)
+                .SetProperty(x => x.CurrentBlockId, blockchainCache.CurrentBlockId)
+                .SetProperty(x => x.NextBlockId, blockchainCache.NextBlockId)
+                .SetProperty(x => x.BlockIndex, blockchainCache.LastBlockIndex));
     }
 }

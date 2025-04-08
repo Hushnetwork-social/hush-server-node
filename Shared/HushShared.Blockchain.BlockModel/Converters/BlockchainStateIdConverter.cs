@@ -1,8 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using HushNode.Blockchain.Storage.Model;
 
-namespace HushNode.Blockchain.Storage.Converters;
+namespace HushShared.Blockchain.BlockModel.Converters;
 
 public class BlockchainStateIdConverter : JsonConverter<BlockchainStateId>
 {

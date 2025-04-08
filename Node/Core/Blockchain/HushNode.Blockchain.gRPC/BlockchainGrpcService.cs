@@ -56,7 +56,7 @@ public class BlockchainGrpcService(
                     else
                     {
                         // add the transaction to the MemPool 
-                        this._memPoolService.AddVerifiedTransactionAsync(transactionSignedByValidator);
+                        this._memPoolService.AddVerifiedTransaction(transactionSignedByValidator);
                     }
                     
                     successful = true;

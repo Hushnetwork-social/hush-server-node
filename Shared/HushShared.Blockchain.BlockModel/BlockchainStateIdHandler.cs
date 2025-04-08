@@ -1,4 +1,4 @@
-namespace HushNode.Blockchain.Storage.Model;
+namespace HushShared.Blockchain.BlockModel;
 
 public static class BlockchainStateIdHandler
 {

@@ -5,11 +5,7 @@ public record FeedParticipant(
     string ParticipantPublicAddress,
     ParticipantType ParticipantType,
     string FeedPublicEncryptAddress,
-    string FeedPrivateEncryptKey);
-
-public enum ParticipantType
+    string FeedPrivateEncryptKey)
 {
-    Owner = 0,
-    Member = 1,
-    Guest = 2
+    public virtual Feed Feed {get; }
 }

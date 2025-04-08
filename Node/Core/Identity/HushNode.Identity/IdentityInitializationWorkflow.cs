@@ -37,7 +37,7 @@ public class IdentityInitializationWorkflow(
                 .ValidateTransactionWithLocalUser();
 
             
-            this._memPoolService.AddVerifiedTransactionAsync(stakerFullIdentityTransactionValidated);
+            this._memPoolService.AddVerifiedTransaction(stakerFullIdentityTransactionValidated);
         }
         else
         {

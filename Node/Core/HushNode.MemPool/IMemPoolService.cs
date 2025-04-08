@@ -6,7 +6,7 @@ public interface IMemPoolService
 {
     Task InitializeMemPoolAsync();
     
-    void AddVerifiedTransactionAsync(AbstractTransaction validatedTransaction);
+    void AddVerifiedTransaction(AbstractTransaction validatedTransaction);
 
     IEnumerable<AbstractTransaction> GetPendingValidatedTransactionsAsync();
 }

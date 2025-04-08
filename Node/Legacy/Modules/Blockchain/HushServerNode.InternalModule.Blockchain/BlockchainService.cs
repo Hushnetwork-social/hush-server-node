@@ -116,7 +116,6 @@ public class BlockchainService :
     {
         if (this._blockVerifier.IsBlockValid(message.Block))
         {
-            // await this.SaveBlock(message.Block);
             await this._blockchainDbAccess.SaveBlockAndBlockchainStateAsync(
                     message.Block.ToBlockEntity(this._transactionBaseConverter), 
                     message.BlockchainState);

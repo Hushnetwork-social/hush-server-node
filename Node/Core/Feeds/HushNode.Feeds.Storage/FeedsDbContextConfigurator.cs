@@ -3,6 +3,7 @@ using HushNode.Interfaces;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
 using HushShared.Blockchain.Model;
+using System.IO.Compression;
 
 namespace HushNode.Feeds.Storage;
 
@@ -61,12 +62,19 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                 feedParticipant.ToTable("FeedParticipant", "Feeds");
                 feedParticipant.HasKey(x => x.FeedId);
 
-                feedParticipant.Property(x => x.FeedId)
+                feedParticipant
+                    .Property(x => x.FeedId)
                     .HasConversion(
                         x => x.ToString(),
                         x => FeedIdHandler.CreateFromString(x)
                     )
                     .HasColumnType("varchar(40)");
+
+                feedParticipant
+                    .HasOne(x => x.Feed)
+                    .WithMany(x => x.Participants)
+                    .HasForeignKey(x => x.FeedId);
+
             });
     }
 
