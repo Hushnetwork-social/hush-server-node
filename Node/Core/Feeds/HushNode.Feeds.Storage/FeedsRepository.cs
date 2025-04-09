@@ -1,4 +1,4 @@
-
+using HushShared.Feeds.Model;
 using Microsoft.EntityFrameworkCore;
 using Olimpo.EntityFramework.Persistency;
 
@@ -12,4 +12,7 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 x.ParticipantPublicAddress == publicSigningAddress &&
                 x.ParticipantType == HushShared.Feeds.Model.ParticipantType.Owner &&
                 x.Feed.FeedType == HushShared.Feeds.Model.FeedType.Personal);
+
+    public async Task CreateFeed(Feed feed) => 
+        await  this.Context.Feeds.AddAsync(feed);
 }

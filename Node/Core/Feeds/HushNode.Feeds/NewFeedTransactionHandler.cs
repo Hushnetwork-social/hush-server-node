@@ -1,30 +1,45 @@
-using Olimpo.EntityFramework.Persistency;
+using HushNode.Credentials;
 using HushNode.Feeds.Storage;
-using HushShared.Blockchain.BlockModel;
 using HushShared.Blockchain.TransactionModel.States;
+using HushShared.Caching;
 using HushShared.Feeds.Model;
-
+using Olimpo;
 
 namespace HushNode.Feeds;
 
 public class NewFeedTransactionHandler(
-    IUnitOfWorkProvider<FeedsDbContext> unitOfWorkProvider) : INewFeedTransactionHandler
+    IFeedsStorageService feedsStorageService,
+    IBlockchainCache blockchainCache,
+    ICredentialsProvider credentialsProvider) : INewFeedTransactionHandler
 {
-    private readonly IUnitOfWorkProvider<FeedsDbContext> _unitOfWorkProvider = unitOfWorkProvider;
+    private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
+    private readonly IBlockchainCache _blockchainCache = blockchainCache;
+    private readonly ICredentialsProvider _credentialsProvider = credentialsProvider;
 
     public Task HandleNewPersonalFeedTransactionAsync(ValidatedTransaction<NewPersonalFeedPayload> newPersonalFeedTransaction)
     {
-        using var readonlyUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
-        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
-
-        // var blockchainState = readonlyUnitOfWork
-
         var newPersonalFeedPayload = newPersonalFeedTransaction.Payload;
 
-        // var feed = new Feed(
-        //     newPersonalFeedPayload.FeedId,
-        //     newPersonalFeedPayload.Title,
-        //     newPersonalFeedPayload.FeedType);
+        var personalFeed = new Feed(
+            newPersonalFeedPayload.FeedId,
+            newPersonalFeedPayload.Title,
+            newPersonalFeedPayload.FeedType,
+            this._blockchainCache.LastBlockIndex);
+
+        var credentials = this._credentialsProvider.GetCredentials();
+
+        var participant = new FeedParticipant
+        (
+            newPersonalFeedPayload.FeedId,
+            newPersonalFeedTransaction.UserSignature.Signatory,
+            ParticipantType.Owner,
+            credentials.PublicSigningAddress,
+            credentials.PublicEncryptAddress
+        );
+
+        personalFeed.Participants.Add(participant);
+
+        this._feedsStorageService.CreateFeed(personalFeed);
 
         return Task.CompletedTask;
     }

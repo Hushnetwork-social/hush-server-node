@@ -1,3 +1,4 @@
+using HushShared.Feeds.Model;
 using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Feeds.Storage;
@@ -13,4 +14,15 @@ public class FeedsStorageService(
             .CreateReadOnly()
             .GetRepository<IFeedsRepository>()
             .HasPersonalFeed(publicSigningAddress);
+
+    public async Task CreateFeed(Feed feed)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .CreateFeed(feed);
+
+        await writableUnitOfWork.CommitAsync();
+    }
 }

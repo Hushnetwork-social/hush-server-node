@@ -6,6 +6,9 @@
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\HushNode.MemPool\HushNode.MemPool.csproj" />
     <ProjectReference Include="..\..\Indexing\HushNode.Indexing.Interfaces\HushNode.Indexing.Interfaces.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Caching\HushShared.Caching.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Olimpo.DigitalSignature\SigningManager.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Olimpo.EncryptingManager\EncryptingManager.csproj" />
   </ItemGroup>
 
   <ItemGroup>
