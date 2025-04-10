@@ -10,7 +10,7 @@ using HushNode.Identity;
 using HushNode.MemPool;
 using HushNode.Bank;
 using HushNode.Feeds;
-using HushShared.Caching;
+using HushNode.Caching;
 
 namespace HushServerNode;
 

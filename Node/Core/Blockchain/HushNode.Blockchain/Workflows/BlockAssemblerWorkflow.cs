@@ -3,6 +3,7 @@ using Olimpo;
 using HushNode.Bank;
 using HushNode.Blockchain.BlockModel.States;
 using HushNode.Blockchain.Storage;
+using HushNode.Caching;
 using HushNode.Credentials;
 using HushNode.Events;
 using HushShared.Blockchain;
@@ -10,7 +11,6 @@ using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.Model;
 using HushShared.Converters;
 using HushShared.Blockchain.BlockModel;
-using HushShared.Caching;
 
 namespace HushNode.Blockchain.Workflows;
 

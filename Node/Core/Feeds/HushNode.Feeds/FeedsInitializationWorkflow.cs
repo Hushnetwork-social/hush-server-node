@@ -1,13 +1,10 @@
-using System.Threading.Tasks;
 using HushNode.Credentials;
 using HushNode.Feeds.Events;
 using HushNode.Feeds.Storage;
 using HushNode.MemPool;
-using HushShared.Blockchain;
 using HushShared.Feeds.Model;
 using Microsoft.Extensions.Options;
 using Olimpo;
-using Org.BouncyCastle.Crypto;
 
 namespace HushNode.Feeds;
 

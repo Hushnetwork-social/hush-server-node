@@ -5,7 +5,7 @@ using HushNode.Blockchain.Storage;
 using HushNode.Blockchain.Workflows;
 using HushNode.Events;
 using HushNode.MemPool;
-using HushShared.Caching;
+using HushNode.Caching;
 
 namespace HushNode.Blockchain.Services;
 

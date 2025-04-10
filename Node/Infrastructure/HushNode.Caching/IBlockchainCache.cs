@@ -1,6 +1,6 @@
 ﻿using HushShared.Blockchain.BlockModel;
 
-namespace HushShared.Caching;
+namespace HushNode.Caching;
 
 public interface IBlockchainCache
 {

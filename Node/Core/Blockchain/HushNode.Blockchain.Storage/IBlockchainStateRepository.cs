@@ -1,6 +1,6 @@
 using Olimpo.EntityFramework.Persistency;
 using HushNode.Blockchain.Storage.Model;
-using HushShared.Caching;
+using HushNode.Caching;
 
 namespace HushNode.Blockchain.Storage;
 

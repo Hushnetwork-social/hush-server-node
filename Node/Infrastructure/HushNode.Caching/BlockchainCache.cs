@@ -1,6 +1,6 @@
 using HushShared.Blockchain.BlockModel;
 
-namespace HushShared.Caching;
+namespace HushNode.Caching;
 
 public class BlockchainCache : IBlockchainCache
 {
@@ -16,31 +16,31 @@ public class BlockchainCache : IBlockchainCache
 
     public IBlockchainCache SetBlockIndex(BlockIndex index)
     {
-        this.LastBlockIndex = index;
+        LastBlockIndex = index;
         return this;
     }
 
     public IBlockchainCache SetPreviousBlockId(BlockId id)
     {
-        this.PreviousBlockId = id;
+        PreviousBlockId = id;
         return this;
     }
 
     public IBlockchainCache SetCurrentBlockId(BlockId id)
     {
-        this.CurrentBlockId = id;
+        CurrentBlockId = id;
         return this;
     }
 
     public IBlockchainCache SetNextBlockId(BlockId id)
     {
-        this.NextBlockId = id;
+        NextBlockId = id;
         return this;
     }
 
     public IBlockchainCache IsBlockchainStateInDatabase()
     {
-        this.BlockchainStateInDatabase = true;
+        BlockchainStateInDatabase = true;
         return this;
     }
 }

@@ -1,9 +1,8 @@
+using HushNode.Caching;
 using HushNode.Credentials;
 using HushNode.Feeds.Storage;
 using HushShared.Blockchain.TransactionModel.States;
-using HushShared.Caching;
 using HushShared.Feeds.Model;
-using Olimpo;
 
 namespace HushNode.Feeds;
 

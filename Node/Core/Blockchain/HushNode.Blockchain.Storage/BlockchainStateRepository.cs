@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using HushNode.Blockchain.Storage.Model;
 using Olimpo.EntityFramework.Persistency;
-using HushShared.Caching;
 using HushShared.Blockchain.BlockModel;
+using HushNode.Caching;
 
 namespace HushNode.Blockchain.Storage;
 

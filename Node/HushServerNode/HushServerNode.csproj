@@ -28,9 +28,9 @@
     <ProjectReference Include="..\Core\Indexing\HushNode.Indexing\HushNode.Indexing.csproj" />
     <ProjectReference Include="..\Core\Identity\HushNode.Identity\HushNode.Identity.csproj" />
     <ProjectReference Include="..\Core\Feeds\HushNode.Feeds\HushNode.Feeds.csproj" />
+    <ProjectReference Include="..\Infrastructure\HushNode.Caching\HushNode.Caching.csproj" />
     <ProjectReference Include="..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
-    <ProjectReference Include="..\..\Shared\HushShared.Caching\HushShared.Caching.csproj" />
   </ItemGroup>
 
 </Project>
