@@ -31,6 +31,7 @@
     <ProjectReference Include="..\Infrastructure\HushNode.Caching\HushNode.Caching.csproj" />
     <ProjectReference Include="..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
+    <ProjectReference Include="..\Core\Feeds\HushNode.Feeds.gRPC\HushNode.Feeds.gRPC.csproj" />
   </ItemGroup>
 
 </Project>

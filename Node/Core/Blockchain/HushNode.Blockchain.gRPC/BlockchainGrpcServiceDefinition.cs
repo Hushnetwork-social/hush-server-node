@@ -10,6 +10,6 @@ public class BlockchainGrpcServiceDefinition(HushBlockchain.HushBlockchainBase b
 
     public void AddGrpcService(Server server)
     {
-        server.Services.Add(HushBlockchain.BindService(_blockchainGrpcService));
+        server.Services.Add(HushBlockchain.BindService(this._blockchainGrpcService));
     }
 }

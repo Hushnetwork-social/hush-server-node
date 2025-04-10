@@ -1,9 +1,7 @@
-using System.Reflection.Metadata;
 using System.Text.Json;
 using Grpc.Core;
 using HushNetwork.proto;
 using HushNode.Blockchain.Storage;
-using HushNode.Credentials;
 using HushNode.MemPool;
 using HushShared.Blockchain.TransactionModel;
 

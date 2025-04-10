@@ -1,8 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Olimpo;
-using HushNode.Feeds.Storage;
 using HushNode.Indexing.Interfaces;
+using HushNode.Feeds.Storage;
+using HushNode.Feeds.gRPC;
 using HushShared.Blockchain.TransactionModel;
 
 namespace HushNode.Feeds;
@@ -22,6 +23,8 @@ public static class FeedsHostBuild
 
             services.AddTransient<ITransactionDeserializerStrategy, NewPersonalFeedDeserializerStrategy>();
             services.AddTransient<IIndexStrategy, NewPersonalFeedIndexStrategy>(); 
+
+            services.RegisterFeedsRPCServices();
         });
 
         return builder;
