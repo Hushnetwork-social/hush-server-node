@@ -7,5 +7,5 @@ public record FeedParticipant(
     string FeedPublicEncryptAddress,
     string FeedPrivateEncryptKey)
 {
-    public virtual Feed Feed {get; }
+    public required virtual Feed Feed { get; init; }
 }

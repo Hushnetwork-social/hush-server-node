@@ -28,7 +28,7 @@ public class BlockchainGrpcService(
         };
     }
 
-    public override async Task<SubmitSignedTransactionReply> SubmitSignedTransaction(
+    public override Task<SubmitSignedTransactionReply> SubmitSignedTransaction(
         SubmitSignedTransactionRequest request, 
         ServerCallContext context)
     {
@@ -64,11 +64,11 @@ public class BlockchainGrpcService(
             }
         }
 
-        return new SubmitSignedTransactionReply 
+        return Task.FromResult(new SubmitSignedTransactionReply 
         {
             Successfull = successful,
             Message = message
-        };
+        });
     }
 
     private bool ValidateUserSignature(AbstractTransaction transaction)

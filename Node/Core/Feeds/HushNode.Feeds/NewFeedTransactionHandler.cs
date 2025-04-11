@@ -34,7 +34,10 @@ public class NewFeedTransactionHandler(
             ParticipantType.Owner,
             credentials.PublicSigningAddress,
             credentials.PublicEncryptAddress
-        );
+        )
+        {
+            Feed = personalFeed
+        };
 
         personalFeed.Participants.Add(participant);
 
