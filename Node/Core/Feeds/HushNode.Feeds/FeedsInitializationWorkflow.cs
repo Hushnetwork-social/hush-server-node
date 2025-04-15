@@ -1,10 +1,10 @@
+using Microsoft.Extensions.Options;
+using Olimpo;
 using HushNode.Credentials;
 using HushNode.Feeds.Events;
 using HushNode.Feeds.Storage;
 using HushNode.MemPool;
 using HushShared.Feeds.Model;
-using Microsoft.Extensions.Options;
-using Olimpo;
 
 namespace HushNode.Feeds;
 

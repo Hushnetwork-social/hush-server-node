@@ -7,12 +7,21 @@ option csharp_namespace = "HushNetwork.proto";
 package rpcHush;
 
 service HushFeed {
+  rpc HasPersonalFeed (HasPersonalFeedRequest) returns (HasPersonalFeedReply);
   rpc GetFeedsForAddress (GetFeedForAddressRequest) returns (GetFeedForAddressReply);
   rpc CreatePersonalFeed (CreatePersonalFeedRequest) returns (CreatePersonalFeedReply);
   rpc CreateChatFeed (CreateChatFeedRequest) returns (CreateChatFeedReply);
   rpc GetChatFeedParticipants (GetChatFeedParticipantsRequest) returns (GetChatFeedParticipantsReply);
   rpc GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest) returns (GetFeedMessagesForAddressReply);
   rpc SendMessage(SendMessageRequest) returns (SendMessageReply);
+}
+
+message HasPersonalFeedRequest {
+  string PublicPublicKey = 1;
+}
+
+message HasPersonalFeedReply {
+  bool FeedAvailable = 1;
 }
 
 message GetFeedForAddressRequest {
