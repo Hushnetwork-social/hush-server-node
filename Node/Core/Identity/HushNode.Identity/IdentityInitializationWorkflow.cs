@@ -27,10 +27,10 @@ public class IdentityInitializationWorkflow(
         if (profileBase is NonExistingProfile)
         {
             var stakerFullIdentityTransaction = FullIdentityPayloadHandler.CreateNew(
-                "N/A",
+                this._credentialsProfileOptions.Value.ProfileName,
                 this._credentialsProfileOptions.Value.PublicSigningAddress,
                 this._credentialsProfileOptions.Value.PublicEncryptAddress,
-                false);
+                this._credentialsProfileOptions.Value.IsPublic);
 
             var stakerFullIdentityTransactionValidated = stakerFullIdentityTransaction
                 .SignTransactionWithLocalUser()

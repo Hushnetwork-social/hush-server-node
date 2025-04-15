@@ -19,4 +19,9 @@ public class FeedsGrpcService(IFeedsStorageService feedsStorageService) : HushFe
             FeedAvailable = hasPersonalFeed
         };
     }
+
+    public override Task<GetFeedForAddressReply> GetFeedsForAddress(GetFeedForAddressRequest request, ServerCallContext context)
+    {
+        return base.GetFeedsForAddress(request, context);
+    }
 }

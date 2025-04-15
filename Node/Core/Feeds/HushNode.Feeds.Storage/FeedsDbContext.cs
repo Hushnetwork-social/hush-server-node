@@ -1,5 +1,5 @@
-﻿using HushShared.Feeds.Model;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
+using HushShared.Feeds.Model;
 
 namespace HushNode.Feeds.Storage;
 

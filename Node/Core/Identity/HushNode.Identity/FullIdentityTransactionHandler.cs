@@ -1,17 +1,20 @@
+using Microsoft.Extensions.Logging;
+using Olimpo.EntityFramework.Persistency;
+using HushNode.Caching;
 using HushNode.Identity.Storage;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Identity.Model;
-using Microsoft.Extensions.Logging;
-using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Identity;
 
 public class FullIdentityTransactionHandler(
     IUnitOfWorkProvider<IdentityDbContext> unitOfWorkProvider,
+    IBlockchainCache blockchainCache,
     ILogger<FullIdentityTransactionHandler> logger) 
     : IFullIdentityTransactionHandler
 {
     private readonly IUnitOfWorkProvider<IdentityDbContext> _unitOfWorkProvider = unitOfWorkProvider;
+    private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly ILogger<FullIdentityTransactionHandler> _logger = logger;
 
     public async Task HandleFullIdentityTransaction(ValidatedTransaction<FullIdentityPayload> transaction)
@@ -39,7 +42,8 @@ public class FullIdentityTransactionHandler(
             transaction.Payload.IdentityAlias,
             transaction.Payload.PublicSigningAddress,
             transaction.Payload.PublicEncryptAddress,
-            transaction.Payload.IsPublic);
+            transaction.Payload.IsPublic,
+            this._blockchainCache.LastBlockIndex);
 
         await writableUnitOfWork
             .GetRepository<IIdentityRepository>()

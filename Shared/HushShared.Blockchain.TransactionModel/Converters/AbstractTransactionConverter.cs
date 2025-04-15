@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using HushShared.Blockchain.TransactionModel.States;
 
 namespace HushShared.Blockchain.TransactionModel.Converters;
 

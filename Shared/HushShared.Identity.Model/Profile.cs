@@ -1,4 +1,5 @@
-﻿using HushShared.Blockchain.TransactionModel;
+﻿using HushShared.Blockchain.BlockModel;
+using HushShared.Blockchain.TransactionModel;
 
 namespace HushShared.Identity.Model;
 
@@ -8,6 +9,7 @@ public record Profile(
     string Alias,
     string PublicSigningAddress,
     string PublicEncryptAddress,
-    bool IsPublic) : ProfileBase, ITransactionPayloadKind;
+    bool IsPublic,
+    BlockIndex BlockIndex) : ProfileBase, ITransactionPayloadKind;
 
 public record NonExistingProfile : ProfileBase;
