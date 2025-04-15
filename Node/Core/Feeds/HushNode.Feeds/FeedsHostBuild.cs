@@ -23,6 +23,7 @@ public static class FeedsHostBuild
 
             services.AddTransient<ITransactionDeserializerStrategy, NewPersonalFeedDeserializerStrategy>();
             services.AddTransient<IIndexStrategy, NewPersonalFeedIndexStrategy>(); 
+            services.AddTransient<ITransactionContentHandler, NewPersonalFeedContentHandler>(); 
 
             services.RegisterFeedsRPCServices();
         });
