@@ -26,7 +26,7 @@ public class IndexingDispatcherService :
         var processingTasks = message.Block.Transactions
             .Select(async transaction => 
             {
-                var strategyTasks = _indexStrategies
+                var strategyTasks = this._indexStrategies
                     .Where(strategy => strategy.CanHandle(transaction))
                     .Select(strategy => strategy.HandleAsync(transaction));
                     
