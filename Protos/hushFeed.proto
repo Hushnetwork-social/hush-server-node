@@ -9,11 +9,13 @@ package rpcHush;
 service HushFeed {
   rpc HasPersonalFeed (HasPersonalFeedRequest) returns (HasPersonalFeedReply);
   rpc GetFeedsForAddress (GetFeedForAddressRequest) returns (GetFeedForAddressReply);
+  /*
   rpc CreatePersonalFeed (CreatePersonalFeedRequest) returns (CreatePersonalFeedReply);
   rpc CreateChatFeed (CreateChatFeedRequest) returns (CreateChatFeedReply);
   rpc GetChatFeedParticipants (GetChatFeedParticipantsRequest) returns (GetChatFeedParticipantsReply);
   rpc GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest) returns (GetFeedMessagesForAddressReply);
   rpc SendMessage(SendMessageRequest) returns (SendMessageReply);
+  */
 }
 
 message HasPersonalFeedRequest {
@@ -53,6 +55,7 @@ message GetFeedForAddressReply {
   repeated Feed Feeds = 1; 
 }
 
+/*
 message CreateFeedRequest {
   string FeedId = 1;
   int32 FeedType = 2;
@@ -131,3 +134,4 @@ message SendMessageReply {
   bool Successfull = 1;
   string Message = 2;
 }
+*/
