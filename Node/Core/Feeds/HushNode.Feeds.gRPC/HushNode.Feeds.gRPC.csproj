@@ -21,6 +21,8 @@
     <ItemGroup>
       <ProjectReference Include="..\..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
       <ProjectReference Include="..\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
+      <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
+      <ProjectReference Include="..\..\Identity\HushNode.Identity\HushNode.Identity.csproj" />
     </ItemGroup>
 
 </Project>

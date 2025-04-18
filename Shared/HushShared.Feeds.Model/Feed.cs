@@ -4,7 +4,7 @@ namespace HushShared.Feeds.Model;
 
 public record Feed(
     FeedId FeedId,
-    string Title,
+    string Alias,
     FeedType FeedType,
     BlockIndex BlockIndex)
 {

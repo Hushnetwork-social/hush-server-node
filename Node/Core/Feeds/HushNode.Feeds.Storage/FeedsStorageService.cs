@@ -1,3 +1,4 @@
+using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
 using Olimpo.EntityFramework.Persistency;
 
@@ -25,4 +26,10 @@ public class FeedsStorageService(
 
         await writableUnitOfWork.CommitAsync();
     }
+
+    public async Task<IEnumerable<Feed>> GetFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex) => 
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .RetrieveFeedsForAddress(publicSigningAddress, blockIndex);
 }

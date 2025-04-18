@@ -16,6 +16,8 @@ public static class IdentityHostBuild
         {
             services.AddSingleton<IBootstrapper, IdentityBootstrapper>();
 
+            services.AddScoped<IIdentityService, IdentityService>();
+
             services.AddSingleton<IIdentityInitializationWorkflow, IdentityInitializationWorkflow>();
 
             services.AddTransient<ITransactionDeserializerStrategy, FullIdentityDeserializerStrategy>();

@@ -7,18 +7,12 @@ namespace HushNode.Identity;
 
 public class FullIdentityDeserializerStrategy : ITransactionDeserializerStrategy
 {
-    public bool CanDeserialize(string transactionKind)
-    {
-        return FullIdentityPayloadHandler.FullIdentityPayloadKind.ToString() == transactionKind;
-    }
+    public bool CanDeserialize(string transactionKind) => 
+        FullIdentityPayloadHandler.FullIdentityPayloadKind.ToString() == transactionKind;
 
-    public AbstractTransaction DeserializeSignedTransaction(string transactionJSON)
-    {
-        return JsonSerializer.Deserialize<SignedTransaction<FullIdentityPayload>>(transactionJSON);
-    }
+    public AbstractTransaction DeserializeSignedTransaction(string transactionJSON) => 
+        JsonSerializer.Deserialize<SignedTransaction<FullIdentityPayload>>(transactionJSON);
 
-    public AbstractTransaction DeserializeValidatedTransaction(string transactionJSON)
-    {
-        return JsonSerializer.Deserialize<ValidatedTransaction<FullIdentityPayload>>(transactionJSON);
-    }
+    public AbstractTransaction DeserializeValidatedTransaction(string transactionJSON) => 
+        JsonSerializer.Deserialize<ValidatedTransaction<FullIdentityPayload>>(transactionJSON);
 }

@@ -1,6 +1,7 @@
-using HushShared.Feeds.Model;
 using Microsoft.EntityFrameworkCore;
 using Olimpo.EntityFramework.Persistency;
+using HushShared.Feeds.Model;
+using HushShared.Blockchain.BlockModel;
 
 namespace HushNode.Feeds.Storage;
 
@@ -10,9 +11,20 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
         await this.Context.FeedParticipants
             .AnyAsync(x => 
                 x.ParticipantPublicAddress == publicSigningAddress &&
-                x.ParticipantType == HushShared.Feeds.Model.ParticipantType.Owner &&
-                x.Feed.FeedType == HushShared.Feeds.Model.FeedType.Personal);
+                x.ParticipantType == ParticipantType.Owner &&
+                x.Feed.FeedType == FeedType.Personal);
 
     public async Task CreateFeed(Feed feed) => 
-        await  this.Context.Feeds.AddAsync(feed);
+        await this.Context.Feeds
+            .AddAsync(feed);
+
+    public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(
+        string publicSigningAddress, 
+        BlockIndex blockIndex) =>
+        await this.Context.Feeds
+            .Include(x => x.Participants)
+            .Where(x => 
+                x.Participants.Any(participant => participant.ParticipantPublicAddress == publicSigningAddress) &&
+                x.BlockIndex > blockIndex)
+            .ToListAsync();
 }

@@ -21,7 +21,9 @@ public static class StorageHostBuild
         services.AddTransient<IUnitOfWorkProvider<FeedsDbContext>, UnitOfWorkProvider<FeedsDbContext>>();
         
         services.AddSingleton<IFeedsStorageService, FeedsStorageService>();
+        services.AddSingleton<IFeedMessageStorageService, FeedMessageStorageService>();
         services.AddTransient<IFeedsRepository, FeedsRepository>();
+        services.AddTransient<IFeedMessageRepository, FeedMessageRepository>();
 
         services.AddTransient<IDbContextConfigurator, FeedsDbContextConfigurator>();
         services.AddTransient<FeedsDbContextConfigurator>();
