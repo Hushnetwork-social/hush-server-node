@@ -9,11 +9,12 @@ package rpcHush;
 service HushFeed {
   rpc HasPersonalFeed (HasPersonalFeedRequest) returns (HasPersonalFeedReply);
   rpc GetFeedsForAddress (GetFeedForAddressRequest) returns (GetFeedForAddressReply);
+  rpc GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest) returns (GetFeedMessagesForAddressReply);
+  
   /*
   rpc CreatePersonalFeed (CreatePersonalFeedRequest) returns (CreatePersonalFeedReply);
   rpc CreateChatFeed (CreateChatFeedRequest) returns (CreateChatFeedReply);
   rpc GetChatFeedParticipants (GetChatFeedParticipantsRequest) returns (GetChatFeedParticipantsReply);
-  rpc GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest) returns (GetFeedMessagesForAddressReply);
   rpc SendMessage(SendMessageRequest) returns (SendMessageReply);
   */
 }
@@ -54,6 +55,29 @@ message GetFeedForAddressReply {
 
   repeated Feed Feeds = 1; 
 }
+
+message GetFeedMessagesForAddressRequest {
+  string ProfilePublicKey = 1;
+  int64 BlockIndex = 2;
+}
+
+message GetFeedMessagesForAddressReply {
+
+  message FeedMessage {
+    string FeedId = 1;
+    string FeedMessageId = 2;
+    string MessageContent = 3;
+    string IssuerPublicAddress = 4;
+    string IssuerName = 5;
+    google.protobuf.Timestamp TimeStamp = 6;
+    int64 BlockIndex = 7;
+  }
+
+  repeated FeedMessage Messages = 1;
+}
+
+
+
 
 /*
 message CreateFeedRequest {
@@ -98,26 +122,6 @@ message GetChatFeedParticipantsReply {
   }
 
   repeated ChatParticipant ChatParticipants = 1;
-}
-
-message GetFeedMessagesForAddressRequest {
-  string ProfilePublicKey = 1;
-  int64 BlockIndex = 2;
-}
-
-message GetFeedMessagesForAddressReply {
-
-  message FeedMessage {
-    string FeedId = 1;
-    string FeedMessageId = 2;
-    string MessageContent = 3;
-    string IssuerPublicAddress = 4;
-    string IssuerName = 5;
-    google.protobuf.Timestamp TimeStamp = 6;
-    int64 BlockIndex = 7;
-  }
-
-  repeated FeedMessage Messages = 1;
 }
 
 message SendMessageRequest {

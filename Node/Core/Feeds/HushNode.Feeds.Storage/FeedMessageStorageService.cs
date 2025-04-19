@@ -1,5 +1,6 @@
-using HushShared.Feeds.Model;
 using Olimpo.EntityFramework.Persistency;
+using HushShared.Blockchain.BlockModel;
+using HushShared.Feeds.Model;
 
 namespace HushNode.Feeds.Storage;
 
@@ -19,5 +20,14 @@ public class FeedMessageStorageService(
 
         await writableUnitOfWork
             .CommitAsync();
+    }
+
+    public async Task<IEnumerable<FeedMessage>> RetrieveLastFeedMessagesForAddress(string publicSigningAddress, BlockIndex blockIndex)
+    {
+        using var readOnlyUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
+
+        return await readOnlyUnitOfWork
+            .GetRepository<IFeedMessageRepository>()
+            .RetrieveLastFeedMessagesForAddress(publicSigningAddress, blockIndex); 
     }
 }

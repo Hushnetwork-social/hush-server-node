@@ -1,7 +1,5 @@
-﻿using System.Threading.Tasks;
-using Grpc.Core;
+﻿using Grpc.Core;
 using HushNetwork.proto;
-using HushNode.Credentials;
 using HushNode.Feeds.Storage;
 using HushNode.Identity;
 using HushShared.Blockchain.BlockModel;
@@ -12,9 +10,11 @@ namespace HushNode.Feeds.gRPC;
 
 public class FeedsGrpcService(
     IFeedsStorageService feedsStorageService,
+    IFeedMessageStorageService feedMessageStorageService,
     IIdentityService identityService) : HushFeed.HushFeedBase
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
+    private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
     private readonly IIdentityService _identityService = identityService;
 
     public override async Task<HasPersonalFeedReply> HasPersonalFeed(
@@ -31,12 +31,14 @@ public class FeedsGrpcService(
 
     public override async Task<GetFeedForAddressReply> GetFeedsForAddress(GetFeedForAddressRequest request, ServerCallContext context)
     {
-        var blockIndex = BlockIndexHandler.CreateNew(request.BlockIndex);
+        var blockIndex = BlockIndexHandler
+            .CreateNew(request.BlockIndex);
 
-        var feeds = await this._feedsStorageService.GetFeedsForAddress(request.ProfilePublicKey, blockIndex);
+        var lastFeeds = await this._feedsStorageService
+            .RetrieveFeedsForAddress(request.ProfilePublicKey, blockIndex);
 
         var reply = new GetFeedForAddressReply();
-        foreach(var feed in feeds)
+        foreach(var feed in lastFeeds)
         {
             // TODO [AboimPinto] Here tghe FeedTitle should be calculated
             // * PersonalFeed -> ProfileAlias + (YOU) / First 10 characters of the public address + (YOU)
@@ -63,6 +65,33 @@ public class FeedsGrpcService(
         return reply;
     }
 
+    public override async Task<GetFeedMessagesForAddressReply> GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest request, ServerCallContext context)
+    {
+        var blockIndex = BlockIndexHandler.CreateNew(request.BlockIndex);
+
+        var lastFeedMessages = await this._feedMessageStorageService
+            .RetrieveLastFeedMessagesForAddress(request.ProfilePublicKey, blockIndex);
+
+        var reply = new GetFeedMessagesForAddressReply();
+
+        foreach(var feedMessage in lastFeedMessages)
+        {
+            reply.Messages.Add(
+                new GetFeedMessagesForAddressReply.Types.FeedMessage
+                {
+                    FeedMessageId = feedMessage.FeedMessageId.ToString(),
+                    FeedId = feedMessage.FeedId.ToString(),
+                    MessageContent = feedMessage.MessageContent,
+                    IssuerPublicAddress = feedMessage.IssuerPublicAddress,
+                    BlockIndex = feedMessage.BlockIndex.Value,
+                    IssuerName = await this.ExtractDisplayName(feedMessage.IssuerPublicAddress),
+                    TimeStamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.SpecifyKind(feedMessage.Timestamp.Value, DateTimeKind.Utc)),
+                });
+        }
+        
+        return reply;
+    }
+
     private Task<string> ExtractBroascastAlias(Feed feed)
     {
         throw new NotImplementedException();
@@ -75,8 +104,15 @@ public class FeedsGrpcService(
 
     private async Task<string> ExtractPersonalFeedAlias(Feed feed)
     {
-        var identity = await this._identityService.RetrieveIdentityAsync(feed.Participants.Single().ParticipantPublicAddress);
+        var displayName = await this.ExtractDisplayName(feed.Participants.Single().ParticipantPublicAddress);
 
-        return string.Format("{0} (YOU)", ((Profile)identity).Alias);
+        return string.Format("{0} (YOU)", displayName);
+    }
+
+    private async Task<string> ExtractDisplayName(string publicSigningAddress)
+    {
+        var identity = await this._identityService.RetrieveIdentityAsync(publicSigningAddress);
+
+        return ((Profile)identity).Alias;
     }
 }

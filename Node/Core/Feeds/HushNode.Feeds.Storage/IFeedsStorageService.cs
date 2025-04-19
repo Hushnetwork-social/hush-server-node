@@ -9,5 +9,5 @@ public interface IFeedsStorageService
 
     Task CreateFeed(Feed feed);
 
-    Task<IEnumerable<Feed>> GetFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex);
+    Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex);
 }

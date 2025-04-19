@@ -27,7 +27,7 @@ public class FeedsStorageService(
         await writableUnitOfWork.CommitAsync();
     }
 
-    public async Task<IEnumerable<Feed>> GetFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex) => 
+    public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex) => 
         await this._unitOfWorkProvider
             .CreateReadOnly()
             .GetRepository<IFeedsRepository>()
