@@ -6,6 +6,7 @@ package rpcHush;
 
 service HushIdentity {
     rpc GetIdentity (GetIdentityRequest) returns (GetIdentityReply);
+    rpc SearchByDisplayName (SearchByDisplayNameRequest) returns (SearchByDisplayNameReply);
 }
 
 message GetIdentityRequest {
@@ -19,4 +20,19 @@ message GetIdentityReply {
   string PublicSigningAddress = 4; 
   string PublicEncryptAddress = 5; 
   bool IsPublic = 6;
+}
+
+message SearchByDisplayNameRequest {
+  string PartialDisplayName = 1;
+}
+
+message SearchByDisplayNameReply {
+
+  message Identity {
+    string DisplayName = 1;
+    string PublicSigningAddress = 2;
+    string PublicEncryptAddress = 3;
+  }
+
+  repeated Identity Identities = 1;
 }

@@ -10,4 +10,6 @@ public interface IIdentityRepository : IRepository
     Task AddFullIdentity(Profile profile);
 
     Task<ProfileBase> GetIdentityAsync(string publicSigningAddress);
+
+    Task<IEnumerable<Profile>> SearchByDisplayNameAsync(string PartialDisplayName);
 }

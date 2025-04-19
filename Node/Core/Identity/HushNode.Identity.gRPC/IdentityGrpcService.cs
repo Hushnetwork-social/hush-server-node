@@ -32,7 +32,27 @@ public class IdentityGrpcService(IIdentityStorageService identityStorageService)
         }
 
         return reply;
-     }
+    }
+
+    public override async Task<SearchByDisplayNameReply> SearchByDisplayName(SearchByDisplayNameRequest request, ServerCallContext context)
+    {
+        var identitiesFound = await this._identityStorageService.SearchByDisplayNameAsync(request.PartialDisplayName);
+        
+        var reply = new SearchByDisplayNameReply();
+
+        foreach (var identity in identitiesFound)
+        {
+            reply.Identities.Add(
+                new SearchByDisplayNameReply.Types.Identity
+                {
+                    DisplayName = identity.Alias,
+                    PublicSigningAddress = identity.PublicSigningAddress,
+                    PublicEncryptAddress = identity.PublicEncryptAddress 
+                });
+        }
+
+        return reply;
+    }
 
 
     // public override Task<GetProfileReply> GetProfile(GetProfileRequest request, ServerCallContext context)

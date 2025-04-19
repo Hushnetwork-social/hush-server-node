@@ -16,4 +16,13 @@ public class IdentityStorageService(
             .GetRepository<IIdentityRepository>()
             .GetIdentityAsync(publicSigingAddress);
     }
+
+    public async Task<IEnumerable<Profile>> SearchByDisplayNameAsync(string PartialDisplayName)
+    {
+        using var readOnlyUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
+
+        return await readOnlyUnitOfWork
+            .GetRepository<IIdentityRepository>()
+            .SearchByDisplayNameAsync(PartialDisplayName);
+    }
 }

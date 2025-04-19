@@ -16,4 +16,9 @@ public class IdentityRepository : RepositoryBase<IdentityDbContext>, IIdentityRe
     public async Task<ProfileBase> GetIdentityAsync(string publicSigningAddress) => 
         await this.Context.Profiles
             .SingleOrDefaultAsync(x => x.PublicSigningAddress == publicSigningAddress) ?? (ProfileBase)new NonExistingProfile();
+
+    public async Task<IEnumerable<Profile>> SearchByDisplayNameAsync(string partialDisplayName) => 
+        await this.Context.Profiles
+            .Where(x => x.Alias.ToLower().Contains(partialDisplayName.ToLower()))
+            .ToListAsync();
 }
