@@ -30,7 +30,7 @@ public class gRPCServerBootstraper : IBootstrapper
     {
         var rcpServer = new Grpc.Core.Server
         {
-            Ports = { new ServerPort("10.88.30.185", 5000, ServerCredentials.Insecure) }
+            Ports = { new ServerPort("0.0.0.0", 5000, ServerCredentials.Insecure) }
         };
 
         foreach (var grpcDefinition in this._grpcDefinitions)
