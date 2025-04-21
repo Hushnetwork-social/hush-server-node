@@ -17,7 +17,7 @@ public static class FeedsHostBuild
             services.AddSingleton<IBootstrapper, FeedsBootstrapper>();
 
             services.AddSingleton<IFeedsInitializationWorkflow, FeedsInitializationWorkflow>();
-            services.AddSingleton<INewFeedTransactionHandler, NewFeedTransactionHandler>();
+            services.AddSingleton<INewPersonalFeedTransactionHandler, NewPersonalFeedTransactionHandler>();
 
             services.RegisterFeedsStorageServices(hostContext);
 
@@ -31,6 +31,11 @@ public static class FeedsHostBuild
             services.AddTransient<ITransactionContentHandler, NewFeedMessageContentHandler>();
             services.AddTransient<IIndexStrategy, NewFeedMessageIndexStrategy>();
             services.AddTransient<IFeedMessageTransactionHandler, FeedMessageTransactionHandler>();
+            
+            services.AddTransient<ITransactionDeserializerStrategy, NewChatFeedDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, NewChatFeedIndexStrategy>(); 
+            services.AddTransient<ITransactionContentHandler, NewChatFeedContentHandler>(); 
+            services.AddTransient<INewChatFeedTransactionHandler, NewChatFeedTransactionHandler>();
         });
 
         return builder;

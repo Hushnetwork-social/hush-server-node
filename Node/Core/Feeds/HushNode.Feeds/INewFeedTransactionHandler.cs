@@ -3,7 +3,7 @@ using HushShared.Feeds.Model;
 
 namespace HushNode.Feeds;
 
-public interface INewFeedTransactionHandler
+public interface INewPersonalFeedTransactionHandler
 {
     Task HandleNewPersonalFeedTransactionAsync(ValidatedTransaction<NewPersonalFeedPayload> newPersonalFeedTransaction);
 }

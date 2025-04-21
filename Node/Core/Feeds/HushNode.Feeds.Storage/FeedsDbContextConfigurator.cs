@@ -60,7 +60,7 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
             .Entity<FeedParticipant>(feedParticipant => 
             {
                 feedParticipant.ToTable("FeedParticipant", "Feeds");
-                feedParticipant.HasKey(x => x.FeedId);
+                feedParticipant.HasKey(x => new { x.FeedId, x.ParticipantPublicAddress });
 
                 feedParticipant
                     .Property(x => x.FeedId)

@@ -5,9 +5,9 @@ using HushShared.Feeds.Model;
 
 namespace HushNode.Feeds;
 
-public class NewPersonalFeedIndexStrategy(INewFeedTransactionHandler newFeedTransactionHandler) : IIndexStrategy
+public class NewPersonalFeedIndexStrategy(INewPersonalFeedTransactionHandler newFeedTransactionHandler) : IIndexStrategy
 {
-    private readonly INewFeedTransactionHandler _newFeedTransactionHandler = newFeedTransactionHandler;
+    private readonly INewPersonalFeedTransactionHandler _newFeedTransactionHandler = newFeedTransactionHandler;
 
     public bool CanHandle(AbstractTransaction transaction) => 
         NewPersonalFeedPayloadHandler.NewPersonalFeedPayloadKind == transaction.PayloadKind;

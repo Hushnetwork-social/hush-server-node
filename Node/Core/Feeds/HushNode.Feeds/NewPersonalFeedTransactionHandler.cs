@@ -1,19 +1,16 @@
 using HushNode.Caching;
-using HushNode.Credentials;
 using HushNode.Feeds.Storage;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Feeds.Model;
 
 namespace HushNode.Feeds;
 
-public class NewFeedTransactionHandler(
+public class NewPersonalFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
-    IBlockchainCache blockchainCache,
-    ICredentialsProvider credentialsProvider) : INewFeedTransactionHandler
+    IBlockchainCache blockchainCache) : INewPersonalFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
-    private readonly ICredentialsProvider _credentialsProvider = credentialsProvider;
 
     public Task HandleNewPersonalFeedTransactionAsync(ValidatedTransaction<NewPersonalFeedPayload> newPersonalFeedTransaction)
     {
@@ -25,15 +22,14 @@ public class NewFeedTransactionHandler(
             newPersonalFeedPayload.FeedType,
             this._blockchainCache.LastBlockIndex);
 
-        var credentials = this._credentialsProvider.GetCredentials();
-
+        // The PersonalFeed encrypt keys are the one from the user. It's not necessary to save it. Even encrypt.
         var participant = new FeedParticipant
         (
             newPersonalFeedPayload.FeedId,
             newPersonalFeedTransaction.UserSignature.Signatory,
             ParticipantType.Owner,
-            credentials.PublicSigningAddress,
-            credentials.PublicEncryptAddress
+            string.Empty,
+            string.Empty
         )
         {
             Feed = personalFeed

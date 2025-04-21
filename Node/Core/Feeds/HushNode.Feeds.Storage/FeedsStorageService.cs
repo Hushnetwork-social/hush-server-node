@@ -20,11 +20,18 @@ public class FeedsStorageService(
     {
         using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
 
-        await writableUnitOfWork
-            .GetRepository<IFeedsRepository>()
-            .CreateFeed(feed);
+        try
+        {
+            await writableUnitOfWork
+                .GetRepository<IFeedsRepository>()
+                .CreateFeed(feed);
 
-        await writableUnitOfWork.CommitAsync();
+            await writableUnitOfWork.CommitAsync();
+        }
+        catch (Exception ex)
+        {
+            
+        }
     }
 
     public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex) => 
