@@ -7,16 +7,23 @@ namespace HushNode.Feeds.Storage;
 
 public class FeedMessageRepository : RepositoryBase<FeedsDbContext>, IFeedMessageRepository
 {
-    public async Task CreateFeedMessage(FeedMessage feedMessage) => 
+    public async Task CreateFeedMessageAsync(FeedMessage feedMessage) => 
         await this.Context.FeedMessages
             .AddAsync(feedMessage);
 
-    public async Task<IEnumerable<FeedMessage>> RetrieveLastFeedMessagesForAddress(
+    public async Task<IEnumerable<FeedMessage>> RetrieveLastFeedMessagesForAddressAsync(
         string publicSigningAddress, 
         BlockIndex blockIndex) => 
         await this.Context.FeedMessages
             .Where(x => 
                 x.IssuerPublicAddress == publicSigningAddress && 
+                x.BlockIndex > blockIndex)
+            .ToListAsync();
+
+    public async Task<IEnumerable<FeedMessage>> RetrieveMessagesForFeedAsync(FeedId feedId, BlockIndex blockIndex) =>
+        await this.Context.FeedMessages
+            .Where(x => 
+                x.FeedId == feedId && 
                 x.BlockIndex > blockIndex)
             .ToListAsync();
 }

@@ -35,12 +35,11 @@ message GetFeedForAddressRequest {
 message GetFeedForAddressReply {
 
   message FeedParticipant {
-    string UserName = 1;
+    string FeedId = 1;
     string ParticipantPublicAddress = 2;
-    string ParticipantType = 3;
-    string PublicEncryptAddress = 4;
-    string PrivateEncryptKey = 5;
-    int64 BlockIndex = 6;
+    int32 ParticipantType = 3;
+    string FeedPublicEncryptAddress = 4;
+    string FeedPrivateEncryptKey = 5;
   }
 
   message Feed {

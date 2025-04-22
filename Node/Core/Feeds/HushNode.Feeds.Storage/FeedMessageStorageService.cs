@@ -10,24 +10,33 @@ public class FeedMessageStorageService(
 {
     private readonly IUnitOfWorkProvider<FeedsDbContext> _unitOfWorkProvider = unitOfWorkProvider;
 
-    public async Task CreateFeedMessage(FeedMessage feedMessage)
+    public async Task CreateFeedMessageAsync(FeedMessage feedMessage)
     {
         using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
 
         await writableUnitOfWork
             .GetRepository<IFeedMessageRepository>()
-            .CreateFeedMessage(feedMessage);
+            .CreateFeedMessageAsync(feedMessage);
 
         await writableUnitOfWork
             .CommitAsync();
     }
 
-    public async Task<IEnumerable<FeedMessage>> RetrieveLastFeedMessagesForAddress(string publicSigningAddress, BlockIndex blockIndex)
+    public async Task<IEnumerable<FeedMessage>> RetrieveLastFeedMessagesForAddressAsync(string publicSigningAddress, BlockIndex blockIndex)
     {
         using var readOnlyUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
 
         return await readOnlyUnitOfWork
             .GetRepository<IFeedMessageRepository>()
-            .RetrieveLastFeedMessagesForAddress(publicSigningAddress, blockIndex); 
+            .RetrieveLastFeedMessagesForAddressAsync(publicSigningAddress, blockIndex); 
+    }
+
+    public async Task<IEnumerable<FeedMessage>> RetrieveLastFeedMessagesForFeedAsync(FeedId feedId, BlockIndex blockIndex)
+    {
+        using var readOnlyUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
+
+        return await readOnlyUnitOfWork
+            .GetRepository<IFeedMessageRepository>()
+            .RetrieveMessagesForFeedAsync(feedId, blockIndex); 
     }
 }

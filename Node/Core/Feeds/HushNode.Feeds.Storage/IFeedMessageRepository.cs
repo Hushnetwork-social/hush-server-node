@@ -6,7 +6,9 @@ namespace HushNode.Feeds.Storage;
 
 public interface IFeedMessageRepository : IRepository
 {
-    Task CreateFeedMessage(FeedMessage feedMessage);
+    Task CreateFeedMessageAsync(FeedMessage feedMessage);
 
-    Task<IEnumerable<FeedMessage>> RetrieveLastFeedMessagesForAddress(string publicSigningAddress, BlockIndex blockIndex);
+    Task<IEnumerable<FeedMessage>> RetrieveLastFeedMessagesForAddressAsync(string publicSigningAddress, BlockIndex blockIndex);
+
+    Task<IEnumerable<FeedMessage>> RetrieveMessagesForFeedAsync(FeedId feedId, BlockIndex blockIndex);
 }

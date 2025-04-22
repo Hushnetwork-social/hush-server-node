@@ -23,6 +23,6 @@ public class FeedMessageTransactionHandler(
             validatedTransaction.TransactionTimeStamp,
             this._blockchainCache.LastBlockIndex);
 
-        await this._feedMessageStorageService.CreateFeedMessage(feedMessage);
+        await this._feedMessageStorageService.CreateFeedMessageAsync(feedMessage);
     }
 }
