@@ -16,22 +16,21 @@ public class FeedsStorageService(
             .GetRepository<IFeedsRepository>()
             .HasPersonalFeed(publicSigningAddress);
 
+    public async Task<bool> IsFeedIsBlockchain(FeedId feedId) => 
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .IsFeedInBlockchain(feedId);
+
     public async Task CreateFeed(Feed feed)
     {
         using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+        
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .CreateFeed(feed);
 
-        try
-        {
-            await writableUnitOfWork
-                .GetRepository<IFeedsRepository>()
-                .CreateFeed(feed);
-
-            await writableUnitOfWork.CommitAsync();
-        }
-        catch (Exception ex)
-        {
-            
-        }
+        await writableUnitOfWork.CommitAsync();
     }
 
     public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex) => 

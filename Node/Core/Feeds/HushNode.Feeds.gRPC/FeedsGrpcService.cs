@@ -29,6 +29,17 @@ public class FeedsGrpcService(
         };
     }
 
+    public override async Task<IsFeedInBlockchainReply> IsFeedInBlockchain(IsFeedInBlockchainRequest request, ServerCallContext context)
+    {
+        var isFeedInBlockchain = await this._feedsStorageService
+            .IsFeedIsBlockchain(FeedIdHandler.CreateFromString(request.FeedId));
+
+        return new IsFeedInBlockchainReply
+        {
+            FeedAvailable = isFeedInBlockchain
+        };
+    }
+
     public override async Task<GetFeedForAddressReply> GetFeedsForAddress(GetFeedForAddressRequest request, ServerCallContext context)
     {
         var blockIndex = BlockIndexHandler

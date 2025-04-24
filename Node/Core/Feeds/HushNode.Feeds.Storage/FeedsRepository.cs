@@ -14,6 +14,10 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 x.ParticipantType == ParticipantType.Owner &&
                 x.Feed.FeedType == FeedType.Personal);
 
+    public async Task<bool> IsFeedInBlockchain(FeedId feedId) => 
+        await this.Context.Feeds
+            .AnyAsync(x => x.FeedId == feedId);
+
     public async Task CreateFeed(Feed feed) => 
         await this.Context.Feeds
             .AddAsync(feed);

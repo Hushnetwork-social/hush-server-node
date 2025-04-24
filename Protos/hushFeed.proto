@@ -8,6 +8,7 @@ package rpcHush;
 
 service HushFeed {
   rpc HasPersonalFeed (HasPersonalFeedRequest) returns (HasPersonalFeedReply);
+  rpc IsFeedInBlockchain (IsFeedInBlockchainRequest) returns (IsFeedInBlockchainReply);
   rpc GetFeedsForAddress (GetFeedForAddressRequest) returns (GetFeedForAddressReply);
   rpc GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest) returns (GetFeedMessagesForAddressReply);
   
@@ -24,6 +25,14 @@ message HasPersonalFeedRequest {
 }
 
 message HasPersonalFeedReply {
+  bool FeedAvailable = 1;
+}
+
+message IsFeedInBlockchainRequest {
+  string FeedId = 1;
+}
+
+message IsFeedInBlockchainReply {
   bool FeedAvailable = 1;
 }
 

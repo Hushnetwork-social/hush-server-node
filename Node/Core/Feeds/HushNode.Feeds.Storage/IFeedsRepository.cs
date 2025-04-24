@@ -8,6 +8,8 @@ public interface IFeedsRepository : IRepository
 {
     Task<bool> HasPersonalFeed(string publicSigningAddress);
 
+    Task<bool> IsFeedInBlockchain(FeedId feedId);
+
     Task CreateFeed(Feed feed);
 
     Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex);

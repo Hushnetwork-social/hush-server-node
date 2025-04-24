@@ -7,6 +7,8 @@ public interface IFeedsStorageService
 {
     Task<bool> HasPersonalFeed(string publicSigningAddress);
 
+    Task<bool> IsFeedIsBlockchain(FeedId feedId);
+
     Task CreateFeed(Feed feed);
 
     Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex);
