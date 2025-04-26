@@ -15,14 +15,19 @@
 </ItemGroup>
 
 <ItemGroup>
-    <Protobuf Include="..\..\..\..\Protos\hushFeed.proto" GrpcServices="Server" ProtoRoot="..\..\..\..\Protos\" />
+    <Protobuf Include="..\..\..\..\Protos\hushBank.proto" GrpcServices="Server" ProtoRoot="..\..\..\..\Protos\" />
 </ItemGroup>
 
 <ItemGroup>
-    <ProjectReference Include="..\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
-    <ProjectReference Include="..\..\Identity\HushNode.Identity\HushNode.Identity.csproj" />
+    <ProjectReference Include="..\HushNode.Bank.Storage\HushNode.Bank.Storage.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
+
+    <!-- 
+    <ProjectReference Include="..\..\Identity\HushNode.Identity\HushNode.Identity.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" /> 
+    -->
 </ItemGroup>
 
 </Project>

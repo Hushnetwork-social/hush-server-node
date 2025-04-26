@@ -2,11 +2,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HushNode.Bank.Model\HushNode.Bank.Model.csproj" />
+    <ProjectReference Include="..\HushNode.Bank.gRPC\HushNode.Bank.gRPC.csproj" />
     <ProjectReference Include="..\HushNode.Bank.Storage\HushNode.Bank.Storage.csproj" />
     <ProjectReference Include="..\..\Indexing\HushNode.Indexing.Interfaces\HushNode.Indexing.Interfaces.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Converters\HushShared.Converters.csproj" />
+    
   </ItemGroup>
 
   <ItemGroup>

@@ -7,6 +7,7 @@ using HushNode.Interfaces;
 using HushNode.Indexing.Interfaces;
 using HushNode.Bank.Storage;
 using HushShared.Blockchain.TransactionModel;
+using HushNode.Bank.gRPC;
 
 namespace HushNode.Bank;
 
@@ -26,6 +27,8 @@ public static class BankHostBuild
                 options.EnableSensitiveDataLogging();  // For debugging
                 options.EnableDetailedErrors();  // For debugging
             });
+
+            services.RegisterBankRPCServices();
 
             services.AddTransient<IUnitOfWorkProvider<BankDbContext>, UnitOfWorkProvider<BankDbContext>>();
 
