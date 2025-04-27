@@ -17,10 +17,6 @@ public static class BankHostBuild
     {
         builder.ConfigureServices((hostContext, services) =>
         {
-            services.AddSingleton<IIndexStrategy, RewardTransactionIndexStrategy>();
-
-            services.AddSingleton<IRewardTransactionHandler, RewardTransactionHandler>();
-
             services.AddDbContext<BankDbContext>((provider, options) => 
             {
                 options.UseNpgsql(hostContext.Configuration.GetConnectionString("HushNetworkDb"));
@@ -39,6 +35,13 @@ public static class BankHostBuild
             services.AddTransient<BankDbContextConfigurator>();
 
             services.AddTransient<ITransactionDeserializerStrategy, RewardTransactionDeserializerStrategy>();
+            services.AddSingleton<IIndexStrategy, RewardTransactionIndexStrategy>();
+            services.AddSingleton<IRewardTransactionHandler, RewardTransactionHandler>();
+
+            services.AddTransient<ITransactionDeserializerStrategy, SendFundsDeserializerStrategy>();
+            services.AddSingleton<IIndexStrategy, SendFundsIndexStrategy>();
+            services.AddSingleton<ISendFundsTransactionHandler, SendFundsTransactionHandler>();
+            services.AddSingleton<ITransactionContentHandler, SendFundsContentHandler>();
         });
 
         return builder;

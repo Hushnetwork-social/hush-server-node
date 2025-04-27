@@ -4,7 +4,9 @@ using HushShared.Blockchain.TransactionModel.States;
 
 namespace HushNode.Bank;
 
-public class RewardTransactionIndexStrategy(IRewardTransactionHandler rewardTransactionHandler) : IIndexStrategy
+public class RewardTransactionIndexStrategy(
+    IRewardTransactionHandler rewardTransactionHandler) 
+    : IIndexStrategy
 {
     private readonly IRewardTransactionHandler _rewardTransactionHandler = rewardTransactionHandler;
 

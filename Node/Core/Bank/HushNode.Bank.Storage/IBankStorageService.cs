@@ -9,4 +9,11 @@ public interface IBankStorageService
     Task CreateTokenBalanceForAddress(AddressBalance addressBalance);
 
     Task UpdateTokenBalanceForAddress(AddressBalance addressBalance);
+
+    Task PersistNewTokenBalances(
+        string originPublicSigningAddress,
+        string newOriginBalance,
+        string tgargetPublicSigningAddress,
+        string newTargetBalance,
+        string token);
 }

@@ -46,4 +46,36 @@ public class BankStorageService(
         await writableUnitOfWork
             .CommitAsync();
     }
+
+    public async Task PersistNewTokenBalances(
+        string originPublicSigningAddress, 
+        string newOriginBalance, 
+        string targetPublicSigningAddress, 
+        string newTargetBalance, 
+        string token)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider
+            .CreateWritable();
+
+        var originTokenBalance = new AddressBalance(
+            originPublicSigningAddress,
+            token,
+            newOriginBalance);
+
+        var newTargetTokenBalance = new AddressBalance(
+            targetPublicSigningAddress, 
+            token, 
+            newTargetBalance);
+
+        writableUnitOfWork
+            .GetRepository<IBalanceRepository>()
+            .UpdateTokenBalance(originTokenBalance);
+
+        writableUnitOfWork
+            .GetRepository<IBalanceRepository>()
+            .UpdateTokenBalance(newTargetTokenBalance);
+
+        await writableUnitOfWork
+            .CommitAsync();
+    }
 }

@@ -87,6 +87,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Caching", "Infrast
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Bank.gRPC", "Core\Bank\HushNode.Bank.gRPC\HushNode.Bank.gRPC.csproj", "{506E191F-EB49-4B9F-A753-26C4E75D45F7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushShared.Bank.Model", "..\Shared\HushShared.Bank.Model\HushShared.Bank.Model.csproj", "{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -517,6 +519,18 @@ Global
 		{506E191F-EB49-4B9F-A753-26C4E75D45F7}.Release|x64.Build.0 = Release|Any CPU
 		{506E191F-EB49-4B9F-A753-26C4E75D45F7}.Release|x86.ActiveCfg = Release|Any CPU
 		{506E191F-EB49-4B9F-A753-26C4E75D45F7}.Release|x86.Build.0 = Release|Any CPU
+		{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}.Debug|x64.Build.0 = Debug|Any CPU
+		{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}.Debug|x86.Build.0 = Debug|Any CPU
+		{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}.Release|x64.ActiveCfg = Release|Any CPU
+		{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}.Release|x64.Build.0 = Release|Any CPU
+		{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}.Release|x86.ActiveCfg = Release|Any CPU
+		{C3CDDF72-0FD7-4C7D-84E9-A5513FA079F4}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
