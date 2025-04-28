@@ -9,13 +9,13 @@ public class MemPoolBootstrapper : IBootstrapper
 
     public int Priority { get; set; } = 10;
 
-    public Subject<bool> BootstrapFinished { get; }
+    public Subject<string> BootstrapFinished { get; }
 
     public MemPoolBootstrapper(IMemPoolService memPoolService)
     {
         this._memPoolService = memPoolService;
         
-        this.BootstrapFinished = new Subject<bool>();
+        this.BootstrapFinished = new Subject<string>();
     }
 
     public void Shutdown()
@@ -26,7 +26,7 @@ public class MemPoolBootstrapper : IBootstrapper
     {
         this._memPoolService.InitializeMemPool();
 
-        this.BootstrapFinished.OnNext(true);
+        this.BootstrapFinished.OnNext("MemPool");
         return Task.CompletedTask;
     }
 }

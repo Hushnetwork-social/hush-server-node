@@ -10,7 +10,7 @@ public class FeedsBootstrapper :
 {
     private readonly IFeedsInitializationWorkflow _feedInitializationWorkflow;
 
-    public Subject<bool> BootstrapFinished { get; } = new Subject<bool>();
+    public Subject<string> BootstrapFinished { get; } = new Subject<string>();
 
     public int Priority { get; set; } = 10;
 
@@ -34,6 +34,6 @@ public class FeedsBootstrapper :
 
     public void Handle(FeedsInitializedEvent message)
     {
-        this.BootstrapFinished.OnNext(true);
+        this.BootstrapFinished.OnNext("Feeds");
     }
 }

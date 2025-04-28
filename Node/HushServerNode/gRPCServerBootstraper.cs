@@ -9,7 +9,7 @@ public class gRPCServerBootstraper : IBootstrapper
 {
     private readonly IEnumerable<IGrpcDefinition> _grpcDefinitions;
 
-    public Subject<bool> BootstrapFinished { get; }
+    public Subject<string> BootstrapFinished { get; }
 
     public int Priority { get; set; } = 10;
         
@@ -19,7 +19,7 @@ public class gRPCServerBootstraper : IBootstrapper
     {
         this._grpcDefinitions = grpcDefinitions;
 
-        this.BootstrapFinished = new Subject<bool>();
+        this.BootstrapFinished = new Subject<string>();
     }
 
     public void Shutdown()
@@ -40,7 +40,7 @@ public class gRPCServerBootstraper : IBootstrapper
 
         rcpServer.Start();
 
-        this.BootstrapFinished.OnNext(true);
+        this.BootstrapFinished.OnNext("gRPC");
         return Task.CompletedTask;
     }
 }

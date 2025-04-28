@@ -5,12 +5,12 @@ namespace HushServerNode.InternalModule.Bank;
 
 public class BankBootstrapper : IBootstrapper
 {
-    public Subject<bool> BootstrapFinished { get; }
+    public Subject<string> BootstrapFinished { get; }
     public int Priority { get; set; } = 10;
 
     public BankBootstrapper()
     {
-        this.BootstrapFinished = new Subject<bool>();
+        this.BootstrapFinished = new Subject<string>();
     }
 
     public void Shutdown()
@@ -19,7 +19,7 @@ public class BankBootstrapper : IBootstrapper
 
     public Task Startup()
     {
-        this.BootstrapFinished.OnNext(true);
+        this.BootstrapFinished.OnNext("Bank");
         return Task.CompletedTask;
     }
 }

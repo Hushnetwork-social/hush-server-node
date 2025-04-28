@@ -8,7 +8,7 @@ public class CredentialsBoostrapper(IOptions<CredentialsProfile> credentials) : 
 {
     private readonly CredentialsProfile _credentials = credentials.Value;
 
-    public Subject<bool> BootstrapFinished { get; } = new Subject<bool>();
+    public Subject<string> BootstrapFinished { get; } = new Subject<string>();
 
     public int Priority { get; set; } = 5;
 
@@ -18,7 +18,7 @@ public class CredentialsBoostrapper(IOptions<CredentialsProfile> credentials) : 
 
     public Task Startup()
     {
-        this.BootstrapFinished.OnNext(true);
+        this.BootstrapFinished.OnNext("Credentials");
         return Task.CompletedTask;
     }
 }

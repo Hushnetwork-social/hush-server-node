@@ -7,7 +7,7 @@ public class MemPoolBoopstrapper(IMemPoolService memPoolService) : IBootstrapper
 {
     private readonly IMemPoolService _memPoolService = memPoolService;
 
-    public Subject<bool> BootstrapFinished { get; } = new Subject<bool>();
+    public Subject<string> BootstrapFinished { get; } = new Subject<string>();
 
     public int Priority { get; set; } = 10;
 
@@ -18,6 +18,6 @@ public class MemPoolBoopstrapper(IMemPoolService memPoolService) : IBootstrapper
     public async Task Startup()
     {
         await this._memPoolService.InitializeMemPoolAsync();
-        this.BootstrapFinished.OnNext(true);
+        this.BootstrapFinished.OnNext("Mempool");
     }
 }

@@ -5,7 +5,7 @@ namespace HushNode.Indexing;
 
 public class IndexingBootstrapper : IBootstrapper
 {
-    public Subject<bool> BootstrapFinished { get; } = new Subject<bool>();
+    public Subject<string> BootstrapFinished { get; } = new Subject<string>();
 
     public int Priority { get; set; } = 10;
 
@@ -20,7 +20,7 @@ public class IndexingBootstrapper : IBootstrapper
 
     public Task Startup()
     {
-        this.BootstrapFinished.OnNext(true);
+        this.BootstrapFinished.OnNext("Indexing");
         return Task.CompletedTask;
     }
 }

@@ -10,7 +10,7 @@ public class BlockchainBootstrapper : IBootstrapper
 
     public int Priority { get; set; } = 10;
 
-    public Subject<bool> BootstrapFinished { get; }
+    public Subject<string> BootstrapFinished { get; }
 
     public BlockchainBootstrapper(
         IBlockchainService blockchainService,
@@ -19,7 +19,7 @@ public class BlockchainBootstrapper : IBootstrapper
         this._blockchainService = blockchainService;
         this._blockGeneratorService = blockGeneratorService;
         
-        this.BootstrapFinished = new Subject<bool>();
+        this.BootstrapFinished = new Subject<string>();
     }
 
     public void Shutdown()
@@ -30,6 +30,6 @@ public class BlockchainBootstrapper : IBootstrapper
     {
         await this._blockchainService.InitializeBlockchainAsync();
 
-        this.BootstrapFinished.OnNext(true);
+        this.BootstrapFinished.OnNext("Blockchain");
     }
 }

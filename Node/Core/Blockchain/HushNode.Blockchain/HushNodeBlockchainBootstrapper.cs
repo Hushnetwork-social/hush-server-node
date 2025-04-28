@@ -17,7 +17,7 @@ public class HushNodeBlockchainBootstrapper(
     private readonly IBlockAssemblerWorkflow _blockAssemblerWorkflow = blockAssemblerWorkflow;
     private readonly TransactionDeserializerHandler transactionDeserializerHandler = transactionDeserializerHandler;
 
-    public Subject<bool> BootstrapFinished { get; } = new Subject<bool>();
+    public Subject<string> BootstrapFinished { get; } = new Subject<string>();
     public int Priority { get; set; } = 10;
 
     public void Shutdown()
@@ -27,6 +27,6 @@ public class HushNodeBlockchainBootstrapper(
     public async Task Startup()
     {
         await this._chainFoundationService.InitializeChain();
-        this.BootstrapFinished.OnNext(true);
+        this.BootstrapFinished.OnNext("Blockchain");
     }
 }

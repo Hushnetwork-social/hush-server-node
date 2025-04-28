@@ -10,7 +10,7 @@ public class IdentityBootstrapper :
 {
     private readonly IIdentityInitializationWorkflow _identityInitializationWorkflow;
 
-    public Subject<bool> BootstrapFinished { get; } = new Subject<bool>();
+    public Subject<string> BootstrapFinished { get; } = new Subject<string>();
 
     public int Priority { get; set; } = 7;
 
@@ -34,6 +34,6 @@ public class IdentityBootstrapper :
 
     public void Handle(IdentityInitializedEvent message)
     {
-        this.BootstrapFinished.OnNext(true);
+        this.BootstrapFinished.OnNext("Identity");
     }
 }
