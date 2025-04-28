@@ -7,7 +7,7 @@ public interface IBootstrapperManager
 {
     Subject<bool> AllModulesBootstrapped { get; }
 
-    Subject<bool> ModuleBootstrapped { get; }
+    Subject<string> ModuleBootstrapped { get; }
 
     int ModulesCount { get; }
 

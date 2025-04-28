@@ -5,7 +5,7 @@ namespace Olimpo;
 
 public interface IBootstrapper
 {
-    Subject<bool> BootstrapFinished { get; }
+    Subject<string> BootstrapFinished { get; }
 
     int Priority { get; set; }
 

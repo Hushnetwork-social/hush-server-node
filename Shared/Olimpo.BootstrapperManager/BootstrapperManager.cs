@@ -20,7 +20,7 @@ public class BootstrapperManager : IBootstrapperManager
 
     public Subject<bool> AllModulesBootstrapped { get; }
 
-    public Subject<bool> ModuleBootstrapped { get; }
+    public Subject<string> ModuleBootstrapped { get; }
 
     public BootstrapperManager(
         IEnumerable<IBootstrapper> bootstrappers,
@@ -30,7 +30,7 @@ public class BootstrapperManager : IBootstrapperManager
         this._logger = logger;
 
         this.AllModulesBootstrapped = new Subject<bool>();
-        this.ModuleBootstrapped = new Subject<bool>();
+        this.ModuleBootstrapped = new Subject<string>();
         this.ModulesCount = this._bootstrappers.Count();
     }
 
@@ -58,13 +58,10 @@ public class BootstrapperManager : IBootstrapperManager
         }    
     }
 
-    public void OnBootstrapFinished(bool isFinished)
+    public void OnBootstrapFinished(string moduleMessage)
     {
-        if (isFinished)
-        {
-            this._moduleBootstrapped ++;
-            this.ModuleBootstrapped.OnNext(true);
-        }
+        this._moduleBootstrapped ++;
+        this.ModuleBootstrapped.OnNext(moduleMessage);
 
         if (this._moduleBootstrapped >= this._moduleCount)
         {
