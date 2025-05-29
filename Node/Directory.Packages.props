@@ -17,3 +17,5 @@
         <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.3" /> 
     </ItemGroup>
 </Project> 
+
+<!-- /home/esqueleto/Games/battlenet/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe -->
