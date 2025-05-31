@@ -7,6 +7,7 @@ public record ProfileBase;
 
 public record Profile(
     string Alias,
+    string ShortAlias,
     string PublicSigningAddress,
     string PublicEncryptAddress,
     bool IsPublic,
