@@ -40,6 +40,7 @@ public class FullIdentityTransactionHandler(
 
         var profile = new Profile(
             transaction.Payload.IdentityAlias,
+            string.Empty,
             transaction.Payload.PublicSigningAddress,
             transaction.Payload.PublicEncryptAddress,
             transaction.Payload.IsPublic,
