@@ -6,5 +6,5 @@ public interface INotificationHandler
 {
     Subject<string> NotificationRequestSteam { get; }
 
-    void RegisterHandler();
+    // void RegisterHandler();
 }
