@@ -21,10 +21,10 @@ namespace HushNode.Identity.Storage
                 .Entity<Profile>()
                 .Property(x => x.BlockIndex)
                 .HasConversion(
-                    x => x.ToString(),
-                    x => new BlockIndex(long.Parse(x))
+                    x => x.Value,
+                    x => new BlockIndex(x)
                 )
-                .HasColumnType("varchar(20)");
+                .HasColumnType("bigint");
         }
     }
 }

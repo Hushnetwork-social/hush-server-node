@@ -35,9 +35,9 @@ public class BlockchainDbContextConfigurator : IDbContextConfigurator
             .Entity<BlockchainBlock>()
             .Property(x => x.BlockIndex)
             .HasConversion(
-                x => x.ToString(),
-                x => new BlockIndex(long.Parse(x)))
-            .HasColumnType("varchar(20)");
+                x => x.Value,
+                x => new BlockIndex(x))
+            .HasColumnType("bigint");
 
         modelBuilder
             .Entity<BlockchainBlock>()
@@ -78,9 +78,9 @@ public class BlockchainDbContextConfigurator : IDbContextConfigurator
             .Entity<BlockchainState>()
             .Property(x => x.BlockIndex)
             .HasConversion(
-                x => x.ToString(), 
-                x => new BlockIndex(long.Parse(x)))
-            .HasColumnType("varchar(20)");
+                x => x.Value, 
+                x => new BlockIndex(x))
+            .HasColumnType("bigint");
 
         modelBuilder
             .Entity<BlockchainState>()

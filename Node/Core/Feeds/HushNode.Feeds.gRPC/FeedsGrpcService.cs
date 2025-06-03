@@ -95,7 +95,7 @@ public class FeedsGrpcService(
         var blockIndex = BlockIndexHandler.CreateNew(request.BlockIndex);
 
         var lastFeedsFromAddress = await this._feedsStorageService
-            .RetrieveFeedsForAddress(request.ProfilePublicKey, blockIndex);
+            .RetrieveFeedsForAddress(request.ProfilePublicKey, new BlockIndex(0));
 
         var reply = new GetFeedMessagesForAddressReply();
 
