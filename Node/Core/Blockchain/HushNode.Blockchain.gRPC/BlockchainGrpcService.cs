@@ -2,19 +2,23 @@ using System.Text.Json;
 using Grpc.Core;
 using HushNetwork.proto;
 using HushNode.Blockchain.Storage;
+using HushNode.Events;
 using HushNode.MemPool;
 using HushShared.Blockchain.TransactionModel;
+using Olimpo;
 
 namespace HushNode.Blockchain.gRPC;
 
 public class BlockchainGrpcService(
     IBlockchainStorageService blockchainStorageService,
     IEnumerable<ITransactionContentHandler> transactionContentHandlers,
-    IMemPoolService memPoolService) : HushBlockchain.HushBlockchainBase
+    IMemPoolService memPoolService,
+    IEventAggregator eventAggregator) : HushBlockchain.HushBlockchainBase
 {
     private readonly IBlockchainStorageService _blockchainStorageService = blockchainStorageService;
     private readonly IEnumerable<ITransactionContentHandler> _transactionContentHandlers = transactionContentHandlers;
     private readonly IMemPoolService _memPoolService = memPoolService;
+    private readonly IEventAggregator _eventAggregator = eventAggregator;
 
     public override async Task<GetBlockchainHeightReply> GetBlockchainHeight(
         GetBlockchainHeightRequest request, 
@@ -53,12 +57,16 @@ public class BlockchainGrpcService(
                     }
                     else
                     {
-                        // add the transaction to the MemPool 
+                        // add the transaction to the MemPool
                         this._memPoolService.AddVerifiedTransaction(transactionSignedByValidator);
+
+                        // notify that a transaction was received (to resume block production if paused)
+                        _ = this._eventAggregator.PublishAsync(new TransactionReceivedEvent());
+
+                        successful = true;
+                        message = "Transaction validated and added to MemPool";
                     }
-                    
-                    successful = true;
-                    message = "Transaction validated and added to MemPool";
+
                     break;
                 }
             }

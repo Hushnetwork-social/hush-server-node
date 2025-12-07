@@ -26,6 +26,6 @@ WORKDIR /app
 COPY --from=build /app/publish .
 
 # Expose the port the gRPC server will listen on
-EXPOSE 5000
+EXPOSE 4665
 
 ENTRYPOINT ["dotnet", "HushServerNode.dll"]

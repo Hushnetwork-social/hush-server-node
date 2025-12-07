@@ -1,3 +1,4 @@
+using HushNode.Blockchain.Configuration;
 using HushNode.Blockchain.gRPC;
 using HushNode.Blockchain.Services;
 using HushNode.Blockchain.Storage;
@@ -15,6 +16,9 @@ public static class HushNodeBlockchainHostBuild
     {
         builder.ConfigureServices((hostContext, services) =>
         {
+            services.Configure<BlockchainSettings>(
+                hostContext.Configuration.GetSection("BlockchainSettings"));
+
             services.AddSingleton<IBootstrapper, HushNodeBlockchainBootstrapper>();
 
             services.AddSingleton<IChainFoundationService, ChainFoundationService>();

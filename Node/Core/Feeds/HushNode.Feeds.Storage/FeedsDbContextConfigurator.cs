@@ -51,6 +51,12 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                         x => new BlockIndex(x)
                     )
                     .HasColumnType("bigint");
+
+                feedMessage.Property(x => x.IssuerPublicAddress)
+                    .HasColumnType("varchar(200)");
+
+                feedMessage.Property(x => x.MessageContent)
+                    .HasColumnType("text");
             });
     }
 

@@ -7,7 +7,7 @@ namespace HushNode.Feeds;
 
 public class FeedMessageTransactionHandler(
     IFeedMessageStorageService feedMessageStorageService,
-    IBlockchainCache blockchainCache) 
+    IBlockchainCache blockchainCache)
     : IFeedMessageTransactionHandler
 {
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
@@ -15,11 +15,26 @@ public class FeedMessageTransactionHandler(
 
     public async Task HandleFeedMessageTransaction(ValidatedTransaction<NewFeedMessagePayload> validatedTransaction)
     {
+        var issuerPublicAddress = validatedTransaction.UserSignature?.Signatory ?? string.Empty;
+
+        // Validation: Warn if IssuerPublicAddress is empty
+        if (string.IsNullOrEmpty(issuerPublicAddress))
+        {
+            Console.WriteLine($"[FeedMessageTransactionHandler] WARNING: UserSignature.Signatory is EMPTY for message {validatedTransaction.Payload.FeedMessageId}");
+            Console.WriteLine($"[FeedMessageTransactionHandler] Transaction will be stored but message ownership detection will fail.");
+            // Note: For now we still store the message, but in the future we could reject it
+            // throw new InvalidOperationException("Transaction rejected: UserSignature.Signatory cannot be empty");
+        }
+        else
+        {
+            Console.WriteLine($"[FeedMessageTransactionHandler] IssuerPublicAddress: {issuerPublicAddress.Substring(0, Math.Min(30, issuerPublicAddress.Length))}...");
+        }
+
         var feedMessage = new FeedMessage(
             validatedTransaction.Payload.FeedMessageId,
             validatedTransaction.Payload.FeedId,
             validatedTransaction.Payload.MessageContent,
-            validatedTransaction.UserSignature.Signatory,
+            issuerPublicAddress,
             validatedTransaction.TransactionTimeStamp,
             this._blockchainCache.LastBlockIndex);
 

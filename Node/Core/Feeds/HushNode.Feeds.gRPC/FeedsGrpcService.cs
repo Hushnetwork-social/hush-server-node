@@ -92,36 +92,66 @@ public class FeedsGrpcService(
 
     public override async Task<GetFeedMessagesForAddressReply> GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest request, ServerCallContext context)
     {
-        var blockIndex = BlockIndexHandler.CreateNew(request.BlockIndex);
-
-        var lastFeedsFromAddress = await this._feedsStorageService
-            .RetrieveFeedsForAddress(request.ProfilePublicKey, new BlockIndex(0));
-
-        var reply = new GetFeedMessagesForAddressReply();
-
-        foreach(var feed in lastFeedsFromAddress)
+        try
         {
-            // Get the last messages from each feed
-            var lastFeedMessages = await this._feedMessageStorageService
-                .RetrieveLastFeedMessagesForFeedAsync(feed.FeedId, blockIndex); 
+            Console.WriteLine($"[GetFeedMessagesForAddress] Starting for ProfilePublicKey: {request.ProfilePublicKey?.Substring(0, Math.Min(20, request.ProfilePublicKey?.Length ?? 0))}..., BlockIndex: {request.BlockIndex}");
 
-            foreach (var feedMessage in lastFeedMessages)
+            var blockIndex = BlockIndexHandler.CreateNew(request.BlockIndex);
+
+            Console.WriteLine("[GetFeedMessagesForAddress] Retrieving feeds for address...");
+            var lastFeedsFromAddress = await this._feedsStorageService
+                .RetrieveFeedsForAddress(request.ProfilePublicKey, new BlockIndex(0));
+
+            Console.WriteLine($"[GetFeedMessagesForAddress] Found {lastFeedsFromAddress.Count()} feeds");
+
+            var reply = new GetFeedMessagesForAddressReply();
+
+            foreach(var feed in lastFeedsFromAddress)
             {
-                reply.Messages.Add(
-                    new GetFeedMessagesForAddressReply.Types.FeedMessage
-                    {
-                        FeedMessageId = feedMessage.FeedMessageId.ToString(),
-                        FeedId = feedMessage.FeedId.ToString(),
-                        MessageContent = feedMessage.MessageContent,
-                        IssuerPublicAddress = feedMessage.IssuerPublicAddress,
-                        BlockIndex = feedMessage.BlockIndex.Value,
-                        IssuerName = await this.ExtractDisplayName(feedMessage.IssuerPublicAddress),
-                        TimeStamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.SpecifyKind(feedMessage.Timestamp.Value, DateTimeKind.Utc)),
-                    });   
+                Console.WriteLine($"[GetFeedMessagesForAddress] Processing feed: {feed.FeedId}, Type: {feed.FeedType}");
+
+                // Get the last messages from each feed
+                var lastFeedMessages = await this._feedMessageStorageService
+                    .RetrieveLastFeedMessagesForFeedAsync(feed.FeedId, blockIndex);
+
+                Console.WriteLine($"[GetFeedMessagesForAddress] Found {lastFeedMessages.Count()} messages for feed {feed.FeedId}");
+
+                foreach (var feedMessage in lastFeedMessages)
+                {
+                    Console.WriteLine($"[GetFeedMessagesForAddress] Processing message: {feedMessage.FeedMessageId}, Timestamp: {feedMessage.Timestamp?.Value}");
+
+                    var issuerName = await this.ExtractDisplayName(feedMessage.IssuerPublicAddress);
+                    Console.WriteLine($"[GetFeedMessagesForAddress] IssuerName resolved: {issuerName}");
+
+                    // Handle potential null or invalid timestamp
+                    var timestamp = feedMessage.Timestamp?.Value ?? DateTime.UtcNow;
+                    Console.WriteLine($"[GetFeedMessagesForAddress] Timestamp to convert: {timestamp}, Kind: {timestamp.Kind}");
+
+                    reply.Messages.Add(
+                        new GetFeedMessagesForAddressReply.Types.FeedMessage
+                        {
+                            FeedMessageId = feedMessage.FeedMessageId.ToString(),
+                            FeedId = feedMessage.FeedId.ToString(),
+                            MessageContent = feedMessage.MessageContent,
+                            IssuerPublicAddress = feedMessage.IssuerPublicAddress,
+                            BlockIndex = feedMessage.BlockIndex.Value,
+                            IssuerName = issuerName,
+                            TimeStamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)),
+                        });
+
+                    Console.WriteLine($"[GetFeedMessagesForAddress] Message added successfully");
+                }
             }
+
+            Console.WriteLine($"[GetFeedMessagesForAddress] Returning {reply.Messages.Count} total messages");
+            return reply;
         }
-        
-        return reply;
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GetFeedMessagesForAddress] ERROR: {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"[GetFeedMessagesForAddress] Stack trace: {ex.StackTrace}");
+            throw;
+        }
     }
 
     private Task<string> ExtractBroascastAlias(Feed feed)
@@ -135,11 +165,7 @@ public class FeedsGrpcService(
             .Single(x => x.ParticipantPublicAddress != requesterPublicAddress)
             .ParticipantPublicAddress;
 
-        var otherParticipant = (await this._identityService
-            .RetrieveIdentityAsync(otherParticipantPublicAddress) as Profile);
-
-        // TODO [AboimPinto]: Reaching this point should never be NULL. Must refactor to fix this warning.
-        return ((Profile)otherParticipant).Alias;
+        return await this.ExtractDisplayName(otherParticipantPublicAddress);
     }
 
     private async Task<string> ExtractPersonalFeedAlias(Feed feed)
@@ -153,6 +179,14 @@ public class FeedsGrpcService(
     {
         var identity = await this._identityService.RetrieveIdentityAsync(publicSigningAddress);
 
-        return ((Profile)identity).Alias;
+        if (identity is Profile profile)
+        {
+            return profile.Alias;
+        }
+
+        // Fallback for NonExistingProfile or unknown types - use first 10 chars of public address
+        return publicSigningAddress.Length > 10
+            ? publicSigningAddress.Substring(0, 10) + "..."
+            : publicSigningAddress;
     }
 }

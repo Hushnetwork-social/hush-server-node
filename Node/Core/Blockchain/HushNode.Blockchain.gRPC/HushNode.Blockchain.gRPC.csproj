@@ -21,6 +21,8 @@
   <ItemGroup>
     <ProjectReference Include="..\HushNode.Blockchain.Storage\HushNode.Blockchain.Storage.csproj" />
     <ProjectReference Include="..\..\HushNode.MemPool\HushNode.MemPool.csproj" />
+    <ProjectReference Include="..\..\HushNode.Events\HushNode.Events.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
   </ItemGroup>
 
 </Project>
