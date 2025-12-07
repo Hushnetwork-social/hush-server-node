@@ -5,7 +5,7 @@ namespace Olimpo.EntityFramework.Persistency;
 public abstract class RepositoryBase<TContext> : IRepositoryWithContext<TContext>
     where TContext : DbContext
 {
-    protected TContext Context { get; private set; }
+    protected TContext Context { get; private set; } = null!;
 
     public void SetContext(TContext context)
     {
