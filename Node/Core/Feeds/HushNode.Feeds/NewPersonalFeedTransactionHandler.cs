@@ -22,14 +22,13 @@ public class NewPersonalFeedTransactionHandler(
             newPersonalFeedPayload.FeedType,
             this._blockchainCache.LastBlockIndex);
 
-        // The PersonalFeed encrypt keys are the one from the user. It's not necessary to save it. Even encrypt.
+        // The EncryptedFeedKey contains the feed's AES key encrypted with the owner's RSA public key
         var participant = new FeedParticipant
         (
             newPersonalFeedPayload.FeedId,
             newPersonalFeedTransaction.UserSignature.Signatory,
             ParticipantType.Owner,
-            string.Empty,
-            string.Empty
+            newPersonalFeedPayload.EncryptedFeedKey
         )
         {
             Feed = personalFeed

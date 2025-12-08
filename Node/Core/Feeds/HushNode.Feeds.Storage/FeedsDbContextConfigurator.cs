@@ -63,7 +63,7 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
     private static void ConfigureFeedParticipant(ModelBuilder modelBuilder)
     {
         modelBuilder
-            .Entity<FeedParticipant>(feedParticipant => 
+            .Entity<FeedParticipant>(feedParticipant =>
             {
                 feedParticipant.ToTable("FeedParticipant", "Feeds");
                 feedParticipant.HasKey(x => new { x.FeedId, x.ParticipantPublicAddress });
@@ -75,6 +75,16 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                         x => FeedIdHandler.CreateFromString(x)
                     )
                     .HasColumnType("varchar(40)");
+
+                feedParticipant
+                    .Property(x => x.ParticipantPublicAddress)
+                    .HasColumnType("varchar(500)");
+
+                // EncryptedFeedKey stores the feed's AES-256 key encrypted with RSA
+                // RSA-2048 encrypted output is ~344 characters in Base64
+                feedParticipant
+                    .Property(x => x.EncryptedFeedKey)
+                    .HasColumnType("text");
 
                 feedParticipant
                     .HasOne(x => x.Feed)

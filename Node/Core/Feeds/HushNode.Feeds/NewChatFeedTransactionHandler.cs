@@ -36,8 +36,7 @@ public class NewChatFeedTransactionHandler(
                 newChatFeedPayload.FeedId,
                 feedParticipant.ParticipantPublicAddress,
                 ParticipantType.Owner,
-                feedParticipant.FeedPublicEncryptAddress,
-                feedParticipant.FeedPrivateEncryptKey
+                feedParticipant.EncryptedFeedKey
             )
             {
                 Feed = chatFeed

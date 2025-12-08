@@ -79,8 +79,7 @@ public class FeedsGrpcService(
                     FeedId = participant.FeedId.ToString(),
                     ParticipantPublicAddress = participant.ParticipantPublicAddress,
                     ParticipantType = (int)participant.ParticipantType,
-                    FeedPublicEncryptAddress = participant.FeedPublicEncryptAddress,
-                    FeedPrivateEncryptKey = participant.FeedPrivateEncryptKey
+                    EncryptedFeedKey = participant.EncryptedFeedKey
                 });
             }
 

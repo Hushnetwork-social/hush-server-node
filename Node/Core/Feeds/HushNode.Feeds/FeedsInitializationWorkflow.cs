@@ -24,7 +24,7 @@ public class FeedsInitializationWorkflow(
         var hasPersonalFeed = await this._feedsStorageService
             .HasPersonalFeed(this._credentialsProfileOptions.Value.PublicSigningAddress);
 
-        if (!hasPersonalFeed) 
+        if (!hasPersonalFeed)
         {
             this.CretatePersonalFeedForLocalUser();
         }
@@ -34,8 +34,14 @@ public class FeedsInitializationWorkflow(
 
     private void CretatePersonalFeedForLocalUser()
     {
+        // Generate AES key for the personal feed and encrypt it with the user's RSA public key
+        var feedAesKey = EncryptKeys.GenerateAesKey();
+        var encryptedFeedKey = EncryptKeys.Encrypt(
+            feedAesKey,
+            this._credentialsProfileOptions.Value.PublicEncryptAddress);
+
         var validatedTransaction = NewPersonalFeedPayloadHandler
-            .CreateNewPersonalFeedTransaction()
+            .CreateNewPersonalFeedTransaction(encryptedFeedKey)
             .SignTransactionWithLocalUser()
             .ValidateTransactionWithLocalUser();
 

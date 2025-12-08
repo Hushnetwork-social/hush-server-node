@@ -7,8 +7,11 @@ public record NewChatFeedPayload(
     FeedType FeedType,
     ChatFeedParticipant[] FeedParticipants) : ITransactionPayloadKind;
 
+/// <summary>
+/// Participant data for a new chat feed transaction.
+/// EncryptedFeedKey contains the feed's AES key encrypted with this participant's RSA public key.
+/// </summary>
 public record ChatFeedParticipant(
     FeedId FeedId,
     string ParticipantPublicAddress,
-    string FeedPublicEncryptAddress,
-    string FeedPrivateEncryptKey);
+    string EncryptedFeedKey);

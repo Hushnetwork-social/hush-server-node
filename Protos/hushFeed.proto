@@ -47,8 +47,7 @@ message GetFeedForAddressReply {
     string FeedId = 1;
     string ParticipantPublicAddress = 2;
     int32 ParticipantType = 3;
-    string FeedPublicEncryptAddress = 4;
-    string FeedPrivateEncryptKey = 5;
+    string EncryptedFeedKey = 4;  // AES key encrypted with participant's RSA public key
   }
 
   message Feed {
