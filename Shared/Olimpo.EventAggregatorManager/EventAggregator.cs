@@ -18,9 +18,34 @@ public class EventAggregator : IEventAggregator
 
     public void Subscribe(object subscriber)
     {
-        if (!this._subscribersList.Any(x => x.Key == subscriber.GetType()))
+        var subscriberType = subscriber.GetType();
+
+        // If a subscriber of this type already exists, replace it
+        if (this._subscribersList.ContainsKey(subscriberType))
         {
-            this._subscribersList.Add(subscriber.GetType(), subscriber);
+            this._subscribersList[subscriberType] = subscriber;
+        }
+        else
+        {
+            this._subscribersList.Add(subscriberType, subscriber);
+        }
+    }
+
+    public void Unsubscribe(object subscriber)
+    {
+        var subscriberType = subscriber.GetType();
+        if (this._subscribersList.ContainsKey(subscriberType))
+        {
+            this._subscribersList.Remove(subscriberType);
+        }
+    }
+
+    public void Unsubscribe<T>() where T : class
+    {
+        var subscriberType = typeof(T);
+        if (this._subscribersList.ContainsKey(subscriberType))
+        {
+            this._subscribersList.Remove(subscriberType);
         }
     }
 
