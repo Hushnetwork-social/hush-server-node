@@ -1,188 +1,186 @@
 using System;
+using System.Linq;
 using System.Text;
-using Org.BouncyCastle.Crypto;
-using Org.BouncyCastle.Crypto.Encodings;
+using Org.BouncyCastle.Asn1.X9;
+using Org.BouncyCastle.Crypto.Agreement;
+using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Modes;
 using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Math;
 using Org.BouncyCastle.Security;
 
 namespace Olimpo;
 
+/// <summary>
+/// Provides ECIES (Elliptic Curve Integrated Encryption Scheme) encryption using secp256k1.
+/// Uses ECDH for key agreement + AES-256-GCM for symmetric encryption.
+/// </summary>
 public class EncryptKeys
 {
-    public string PublicKey { get; private set; }
+    private static readonly X9ECParameters Curve = ECNamedCurveTable.GetByName("secp256k1");
+    private static readonly ECDomainParameters DomainParams = new ECDomainParameters(
+        Curve.Curve, Curve.G, Curve.N, Curve.H, Curve.GetSeed());
 
-    public string PrivateKey { get; private set; }
-
-    public EncryptKeys()
-    {
-        // Use BouncyCastle which works in WebAssembly (pure managed implementation)
-        var keyGen = new RsaKeyPairGenerator();
-        keyGen.Init(new KeyGenerationParameters(new SecureRandom(), 2048));
-        var keyPair = keyGen.GenerateKeyPair();
-
-        var publicKeyParams = (RsaKeyParameters)keyPair.Public;
-        var privateKeyParams = (RsaPrivateCrtKeyParameters)keyPair.Private;
-
-        // Serialize keys to a portable format (Base64-encoded parameters)
-        this.PublicKey = SerializePublicKey(publicKeyParams);
-        this.PrivateKey = SerializePrivateKey(privateKeyParams);
-    }
-
-    private static string SerializePublicKey(RsaKeyParameters publicKey)
-    {
-        // Format: Modulus|Exponent (both Base64 encoded)
-        var modulus = Convert.ToBase64String(publicKey.Modulus.ToByteArrayUnsigned());
-        var exponent = Convert.ToBase64String(publicKey.Exponent.ToByteArrayUnsigned());
-        return $"{modulus}|{exponent}";
-    }
-
-    private static string SerializePrivateKey(RsaPrivateCrtKeyParameters privateKey)
-    {
-        // Format: Modulus|PublicExponent|PrivateExponent|P|Q|DP|DQ|QInv (all Base64 encoded)
-        var parts = new[]
-        {
-            Convert.ToBase64String(privateKey.Modulus.ToByteArrayUnsigned()),
-            Convert.ToBase64String(privateKey.PublicExponent.ToByteArrayUnsigned()),
-            Convert.ToBase64String(privateKey.Exponent.ToByteArrayUnsigned()),
-            Convert.ToBase64String(privateKey.P.ToByteArrayUnsigned()),
-            Convert.ToBase64String(privateKey.Q.ToByteArrayUnsigned()),
-            Convert.ToBase64String(privateKey.DP.ToByteArrayUnsigned()),
-            Convert.ToBase64String(privateKey.DQ.ToByteArrayUnsigned()),
-            Convert.ToBase64String(privateKey.QInv.ToByteArrayUnsigned())
-        };
-        return string.Join("|", parts);
-    }
-
-    private static RsaKeyParameters DeserializePublicKey(string serialized)
-    {
-        // Check if it's the new pipe-separated format or old XML format
-        if (serialized.Contains('|'))
-        {
-            // New format: Modulus|Exponent (both Base64 encoded)
-            var parts = serialized.Split('|');
-            var modulus = new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(parts[0]));
-            var exponent = new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(parts[1]));
-            return new RsaKeyParameters(false, modulus, exponent);
-        }
-        else
-        {
-            // Old format: Base64-encoded XML RSAKeyValue
-            return ParseXmlPublicKey(serialized);
-        }
-    }
-
-    private static RsaKeyParameters ParseXmlPublicKey(string base64Xml)
-    {
-        var xml = Encoding.UTF8.GetString(Convert.FromBase64String(base64Xml));
-
-        // Parse XML manually to avoid System.Security.Cryptography dependencies
-        var modulusStart = xml.IndexOf("<Modulus>") + 9;
-        var modulusEnd = xml.IndexOf("</Modulus>");
-        var exponentStart = xml.IndexOf("<Exponent>") + 10;
-        var exponentEnd = xml.IndexOf("</Exponent>");
-
-        var modulusBase64 = xml.Substring(modulusStart, modulusEnd - modulusStart);
-        var exponentBase64 = xml.Substring(exponentStart, exponentEnd - exponentStart);
-
-        var modulus = new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(modulusBase64));
-        var exponent = new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(exponentBase64));
-
-        return new RsaKeyParameters(false, modulus, exponent);
-    }
-
-    private static RsaPrivateCrtKeyParameters DeserializePrivateKey(string serialized)
-    {
-        // Check if it's the new pipe-separated format or old XML format
-        if (serialized.Contains('|'))
-        {
-            // New format: pipe-separated Base64 values
-            var parts = serialized.Split('|');
-            var modulus = new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(parts[0]));
-            var publicExponent = new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(parts[1]));
-            var privateExponent = new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(parts[2]));
-            var p = new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(parts[3]));
-            var q = new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(parts[4]));
-            var dp = new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(parts[5]));
-            var dq = new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(parts[6]));
-            var qInv = new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(parts[7]));
-
-            return new RsaPrivateCrtKeyParameters(modulus, publicExponent, privateExponent, p, q, dp, dq, qInv);
-        }
-        else
-        {
-            // Old format: Base64-encoded XML RSAKeyValue
-            return ParseXmlPrivateKey(serialized);
-        }
-    }
-
-    private static RsaPrivateCrtKeyParameters ParseXmlPrivateKey(string base64Xml)
-    {
-        var xml = Encoding.UTF8.GetString(Convert.FromBase64String(base64Xml));
-
-        // Parse XML manually to extract RSA private key components
-        var modulus = ParseXmlElement(xml, "Modulus");
-        var exponent = ParseXmlElement(xml, "Exponent");
-        var d = ParseXmlElement(xml, "D");
-        var p = ParseXmlElement(xml, "P");
-        var q = ParseXmlElement(xml, "Q");
-        var dp = ParseXmlElement(xml, "DP");
-        var dq = ParseXmlElement(xml, "DQ");
-        var inverseQ = ParseXmlElement(xml, "InverseQ");
-
-        return new RsaPrivateCrtKeyParameters(
-            new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(modulus)),
-            new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(exponent)),
-            new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(d)),
-            new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(p)),
-            new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(q)),
-            new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(dp)),
-            new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(dq)),
-            new Org.BouncyCastle.Math.BigInteger(1, Convert.FromBase64String(inverseQ)));
-    }
-
-    private static string ParseXmlElement(string xml, string elementName)
-    {
-        var startTag = $"<{elementName}>";
-        var endTag = $"</{elementName}>";
-        var startIndex = xml.IndexOf(startTag) + startTag.Length;
-        var endIndex = xml.IndexOf(endTag);
-        return xml.Substring(startIndex, endIndex - startIndex);
-    }
-
-    public static string Encrypt(string message, string publicKey)
-    {
-        var keyParams = DeserializePublicKey(publicKey);
-
-        var engine = new OaepEncoding(new RsaEngine());
-        engine.Init(true, keyParams);
-
-        byte[] dataToEncrypt = Encoding.UTF8.GetBytes(message);
-        byte[] encryptedData = engine.ProcessBlock(dataToEncrypt, 0, dataToEncrypt.Length);
-
-        return Convert.ToBase64String(encryptedData);
-    }
-
-    public static string Decrypt(string encryptedMessage, string privateKey)
-    {
-        var keyParams = DeserializePrivateKey(privateKey);
-
-        var engine = new OaepEncoding(new RsaEngine());
-        engine.Init(false, keyParams);
-
-        byte[] encryptedData = Convert.FromBase64String(encryptedMessage);
-        byte[] decryptedData = engine.ProcessBlock(encryptedData, 0, encryptedData.Length);
-
-        return Encoding.UTF8.GetString(decryptedData);
-    }
-
-    #region AES-256-GCM Encryption
-
-    private const int AesKeySize = 32;  // 256 bits
+    private const int AesKeySize = 32;   // 256 bits
     private const int GcmNonceSize = 12; // 96 bits (recommended for GCM)
     private const int GcmTagSize = 128;  // 128 bits authentication tag
+
+    public string PublicKey { get; private set; }
+    public string PrivateKey { get; private set; }
+
+    /// <summary>
+    /// Generates a new random secp256k1 key pair for encryption.
+    /// </summary>
+    public EncryptKeys()
+    {
+        var random = new SecureRandom();
+        var keyBytes = new byte[32];
+        random.NextBytes(keyBytes);
+
+        var privateKeyValue = new BigInteger(1, keyBytes);
+
+        // Ensure valid key (0 < key < N)
+        while (privateKeyValue.CompareTo(BigInteger.One) < 0 || privateKeyValue.CompareTo(Curve.N) >= 0)
+        {
+            random.NextBytes(keyBytes);
+            privateKeyValue = new BigInteger(1, keyBytes);
+        }
+
+        var publicKeyPoint = Curve.G.Multiply(privateKeyValue).Normalize();
+
+        this.PrivateKey = ToHex(privateKeyValue.ToByteArrayUnsigned());
+        this.PublicKey = ToHex(publicKeyPoint.GetEncoded(false)); // Uncompressed (65 bytes)
+    }
+
+    /// <summary>
+    /// Encrypts a message using ECIES (ECDH + AES-256-GCM).
+    /// </summary>
+    /// <param name="message">Plaintext message to encrypt</param>
+    /// <param name="recipientPublicKey">Recipient's public key (hex-encoded, 65 bytes uncompressed)</param>
+    /// <returns>Base64-encoded ciphertext: ephemeralPublicKey + nonce + ciphertext + tag</returns>
+    public static string Encrypt(string message, string recipientPublicKey)
+    {
+        // Parse recipient's public key
+        var recipientPubKeyBytes = FromHex(recipientPublicKey);
+        var recipientPubKeyPoint = Curve.Curve.DecodePoint(recipientPubKeyBytes);
+        var recipientPubKeyParams = new ECPublicKeyParameters("EC", recipientPubKeyPoint, DomainParams);
+
+        // Generate ephemeral key pair
+        var random = new SecureRandom();
+        var ephemeralPrivateBytes = new byte[32];
+        random.NextBytes(ephemeralPrivateBytes);
+        var ephemeralPrivateValue = new BigInteger(1, ephemeralPrivateBytes);
+
+        // Ensure valid ephemeral key
+        while (ephemeralPrivateValue.CompareTo(BigInteger.One) < 0 || ephemeralPrivateValue.CompareTo(Curve.N) >= 0)
+        {
+            random.NextBytes(ephemeralPrivateBytes);
+            ephemeralPrivateValue = new BigInteger(1, ephemeralPrivateBytes);
+        }
+
+        var ephemeralPublicPoint = Curve.G.Multiply(ephemeralPrivateValue).Normalize();
+        var ephemeralPrivateParams = new ECPrivateKeyParameters("EC", ephemeralPrivateValue, DomainParams);
+
+        // Perform ECDH key agreement
+        var agreement = new ECDHBasicAgreement();
+        agreement.Init(ephemeralPrivateParams);
+        var sharedSecret = agreement.CalculateAgreement(recipientPubKeyParams);
+        var sharedSecretBytes = sharedSecret.ToByteArrayUnsigned();
+
+        // Derive AES key from shared secret using HKDF
+        var aesKey = DeriveAesKey(sharedSecretBytes, ephemeralPublicPoint.GetEncoded(false));
+
+        // Encrypt message with AES-256-GCM
+        var plaintextBytes = Encoding.UTF8.GetBytes(message);
+        var nonce = new byte[GcmNonceSize];
+        random.NextBytes(nonce);
+
+        var cipher = new GcmBlockCipher(new AesEngine());
+        var parameters = new AeadParameters(new KeyParameter(aesKey), GcmTagSize, nonce);
+        cipher.Init(true, parameters);
+
+        var ciphertext = new byte[cipher.GetOutputSize(plaintextBytes.Length)];
+        var len = cipher.ProcessBytes(plaintextBytes, 0, plaintextBytes.Length, ciphertext, 0);
+        cipher.DoFinal(ciphertext, len);
+
+        // Combine: ephemeralPublicKey (65 bytes) + nonce (12 bytes) + ciphertext (includes tag)
+        var ephemeralPubKeyBytes = ephemeralPublicPoint.GetEncoded(false);
+        var result = new byte[ephemeralPubKeyBytes.Length + nonce.Length + ciphertext.Length];
+        Buffer.BlockCopy(ephemeralPubKeyBytes, 0, result, 0, ephemeralPubKeyBytes.Length);
+        Buffer.BlockCopy(nonce, 0, result, ephemeralPubKeyBytes.Length, nonce.Length);
+        Buffer.BlockCopy(ciphertext, 0, result, ephemeralPubKeyBytes.Length + nonce.Length, ciphertext.Length);
+
+        return Convert.ToBase64String(result);
+    }
+
+    /// <summary>
+    /// Decrypts a message using ECIES (ECDH + AES-256-GCM).
+    /// </summary>
+    /// <param name="encryptedMessage">Base64-encoded ciphertext from Encrypt()</param>
+    /// <param name="privateKey">Recipient's private key (hex-encoded, 32 bytes)</param>
+    /// <returns>Decrypted plaintext message</returns>
+    public static string Decrypt(string encryptedMessage, string privateKey)
+    {
+        var encryptedBytes = Convert.FromBase64String(encryptedMessage);
+
+        // Extract ephemeral public key (65 bytes), nonce (12 bytes), and ciphertext
+        const int ephemeralPubKeyLen = 65;
+        var ephemeralPubKeyBytes = new byte[ephemeralPubKeyLen];
+        var nonce = new byte[GcmNonceSize];
+        var ciphertext = new byte[encryptedBytes.Length - ephemeralPubKeyLen - GcmNonceSize];
+
+        Buffer.BlockCopy(encryptedBytes, 0, ephemeralPubKeyBytes, 0, ephemeralPubKeyLen);
+        Buffer.BlockCopy(encryptedBytes, ephemeralPubKeyLen, nonce, 0, GcmNonceSize);
+        Buffer.BlockCopy(encryptedBytes, ephemeralPubKeyLen + GcmNonceSize, ciphertext, 0, ciphertext.Length);
+
+        // Parse ephemeral public key
+        var ephemeralPubKeyPoint = Curve.Curve.DecodePoint(ephemeralPubKeyBytes);
+        var ephemeralPubKeyParams = new ECPublicKeyParameters("EC", ephemeralPubKeyPoint, DomainParams);
+
+        // Parse recipient's private key
+        var privateKeyBytes = FromHex(privateKey);
+        var privateKeyValue = new BigInteger(1, privateKeyBytes);
+        var privateKeyParams = new ECPrivateKeyParameters("EC", privateKeyValue, DomainParams);
+
+        // Perform ECDH key agreement
+        var agreement = new ECDHBasicAgreement();
+        agreement.Init(privateKeyParams);
+        var sharedSecret = agreement.CalculateAgreement(ephemeralPubKeyParams);
+        var sharedSecretBytes = sharedSecret.ToByteArrayUnsigned();
+
+        // Derive AES key from shared secret using HKDF
+        var aesKey = DeriveAesKey(sharedSecretBytes, ephemeralPubKeyBytes);
+
+        // Decrypt with AES-256-GCM
+        var cipher = new GcmBlockCipher(new AesEngine());
+        var parameters = new AeadParameters(new KeyParameter(aesKey), GcmTagSize, nonce);
+        cipher.Init(false, parameters);
+
+        var plaintext = new byte[cipher.GetOutputSize(ciphertext.Length)];
+        var len = cipher.ProcessBytes(ciphertext, 0, ciphertext.Length, plaintext, 0);
+        cipher.DoFinal(plaintext, len);
+
+        return Encoding.UTF8.GetString(plaintext);
+    }
+
+    /// <summary>
+    /// Derives an AES-256 key from the ECDH shared secret using HKDF.
+    /// </summary>
+    private static byte[] DeriveAesKey(byte[] sharedSecret, byte[] ephemeralPublicKey)
+    {
+        var generator = new HkdfBytesGenerator(new Sha256Digest());
+        // Use ephemeral public key as salt, "hush/ecies/aes256gcm/v1" as info
+        var info = Encoding.UTF8.GetBytes("hush/ecies/aes256gcm/v1");
+        generator.Init(new HkdfParameters(sharedSecret, ephemeralPublicKey, info));
+
+        var aesKey = new byte[AesKeySize];
+        generator.GenerateBytes(aesKey, 0, AesKeySize);
+        return aesKey;
+    }
+
+    #region AES-256-GCM Standalone Methods (for symmetric encryption)
 
     /// <summary>
     /// Generates a cryptographically secure random AES-256 key.
@@ -258,6 +256,22 @@ public class EncryptKeys
         cipher.DoFinal(plaintext, len);
 
         return Encoding.UTF8.GetString(plaintext);
+    }
+
+    #endregion
+
+    #region Hex Utilities
+
+    private static string ToHex(byte[] data) => string.Concat(data.Select(x => x.ToString("x2")));
+
+    private static byte[] FromHex(string hex)
+    {
+        var bytes = new byte[hex.Length / 2];
+        for (int i = 0; i < bytes.Length; i++)
+        {
+            bytes[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
+        }
+        return bytes;
     }
 
     #endregion
