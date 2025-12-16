@@ -1,0 +1,25 @@
+{
+    "BlockchainSettings": {
+        "MaxEmptyBlocksBeforePause": 5
+    },
+
+    "ServerInfo": {
+        "ListeningPort": 4665
+    },
+
+    "DbSettings": {
+        "Host": "HushNetworkPostgreSQL",
+        "Db": "HushNetworkDb",
+        "User": "HushNetworkDb_USER",
+        "Password": "CHANGE_ME_IN_PRODUCTION"
+    },
+
+    "ConnectionStrings": {
+        "HushNetworkDb": "Host=HushNetworkPostgreSQL;Database=HushNetworkDb;Username=HushNetworkDb_USER;Password=CHANGE_ME_IN_PRODUCTION;"
+    },
+
+    "CredentialsProfile": {
+        "CredentialsFile": "./stacker-credentials.dat",
+        "CredentialsPasswordEnvVar": "HUSH_CREDENTIALS_PASSWORD"
+    }
+}

@@ -25,7 +25,10 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0
 WORKDIR /app
 COPY --from=build /app/publish .
 
-# Expose the port the gRPC server will listen on
+# Expose gRPC ports:
+# - 4665: Native gRPC (HTTP/2) for Desktop, Android, iOS
+# - 4666: gRPC-Web (HTTP/1.1) for Browser/WebAssembly
 EXPOSE 4665
+EXPOSE 4666
 
 ENTRYPOINT ["dotnet", "HushServerNode.dll"]
