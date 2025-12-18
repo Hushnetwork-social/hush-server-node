@@ -19,6 +19,28 @@ public class FullIdentityTransactionHandler(
 
     public async Task HandleFullIdentityTransaction(ValidatedTransaction<FullIdentityPayload> transaction)
     {
+        // Validate required fields before processing
+        if (string.IsNullOrWhiteSpace(transaction.Payload.IdentityAlias))
+        {
+            this._logger.LogWarning("Rejecting FullIdentity transaction: IdentityAlias is null or empty. Signatory: {Signatory}",
+                transaction.UserSignature.Signatory);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(transaction.Payload.PublicSigningAddress))
+        {
+            this._logger.LogWarning("Rejecting FullIdentity transaction: PublicSigningAddress is null or empty. Signatory: {Signatory}",
+                transaction.UserSignature.Signatory);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(transaction.Payload.PublicEncryptAddress))
+        {
+            this._logger.LogWarning("Rejecting FullIdentity transaction: PublicEncryptAddress is null or empty. Signatory: {Signatory}",
+                transaction.UserSignature.Signatory);
+            return;
+        }
+
         using var readonlyUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
         var identityExists = await readonlyUnitOfWork
             .GetRepository<IIdentityRepository>()
@@ -26,11 +48,13 @@ public class FullIdentityTransactionHandler(
 
         if(identityExists)
         {
-            // TODO [AboimPinto] should not exist. 
-            // If the identity exists, should never receive a transaction with FullIdentity, but, only field updates
-            throw new InvalidOperationException("At this point the system should already have a identity in the Index database");
+            // Identity already exists - this can happen if the same transaction is processed twice
+            // or if the client retries identity creation. Gracefully skip instead of crashing.
+            this._logger.LogWarning("Skipping FullIdentity transaction: Identity already exists for address {Address}",
+                transaction.Payload.PublicSigningAddress);
+            return;
         }
-        
+
         await this.InsertFullIdentity(transaction);
     }
 

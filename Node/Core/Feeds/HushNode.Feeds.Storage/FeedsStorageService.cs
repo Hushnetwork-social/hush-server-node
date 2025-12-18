@@ -25,12 +25,29 @@ public class FeedsStorageService(
     public async Task CreateFeed(Feed feed)
     {
         using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
-        
+
         await writableUnitOfWork
             .GetRepository<IFeedsRepository>()
             .CreateFeed(feed);
 
         await writableUnitOfWork.CommitAsync();
+    }
+
+    public async Task<bool> CreatePersonalFeedIfNotExists(Feed feed, string publicSigningAddress)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+        var repository = writableUnitOfWork.GetRepository<IFeedsRepository>();
+
+        // Check within the same transaction
+        var hasPersonalFeed = await repository.HasPersonalFeed(publicSigningAddress);
+        if (hasPersonalFeed)
+        {
+            return false; // Personal feed already exists
+        }
+
+        await repository.CreateFeed(feed);
+        await writableUnitOfWork.CommitAsync();
+        return true;
     }
 
     public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex) => 
