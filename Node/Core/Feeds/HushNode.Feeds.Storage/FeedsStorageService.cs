@@ -35,10 +35,13 @@ public class FeedsStorageService(
 
     public async Task<bool> CreatePersonalFeedIfNotExists(Feed feed, string publicSigningAddress)
     {
-        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+        // Use serializable isolation to prevent race conditions where two transactions
+        // both check HasPersonalFeed=false and then both create a feed
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable(
+            System.Data.IsolationLevel.Serializable);
         var repository = writableUnitOfWork.GetRepository<IFeedsRepository>();
 
-        // Check within the same transaction
+        // Check within the same serializable transaction
         var hasPersonalFeed = await repository.HasPersonalFeed(publicSigningAddress);
         if (hasPersonalFeed)
         {

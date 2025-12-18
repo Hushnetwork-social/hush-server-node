@@ -1,22 +1,28 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Olimpo.EntityFramework.Persistency;
 
-public sealed class WritableUnitOfWork<TContext> : IWritableUnitOfWork<TContext> 
+public sealed class WritableUnitOfWork<TContext> : IWritableUnitOfWork<TContext>
     where TContext : DbContext
 {
     private readonly IServiceScope _serviceScope;
     private readonly IDbContextTransaction _transaction;
-    
+
     public TContext Context { get; }
 
-    public WritableUnitOfWork(IServiceProvider serviceProvider)     
+    public WritableUnitOfWork(IServiceProvider serviceProvider)
+        : this(serviceProvider, IsolationLevel.ReadCommitted)
+    {
+    }
+
+    public WritableUnitOfWork(IServiceProvider serviceProvider, IsolationLevel isolationLevel)
     {
         this._serviceScope = serviceProvider.CreateScope();
         this.Context = _serviceScope.ServiceProvider.GetRequiredService<TContext>();
-        this._transaction = Context.Database.BeginTransaction();
+        this._transaction = Context.Database.BeginTransaction(isolationLevel);
     }
 
     public TRepository GetRepository<TRepository>() 

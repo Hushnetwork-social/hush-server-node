@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace Olimpo.EntityFramework.Persistency
@@ -8,5 +9,7 @@ namespace Olimpo.EntityFramework.Persistency
         IReadOnlyUnitOfWork<TContext> CreateReadOnly();
 
         IWritableUnitOfWork<TContext> CreateWritable();
+
+        IWritableUnitOfWork<TContext> CreateWritable(IsolationLevel isolationLevel);
     }
 }
