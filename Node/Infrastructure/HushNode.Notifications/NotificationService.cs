@@ -119,9 +119,9 @@ public class NotificationService : INotificationService
             var json = JsonSerializer.Serialize(evt, JsonOptions);
             await _redis.Subscriber.PublishAsync(channel, json);
 
-            _logger.LogDebug(
-                "Published NewMessage event for user {UserId}, feed {FeedId}",
-                recipientUserId, feedId);
+            _logger.LogInformation(
+                "Published NewMessage event to Redis for user {UserId}, feed {FeedId}, channel {Channel}",
+                recipientUserId.Substring(0, Math.Min(20, recipientUserId.Length)), feedId, channel);
         }
         catch (RedisConnectionException ex)
         {
