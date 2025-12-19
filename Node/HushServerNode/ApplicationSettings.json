@@ -3,6 +3,15 @@
         "MaxEmptyBlocksBeforePause": 5
     },
 
+    "Redis": {
+        "ConnectionString": "localhost:6379",
+        "InstanceName": "HushFeeds:",
+        "ConnectRetry": 3,
+        "ConnectTimeout": 5000,
+        "SyncTimeout": 5000,
+        "Enabled": true
+    },
+
     "StackerInfo": {
         "PublicSigningAddress":  "04683b05d070d1fe43a4b337f3e474d48271c55f1b75c787a2a0703b991ca0d7636102e777ab147dcbe866e3741350a654382df8200496841ae1fa6debf732b477",
         "PrivateSigningKey":     "7fbcd7c10fc3e71d8fbe6770e3b8a2b2726fa5c615a46462053170b4069e1557",

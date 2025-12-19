@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+option csharp_namespace = "HushNetwork.proto";
+
+package rpcHush;
+
+// Service for real-time notifications and unread tracking
+service HushNotification {
+  // Subscribe to real-time events (server streaming)
+  rpc SubscribeToEvents(SubscribeToEventsRequest) returns (stream FeedEvent);
+
+  // Mark a feed as read
+  rpc MarkFeedAsRead(MarkFeedAsReadRequest) returns (MarkFeedAsReadReply);
+
+  // Get current unread counts for all feeds
+  rpc GetUnreadCounts(GetUnreadCountsRequest) returns (GetUnreadCountsReply);
+}
+
+// Subscribe request
+message SubscribeToEventsRequest {
+  string UserId = 1;
+  string DeviceId = 2;   // Optional: for analytics/debugging
+  string Platform = 3;   // "browser", "tauri", "mobile-pwa"
+}
+
+// Event types
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_NEW_MESSAGE = 1;
+  EVENT_TYPE_MESSAGES_READ = 2;
+  EVENT_TYPE_UNREAD_COUNT_SYNC = 3;
+}
+
+// Event pushed to clients via server streaming
+message FeedEvent {
+  EventType Type = 1;
+  string FeedId = 2;
+
+  // For NEW_MESSAGE events
+  string SenderName = 3;
+  string MessagePreview = 4;  // Max 255 chars
+
+  // Current unread count for this feed
+  int32 UnreadCount = 5;
+
+  // For UNREAD_COUNT_SYNC events - all feed counts
+  map<string, int32> AllCounts = 6;
+
+  // Timestamp (Unix milliseconds)
+  int64 TimestampUnixMs = 7;
+}
+
+// Mark as read request
+message MarkFeedAsReadRequest {
+  string UserId = 1;
+  string FeedId = 2;
+}
+
+message MarkFeedAsReadReply {
+  bool Success = 1;
+}
+
+// Get unread counts request
+message GetUnreadCountsRequest {
+  string UserId = 1;
+}
+
+message GetUnreadCountsReply {
+  map<string, int32> Counts = 1;  // feedId -> unread count
+}

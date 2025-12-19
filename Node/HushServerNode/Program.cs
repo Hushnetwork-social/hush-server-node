@@ -16,6 +16,7 @@ using HushNode.Bank.gRPC;
 using HushNode.Feeds;
 using HushNode.Feeds.gRPC;
 using HushNode.Caching;
+using HushNode.Notifications.gRPC;
 
 namespace HushServerNode;
 
@@ -85,7 +86,8 @@ public class Program
             .RegisterCoreModuleFeeds()
             .RegisterHushNodeIndexing()
             .RegisterHushNodeMemPool()
-            .RegisterInternalModuleIdentity();
+            .RegisterInternalModuleIdentity()
+            .RegisterNotificationGrpc();
 
         var app = builder.Build();
 
@@ -107,6 +109,7 @@ public class Program
         app.MapGrpcService<BankGrpService>();
         app.MapGrpcService<IdentityGrpcService>();
         app.MapGrpcService<FeedsGrpcService>();
+        app.MapGrpcService<NotificationGrpcService>();
 
         app.Run();
     }
