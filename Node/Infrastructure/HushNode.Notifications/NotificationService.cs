@@ -45,8 +45,9 @@ public class NotificationService : INotificationService
         });
 
         // Subscribe to Redis channel
-        await _redis.Subscriber.SubscribeAsync(channel, (_, message) =>
+        await _redis.Subscriber.SubscribeAsync(channel, (redisChannel, message) =>
         {
+            _logger.LogInformation("Received message on Redis channel {Channel}: {HasValue}", redisChannel, message.HasValue);
             if (message.HasValue)
             {
                 try
@@ -54,6 +55,7 @@ public class NotificationService : INotificationService
                     var feedEvent = JsonSerializer.Deserialize<FeedEvent>(message!, JsonOptions);
                     if (feedEvent != null)
                     {
+                        _logger.LogInformation("Deserialized event type {Type} for feed {FeedId}, writing to queue", feedEvent.Type, feedEvent.FeedId);
                         queue.Writer.TryWrite(feedEvent);
                     }
                 }
@@ -64,7 +66,7 @@ public class NotificationService : INotificationService
             }
         });
 
-        _logger.LogInformation("User {UserId} subscribed to notification events", userId);
+        _logger.LogInformation("User {UserId} subscribed to notification events on channel {Channel}", userId, channel);
 
         try
         {
