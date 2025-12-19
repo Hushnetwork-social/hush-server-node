@@ -52,16 +52,24 @@ public class EventAggregator : IEventAggregator
     public Task PublishAsync<T>(T message) where T : class
     {
         this._logger.LogInformation("Publishing message {0} | {1}", message.GetType().Name, message.ToString());
+        this._logger.LogInformation("EventAggregator has {0} subscribers: {1}",
+            this._subscribersList.Count,
+            string.Join(", ", this._subscribersList.Keys.Select(k => k.Name)));
 
         foreach (var handler in this._subscribersList.Select(x => x.Value).OfType<IHandle<T>>().ToList())
         {
             handler.Handle(message);
         }
 
-        var handlers = this._subscribersList
+        var asyncHandlers = this._subscribersList
             .ToList()
             .Select(x => x.Value)
             .OfType<IHandleAsync<T>>()
+            .ToList();
+
+        this._logger.LogInformation("Found {0} async handlers for {1}", asyncHandlers.Count, typeof(T).Name);
+
+        var handlers = asyncHandlers
             .Select(s => s.HandleAsync(message))
             .Where(t => t.Status != TaskStatus.RanToCompletion)
             .ToList();
