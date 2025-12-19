@@ -18,4 +18,6 @@ public interface IFeedsStorageService
     Task<bool> CreatePersonalFeedIfNotExists(Feed feed, string publicSigningAddress);
 
     Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex);
+
+    Task<Feed?> GetFeedByIdAsync(FeedId feedId);
 }

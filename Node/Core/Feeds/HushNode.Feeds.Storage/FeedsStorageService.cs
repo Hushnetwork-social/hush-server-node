@@ -53,9 +53,15 @@ public class FeedsStorageService(
         return true;
     }
 
-    public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex) => 
+    public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex) =>
         await this._unitOfWorkProvider
             .CreateReadOnly()
             .GetRepository<IFeedsRepository>()
             .RetrieveFeedsForAddress(publicSigningAddress, blockIndex);
+
+    public async Task<Feed?> GetFeedByIdAsync(FeedId feedId) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetFeedByIdAsync(feedId);
 }

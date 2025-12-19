@@ -23,12 +23,17 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .AddAsync(feed);
 
     public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(
-        string publicSigningAddress, 
+        string publicSigningAddress,
         BlockIndex blockIndex) =>
         await this.Context.Feeds
             .Include(x => x.Participants)
-            .Where(x => 
+            .Where(x =>
                 x.Participants.Any(participant => participant.ParticipantPublicAddress == publicSigningAddress) &&
                 x.BlockIndex > blockIndex)
             .ToListAsync();
+
+    public async Task<Feed?> GetFeedByIdAsync(FeedId feedId) =>
+        await this.Context.Feeds
+            .Include(x => x.Participants)
+            .FirstOrDefaultAsync(x => x.FeedId == feedId);
 }

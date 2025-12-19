@@ -50,6 +50,7 @@ public class Program
 
         // Add gRPC services
         builder.Services.AddGrpc();
+        builder.Services.AddGrpcReflection();
 
         // Add CORS for browser clients
         builder.Services.AddCors(options =>
@@ -110,6 +111,9 @@ public class Program
         app.MapGrpcService<IdentityGrpcService>();
         app.MapGrpcService<FeedsGrpcService>();
         app.MapGrpcService<NotificationGrpcService>();
+
+        // Enable gRPC reflection for grpcurl and other testing tools
+        app.MapGrpcReflectionService();
 
         app.Run();
     }

@@ -13,4 +13,6 @@ public interface IFeedsRepository : IRepository
     Task CreateFeed(Feed feed);
 
     Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex);
+
+    Task<Feed?> GetFeedByIdAsync(FeedId feedId);
 }

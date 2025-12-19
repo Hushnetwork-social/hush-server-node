@@ -30,6 +30,9 @@ public static class Registration
         services.AddSingleton<IUnreadTrackingService, UnreadTrackingService>();
         services.AddSingleton<INotificationService, NotificationService>();
 
+        // Register the event handler as singleton (subscribes via EventAggregator)
+        services.AddSingleton<NotificationEventHandler>();
+
         return services;
     }
 }

@@ -1,17 +1,21 @@
 using HushNode.Caching;
+using HushNode.Events;
 using HushNode.Feeds.Storage;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Feeds.Model;
+using Olimpo;
 
 namespace HushNode.Feeds;
 
 public class FeedMessageTransactionHandler(
     IFeedMessageStorageService feedMessageStorageService,
-    IBlockchainCache blockchainCache)
+    IBlockchainCache blockchainCache,
+    IEventAggregator eventAggregator)
     : IFeedMessageTransactionHandler
 {
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
+    private readonly IEventAggregator _eventAggregator = eventAggregator;
 
     public async Task HandleFeedMessageTransaction(ValidatedTransaction<NewFeedMessagePayload> validatedTransaction)
     {
@@ -39,5 +43,8 @@ public class FeedMessageTransactionHandler(
             this._blockchainCache.LastBlockIndex);
 
         await this._feedMessageStorageService.CreateFeedMessageAsync(feedMessage);
+
+        // Publish event for notification system (via EventAggregator - no hard reference)
+        await this._eventAggregator.PublishAsync(new NewFeedMessageCreatedEvent(feedMessage));
     }
 }

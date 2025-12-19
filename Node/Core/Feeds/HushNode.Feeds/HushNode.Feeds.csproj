@@ -3,6 +3,7 @@
     <ProjectReference Include="..\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
     <ProjectReference Include="..\HushNode.Feeds.gRPC\HushNode.Feeds.gRPC.csproj" />
     <ProjectReference Include="..\..\HushNode.MemPool\HushNode.MemPool.csproj" />
+    <ProjectReference Include="..\..\HushNode.Events\HushNode.Events.csproj" />
     <ProjectReference Include="..\..\Indexing\HushNode.Indexing.Interfaces\HushNode.Indexing.Interfaces.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Caching\HushNode.Caching.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
