@@ -51,8 +51,8 @@ public class EventAggregator : IEventAggregator
 
     public Task PublishAsync<T>(T message) where T : class
     {
-        this._logger.LogInformation("Publishing message {0} | {1}", message.GetType().Name, message.ToString());
-        this._logger.LogInformation("EventAggregator has {0} subscribers: {1}",
+        this._logger.LogDebug("Publishing message {MessageType} | {Message}", message.GetType().Name, message.ToString());
+        this._logger.LogDebug("EventAggregator has {SubscriberCount} subscribers: {Subscribers}",
             this._subscribersList.Count,
             string.Join(", ", this._subscribersList.Keys.Select(k => k.Name)));
 
@@ -67,7 +67,7 @@ public class EventAggregator : IEventAggregator
             .OfType<IHandleAsync<T>>()
             .ToList();
 
-        this._logger.LogInformation("Found {0} async handlers for {1}", asyncHandlers.Count, typeof(T).Name);
+        this._logger.LogDebug("Found {HandlerCount} async handlers for {MessageType}", asyncHandlers.Count, typeof(T).Name);
 
         var handlers = asyncHandlers
             .Select(s => s.HandleAsync(message))

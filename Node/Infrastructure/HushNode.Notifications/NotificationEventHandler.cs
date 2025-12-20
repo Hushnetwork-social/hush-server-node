@@ -46,7 +46,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
     {
         var feedMessage = message.FeedMessage;
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Handling new feed message: FeedId={FeedId}, MessageId={MessageId}, Issuer={Issuer}",
             feedMessage.FeedId,
             feedMessage.FeedMessageId,
@@ -89,7 +89,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
                     senderName,
                     messagePreview);
 
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Notification sent to recipient: UserId={UserId}, FeedId={FeedId}",
                     recipientUserId.Substring(0, Math.Min(20, recipientUserId.Length)),
                     feedMessage.FeedId);

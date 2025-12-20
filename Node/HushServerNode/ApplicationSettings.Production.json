@@ -1,4 +1,15 @@
 {
+    "Logging": {
+        "LogLevel": {
+            "Default": "Information",
+            "Microsoft": "Warning",
+            "Microsoft.EntityFrameworkCore": "Warning",
+            "HushNode.Notifications": "Warning",
+            "HushNode.Feeds": "Warning",
+            "Olimpo": "Warning"
+        }
+    },
+
     "BlockchainSettings": {
         "MaxEmptyBlocksBeforePause": 5
     },
@@ -14,13 +25,6 @@
 
     "ServerInfo": {
         "ListeningPort": 4665
-    },
-
-    "DbSettings": {
-        "Host": "HushNetworkPostgreSQL",
-        "Db": "HushNetworkDb",
-        "User": "HushNetworkDb_USER",
-        "Password": "CHANGE_ME_IN_PRODUCTION"
     },
 
     "ConnectionStrings": {

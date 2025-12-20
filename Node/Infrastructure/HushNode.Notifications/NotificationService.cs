@@ -47,7 +47,7 @@ public class NotificationService : INotificationService
         // Subscribe to Redis channel
         await _redis.Subscriber.SubscribeAsync(channel, (redisChannel, message) =>
         {
-            _logger.LogInformation("Received message on Redis channel {Channel}: {HasValue}", redisChannel, message.HasValue);
+            _logger.LogDebug("Received message on Redis channel {Channel}: {HasValue}", redisChannel, message.HasValue);
             if (message.HasValue)
             {
                 try
@@ -55,7 +55,7 @@ public class NotificationService : INotificationService
                     var feedEvent = JsonSerializer.Deserialize<FeedEvent>(message!, JsonOptions);
                     if (feedEvent != null)
                     {
-                        _logger.LogInformation("Deserialized event type {Type} for feed {FeedId}, writing to queue", feedEvent.Type, feedEvent.FeedId);
+                        _logger.LogDebug("Deserialized event type {Type} for feed {FeedId}, writing to queue", feedEvent.Type, feedEvent.FeedId);
                         queue.Writer.TryWrite(feedEvent);
                     }
                 }
@@ -66,7 +66,7 @@ public class NotificationService : INotificationService
             }
         });
 
-        _logger.LogInformation("User {UserId} subscribed to notification events on channel {Channel}", userId, channel);
+        _logger.LogDebug("User {UserId} subscribed to notification events on channel {Channel}", userId, channel);
 
         try
         {
@@ -91,7 +91,7 @@ public class NotificationService : INotificationService
             // Cleanup on disconnect
             await _redis.Subscriber.UnsubscribeAsync(channel);
             queue.Writer.Complete();
-            _logger.LogInformation("User {UserId} unsubscribed from notification events", userId);
+            _logger.LogDebug("User {UserId} unsubscribed from notification events", userId);
         }
     }
 
@@ -121,7 +121,7 @@ public class NotificationService : INotificationService
             var json = JsonSerializer.Serialize(evt, JsonOptions);
             await _redis.Subscriber.PublishAsync(channel, json);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Published NewMessage event to Redis for user {UserId}, feed {FeedId}, channel {Channel}",
                 recipientUserId.Substring(0, Math.Min(20, recipientUserId.Length)), feedId, channel);
         }
