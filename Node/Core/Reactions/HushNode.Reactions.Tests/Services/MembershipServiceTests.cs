@@ -49,6 +49,8 @@ public class MembershipServiceTests
             .Returns(_readOnlyUnitOfWorkMock.Object);
         _unitOfWorkProviderMock.Setup(x => x.CreateWritable(It.IsAny<System.Data.IsolationLevel>()))
             .Returns(_writableUnitOfWorkMock.Object);
+        _unitOfWorkProviderMock.Setup(x => x.CreateWritable())
+            .Returns(_writableUnitOfWorkMock.Object);
 
         _service = new MembershipService(
             _unitOfWorkProviderMock.Object,
@@ -125,9 +127,13 @@ public class MembershipServiceTests
         var feedId = TestDataFactory.CreateFeedId();
         var commitment = TestDataFactory.CreateCommitment();
 
-        // Setup empty feed
+        // Setup empty feed - both commitment repo and merkle repo
         _commitmentRepoMock.Setup(x => x.GetCommitmentsForFeedAsync(feedId))
             .ReturnsAsync(new List<FeedMemberCommitment>());
+        _merkleRepoMock.Setup(x => x.GetCommitmentsAsync(feedId))
+            .ReturnsAsync(new List<byte[]>());
+        _merkleRepoMock.Setup(x => x.GetCommitmentCountAsync(feedId))
+            .ReturnsAsync(0);
 
         var result = await _service.RegisterCommitmentAsync(feedId, commitment);
 
@@ -177,8 +183,12 @@ public class MembershipServiceTests
         var commitment = TestDataFactory.CreateCommitment();
         var memberCommitment = new FeedMemberCommitment(feedId, commitment, DateTime.UtcNow);
 
-        _commitmentRepoMock.Setup(x => x.GetCommitmentsForFeedAsync(feedId))
-            .ReturnsAsync(new List<FeedMemberCommitment> { memberCommitment });
+        // Setup commitment repo - SetupCommitments also sets up IsCommitmentRegisteredAsync
+        _commitmentRepoMock.SetupCommitments(feedId, memberCommitment);
+
+        // Also set up merkle repo for GetCommitmentsAsync (used by MembershipService)
+        _merkleRepoMock.Setup(x => x.GetCommitmentsAsync(feedId))
+            .ReturnsAsync(new List<byte[]> { commitment });
 
         var root = TestDataFactory.CreateMerkleRootHistory(feedId, 100);
         _merkleRepoMock.SetupMerkleRoots(feedId, root);
@@ -199,8 +209,12 @@ public class MembershipServiceTests
         var commitment = TestDataFactory.CreateCommitment();
         var memberCommitment = new FeedMemberCommitment(feedId, commitment, DateTime.UtcNow);
 
-        _commitmentRepoMock.Setup(x => x.GetCommitmentsForFeedAsync(feedId))
-            .ReturnsAsync(new List<FeedMemberCommitment> { memberCommitment });
+        // Setup commitment repo - SetupCommitments also sets up IsCommitmentRegisteredAsync
+        _commitmentRepoMock.SetupCommitments(feedId, memberCommitment);
+
+        // Also set up merkle repo for GetCommitmentsAsync
+        _merkleRepoMock.Setup(x => x.GetCommitmentsAsync(feedId))
+            .ReturnsAsync(new List<byte[]> { commitment });
 
         var root = TestDataFactory.CreateMerkleRootHistory(feedId, 100);
         _merkleRepoMock.SetupMerkleRoots(feedId, root);
@@ -216,8 +230,9 @@ public class MembershipServiceTests
     {
         var feedId = TestDataFactory.CreateFeedId();
 
-        _commitmentRepoMock.Setup(x => x.GetCommitmentsForFeedAsync(feedId))
-            .ReturnsAsync(new List<FeedMemberCommitment>());
+        // Set up merkle repo for GetCommitmentsAsync (empty)
+        _merkleRepoMock.Setup(x => x.GetCommitmentsAsync(feedId))
+            .ReturnsAsync(new List<byte[]>());
 
         var result = await _service.UpdateMerkleRootAsync(feedId, 100);
 
@@ -229,11 +244,12 @@ public class MembershipServiceTests
     public async Task UpdateMerkleRootAsync_WithCommitments_ShouldComputeRoot()
     {
         var feedId = TestDataFactory.CreateFeedId();
-        var commitment1 = new FeedMemberCommitment(feedId, TestDataFactory.CreateCommitment(), DateTime.UtcNow);
-        var commitment2 = new FeedMemberCommitment(feedId, TestDataFactory.CreateCommitment(), DateTime.UtcNow);
+        var commitment1 = TestDataFactory.CreateCommitment();
+        var commitment2 = TestDataFactory.CreateCommitment();
 
-        _commitmentRepoMock.Setup(x => x.GetCommitmentsForFeedAsync(feedId))
-            .ReturnsAsync(new List<FeedMemberCommitment> { commitment1, commitment2 });
+        // Set up merkle repo for GetCommitmentsAsync
+        _merkleRepoMock.Setup(x => x.GetCommitmentsAsync(feedId))
+            .ReturnsAsync(new List<byte[]> { commitment1, commitment2 });
 
         var result = await _service.UpdateMerkleRootAsync(feedId, 100);
 
@@ -252,10 +268,11 @@ public class MembershipServiceTests
     public async Task UpdateMerkleRootAsync_SameCommitments_ShouldProduceSameRoot()
     {
         var feedId = TestDataFactory.CreateFeedId();
-        var commitment = new FeedMemberCommitment(feedId, TestDataFactory.CreateCommitment(), DateTime.UtcNow);
+        var commitment = TestDataFactory.CreateCommitment();
 
-        _commitmentRepoMock.Setup(x => x.GetCommitmentsForFeedAsync(feedId))
-            .ReturnsAsync(new List<FeedMemberCommitment> { commitment });
+        // Set up merkle repo for GetCommitmentsAsync
+        _merkleRepoMock.Setup(x => x.GetCommitmentsAsync(feedId))
+            .ReturnsAsync(new List<byte[]> { commitment });
 
         var result1 = await _service.UpdateMerkleRootAsync(feedId, 100);
         var result2 = await _service.UpdateMerkleRootAsync(feedId, 101);

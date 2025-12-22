@@ -60,7 +60,7 @@ public class PoseidonHash : IPoseidonHash
         state[1] = Mod(a);
         state[2] = Mod(b);
 
-        Permute(state, _roundConstantsT3, _mdsMatrixT3);
+        state = Permute(state, _roundConstantsT3, _mdsMatrixT3);
 
         return state[0];  // Output is first element
     }
@@ -75,12 +75,12 @@ public class PoseidonHash : IPoseidonHash
         state[3] = Mod(c);
         state[4] = Mod(d);
 
-        Permute(state, _roundConstantsT5, _mdsMatrixT5);
+        state = Permute(state, _roundConstantsT5, _mdsMatrixT5);
 
         return state[0];  // Output is first element
     }
 
-    private void Permute(BigInteger[] state, BigInteger[] roundConstants, BigInteger[][] mdsMatrix)
+    private BigInteger[] Permute(BigInteger[] state, BigInteger[] roundConstants, BigInteger[][] mdsMatrix)
     {
         int t = state.Length;
         int rcIdx = 0;
@@ -138,6 +138,8 @@ public class PoseidonHash : IPoseidonHash
             // MDS mix
             state = MixLayer(state, mdsMatrix);
         }
+
+        return state;
     }
 
     private BigInteger SBox(BigInteger x)

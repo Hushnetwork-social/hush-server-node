@@ -41,15 +41,22 @@ public class PoseidonHashTests
     }
 
     [Fact]
-    public void Hash2_DifferentInputs_ShouldProduceDifferentOutputs()
+    public void Hash2_DifferentSecondInput_ShouldProduceDifferentOutputs()
     {
-        var a = BigInteger.Parse("111");
-        var b = BigInteger.Parse("222");
+        // Fixing first input, different second inputs should produce different hashes
+        var result1 = _poseidon.Hash2(BigInteger.Parse("12345"), BigInteger.Parse("1"));
+        var result2 = _poseidon.Hash2(BigInteger.Parse("12345"), BigInteger.Parse("2"));
 
-        var result1 = _poseidon.Hash2(a, b);
-        var result2 = _poseidon.Hash2(a, BigInteger.Parse("333"));
+        result1.Should().NotBe(result2);
+    }
 
-        // Different second input should produce different output
+    [Fact]
+    public void Hash2_DifferentFirstInput_ShouldProduceDifferentOutputs()
+    {
+        // Fixing second input, different first inputs should produce different hashes
+        var result1 = _poseidon.Hash2(BigInteger.Parse("1"), BigInteger.Parse("99999"));
+        var result2 = _poseidon.Hash2(BigInteger.Parse("2"), BigInteger.Parse("99999"));
+
         result1.Should().NotBe(result2);
     }
 
@@ -70,15 +77,18 @@ public class PoseidonHashTests
     [Fact]
     public void Hash4_DifferentInputs_ShouldProduceDifferentOutputs()
     {
-        var a = BigInteger.Parse("1");
-        var b = BigInteger.Parse("2");
-        var c = BigInteger.Parse("3");
-        var d = BigInteger.Parse("4");
+        // Changing any input should produce different hash
+        var result1 = _poseidon.Hash4(
+            BigInteger.Parse("1"),
+            BigInteger.Parse("2"),
+            BigInteger.Parse("3"),
+            BigInteger.Parse("4"));
+        var result2 = _poseidon.Hash4(
+            BigInteger.Parse("1"),
+            BigInteger.Parse("2"),
+            BigInteger.Parse("3"),
+            BigInteger.Parse("5")); // Only last input differs
 
-        var result1 = _poseidon.Hash4(a, b, c, d);
-        var result2 = _poseidon.Hash4(a, b, c, BigInteger.Parse("5"));
-
-        // Different fourth input should produce different output
         result1.Should().NotBe(result2);
     }
 
