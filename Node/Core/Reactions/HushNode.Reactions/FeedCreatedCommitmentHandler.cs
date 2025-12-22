@@ -35,7 +35,8 @@ public class FeedCreatedCommitmentHandler : IHandle<FeedCreatedEvent>
         // Subscribe to feed created events
         eventAggregator.Subscribe(this);
 
-        _logger.LogInformation("[FeedCreatedCommitmentHandler] Initialized for user {Address}", _localUserAddress[..16]);
+        var addressPreview = _localUserAddress.Length > 16 ? _localUserAddress[..16] : _localUserAddress;
+        _logger.LogInformation("[FeedCreatedCommitmentHandler] Initialized for user {Address}...", addressPreview);
     }
 
     public async void Handle(FeedCreatedEvent message)
