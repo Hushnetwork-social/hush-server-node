@@ -1,0 +1,174 @@
+syntax = "proto3";
+
+option csharp_namespace = "HushNetwork.proto";
+
+package rpcHush;
+
+// Reaction Service - Anonymous reactions with ZK proofs
+service HushReactions {
+  // Submit a new reaction or update existing
+  rpc SubmitReaction(SubmitReactionRequest) returns (SubmitReactionResponse);
+
+  // Get aggregated tallies for multiple messages
+  rpc GetReactionTallies(GetTalliesRequest) returns (GetTalliesResponse);
+
+  // Check if a nullifier exists (for client state recovery)
+  rpc NullifierExists(NullifierExistsRequest) returns (NullifierExistsResponse);
+
+  // Get reaction backup for cross-device recovery
+  rpc GetReactionBackup(GetReactionBackupRequest) returns (GetReactionBackupResponse);
+}
+
+// Membership Service - Merkle tree operations for ZK proofs
+service HushMembership {
+  // Get user's Merkle proof for a feed
+  rpc GetMembershipProof(GetMembershipProofRequest) returns (GetMembershipProofResponse);
+
+  // Get recent Merkle roots (for grace period verification)
+  rpc GetRecentMerkleRoots(GetRecentRootsRequest) returns (GetRecentRootsResponse);
+
+  // Anonymous commitment registration
+  rpc RegisterCommitment(RegisterCommitmentRequest) returns (RegisterCommitmentResponse);
+
+  // Check if a commitment is already registered for a feed
+  rpc IsCommitmentRegistered(IsCommitmentRegisteredRequest) returns (IsCommitmentRegisteredResponse);
+}
+
+// ============================================
+// Common Types
+// ============================================
+
+// Elliptic curve point (Baby JubJub)
+message ECPoint {
+  bytes x = 1;  // 32 bytes (big-endian)
+  bytes y = 2;  // 32 bytes (big-endian)
+}
+
+// ============================================
+// Submit Reaction
+// ============================================
+
+message SubmitReactionRequest {
+  bytes feed_id = 1;                    // 16 bytes (UUID)
+  bytes message_id = 2;                 // 16 bytes (UUID)
+  bytes nullifier = 3;                  // 32 bytes (Poseidon hash)
+  repeated ECPoint ciphertext_c1 = 4;   // 6 points (one per emoji)
+  repeated ECPoint ciphertext_c2 = 5;   // 6 points (one per emoji)
+  bytes zk_proof = 6;                   // ~256 bytes (Groth16 proof)
+  bytes encrypted_emoji_backup = 7;     // For cross-device recovery (~32 bytes)
+  string circuit_version = 8;           // e.g., "omega-v1.0.0" (for verification key selection)
+  // NOTE: No signature field - ZK proof proves membership = authentication
+}
+
+message SubmitReactionResponse {
+  bool success = 1;
+  string error_message = 2;
+  bytes transaction_id = 3;             // 16 bytes (UUID)
+}
+
+// ============================================
+// Get Tallies
+// ============================================
+
+message GetTalliesRequest {
+  bytes feed_id = 1;                    // 16 bytes (UUID)
+  repeated bytes message_ids = 2;       // List of message UUIDs
+}
+
+message GetTalliesResponse {
+  repeated MessageTally tallies = 1;
+}
+
+message MessageTally {
+  bytes message_id = 1;                 // 16 bytes (UUID)
+  repeated ECPoint tally_c1 = 2;        // 6 aggregated C1 points
+  repeated ECPoint tally_c2 = 3;        // 6 aggregated C2 points
+  int32 total_count = 4;                // Total reactions (quick stat, not per-emoji)
+}
+
+// ============================================
+// Nullifier Check
+// ============================================
+
+message NullifierExistsRequest {
+  bytes nullifier = 1;                  // 32 bytes (client computes from user_secret)
+}
+
+message NullifierExistsResponse {
+  bool exists = 1;                      // True if user has reacted to this message
+}
+
+// ============================================
+// Cross-Device Recovery
+// ============================================
+
+message GetReactionBackupRequest {
+  bytes nullifier = 1;                  // 32 bytes
+}
+
+message GetReactionBackupResponse {
+  bool exists = 1;                      // True if nullifier found
+  bytes encrypted_emoji_backup = 2;     // Encrypted with user's backup key (empty if legacy)
+}
+
+// ============================================
+// Get Membership Proof
+// ============================================
+
+message GetMembershipProofRequest {
+  bytes feed_id = 1;                    // 16 bytes (UUID)
+  bytes user_commitment = 2;            // 32 bytes - Poseidon(user_secret)
+}
+
+message GetMembershipProofResponse {
+  bool is_member = 1;                   // True if user found in tree
+  bytes merkle_root = 2;                // Current root (32 bytes)
+  repeated bytes path_elements = 3;     // Sibling hashes (depth x 32 bytes)
+  repeated bool path_indices = 4;       // Left(false)/Right(true) indicators
+  int32 tree_depth = 5;                 // Tree depth (typically 20)
+  int64 root_block_height = 6;          // Block height when root was computed
+}
+
+// ============================================
+// Get Recent Merkle Roots
+// ============================================
+
+message GetRecentRootsRequest {
+  bytes feed_id = 1;                    // 16 bytes (UUID)
+  int32 count = 2;                      // How many recent roots (default: 3, max: 10)
+}
+
+message GetRecentRootsResponse {
+  repeated MerkleRootInfo roots = 1;
+}
+
+message MerkleRootInfo {
+  bytes root = 1;                       // 32 bytes
+  int64 block_height = 2;
+  int64 timestamp = 3;                  // Unix timestamp in milliseconds
+}
+
+// ============================================
+// Commitment Registration (Anonymous)
+// ============================================
+
+message RegisterCommitmentRequest {
+  bytes feed_id = 1;                    // 16 bytes (UUID)
+  bytes user_commitment = 2;            // 32 bytes - Poseidon(user_secret)
+  // NOTE: No participant_public_address - registration is anonymous!
+}
+
+message RegisterCommitmentResponse {
+  bool success = 1;                     // True if registered (or already exists)
+  bytes new_merkle_root = 2;            // Updated Merkle root after insertion (32 bytes)
+  bool already_registered = 3;          // True if commitment was already registered (idempotent)
+}
+
+message IsCommitmentRegisteredRequest {
+  bytes feed_id = 1;                    // 16 bytes (UUID)
+  bytes user_commitment = 2;            // 32 bytes
+}
+
+message IsCommitmentRegisteredResponse {
+  bool is_registered = 1;               // True if commitment found for this feed
+}

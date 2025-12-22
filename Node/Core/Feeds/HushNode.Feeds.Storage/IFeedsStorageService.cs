@@ -20,4 +20,10 @@ public interface IFeedsStorageService
     Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex);
 
     Task<Feed?> GetFeedByIdAsync(FeedId feedId);
+
+    /// <summary>
+    /// Get all feed IDs that a user is a participant of.
+    /// Used for reaction sync to know which feeds to query for updated tallies.
+    /// </summary>
+    Task<IReadOnlyList<FeedId>> GetFeedIdsForUserAsync(string publicAddress);
 }

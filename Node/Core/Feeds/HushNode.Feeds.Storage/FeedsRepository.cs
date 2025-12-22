@@ -36,4 +36,11 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
         await this.Context.Feeds
             .Include(x => x.Participants)
             .FirstOrDefaultAsync(x => x.FeedId == feedId);
+
+    public async Task<IReadOnlyList<FeedId>> GetFeedIdsForUserAsync(string publicAddress) =>
+        await this.Context.FeedParticipants
+            .Where(fp => fp.ParticipantPublicAddress == publicAddress)
+            .Select(fp => fp.FeedId)
+            .Distinct()
+            .ToListAsync();
 }

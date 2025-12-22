@@ -16,11 +16,14 @@
 
 <ItemGroup>
     <Protobuf Include="..\..\..\..\Protos\hushFeed.proto" GrpcServices="Server" ProtoRoot="..\..\..\..\Protos\" />
+    <Protobuf Include="..\..\..\..\Protos\hushReactions.proto" GrpcServices="None" ProtoRoot="..\..\..\..\Protos\" />
 </ItemGroup>
 
 <ItemGroup>
     <ProjectReference Include="..\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
     <ProjectReference Include="..\..\Identity\HushNode.Identity\HushNode.Identity.csproj" />
+    <ProjectReference Include="..\..\Reactions\HushNode.Reactions.Storage\HushNode.Reactions.Storage.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Reactions.Model\HushShared.Reactions.Model.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
 </ItemGroup>

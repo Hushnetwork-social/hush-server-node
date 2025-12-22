@@ -2,20 +2,26 @@
 using HushNetwork.proto;
 using HushNode.Feeds.Storage;
 using HushNode.Identity;
+using HushNode.Reactions.Storage;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
+using MessageReactionTallyModel = HushShared.Reactions.Model.MessageReactionTally;
+using Google.Protobuf;
+using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Feeds.gRPC;
 
 public class FeedsGrpcService(
     IFeedsStorageService feedsStorageService,
     IFeedMessageStorageService feedMessageStorageService,
-    IIdentityService identityService) : HushFeed.HushFeedBase
+    IIdentityService identityService,
+    IUnitOfWorkProvider<ReactionsDbContext> reactionsUnitOfWorkProvider) : HushFeed.HushFeedBase
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
     private readonly IIdentityService _identityService = identityService;
+    private readonly IUnitOfWorkProvider<ReactionsDbContext> _reactionsUnitOfWorkProvider = reactionsUnitOfWorkProvider;
 
     public override async Task<HasPersonalFeedReply> HasPersonalFeed(
         HasPersonalFeedRequest request, 
@@ -93,7 +99,7 @@ public class FeedsGrpcService(
     {
         try
         {
-            Console.WriteLine($"[GetFeedMessagesForAddress] Starting for ProfilePublicKey: {request.ProfilePublicKey?.Substring(0, Math.Min(20, request.ProfilePublicKey?.Length ?? 0))}..., BlockIndex: {request.BlockIndex}");
+            Console.WriteLine($"[GetFeedMessagesForAddress] Starting for ProfilePublicKey: {request.ProfilePublicKey?.Substring(0, Math.Min(20, request.ProfilePublicKey?.Length ?? 0))}..., BlockIndex: {request.BlockIndex}, LastReactionTallyVersion: {request.LastReactionTallyVersion}");
 
             var blockIndex = BlockIndexHandler.CreateNew(request.BlockIndex);
 
@@ -126,23 +132,33 @@ public class FeedsGrpcService(
                     var timestamp = feedMessage.Timestamp?.Value ?? DateTime.UtcNow;
                     Console.WriteLine($"[GetFeedMessagesForAddress] Timestamp to convert: {timestamp}, Kind: {timestamp.Kind}");
 
-                    reply.Messages.Add(
-                        new GetFeedMessagesForAddressReply.Types.FeedMessage
-                        {
-                            FeedMessageId = feedMessage.FeedMessageId.ToString(),
-                            FeedId = feedMessage.FeedId.ToString(),
-                            MessageContent = feedMessage.MessageContent,
-                            IssuerPublicAddress = feedMessage.IssuerPublicAddress,
-                            BlockIndex = feedMessage.BlockIndex.Value,
-                            IssuerName = issuerName,
-                            TimeStamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)),
-                        });
+                    var feedMessageReply = new GetFeedMessagesForAddressReply.Types.FeedMessage
+                    {
+                        FeedMessageId = feedMessage.FeedMessageId.ToString(),
+                        FeedId = feedMessage.FeedId.ToString(),
+                        MessageContent = feedMessage.MessageContent,
+                        IssuerPublicAddress = feedMessage.IssuerPublicAddress,
+                        BlockIndex = feedMessage.BlockIndex.Value,
+                        IssuerName = issuerName,
+                        TimeStamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)),
+                    };
+
+                    // Add AuthorCommitment if present (Protocol Omega)
+                    if (feedMessage.AuthorCommitment != null)
+                    {
+                        feedMessageReply.AuthorCommitment = ByteString.CopyFrom(feedMessage.AuthorCommitment);
+                    }
+
+                    reply.Messages.Add(feedMessageReply);
 
                     Console.WriteLine($"[GetFeedMessagesForAddress] Message added successfully");
                 }
             }
 
-            Console.WriteLine($"[GetFeedMessagesForAddress] Returning {reply.Messages.Count} total messages");
+            // Fetch and add reaction tallies (Protocol Omega)
+            await AddReactionTallies(request, reply);
+
+            Console.WriteLine($"[GetFeedMessagesForAddress] Returning {reply.Messages.Count} total messages, {reply.ReactionTallies.Count} reaction tallies");
             return reply;
         }
         catch (Exception ex)
@@ -151,6 +167,77 @@ public class FeedsGrpcService(
             Console.WriteLine($"[GetFeedMessagesForAddress] Stack trace: {ex.StackTrace}");
             throw;
         }
+    }
+
+    private async Task AddReactionTallies(GetFeedMessagesForAddressRequest request, GetFeedMessagesForAddressReply reply)
+    {
+        try
+        {
+            // Get all feed IDs for this user
+            var userFeedIds = await this._feedsStorageService
+                .GetFeedIdsForUserAsync(request.ProfilePublicKey);
+
+            if (userFeedIds.Count == 0)
+            {
+                reply.MaxReactionTallyVersion = request.LastReactionTallyVersion;
+                return;
+            }
+
+            Console.WriteLine($"[GetFeedMessagesForAddress] Fetching reaction tallies for {userFeedIds.Count} feeds since version {request.LastReactionTallyVersion}");
+
+            // Get updated tallies using unit of work pattern
+            using var unitOfWork = this._reactionsUnitOfWorkProvider.CreateReadOnly();
+            var reactionsRepo = unitOfWork.GetRepository<IReactionsRepository>();
+            var reactionTallies = await reactionsRepo.GetTalliesForFeedsAsync(userFeedIds, request.LastReactionTallyVersion);
+
+            Console.WriteLine($"[GetFeedMessagesForAddress] Found {reactionTallies.Count} updated reaction tallies");
+
+            long maxVersion = request.LastReactionTallyVersion;
+
+            foreach (var tally in reactionTallies)
+            {
+                reply.ReactionTallies.Add(MapTallyToProto(tally));
+                maxVersion = Math.Max(maxVersion, tally.Version);
+            }
+
+            reply.MaxReactionTallyVersion = maxVersion;
+        }
+        catch (Exception ex)
+        {
+            // Don't fail the entire request if reactions fail - just log and continue
+            Console.WriteLine($"[GetFeedMessagesForAddress] Warning: Failed to fetch reaction tallies: {ex.Message}");
+            Console.WriteLine($"[GetFeedMessagesForAddress] Exception type: {ex.GetType().Name}");
+            Console.WriteLine($"[GetFeedMessagesForAddress] Stack trace: {ex.StackTrace}");
+            reply.MaxReactionTallyVersion = request.LastReactionTallyVersion;
+        }
+    }
+
+    private static GetFeedMessagesForAddressReply.Types.MessageReactionTally MapTallyToProto(
+        MessageReactionTallyModel tally)
+    {
+        var proto = new GetFeedMessagesForAddressReply.Types.MessageReactionTally
+        {
+            MessageId = tally.MessageId.ToString(),
+            TallyVersion = tally.Version,
+            ReactionCount = tally.TotalCount
+        };
+
+        // Map EC points (6 points for each array)
+        for (int i = 0; i < 6; i++)
+        {
+            proto.TallyC1.Add(new ECPoint
+            {
+                X = ByteString.CopyFrom(tally.TallyC1X[i]),
+                Y = ByteString.CopyFrom(tally.TallyC1Y[i])
+            });
+            proto.TallyC2.Add(new ECPoint
+            {
+                X = ByteString.CopyFrom(tally.TallyC2X[i]),
+                Y = ByteString.CopyFrom(tally.TallyC2Y[i])
+            });
+        }
+
+        return proto;
     }
 
     private Task<string> ExtractBroascastAlias(Feed feed)

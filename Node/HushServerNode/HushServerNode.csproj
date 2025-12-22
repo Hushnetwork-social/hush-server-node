@@ -32,11 +32,13 @@
     <ProjectReference Include="..\Core\Indexing\HushNode.Indexing\HushNode.Indexing.csproj" />
     <ProjectReference Include="..\Core\Identity\HushNode.Identity\HushNode.Identity.csproj" />
     <ProjectReference Include="..\Core\Feeds\HushNode.Feeds\HushNode.Feeds.csproj" />
+    <ProjectReference Include="..\Core\Reactions\HushNode.Reactions\HushNode.Reactions.csproj" />
     <ProjectReference Include="..\Infrastructure\HushNode.Caching\HushNode.Caching.csproj" />
     <ProjectReference Include="..\Infrastructure\HushNode.Notifications\HushNode.Notifications.csproj" />
     <ProjectReference Include="..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
     <ProjectReference Include="..\Core\Feeds\HushNode.Feeds.gRPC\HushNode.Feeds.gRPC.csproj" />
+    <ProjectReference Include="..\Core\Reactions\HushNode.Reactions.gRPC\HushNode.Reactions.gRPC.csproj" />
     <ProjectReference Include="..\Infrastructure\HushNode.Notifications.gRPC\HushNode.Notifications.gRPC.csproj" />
   </ItemGroup>
 

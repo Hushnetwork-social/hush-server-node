@@ -35,22 +35,39 @@ public class FeedsStorageService(
 
     public async Task<bool> CreatePersonalFeedIfNotExists(Feed feed, string publicSigningAddress)
     {
-        // Use serializable isolation to prevent race conditions where two transactions
-        // both check HasPersonalFeed=false and then both create a feed
-        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable(
-            System.Data.IsolationLevel.Serializable);
-        var repository = writableUnitOfWork.GetRepository<IFeedsRepository>();
-
-        // Check within the same serializable transaction
-        var hasPersonalFeed = await repository.HasPersonalFeed(publicSigningAddress);
-        if (hasPersonalFeed)
+        const int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
-            return false; // Personal feed already exists
+            try
+            {
+                // Use serializable isolation to prevent race conditions where two transactions
+                // both check HasPersonalFeed=false and then both create a feed
+                using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable(
+                    System.Data.IsolationLevel.Serializable);
+                var repository = writableUnitOfWork.GetRepository<IFeedsRepository>();
+
+                // Check within the same serializable transaction
+                var hasPersonalFeed = await repository.HasPersonalFeed(publicSigningAddress);
+                if (hasPersonalFeed)
+                {
+                    return false; // Personal feed already exists
+                }
+
+                await repository.CreateFeed(feed);
+                await writableUnitOfWork.CommitAsync();
+                return true;
+            }
+            catch (Npgsql.PostgresException ex) when (ex.SqlState == "40001") // Serialization failure
+            {
+                if (attempt == maxRetries)
+                    throw; // Rethrow on final attempt
+
+                // Wait a bit before retrying (exponential backoff)
+                await Task.Delay(50 * attempt);
+            }
         }
 
-        await repository.CreateFeed(feed);
-        await writableUnitOfWork.CommitAsync();
-        return true;
+        return false; // Should not reach here
     }
 
     public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex) =>
@@ -64,4 +81,10 @@ public class FeedsStorageService(
             .CreateReadOnly()
             .GetRepository<IFeedsRepository>()
             .GetFeedByIdAsync(feedId);
+
+    public async Task<IReadOnlyList<FeedId>> GetFeedIdsForUserAsync(string publicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetFeedIdsForUserAsync(publicAddress);
 }

@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
+using Olimpo;
 using HushNode.Caching;
+using HushNode.Feeds.Events;
 using HushNode.Feeds.Storage;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Feeds.Model;
@@ -9,10 +11,12 @@ namespace HushNode.Feeds;
 public class NewPersonalFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
     IBlockchainCache blockchainCache,
+    IEventAggregator eventAggregator,
     ILogger<NewPersonalFeedTransactionHandler> logger) : INewPersonalFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
+    private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly ILogger<NewPersonalFeedTransactionHandler> _logger = logger;
 
     public async Task HandleNewPersonalFeedTransactionAsync(ValidatedTransaction<NewPersonalFeedPayload> newPersonalFeedTransaction)
@@ -59,6 +63,12 @@ public class NewPersonalFeedTransactionHandler(
         if (created)
         {
             this._logger.LogInformation("Personal feed created: {FeedId} for {Signatory}", newPersonalFeedPayload.FeedId, signatoryAddress);
+
+            // Publish event for other modules (e.g., Reactions) to handle
+            _ = this._eventAggregator.PublishAsync(new FeedCreatedEvent(
+                newPersonalFeedPayload.FeedId,
+                new[] { signatoryAddress },
+                newPersonalFeedPayload.FeedType));
         }
         else
         {

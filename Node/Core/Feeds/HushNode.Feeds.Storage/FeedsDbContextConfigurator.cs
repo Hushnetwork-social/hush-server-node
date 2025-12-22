@@ -57,6 +57,12 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
 
                 feedMessage.Property(x => x.MessageContent)
                     .HasColumnType("text");
+
+                // Protocol Omega: Author commitment for ZK proof verification
+                feedMessage.Property(x => x.AuthorCommitment)
+                    .HasColumnType("bytea")
+                    .HasMaxLength(32)
+                    .IsRequired(false);
             });
     }
 

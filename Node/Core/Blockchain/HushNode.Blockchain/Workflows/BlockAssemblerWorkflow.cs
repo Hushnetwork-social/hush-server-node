@@ -81,7 +81,21 @@ public class BlockAssemblerWorkflow(
         await this._blockchainStorageService
             .PersisteBlockAndBlockState(finalizedBlock.ToBlockchainBlock());
 
-        this._logger.LogInformation($"Block {0} generated...", finalizedBlock.BlockId);
+        // Log block details
+        this._logger.LogInformation(
+            "Block #{BlockIndex} generated (ID: {BlockId}) with {TransactionCount} transactions",
+            finalizedBlock.BlockIndex.Value,
+            finalizedBlock.BlockId,
+            finalizedBlock.Transactions.Count());
+
+        // Log each transaction in the block
+        foreach (var tx in finalizedBlock.Transactions)
+        {
+            this._logger.LogDebug(
+                "  -> Transaction {TxId}: Kind={Kind}",
+                tx.TransactionId,
+                tx.PayloadKind);
+        }
 
         await this._eventAggregator.PublishAsync(new BlockCreatedEvent(finalizedBlock));
     }

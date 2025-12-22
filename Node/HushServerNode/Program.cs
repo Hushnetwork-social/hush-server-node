@@ -15,6 +15,8 @@ using HushNode.Bank;
 using HushNode.Bank.gRPC;
 using HushNode.Feeds;
 using HushNode.Feeds.gRPC;
+using HushNode.Reactions;
+using HushNode.Reactions.gRPC;
 using HushNode.Caching;
 using HushNode.Notifications.gRPC;
 
@@ -85,6 +87,7 @@ public class Program
             .RegisterCoreModuleBlockchain()
             .RegisterCoreModuleBank()
             .RegisterCoreModuleFeeds()
+            .RegisterCoreModuleReactions()
             .RegisterHushNodeIndexing()
             .RegisterHushNodeMemPool()
             .RegisterInternalModuleIdentity()
@@ -110,6 +113,8 @@ public class Program
         app.MapGrpcService<BankGrpService>();
         app.MapGrpcService<IdentityGrpcService>();
         app.MapGrpcService<FeedsGrpcService>();
+        app.MapGrpcService<ReactionsGrpcService>();
+        app.MapGrpcService<MembershipGrpcService>();
         app.MapGrpcService<NotificationGrpcService>();
 
         // Enable gRPC reflection for grpcurl and other testing tools

@@ -4,6 +4,8 @@
             "Default": "Information",
             "Microsoft": "Warning",
             "Microsoft.EntityFrameworkCore": "Warning",
+            "HushNode.Blockchain": "Debug",
+            "HushNode.Reactions": "Debug",
             "HushNode.Notifications": "Information",
             "HushNode.Feeds": "Information",
             "Olimpo": "Information"
@@ -12,6 +14,10 @@
 
     "BlockchainSettings": {
         "MaxEmptyBlocksBeforePause": 5
+    },
+
+    "Reactions": {
+        "DevMode": true
     },
 
     "Redis": {

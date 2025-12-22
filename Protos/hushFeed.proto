@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
+import "hushReactions.proto";  // For ECPoint type
 
 option csharp_namespace = "HushNetwork.proto";
 
@@ -66,6 +67,7 @@ message GetFeedForAddressReply {
 message GetFeedMessagesForAddressRequest {
   string ProfilePublicKey = 1;
   int64 BlockIndex = 2;
+  int64 LastReactionTallyVersion = 3;  // Only return tallies newer than this version
 }
 
 message GetFeedMessagesForAddressReply {
@@ -78,9 +80,21 @@ message GetFeedMessagesForAddressReply {
     string IssuerName = 5;
     google.protobuf.Timestamp TimeStamp = 6;
     int64 BlockIndex = 7;
+    bytes AuthorCommitment = 8;  // Protocol Omega: Poseidon(author_secret)
+  }
+
+  // Reaction tally for a message (Protocol Omega)
+  message MessageReactionTally {
+    string MessageId = 1;              // Links to FeedMessage.FeedMessageId
+    repeated ECPoint TallyC1 = 2;      // 6 aggregated C1 points
+    repeated ECPoint TallyC2 = 3;      // 6 aggregated C2 points
+    int64 TallyVersion = 4;            // Monotonic counter for cache invalidation
+    int64 ReactionCount = 5;           // Total reactions (for quick "has reactions" check)
   }
 
   repeated FeedMessage Messages = 1;
+  repeated MessageReactionTally ReactionTallies = 2;  // Tallies for messages with reactions
+  int64 MaxReactionTallyVersion = 3;                  // For incremental sync
 }
 
 
