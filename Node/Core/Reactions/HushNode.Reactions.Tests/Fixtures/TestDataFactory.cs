@@ -2,7 +2,6 @@ using System.Numerics;
 using HushShared.Feeds.Model;
 using HushShared.Reactions.Model;
 using HushNode.Reactions.Crypto;
-using HushNode.Reactions.Storage;
 
 namespace HushNode.Reactions.Tests.Fixtures;
 
@@ -140,21 +139,6 @@ public static class TestDataFactory
             MerkleRoot: CreateCommitment(),
             BlockHeight: blockHeight,
             CreatedAt: DateTime.UtcNow);
-    }
-
-    public static HushNode.Reactions.Storage.SubmitReactionRequest CreateSubmitRequest(FeedId? feedId = null, FeedMessageId? messageId = null)
-    {
-        return new HushNode.Reactions.Storage.SubmitReactionRequest
-        {
-            FeedId = feedId ?? CreateFeedId(),
-            MessageId = messageId ?? CreateMessageId(),
-            Nullifier = CreateNullifier(),
-            CiphertextC1 = CreateCiphertextArray(),
-            CiphertextC2 = CreateCiphertextArray(),
-            ZkProof = CreateZkProof(),
-            EncryptedEmojiBackup = CreateCommitment(),
-            CircuitVersion = "omega-v1.0.0"
-        };
     }
 
     private static byte[] PadTo32Bytes(byte[] input)
