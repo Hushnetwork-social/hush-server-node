@@ -81,6 +81,7 @@ message GetFeedMessagesForAddressReply {
     google.protobuf.Timestamp TimeStamp = 6;
     int64 BlockIndex = 7;
     bytes AuthorCommitment = 8;  // Protocol Omega: Poseidon(author_secret)
+    optional string ReplyToMessageId = 9;  // Reply to Message: parent message reference
   }
 
   // Reaction tally for a message (Protocol Omega)

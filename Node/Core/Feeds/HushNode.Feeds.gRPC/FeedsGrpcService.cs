@@ -153,6 +153,12 @@ public class FeedsGrpcService(
                         feedMessageReply.AuthorCommitment = ByteString.CopyFrom(feedMessage.AuthorCommitment);
                     }
 
+                    // Add ReplyToMessageId if present (Reply to Message feature)
+                    if (feedMessage.ReplyToMessageId != null)
+                    {
+                        feedMessageReply.ReplyToMessageId = feedMessage.ReplyToMessageId.ToString();
+                    }
+
                     reply.Messages.Add(feedMessageReply);
 
                     Console.WriteLine($"[GetFeedMessagesForAddress] Message added successfully");
