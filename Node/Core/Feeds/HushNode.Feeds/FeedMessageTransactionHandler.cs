@@ -40,7 +40,8 @@ public class FeedMessageTransactionHandler(
             validatedTransaction.Payload.MessageContent,
             issuerPublicAddress,
             validatedTransaction.TransactionTimeStamp,
-            this._blockchainCache.LastBlockIndex);
+            this._blockchainCache.LastBlockIndex,
+            ReplyToMessageId: validatedTransaction.Payload.ReplyToMessageId);
 
         await this._feedMessageStorageService.CreateFeedMessageAsync(feedMessage);
 

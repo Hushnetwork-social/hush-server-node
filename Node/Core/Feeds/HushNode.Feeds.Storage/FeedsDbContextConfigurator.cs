@@ -63,6 +63,17 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                     .HasColumnType("bytea")
                     .HasMaxLength(32)
                     .IsRequired(false);
+
+                // Reply to Message: Reference to parent message
+                feedMessage.Property(x => x.ReplyToMessageId)
+                    .HasConversion(
+                        x => x != null ? x.ToString() : null,
+                        x => x != null ? FeedMessageIdHandler.CreateFromString(x) : null
+                    )
+                    .HasColumnType("varchar(40)")
+                    .IsRequired(false);
+
+                feedMessage.HasIndex(x => x.ReplyToMessageId);
             });
     }
 

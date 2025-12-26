@@ -7,7 +7,8 @@ namespace HushShared.Feeds.Model;
 public record NewFeedMessagePayload(
     FeedMessageId FeedMessageId,
     FeedId FeedId,
-    string MessageContent) : ITransactionPayloadKind;
+    string MessageContent,
+    FeedMessageId? ReplyToMessageId = null) : ITransactionPayloadKind;
 
 public static class NewFeedMessagePayloadHandler
 {
@@ -16,9 +17,10 @@ public static class NewFeedMessagePayloadHandler
     public static UnsignedTransaction<NewFeedMessagePayload> CreateNewFeedMessageTransaction(
         FeedMessageId feedMessageId,
         FeedId feedId,
-        string messageContent) => 
+        string messageContent,
+        FeedMessageId? replyToMessageId = null) =>
         UnsignedTransactionHandler.CreateNew(
             NewFeedMessagePayloadKind,
             Timestamp.Current,
-            new NewFeedMessagePayload(feedMessageId, feedId, messageContent));
+            new NewFeedMessagePayload(feedMessageId, feedId, messageContent, replyToMessageId));
 }

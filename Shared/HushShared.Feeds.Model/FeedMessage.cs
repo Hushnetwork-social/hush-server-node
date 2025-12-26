@@ -10,4 +10,5 @@ public record FeedMessage(
     string IssuerPublicAddress,
     Timestamp Timestamp,
     BlockIndex BlockIndex,
-    byte[]? AuthorCommitment = null);  // Protocol Omega: Poseidon hash of author's user_secret for ZK proof
+    byte[]? AuthorCommitment = null,  // Protocol Omega: Poseidon hash of author's user_secret for ZK proof
+    FeedMessageId? ReplyToMessageId = null);  // Reply to Message: Reference to parent message
