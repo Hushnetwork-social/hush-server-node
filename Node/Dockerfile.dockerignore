@@ -1,0 +1,68 @@
+# ===========================================
+# HushServerNode Docker Build - Exclusions
+# ===========================================
+# This file is used when building with Node/Dockerfile
+# Excludes everything not needed for the .NET server
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.idea
+.vs
+.vscode
+*.suo
+*.user
+
+# ===========================================
+# Exclude Web/JS Projects (not needed for .NET server)
+# ===========================================
+hush-web-client
+hush-chat-landing
+hush-network-presentation-v2
+
+# Avalonia Client (separate build)
+Client
+
+# ===========================================
+# .NET Build Artifacts (rebuilt in container)
+# ===========================================
+**/bin
+**/obj
+**/packages
+**/TestResults
+
+# ===========================================
+# Node.js artifacts (from any JS projects)
+# ===========================================
+**/node_modules
+**/.next
+**/out
+**/.turbo
+
+# ===========================================
+# Documentation & Planning
+# ===========================================
+MemoryBank
+*.md
+!README.md
+
+# ===========================================
+# Local Config (mounted at runtime)
+# ===========================================
+local-config
+.env
+.env.*
+
+# ===========================================
+# Misc
+# ===========================================
+*.log
+*.tmp
+Thumbs.db
+.DS_Store
+
+# GitHub workflows (not needed in container)
+.github
