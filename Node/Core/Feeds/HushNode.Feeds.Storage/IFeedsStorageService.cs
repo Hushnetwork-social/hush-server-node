@@ -26,4 +26,10 @@ public interface IFeedsStorageService
     /// Used for reaction sync to know which feeds to query for updated tallies.
     /// </summary>
     Task<IReadOnlyList<FeedId>> GetFeedIdsForUserAsync(string publicAddress);
+
+    /// <summary>
+    /// Update the BlockIndex of all feeds where the user is a participant.
+    /// Called when a user updates their identity so other clients can detect the change.
+    /// </summary>
+    Task UpdateFeedsBlockIndexForParticipantAsync(string publicSigningAddress, BlockIndex blockIndex);
 }

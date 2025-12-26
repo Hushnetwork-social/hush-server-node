@@ -87,4 +87,15 @@ public class FeedsStorageService(
             .CreateReadOnly()
             .GetRepository<IFeedsRepository>()
             .GetFeedIdsForUserAsync(publicAddress);
+
+    public async Task UpdateFeedsBlockIndexForParticipantAsync(string publicSigningAddress, BlockIndex blockIndex)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .UpdateFeedsBlockIndexForParticipantAsync(publicSigningAddress, blockIndex);
+
+        await writableUnitOfWork.CommitAsync();
+    }
 }

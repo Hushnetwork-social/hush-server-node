@@ -69,13 +69,17 @@ public class FeedsGrpcService(
                 _ => throw new InvalidOperationException($"the FeedTYype {feed.FeedType} is not supported.")
             };
 
+            // Calculate effective BlockIndex: MAX of feed BlockIndex and all participants' profile BlockIndex
+            // This ensures clients detect changes when any participant updates their identity
+            var effectiveBlockIndex = await GetEffectiveBlockIndex(feed);
+
             var replyFeed = new GetFeedForAddressReply.Types.Feed
             {
                 FeedId = feed.FeedId.ToString(),
                 FeedTitle = feedAlias,
                 FeedType = (int)feed.FeedType,
-                BlockIndex = feed.BlockIndex.Value,
-                
+                BlockIndex = effectiveBlockIndex,
+
             };
 
             foreach(var participant in feed.Participants)
@@ -274,5 +278,27 @@ public class FeedsGrpcService(
         return publicSigningAddress.Length > 10
             ? publicSigningAddress.Substring(0, 10) + "..."
             : publicSigningAddress;
+    }
+
+    /// <summary>
+    /// Calculate effective BlockIndex for a feed.
+    /// Returns MAX of feed BlockIndex and all participants' profile BlockIndex.
+    /// This ensures clients detect when any participant updates their identity.
+    /// </summary>
+    private async Task<long> GetEffectiveBlockIndex(Feed feed)
+    {
+        var maxBlockIndex = feed.BlockIndex.Value;
+
+        foreach (var participant in feed.Participants)
+        {
+            var identity = await this._identityService.RetrieveIdentityAsync(participant.ParticipantPublicAddress);
+
+            if (identity is Profile profile && profile.BlockIndex.Value > maxBlockIndex)
+            {
+                maxBlockIndex = profile.BlockIndex.Value;
+            }
+        }
+
+        return maxBlockIndex;
     }
 }

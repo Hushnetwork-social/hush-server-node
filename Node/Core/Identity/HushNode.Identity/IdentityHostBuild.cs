@@ -26,6 +26,13 @@ public static class IdentityHostBuild
 
             services.AddSingleton<IFullIdentityTransactionHandler, FullIdentityTransactionHandler>();
 
+            // UpdateIdentity transaction support
+            services.AddTransient<ITransactionDeserializerStrategy, UpdateIdentityDeserializerStrategy>();
+            services.AddTransient<ITransactionContentHandler, UpdateIdentityContentHandler>();
+            services.AddTransient<IIndexStrategy, UpdateIdentityIndexStrategy>();
+
+            services.AddSingleton<IUpdateIdentityTransactionHandler, UpdateIdentityTransactionHandler>();
+
             services.RegisterIdentitygRPCServices();
             services.RegisterIdentityStorageServices(hostContext);
         });

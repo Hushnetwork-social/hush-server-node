@@ -43,4 +43,22 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .Select(fp => fp.FeedId)
             .Distinct()
             .ToListAsync();
+
+    public async Task UpdateFeedsBlockIndexForParticipantAsync(string publicSigningAddress, BlockIndex blockIndex)
+    {
+        // Get all feed IDs where this user is a participant
+        var feedIds = await this.Context.FeedParticipants
+            .Where(fp => fp.ParticipantPublicAddress == publicSigningAddress)
+            .Select(fp => fp.FeedId)
+            .Distinct()
+            .ToListAsync();
+
+        if (feedIds.Count == 0) return;
+
+        // Update BlockIndex for all these feeds
+        await this.Context.Feeds
+            .Where(f => feedIds.Contains(f.FeedId))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(f => f.BlockIndex, blockIndex));
+    }
 }

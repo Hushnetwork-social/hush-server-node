@@ -4,6 +4,7 @@
     <ProjectReference Include="..\HushNode.Identity.Storage\HushNode.Identity.Storage.csproj" />
     <ProjectReference Include="..\HushNode.Identity.gRPC\HushNode.Identity.gRPC.csproj" />
     <ProjectReference Include="..\..\Blockchain\HushNode.Blockchain\HushNode.Blockchain.csproj" />
+    <ProjectReference Include="..\..\Feeds\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
