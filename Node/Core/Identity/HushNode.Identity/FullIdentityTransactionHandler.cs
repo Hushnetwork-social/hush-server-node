@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Olimpo.EntityFramework.Persistency;
 using HushNode.Caching;
@@ -70,12 +71,23 @@ public class FullIdentityTransactionHandler(
             transaction.Payload.IsPublic,
             this._blockchainCache.LastBlockIndex);
 
-        await writableUnitOfWork
-            .GetRepository<IIdentityRepository>()
-            .AddFullIdentity(profile);
+        try
+        {
+            await writableUnitOfWork
+                .GetRepository<IIdentityRepository>()
+                .AddFullIdentity(profile);
 
-        await writableUnitOfWork.CommitAsync();
+            await writableUnitOfWork.CommitAsync();
 
-        this._logger.LogInformation($"Full identity added: {profile.Alias} | {profile.PublicSigningAddress}");
+            this._logger.LogInformation($"Full identity added: {profile.Alias} | {profile.PublicSigningAddress}");
+        }
+        catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("PK_Profile") == true ||
+                                           ex.InnerException?.Message.Contains("duplicate key") == true)
+        {
+            // Race condition: Another request inserted the same identity between our check and insert.
+            // This is expected under high load. Gracefully skip.
+            this._logger.LogWarning("Race condition detected: Identity already exists for address {Address}. Skipping duplicate insert.",
+                transaction.Payload.PublicSigningAddress);
+        }
     }
 }
