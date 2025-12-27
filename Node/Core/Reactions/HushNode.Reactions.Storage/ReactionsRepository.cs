@@ -104,4 +104,12 @@ public class ReactionsRepository : RepositoryBase<ReactionsDbContext>, IReaction
             .Take(1000)  // Limit to prevent huge responses
             .ToListAsync();
     }
+
+    public async Task<long> GetNextGlobalTallyVersionAsync()
+    {
+        var maxVersion = await this.Context.MessageReactionTallies
+            .MaxAsync(t => (long?)t.Version) ?? 0;
+
+        return maxVersion + 1;
+    }
 }

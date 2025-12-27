@@ -121,11 +121,14 @@ public class ReactionTransactionHandler : IReactionTransactionHandler
                     _logger.LogDebug("[ReactionTransactionHandler] Added new reaction for message {MessageId}", payload.MessageId);
                 }
 
-                // Update tally timestamp and increment version for sync
+                // Get next global version for sync (ensures new reactions always have higher version)
+                var nextVersion = await reactionsRepo.GetNextGlobalTallyVersionAsync();
+
+                // Update tally timestamp and set global version for sync
                 tally = tally with
                 {
                     LastUpdated = DateTime.UtcNow,
-                    Version = tally.Version + 1
+                    Version = nextVersion
                 };
 
                 // Save tally
@@ -192,7 +195,7 @@ public class ReactionTransactionHandler : IReactionTransactionHandler
             TallyC2X: Enumerable.Repeat(identityX, 6).ToArray(),
             TallyC2Y: Enumerable.Repeat(identityY, 6).ToArray(),
             TotalCount: 0,
-            Version: 1,
+            Version: 0,  // Will be set to next global version before saving
             LastUpdated: DateTime.UtcNow);
     }
 

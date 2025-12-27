@@ -39,4 +39,11 @@ public interface IReactionsRepository : IRepository
     Task<IReadOnlyList<MessageReactionTally>> GetTalliesForFeedsAsync(
         IReadOnlyList<FeedId> feedIds,
         long sinceVersion);
+
+    /// <summary>
+    /// Get the next global tally version for sync purposes.
+    /// This ensures all new/updated tallies have a version higher than any existing tally.
+    /// </summary>
+    /// <returns>Next version number to use (max existing version + 1, or 1 if no tallies exist)</returns>
+    Task<long> GetNextGlobalTallyVersionAsync();
 }
