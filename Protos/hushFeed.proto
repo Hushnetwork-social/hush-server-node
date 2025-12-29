@@ -98,8 +98,227 @@ message GetFeedMessagesForAddressReply {
   int64 MaxReactionTallyVersion = 3;                  // For incremental sync
 }
 
+// =============================================================================
+// Group Feed Messages (FEAT-006)
+// =============================================================================
 
+// --- Shared Types for Group Feed ---
 
+// Represents a participant in a Group Feed with their encrypted key
+message GroupFeedParticipantProto {
+  string FeedId = 1;
+  string ParticipantPublicAddress = 2;
+  int32 ParticipantType = 3;  // Maps to ParticipantType enum
+  string EncryptedFeedKey = 4;  // AES key encrypted with participant's public encrypt key
+  int32 KeyGeneration = 5;  // Key generation number for key rotation tracking
+}
+
+// Represents an encrypted key for a specific member during key rotation
+message GroupFeedEncryptedKeyProto {
+  string MemberPublicAddress = 1;
+  string EncryptedAesKey = 2;  // New AES key encrypted with member's public encrypt key
+}
+
+// Represents a member in a Group Feed for query responses
+message GroupFeedMemberProto {
+  string PublicAddress = 1;
+  int32 ParticipantType = 2;  // Maps to ParticipantType enum
+  int64 JoinedAtBlock = 3;
+}
+
+// --- Task 3.1: Group Feed Creation ---
+
+message NewGroupFeedRequest {
+  string FeedId = 1;
+  string Title = 2;
+  string Description = 3;
+  bool IsPublic = 4;
+  repeated GroupFeedParticipantProto Participants = 5;
+}
+
+message NewGroupFeedResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+// --- Task 3.2: Membership Change ---
+
+message JoinGroupFeedRequest {
+  string FeedId = 1;
+  string JoiningUserPublicAddress = 2;
+  optional string InvitationSignature = 3;  // Required for private groups
+}
+
+message JoinGroupFeedResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+message LeaveGroupFeedRequest {
+  string FeedId = 1;
+  string LeavingUserPublicAddress = 2;
+}
+
+message LeaveGroupFeedResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+message AddMemberToGroupFeedRequest {
+  string FeedId = 1;
+  string AdminPublicAddress = 2;
+  string NewMemberPublicAddress = 3;
+  string NewMemberPublicEncryptKey = 4;
+}
+
+message AddMemberToGroupFeedResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+// --- Task 3.3: Admin Controls ---
+
+message BlockMemberRequest {
+  string FeedId = 1;
+  string AdminPublicAddress = 2;
+  string BlockedUserPublicAddress = 3;
+  optional string Reason = 4;
+}
+
+message BlockMemberResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+message UnblockMemberRequest {
+  string FeedId = 1;
+  string AdminPublicAddress = 2;
+  string UnblockedUserPublicAddress = 3;
+}
+
+message UnblockMemberResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+message BanFromGroupFeedRequest {
+  string FeedId = 1;
+  string AdminPublicAddress = 2;
+  string BannedUserPublicAddress = 3;
+  optional string Reason = 4;
+}
+
+message BanFromGroupFeedResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+message UnbanFromGroupFeedRequest {
+  string FeedId = 1;
+  string AdminPublicAddress = 2;
+  string UnbannedUserPublicAddress = 3;
+}
+
+message UnbanFromGroupFeedResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+message PromoteToAdminRequest {
+  string FeedId = 1;
+  string AdminPublicAddress = 2;
+  string MemberPublicAddress = 3;
+}
+
+message PromoteToAdminResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+message UpdateGroupFeedTitleRequest {
+  string FeedId = 1;
+  string AdminPublicAddress = 2;
+  string NewTitle = 3;
+}
+
+message UpdateGroupFeedTitleResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+message UpdateGroupFeedDescriptionRequest {
+  string FeedId = 1;
+  string AdminPublicAddress = 2;
+  string NewDescription = 3;
+}
+
+message UpdateGroupFeedDescriptionResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+message DeleteGroupFeedRequest {
+  string FeedId = 1;
+  string AdminPublicAddress = 2;
+}
+
+message DeleteGroupFeedResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+// --- Task 3.4: Key Rotation and Messaging ---
+
+message GroupFeedKeyRotationRequest {
+  string FeedId = 1;
+  int32 NewKeyGeneration = 2;
+  int32 PreviousKeyGeneration = 3;
+  int64 ValidFromBlock = 4;
+  repeated GroupFeedEncryptedKeyProto EncryptedKeys = 5;
+  int32 RotationTrigger = 6;  // Maps to RotationTrigger enum
+}
+
+message GroupFeedKeyRotationResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+message NewGroupFeedMessageRequest {
+  string MessageId = 1;
+  string FeedId = 2;
+  string EncryptedContent = 3;
+  int32 KeyGeneration = 4;
+  optional string ReplyToMessageId = 5;
+  optional bytes AuthorCommitment = 6;  // Protocol Omega: Poseidon(author_secret)
+}
+
+message NewGroupFeedMessageResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
+// --- Task 3.5: Query Messages ---
+
+message GetGroupFeedRequest {
+  string FeedId = 1;
+}
+
+message GetGroupFeedResponse {
+  string FeedId = 1;
+  string Title = 2;
+  string Description = 3;
+  bool IsPublic = 4;
+  int32 MemberCount = 5;
+  int32 CurrentKeyGeneration = 6;
+}
+
+message GetGroupMembersRequest {
+  string FeedId = 1;
+}
+
+message GetGroupMembersResponse {
+  repeated GroupFeedMemberProto Members = 1;
+}
 
 /*
 message CreateFeedRequest {
