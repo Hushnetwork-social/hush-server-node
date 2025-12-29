@@ -12,6 +12,10 @@ public class FeedsDbContext(
     public DbSet<Feed> Feeds { get; set; }
     public DbSet<FeedParticipant> FeedParticipants { get; set; }
     public DbSet<FeedMessage> FeedMessages { get; set; }
+    public DbSet<GroupFeed> GroupFeeds { get; set; }
+    public DbSet<GroupFeedParticipantEntity> GroupFeedParticipants { get; set; }
+    public DbSet<GroupFeedKeyGenerationEntity> GroupFeedKeyGenerations { get; set; }
+    public DbSet<GroupFeedEncryptedKeyEntity> GroupFeedEncryptedKeys { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
