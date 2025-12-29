@@ -33,9 +33,15 @@ public static class FeedsHostBuild
             services.AddTransient<IFeedMessageTransactionHandler, FeedMessageTransactionHandler>();
             
             services.AddTransient<ITransactionDeserializerStrategy, NewChatFeedDeserializerStrategy>();
-            services.AddTransient<IIndexStrategy, NewChatFeedIndexStrategy>(); 
-            services.AddTransient<ITransactionContentHandler, NewChatFeedContentHandler>(); 
+            services.AddTransient<IIndexStrategy, NewChatFeedIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, NewChatFeedContentHandler>();
             services.AddTransient<INewChatFeedTransactionHandler, NewChatFeedTransactionHandler>();
+
+            // Group Feed services
+            services.AddTransient<ITransactionDeserializerStrategy, NewGroupFeedDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, NewGroupFeedIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, NewGroupFeedContentHandler>();
+            services.AddTransient<INewGroupFeedTransactionHandler, NewGroupFeedTransactionHandler>();
         });
 
         return builder;

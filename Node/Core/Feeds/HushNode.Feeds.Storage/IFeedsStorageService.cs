@@ -5,6 +5,10 @@ namespace HushNode.Feeds.Storage;
 
 public interface IFeedsStorageService
 {
+    /// <summary>
+    /// Creates a new Group Feed with all related entities (participants, key generation, encrypted keys).
+    /// </summary>
+    Task CreateGroupFeed(GroupFeed groupFeed);
     Task<bool> HasPersonalFeed(string publicSigningAddress);
 
     Task<bool> IsFeedIsBlockchain(FeedId feedId);

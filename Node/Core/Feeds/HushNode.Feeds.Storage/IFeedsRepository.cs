@@ -12,6 +12,11 @@ public interface IFeedsRepository : IRepository
 
     Task CreateFeed(Feed feed);
 
+    /// <summary>
+    /// Creates a new Group Feed with all related entities (participants, key generation, encrypted keys).
+    /// </summary>
+    Task CreateGroupFeed(GroupFeed groupFeed);
+
     Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex);
 
     Task<Feed?> GetFeedByIdAsync(FeedId feedId);

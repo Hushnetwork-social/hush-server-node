@@ -10,6 +10,17 @@ public class FeedsStorageService(
 {
     private readonly IUnitOfWorkProvider<FeedsDbContext> _unitOfWorkProvider = unitOfWorkProvider;
 
+    public async Task CreateGroupFeed(GroupFeed groupFeed)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .CreateGroupFeed(groupFeed);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
     public async Task<bool> HasPersonalFeed(string publicSigningAddress) =>
         await this._unitOfWorkProvider
             .CreateReadOnly()

@@ -18,9 +18,13 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
         await this.Context.Feeds
             .AnyAsync(x => x.FeedId == feedId);
 
-    public async Task CreateFeed(Feed feed) => 
+    public async Task CreateFeed(Feed feed) =>
         await this.Context.Feeds
             .AddAsync(feed);
+
+    public async Task CreateGroupFeed(GroupFeed groupFeed) =>
+        await this.Context.GroupFeeds
+            .AddAsync(groupFeed);
 
     public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(
         string publicSigningAddress,
