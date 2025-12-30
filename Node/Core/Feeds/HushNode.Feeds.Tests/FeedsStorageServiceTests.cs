@@ -1,6 +1,7 @@
 using FluentAssertions;
 using HushNode.Feeds.Storage;
 using HushNode.Feeds.Tests.Fixtures;
+using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
 using Moq;
 using Moq.AutoMock;
@@ -241,6 +242,136 @@ public class FeedsStorageServiceTests
         // Assert
         mockProvider.Verify(x => x.CreateReadOnly(), Times.Once);
         mockRepository.Verify(x => x.GetActiveGroupMemberAddressesAsync(feedId), Times.Once);
+    }
+
+    #endregion
+
+    #region CreateKeyRotationAsync Tests
+
+    [Fact]
+    public async Task CreateKeyRotationAsync_WithValidKeyGeneration_ShouldCreateAndUpdateGroup()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var keyGeneration = new GroupFeedKeyGenerationEntity(
+            feedId,
+            KeyGeneration: 3,
+            ValidFromBlock: new BlockIndex(100),
+            RotationTrigger: RotationTrigger.Join);
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.CreateKeyRotationAsync(keyGeneration))
+            .Returns(Task.CompletedTask);
+        mockRepository
+            .Setup(x => x.UpdateCurrentKeyGenerationAsync(feedId, 3))
+            .Returns(Task.CompletedTask);
+
+        var mockUnitOfWork = new Mock<IWritableUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+        mockUnitOfWork
+            .Setup(x => x.CommitAsync())
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateWritable())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        await service.CreateKeyRotationAsync(keyGeneration);
+
+        // Assert
+        mockRepository.Verify(x => x.CreateKeyRotationAsync(keyGeneration), Times.Once);
+        mockRepository.Verify(x => x.UpdateCurrentKeyGenerationAsync(feedId, 3), Times.Once);
+        mockUnitOfWork.Verify(x => x.CommitAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateKeyRotationAsync_ShouldUseWritableUnitOfWork()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var keyGeneration = new GroupFeedKeyGenerationEntity(
+            feedId,
+            KeyGeneration: 1,
+            ValidFromBlock: new BlockIndex(50),
+            RotationTrigger: RotationTrigger.Leave);
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.CreateKeyRotationAsync(keyGeneration))
+            .Returns(Task.CompletedTask);
+        mockRepository
+            .Setup(x => x.UpdateCurrentKeyGenerationAsync(feedId, 1))
+            .Returns(Task.CompletedTask);
+
+        var mockUnitOfWork = new Mock<IWritableUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+        mockUnitOfWork
+            .Setup(x => x.CommitAsync())
+            .Returns(Task.CompletedTask);
+
+        var mockProvider = mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>();
+        mockProvider
+            .Setup(x => x.CreateWritable())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        await service.CreateKeyRotationAsync(keyGeneration);
+
+        // Assert
+        mockProvider.Verify(x => x.CreateWritable(), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateKeyRotationAsync_ShouldCommitTransaction()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var keyGeneration = new GroupFeedKeyGenerationEntity(
+            feedId,
+            KeyGeneration: 5,
+            ValidFromBlock: new BlockIndex(200),
+            RotationTrigger: RotationTrigger.Ban);
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.CreateKeyRotationAsync(keyGeneration))
+            .Returns(Task.CompletedTask);
+        mockRepository
+            .Setup(x => x.UpdateCurrentKeyGenerationAsync(feedId, 5))
+            .Returns(Task.CompletedTask);
+
+        var mockUnitOfWork = new Mock<IWritableUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+        mockUnitOfWork
+            .Setup(x => x.CommitAsync())
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateWritable())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        await service.CreateKeyRotationAsync(keyGeneration);
+
+        // Assert
+        mockUnitOfWork.Verify(x => x.CommitAsync(), Times.Once);
     }
 
     #endregion
