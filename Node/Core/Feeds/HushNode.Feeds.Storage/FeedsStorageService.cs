@@ -109,4 +109,41 @@ public class FeedsStorageService(
 
         await writableUnitOfWork.CommitAsync();
     }
+
+    // ===== Group Feed Admin Operations (FEAT-009) =====
+
+    public async Task<GroupFeed?> GetGroupFeedAsync(FeedId feedId) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetGroupFeedAsync(feedId);
+
+    public async Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetGroupFeedParticipantAsync(feedId, publicAddress);
+
+    public async Task UpdateParticipantTypeAsync(FeedId feedId, string publicAddress, ParticipantType newType)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .UpdateParticipantTypeAsync(feedId, publicAddress, newType);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
+    public async Task<bool> IsAdminAsync(FeedId feedId, string publicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .IsAdminAsync(feedId, publicAddress);
+
+    public async Task<int> GetAdminCountAsync(FeedId feedId) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetAdminCountAsync(feedId);
 }

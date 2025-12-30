@@ -65,4 +65,42 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(f => f.BlockIndex, blockIndex));
     }
+
+    // ===== Group Feed Admin Operations (FEAT-009) =====
+
+    public async Task<GroupFeed?> GetGroupFeedAsync(FeedId feedId) =>
+        await this.Context.GroupFeeds
+            .Include(g => g.Participants)
+            .FirstOrDefaultAsync(g => g.FeedId == feedId);
+
+    public async Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress) =>
+        await this.Context.GroupFeedParticipants
+            .FirstOrDefaultAsync(p =>
+                p.FeedId == feedId &&
+                p.ParticipantPublicAddress == publicAddress &&
+                p.LeftAtBlock == null); // Only active participants
+
+    public async Task UpdateParticipantTypeAsync(FeedId feedId, string publicAddress, ParticipantType newType)
+    {
+        await this.Context.GroupFeedParticipants
+            .Where(p => p.FeedId == feedId && p.ParticipantPublicAddress == publicAddress)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(p => p.ParticipantType, newType));
+    }
+
+    public async Task<bool> IsAdminAsync(FeedId feedId, string publicAddress) =>
+        await this.Context.GroupFeedParticipants
+            .AnyAsync(p =>
+                p.FeedId == feedId &&
+                p.ParticipantPublicAddress == publicAddress &&
+                p.ParticipantType == ParticipantType.Admin &&
+                p.LeftAtBlock == null);
+
+    public async Task<int> GetAdminCountAsync(FeedId feedId) =>
+        await this.Context.GroupFeedParticipants
+            .CountAsync(p =>
+                p.FeedId == feedId &&
+                p.ParticipantType == ParticipantType.Admin &&
+                p.LeftAtBlock == null);
 }
+

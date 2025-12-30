@@ -36,4 +36,31 @@ public interface IFeedsStorageService
     /// Called when a user updates their identity so other clients can detect the change.
     /// </summary>
     Task UpdateFeedsBlockIndexForParticipantAsync(string publicSigningAddress, BlockIndex blockIndex);
+
+    // ===== Group Feed Admin Operations (FEAT-009) =====
+
+    /// <summary>
+    /// Get a GroupFeed by its FeedId, including participants.
+    /// </summary>
+    Task<GroupFeed?> GetGroupFeedAsync(FeedId feedId);
+
+    /// <summary>
+    /// Get a specific participant from a group feed.
+    /// </summary>
+    Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress);
+
+    /// <summary>
+    /// Update a participant's type (e.g., Member -> Blocked, Blocked -> Member).
+    /// </summary>
+    Task UpdateParticipantTypeAsync(FeedId feedId, string publicAddress, ParticipantType newType);
+
+    /// <summary>
+    /// Check if a user is an admin in the specified group.
+    /// </summary>
+    Task<bool> IsAdminAsync(FeedId feedId, string publicAddress);
+
+    /// <summary>
+    /// Get the count of admins in a group.
+    /// </summary>
+    Task<int> GetAdminCountAsync(FeedId feedId);
 }
