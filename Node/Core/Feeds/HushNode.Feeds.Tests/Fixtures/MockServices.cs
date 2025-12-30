@@ -118,4 +118,15 @@ public static class MockServices
             .Setup(x => x.GetCredentials())
             .Returns(credentials);
     }
+
+    /// <summary>
+    /// Configures the IFeedsStorageService mock for key rotation operations.
+    /// </summary>
+    public static void ConfigureFeedsStorageForKeyRotation(AutoMocker mocker)
+    {
+        var mock = mocker.GetMock<IFeedsStorageService>();
+
+        mock.Setup(x => x.CreateKeyRotationAsync(It.IsAny<GroupFeedKeyGenerationEntity>()))
+            .Returns(Task.CompletedTask);
+    }
 }

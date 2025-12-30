@@ -307,5 +307,21 @@ public static class TestDataFactory
         return new SignedTransaction<GroupFeedKeyRotationPayload>(unsignedTx, signature);
     }
 
+    public static ValidatedTransaction<GroupFeedKeyRotationPayload> CreateKeyRotationValidatedTransaction(
+        GroupFeedKeyRotationPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var validatorSignature = new SignatureInfo("validator-address", CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<GroupFeedKeyRotationPayload>(
+            new TransactionId(Guid.NewGuid()),
+            GroupFeedKeyRotationPayloadHandler.GroupFeedKeyRotationPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        var signedTx = new SignedTransaction<GroupFeedKeyRotationPayload>(unsignedTx, signature);
+        return new ValidatedTransaction<GroupFeedKeyRotationPayload>(signedTx, validatorSignature);
+    }
+
     #endregion
 }
