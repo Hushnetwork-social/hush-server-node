@@ -141,4 +141,107 @@ public class FeedsStorageServiceTests
     }
 
     #endregion
+
+    #region GetActiveGroupMemberAddressesAsync Tests
+
+    [Fact]
+    public async Task GetActiveGroupMemberAddressesAsync_WithActiveMembers_ShouldReturnAddresses()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var expectedAddresses = new List<string>
+        {
+            TestDataFactory.CreateAddress(),
+            TestDataFactory.CreateAddress(),
+            TestDataFactory.CreateAddress()
+        };
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.GetActiveGroupMemberAddressesAsync(feedId))
+            .ReturnsAsync(expectedAddresses);
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.GetActiveGroupMemberAddressesAsync(feedId);
+
+        // Assert
+        result.Should().BeEquivalentTo(expectedAddresses);
+        result.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task GetActiveGroupMemberAddressesAsync_WithNoMembers_ShouldReturnEmptyList()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.GetActiveGroupMemberAddressesAsync(feedId))
+            .ReturnsAsync(new List<string>());
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.GetActiveGroupMemberAddressesAsync(feedId);
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetActiveGroupMemberAddressesAsync_ShouldUseReadOnlyUnitOfWork()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.GetActiveGroupMemberAddressesAsync(feedId))
+            .ReturnsAsync(new List<string> { TestDataFactory.CreateAddress() });
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        var mockProvider = mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>();
+        mockProvider
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        await service.GetActiveGroupMemberAddressesAsync(feedId);
+
+        // Assert
+        mockProvider.Verify(x => x.CreateReadOnly(), Times.Once);
+        mockRepository.Verify(x => x.GetActiveGroupMemberAddressesAsync(feedId), Times.Once);
+    }
+
+    #endregion
 }
