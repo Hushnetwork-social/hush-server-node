@@ -1,3 +1,4 @@
+using HushShared.Blockchain.BlockModel;
 using HushShared.Blockchain.Model;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
@@ -107,4 +108,164 @@ public static class TestDataFactory
         Random.NextBytes(bytes);
         return Convert.ToHexString(bytes).ToLower();
     }
+
+    #region Admin Control Payloads
+
+    public static BlockMemberPayload CreateBlockMemberPayload(
+        FeedId feedId,
+        string adminAddress,
+        string targetAddress,
+        string? reason = null)
+    {
+        return new BlockMemberPayload(feedId, adminAddress, targetAddress, reason);
+    }
+
+    public static SignedTransaction<BlockMemberPayload> CreateBlockMemberSignedTransaction(
+        BlockMemberPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<BlockMemberPayload>(
+            new TransactionId(Guid.NewGuid()),
+            BlockMemberPayloadHandler.BlockMemberPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        return new SignedTransaction<BlockMemberPayload>(unsignedTx, signature);
+    }
+
+    public static UnblockMemberPayload CreateUnblockMemberPayload(
+        FeedId feedId,
+        string adminAddress,
+        string targetAddress)
+    {
+        return new UnblockMemberPayload(feedId, adminAddress, targetAddress);
+    }
+
+    public static SignedTransaction<UnblockMemberPayload> CreateUnblockMemberSignedTransaction(
+        UnblockMemberPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<UnblockMemberPayload>(
+            new TransactionId(Guid.NewGuid()),
+            UnblockMemberPayloadHandler.UnblockMemberPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        return new SignedTransaction<UnblockMemberPayload>(unsignedTx, signature);
+    }
+
+    public static PromoteToAdminPayload CreatePromoteToAdminPayload(
+        FeedId feedId,
+        string adminAddress,
+        string targetAddress)
+    {
+        return new PromoteToAdminPayload(feedId, adminAddress, targetAddress);
+    }
+
+    public static SignedTransaction<PromoteToAdminPayload> CreatePromoteToAdminSignedTransaction(
+        PromoteToAdminPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<PromoteToAdminPayload>(
+            new TransactionId(Guid.NewGuid()),
+            PromoteToAdminPayloadHandler.PromoteToAdminPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        return new SignedTransaction<PromoteToAdminPayload>(unsignedTx, signature);
+    }
+
+    public static UpdateGroupFeedTitlePayload CreateUpdateTitlePayload(
+        FeedId feedId,
+        string adminAddress,
+        string newTitle)
+    {
+        return new UpdateGroupFeedTitlePayload(feedId, adminAddress, newTitle);
+    }
+
+    public static SignedTransaction<UpdateGroupFeedTitlePayload> CreateUpdateTitleSignedTransaction(
+        UpdateGroupFeedTitlePayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<UpdateGroupFeedTitlePayload>(
+            new TransactionId(Guid.NewGuid()),
+            UpdateGroupFeedTitlePayloadHandler.UpdateGroupFeedTitlePayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        return new SignedTransaction<UpdateGroupFeedTitlePayload>(unsignedTx, signature);
+    }
+
+    public static UpdateGroupFeedDescriptionPayload CreateUpdateDescriptionPayload(
+        FeedId feedId,
+        string adminAddress,
+        string newDescription)
+    {
+        return new UpdateGroupFeedDescriptionPayload(feedId, adminAddress, newDescription);
+    }
+
+    public static SignedTransaction<UpdateGroupFeedDescriptionPayload> CreateUpdateDescriptionSignedTransaction(
+        UpdateGroupFeedDescriptionPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<UpdateGroupFeedDescriptionPayload>(
+            new TransactionId(Guid.NewGuid()),
+            UpdateGroupFeedDescriptionPayloadHandler.UpdateGroupFeedDescriptionPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        return new SignedTransaction<UpdateGroupFeedDescriptionPayload>(unsignedTx, signature);
+    }
+
+    public static DeleteGroupFeedPayload CreateDeleteGroupFeedPayload(
+        FeedId feedId,
+        string adminAddress)
+    {
+        return new DeleteGroupFeedPayload(feedId, adminAddress);
+    }
+
+    public static SignedTransaction<DeleteGroupFeedPayload> CreateDeleteGroupFeedSignedTransaction(
+        DeleteGroupFeedPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<DeleteGroupFeedPayload>(
+            new TransactionId(Guid.NewGuid()),
+            DeleteGroupFeedPayloadHandler.DeleteGroupFeedPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        return new SignedTransaction<DeleteGroupFeedPayload>(unsignedTx, signature);
+    }
+
+    public static GroupFeed CreateGroupFeed(
+        FeedId feedId,
+        string title = "Test Group",
+        string description = "Test Description",
+        bool isDeleted = false)
+    {
+        return new GroupFeed(feedId, title, description, false, new BlockIndex(100), 0)
+        {
+            IsDeleted = isDeleted
+        };
+    }
+
+    public static GroupFeedParticipantEntity CreateParticipantEntity(
+        FeedId feedId,
+        string address,
+        ParticipantType participantType)
+    {
+        return new GroupFeedParticipantEntity(
+            feedId,
+            address,
+            participantType,
+            new BlockIndex(100));
+    }
+
+    #endregion
 }

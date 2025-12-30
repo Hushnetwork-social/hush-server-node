@@ -26,6 +26,58 @@ public static class MockServices
     }
 
     /// <summary>
+    /// Configures the IFeedsStorageService mock for admin control operations.
+    /// </summary>
+    public static void ConfigureFeedsStorageForAdminControls(
+        AutoMocker mocker,
+        GroupFeed? groupFeed = null,
+        GroupFeedParticipantEntity? senderParticipant = null,
+        GroupFeedParticipantEntity? targetParticipant = null,
+        int adminCount = 1)
+    {
+        var mock = mocker.GetMock<IFeedsStorageService>();
+
+        // GetGroupFeedAsync
+        mock.Setup(x => x.GetGroupFeedAsync(It.IsAny<FeedId>()))
+            .ReturnsAsync(groupFeed);
+
+        // GetGroupFeedParticipantAsync for sender
+        if (senderParticipant != null)
+        {
+            mock.Setup(x => x.GetGroupFeedParticipantAsync(It.IsAny<FeedId>(), senderParticipant.ParticipantPublicAddress))
+                .ReturnsAsync(senderParticipant);
+        }
+
+        // GetGroupFeedParticipantAsync for target
+        if (targetParticipant != null)
+        {
+            mock.Setup(x => x.GetGroupFeedParticipantAsync(It.IsAny<FeedId>(), targetParticipant.ParticipantPublicAddress))
+                .ReturnsAsync(targetParticipant);
+        }
+
+        // GetAdminCountAsync
+        mock.Setup(x => x.GetAdminCountAsync(It.IsAny<FeedId>()))
+            .ReturnsAsync(adminCount);
+
+        // IsAdminAsync - based on sender participant type
+        if (senderParticipant != null && senderParticipant.ParticipantType == ParticipantType.Admin)
+        {
+            mock.Setup(x => x.IsAdminAsync(It.IsAny<FeedId>(), senderParticipant.ParticipantPublicAddress))
+                .ReturnsAsync(true);
+        }
+
+        // Update operations
+        mock.Setup(x => x.UpdateGroupFeedTitleAsync(It.IsAny<FeedId>(), It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+        mock.Setup(x => x.UpdateGroupFeedDescriptionAsync(It.IsAny<FeedId>(), It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+        mock.Setup(x => x.MarkGroupFeedDeletedAsync(It.IsAny<FeedId>()))
+            .Returns(Task.CompletedTask);
+        mock.Setup(x => x.UpdateParticipantTypeAsync(It.IsAny<FeedId>(), It.IsAny<string>(), It.IsAny<ParticipantType>()))
+            .Returns(Task.CompletedTask);
+    }
+
+    /// <summary>
     /// Configures the IBlockchainCache mock in the AutoMocker.
     /// </summary>
     public static void ConfigureBlockchainCache(AutoMocker mocker, long currentBlockIndex = 100)

@@ -48,9 +48,9 @@ public class PromoteToAdminContentHandler(
             return null!;
         }
 
-        // Validation: Check group exists
+        // Validation: Check group exists and is not deleted
         var groupFeed = this._feedsStorageService.GetGroupFeedAsync(payload.FeedId).GetAwaiter().GetResult();
-        if (groupFeed == null)
+        if (groupFeed == null || groupFeed.IsDeleted)
         {
             return null!;
         }
