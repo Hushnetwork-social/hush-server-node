@@ -42,6 +42,42 @@ public static class FeedsHostBuild
             services.AddTransient<IIndexStrategy, NewGroupFeedIndexStrategy>();
             services.AddTransient<ITransactionContentHandler, NewGroupFeedContentHandler>();
             services.AddTransient<INewGroupFeedTransactionHandler, NewGroupFeedTransactionHandler>();
+
+            // FEAT-009: Admin Controls - Block Member
+            services.AddTransient<ITransactionDeserializerStrategy, BlockMemberDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, BlockMemberIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, BlockMemberContentHandler>();
+            services.AddTransient<IBlockMemberTransactionHandler, BlockMemberTransactionHandler>();
+
+            // FEAT-009: Admin Controls - Unblock Member
+            services.AddTransient<ITransactionDeserializerStrategy, UnblockMemberDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, UnblockMemberIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, UnblockMemberContentHandler>();
+            services.AddTransient<IUnblockMemberTransactionHandler, UnblockMemberTransactionHandler>();
+
+            // FEAT-009: Admin Controls - Promote to Admin
+            services.AddTransient<ITransactionDeserializerStrategy, PromoteToAdminDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, PromoteToAdminIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, PromoteToAdminContentHandler>();
+            services.AddTransient<IPromoteToAdminTransactionHandler, PromoteToAdminTransactionHandler>();
+
+            // FEAT-009: Admin Controls - Update Group Feed Title
+            services.AddTransient<ITransactionDeserializerStrategy, UpdateGroupFeedTitleDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, UpdateGroupFeedTitleIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, UpdateGroupFeedTitleContentHandler>();
+            services.AddTransient<IUpdateGroupFeedTitleTransactionHandler, UpdateGroupFeedTitleTransactionHandler>();
+
+            // FEAT-009: Admin Controls - Update Group Feed Description
+            services.AddTransient<ITransactionDeserializerStrategy, UpdateGroupFeedDescriptionDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, UpdateGroupFeedDescriptionIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, UpdateGroupFeedDescriptionContentHandler>();
+            services.AddTransient<IUpdateGroupFeedDescriptionTransactionHandler, UpdateGroupFeedDescriptionTransactionHandler>();
+
+            // FEAT-009: Admin Controls - Delete Group Feed
+            services.AddTransient<ITransactionDeserializerStrategy, DeleteGroupFeedDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, DeleteGroupFeedIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, DeleteGroupFeedContentHandler>();
+            services.AddTransient<IDeleteGroupFeedTransactionHandler, DeleteGroupFeedTransactionHandler>();
         });
 
         return builder;
