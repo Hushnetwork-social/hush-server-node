@@ -181,6 +181,11 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                     .HasColumnType("int")
                     .HasDefaultValue(0);
 
+                // FEAT-009: Soft-delete flag for group feeds
+                groupFeed.Property(x => x.IsDeleted)
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false);
+
                 groupFeed.HasMany(x => x.Participants)
                     .WithOne(x => x.GroupFeed)
                     .HasForeignKey(x => x.FeedId);

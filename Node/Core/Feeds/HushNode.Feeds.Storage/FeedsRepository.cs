@@ -102,5 +102,31 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 p.FeedId == feedId &&
                 p.ParticipantType == ParticipantType.Admin &&
                 p.LeftAtBlock == null);
+
+    // ===== Group Feed Metadata Operations (FEAT-009 Phase 4) =====
+
+    public async Task UpdateGroupFeedTitleAsync(FeedId feedId, string newTitle)
+    {
+        await this.Context.GroupFeeds
+            .Where(g => g.FeedId == feedId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(g => g.Title, newTitle));
+    }
+
+    public async Task UpdateGroupFeedDescriptionAsync(FeedId feedId, string newDescription)
+    {
+        await this.Context.GroupFeeds
+            .Where(g => g.FeedId == feedId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(g => g.Description, newDescription));
+    }
+
+    public async Task MarkGroupFeedDeletedAsync(FeedId feedId)
+    {
+        await this.Context.GroupFeeds
+            .Where(g => g.FeedId == feedId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(g => g.IsDeleted, true));
+    }
 }
 

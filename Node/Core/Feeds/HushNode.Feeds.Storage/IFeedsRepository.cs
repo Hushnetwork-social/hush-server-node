@@ -59,4 +59,21 @@ public interface IFeedsRepository : IRepository
     /// Get the count of admins in a group.
     /// </summary>
     Task<int> GetAdminCountAsync(FeedId feedId);
+
+    // ===== Group Feed Metadata Operations (FEAT-009 Phase 4) =====
+
+    /// <summary>
+    /// Update the title of a group feed.
+    /// </summary>
+    Task UpdateGroupFeedTitleAsync(FeedId feedId, string newTitle);
+
+    /// <summary>
+    /// Update the description of a group feed.
+    /// </summary>
+    Task UpdateGroupFeedDescriptionAsync(FeedId feedId, string newDescription);
+
+    /// <summary>
+    /// Soft-delete a group feed (mark as deleted, preserve data).
+    /// </summary>
+    Task MarkGroupFeedDeletedAsync(FeedId feedId);
 }

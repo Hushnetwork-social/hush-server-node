@@ -146,4 +146,39 @@ public class FeedsStorageService(
             .CreateReadOnly()
             .GetRepository<IFeedsRepository>()
             .GetAdminCountAsync(feedId);
+
+    // ===== Group Feed Metadata Operations (FEAT-009 Phase 4) =====
+
+    public async Task UpdateGroupFeedTitleAsync(FeedId feedId, string newTitle)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .UpdateGroupFeedTitleAsync(feedId, newTitle);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
+    public async Task UpdateGroupFeedDescriptionAsync(FeedId feedId, string newDescription)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .UpdateGroupFeedDescriptionAsync(feedId, newDescription);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
+    public async Task MarkGroupFeedDeletedAsync(FeedId feedId)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .MarkGroupFeedDeletedAsync(feedId);
+
+        await writableUnitOfWork.CommitAsync();
+    }
 }
