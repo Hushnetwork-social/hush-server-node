@@ -13,6 +13,12 @@ public record GroupFeed(
     BlockIndex CreatedAtBlock,
     int CurrentKeyGeneration)
 {
+    /// <summary>
+    /// Indicates if the group has been soft-deleted.
+    /// Deleted groups cannot accept new messages but existing data is preserved.
+    /// </summary>
+    public bool IsDeleted { get; set; } = false;
+
     public virtual ICollection<GroupFeedParticipantEntity> Participants { get; set; } = [];
     public virtual ICollection<GroupFeedKeyGenerationEntity> KeyGenerations { get; set; } = [];
 }

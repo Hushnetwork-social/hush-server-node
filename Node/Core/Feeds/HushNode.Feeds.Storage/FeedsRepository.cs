@@ -65,4 +65,68 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(f => f.BlockIndex, blockIndex));
     }
+
+    // ===== Group Feed Admin Operations (FEAT-009) =====
+
+    public async Task<GroupFeed?> GetGroupFeedAsync(FeedId feedId) =>
+        await this.Context.GroupFeeds
+            .Include(g => g.Participants)
+            .FirstOrDefaultAsync(g => g.FeedId == feedId);
+
+    public async Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress) =>
+        await this.Context.GroupFeedParticipants
+            .FirstOrDefaultAsync(p =>
+                p.FeedId == feedId &&
+                p.ParticipantPublicAddress == publicAddress &&
+                p.LeftAtBlock == null); // Only active participants
+
+    public async Task UpdateParticipantTypeAsync(FeedId feedId, string publicAddress, ParticipantType newType)
+    {
+        await this.Context.GroupFeedParticipants
+            .Where(p => p.FeedId == feedId && p.ParticipantPublicAddress == publicAddress)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(p => p.ParticipantType, newType));
+    }
+
+    public async Task<bool> IsAdminAsync(FeedId feedId, string publicAddress) =>
+        await this.Context.GroupFeedParticipants
+            .AnyAsync(p =>
+                p.FeedId == feedId &&
+                p.ParticipantPublicAddress == publicAddress &&
+                p.ParticipantType == ParticipantType.Admin &&
+                p.LeftAtBlock == null);
+
+    public async Task<int> GetAdminCountAsync(FeedId feedId) =>
+        await this.Context.GroupFeedParticipants
+            .CountAsync(p =>
+                p.FeedId == feedId &&
+                p.ParticipantType == ParticipantType.Admin &&
+                p.LeftAtBlock == null);
+
+    // ===== Group Feed Metadata Operations (FEAT-009 Phase 4) =====
+
+    public async Task UpdateGroupFeedTitleAsync(FeedId feedId, string newTitle)
+    {
+        await this.Context.GroupFeeds
+            .Where(g => g.FeedId == feedId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(g => g.Title, newTitle));
+    }
+
+    public async Task UpdateGroupFeedDescriptionAsync(FeedId feedId, string newDescription)
+    {
+        await this.Context.GroupFeeds
+            .Where(g => g.FeedId == feedId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(g => g.Description, newDescription));
+    }
+
+    public async Task MarkGroupFeedDeletedAsync(FeedId feedId)
+    {
+        await this.Context.GroupFeeds
+            .Where(g => g.FeedId == feedId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(g => g.IsDeleted, true));
+    }
 }
+
