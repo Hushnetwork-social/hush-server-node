@@ -80,4 +80,12 @@ public interface IFeedsStorageService
     /// Soft-delete a group feed (mark as deleted, preserve data).
     /// </summary>
     Task MarkGroupFeedDeletedAsync(FeedId feedId);
+
+    // ===== Key Rotation Operations (FEAT-010) =====
+
+    /// <summary>
+    /// Get the maximum KeyGeneration for a group feed.
+    /// Returns null if the group has no key generations.
+    /// </summary>
+    Task<int?> GetMaxKeyGenerationAsync(FeedId feedId);
 }

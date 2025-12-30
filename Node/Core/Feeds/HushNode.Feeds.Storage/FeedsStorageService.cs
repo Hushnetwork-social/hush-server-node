@@ -181,4 +181,12 @@ public class FeedsStorageService(
 
         await writableUnitOfWork.CommitAsync();
     }
+
+    // ===== Key Rotation Operations (FEAT-010) =====
+
+    public async Task<int?> GetMaxKeyGenerationAsync(FeedId feedId) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetMaxKeyGenerationAsync(feedId);
 }

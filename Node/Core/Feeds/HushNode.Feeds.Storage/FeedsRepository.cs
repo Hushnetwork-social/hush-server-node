@@ -128,5 +128,12 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(g => g.IsDeleted, true));
     }
+
+    // ===== Key Rotation Operations (FEAT-010) =====
+
+    public async Task<int?> GetMaxKeyGenerationAsync(FeedId feedId) =>
+        await this.Context.GroupFeedKeyGenerations
+            .Where(k => k.FeedId == feedId)
+            .MaxAsync(k => (int?)k.KeyGeneration);
 }
 
