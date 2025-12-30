@@ -135,5 +135,13 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
         await this.Context.GroupFeedKeyGenerations
             .Where(k => k.FeedId == feedId)
             .MaxAsync(k => (int?)k.KeyGeneration);
+
+    public async Task<IReadOnlyList<string>> GetActiveGroupMemberAddressesAsync(FeedId feedId) =>
+        await this.Context.GroupFeedParticipants
+            .Where(p => p.FeedId == feedId
+                && p.LeftAtBlock == null
+                && p.ParticipantType != ParticipantType.Banned)
+            .Select(p => p.ParticipantPublicAddress)
+            .ToListAsync();
 }
 

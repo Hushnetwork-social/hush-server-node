@@ -189,4 +189,10 @@ public class FeedsStorageService(
             .CreateReadOnly()
             .GetRepository<IFeedsRepository>()
             .GetMaxKeyGenerationAsync(feedId);
+
+    public async Task<IReadOnlyList<string>> GetActiveGroupMemberAddressesAsync(FeedId feedId) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetActiveGroupMemberAddressesAsync(feedId);
 }

@@ -84,4 +84,11 @@ public interface IFeedsRepository : IRepository
     /// Returns null if the group has no key generations.
     /// </summary>
     Task<int?> GetMaxKeyGenerationAsync(FeedId feedId);
+
+    /// <summary>
+    /// Get addresses of all active group members who should receive new keys during rotation.
+    /// Includes: Admin, Member, Blocked (still in group).
+    /// Excludes: Banned (removed from group), users with LeftAtBlock != null.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetActiveGroupMemberAddressesAsync(FeedId feedId);
 }
