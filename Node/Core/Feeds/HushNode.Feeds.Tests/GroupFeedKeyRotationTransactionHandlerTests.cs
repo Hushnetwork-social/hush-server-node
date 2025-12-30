@@ -1,10 +1,12 @@
 using FluentAssertions;
+using HushNode.Feeds.Events;
 using HushNode.Feeds.Storage;
 using HushNode.Feeds.Tests.Fixtures;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
 using Moq;
 using Moq.AutoMock;
+using Olimpo;
 using Xunit;
 
 namespace HushNode.Feeds.Tests;
@@ -384,6 +386,141 @@ public class GroupFeedKeyRotationTransactionHandlerTests
         // Assert
         capturedEntity.Should().NotBeNull();
         capturedEntity!.KeyGeneration.Should().Be(999);
+    }
+
+    #endregion
+
+    #region Event Publishing Tests
+
+    [Fact]
+    public async Task HandleKeyRotationTransactionAsync_PublishesKeyRotationCompletedEvent()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        MockServices.ConfigureFeedsStorageForKeyRotation(mocker);
+
+        var handler = mocker.CreateInstance<GroupFeedKeyRotationTransactionHandler>();
+        var feedId = TestDataFactory.CreateFeedId();
+        var payload = TestDataFactory.CreateKeyRotationPayload(feedId);
+        var transaction = TestDataFactory.CreateKeyRotationValidatedTransaction(payload, TestDataFactory.CreateAddress());
+
+        // Act
+        await handler.HandleKeyRotationTransactionAsync(transaction);
+
+        // Assert
+        mocker.GetMock<IEventAggregator>()
+            .Verify(x => x.PublishAsync(It.IsAny<KeyRotationCompletedEvent>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleKeyRotationTransactionAsync_EventContainsCorrectFeedId()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        MockServices.ConfigureFeedsStorageForKeyRotation(mocker);
+
+        var handler = mocker.CreateInstance<GroupFeedKeyRotationTransactionHandler>();
+        var feedId = TestDataFactory.CreateFeedId();
+        var payload = TestDataFactory.CreateKeyRotationPayload(feedId, newKeyGeneration: 5);
+        var transaction = TestDataFactory.CreateKeyRotationValidatedTransaction(payload, TestDataFactory.CreateAddress());
+
+        KeyRotationCompletedEvent? capturedEvent = null;
+        mocker.GetMock<IEventAggregator>()
+            .Setup(x => x.PublishAsync(It.IsAny<KeyRotationCompletedEvent>()))
+            .Callback<KeyRotationCompletedEvent>(e => capturedEvent = e)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await handler.HandleKeyRotationTransactionAsync(transaction);
+
+        // Assert
+        capturedEvent.Should().NotBeNull();
+        capturedEvent!.FeedId.Should().Be(feedId);
+        capturedEvent.NewKeyGeneration.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task HandleKeyRotationTransactionAsync_EventContainsAllMemberAddresses()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        MockServices.ConfigureFeedsStorageForKeyRotation(mocker);
+
+        var handler = mocker.CreateInstance<GroupFeedKeyRotationTransactionHandler>();
+        var feedId = TestDataFactory.CreateFeedId();
+        var member1 = TestDataFactory.CreateAddress();
+        var member2 = TestDataFactory.CreateAddress();
+        var member3 = TestDataFactory.CreateAddress();
+
+        var payload = new GroupFeedKeyRotationPayload(
+            feedId,
+            NewKeyGeneration: 2,
+            PreviousKeyGeneration: 1,
+            ValidFromBlock: 100,
+            EncryptedKeys: new[]
+            {
+                new GroupFeedEncryptedKey(member1, Convert.ToBase64String(new byte[128])),
+                new GroupFeedEncryptedKey(member2, Convert.ToBase64String(new byte[128])),
+                new GroupFeedEncryptedKey(member3, Convert.ToBase64String(new byte[128]))
+            },
+            RotationTrigger: RotationTrigger.Join);
+        var transaction = TestDataFactory.CreateKeyRotationValidatedTransaction(payload, TestDataFactory.CreateAddress());
+
+        KeyRotationCompletedEvent? capturedEvent = null;
+        mocker.GetMock<IEventAggregator>()
+            .Setup(x => x.PublishAsync(It.IsAny<KeyRotationCompletedEvent>()))
+            .Callback<KeyRotationCompletedEvent>(e => capturedEvent = e)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await handler.HandleKeyRotationTransactionAsync(transaction);
+
+        // Assert
+        capturedEvent.Should().NotBeNull();
+        capturedEvent!.MemberPublicAddresses.Should().HaveCount(3);
+        capturedEvent.MemberPublicAddresses.Should().Contain(member1);
+        capturedEvent.MemberPublicAddresses.Should().Contain(member2);
+        capturedEvent.MemberPublicAddresses.Should().Contain(member3);
+    }
+
+    [Theory]
+    [InlineData(RotationTrigger.Join)]
+    [InlineData(RotationTrigger.Leave)]
+    [InlineData(RotationTrigger.Ban)]
+    [InlineData(RotationTrigger.Unban)]
+    [InlineData(RotationTrigger.Manual)]
+    public async Task HandleKeyRotationTransactionAsync_EventContainsCorrectTrigger(RotationTrigger trigger)
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        MockServices.ConfigureFeedsStorageForKeyRotation(mocker);
+
+        var handler = mocker.CreateInstance<GroupFeedKeyRotationTransactionHandler>();
+        var feedId = TestDataFactory.CreateFeedId();
+        var payload = new GroupFeedKeyRotationPayload(
+            feedId,
+            NewKeyGeneration: 2,
+            PreviousKeyGeneration: 1,
+            ValidFromBlock: 100,
+            EncryptedKeys: new[]
+            {
+                new GroupFeedEncryptedKey(TestDataFactory.CreateAddress(), Convert.ToBase64String(new byte[128]))
+            },
+            RotationTrigger: trigger);
+        var transaction = TestDataFactory.CreateKeyRotationValidatedTransaction(payload, TestDataFactory.CreateAddress());
+
+        KeyRotationCompletedEvent? capturedEvent = null;
+        mocker.GetMock<IEventAggregator>()
+            .Setup(x => x.PublishAsync(It.IsAny<KeyRotationCompletedEvent>()))
+            .Callback<KeyRotationCompletedEvent>(e => capturedEvent = e)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await handler.HandleKeyRotationTransactionAsync(transaction);
+
+        // Assert
+        capturedEvent.Should().NotBeNull();
+        capturedEvent!.Trigger.Should().Be(trigger);
     }
 
     #endregion
