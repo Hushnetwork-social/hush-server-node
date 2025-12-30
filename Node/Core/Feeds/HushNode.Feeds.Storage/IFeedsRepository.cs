@@ -91,4 +91,15 @@ public interface IFeedsRepository : IRepository
     /// Excludes: Banned (removed from group), users with LeftAtBlock != null.
     /// </summary>
     Task<IReadOnlyList<string>> GetActiveGroupMemberAddressesAsync(FeedId feedId);
+
+    /// <summary>
+    /// Creates a new KeyGeneration with all encrypted keys and updates the group's CurrentKeyGeneration.
+    /// The KeyGeneration entity should have EncryptedKeys collection populated.
+    /// </summary>
+    Task CreateKeyRotationAsync(GroupFeedKeyGenerationEntity keyGeneration);
+
+    /// <summary>
+    /// Updates the CurrentKeyGeneration field on a GroupFeed.
+    /// </summary>
+    Task UpdateCurrentKeyGenerationAsync(FeedId feedId, int newKeyGeneration);
 }

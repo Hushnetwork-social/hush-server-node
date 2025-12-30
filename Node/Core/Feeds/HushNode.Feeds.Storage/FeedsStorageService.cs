@@ -195,4 +195,19 @@ public class FeedsStorageService(
             .CreateReadOnly()
             .GetRepository<IFeedsRepository>()
             .GetActiveGroupMemberAddressesAsync(feedId);
+
+    public async Task CreateKeyRotationAsync(GroupFeedKeyGenerationEntity keyGeneration)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+        var repository = writableUnitOfWork.GetRepository<IFeedsRepository>();
+
+        // Create the key generation entity with encrypted keys
+        await repository.CreateKeyRotationAsync(keyGeneration);
+
+        // Update the group's CurrentKeyGeneration
+        await repository.UpdateCurrentKeyGenerationAsync(keyGeneration.FeedId, keyGeneration.KeyGeneration);
+
+        // Commit atomically
+        await writableUnitOfWork.CommitAsync();
+    }
 }
