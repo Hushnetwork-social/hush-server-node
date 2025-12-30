@@ -1,7 +1,9 @@
+using HushNode.Feeds.Events;
 using HushNode.Feeds.Storage;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Feeds.Model;
+using Olimpo;
 
 namespace HushNode.Feeds;
 
@@ -11,10 +13,12 @@ namespace HushNode.Feeds;
 /// the group's CurrentKeyGeneration field atomically.
 /// </summary>
 public class GroupFeedKeyRotationTransactionHandler(
-    IFeedsStorageService feedsStorageService)
+    IFeedsStorageService feedsStorageService,
+    IEventAggregator eventAggregator)
     : IGroupFeedKeyRotationTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
+    private readonly IEventAggregator _eventAggregator = eventAggregator;
 
     public async Task HandleKeyRotationTransactionAsync(
         ValidatedTransaction<GroupFeedKeyRotationPayload> keyRotationTransaction)
@@ -45,5 +49,17 @@ public class GroupFeedKeyRotationTransactionHandler(
 
         // Persist atomically: creates KeyGeneration + encrypted keys + updates group's CurrentKeyGeneration
         await this._feedsStorageService.CreateKeyRotationAsync(keyGenerationEntity);
+
+        // Publish event for client notification
+        // Fire and forget - don't block key rotation on downstream processing
+        var memberAddresses = payload.EncryptedKeys
+            .Select(ek => ek.MemberPublicAddress)
+            .ToArray();
+
+        _ = this._eventAggregator.PublishAsync(new KeyRotationCompletedEvent(
+            payload.FeedId,
+            payload.NewKeyGeneration,
+            memberAddresses,
+            payload.RotationTrigger));
     }
 }
