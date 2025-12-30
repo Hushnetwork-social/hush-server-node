@@ -81,6 +81,8 @@ public static class FeedsHostBuild
 
             // FEAT-010: Key Rotation System
             services.AddTransient<IKeyRotationService, KeyRotationService>();
+            services.AddTransient<ITransactionDeserializerStrategy, GroupFeedKeyRotationDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, GroupFeedKeyRotationIndexStrategy>();
             services.AddTransient<ITransactionContentHandler, GroupFeedKeyRotationContentHandler>();
             services.AddTransient<IGroupFeedKeyRotationTransactionHandler, GroupFeedKeyRotationTransactionHandler>();
         });
