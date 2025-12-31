@@ -59,6 +59,9 @@ public static class ReactionsHostBuild
         // Replaces StubFeedInfoProvider with real implementation that queries Feeds storage
         services.AddSingleton<IFeedInfoProvider, GroupFeedInfoProvider>();
 
+        // FEAT-012: Reaction key derivation service for Group Feeds
+        services.AddSingleton<IReactionKeyDerivationService, ReactionKeyDerivationService>();
+
         // Blockchain transaction infrastructure for reactions
         services.AddTransient<ITransactionDeserializerStrategy, NewReactionDeserializeStrategy>();
         services.AddTransient<ITransactionContentHandler, NewReactionContentHandler>();
