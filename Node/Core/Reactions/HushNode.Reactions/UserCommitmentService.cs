@@ -33,8 +33,6 @@ public class UserCommitmentService : IUserCommitmentService
 
         // Compute commitment
         _localUserCommitment = ComputeCommitment(_localUserSecret);
-
-        Console.WriteLine($"[UserCommitmentService] Initialized. Commitment: {Convert.ToHexString(_localUserCommitment)[..32]}...");
     }
 
     public byte[] GetLocalUserCommitment() => _localUserCommitment;
