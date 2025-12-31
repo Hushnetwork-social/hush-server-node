@@ -416,4 +416,60 @@ public static class TestDataFactory
     }
 
     #endregion
+
+    #region Key Rotation Payloads
+
+    public static GroupFeedKeyRotationPayload CreateKeyRotationPayload(
+        FeedId feedId,
+        int newKeyGeneration = 2,
+        int previousKeyGeneration = 1,
+        long validFromBlock = 100,
+        int memberCount = 3)
+    {
+        var encryptedKeys = Enumerable.Range(0, memberCount)
+            .Select(_ => new GroupFeedEncryptedKey(
+                CreateAddress(),
+                Convert.ToBase64String(new byte[128])))
+            .ToArray();
+
+        return new GroupFeedKeyRotationPayload(
+            feedId,
+            newKeyGeneration,
+            previousKeyGeneration,
+            validFromBlock,
+            encryptedKeys,
+            RotationTrigger.Join);
+    }
+
+    public static SignedTransaction<GroupFeedKeyRotationPayload> CreateKeyRotationSignedTransaction(
+        GroupFeedKeyRotationPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<GroupFeedKeyRotationPayload>(
+            new TransactionId(Guid.NewGuid()),
+            GroupFeedKeyRotationPayloadHandler.GroupFeedKeyRotationPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        return new SignedTransaction<GroupFeedKeyRotationPayload>(unsignedTx, signature);
+    }
+
+    public static ValidatedTransaction<GroupFeedKeyRotationPayload> CreateKeyRotationValidatedTransaction(
+        GroupFeedKeyRotationPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var validatorSignature = new SignatureInfo("validator-address", CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<GroupFeedKeyRotationPayload>(
+            new TransactionId(Guid.NewGuid()),
+            GroupFeedKeyRotationPayloadHandler.GroupFeedKeyRotationPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        var signedTx = new SignedTransaction<GroupFeedKeyRotationPayload>(unsignedTx, signature);
+        return new ValidatedTransaction<GroupFeedKeyRotationPayload>(signedTx, validatorSignature);
+    }
+
+    #endregion
 }

@@ -217,4 +217,15 @@ public static class MockServices
         mock.Setup(x => x.MarkGroupFeedDeletedAsync(It.IsAny<FeedId>()))
             .Returns(Task.CompletedTask);
     }
+
+    /// <summary>
+    /// Configures the IFeedsStorageService mock for key rotation operations.
+    /// </summary>
+    public static void ConfigureFeedsStorageForKeyRotation(AutoMocker mocker)
+    {
+        var mock = mocker.GetMock<IFeedsStorageService>();
+
+        mock.Setup(x => x.CreateKeyRotationAsync(It.IsAny<GroupFeedKeyGenerationEntity>()))
+            .Returns(Task.CompletedTask);
+    }
 }

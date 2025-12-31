@@ -180,5 +180,31 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(g => g.CurrentKeyGeneration, keyGeneration.KeyGeneration));
     }
+
+    // ===== Key Rotation Operations (FEAT-010) =====
+
+    public async Task<int?> GetMaxKeyGenerationAsync(FeedId feedId) =>
+        await this.Context.GroupFeedKeyGenerations
+            .Where(k => k.FeedId == feedId)
+            .MaxAsync(k => (int?)k.KeyGeneration);
+
+    public async Task<IReadOnlyList<string>> GetActiveGroupMemberAddressesAsync(FeedId feedId) =>
+        await this.Context.GroupFeedParticipants
+            .Where(p => p.FeedId == feedId
+                && p.LeftAtBlock == null
+                && p.ParticipantType != ParticipantType.Banned)
+            .Select(p => p.ParticipantPublicAddress)
+            .ToListAsync();
+
+    public async Task CreateKeyRotationAsync(GroupFeedKeyGenerationEntity keyGeneration) =>
+        await this.Context.GroupFeedKeyGenerations.AddAsync(keyGeneration);
+
+    public async Task UpdateCurrentKeyGenerationAsync(FeedId feedId, int newKeyGeneration)
+    {
+        await this.Context.GroupFeeds
+            .Where(g => g.FeedId == feedId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(g => g.CurrentKeyGeneration, newKeyGeneration));
+    }
 }
 

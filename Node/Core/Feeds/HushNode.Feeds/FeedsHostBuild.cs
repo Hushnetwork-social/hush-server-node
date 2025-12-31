@@ -96,6 +96,13 @@ public static class FeedsHostBuild
             services.AddTransient<IIndexStrategy, DeleteGroupFeedIndexStrategy>();
             services.AddTransient<ITransactionContentHandler, DeleteGroupFeedContentHandler>();
             services.AddTransient<IDeleteGroupFeedTransactionHandler, DeleteGroupFeedTransactionHandler>();
+
+            // FEAT-010: Key Rotation System
+            services.AddTransient<IKeyRotationService, KeyRotationService>();
+            services.AddTransient<ITransactionDeserializerStrategy, GroupFeedKeyRotationDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, GroupFeedKeyRotationIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, GroupFeedKeyRotationContentHandler>();
+            services.AddTransient<IGroupFeedKeyRotationTransactionHandler, GroupFeedKeyRotationTransactionHandler>();
         });
 
         return builder;
