@@ -115,6 +115,12 @@ public static class FeedsHostBuild
             services.AddTransient<IIndexStrategy, UnbanFromGroupFeedIndexStrategy>();
             services.AddTransient<ITransactionContentHandler, UnbanFromGroupFeedContentHandler>();
             services.AddTransient<IUnbanFromGroupFeedTransactionHandler, UnbanFromGroupFeedTransactionHandler>();
+
+            // FEAT-011: Group Feed Messaging
+            services.AddTransient<ITransactionDeserializerStrategy, NewGroupFeedMessageDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, NewGroupFeedMessageIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, NewGroupFeedMessageContentHandler>();
+            services.AddTransient<INewGroupFeedMessageTransactionHandler, NewGroupFeedMessageTransactionHandler>();
         });
 
         return builder;

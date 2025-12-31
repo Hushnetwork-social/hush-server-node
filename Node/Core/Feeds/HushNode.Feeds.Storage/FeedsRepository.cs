@@ -206,5 +206,19 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(g => g.CurrentKeyGeneration, newKeyGeneration));
     }
+
+    // ===== Group Messaging Operations (FEAT-011) =====
+
+    public async Task<GroupFeedKeyGenerationEntity?> GetKeyGenerationByNumberAsync(FeedId feedId, int keyGeneration) =>
+        await this.Context.GroupFeedKeyGenerations
+            .FirstOrDefaultAsync(k => k.FeedId == feedId && k.KeyGeneration == keyGeneration);
+
+    public async Task<bool> CanMemberSendMessagesAsync(FeedId feedId, string publicAddress) =>
+        await this.Context.GroupFeedParticipants
+            .AnyAsync(p =>
+                p.FeedId == feedId &&
+                p.ParticipantPublicAddress == publicAddress &&
+                p.LeftAtBlock == null &&
+                (p.ParticipantType == ParticipantType.Admin || p.ParticipantType == ParticipantType.Member));
 }
 

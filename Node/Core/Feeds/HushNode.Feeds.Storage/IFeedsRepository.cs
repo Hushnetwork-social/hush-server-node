@@ -137,4 +137,18 @@ public interface IFeedsRepository : IRepository
     /// Updates the CurrentKeyGeneration field on a GroupFeed.
     /// </summary>
     Task UpdateCurrentKeyGenerationAsync(FeedId feedId, int newKeyGeneration);
+
+    // ===== Group Messaging Operations (FEAT-011) =====
+
+    /// <summary>
+    /// Get a specific KeyGeneration entity by its number.
+    /// Used for grace period validation during message submission.
+    /// </summary>
+    Task<GroupFeedKeyGenerationEntity?> GetKeyGenerationByNumberAsync(FeedId feedId, int keyGeneration);
+
+    /// <summary>
+    /// Check if a user is an active member who can send messages.
+    /// Returns true for Admin or Member, false for Blocked, Banned, Left, or non-member.
+    /// </summary>
+    Task<bool> CanMemberSendMessagesAsync(FeedId feedId, string publicAddress);
 }
