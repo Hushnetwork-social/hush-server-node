@@ -103,6 +103,18 @@ public static class FeedsHostBuild
             services.AddTransient<IIndexStrategy, GroupFeedKeyRotationIndexStrategy>();
             services.AddTransient<ITransactionContentHandler, GroupFeedKeyRotationContentHandler>();
             services.AddTransient<IGroupFeedKeyRotationTransactionHandler, GroupFeedKeyRotationTransactionHandler>();
+
+            // FEAT-015: Ban/Unban System - Ban Member
+            services.AddTransient<ITransactionDeserializerStrategy, BanFromGroupFeedDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, BanFromGroupFeedIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, BanFromGroupFeedContentHandler>();
+            services.AddTransient<IBanFromGroupFeedTransactionHandler, BanFromGroupFeedTransactionHandler>();
+
+            // FEAT-015: Ban/Unban System - Unban Member
+            services.AddTransient<ITransactionDeserializerStrategy, UnbanFromGroupFeedDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, UnbanFromGroupFeedIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, UnbanFromGroupFeedContentHandler>();
+            services.AddTransient<IUnbanFromGroupFeedTransactionHandler, UnbanFromGroupFeedTransactionHandler>();
         });
 
         return builder;
