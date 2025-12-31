@@ -90,8 +90,24 @@ public class KeyRotationService(
                         $"Could not retrieve identity for member {memberAddress}. Cannot complete key rotation.");
                 }
 
+                // Validate public encrypt key before attempting encryption
+                if (string.IsNullOrEmpty(fullProfile.PublicEncryptAddress))
+                {
+                    return KeyRotationResult.Failure(
+                        $"Member {memberAddress} has an empty public encrypt key. Cannot complete key rotation.");
+                }
+
                 // ECIES encrypt the AES key with the member's public encrypt key
-                var encryptedAesKey = EncryptKeys.Encrypt(plaintextAesKey, fullProfile.PublicEncryptAddress);
+                string encryptedAesKey;
+                try
+                {
+                    encryptedAesKey = EncryptKeys.Encrypt(plaintextAesKey, fullProfile.PublicEncryptAddress);
+                }
+                catch (Exception ex) when (ex is FormatException or IndexOutOfRangeException or ArgumentException)
+                {
+                    return KeyRotationResult.Failure(
+                        $"ECIES encryption failed for member {memberAddress}: invalid public key format. Cannot complete key rotation.");
+                }
 
                 encryptedKeys.Add(new GroupFeedEncryptedKey(
                     MemberPublicAddress: memberAddress,
