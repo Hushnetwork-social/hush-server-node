@@ -268,4 +268,152 @@ public static class TestDataFactory
     }
 
     #endregion
+
+    #region FEAT-008: Join/Leave Mechanics Payloads
+
+    public static JoinGroupFeedPayload CreateJoinGroupFeedPayload(
+        FeedId feedId,
+        string joiningUserAddress,
+        string? invitationSignature = null)
+    {
+        return new JoinGroupFeedPayload(feedId, joiningUserAddress, invitationSignature);
+    }
+
+    public static SignedTransaction<JoinGroupFeedPayload> CreateJoinGroupFeedSignedTransaction(
+        JoinGroupFeedPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<JoinGroupFeedPayload>(
+            new TransactionId(Guid.NewGuid()),
+            JoinGroupFeedPayloadHandler.JoinGroupFeedPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        return new SignedTransaction<JoinGroupFeedPayload>(unsignedTx, signature);
+    }
+
+    public static ValidatedTransaction<JoinGroupFeedPayload> CreateJoinGroupFeedValidatedTransaction(
+        JoinGroupFeedPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var validatorSignature = new SignatureInfo("validator-address", CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<JoinGroupFeedPayload>(
+            new TransactionId(Guid.NewGuid()),
+            JoinGroupFeedPayloadHandler.JoinGroupFeedPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        var signedTx = new SignedTransaction<JoinGroupFeedPayload>(unsignedTx, signature);
+        return new ValidatedTransaction<JoinGroupFeedPayload>(signedTx, validatorSignature);
+    }
+
+    public static AddMemberToGroupFeedPayload CreateAddMemberToGroupFeedPayload(
+        FeedId feedId,
+        string adminAddress,
+        string newMemberAddress,
+        string encryptedKey)
+    {
+        return new AddMemberToGroupFeedPayload(feedId, adminAddress, newMemberAddress, encryptedKey);
+    }
+
+    public static SignedTransaction<AddMemberToGroupFeedPayload> CreateAddMemberToGroupFeedSignedTransaction(
+        AddMemberToGroupFeedPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<AddMemberToGroupFeedPayload>(
+            new TransactionId(Guid.NewGuid()),
+            AddMemberToGroupFeedPayloadHandler.AddMemberToGroupFeedPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        return new SignedTransaction<AddMemberToGroupFeedPayload>(unsignedTx, signature);
+    }
+
+    public static ValidatedTransaction<AddMemberToGroupFeedPayload> CreateAddMemberToGroupFeedValidatedTransaction(
+        AddMemberToGroupFeedPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var validatorSignature = new SignatureInfo("validator-address", CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<AddMemberToGroupFeedPayload>(
+            new TransactionId(Guid.NewGuid()),
+            AddMemberToGroupFeedPayloadHandler.AddMemberToGroupFeedPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        var signedTx = new SignedTransaction<AddMemberToGroupFeedPayload>(unsignedTx, signature);
+        return new ValidatedTransaction<AddMemberToGroupFeedPayload>(signedTx, validatorSignature);
+    }
+
+    public static LeaveGroupFeedPayload CreateLeaveGroupFeedPayload(
+        FeedId feedId,
+        string leavingUserAddress)
+    {
+        return new LeaveGroupFeedPayload(feedId, leavingUserAddress);
+    }
+
+    public static SignedTransaction<LeaveGroupFeedPayload> CreateLeaveGroupFeedSignedTransaction(
+        LeaveGroupFeedPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<LeaveGroupFeedPayload>(
+            new TransactionId(Guid.NewGuid()),
+            LeaveGroupFeedPayloadHandler.LeaveGroupFeedPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        return new SignedTransaction<LeaveGroupFeedPayload>(unsignedTx, signature);
+    }
+
+    public static ValidatedTransaction<LeaveGroupFeedPayload> CreateLeaveGroupFeedValidatedTransaction(
+        LeaveGroupFeedPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var validatorSignature = new SignatureInfo("validator-address", CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<LeaveGroupFeedPayload>(
+            new TransactionId(Guid.NewGuid()),
+            LeaveGroupFeedPayloadHandler.LeaveGroupFeedPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        var signedTx = new SignedTransaction<LeaveGroupFeedPayload>(unsignedTx, signature);
+        return new ValidatedTransaction<LeaveGroupFeedPayload>(signedTx, validatorSignature);
+    }
+
+    public static GroupFeedParticipantEntity CreateParticipantEntityWithHistory(
+        FeedId feedId,
+        string address,
+        ParticipantType participantType,
+        BlockIndex? leftAtBlock = null,
+        BlockIndex? lastLeaveBlock = null)
+    {
+        return new GroupFeedParticipantEntity(
+            feedId,
+            address,
+            participantType,
+            new BlockIndex(100))
+        {
+            LeftAtBlock = leftAtBlock,
+            LastLeaveBlock = lastLeaveBlock
+        };
+    }
+
+    public static GroupFeed CreatePublicGroupFeed(
+        FeedId feedId,
+        string title = "Test Public Group",
+        string description = "Test Description",
+        bool isDeleted = false)
+    {
+        return new GroupFeed(feedId, title, description, true, new BlockIndex(100), 0)
+        {
+            IsDeleted = isDeleted
+        };
+    }
+
+    #endregion
 }

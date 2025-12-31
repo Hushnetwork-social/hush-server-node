@@ -118,4 +118,103 @@ public static class MockServices
             .Setup(x => x.GetCredentials())
             .Returns(credentials);
     }
+
+    /// <summary>
+    /// Configures the IFeedsStorageService mock for join group operations.
+    /// </summary>
+    public static void ConfigureFeedsStorageForJoinGroup(
+        AutoMocker mocker,
+        GroupFeed? groupFeed = null,
+        GroupFeedParticipantEntity? existingParticipant = null,
+        long currentBlock = 500)
+    {
+        var mock = mocker.GetMock<IFeedsStorageService>();
+
+        mock.Setup(x => x.GetGroupFeedAsync(It.IsAny<FeedId>()))
+            .ReturnsAsync(groupFeed);
+
+        mock.Setup(x => x.GetParticipantWithHistoryAsync(It.IsAny<FeedId>(), It.IsAny<string>()))
+            .ReturnsAsync(existingParticipant);
+
+        mock.Setup(x => x.AddParticipantAsync(It.IsAny<FeedId>(), It.IsAny<GroupFeedParticipantEntity>()))
+            .Returns(Task.CompletedTask);
+
+        mock.Setup(x => x.UpdateParticipantRejoinAsync(It.IsAny<FeedId>(), It.IsAny<string>(), It.IsAny<BlockIndex>(), It.IsAny<ParticipantType>()))
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<IBlockchainCache>()
+            .Setup(x => x.LastBlockIndex)
+            .Returns(new BlockIndex(currentBlock));
+    }
+
+    /// <summary>
+    /// Configures the IFeedsStorageService mock for add member to group operations.
+    /// </summary>
+    public static void ConfigureFeedsStorageForAddMember(
+        AutoMocker mocker,
+        GroupFeed? groupFeed = null,
+        GroupFeedParticipantEntity? adminParticipant = null,
+        GroupFeedParticipantEntity? existingMember = null)
+    {
+        var mock = mocker.GetMock<IFeedsStorageService>();
+
+        mock.Setup(x => x.GetGroupFeedAsync(It.IsAny<FeedId>()))
+            .ReturnsAsync(groupFeed);
+
+        // Setup GetGroupFeedParticipantAsync for admin
+        if (adminParticipant != null)
+        {
+            mock.Setup(x => x.GetGroupFeedParticipantAsync(It.IsAny<FeedId>(), adminParticipant.ParticipantPublicAddress))
+                .ReturnsAsync(adminParticipant);
+
+            // Setup IsAdminAsync based on participant type
+            mock.Setup(x => x.IsAdminAsync(It.IsAny<FeedId>(), adminParticipant.ParticipantPublicAddress))
+                .ReturnsAsync(adminParticipant.ParticipantType == ParticipantType.Admin);
+        }
+
+        // Setup GetParticipantWithHistoryAsync for new member
+        if (existingMember != null)
+        {
+            mock.Setup(x => x.GetParticipantWithHistoryAsync(It.IsAny<FeedId>(), existingMember.ParticipantPublicAddress))
+                .ReturnsAsync(existingMember);
+        }
+        else
+        {
+            mock.Setup(x => x.GetParticipantWithHistoryAsync(It.IsAny<FeedId>(), It.IsAny<string>()))
+                .ReturnsAsync((GroupFeedParticipantEntity?)null);
+        }
+
+        mock.Setup(x => x.AddParticipantAsync(It.IsAny<FeedId>(), It.IsAny<GroupFeedParticipantEntity>()))
+            .Returns(Task.CompletedTask);
+    }
+
+    /// <summary>
+    /// Configures the IFeedsStorageService mock for leave group operations.
+    /// </summary>
+    public static void ConfigureFeedsStorageForLeaveGroup(
+        AutoMocker mocker,
+        GroupFeed? groupFeed = null,
+        GroupFeedParticipantEntity? leavingParticipant = null,
+        int adminCount = 1)
+    {
+        var mock = mocker.GetMock<IFeedsStorageService>();
+
+        mock.Setup(x => x.GetGroupFeedAsync(It.IsAny<FeedId>()))
+            .ReturnsAsync(groupFeed);
+
+        if (leavingParticipant != null)
+        {
+            mock.Setup(x => x.GetGroupFeedParticipantAsync(It.IsAny<FeedId>(), leavingParticipant.ParticipantPublicAddress))
+                .ReturnsAsync(leavingParticipant);
+        }
+
+        mock.Setup(x => x.GetAdminCountAsync(It.IsAny<FeedId>()))
+            .ReturnsAsync(adminCount);
+
+        mock.Setup(x => x.UpdateParticipantLeaveStatusAsync(It.IsAny<FeedId>(), It.IsAny<string>(), It.IsAny<BlockIndex>()))
+            .Returns(Task.CompletedTask);
+
+        mock.Setup(x => x.MarkGroupFeedDeletedAsync(It.IsAny<FeedId>()))
+            .Returns(Task.CompletedTask);
+    }
 }

@@ -43,6 +43,24 @@ public static class FeedsHostBuild
             services.AddTransient<ITransactionContentHandler, NewGroupFeedContentHandler>();
             services.AddTransient<INewGroupFeedTransactionHandler, NewGroupFeedTransactionHandler>();
 
+            // FEAT-008: Join/Leave Mechanics - JoinGroupFeed
+            services.AddTransient<ITransactionDeserializerStrategy, JoinGroupFeedDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, JoinGroupFeedIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, JoinGroupFeedContentHandler>();
+            services.AddTransient<IJoinGroupFeedTransactionHandler, JoinGroupFeedTransactionHandler>();
+
+            // FEAT-008: Join/Leave Mechanics - AddMemberToGroupFeed
+            services.AddTransient<ITransactionDeserializerStrategy, AddMemberToGroupFeedDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, AddMemberToGroupFeedIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, AddMemberToGroupFeedContentHandler>();
+            services.AddTransient<IAddMemberToGroupFeedTransactionHandler, AddMemberToGroupFeedTransactionHandler>();
+
+            // FEAT-008: Join/Leave Mechanics - LeaveGroupFeed
+            services.AddTransient<ITransactionDeserializerStrategy, LeaveGroupFeedDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, LeaveGroupFeedIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, LeaveGroupFeedContentHandler>();
+            services.AddTransient<ILeaveGroupFeedTransactionHandler, LeaveGroupFeedTransactionHandler>();
+
             // FEAT-009: Admin Controls - Block Member
             services.AddTransient<ITransactionDeserializerStrategy, BlockMemberDeserializerStrategy>();
             services.AddTransient<IIndexStrategy, BlockMemberIndexStrategy>();
