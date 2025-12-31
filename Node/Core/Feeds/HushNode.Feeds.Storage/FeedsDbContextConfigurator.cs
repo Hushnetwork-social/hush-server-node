@@ -18,6 +18,7 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
         ConfigureGroupFeedParticipant(modelBuilder);
         ConfigureGroupFeedKeyGeneration(modelBuilder);
         ConfigureGroupFeedEncryptedKey(modelBuilder);
+        ConfigureGroupFeedMemberCommitment(modelBuilder);
     }
 
     private static void ConfigureFeedMessage(ModelBuilder modelBuilder)
@@ -314,6 +315,56 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                 encKey.HasOne(x => x.KeyGenerationEntity)
                     .WithMany(x => x.EncryptedKeys)
                     .HasForeignKey(x => new { x.FeedId, x.KeyGeneration });
+            });
+    }
+
+    private static void ConfigureGroupFeedMemberCommitment(ModelBuilder modelBuilder)
+    {
+        modelBuilder
+            .Entity<GroupFeedMemberCommitment>(commitment =>
+            {
+                commitment.ToTable("GroupFeedMemberCommitment", "Feeds");
+                commitment.HasKey(x => x.Id);
+
+                commitment.Property(x => x.Id)
+                    .ValueGeneratedOnAdd();
+
+                commitment.Property(x => x.FeedId)
+                    .HasConversion(
+                        x => x.ToString(),
+                        x => FeedIdHandler.CreateFromString(x)
+                    )
+                    .HasColumnType("varchar(40)");
+
+                // 32-byte Poseidon hash of user_secret
+                commitment.Property(x => x.UserCommitment)
+                    .HasColumnType("bytea")
+                    .HasMaxLength(32)
+                    .IsRequired();
+
+                commitment.Property(x => x.KeyGeneration)
+                    .HasColumnType("int");
+
+                commitment.Property(x => x.RegisteredAtBlock)
+                    .HasConversion(
+                        x => x.Value,
+                        x => new BlockIndex(x)
+                    )
+                    .HasColumnType("bigint");
+
+                commitment.Property(x => x.RevokedAtBlock)
+                    .HasConversion(
+                        x => x != null ? x.Value : (long?)null,
+                        x => x != null ? new BlockIndex(x.Value) : null
+                    )
+                    .HasColumnType("bigint")
+                    .IsRequired(false);
+
+                // Index for finding active commitments per feed
+                commitment.HasIndex(x => new { x.FeedId, x.RevokedAtBlock });
+
+                // Index for looking up specific commitment
+                commitment.HasIndex(x => new { x.FeedId, x.UserCommitment });
             });
     }
 }
