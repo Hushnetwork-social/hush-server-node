@@ -268,4 +268,18 @@ public class FeedsStorageService(
         // Commit atomically
         await writableUnitOfWork.CommitAsync();
     }
+
+    // ===== Group Messaging Operations (FEAT-011) =====
+
+    public async Task<GroupFeedKeyGenerationEntity?> GetKeyGenerationByNumberAsync(FeedId feedId, int keyGeneration) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetKeyGenerationByNumberAsync(feedId, keyGeneration);
+
+    public async Task<bool> CanMemberSendMessagesAsync(FeedId feedId, string publicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .CanMemberSendMessagesAsync(feedId, publicAddress);
 }
