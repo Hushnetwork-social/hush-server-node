@@ -55,6 +55,9 @@ public static class ReactionsHostBuild
         // Handler to register local user's commitment when they join a feed
         services.AddSingleton<FeedCreatedCommitmentHandler>();
 
+        // FEAT-012: Handler for Group Feed membership changes (updates Merkle tree)
+        services.AddSingleton<GroupMembershipMerkleHandler>();
+
         // FEAT-012: GroupFeedInfoProvider for Protocol Omega integration with Group Feeds
         // Replaces StubFeedInfoProvider with real implementation that queries Feeds storage
         services.AddSingleton<IFeedInfoProvider, GroupFeedInfoProvider>();

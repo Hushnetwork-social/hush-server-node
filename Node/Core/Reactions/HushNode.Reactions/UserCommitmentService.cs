@@ -79,6 +79,34 @@ public class UserCommitmentService : IUserCommitmentService
         return reduced == 0 ? BigInteger.One : reduced;
     }
 
+    /// <summary>
+    /// Derives a deterministic commitment from a public address.
+    /// Uses HKDF to derive a secret from the address, then computes Poseidon hash.
+    /// </summary>
+    public byte[] DeriveCommitmentFromAddress(string publicAddress)
+    {
+        // Derive a deterministic secret from the public address
+        var addressBytes = Encoding.UTF8.GetBytes(publicAddress);
+
+        var salt = Encoding.UTF8.GetBytes("hush-network-address-commitment");
+        var info = Encoding.UTF8.GetBytes("address-secret-v1");
+
+        var derivedBytes = HKDF.DeriveKey(
+            HashAlgorithmName.SHA256,
+            addressBytes,
+            32,
+            salt,
+            info);
+
+        // Convert to BigInteger and reduce modulo curve order
+        var secret = new BigInteger(derivedBytes, isUnsigned: true, isBigEndian: true);
+        var reduced = secret % CurveOrder;
+        if (reduced == 0) reduced = BigInteger.One;
+
+        // Compute commitment = Poseidon(secret)
+        return ComputeCommitment(reduced);
+    }
+
     private static byte[] BigIntegerToBytes32(BigInteger value)
     {
         var bytes = value.ToByteArray(isUnsigned: true, isBigEndian: true);
