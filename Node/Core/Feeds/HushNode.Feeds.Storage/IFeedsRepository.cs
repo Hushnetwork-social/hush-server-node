@@ -76,4 +76,39 @@ public interface IFeedsRepository : IRepository
     /// Soft-delete a group feed (mark as deleted, preserve data).
     /// </summary>
     Task MarkGroupFeedDeletedAsync(FeedId feedId);
+
+    // ===== Group Feed Join/Leave Operations (FEAT-008) =====
+
+    /// <summary>
+    /// Add a new participant to a group feed.
+    /// </summary>
+    Task AddParticipantAsync(FeedId feedId, GroupFeedParticipantEntity participant);
+
+    /// <summary>
+    /// Update participant leave status (set LeftAtBlock and LastLeaveBlock).
+    /// </summary>
+    Task UpdateParticipantLeaveStatusAsync(FeedId feedId, string publicAddress, BlockIndex leftAtBlock);
+
+    /// <summary>
+    /// Update participant on rejoin (clear LeftAtBlock, update JoinedAtBlock and ParticipantType).
+    /// </summary>
+    Task UpdateParticipantRejoinAsync(FeedId feedId, string publicAddress, BlockIndex joinedAtBlock, ParticipantType participantType);
+
+    /// <summary>
+    /// Get a participant including those who have left (for cooldown checking).
+    /// Unlike GetGroupFeedParticipantAsync, this returns participants regardless of LeftAtBlock.
+    /// </summary>
+    Task<GroupFeedParticipantEntity?> GetParticipantWithHistoryAsync(FeedId feedId, string publicAddress);
+
+    /// <summary>
+    /// Get all active participants in a group (not left, not banned).
+    /// Used for key rotation to know who should receive the new key.
+    /// </summary>
+    Task<IReadOnlyList<GroupFeedParticipantEntity>> GetActiveParticipantsAsync(FeedId feedId);
+
+    /// <summary>
+    /// Add a new key generation with encrypted keys to a group feed.
+    /// Also increments the group's CurrentKeyGeneration.
+    /// </summary>
+    Task AddKeyGenerationAsync(FeedId feedId, GroupFeedKeyGenerationEntity keyGeneration);
 }

@@ -128,5 +128,57 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(g => g.IsDeleted, true));
     }
+
+    // ===== Group Feed Join/Leave Operations (FEAT-008) =====
+
+    public async Task AddParticipantAsync(FeedId feedId, GroupFeedParticipantEntity participant)
+    {
+        await this.Context.GroupFeedParticipants.AddAsync(participant);
+    }
+
+    public async Task UpdateParticipantLeaveStatusAsync(FeedId feedId, string publicAddress, BlockIndex leftAtBlock)
+    {
+        await this.Context.GroupFeedParticipants
+            .Where(p => p.FeedId == feedId && p.ParticipantPublicAddress == publicAddress)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(p => p.LeftAtBlock, leftAtBlock)
+                .SetProperty(p => p.LastLeaveBlock, leftAtBlock));
+    }
+
+    public async Task UpdateParticipantRejoinAsync(FeedId feedId, string publicAddress, BlockIndex joinedAtBlock, ParticipantType participantType)
+    {
+        await this.Context.GroupFeedParticipants
+            .Where(p => p.FeedId == feedId && p.ParticipantPublicAddress == publicAddress)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(p => p.LeftAtBlock, (BlockIndex?)null)
+                .SetProperty(p => p.JoinedAtBlock, joinedAtBlock)
+                .SetProperty(p => p.ParticipantType, participantType));
+    }
+
+    public async Task<GroupFeedParticipantEntity?> GetParticipantWithHistoryAsync(FeedId feedId, string publicAddress) =>
+        await this.Context.GroupFeedParticipants
+            .FirstOrDefaultAsync(p =>
+                p.FeedId == feedId &&
+                p.ParticipantPublicAddress == publicAddress);
+
+    public async Task<IReadOnlyList<GroupFeedParticipantEntity>> GetActiveParticipantsAsync(FeedId feedId) =>
+        await this.Context.GroupFeedParticipants
+            .Where(p =>
+                p.FeedId == feedId &&
+                p.LeftAtBlock == null &&
+                p.ParticipantType != ParticipantType.Banned)
+            .ToListAsync();
+
+    public async Task AddKeyGenerationAsync(FeedId feedId, GroupFeedKeyGenerationEntity keyGeneration)
+    {
+        // Add the key generation entity
+        await this.Context.GroupFeedKeyGenerations.AddAsync(keyGeneration);
+
+        // Increment the group's CurrentKeyGeneration
+        await this.Context.GroupFeeds
+            .Where(g => g.FeedId == feedId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(g => g.CurrentKeyGeneration, keyGeneration.KeyGeneration));
+    }
 }
 

@@ -181,4 +181,62 @@ public class FeedsStorageService(
 
         await writableUnitOfWork.CommitAsync();
     }
+
+    // ===== Group Feed Join/Leave Operations (FEAT-008) =====
+
+    public async Task AddParticipantAsync(FeedId feedId, GroupFeedParticipantEntity participant)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .AddParticipantAsync(feedId, participant);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
+    public async Task UpdateParticipantLeaveStatusAsync(FeedId feedId, string publicAddress, BlockIndex leftAtBlock)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .UpdateParticipantLeaveStatusAsync(feedId, publicAddress, leftAtBlock);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
+    public async Task UpdateParticipantRejoinAsync(FeedId feedId, string publicAddress, BlockIndex joinedAtBlock, ParticipantType participantType)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .UpdateParticipantRejoinAsync(feedId, publicAddress, joinedAtBlock, participantType);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
+    public async Task<GroupFeedParticipantEntity?> GetParticipantWithHistoryAsync(FeedId feedId, string publicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetParticipantWithHistoryAsync(feedId, publicAddress);
+
+    public async Task<IReadOnlyList<GroupFeedParticipantEntity>> GetActiveParticipantsAsync(FeedId feedId) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetActiveParticipantsAsync(feedId);
+
+    public async Task AddKeyGenerationAsync(FeedId feedId, GroupFeedKeyGenerationEntity keyGeneration)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .AddKeyGenerationAsync(feedId, keyGeneration);
+
+        await writableUnitOfWork.CommitAsync();
+    }
 }
