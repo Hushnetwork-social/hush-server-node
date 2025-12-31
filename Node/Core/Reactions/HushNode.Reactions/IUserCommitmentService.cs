@@ -25,4 +25,12 @@ public interface IUserCommitmentService
     /// commitment = Poseidon(userSecret)
     /// </summary>
     byte[] ComputeCommitment(BigInteger userSecret);
+
+    /// <summary>
+    /// Derives a deterministic commitment from a public address.
+    /// Used by the node to track member commitments in Group Feeds.
+    /// Note: This is a server-side commitment derivation. Clients will compute
+    /// their own commitments from their private keys.
+    /// </summary>
+    byte[] DeriveCommitmentFromAddress(string publicAddress);
 }

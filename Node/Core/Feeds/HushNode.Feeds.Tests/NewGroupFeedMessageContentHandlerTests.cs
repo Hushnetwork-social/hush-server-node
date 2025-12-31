@@ -263,6 +263,130 @@ public class NewGroupFeedMessageContentHandlerTests
 
     #endregion
 
+    #region AuthorCommitment Validation Tests (Protocol Omega)
+
+    [Fact]
+    public void ValidateAndSign_ValidAuthorCommitment_Success()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var senderAddress = TestDataFactory.CreateAddress();
+
+        SetupGroupFeed(mocker, feedId, currentKeyGeneration: 1);
+        SetupMemberCanSend(mocker, feedId, senderAddress, canSend: true);
+        SetupBlockchainCache(mocker, currentBlockIndex: 100);
+        SetupCredentials(mocker);
+
+        var sut = mocker.CreateInstance<NewGroupFeedMessageContentHandler>();
+        var authorCommitment = new byte[32]; // Valid 32-byte commitment
+        new Random(42).NextBytes(authorCommitment);
+        var transaction = CreateSignedTransactionWithCommitment(feedId, senderAddress, keyGeneration: 1, authorCommitment);
+
+        // Act
+        var result = sut.ValidateAndSign(transaction);
+
+        // Assert
+        result.Should().NotBeNull("valid 32-byte AuthorCommitment should pass");
+    }
+
+    [Fact]
+    public void ValidateAndSign_NullAuthorCommitment_Success()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var senderAddress = TestDataFactory.CreateAddress();
+
+        SetupGroupFeed(mocker, feedId, currentKeyGeneration: 1);
+        SetupMemberCanSend(mocker, feedId, senderAddress, canSend: true);
+        SetupBlockchainCache(mocker, currentBlockIndex: 100);
+        SetupCredentials(mocker);
+
+        var sut = mocker.CreateInstance<NewGroupFeedMessageContentHandler>();
+        var transaction = CreateSignedTransactionWithCommitment(feedId, senderAddress, keyGeneration: 1, authorCommitment: null);
+
+        // Act
+        var result = sut.ValidateAndSign(transaction);
+
+        // Assert
+        result.Should().NotBeNull("null AuthorCommitment is optional and should pass");
+    }
+
+    [Fact]
+    public void ValidateAndSign_TooShortAuthorCommitment_ReturnsNull()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var senderAddress = TestDataFactory.CreateAddress();
+
+        SetupGroupFeed(mocker, feedId, currentKeyGeneration: 1);
+        SetupMemberCanSend(mocker, feedId, senderAddress, canSend: true);
+        SetupBlockchainCache(mocker, currentBlockIndex: 100);
+        SetupCredentials(mocker);
+
+        var sut = mocker.CreateInstance<NewGroupFeedMessageContentHandler>();
+        var authorCommitment = new byte[16]; // Too short - should be 32 bytes
+        var transaction = CreateSignedTransactionWithCommitment(feedId, senderAddress, keyGeneration: 1, authorCommitment);
+
+        // Act
+        var result = sut.ValidateAndSign(transaction);
+
+        // Assert
+        result.Should().BeNull("AuthorCommitment must be exactly 32 bytes");
+    }
+
+    [Fact]
+    public void ValidateAndSign_TooLongAuthorCommitment_ReturnsNull()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var senderAddress = TestDataFactory.CreateAddress();
+
+        SetupGroupFeed(mocker, feedId, currentKeyGeneration: 1);
+        SetupMemberCanSend(mocker, feedId, senderAddress, canSend: true);
+        SetupBlockchainCache(mocker, currentBlockIndex: 100);
+        SetupCredentials(mocker);
+
+        var sut = mocker.CreateInstance<NewGroupFeedMessageContentHandler>();
+        var authorCommitment = new byte[64]; // Too long - should be 32 bytes
+        var transaction = CreateSignedTransactionWithCommitment(feedId, senderAddress, keyGeneration: 1, authorCommitment);
+
+        // Act
+        var result = sut.ValidateAndSign(transaction);
+
+        // Assert
+        result.Should().BeNull("AuthorCommitment must be exactly 32 bytes");
+    }
+
+    [Fact]
+    public void ValidateAndSign_EmptyAuthorCommitment_ReturnsNull()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var senderAddress = TestDataFactory.CreateAddress();
+
+        SetupGroupFeed(mocker, feedId, currentKeyGeneration: 1);
+        SetupMemberCanSend(mocker, feedId, senderAddress, canSend: true);
+        SetupBlockchainCache(mocker, currentBlockIndex: 100);
+        SetupCredentials(mocker);
+
+        var sut = mocker.CreateInstance<NewGroupFeedMessageContentHandler>();
+        var authorCommitment = Array.Empty<byte>(); // Empty array
+        var transaction = CreateSignedTransactionWithCommitment(feedId, senderAddress, keyGeneration: 1, authorCommitment);
+
+        // Act
+        var result = sut.ValidateAndSign(transaction);
+
+        // Assert
+        result.Should().BeNull("empty AuthorCommitment is invalid - must be 32 bytes or null");
+    }
+
+    #endregion
+
     #region Group State Validation Tests
 
     [Fact]
@@ -427,6 +551,29 @@ public class NewGroupFeedMessageContentHandlerTests
             keyGeneration);
 
         var signature = new SignatureInfo("", "signature"); // Empty sender
+
+        var unsignedTx = new UnsignedTransaction<NewGroupFeedMessagePayload>(
+            new TransactionId(Guid.NewGuid()),
+            NewGroupFeedMessagePayloadHandler.NewGroupFeedMessagePayloadKind,
+            Timestamp.Current,
+            payload,
+            1000);
+
+        return new SignedTransaction<NewGroupFeedMessagePayload>(unsignedTx, signature);
+    }
+
+    private static SignedTransaction<NewGroupFeedMessagePayload> CreateSignedTransactionWithCommitment(
+        FeedId feedId, string senderAddress, int keyGeneration, byte[]? authorCommitment)
+    {
+        var payload = new NewGroupFeedMessagePayload(
+            new FeedMessageId(Guid.NewGuid()),
+            feedId,
+            "encrypted-content",
+            keyGeneration,
+            ReplyToMessageId: null,
+            AuthorCommitment: authorCommitment);
+
+        var signature = new SignatureInfo(senderAddress, "signature");
 
         var unsignedTx = new UnsignedTransaction<NewGroupFeedMessagePayload>(
             new TransactionId(Guid.NewGuid()),

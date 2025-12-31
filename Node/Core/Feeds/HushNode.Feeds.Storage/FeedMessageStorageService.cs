@@ -37,6 +37,15 @@ public class FeedMessageStorageService(
 
         return await readOnlyUnitOfWork
             .GetRepository<IFeedMessageRepository>()
-            .RetrieveMessagesForFeedAsync(feedId, blockIndex); 
+            .RetrieveMessagesForFeedAsync(feedId, blockIndex);
+    }
+
+    public async Task<FeedMessage?> GetFeedMessageByIdAsync(FeedMessageId messageId)
+    {
+        using var readOnlyUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
+
+        return await readOnlyUnitOfWork
+            .GetRepository<IFeedMessageRepository>()
+            .GetFeedMessageByIdAsync(messageId);
     }
 }

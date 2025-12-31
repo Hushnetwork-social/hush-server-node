@@ -13,6 +13,7 @@ namespace HushNode.Feeds;
 /// - Group exists and is not deleted
 /// - Sender is an active member (Admin or Member, not Blocked/Banned/Left)
 /// - KeyGeneration is current or within grace period (5 blocks)
+/// - AuthorCommitment is exactly 32 bytes if provided (Protocol Omega)
 /// </summary>
 public class NewGroupFeedMessageContentHandler(
     ICredentialsProvider credentialProvider,
@@ -81,6 +82,12 @@ public class NewGroupFeedMessageContentHandler(
         if (!keyGenValidationResult)
         {
             return null;
+        }
+
+        // Validation: AuthorCommitment must be exactly 32 bytes if provided (Protocol Omega)
+        if (payload.AuthorCommitment != null && payload.AuthorCommitment.Length != 32)
+        {
+            return null; // Invalid commitment size
         }
 
         // All validations passed - sign the transaction

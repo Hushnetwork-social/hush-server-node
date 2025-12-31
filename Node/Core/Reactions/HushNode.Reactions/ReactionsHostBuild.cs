@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Olimpo;
 using HushNode.Indexing.Interfaces;
+using HushNode.Feeds.Storage;
 using HushNode.Reactions.Crypto;
 using HushNode.Reactions.Storage;
 using HushNode.Reactions.ZK;
@@ -54,9 +55,15 @@ public static class ReactionsHostBuild
         // Handler to register local user's commitment when they join a feed
         services.AddSingleton<FeedCreatedCommitmentHandler>();
 
-        // IFeedInfoProvider needs to be implemented by the Feeds module
-        // For now, we'll register a stub implementation
-        services.AddSingleton<IFeedInfoProvider, StubFeedInfoProvider>();
+        // FEAT-012: Handler for Group Feed membership changes (updates Merkle tree)
+        services.AddSingleton<GroupMembershipMerkleHandler>();
+
+        // FEAT-012: GroupFeedInfoProvider for Protocol Omega integration with Group Feeds
+        // Replaces StubFeedInfoProvider with real implementation that queries Feeds storage
+        services.AddSingleton<IFeedInfoProvider, GroupFeedInfoProvider>();
+
+        // FEAT-012: Reaction key derivation service for Group Feeds
+        services.AddSingleton<IReactionKeyDerivationService, ReactionKeyDerivationService>();
 
         // Blockchain transaction infrastructure for reactions
         services.AddTransient<ITransactionDeserializerStrategy, NewReactionDeserializeStrategy>();

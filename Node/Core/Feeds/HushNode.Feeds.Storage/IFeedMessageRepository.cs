@@ -11,4 +11,9 @@ public interface IFeedMessageRepository : IRepository
     Task<IEnumerable<FeedMessage>> RetrieveLastFeedMessagesForAddressAsync(string publicSigningAddress, BlockIndex blockIndex);
 
     Task<IEnumerable<FeedMessage>> RetrieveMessagesForFeedAsync(FeedId feedId, BlockIndex blockIndex);
+
+    /// <summary>
+    /// Retrieves a FeedMessage by its ID. Used by Protocol Omega to get AuthorCommitment.
+    /// </summary>
+    Task<FeedMessage?> GetFeedMessageByIdAsync(FeedMessageId messageId);
 }

@@ -1,4 +1,5 @@
 using System.Numerics;
+using HushShared.Blockchain.Model;
 using HushShared.Feeds.Model;
 using HushShared.Reactions.Model;
 using HushNode.Reactions.Crypto;
@@ -16,6 +17,8 @@ public static class TestDataFactory
     public static FeedId CreateFeedId() => new(Guid.NewGuid());
 
     public static FeedMessageId CreateMessageId() => new(Guid.NewGuid());
+
+    public static Timestamp CreateTimestamp() => new(DateTime.UtcNow);
 
     public static byte[] CreateCommitment()
     {

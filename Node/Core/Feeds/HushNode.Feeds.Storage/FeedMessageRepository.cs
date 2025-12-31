@@ -22,8 +22,12 @@ public class FeedMessageRepository : RepositoryBase<FeedsDbContext>, IFeedMessag
 
     public async Task<IEnumerable<FeedMessage>> RetrieveMessagesForFeedAsync(FeedId feedId, BlockIndex blockIndex) =>
         await this.Context.FeedMessages
-            .Where(x => 
-                x.FeedId == feedId && 
+            .Where(x =>
+                x.FeedId == feedId &&
                 x.BlockIndex > blockIndex)
             .ToListAsync();
+
+    public async Task<FeedMessage?> GetFeedMessageByIdAsync(FeedMessageId messageId) =>
+        await this.Context.FeedMessages
+            .FirstOrDefaultAsync(x => x.FeedMessageId == messageId);
 }
