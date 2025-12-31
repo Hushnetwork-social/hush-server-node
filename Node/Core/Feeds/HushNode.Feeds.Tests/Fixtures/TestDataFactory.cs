@@ -417,6 +417,49 @@ public static class TestDataFactory
 
     #endregion
 
+    #region FEAT-015: Ban/Unban System Payloads
+
+    public static BanFromGroupFeedPayload CreateBanFromGroupFeedPayload(
+        FeedId feedId,
+        string adminAddress,
+        string bannedUserAddress,
+        string? reason = null)
+    {
+        return new BanFromGroupFeedPayload(feedId, adminAddress, bannedUserAddress, reason);
+    }
+
+    public static SignedTransaction<BanFromGroupFeedPayload> CreateBanFromGroupFeedSignedTransaction(
+        BanFromGroupFeedPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<BanFromGroupFeedPayload>(
+            new TransactionId(Guid.NewGuid()),
+            BanFromGroupFeedPayloadHandler.BanFromGroupFeedPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        return new SignedTransaction<BanFromGroupFeedPayload>(unsignedTx, signature);
+    }
+
+    public static ValidatedTransaction<BanFromGroupFeedPayload> CreateBanFromGroupFeedValidatedTransaction(
+        BanFromGroupFeedPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var validatorSignature = new SignatureInfo("validator-address", CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<BanFromGroupFeedPayload>(
+            new TransactionId(Guid.NewGuid()),
+            BanFromGroupFeedPayloadHandler.BanFromGroupFeedPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        var signedTx = new SignedTransaction<BanFromGroupFeedPayload>(unsignedTx, signature);
+        return new ValidatedTransaction<BanFromGroupFeedPayload>(signedTx, validatorSignature);
+    }
+
+    #endregion
+
     #region Key Rotation Payloads
 
     public static GroupFeedKeyRotationPayload CreateKeyRotationPayload(
