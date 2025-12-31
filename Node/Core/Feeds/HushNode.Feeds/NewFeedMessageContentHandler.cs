@@ -13,7 +13,7 @@ public class NewFeedMessageContentHandler(
     public bool CanValidate(Guid transactionKind) => 
         NewFeedMessagePayloadHandler.NewFeedMessagePayloadKind == transactionKind;
 
-    public AbstractTransaction ValidateAndSign(AbstractTransaction transaction)
+    public AbstractTransaction? ValidateAndSign(AbstractTransaction transaction)
     {
         var newFeedMessagePayload = transaction as SignedTransaction<NewFeedMessagePayload>;
 

@@ -10,9 +10,9 @@ public class RewardTransactionDeserializerStrategy : ITransactionDeserializerStr
         RewardPayloadHandler.RewardPayloadKind.ToString() == transactionKind;
     
 
-    public AbstractTransaction DeserializeSignedTransaction(string transactionJSON) => 
-        JsonSerializer.Deserialize<SignedTransaction<RewardPayload>>(transactionJSON);
+    public AbstractTransaction DeserializeSignedTransaction(string transactionJSON) =>
+        JsonSerializer.Deserialize<SignedTransaction<RewardPayload>>(transactionJSON)!;
 
-    public AbstractTransaction DeserializeValidatedTransaction(string transactionJSON) => 
-        JsonSerializer.Deserialize<ValidatedTransaction<RewardPayload>>(transactionJSON);
+    public AbstractTransaction DeserializeValidatedTransaction(string transactionJSON) =>
+        JsonSerializer.Deserialize<ValidatedTransaction<RewardPayload>>(transactionJSON)!;
 }

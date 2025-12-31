@@ -11,8 +11,8 @@ public class UpdateIdentityDeserializerStrategy : ITransactionDeserializerStrate
         UpdateIdentityPayloadHandler.UpdateIdentityPayloadKind.ToString() == transactionKind;
 
     public AbstractTransaction DeserializeSignedTransaction(string transactionJSON) =>
-        JsonSerializer.Deserialize<SignedTransaction<UpdateIdentityPayload>>(transactionJSON);
+        JsonSerializer.Deserialize<SignedTransaction<UpdateIdentityPayload>>(transactionJSON)!;
 
     public AbstractTransaction DeserializeValidatedTransaction(string transactionJSON) =>
-        JsonSerializer.Deserialize<ValidatedTransaction<UpdateIdentityPayload>>(transactionJSON);
+        JsonSerializer.Deserialize<ValidatedTransaction<UpdateIdentityPayload>>(transactionJSON)!;
 }

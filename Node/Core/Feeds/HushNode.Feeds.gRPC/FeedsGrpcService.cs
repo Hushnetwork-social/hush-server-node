@@ -109,7 +109,7 @@ public class FeedsGrpcService(
 
             Console.WriteLine("[GetFeedMessagesForAddress] Retrieving feeds for address...");
             var lastFeedsFromAddress = await this._feedsStorageService
-                .RetrieveFeedsForAddress(request.ProfilePublicKey, new BlockIndex(0));
+                .RetrieveFeedsForAddress(request.ProfilePublicKey ?? string.Empty, new BlockIndex(0));
 
             Console.WriteLine($"[GetFeedMessagesForAddress] Found {lastFeedsFromAddress.Count()} feeds");
 

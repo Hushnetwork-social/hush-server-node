@@ -10,9 +10,9 @@ public class NewFeedMessageDeserializeStrategy : ITransactionDeserializerStrateg
     public bool CanDeserialize(string transactionKind) => 
         NewFeedMessagePayloadHandler.NewFeedMessagePayloadKind.ToString() == transactionKind;
 
-    public AbstractTransaction DeserializeSignedTransaction(string transactionJSON) => 
-        JsonSerializer.Deserialize<SignedTransaction<NewFeedMessagePayload>>(transactionJSON);
+    public AbstractTransaction DeserializeSignedTransaction(string transactionJSON) =>
+        JsonSerializer.Deserialize<SignedTransaction<NewFeedMessagePayload>>(transactionJSON)!;
 
-    public AbstractTransaction DeserializeValidatedTransaction(string transactionJSON) => 
-        JsonSerializer.Deserialize<ValidatedTransaction<NewFeedMessagePayload>>(transactionJSON);
+    public AbstractTransaction DeserializeValidatedTransaction(string transactionJSON) =>
+        JsonSerializer.Deserialize<ValidatedTransaction<NewFeedMessagePayload>>(transactionJSON)!;
 }

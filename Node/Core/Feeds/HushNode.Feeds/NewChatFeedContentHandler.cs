@@ -14,7 +14,7 @@ public class NewChatFeedContentHandler(
     public bool CanValidate(Guid transactionKind) =>
         NewChatFeedPayloadHandler.NewChatFeedPayloadKind == transactionKind;
 
-    public AbstractTransaction ValidateAndSign(AbstractTransaction transaction)
+    public AbstractTransaction? ValidateAndSign(AbstractTransaction transaction)
     {
         var signedTransaction = transaction as SignedTransaction<NewChatFeedPayload>;
 

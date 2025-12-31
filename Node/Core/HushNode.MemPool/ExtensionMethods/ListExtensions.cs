@@ -17,7 +17,7 @@ public static class ListExtensions
 
         for (int i = 0; i < elementsToTake; i++)
         {
-            if (bag.TryTake(out T item))
+            if (bag.TryTake(out T? item) && item is not null)
             {
                 takenElements.Add(item);
             }

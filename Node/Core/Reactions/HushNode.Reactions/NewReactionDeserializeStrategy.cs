@@ -14,8 +14,8 @@ public class NewReactionDeserializeStrategy : ITransactionDeserializerStrategy
         NewReactionPayloadHandler.NewReactionPayloadKind.ToString() == transactionKind;
 
     public AbstractTransaction DeserializeSignedTransaction(string transactionJSON) =>
-        JsonSerializer.Deserialize<SignedTransaction<NewReactionPayload>>(transactionJSON);
+        JsonSerializer.Deserialize<SignedTransaction<NewReactionPayload>>(transactionJSON)!;
 
     public AbstractTransaction DeserializeValidatedTransaction(string transactionJSON) =>
-        JsonSerializer.Deserialize<ValidatedTransaction<NewReactionPayload>>(transactionJSON);
+        JsonSerializer.Deserialize<ValidatedTransaction<NewReactionPayload>>(transactionJSON)!;
 }

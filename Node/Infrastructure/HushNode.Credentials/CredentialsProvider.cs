@@ -8,10 +8,10 @@ namespace HushNode.Credentials;
 
 public class CredentialsProvider : ICredentialsProvider
 {
-    private static CredentialsProvider _instance;
+    private static CredentialsProvider? _instance;
     private readonly CredentialsProfile _credentialsProfile;
 
-    internal static CredentialsProvider Instance { get => _instance; }
+    internal static CredentialsProvider Instance { get => _instance ?? throw new InvalidOperationException("CredentialsProvider has not been initialized."); }
 
     public CredentialsProvider(IOptions<CredentialsProfile> credentials)
     {

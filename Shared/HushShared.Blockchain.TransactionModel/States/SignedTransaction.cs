@@ -8,7 +8,7 @@ public record SignedTransaction<T>: UnsignedTransaction<T>
     where T: ITransactionPayloadKind
 {
     public SignatureInfo UserSignature { get; init; }
-    public object SignByValidator { get; set; }
+    public object? SignByValidator { get; set; }
 
     public SignedTransaction(
         UnsignedTransaction<T> unsignedTransaction, 

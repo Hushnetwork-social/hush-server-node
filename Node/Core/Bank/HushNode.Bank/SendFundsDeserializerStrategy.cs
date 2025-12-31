@@ -10,9 +10,9 @@ public class SendFundsDeserializerStrategy : ITransactionDeserializerStrategy
     public bool CanDeserialize(string transactionKind) => 
         SendFundsPayloadHandler.SendFundsPayloadKind.ToString() == transactionKind;
 
-    public AbstractTransaction DeserializeSignedTransaction(string transactionJSON) => 
-        JsonSerializer.Deserialize<SignedTransaction<SendFundsPayload>>(transactionJSON);
+    public AbstractTransaction DeserializeSignedTransaction(string transactionJSON) =>
+        JsonSerializer.Deserialize<SignedTransaction<SendFundsPayload>>(transactionJSON)!;
 
-    public AbstractTransaction DeserializeValidatedTransaction(string transactionJSON) => 
-        JsonSerializer.Deserialize<ValidatedTransaction<SendFundsPayload>>(transactionJSON);
+    public AbstractTransaction DeserializeValidatedTransaction(string transactionJSON) =>
+        JsonSerializer.Deserialize<ValidatedTransaction<SendFundsPayload>>(transactionJSON)!;
 }

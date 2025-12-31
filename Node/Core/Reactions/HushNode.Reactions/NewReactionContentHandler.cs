@@ -41,7 +41,7 @@ public class NewReactionContentHandler : ITransactionContentHandler
     public bool CanValidate(Guid transactionKind) =>
         NewReactionPayloadHandler.NewReactionPayloadKind == transactionKind;
 
-    public AbstractTransaction ValidateAndSign(AbstractTransaction transaction)
+    public AbstractTransaction? ValidateAndSign(AbstractTransaction transaction)
     {
         var reactionTransaction = transaction as SignedTransaction<NewReactionPayload>;
 

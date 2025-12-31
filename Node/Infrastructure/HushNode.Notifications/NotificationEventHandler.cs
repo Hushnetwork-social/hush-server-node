@@ -63,7 +63,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
             }
 
             // Get sender display name
-            var senderName = await GetDisplayNameAsync(feedMessage.IssuerPublicAddress);
+            var senderName = await GetDisplayNameAsync(feedMessage.IssuerPublicAddress ?? string.Empty);
 
             // Truncate message preview
             var messagePreview = TruncateMessage(feedMessage.MessageContent, 255);

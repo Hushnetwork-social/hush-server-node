@@ -14,7 +14,7 @@ public class SendFundsContentHandler(
     public bool CanValidate(Guid transactionKind) => 
         SendFundsPayloadHandler.SendFundsPayloadKind == transactionKind;
 
-    public AbstractTransaction ValidateAndSign(AbstractTransaction transaction)
+    public AbstractTransaction? ValidateAndSign(AbstractTransaction transaction)
     {
         var signedTransaction = transaction as SignedTransaction<SendFundsPayload>;
 

@@ -16,7 +16,7 @@ public class AbstractTransactionConverter : JsonConverter<AbstractTransaction>
 
         foreach (var item in TransactionDeserializerHandler.Instance.SpecificDeserializers)
         {
-            if (item.CanDeserialize(payloadKind))
+            if (payloadKind is not null && item.CanDeserialize(payloadKind))
             {
                 if (validatedSignature.ValueKind == JsonValueKind.Undefined)
                 {

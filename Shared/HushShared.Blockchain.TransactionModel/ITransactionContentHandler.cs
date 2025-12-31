@@ -4,5 +4,5 @@ public interface ITransactionContentHandler
 {
     bool CanValidate(Guid transactionKind);
 
-    AbstractTransaction ValidateAndSign(AbstractTransaction transaction);
+    AbstractTransaction? ValidateAndSign(AbstractTransaction transaction);
 }

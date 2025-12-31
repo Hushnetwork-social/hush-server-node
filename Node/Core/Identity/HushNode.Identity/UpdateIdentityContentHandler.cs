@@ -13,7 +13,7 @@ public class UpdateIdentityContentHandler(
     public bool CanValidate(Guid transactionKind) =>
         UpdateIdentityPayloadHandler.UpdateIdentityPayloadKind == transactionKind;
 
-    public AbstractTransaction ValidateAndSign(AbstractTransaction transaction)
+    public AbstractTransaction? ValidateAndSign(AbstractTransaction transaction)
     {
         var updateIdentityPayload = transaction as SignedTransaction<UpdateIdentityPayload>;
 
