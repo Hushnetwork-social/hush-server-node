@@ -458,6 +458,44 @@ public static class TestDataFactory
         return new ValidatedTransaction<BanFromGroupFeedPayload>(signedTx, validatorSignature);
     }
 
+    public static UnbanFromGroupFeedPayload CreateUnbanFromGroupFeedPayload(
+        FeedId feedId,
+        string adminAddress,
+        string unbannedUserAddress)
+    {
+        return new UnbanFromGroupFeedPayload(feedId, adminAddress, unbannedUserAddress);
+    }
+
+    public static SignedTransaction<UnbanFromGroupFeedPayload> CreateUnbanFromGroupFeedSignedTransaction(
+        UnbanFromGroupFeedPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<UnbanFromGroupFeedPayload>(
+            new TransactionId(Guid.NewGuid()),
+            UnbanFromGroupFeedPayloadHandler.UnbanFromGroupFeedPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        return new SignedTransaction<UnbanFromGroupFeedPayload>(unsignedTx, signature);
+    }
+
+    public static ValidatedTransaction<UnbanFromGroupFeedPayload> CreateUnbanFromGroupFeedValidatedTransaction(
+        UnbanFromGroupFeedPayload payload,
+        string senderAddress)
+    {
+        var signature = new SignatureInfo(senderAddress, CreateSignatureString());
+        var validatorSignature = new SignatureInfo("validator-address", CreateSignatureString());
+        var unsignedTx = new UnsignedTransaction<UnbanFromGroupFeedPayload>(
+            new TransactionId(Guid.NewGuid()),
+            UnbanFromGroupFeedPayloadHandler.UnbanFromGroupFeedPayloadKind,
+            new Timestamp(DateTime.UtcNow),
+            payload,
+            1000);
+        var signedTx = new SignedTransaction<UnbanFromGroupFeedPayload>(unsignedTx, signature);
+        return new ValidatedTransaction<UnbanFromGroupFeedPayload>(signedTx, validatorSignature);
+    }
+
     #endregion
 
     #region Key Rotation Payloads
