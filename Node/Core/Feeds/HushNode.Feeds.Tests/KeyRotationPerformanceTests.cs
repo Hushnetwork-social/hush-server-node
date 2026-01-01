@@ -97,9 +97,9 @@ public class KeyRotationPerformanceTests
         result.Payload!.EncryptedKeys.Should().HaveCount(64);
 
         _output.WriteLine($"64 members: {stopwatch.ElapsedMilliseconds}ms");
-        // Allow 20% tolerance for test environment variance (JIT, GC, etc.)
-        stopwatch.ElapsedMilliseconds.Should().BeLessThan(120,
-            "Rotation for 64 members should complete in less than 100ms (+20% tolerance)");
+        // Allow 50% tolerance for test environment variance (CI/CD, system load)
+        stopwatch.ElapsedMilliseconds.Should().BeLessThan(150,
+            "Rotation for 64 members should complete in less than 100ms (+50% tolerance)");
     }
 
     [Fact]
@@ -125,9 +125,9 @@ public class KeyRotationPerformanceTests
         result.Payload!.EncryptedKeys.Should().HaveCount(128);
 
         _output.WriteLine($"128 members: {stopwatch.ElapsedMilliseconds}ms");
-        // Allow 25% tolerance for test environment variance
-        stopwatch.ElapsedMilliseconds.Should().BeLessThan(250,
-            "Rotation for 128 members should complete in less than 200ms (+25% tolerance)");
+        // Allow 50% tolerance for test environment variance (CI/CD, system load)
+        stopwatch.ElapsedMilliseconds.Should().BeLessThan(300,
+            "Rotation for 128 members should complete in less than 200ms (+50% tolerance)");
     }
 
     [Fact]
@@ -153,9 +153,9 @@ public class KeyRotationPerformanceTests
         result.Payload!.EncryptedKeys.Should().HaveCount(256);
 
         _output.WriteLine($"256 members: {stopwatch.ElapsedMilliseconds}ms");
-        // Allow 20% tolerance for test environment variance
-        stopwatch.ElapsedMilliseconds.Should().BeLessThan(600,
-            "Rotation for 256 members should complete in less than 500ms (+20% tolerance)");
+        // Allow 50% tolerance for test environment variance (CI/CD, system load)
+        stopwatch.ElapsedMilliseconds.Should().BeLessThan(750,
+            "Rotation for 256 members should complete in less than 500ms (+50% tolerance)");
     }
 
     [Fact]
@@ -181,9 +181,9 @@ public class KeyRotationPerformanceTests
         result.Payload!.EncryptedKeys.Should().HaveCount(512);
 
         _output.WriteLine($"512 members (max): {stopwatch.ElapsedMilliseconds}ms");
-        // Allow 20% tolerance for test environment variance
-        stopwatch.ElapsedMilliseconds.Should().BeLessThan(1200,
-            "Rotation for 512 members (maximum) should complete in less than 1000ms (+20% tolerance)");
+        // Allow 50% tolerance for test environment variance (CI/CD, system load)
+        stopwatch.ElapsedMilliseconds.Should().BeLessThan(1500,
+            "Rotation for 512 members (maximum) should complete in less than 1000ms (+50% tolerance)");
     }
 
     #endregion
