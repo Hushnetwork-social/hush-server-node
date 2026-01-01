@@ -39,9 +39,9 @@ The solution includes the following test projects:
 
 | Project | Tests | Description |
 |---------|-------|-------------|
-| `HushNode.Feeds.Tests` | 99 | Feed transaction handlers, content handlers |
-| `HushNode.Reactions.Tests` | 105 | Protocol Omega reaction system |
-| **Total** | **204** | |
+| `HushNode.Feeds.Tests` | 242 | Feed transaction handlers, content handlers |
+| `HushNode.Reactions.Tests` | 126 | Protocol Omega reaction system |
+| **Total** | **368** | |
 
 ## Running the Server
 
