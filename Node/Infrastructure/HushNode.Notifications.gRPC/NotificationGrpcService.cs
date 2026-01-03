@@ -38,13 +38,25 @@ public class NotificationGrpcService(
                 request.UserId,
                 context.CancellationToken))
             {
+                // Check if client disconnected before attempting to write
+                if (context.CancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogInformation("Client disconnected before write: UserId={UserId}", request.UserId);
+                    break;
+                }
+
                 var protoEvent = MapToProtoEvent(internalEvent);
-                await responseStream.WriteAsync(protoEvent);
+                await responseStream.WriteAsync(protoEvent, context.CancellationToken);
             }
         }
         catch (OperationCanceledException)
         {
             _logger.LogInformation("Client disconnected: UserId={UserId}", request.UserId);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("request is complete"))
+        {
+            // Client disconnected during write - this is expected during page refresh
+            _logger.LogInformation("Client connection closed during write: UserId={UserId}", request.UserId);
         }
         catch (Exception ex)
         {
