@@ -150,4 +150,18 @@ public interface IFeedsStorageService
     /// Returns true for Admin or Member, false for Blocked, Banned, Left, or non-member.
     /// </summary>
     Task<bool> CanMemberSendMessagesAsync(FeedId feedId, string publicAddress);
+
+    // ===== Group Feed Query Operations (FEAT-017) =====
+
+    /// <summary>
+    /// Get all KeyGenerations for a group feed that the user has access to.
+    /// Returns KeyGenerations where the user was a member when the key was created.
+    /// </summary>
+    Task<IReadOnlyList<GroupFeedKeyGenerationEntity>> GetKeyGenerationsForUserAsync(FeedId feedId, string publicAddress);
+
+    /// <summary>
+    /// Update the BlockIndex of a feed.
+    /// Used to signal to clients that the feed has changed (e.g., membership change).
+    /// </summary>
+    Task UpdateFeedBlockIndexAsync(FeedId feedId, BlockIndex blockIndex);
 }

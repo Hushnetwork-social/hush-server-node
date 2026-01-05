@@ -16,6 +16,333 @@ namespace HushNode.Feeds.Tests;
 /// </summary>
 public class FeedsStorageServiceTests
 {
+    #region RetrieveFeedsForAddress Tests
+
+    /// <summary>
+    /// BUG: RetrieveFeedsForAddress currently only queries the Feeds table.
+    /// Group feeds are stored in GroupFeeds/GroupFeedParticipants tables and are NOT returned.
+    ///
+    /// This test documents the bug: Group feeds should be included in the results.
+    /// </summary>
+    [Fact]
+    public async Task RetrieveFeedsForAddress_WithGroupFeed_ShouldIncludeGroupFeedsFromGroupFeedParticipants()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var personalFeedId = TestDataFactory.CreateFeedId();
+        var groupFeedId = TestDataFactory.CreateFeedId();
+
+        // Create a personal feed (stored in Feeds table)
+        var personalFeed = new Feed(personalFeedId, "Personal", FeedType.Personal, new BlockIndex(100));
+
+        // Create a group feed participant (stored in GroupFeedParticipants table)
+        var groupFeed = new GroupFeed(groupFeedId, "Tech Friends", "Description", false, new BlockIndex(100), 0);
+        groupFeed.Participants.Add(new GroupFeedParticipantEntity(
+            groupFeedId, userAddress, ParticipantType.Admin, new BlockIndex(100), null, null));
+
+        var mockRepository = new Mock<IFeedsRepository>();
+
+        // Current behavior: RetrieveFeedsForAddress only returns feeds from Feeds table
+        mockRepository
+            .Setup(x => x.RetrieveFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(new[] { personalFeed });
+
+        // New method needed: RetrieveGroupFeedsForAddress to query GroupFeedParticipants
+        mockRepository
+            .Setup(x => x.RetrieveGroupFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(new[] { groupFeed });
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.RetrieveFeedsForAddress(userAddress, new BlockIndex(0));
+
+        // Assert - Should include BOTH personal AND group feeds
+        result.Should().HaveCount(2);
+        result.Should().Contain(f => f.FeedType == FeedType.Personal);
+        result.Should().Contain(f => f.FeedType == FeedType.Group);
+    }
+
+    [Fact]
+    public async Task RetrieveFeedsForAddress_WithOnlyGroupFeeds_ShouldReturnGroupFeeds()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var groupFeedId = TestDataFactory.CreateFeedId();
+
+        // No personal/chat feeds in Feeds table
+        var groupFeed = new GroupFeed(groupFeedId, "Friends Group", "A test group", false, new BlockIndex(100), 0);
+        groupFeed.Participants.Add(new GroupFeedParticipantEntity(
+            groupFeedId, userAddress, ParticipantType.Member, new BlockIndex(100), null, null));
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.RetrieveFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(Array.Empty<Feed>());
+        mockRepository
+            .Setup(x => x.RetrieveGroupFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(new[] { groupFeed });
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.RetrieveFeedsForAddress(userAddress, new BlockIndex(0));
+
+        // Assert
+        result.Should().HaveCount(1);
+        result.First().FeedType.Should().Be(FeedType.Group);
+        result.First().Alias.Should().Be("Friends Group");
+    }
+
+    [Fact]
+    public async Task RetrieveFeedsForAddress_WithLeftGroupMember_ShouldExcludeLeftGroups()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var groupFeedId = TestDataFactory.CreateFeedId();
+
+        // User has left this group (LeftAtBlock is set)
+        var groupFeed = new GroupFeed(groupFeedId, "Old Group", "Left this group", false, new BlockIndex(100), 0);
+        groupFeed.Participants.Add(new GroupFeedParticipantEntity(
+            groupFeedId, userAddress, ParticipantType.Member, new BlockIndex(100),
+            LeftAtBlock: new BlockIndex(150), LastLeaveBlock: new BlockIndex(150)));
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.RetrieveFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(Array.Empty<Feed>());
+        // Should NOT return groups where user has left
+        mockRepository
+            .Setup(x => x.RetrieveGroupFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(Array.Empty<GroupFeed>());
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.RetrieveFeedsForAddress(userAddress, new BlockIndex(0));
+
+        // Assert - No feeds returned (user left the only group)
+        result.Should().BeEmpty();
+    }
+
+    #endregion
+
+    #region RetrieveGroupFeedsForAddress Query Logic Tests
+
+    /// <summary>
+    /// FEAT-017 BUG: Participant "Paulo Tauri 5" cannot see "Tech Friends" group.
+    /// This test verifies that when a user is an ACTIVE participant (Admin/Member),
+    /// the group feed is returned by RetrieveFeedsForAddress.
+    ///
+    /// Expected: Query should match participants where:
+    /// - ParticipantPublicAddress matches
+    /// - LeftAtBlock is null (active)
+    /// - ParticipantType is not Banned
+    /// </summary>
+    [Fact]
+    public async Task RetrieveFeedsForAddress_ParticipantWithAdminRole_ShouldReturnGroupFeed()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var participantAddress = TestDataFactory.CreateAddress();
+        var groupFeedId = TestDataFactory.CreateFeedId();
+
+        // Create group feed with the participant as Admin (not Owner!)
+        var groupFeed = new GroupFeed(groupFeedId, "Tech Friends", "A tech discussion group", false, new BlockIndex(100), 0);
+        groupFeed.Participants.Add(new GroupFeedParticipantEntity(
+            groupFeedId, participantAddress, ParticipantType.Admin, new BlockIndex(105), null, null));
+
+        var mockRepository = new Mock<IFeedsRepository>();
+
+        // Setup: No personal/chat feeds
+        mockRepository
+            .Setup(x => x.RetrieveFeedsForAddress(participantAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(Array.Empty<Feed>());
+
+        // Setup: Group feed query should return the group
+        mockRepository
+            .Setup(x => x.RetrieveGroupFeedsForAddress(participantAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(new[] { groupFeed });
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.RetrieveFeedsForAddress(participantAddress, new BlockIndex(0));
+
+        // Assert - User should see the group feed
+        result.Should().HaveCount(1);
+        result.First().FeedType.Should().Be(FeedType.Group);
+        result.First().FeedId.Should().Be(groupFeedId);
+    }
+
+    /// <summary>
+    /// FEAT-017 BUG: Verifies the conversion from GroupFeed to Feed includes participants correctly.
+    /// The participant should be visible in the Feed.Participants collection.
+    /// </summary>
+    [Fact]
+    public async Task RetrieveFeedsForAddress_GroupFeedConversion_ShouldIncludeActiveParticipants()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var ownerAddress = TestDataFactory.CreateAddress();
+        var memberAddress = TestDataFactory.CreateAddress();
+        var groupFeedId = TestDataFactory.CreateFeedId();
+
+        // Create group feed with Owner and a Member
+        var groupFeed = new GroupFeed(groupFeedId, "Tech Friends", "Description", false, new BlockIndex(100), 0);
+        groupFeed.Participants.Add(new GroupFeedParticipantEntity(
+            groupFeedId, ownerAddress, ParticipantType.Admin, new BlockIndex(100), null, null));
+        groupFeed.Participants.Add(new GroupFeedParticipantEntity(
+            groupFeedId, memberAddress, ParticipantType.Member, new BlockIndex(105), null, null));
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.RetrieveFeedsForAddress(memberAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(Array.Empty<Feed>());
+        mockRepository
+            .Setup(x => x.RetrieveGroupFeedsForAddress(memberAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(new[] { groupFeed });
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.RetrieveFeedsForAddress(memberAddress, new BlockIndex(0));
+
+        // Assert - Should return the group with all active participants
+        result.Should().HaveCount(1);
+        var convertedFeed = result.First();
+        convertedFeed.FeedType.Should().Be(FeedType.Group);
+        convertedFeed.Participants.Should().HaveCount(2);
+        convertedFeed.Participants.Should().Contain(p => p.ParticipantPublicAddress == ownerAddress);
+        convertedFeed.Participants.Should().Contain(p => p.ParticipantPublicAddress == memberAddress);
+    }
+
+    /// <summary>
+    /// FEAT-017: Verifies that left participants (LeftAtBlock != null) are excluded from results.
+    /// </summary>
+    [Fact]
+    public async Task RetrieveFeedsForAddress_ParticipantWithLeftAtBlock_ShouldNotReturnGroupFeed()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var participantAddress = TestDataFactory.CreateAddress();
+        var groupFeedId = TestDataFactory.CreateFeedId();
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.RetrieveFeedsForAddress(participantAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(Array.Empty<Feed>());
+        // When user has left the group, RetrieveGroupFeedsForAddress should return empty
+        mockRepository
+            .Setup(x => x.RetrieveGroupFeedsForAddress(participantAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(Array.Empty<GroupFeed>());
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.RetrieveFeedsForAddress(participantAddress, new BlockIndex(0));
+
+        // Assert - No feeds returned (user left the group)
+        result.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// FEAT-017: Verifies that banned participants are excluded from group feed results.
+    /// </summary>
+    [Fact]
+    public async Task RetrieveFeedsForAddress_BannedParticipant_ShouldNotReturnGroupFeed()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var bannedUserAddress = TestDataFactory.CreateAddress();
+        var groupFeedId = TestDataFactory.CreateFeedId();
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.RetrieveFeedsForAddress(bannedUserAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(Array.Empty<Feed>());
+        // Banned users should not see the group
+        mockRepository
+            .Setup(x => x.RetrieveGroupFeedsForAddress(bannedUserAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(Array.Empty<GroupFeed>());
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.RetrieveFeedsForAddress(bannedUserAddress, new BlockIndex(0));
+
+        // Assert - No feeds returned (user is banned)
+        result.Should().BeEmpty();
+    }
+
+    #endregion
+
     #region GetMaxKeyGenerationAsync Tests
 
     [Fact]

@@ -36,17 +36,62 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 x.BlockIndex > blockIndex)
             .ToListAsync();
 
+    public async Task<IEnumerable<GroupFeed>> RetrieveGroupFeedsForAddress(
+        string publicSigningAddress,
+        BlockIndex blockIndex)
+    {
+        // Note: For group feeds, we use CreatedAtBlock for the filter.
+        // Unlike regular feeds (which have BlockIndex updated on activity),
+        // GroupFeed.CreatedAtBlock is static. For proper incremental sync,
+        // we'd need to track participant join dates.
+        // For now, we return all groups where:
+        // 1. User is an active participant (not left, not banned, not blocked)
+        // 2. Group was created after the requested block index
+        //
+        // EF Core translates BlockIndex comparisons via the value converter,
+        // so we use the BlockIndex object directly (not .Value).
+        return await this.Context.GroupFeeds
+            .Include(g => g.Participants)
+            .Include(g => g.KeyGenerations)
+                .ThenInclude(kg => kg.EncryptedKeys)
+            .Where(g =>
+                !g.IsDeleted &&
+                g.Participants.Any(p =>
+                    p.ParticipantPublicAddress == publicSigningAddress &&
+                    p.LeftAtBlock == null &&
+                    p.ParticipantType != ParticipantType.Banned &&
+                    p.ParticipantType != ParticipantType.Blocked) &&
+                g.CreatedAtBlock > blockIndex)
+            .ToListAsync();
+    }
+
     public async Task<Feed?> GetFeedByIdAsync(FeedId feedId) =>
         await this.Context.Feeds
             .Include(x => x.Participants)
             .FirstOrDefaultAsync(x => x.FeedId == feedId);
 
-    public async Task<IReadOnlyList<FeedId>> GetFeedIdsForUserAsync(string publicAddress) =>
-        await this.Context.FeedParticipants
+    public async Task<IReadOnlyList<FeedId>> GetFeedIdsForUserAsync(string publicAddress)
+    {
+        // Get feed IDs from regular feeds (Personal, Chat)
+        var regularFeedIds = await this.Context.FeedParticipants
             .Where(fp => fp.ParticipantPublicAddress == publicAddress)
             .Select(fp => fp.FeedId)
             .Distinct()
             .ToListAsync();
+
+        // Get feed IDs from group feeds (where user is active participant)
+        var groupFeedIds = await this.Context.GroupFeedParticipants
+            .Where(gp => gp.ParticipantPublicAddress == publicAddress &&
+                         gp.LeftAtBlock == null &&
+                         gp.ParticipantType != ParticipantType.Banned &&
+                         gp.ParticipantType != ParticipantType.Blocked)
+            .Select(gp => gp.FeedId)
+            .Distinct()
+            .ToListAsync();
+
+        // Combine and return unique feed IDs
+        return regularFeedIds.Union(groupFeedIds).Distinct().ToList();
+    }
 
     public async Task UpdateFeedsBlockIndexForParticipantAsync(string publicSigningAddress, BlockIndex blockIndex)
     {
@@ -220,5 +265,24 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 p.ParticipantPublicAddress == publicAddress &&
                 p.LeftAtBlock == null &&
                 (p.ParticipantType == ParticipantType.Admin || p.ParticipantType == ParticipantType.Member));
+
+    // ===== Group Feed Query Operations (FEAT-017) =====
+
+    public async Task<IReadOnlyList<GroupFeedKeyGenerationEntity>> GetKeyGenerationsForUserAsync(FeedId feedId, string publicAddress) =>
+        await this.Context.GroupFeedKeyGenerations
+            .Include(kg => kg.EncryptedKeys)
+            .Where(kg =>
+                kg.FeedId == feedId &&
+                kg.EncryptedKeys.Any(ek => ek.MemberPublicAddress == publicAddress))
+            .OrderBy(kg => kg.KeyGeneration)
+            .ToListAsync();
+
+    public async Task UpdateFeedBlockIndexAsync(FeedId feedId, BlockIndex blockIndex)
+    {
+        await this.Context.Feeds
+            .Where(f => f.FeedId == feedId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(f => f.BlockIndex, blockIndex));
+    }
 }
 

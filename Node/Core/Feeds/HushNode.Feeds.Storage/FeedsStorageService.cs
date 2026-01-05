@@ -81,11 +81,59 @@ public class FeedsStorageService(
         return false; // Should not reach here
     }
 
-    public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex) =>
-        await this._unitOfWorkProvider
-            .CreateReadOnly()
-            .GetRepository<IFeedsRepository>()
-            .RetrieveFeedsForAddress(publicSigningAddress, blockIndex);
+    public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex)
+    {
+        using var unitOfWork = this._unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IFeedsRepository>();
+
+        // Get Personal/Chat feeds from Feeds table
+        var feeds = await repository.RetrieveFeedsForAddress(publicSigningAddress, blockIndex);
+
+        // Get Group feeds from GroupFeeds table (separate participant tracking)
+        var groupFeeds = await repository.RetrieveGroupFeedsForAddress(publicSigningAddress, blockIndex);
+
+        // Convert GroupFeed to Feed for consistent API return type
+        var groupFeedsAsFeed = groupFeeds.Select(g => ConvertGroupFeedToFeed(g, publicSigningAddress));
+
+        return feeds.Concat(groupFeedsAsFeed);
+    }
+
+    /// <summary>
+    /// Converts a GroupFeed to a Feed for consistent API response.
+    /// The Feed object is used by gRPC service for all feed types.
+    /// </summary>
+    private static Feed ConvertGroupFeedToFeed(GroupFeed groupFeed, string requesterPublicAddress)
+    {
+        var feed = new Feed(groupFeed.FeedId, groupFeed.Title, FeedType.Group, groupFeed.CreatedAtBlock);
+
+        // Find the current KeyGeneration and the user's encrypted key
+        var currentKeyGen = groupFeed.KeyGenerations
+            .FirstOrDefault(kg => kg.KeyGeneration == groupFeed.CurrentKeyGeneration);
+
+        var userEncryptedKey = currentKeyGen?.EncryptedKeys
+            .FirstOrDefault(ek => ek.MemberPublicAddress == requesterPublicAddress)
+            ?.EncryptedAesKey ?? string.Empty;
+
+        // Convert GroupFeedParticipantEntity to FeedParticipant
+        foreach (var participant in groupFeed.Participants.Where(p => p.LeftAtBlock == null))
+        {
+            // For the requesting user, include their encrypted feed key from the current KeyGeneration
+            var encryptedFeedKey = participant.ParticipantPublicAddress == requesterPublicAddress
+                ? userEncryptedKey
+                : string.Empty;
+
+            feed.Participants = feed.Participants.Append(new FeedParticipant(
+                groupFeed.FeedId,
+                participant.ParticipantPublicAddress,
+                participant.ParticipantType,
+                encryptedFeedKey)
+            {
+                Feed = feed
+            }).ToArray();
+        }
+
+        return feed;
+    }
 
     public async Task<Feed?> GetFeedByIdAsync(FeedId feedId) =>
         await this._unitOfWorkProvider
@@ -282,4 +330,23 @@ public class FeedsStorageService(
             .CreateReadOnly()
             .GetRepository<IFeedsRepository>()
             .CanMemberSendMessagesAsync(feedId, publicAddress);
+
+    // ===== Group Feed Query Operations (FEAT-017) =====
+
+    public async Task<IReadOnlyList<GroupFeedKeyGenerationEntity>> GetKeyGenerationsForUserAsync(FeedId feedId, string publicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetKeyGenerationsForUserAsync(feedId, publicAddress);
+
+    public async Task UpdateFeedBlockIndexAsync(FeedId feedId, BlockIndex blockIndex)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .UpdateFeedBlockIndexAsync(feedId, blockIndex);
+
+        await writableUnitOfWork.CommitAsync();
+    }
 }

@@ -19,6 +19,13 @@ public interface IFeedsRepository : IRepository
 
     Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex);
 
+    /// <summary>
+    /// Retrieves Group feeds where the user is an active participant.
+    /// This queries the GroupFeedParticipants table (separate from Feeds/FeedParticipants).
+    /// Active means: not left (LeftAtBlock == null) and not banned.
+    /// </summary>
+    Task<IEnumerable<GroupFeed>> RetrieveGroupFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex);
+
     Task<Feed?> GetFeedByIdAsync(FeedId feedId);
 
     /// <summary>
@@ -151,4 +158,18 @@ public interface IFeedsRepository : IRepository
     /// Returns true for Admin or Member, false for Blocked, Banned, Left, or non-member.
     /// </summary>
     Task<bool> CanMemberSendMessagesAsync(FeedId feedId, string publicAddress);
+
+    // ===== Group Feed Query Operations (FEAT-017) =====
+
+    /// <summary>
+    /// Get all KeyGenerations for a group feed that the user has access to.
+    /// Returns KeyGenerations where the user has an encrypted key entry.
+    /// </summary>
+    Task<IReadOnlyList<GroupFeedKeyGenerationEntity>> GetKeyGenerationsForUserAsync(FeedId feedId, string publicAddress);
+
+    /// <summary>
+    /// Update the BlockIndex of a feed.
+    /// Used to signal to clients that the feed has changed (e.g., membership change).
+    /// </summary>
+    Task UpdateFeedBlockIndexAsync(FeedId feedId, BlockIndex blockIndex);
 }

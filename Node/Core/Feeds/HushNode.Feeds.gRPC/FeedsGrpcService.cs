@@ -1,13 +1,16 @@
 ﻿using Grpc.Core;
 using HushNetwork.proto;
+using HushNode.Caching;
 using HushNode.Feeds.Storage;
 using HushNode.Identity;
+using HushNode.Identity.Storage;
 using HushNode.Reactions.Storage;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
 using MessageReactionTallyModel = HushShared.Reactions.Model.MessageReactionTally;
 using Google.Protobuf;
+using Olimpo;
 using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Feeds.gRPC;
@@ -16,12 +19,19 @@ public class FeedsGrpcService(
     IFeedsStorageService feedsStorageService,
     IFeedMessageStorageService feedMessageStorageService,
     IIdentityService identityService,
+    IIdentityStorageService identityStorageService,
+    IBlockchainCache blockchainCache,
     IUnitOfWorkProvider<ReactionsDbContext> reactionsUnitOfWorkProvider) : HushFeed.HushFeedBase
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
     private readonly IIdentityService _identityService = identityService;
+    private readonly IIdentityStorageService _identityStorageService = identityStorageService;
+    private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IUnitOfWorkProvider<ReactionsDbContext> _reactionsUnitOfWorkProvider = reactionsUnitOfWorkProvider;
+
+    /// <summary>Maximum number of members supported in a single key rotation.</summary>
+    private const int MaxMembersPerRotation = 512;
 
     public override async Task<HasPersonalFeedReply> HasPersonalFeed(
         HasPersonalFeedRequest request, 
@@ -65,6 +75,7 @@ public class FeedsGrpcService(
             {
                 FeedType.Personal => await ExtractPersonalFeedAlias(feed),
                 FeedType.Chat => await ExtractChatFeedAlias(feed, request.ProfilePublicKey),
+                FeedType.Group => await ExtractGroupFeedAlias(feed),
                 FeedType.Broadcast => await ExtractBroascastAlias(feed),
                 _ => throw new InvalidOperationException($"the FeedTYype {feed.FeedType} is not supported.")
             };
@@ -157,6 +168,12 @@ public class FeedsGrpcService(
                     if (feedMessage.ReplyToMessageId != null)
                     {
                         feedMessageReply.ReplyToMessageId = feedMessage.ReplyToMessageId.ToString();
+                    }
+
+                    // Add KeyGeneration if present (Group Feeds)
+                    if (feedMessage.KeyGeneration != null)
+                    {
+                        feedMessageReply.KeyGeneration = feedMessage.KeyGeneration.Value;
                     }
 
                     reply.Messages.Add(feedMessageReply);
@@ -271,6 +288,19 @@ public class FeedsGrpcService(
         return string.Format("{0} (YOU)", displayName);
     }
 
+    private async Task<string> ExtractGroupFeedAlias(Feed feed)
+    {
+        var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feed.FeedId);
+
+        if (groupFeed != null)
+        {
+            return groupFeed.Title;
+        }
+
+        // Fallback: use the alias from the Feed record if GroupFeed lookup fails
+        return feed.Alias;
+    }
+
     private async Task<string> ExtractDisplayName(string publicSigningAddress)
     {
         var identity = await this._identityService.RetrieveIdentityAsync(publicSigningAddress);
@@ -306,5 +336,293 @@ public class FeedsGrpcService(
         }
 
         return maxBlockIndex;
+    }
+
+    // ===== Group Feed Query Operations (FEAT-017) =====
+
+    public override async Task<GetGroupMembersResponse> GetGroupMembers(
+        GetGroupMembersRequest request,
+        ServerCallContext context)
+    {
+        Console.WriteLine($"[GetGroupMembers] FeedId: {request.FeedId}");
+
+        var feedId = FeedIdHandler.CreateFromString(request.FeedId);
+        var activeParticipants = await this._feedsStorageService.GetActiveParticipantsAsync(feedId);
+
+        var response = new GetGroupMembersResponse();
+
+        foreach (var participant in activeParticipants)
+        {
+            response.Members.Add(new GroupFeedMemberProto
+            {
+                PublicAddress = participant.ParticipantPublicAddress,
+                ParticipantType = (int)participant.ParticipantType,
+                JoinedAtBlock = participant.JoinedAtBlock.Value
+            });
+        }
+
+        Console.WriteLine($"[GetGroupMembers] Returning {response.Members.Count} members");
+        return response;
+    }
+
+    public override async Task<GetKeyGenerationsResponse> GetKeyGenerations(
+        GetKeyGenerationsRequest request,
+        ServerCallContext context)
+    {
+        var userAddress = request.UserPublicAddress ?? string.Empty;
+        Console.WriteLine($"[GetKeyGenerations] FeedId: {request.FeedId}, UserAddress: {userAddress.Substring(0, Math.Min(10, userAddress.Length))}...");
+
+        var feedId = FeedIdHandler.CreateFromString(request.FeedId);
+        var keyGenerations = await this._feedsStorageService.GetKeyGenerationsForUserAsync(feedId, userAddress);
+
+        var response = new GetKeyGenerationsResponse();
+
+        foreach (var kg in keyGenerations)
+        {
+            // Find this user's encrypted key for this KeyGeneration
+            var userEncryptedKey = kg.EncryptedKeys
+                .FirstOrDefault(ek => ek.MemberPublicAddress == userAddress)
+                ?.EncryptedAesKey ?? string.Empty;
+
+            var keyGenProto = new KeyGenerationProto
+            {
+                KeyGeneration = kg.KeyGeneration,
+                EncryptedKey = userEncryptedKey,
+                ValidFromBlock = kg.ValidFromBlock.Value
+            };
+
+            // ValidToBlock is optional - only set if there's a newer KeyGeneration
+            // For the last key, ValidToBlock remains unset (null)
+            response.KeyGenerations.Add(keyGenProto);
+        }
+
+        Console.WriteLine($"[GetKeyGenerations] Returning {response.KeyGenerations.Count} key generations");
+        return response;
+    }
+
+    // ===== Group Feed Admin Operations (FEAT-017) =====
+
+    public override async Task<AddMemberToGroupFeedResponse> AddMemberToGroupFeed(
+        AddMemberToGroupFeedRequest request,
+        ServerCallContext context)
+    {
+        Console.WriteLine($"[AddMemberToGroupFeed] FeedId: {request.FeedId}, Admin: {request.AdminPublicAddress?.Substring(0, Math.Min(10, request.AdminPublicAddress?.Length ?? 0))}..., NewMember: {request.NewMemberPublicAddress?.Substring(0, Math.Min(10, request.NewMemberPublicAddress?.Length ?? 0))}...");
+
+        try
+        {
+            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
+            var adminAddress = request.AdminPublicAddress ?? string.Empty;
+            var newMemberAddress = request.NewMemberPublicAddress ?? string.Empty;
+            var newMemberEncryptKey = request.NewMemberPublicEncryptKey ?? string.Empty;
+
+            // Step 1: Validate admin has permission
+            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
+            if (!isAdmin)
+            {
+                Console.WriteLine($"[AddMemberToGroupFeed] Failed: User is not an admin");
+                return new AddMemberToGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "Only administrators can add members to the group"
+                };
+            }
+
+            // Step 2: Check if member is already in the group
+            var existingParticipant = await this._feedsStorageService.GetParticipantWithHistoryAsync(feedId, newMemberAddress);
+            if (existingParticipant != null && existingParticipant.LeftAtBlock == null)
+            {
+                Console.WriteLine($"[AddMemberToGroupFeed] Failed: Member already in group");
+                return new AddMemberToGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "User is already a member of this group"
+                };
+            }
+
+            // Step 3: Get current block height for JoinedAtBlock
+            var currentBlock = this._blockchainCache.LastBlockIndex;
+            var joinedAtBlock = currentBlock;
+
+            // Step 4: Add or update the participant
+            if (existingParticipant != null)
+            {
+                // Participant existed before (re-joining after leaving) - update their status
+                await this._feedsStorageService.UpdateParticipantRejoinAsync(
+                    feedId,
+                    newMemberAddress,
+                    joinedAtBlock,
+                    ParticipantType.Member);
+                Console.WriteLine($"[AddMemberToGroupFeed] Updated existing participant for rejoin");
+            }
+            else
+            {
+                // New participant - create new record
+                var newParticipant = new GroupFeedParticipantEntity(
+                    feedId,
+                    newMemberAddress,
+                    ParticipantType.Member,
+                    joinedAtBlock,
+                    LeftAtBlock: null,
+                    LastLeaveBlock: null);
+
+                await this._feedsStorageService.AddParticipantAsync(feedId, newParticipant);
+                Console.WriteLine($"[AddMemberToGroupFeed] Added new participant");
+            }
+
+            // Step 5: Trigger key rotation to include the new member
+            Console.WriteLine($"[AddMemberToGroupFeed] Triggering key rotation for new member");
+            var rotationResult = await TriggerKeyRotationAsync(
+                feedId,
+                RotationTrigger.Join,
+                joiningMemberAddress: newMemberAddress);
+            var (rotationSuccess, newKeyGeneration, errorMessage) = rotationResult;
+
+            if (!rotationSuccess)
+            {
+                Console.WriteLine($"[AddMemberToGroupFeed] Key rotation failed: {errorMessage}");
+                // Note: Member was added but key rotation failed. This is a partial failure.
+                // The member won't be able to decrypt messages until key rotation succeeds.
+                return new AddMemberToGroupFeedResponse
+                {
+                    Success = false,
+                    Message = $"Member was added but key distribution failed: {errorMessage}"
+                };
+            }
+
+            // Step 6: Update the feed's BlockIndex to signal other clients that there's a change
+            // This ensures existing group members will sync the new KeyGeneration
+            Console.WriteLine($"[AddMemberToGroupFeed] Updating feed BlockIndex to trigger client sync");
+            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, currentBlock);
+
+            Console.WriteLine($"[AddMemberToGroupFeed] Success - new KeyGeneration: {newKeyGeneration}");
+            return new AddMemberToGroupFeedResponse
+            {
+                Success = true,
+                Message = $"Member added successfully. New key generation: {newKeyGeneration}"
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AddMemberToGroupFeed] ERROR: {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"[AddMemberToGroupFeed] Stack trace: {ex.StackTrace}");
+            return new AddMemberToGroupFeedResponse
+            {
+                Success = false,
+                Message = $"Internal error: {ex.Message}"
+            };
+        }
+    }
+
+    /// <summary>
+    /// Triggers a key rotation for a Group Feed when a member joins.
+    /// Generates a new AES key, encrypts it for all current active members, and stores the key generation.
+    /// </summary>
+    private async Task<(bool Success, int? NewKeyGeneration, string? ErrorMessage)> TriggerKeyRotationAsync(
+        FeedId feedId,
+        RotationTrigger trigger,
+        string? joiningMemberAddress = null,
+        string? leavingMemberAddress = null)
+    {
+        // Step 1: Get current max KeyGeneration
+        var currentMaxKeyGeneration = await this._feedsStorageService.GetMaxKeyGenerationAsync(feedId);
+        if (currentMaxKeyGeneration == null)
+        {
+            return (false, null, $"Group feed {feedId} does not exist or has no KeyGenerations.");
+        }
+
+        var newKeyGeneration = currentMaxKeyGeneration.Value + 1;
+
+        // Step 2: Get active member addresses (excludes Banned, includes Admin/Member/Blocked)
+        var memberAddresses = (await this._feedsStorageService.GetActiveGroupMemberAddressesAsync(feedId)).ToList();
+
+        // Adjust member list based on membership change
+        if (!string.IsNullOrEmpty(leavingMemberAddress))
+        {
+            // For Leave/Ban: exclude the leaving/banned member
+            memberAddresses = memberAddresses.Where(a => a != leavingMemberAddress).ToList();
+        }
+
+        if (!string.IsNullOrEmpty(joiningMemberAddress))
+        {
+            // For Join/Unban: include the joining member (might already be in list for Unban)
+            if (!memberAddresses.Contains(joiningMemberAddress))
+            {
+                memberAddresses.Add(joiningMemberAddress);
+            }
+        }
+
+        // Step 3: Validate member count
+        if (memberAddresses.Count == 0)
+        {
+            return (false, null, "Cannot rotate keys for a group with no active members.");
+        }
+
+        if (memberAddresses.Count > MaxMembersPerRotation)
+        {
+            return (false, null, $"Group has {memberAddresses.Count} members, exceeding the maximum of {MaxMembersPerRotation}.");
+        }
+
+        // Step 4: Generate new AES-256 key
+        var plaintextAesKey = EncryptKeys.GenerateAesKey();
+
+        // Step 5: Encrypt the AES key for each member using ECIES
+        var encryptedKeys = new List<GroupFeedEncryptedKeyEntity>();
+        try
+        {
+            foreach (var memberAddress in memberAddresses)
+            {
+                // Fetch the member's public encrypt key from Identity module
+                var profile = await this._identityStorageService.RetrieveIdentityAsync(memberAddress);
+
+                if (profile is NonExistingProfile || profile is not Profile fullProfile)
+                {
+                    return (false, null, $"Could not retrieve identity for member {memberAddress}. Cannot complete key rotation.");
+                }
+
+                // Validate public encrypt key before attempting encryption
+                if (string.IsNullOrEmpty(fullProfile.PublicEncryptAddress))
+                {
+                    return (false, null, $"Member {memberAddress} has an empty public encrypt key. Cannot complete key rotation.");
+                }
+
+                // ECIES encrypt the AES key with the member's public encrypt key
+                string encryptedAesKey;
+                try
+                {
+                    encryptedAesKey = EncryptKeys.Encrypt(plaintextAesKey, fullProfile.PublicEncryptAddress);
+                }
+                catch (Exception ex) when (ex is FormatException or IndexOutOfRangeException or ArgumentException)
+                {
+                    return (false, null, $"ECIES encryption failed for member {memberAddress}: invalid public key format. Cannot complete key rotation.");
+                }
+
+                encryptedKeys.Add(new GroupFeedEncryptedKeyEntity(
+                    FeedId: feedId,
+                    KeyGeneration: newKeyGeneration,
+                    MemberPublicAddress: memberAddress,
+                    EncryptedAesKey: encryptedAesKey));
+            }
+        }
+        finally
+        {
+            // Step 6: Security - zero the plaintext key from memory
+            // Note: In .NET, strings are immutable and cannot be truly zeroed.
+            plaintextAesKey = null!;
+        }
+
+        // Step 7: Create and store the KeyGeneration
+        var validFromBlock = this._blockchainCache.LastBlockIndex.Value;
+        var keyGenerationEntity = new GroupFeedKeyGenerationEntity(
+            FeedId: feedId,
+            KeyGeneration: newKeyGeneration,
+            ValidFromBlock: new BlockIndex(validFromBlock),
+            RotationTrigger: trigger)
+        {
+            EncryptedKeys = encryptedKeys
+        };
+
+        await this._feedsStorageService.CreateKeyRotationAsync(keyGenerationEntity);
+
+        return (true, newKeyGeneration, null);
     }
 }

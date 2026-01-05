@@ -12,7 +12,14 @@ service HushFeed {
   rpc IsFeedInBlockchain (IsFeedInBlockchainRequest) returns (IsFeedInBlockchainReply);
   rpc GetFeedsForAddress (GetFeedForAddressRequest) returns (GetFeedForAddressReply);
   rpc GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest) returns (GetFeedMessagesForAddressReply);
-  
+
+  // Group Feed Query Operations
+  rpc GetGroupMembers (GetGroupMembersRequest) returns (GetGroupMembersResponse);
+  rpc GetKeyGenerations (GetKeyGenerationsRequest) returns (GetKeyGenerationsResponse);
+
+  // Group Feed Admin Operations
+  rpc AddMemberToGroupFeed (AddMemberToGroupFeedRequest) returns (AddMemberToGroupFeedResponse);
+
   /*
   rpc CreatePersonalFeed (CreatePersonalFeedRequest) returns (CreatePersonalFeedReply);
   rpc CreateChatFeed (CreateChatFeedRequest) returns (CreateChatFeedReply);
@@ -82,6 +89,7 @@ message GetFeedMessagesForAddressReply {
     int64 BlockIndex = 7;
     bytes AuthorCommitment = 8;  // Protocol Omega: Poseidon(author_secret)
     optional string ReplyToMessageId = 9;  // Reply to Message: parent message reference
+    optional int32 KeyGeneration = 10;  // Group Feeds: Key generation used to encrypt this message
   }
 
   // Reaction tally for a message (Protocol Omega)
@@ -318,6 +326,24 @@ message GetGroupMembersRequest {
 
 message GetGroupMembersResponse {
   repeated GroupFeedMemberProto Members = 1;
+}
+
+// --- Get Key Generations for User ---
+
+message GetKeyGenerationsRequest {
+  string FeedId = 1;
+  string UserPublicAddress = 2;
+}
+
+message KeyGenerationProto {
+  int32 KeyGeneration = 1;
+  string EncryptedKey = 2;  // AES key encrypted for this user
+  int64 ValidFromBlock = 3;
+  optional int64 ValidToBlock = 4;  // Null if still active
+}
+
+message GetKeyGenerationsResponse {
+  repeated KeyGenerationProto KeyGenerations = 1;
 }
 
 /*

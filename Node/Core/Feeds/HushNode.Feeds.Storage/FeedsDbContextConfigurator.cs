@@ -79,6 +79,11 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                     .IsRequired(false);
 
                 feedMessage.HasIndex(x => x.ReplyToMessageId);
+
+                // Group Feeds: Key generation used to encrypt this message
+                feedMessage.Property(x => x.KeyGeneration)
+                    .HasColumnType("int")
+                    .IsRequired(false);
             });
     }
 

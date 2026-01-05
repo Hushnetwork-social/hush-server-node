@@ -45,7 +45,8 @@ public class NewGroupFeedMessageTransactionHandler(
             validatedTransaction.TransactionTimeStamp,
             this._blockchainCache.LastBlockIndex,
             AuthorCommitment: validatedTransaction.Payload.AuthorCommitment,
-            ReplyToMessageId: validatedTransaction.Payload.ReplyToMessageId);
+            ReplyToMessageId: validatedTransaction.Payload.ReplyToMessageId,
+            KeyGeneration: validatedTransaction.Payload.KeyGeneration);
 
         await this._feedMessageStorageService.CreateFeedMessageAsync(feedMessage);
 

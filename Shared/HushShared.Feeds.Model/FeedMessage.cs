@@ -11,4 +11,5 @@ public record FeedMessage(
     Timestamp Timestamp,
     BlockIndex BlockIndex,
     byte[]? AuthorCommitment = null,  // Protocol Omega: Poseidon hash of author's user_secret for ZK proof
-    FeedMessageId? ReplyToMessageId = null);  // Reply to Message: Reference to parent message
+    FeedMessageId? ReplyToMessageId = null,  // Reply to Message: Reference to parent message
+    int? KeyGeneration = null);  // Group Feeds: Key generation used to encrypt this message
