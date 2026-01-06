@@ -185,6 +185,35 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 .SetProperty(g => g.Description, newDescription));
     }
 
+    public async Task UpdateGroupFeedSettingsAsync(FeedId feedId, string? newTitle, string? newDescription, bool? isPublic)
+    {
+        // Build dynamic update based on which fields are provided
+        // We need to run separate updates for each non-null field since ExecuteUpdateAsync doesn't support conditional setters
+        if (newTitle != null)
+        {
+            await this.Context.GroupFeeds
+                .Where(g => g.FeedId == feedId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(g => g.Title, newTitle));
+        }
+
+        if (newDescription != null)
+        {
+            await this.Context.GroupFeeds
+                .Where(g => g.FeedId == feedId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(g => g.Description, newDescription));
+        }
+
+        if (isPublic.HasValue)
+        {
+            await this.Context.GroupFeeds
+                .Where(g => g.FeedId == feedId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(g => g.IsPublic, isPublic.Value));
+        }
+    }
+
     public async Task MarkGroupFeedDeletedAsync(FeedId feedId)
     {
         await this.Context.GroupFeeds
@@ -335,6 +364,24 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .Where(f => f.FeedId == feedId)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(f => f.BlockIndex, blockIndex));
+    }
+
+    // ===== Public Group Search Operations =====
+
+    public async Task<IReadOnlyList<GroupFeed>> SearchPublicGroupsAsync(string searchQuery, int maxResults = 20)
+    {
+        // Case-insensitive search on Title and Description for public groups
+        var normalizedQuery = searchQuery.ToLowerInvariant();
+
+        return await this.Context.GroupFeeds
+            .Where(g =>
+                g.IsPublic &&
+                !g.IsDeleted &&
+                (g.Title.ToLower().Contains(normalizedQuery) ||
+                 (g.Description != null && g.Description.ToLower().Contains(normalizedQuery))))
+            .OrderByDescending(g => g.CreatedAtBlock) // Most recently created first
+            .Take(maxResults)
+            .ToListAsync();
     }
 }
 

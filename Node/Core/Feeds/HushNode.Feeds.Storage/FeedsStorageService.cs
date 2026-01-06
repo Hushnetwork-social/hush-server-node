@@ -228,6 +228,17 @@ public class FeedsStorageService(
         await writableUnitOfWork.CommitAsync();
     }
 
+    public async Task UpdateGroupFeedSettingsAsync(FeedId feedId, string? newTitle, string? newDescription, bool? isPublic)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .UpdateGroupFeedSettingsAsync(feedId, newTitle, newDescription, isPublic);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
     public async Task MarkGroupFeedDeletedAsync(FeedId feedId)
     {
         using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
@@ -392,4 +403,12 @@ public class FeedsStorageService(
 
         await writableUnitOfWork.CommitAsync();
     }
+
+    // ===== Public Group Search Operations =====
+
+    public async Task<IReadOnlyList<GroupFeed>> SearchPublicGroupsAsync(string searchQuery, int maxResults = 20) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .SearchPublicGroupsAsync(searchQuery, maxResults);
 }

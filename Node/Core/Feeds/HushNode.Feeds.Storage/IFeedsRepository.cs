@@ -86,6 +86,12 @@ public interface IFeedsRepository : IRepository
     Task UpdateGroupFeedDescriptionAsync(FeedId feedId, string newDescription);
 
     /// <summary>
+    /// Update group feed settings (title, description, visibility) in a single operation.
+    /// Only non-null values are updated.
+    /// </summary>
+    Task UpdateGroupFeedSettingsAsync(FeedId feedId, string? newTitle, string? newDescription, bool? isPublic);
+
+    /// <summary>
     /// Soft-delete a group feed (mark as deleted, preserve data).
     /// </summary>
     Task MarkGroupFeedDeletedAsync(FeedId feedId);
@@ -200,4 +206,12 @@ public interface IFeedsRepository : IRepository
     /// Used to signal to clients that the feed has changed (e.g., membership change).
     /// </summary>
     Task UpdateFeedBlockIndexAsync(FeedId feedId, BlockIndex blockIndex);
+
+    // ===== Public Group Search Operations =====
+
+    /// <summary>
+    /// Search for public groups by title or description (case-insensitive partial match).
+    /// Returns groups where IsPublic = true and title or description contains the search query.
+    /// </summary>
+    Task<IReadOnlyList<GroupFeed>> SearchPublicGroupsAsync(string searchQuery, int maxResults = 20);
 }

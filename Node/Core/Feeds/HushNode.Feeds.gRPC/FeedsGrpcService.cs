@@ -1465,6 +1465,76 @@ public class FeedsGrpcService(
         }
     }
 
+    public override async Task<UpdateGroupFeedSettingsResponse> UpdateGroupFeedSettings(
+        UpdateGroupFeedSettingsRequest request,
+        ServerCallContext context)
+    {
+        Console.WriteLine($"[UpdateGroupFeedSettings] FeedId: {request.FeedId}, Admin: {request.AdminPublicAddress?.Substring(0, Math.Min(10, request.AdminPublicAddress?.Length ?? 0))}...");
+
+        try
+        {
+            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
+            var adminAddress = request.AdminPublicAddress ?? string.Empty;
+
+            // Step 1: Validate admin has permission
+            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
+            if (!isAdmin)
+            {
+                return new UpdateGroupFeedSettingsResponse
+                {
+                    Success = false,
+                    Message = "Only administrators can update group settings"
+                };
+            }
+
+            // Step 2: Validate inputs
+            string? newTitle = request.HasNewTitle ? request.NewTitle : null;
+            string? newDescription = request.HasNewDescription ? request.NewDescription : null;
+            bool? isPublic = request.HasIsPublic ? request.IsPublic : null;
+
+            if (newTitle != null && (newTitle.Length < 1 || newTitle.Length > 100))
+            {
+                return new UpdateGroupFeedSettingsResponse
+                {
+                    Success = false,
+                    Message = "Title must be between 1 and 100 characters"
+                };
+            }
+
+            if (newDescription != null && newDescription.Length > 500)
+            {
+                return new UpdateGroupFeedSettingsResponse
+                {
+                    Success = false,
+                    Message = "Description cannot exceed 500 characters"
+                };
+            }
+
+            // Step 3: Update the settings
+            await this._feedsStorageService.UpdateGroupFeedSettingsAsync(feedId, newTitle, newDescription, isPublic);
+
+            // Update feed BlockIndex to notify clients
+            var currentBlock = this._blockchainCache.LastBlockIndex;
+            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, currentBlock);
+
+            Console.WriteLine($"[UpdateGroupFeedSettings] Success - Title: {newTitle ?? "(unchanged)"}, Description: {(newDescription != null ? "updated" : "(unchanged)")}, IsPublic: {(isPublic.HasValue ? isPublic.Value.ToString() : "(unchanged)")}");
+            return new UpdateGroupFeedSettingsResponse
+            {
+                Success = true,
+                Message = "Group settings updated successfully"
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UpdateGroupFeedSettings] ERROR: {ex.Message}");
+            return new UpdateGroupFeedSettingsResponse
+            {
+                Success = false,
+                Message = $"Internal error: {ex.Message}"
+            };
+        }
+    }
+
     public override async Task<DeleteGroupFeedResponse> DeleteGroupFeed(
         DeleteGroupFeedRequest request,
         ServerCallContext context)
@@ -1501,6 +1571,56 @@ public class FeedsGrpcService(
         {
             Console.WriteLine($"[DeleteGroupFeed] ERROR: {ex.Message}");
             return new DeleteGroupFeedResponse
+            {
+                Success = false,
+                Message = $"Internal error: {ex.Message}"
+            };
+        }
+    }
+
+    // ===== Search Public Groups =====
+
+    public override async Task<SearchPublicGroupsResponse> SearchPublicGroups(
+        SearchPublicGroupsRequest request,
+        ServerCallContext context)
+    {
+        Console.WriteLine($"[SearchPublicGroups] Query: '{request.SearchQuery}', MaxResults: {request.MaxResults}");
+
+        try
+        {
+            var maxResults = request.MaxResults > 0 ? request.MaxResults : 20;
+            var groups = await this._feedsStorageService.SearchPublicGroupsAsync(
+                request.SearchQuery ?? string.Empty,
+                maxResults);
+
+            var response = new SearchPublicGroupsResponse
+            {
+                Success = true,
+                Message = $"Found {groups.Count} public groups"
+            };
+
+            foreach (var group in groups)
+            {
+                // Count active members for each group
+                var activeParticipants = await this._feedsStorageService.GetActiveParticipantsAsync(group.FeedId);
+
+                response.Groups.Add(new PublicGroupInfoProto
+                {
+                    FeedId = group.FeedId.ToString(),
+                    Title = group.Title,
+                    Description = group.Description ?? string.Empty,
+                    MemberCount = activeParticipants.Count,
+                    CreatedAtBlock = group.CreatedAtBlock.Value
+                });
+            }
+
+            Console.WriteLine($"[SearchPublicGroups] Returning {response.Groups.Count} groups");
+            return response;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SearchPublicGroups] ERROR: {ex.Message}");
+            return new SearchPublicGroupsResponse
             {
                 Success = false,
                 Message = $"Internal error: {ex.Message}"

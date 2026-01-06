@@ -17,6 +17,7 @@ service HushFeed {
   rpc GetGroupMembers (GetGroupMembersRequest) returns (GetGroupMembersResponse);
   rpc GetKeyGenerations (GetKeyGenerationsRequest) returns (GetKeyGenerationsResponse);
   rpc GetGroupFeed (GetGroupFeedRequest) returns (GetGroupFeedResponse);
+  rpc SearchPublicGroups (SearchPublicGroupsRequest) returns (SearchPublicGroupsResponse);
 
   // Group Feed Creation & Membership Operations
   rpc CreateGroupFeed (NewGroupFeedRequest) returns (NewGroupFeedResponse);
@@ -32,6 +33,7 @@ service HushFeed {
   rpc PromoteToAdmin (PromoteToAdminRequest) returns (PromoteToAdminResponse);
   rpc UpdateGroupFeedTitle (UpdateGroupFeedTitleRequest) returns (UpdateGroupFeedTitleResponse);
   rpc UpdateGroupFeedDescription (UpdateGroupFeedDescriptionRequest) returns (UpdateGroupFeedDescriptionResponse);
+  rpc UpdateGroupFeedSettings (UpdateGroupFeedSettingsRequest) returns (UpdateGroupFeedSettingsResponse);
   rpc DeleteGroupFeed (DeleteGroupFeedRequest) returns (DeleteGroupFeedResponse);
 
   /*
@@ -281,6 +283,19 @@ message UpdateGroupFeedDescriptionResponse {
   string Message = 2;
 }
 
+message UpdateGroupFeedSettingsRequest {
+  string FeedId = 1;
+  string AdminPublicAddress = 2;
+  optional string NewTitle = 3;
+  optional string NewDescription = 4;
+  optional bool IsPublic = 5;
+}
+
+message UpdateGroupFeedSettingsResponse {
+  bool Success = 1;
+  string Message = 2;
+}
+
 message DeleteGroupFeedRequest {
   string FeedId = 1;
   string AdminPublicAddress = 2;
@@ -362,6 +377,27 @@ message KeyGenerationProto {
 
 message GetKeyGenerationsResponse {
   repeated KeyGenerationProto KeyGenerations = 1;
+}
+
+// --- Search Public Groups ---
+
+message SearchPublicGroupsRequest {
+  string SearchQuery = 1;  // Partial title/description to search for
+  int32 MaxResults = 2;    // Maximum number of results to return (default 20)
+}
+
+message PublicGroupInfoProto {
+  string FeedId = 1;
+  string Title = 2;
+  string Description = 3;
+  int32 MemberCount = 4;
+  int64 CreatedAtBlock = 5;
+}
+
+message SearchPublicGroupsResponse {
+  bool Success = 1;
+  string Message = 2;
+  repeated PublicGroupInfoProto Groups = 3;
 }
 
 /*
