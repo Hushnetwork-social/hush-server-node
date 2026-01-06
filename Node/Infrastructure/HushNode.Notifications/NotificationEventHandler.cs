@@ -1,6 +1,7 @@
 using HushNode.Events;
 using HushNode.Feeds.Storage;
 using HushNode.Identity;
+using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
 using Microsoft.Extensions.Logging;
 using Olimpo;
@@ -54,50 +55,82 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
 
         try
         {
-            // Get the feed with participants
-            var feed = await _feedsStorageService.GetFeedByIdAsync(feedMessage.FeedId);
-            if (feed == null)
-            {
-                _logger.LogWarning("Feed not found for notification: FeedId={FeedId}", feedMessage.FeedId);
-                return;
-            }
-
             // Get sender display name
             var senderName = await GetDisplayNameAsync(feedMessage.IssuerPublicAddress ?? string.Empty);
 
             // Truncate message preview
             var messagePreview = TruncateMessage(feedMessage.MessageContent, 255);
 
-            // Notify all participants except the sender
-            foreach (var participant in feed.Participants)
+            // Try to get the feed as a regular Feed first (Personal, Chat)
+            var feed = await _feedsStorageService.GetFeedByIdAsync(feedMessage.FeedId);
+            if (feed != null)
             {
-                // Skip the message sender - they don't need notification for their own message
-                if (participant.ParticipantPublicAddress == feedMessage.IssuerPublicAddress)
-                {
-                    continue;
-                }
-
-                var recipientUserId = participant.ParticipantPublicAddress;
-
-                // Increment unread count for recipient
-                await _unreadTrackingService.IncrementUnreadAsync(recipientUserId, feedMessage.FeedId.ToString());
-
-                // Publish notification event via Redis Pub/Sub
-                await _notificationService.PublishNewMessageAsync(
-                    recipientUserId,
-                    feedMessage.FeedId.ToString(),
+                // Regular feed - notify all participants
+                await NotifyFeedParticipantsAsync(
+                    feed.Participants.Select(p => p.ParticipantPublicAddress),
+                    feedMessage,
                     senderName,
                     messagePreview);
-
-                _logger.LogDebug(
-                    "Notification sent to recipient: UserId={UserId}, FeedId={FeedId}",
-                    recipientUserId.Substring(0, Math.Min(20, recipientUserId.Length)),
-                    feedMessage.FeedId);
+                return;
             }
+
+            // Feed not found in Feeds table - try GroupFeeds table
+            var groupFeed = await _feedsStorageService.GetGroupFeedAsync(feedMessage.FeedId);
+            if (groupFeed != null)
+            {
+                // Group feed - notify active participants (not left, not banned)
+                var activeParticipants = groupFeed.Participants
+                    .Where(p => p.LeftAtBlock == null &&
+                                p.ParticipantType != ParticipantType.Banned)
+                    .Select(p => p.ParticipantPublicAddress);
+
+                await NotifyFeedParticipantsAsync(
+                    activeParticipants,
+                    feedMessage,
+                    senderName,
+                    messagePreview);
+                return;
+            }
+
+            _logger.LogWarning("Feed not found for notification: FeedId={FeedId}", feedMessage.FeedId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error handling feed message notification: FeedId={FeedId}", feedMessage.FeedId);
+        }
+    }
+
+    /// <summary>
+    /// Notifies all participants except the message sender.
+    /// </summary>
+    private async Task NotifyFeedParticipantsAsync(
+        IEnumerable<string> participantAddresses,
+        FeedMessage feedMessage,
+        string senderName,
+        string messagePreview)
+    {
+        foreach (var participantAddress in participantAddresses)
+        {
+            // Skip the message sender - they don't need notification for their own message
+            if (participantAddress == feedMessage.IssuerPublicAddress)
+            {
+                continue;
+            }
+
+            // Increment unread count for recipient
+            await _unreadTrackingService.IncrementUnreadAsync(participantAddress, feedMessage.FeedId.ToString());
+
+            // Publish notification event via Redis Pub/Sub
+            await _notificationService.PublishNewMessageAsync(
+                participantAddress,
+                feedMessage.FeedId.ToString(),
+                senderName,
+                messagePreview);
+
+            _logger.LogDebug(
+                "Notification sent to recipient: UserId={UserId}, FeedId={FeedId}",
+                participantAddress.Substring(0, Math.Min(20, participantAddress.Length)),
+                feedMessage.FeedId);
         }
     }
 

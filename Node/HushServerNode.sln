@@ -105,6 +105,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Feeds.Tests", "Cor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Reactions.Tests", "Core\Reactions\HushNode.Reactions.Tests\HushNode.Reactions.Tests.csproj", "{9E9C1390-8C47-4CD5-B5C5-534B31857716}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Notifications.Tests", "Infrastructure\HushNode.Notifications.Tests\HushNode.Notifications.Tests.csproj", "{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -631,6 +633,18 @@ Global
 		{9E9C1390-8C47-4CD5-B5C5-534B31857716}.Release|x64.Build.0 = Release|Any CPU
 		{9E9C1390-8C47-4CD5-B5C5-534B31857716}.Release|x86.ActiveCfg = Release|Any CPU
 		{9E9C1390-8C47-4CD5-B5C5-534B31857716}.Release|x86.Build.0 = Release|Any CPU
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}.Debug|x64.Build.0 = Debug|Any CPU
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}.Debug|x86.Build.0 = Debug|Any CPU
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}.Release|x64.ActiveCfg = Release|Any CPU
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}.Release|x64.Build.0 = Release|Any CPU
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}.Release|x86.ActiveCfg = Release|Any CPU
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -670,5 +684,6 @@ Global
 		{DE414828-DE20-4682-8A36-E5C022191E95} = {CA73E200-0A43-5D2E-AB19-C9B22F5FAB4B}
 		{970B8535-3F54-40B8-ADB6-3ADAA8EC9280} = {6544EB24-47F3-9BE3-1623-BA6BFBB17757}
 		{9E9C1390-8C47-4CD5-B5C5-534B31857716} = {CA73E200-0A43-5D2E-AB19-C9B22F5FAB4B}
+		{C03FFF28-0E3D-4A8D-BBD9-498782A92B3E} = {7E18AD70-0709-4E21-8448-E6F6E3721850}
 	EndGlobalSection
 EndGlobal
