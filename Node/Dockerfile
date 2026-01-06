@@ -4,7 +4,7 @@ WORKDIR /src
 
 # Copy all the necessary files and restore dependencies
 # Copying .sln and .csproj files first allows Docker to cache the restore step
-COPY HushNetwork.sln .
+COPY ["Node/HushServerNode.sln", "Node/"]
 COPY ["Node/HushServerNode/HushServerNode.csproj", "Node/HushServerNode/"]
 COPY ["Shared/Olimpo.BootstrapperManager/BootstrapperManager.csproj", "Shared/Olimpo.BootstrapperManager/"]
 COPY ["Shared/Olimpo.EventAggregatorManager/EventAggregatorManager.csproj", "Shared/Olimpo.EventAggregatorManager/"]
@@ -14,10 +14,9 @@ COPY ["Node/Infrastructure/HushNode.Credentials/HushNode.Credentials.csproj", "N
 # A more optimized Dockerfile would copy only the necessary projects.
 COPY . .
 
-WORKDIR "/src/Node/HushServerNode"
-RUN dotnet restore
-
 WORKDIR "/src"
+RUN dotnet restore "Node/HushServerNode.sln"
+
 RUN dotnet publish "Node/HushServerNode/HushServerNode.csproj" -c Release -o /app/publish
 
 # Use the ASP.NET runtime image for the final, smaller container
