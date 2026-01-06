@@ -436,7 +436,15 @@ public class FeedsGrpcService(
                 };
             }
 
-            return new GetGroupFeedResponse
+            // Auto-generate invite code for public groups if not present
+            var inviteCode = groupFeed.InviteCode;
+            if (groupFeed.IsPublic && string.IsNullOrEmpty(inviteCode))
+            {
+                inviteCode = await this._feedsStorageService.GenerateInviteCodeAsync(feedId);
+                Console.WriteLine($"[GetGroupFeed] Generated invite code: {inviteCode}");
+            }
+
+            var response = new GetGroupFeedResponse
             {
                 Success = true,
                 FeedId = groupFeed.FeedId.ToString(),
@@ -444,11 +452,71 @@ public class FeedsGrpcService(
                 Description = groupFeed.Description ?? "",
                 IsPublic = groupFeed.IsPublic
             };
+
+            // Only include invite code for public groups
+            if (groupFeed.IsPublic && !string.IsNullOrEmpty(inviteCode))
+            {
+                response.InviteCode = inviteCode;
+            }
+
+            return response;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[GetGroupFeed] ERROR: {ex.Message}");
             return new GetGroupFeedResponse
+            {
+                Success = false,
+                Message = $"Internal error: {ex.Message}"
+            };
+        }
+    }
+
+    public override async Task<GetGroupFeedByInviteCodeResponse> GetGroupFeedByInviteCode(
+        GetGroupFeedByInviteCodeRequest request,
+        ServerCallContext context)
+    {
+        Console.WriteLine($"[GetGroupFeedByInviteCode] InviteCode: {request.InviteCode}");
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.InviteCode))
+            {
+                return new GetGroupFeedByInviteCodeResponse
+                {
+                    Success = false,
+                    Message = "Invite code is required"
+                };
+            }
+
+            var groupFeed = await this._feedsStorageService.GetGroupFeedByInviteCodeAsync(request.InviteCode);
+
+            if (groupFeed == null)
+            {
+                return new GetGroupFeedByInviteCodeResponse
+                {
+                    Success = false,
+                    Message = "No public group found with this invite code"
+                };
+            }
+
+            // Count active members
+            var activeParticipants = await this._feedsStorageService.GetActiveParticipantsAsync(groupFeed.FeedId);
+
+            return new GetGroupFeedByInviteCodeResponse
+            {
+                Success = true,
+                FeedId = groupFeed.FeedId.ToString(),
+                Title = groupFeed.Title,
+                Description = groupFeed.Description ?? "",
+                IsPublic = groupFeed.IsPublic,
+                MemberCount = activeParticipants.Count
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GetGroupFeedByInviteCode] ERROR: {ex.Message}");
+            return new GetGroupFeedByInviteCodeResponse
             {
                 Success = false,
                 Message = $"Internal error: {ex.Message}"
@@ -573,12 +641,15 @@ public class FeedsGrpcService(
         JoinGroupFeedRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[JoinGroupFeed] FeedId: {request.FeedId}, User: {request.JoiningUserPublicAddress?.Substring(0, Math.Min(10, request.JoiningUserPublicAddress?.Length ?? 0))}...");
+        var userAddressLog = request.JoiningUserPublicAddress?.Substring(0, Math.Min(10, request.JoiningUserPublicAddress?.Length ?? 0)) ?? "";
+        var hasEncryptKey = request.HasJoiningUserPublicEncryptKey;
+        Console.WriteLine($"[JoinGroupFeed] FeedId: {request.FeedId}, User: {userAddressLog}..., HasEncryptKey: {hasEncryptKey}");
 
         try
         {
             var feedId = FeedIdHandler.CreateFromString(request.FeedId);
             var userAddress = request.JoiningUserPublicAddress ?? string.Empty;
+            var userEncryptKey = request.HasJoiningUserPublicEncryptKey ? request.JoiningUserPublicEncryptKey : null;
 
             // Check if group exists and is public
             var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
@@ -650,11 +721,13 @@ public class FeedsGrpcService(
                 await this._feedsStorageService.AddParticipantAsync(feedId, newParticipant);
             }
 
-            // Trigger key rotation
+            // Trigger key rotation - pass the user's encrypt key if provided (avoids identity lookup timing issue)
             var (success, newKeyGen, errorMsg) = await TriggerKeyRotationAsync(
                 feedId,
                 RotationTrigger.Join,
-                joiningMemberAddress: userAddress);
+                joiningMemberAddress: userAddress,
+                leavingMemberAddress: null,
+                joiningMemberPublicEncryptKey: userEncryptKey);
 
             if (!success)
             {
@@ -875,11 +948,14 @@ public class FeedsGrpcService(
     /// Triggers a key rotation for a Group Feed when a member joins.
     /// Generates a new AES key, encrypts it for all current active members, and stores the key generation.
     /// </summary>
+    /// <param name="joiningMemberPublicEncryptKey">Optional: The public encrypt key for the joining member.
+    /// When provided, skips identity lookup for the joining member (avoids timing issues when identity isn't confirmed yet).</param>
     private async Task<(bool Success, int? NewKeyGeneration, string? ErrorMessage)> TriggerKeyRotationAsync(
         FeedId feedId,
         RotationTrigger trigger,
         string? joiningMemberAddress = null,
-        string? leavingMemberAddress = null)
+        string? leavingMemberAddress = null,
+        string? joiningMemberPublicEncryptKey = null)
     {
         // Step 1: Get current max KeyGeneration
         var currentMaxKeyGeneration = await this._feedsStorageService.GetMaxKeyGenerationAsync(feedId);
@@ -929,25 +1005,40 @@ public class FeedsGrpcService(
         {
             foreach (var memberAddress in memberAddresses)
             {
-                // Fetch the member's public encrypt key from Identity module
-                var profile = await this._identityStorageService.RetrieveIdentityAsync(memberAddress);
+                string publicEncryptKey;
 
-                if (profile is NonExistingProfile || profile is not Profile fullProfile)
+                // Check if this is the joining member and we have their key provided directly
+                if (!string.IsNullOrEmpty(joiningMemberPublicEncryptKey) &&
+                    memberAddress == joiningMemberAddress)
                 {
-                    return (false, null, $"Could not retrieve identity for member {memberAddress}. Cannot complete key rotation.");
+                    // Use the provided key directly (avoids timing issue where identity isn't in DB yet)
+                    publicEncryptKey = joiningMemberPublicEncryptKey;
+                    Console.WriteLine($"[TriggerKeyRotationAsync] Using provided public encrypt key for joining member {memberAddress.Substring(0, Math.Min(10, memberAddress.Length))}...");
                 }
-
-                // Validate public encrypt key before attempting encryption
-                if (string.IsNullOrEmpty(fullProfile.PublicEncryptAddress))
+                else
                 {
-                    return (false, null, $"Member {memberAddress} has an empty public encrypt key. Cannot complete key rotation.");
+                    // Fetch the member's public encrypt key from Identity module
+                    var profile = await this._identityStorageService.RetrieveIdentityAsync(memberAddress);
+
+                    if (profile is NonExistingProfile || profile is not Profile fullProfile)
+                    {
+                        return (false, null, $"Could not retrieve identity for member {memberAddress}. Cannot complete key rotation.");
+                    }
+
+                    // Validate public encrypt key before attempting encryption
+                    if (string.IsNullOrEmpty(fullProfile.PublicEncryptAddress))
+                    {
+                        return (false, null, $"Member {memberAddress} has an empty public encrypt key. Cannot complete key rotation.");
+                    }
+
+                    publicEncryptKey = fullProfile.PublicEncryptAddress;
                 }
 
                 // ECIES encrypt the AES key with the member's public encrypt key
                 string encryptedAesKey;
                 try
                 {
-                    encryptedAesKey = EncryptKeys.Encrypt(plaintextAesKey, fullProfile.PublicEncryptAddress);
+                    encryptedAesKey = EncryptKeys.Encrypt(plaintextAesKey, publicEncryptKey);
                 }
                 catch (Exception ex) when (ex is FormatException or IndexOutOfRangeException or ArgumentException)
                 {

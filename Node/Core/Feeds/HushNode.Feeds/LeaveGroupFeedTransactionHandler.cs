@@ -7,15 +7,18 @@ namespace HushNode.Feeds;
 
 /// <summary>
 /// Transaction handler that processes validated LeaveGroupFeed transactions.
-/// Updates the leaving user's participant record and handles last-admin scenario.
+/// Updates the leaving user's participant record, handles last-admin scenario,
+/// and triggers key rotation to exclude the leaving member from future keys.
 /// </summary>
 public class LeaveGroupFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
-    IBlockchainCache blockchainCache)
+    IBlockchainCache blockchainCache,
+    IKeyRotationService keyRotationService)
     : ILeaveGroupFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
+    private readonly IKeyRotationService _keyRotationService = keyRotationService;
 
     public async Task HandleLeaveGroupFeedTransactionAsync(ValidatedTransaction<LeaveGroupFeedPayload> transaction)
     {
@@ -53,8 +56,15 @@ public class LeaveGroupFeedTransactionHandler(
             await this._feedsStorageService.MarkGroupFeedDeletedAsync(payload.FeedId);
             // No key rotation needed for deleted group
         }
-        // Key rotation note: For non-deletion cases, the remaining admins should
-        // submit a GroupFeedKeyRotationPayload transaction to distribute new
-        // encrypted keys to remaining members (excluding the leaving user).
+        else
+        {
+            // Trigger key rotation to exclude leaving member from future key distribution
+            // This ensures the leaving user can no longer decrypt messages sent after they leave
+            await this._keyRotationService.TriggerAndPersistRotationAsync(
+                payload.FeedId,
+                RotationTrigger.Leave,
+                joiningMemberAddress: null,
+                leavingMemberAddress: leavingUserAddress);
+        }
     }
 }

@@ -411,4 +411,25 @@ public class FeedsStorageService(
             .CreateReadOnly()
             .GetRepository<IFeedsRepository>()
             .SearchPublicGroupsAsync(searchQuery, maxResults);
+
+    // ===== Invite Code Operations =====
+
+    public async Task<GroupFeed?> GetGroupFeedByInviteCodeAsync(string inviteCode) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetGroupFeedByInviteCodeAsync(inviteCode);
+
+    public async Task<string> GenerateInviteCodeAsync(FeedId feedId)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        var code = await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .GenerateInviteCodeAsync(feedId);
+
+        await writableUnitOfWork.CommitAsync();
+
+        return code;
+    }
 }

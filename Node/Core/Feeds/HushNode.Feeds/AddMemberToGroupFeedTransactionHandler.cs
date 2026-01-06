@@ -7,15 +7,18 @@ namespace HushNode.Feeds;
 
 /// <summary>
 /// Transaction handler that processes validated AddMemberToGroupFeed transactions.
-/// Adds the new member as a participant to the group.
+/// Adds the new member as a participant to the group and triggers key rotation
+/// to distribute encryption keys to the new member.
 /// </summary>
 public class AddMemberToGroupFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
-    IBlockchainCache blockchainCache)
+    IBlockchainCache blockchainCache,
+    IKeyRotationService keyRotationService)
     : IAddMemberToGroupFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
+    private readonly IKeyRotationService _keyRotationService = keyRotationService;
 
     public async Task HandleAddMemberToGroupFeedTransactionAsync(ValidatedTransaction<AddMemberToGroupFeedPayload> transaction)
     {
@@ -52,9 +55,12 @@ public class AddMemberToGroupFeedTransactionHandler(
         // Note: If existingParticipant != null && LeftAtBlock == null, they're already a member
         // This case should have been caught by validation, but we don't throw - just no-op
 
-        // Key rotation note: The admin should submit a GroupFeedKeyRotationPayload
-        // transaction to distribute the new encrypted keys to all members including
-        // the new one. The NewMemberPublicEncryptKey in the payload can be used to
-        // encrypt the feed key for the new member.
+        // Trigger key rotation to distribute encryption keys to the new member
+        // This ensures the new member immediately receives keys to send and receive messages
+        await this._keyRotationService.TriggerAndPersistRotationAsync(
+            payload.FeedId,
+            RotationTrigger.Join,
+            joiningMemberAddress: newMemberAddress,
+            leavingMemberAddress: null);
     }
 }

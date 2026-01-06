@@ -22,6 +22,21 @@ public interface IKeyRotationService
         RotationTrigger trigger,
         string? joiningMemberAddress = null,
         string? leavingMemberAddress = null);
+
+    /// <summary>
+    /// Triggers a key rotation and persists it to the database in one operation.
+    /// This is the preferred method for membership change handlers (Join, Leave, Ban, Unban).
+    /// </summary>
+    /// <param name="feedId">The Group Feed to rotate keys for.</param>
+    /// <param name="trigger">The event that triggered the rotation (Join, Leave, Ban, Unban, Manual).</param>
+    /// <param name="joiningMemberAddress">Optional: Public address of a member joining (will be included in key distribution).</param>
+    /// <param name="leavingMemberAddress">Optional: Public address of a member leaving/banned (will be excluded from key distribution).</param>
+    /// <returns>Result containing the new KeyGeneration number or error details.</returns>
+    Task<KeyRotationResult> TriggerAndPersistRotationAsync(
+        FeedId feedId,
+        RotationTrigger trigger,
+        string? joiningMemberAddress = null,
+        string? leavingMemberAddress = null);
 }
 
 /// <summary>

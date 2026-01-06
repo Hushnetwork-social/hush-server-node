@@ -135,4 +135,43 @@ public class KeyRotationService(
 
         return KeyRotationResult.Success(newKeyGeneration, payload);
     }
+
+    /// <inheritdoc/>
+    public async Task<KeyRotationResult> TriggerAndPersistRotationAsync(
+        FeedId feedId,
+        RotationTrigger trigger,
+        string? joiningMemberAddress = null,
+        string? leavingMemberAddress = null)
+    {
+        // Step 1: Generate the key rotation payload
+        var result = await this.TriggerRotationAsync(feedId, trigger, joiningMemberAddress, leavingMemberAddress);
+
+        if (!result.IsSuccess || result.Payload == null)
+        {
+            return result;
+        }
+
+        // Step 2: Convert payload to entity and persist
+        var payload = result.Payload;
+        var keyGenerationEntity = new GroupFeedKeyGenerationEntity(
+            payload.FeedId,
+            payload.NewKeyGeneration,
+            new HushShared.Blockchain.BlockModel.BlockIndex(payload.ValidFromBlock),
+            payload.RotationTrigger);
+
+        // Map payload encrypted keys to entity encrypted keys
+        foreach (var encryptedKey in payload.EncryptedKeys)
+        {
+            keyGenerationEntity.EncryptedKeys.Add(new GroupFeedEncryptedKeyEntity(
+                payload.FeedId,
+                payload.NewKeyGeneration,
+                encryptedKey.MemberPublicAddress,
+                encryptedKey.EncryptedAesKey));
+        }
+
+        // Step 3: Persist atomically
+        await this._feedsStorageService.CreateKeyRotationAsync(keyGenerationEntity);
+
+        return result;
+    }
 }

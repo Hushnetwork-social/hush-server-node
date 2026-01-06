@@ -19,6 +19,12 @@ public record GroupFeed(
     /// </summary>
     public bool IsDeleted { get; set; } = false;
 
+    /// <summary>
+    /// Unique invite code for public groups. 8 characters, alphanumeric uppercase.
+    /// Allows users to join via shareable link or by entering the code directly.
+    /// </summary>
+    public string? InviteCode { get; set; }
+
     public virtual ICollection<GroupFeedParticipantEntity> Participants { get; set; } = [];
     public virtual ICollection<GroupFeedKeyGenerationEntity> KeyGenerations { get; set; } = [];
 }

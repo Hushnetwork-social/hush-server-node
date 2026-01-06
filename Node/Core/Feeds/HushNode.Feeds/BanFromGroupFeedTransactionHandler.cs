@@ -30,7 +30,7 @@ public class BanFromGroupFeedTransactionHandler(
 
         // Step 2: Trigger key rotation to exclude banned member from future key distribution
         // The leavingMemberAddress parameter ensures the banned member is excluded from the new key
-        await this._keyRotationService.TriggerRotationAsync(
+        await this._keyRotationService.TriggerAndPersistRotationAsync(
             payload.FeedId,
             RotationTrigger.Ban,
             joiningMemberAddress: null,

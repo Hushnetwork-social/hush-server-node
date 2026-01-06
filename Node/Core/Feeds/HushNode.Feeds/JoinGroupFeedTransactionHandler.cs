@@ -7,15 +7,18 @@ namespace HushNode.Feeds;
 
 /// <summary>
 /// Transaction handler that processes validated JoinGroupFeed transactions.
-/// Adds the joining user as a participant to the group.
+/// Adds the joining user as a participant to the group and triggers key rotation
+/// to distribute encryption keys to the new member.
 /// </summary>
 public class JoinGroupFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
-    IBlockchainCache blockchainCache)
+    IBlockchainCache blockchainCache,
+    IKeyRotationService keyRotationService)
     : IJoinGroupFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
+    private readonly IKeyRotationService _keyRotationService = keyRotationService;
 
     public async Task HandleJoinGroupFeedTransactionAsync(ValidatedTransaction<JoinGroupFeedPayload> transaction)
     {
@@ -52,8 +55,12 @@ public class JoinGroupFeedTransactionHandler(
         // Note: If existingParticipant != null && LeftAtBlock == null, they're already a member
         // This case should have been caught by validation, but we don't throw - just no-op
 
-        // Key rotation note: The actual key rotation is triggered by the client
-        // submitting a separate GroupFeedKeyRotationPayload transaction after joining.
-        // This allows the admin/owner to generate and distribute the new encrypted keys.
+        // Trigger key rotation to distribute encryption keys to the new member
+        // This ensures the joining user immediately receives keys to send and receive messages
+        await this._keyRotationService.TriggerAndPersistRotationAsync(
+            payload.FeedId,
+            RotationTrigger.Join,
+            joiningMemberAddress: joiningUserAddress,
+            leavingMemberAddress: null);
     }
 }

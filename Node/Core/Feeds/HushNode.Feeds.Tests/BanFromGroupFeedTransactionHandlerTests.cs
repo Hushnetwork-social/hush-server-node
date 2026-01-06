@@ -92,7 +92,7 @@ public class BanFromGroupFeedTransactionHandlerTests
 
         // Assert
         mocker.GetMock<IKeyRotationService>()
-            .Verify(x => x.TriggerRotationAsync(
+            .Verify(x => x.TriggerAndPersistRotationAsync(
                 feedId,
                 RotationTrigger.Ban,
                 null,
@@ -115,7 +115,7 @@ public class BanFromGroupFeedTransactionHandlerTests
 
         RotationTrigger? capturedTrigger = null;
         mocker.GetMock<IKeyRotationService>()
-            .Setup(x => x.TriggerRotationAsync(It.IsAny<FeedId>(), It.IsAny<RotationTrigger>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Setup(x => x.TriggerAndPersistRotationAsync(It.IsAny<FeedId>(), It.IsAny<RotationTrigger>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Callback<FeedId, RotationTrigger, string?, string?>((_, trigger, _, _) => capturedTrigger = trigger)
             .ReturnsAsync(KeyRotationResult.Failure("Mock result"));
 
@@ -143,7 +143,7 @@ public class BanFromGroupFeedTransactionHandlerTests
         string? capturedLeavingAddress = null;
         string? capturedJoiningAddress = null;
         mocker.GetMock<IKeyRotationService>()
-            .Setup(x => x.TriggerRotationAsync(It.IsAny<FeedId>(), It.IsAny<RotationTrigger>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Setup(x => x.TriggerAndPersistRotationAsync(It.IsAny<FeedId>(), It.IsAny<RotationTrigger>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Callback<FeedId, RotationTrigger, string?, string?>((_, _, joining, leaving) =>
             {
                 capturedJoiningAddress = joining;
@@ -184,8 +184,8 @@ public class BanFromGroupFeedTransactionHandlerTests
             .Returns(Task.CompletedTask);
 
         mocker.GetMock<IKeyRotationService>()
-            .Setup(x => x.TriggerRotationAsync(It.IsAny<FeedId>(), It.IsAny<RotationTrigger>(), It.IsAny<string?>(), It.IsAny<string?>()))
-            .Callback(() => callOrder.Add("TriggerRotation"))
+            .Setup(x => x.TriggerAndPersistRotationAsync(It.IsAny<FeedId>(), It.IsAny<RotationTrigger>(), It.IsAny<string?>(), It.IsAny<string?>()))
+            .Callback(() => callOrder.Add("TriggerAndPersistRotation"))
             .ReturnsAsync(KeyRotationResult.Failure("Mock result"));
 
         // Act
@@ -194,7 +194,7 @@ public class BanFromGroupFeedTransactionHandlerTests
         // Assert
         callOrder.Should().HaveCount(2);
         callOrder[0].Should().Be("UpdateParticipantType");
-        callOrder[1].Should().Be("TriggerRotation");
+        callOrder[1].Should().Be("TriggerAndPersistRotation");
     }
 
     #endregion

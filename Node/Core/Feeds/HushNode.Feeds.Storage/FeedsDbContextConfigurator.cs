@@ -192,6 +192,15 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                     .HasColumnType("boolean")
                     .HasDefaultValue(false);
 
+                // Invite code for public group sharing (8 chars, alphanumeric uppercase)
+                groupFeed.Property(x => x.InviteCode)
+                    .HasColumnType("varchar(12)")
+                    .IsRequired(false);
+
+                groupFeed.HasIndex(x => x.InviteCode)
+                    .IsUnique()
+                    .HasFilter("\"InviteCode\" IS NOT NULL");
+
                 groupFeed.HasMany(x => x.Participants)
                     .WithOne(x => x.GroupFeed)
                     .HasForeignKey(x => x.FeedId);

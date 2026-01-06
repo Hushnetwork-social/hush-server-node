@@ -214,4 +214,18 @@ public interface IFeedsRepository : IRepository
     /// Returns groups where IsPublic = true and title or description contains the search query.
     /// </summary>
     Task<IReadOnlyList<GroupFeed>> SearchPublicGroupsAsync(string searchQuery, int maxResults = 20);
+
+    // ===== Invite Code Operations =====
+
+    /// <summary>
+    /// Get a public group feed by its invite code.
+    /// Returns null if not found or if the group is not public.
+    /// </summary>
+    Task<GroupFeed?> GetGroupFeedByInviteCodeAsync(string inviteCode);
+
+    /// <summary>
+    /// Generate a unique invite code for a group and store it.
+    /// Returns the generated code (8 characters, alphanumeric uppercase).
+    /// </summary>
+    Task<string> GenerateInviteCodeAsync(FeedId feedId);
 }

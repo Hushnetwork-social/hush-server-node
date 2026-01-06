@@ -17,6 +17,7 @@ service HushFeed {
   rpc GetGroupMembers (GetGroupMembersRequest) returns (GetGroupMembersResponse);
   rpc GetKeyGenerations (GetKeyGenerationsRequest) returns (GetKeyGenerationsResponse);
   rpc GetGroupFeed (GetGroupFeedRequest) returns (GetGroupFeedResponse);
+  rpc GetGroupFeedByInviteCode (GetGroupFeedByInviteCodeRequest) returns (GetGroupFeedByInviteCodeResponse);
   rpc SearchPublicGroups (SearchPublicGroupsRequest) returns (SearchPublicGroupsResponse);
 
   // Group Feed Creation & Membership Operations
@@ -173,6 +174,7 @@ message JoinGroupFeedRequest {
   string FeedId = 1;
   string JoiningUserPublicAddress = 2;
   optional string InvitationSignature = 3;  // Required for private groups
+  optional string JoiningUserPublicEncryptKey = 4;  // User's public encrypt key for key rotation (avoids identity lookup timing issue)
 }
 
 message JoinGroupFeedResponse {
@@ -351,6 +353,23 @@ message GetGroupFeedResponse {
   bool IsPublic = 6;
   int32 MemberCount = 7;
   int32 CurrentKeyGeneration = 8;
+  optional string InviteCode = 9;  // Unique invite code for public groups
+}
+
+// --- Get Group Feed by Invite Code ---
+
+message GetGroupFeedByInviteCodeRequest {
+  string InviteCode = 1;  // 8-char alphanumeric uppercase code
+}
+
+message GetGroupFeedByInviteCodeResponse {
+  bool Success = 1;
+  string Message = 2;
+  string FeedId = 3;
+  string Title = 4;
+  string Description = 5;
+  bool IsPublic = 6;
+  int32 MemberCount = 7;
 }
 
 message GetGroupMembersRequest {

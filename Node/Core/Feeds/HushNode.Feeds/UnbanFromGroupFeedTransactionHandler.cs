@@ -31,7 +31,7 @@ public class UnbanFromGroupFeedTransactionHandler(
 
         // Step 2: Trigger key rotation to include unbanned member in key distribution
         // The joiningMemberAddress parameter ensures the unbanned member receives the new key
-        await this._keyRotationService.TriggerRotationAsync(
+        await this._keyRotationService.TriggerAndPersistRotationAsync(
             payload.FeedId,
             RotationTrigger.Unban,
             joiningMemberAddress: payload.UnbannedUserPublicAddress,

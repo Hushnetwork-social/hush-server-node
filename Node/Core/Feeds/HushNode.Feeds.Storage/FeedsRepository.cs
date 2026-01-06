@@ -383,5 +383,67 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .Take(maxResults)
             .ToListAsync();
     }
+
+    // ===== Invite Code Operations =====
+
+    private static readonly char[] InviteCodeChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".ToCharArray();
+    private static readonly Random InviteCodeRandom = new();
+
+    public async Task<GroupFeed?> GetGroupFeedByInviteCodeAsync(string inviteCode)
+    {
+        if (string.IsNullOrWhiteSpace(inviteCode))
+            return null;
+
+        var normalizedCode = inviteCode.Trim().ToUpperInvariant();
+
+        return await this.Context.GroupFeeds
+            .FirstOrDefaultAsync(g =>
+                g.InviteCode == normalizedCode &&
+                g.IsPublic &&
+                !g.IsDeleted);
+    }
+
+    public async Task<string> GenerateInviteCodeAsync(FeedId feedId)
+    {
+        // Generate a unique 8-character code
+        string code;
+        int maxAttempts = 10;
+        int attempts = 0;
+
+        do
+        {
+            code = GenerateRandomCode(8);
+            attempts++;
+
+            // Check if code already exists
+            var exists = await this.Context.GroupFeeds
+                .AnyAsync(g => g.InviteCode == code);
+
+            if (!exists)
+                break;
+
+        } while (attempts < maxAttempts);
+
+        // Store the code
+        await this.Context.GroupFeeds
+            .Where(g => g.FeedId == feedId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(g => g.InviteCode, code));
+
+        return code;
+    }
+
+    private static string GenerateRandomCode(int length)
+    {
+        var chars = new char[length];
+        lock (InviteCodeRandom)
+        {
+            for (int i = 0; i < length; i++)
+            {
+                chars[i] = InviteCodeChars[InviteCodeRandom.Next(InviteCodeChars.Length)];
+            }
+        }
+        return new string(chars);
+    }
 }
 
