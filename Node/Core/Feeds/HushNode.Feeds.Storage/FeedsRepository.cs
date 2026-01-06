@@ -40,13 +40,14 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
         string publicSigningAddress,
         BlockIndex blockIndex)
     {
-        // Note: For group feeds, we use CreatedAtBlock for the filter.
-        // Unlike regular feeds (which have BlockIndex updated on activity),
-        // GroupFeed.CreatedAtBlock is static. For proper incremental sync,
-        // we'd need to track participant join dates.
-        // For now, we return all groups where:
+        // For group feeds, we use the participant's JoinedAtBlock for the filter.
+        // This ensures that when a user is added to an existing group, they will
+        // see the group in their next sync (since JoinedAtBlock >= blockIndex).
+        //
+        // The query returns groups where:
         // 1. User is an active participant (not left, not banned, not blocked)
-        // 2. Group was created after the requested block index
+        // 2. User's JoinedAtBlock is greater than the requested block index
+        //    (meaning they joined after the client's last sync position)
         //
         // EF Core translates BlockIndex comparisons via the value converter,
         // so we use the BlockIndex object directly (not .Value).
@@ -60,8 +61,8 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                     p.ParticipantPublicAddress == publicSigningAddress &&
                     p.LeftAtBlock == null &&
                     p.ParticipantType != ParticipantType.Banned &&
-                    p.ParticipantType != ParticipantType.Blocked) &&
-                g.CreatedAtBlock > blockIndex)
+                    p.ParticipantType != ParticipantType.Blocked &&
+                    p.JoinedAtBlock > blockIndex))
             .ToListAsync();
     }
 
