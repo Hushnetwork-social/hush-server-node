@@ -92,10 +92,19 @@ public class FeedsStorageService(
         // Get Group feeds from GroupFeeds table (separate participant tracking)
         var groupFeeds = await repository.RetrieveGroupFeedsForAddress(publicSigningAddress, blockIndex);
 
+        // Get Group feeds where the user has left (for viewing message history)
+        // These are always returned regardless of blockIndex since they're historical
+        var leftGroupFeeds = await repository.RetrieveLeftGroupFeedsForAddress(publicSigningAddress);
+
+        // Combine active and left group feeds, avoiding duplicates
+        var activeGroupFeedIds = groupFeeds.Select(g => g.FeedId).ToHashSet();
+        var uniqueLeftGroupFeeds = leftGroupFeeds.Where(g => !activeGroupFeedIds.Contains(g.FeedId));
+
         // Convert GroupFeed to Feed for consistent API return type
         var groupFeedsAsFeed = groupFeeds.Select(g => ConvertGroupFeedToFeed(g, publicSigningAddress));
+        var leftGroupFeedsAsFeed = uniqueLeftGroupFeeds.Select(g => ConvertGroupFeedToFeed(g, publicSigningAddress));
 
-        return feeds.Concat(groupFeedsAsFeed);
+        return feeds.Concat(groupFeedsAsFeed).Concat(leftGroupFeedsAsFeed);
     }
 
     /// <summary>
@@ -265,6 +274,34 @@ public class FeedsStorageService(
         await writableUnitOfWork.CommitAsync();
     }
 
+    public async Task UpdateParticipantBanAsync(FeedId feedId, string publicAddress, BlockIndex bannedAtBlock)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .UpdateParticipantBanAsync(feedId, publicAddress, bannedAtBlock);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
+    public async Task UpdateParticipantUnbanAsync(FeedId feedId, string publicAddress, BlockIndex rejoinedAtBlock)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .UpdateParticipantUnbanAsync(feedId, publicAddress, rejoinedAtBlock);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
+    public async Task<bool> IsBannedAsync(FeedId feedId, string publicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .IsBannedAsync(feedId, publicAddress);
+
     public async Task<GroupFeedParticipantEntity?> GetParticipantWithHistoryAsync(FeedId feedId, string publicAddress) =>
         await this._unitOfWorkProvider
             .CreateReadOnly()
@@ -276,6 +313,12 @@ public class FeedsStorageService(
             .CreateReadOnly()
             .GetRepository<IFeedsRepository>()
             .GetActiveParticipantsAsync(feedId);
+
+    public async Task<IReadOnlyList<GroupFeedParticipantEntity>> GetAllParticipantsAsync(FeedId feedId) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetAllParticipantsAsync(feedId);
 
     public async Task AddKeyGenerationAsync(FeedId feedId, GroupFeedKeyGenerationEntity keyGeneration)
     {

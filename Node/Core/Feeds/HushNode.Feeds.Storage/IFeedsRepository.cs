@@ -26,6 +26,12 @@ public interface IFeedsRepository : IRepository
     /// </summary>
     Task<IEnumerable<GroupFeed>> RetrieveGroupFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex);
 
+    /// <summary>
+    /// Retrieves Group feeds where the user has left (LeftAtBlock != null) but was once a member.
+    /// These feeds are returned so users can still view their message history after leaving.
+    /// </summary>
+    Task<IEnumerable<GroupFeed>> RetrieveLeftGroupFeedsForAddress(string publicSigningAddress);
+
     Task<Feed?> GetFeedByIdAsync(FeedId feedId);
 
     /// <summary>
@@ -102,6 +108,22 @@ public interface IFeedsRepository : IRepository
     Task UpdateParticipantRejoinAsync(FeedId feedId, string publicAddress, BlockIndex joinedAtBlock, ParticipantType participantType);
 
     /// <summary>
+    /// Update participant status when they are banned (set LeftAtBlock, LastLeaveBlock, and ParticipantType to Banned).
+    /// </summary>
+    Task UpdateParticipantBanAsync(FeedId feedId, string publicAddress, BlockIndex bannedAtBlock);
+
+    /// <summary>
+    /// Update participant status when they are unbanned (clear LeftAtBlock, update JoinedAtBlock, set ParticipantType to Member).
+    /// </summary>
+    Task UpdateParticipantUnbanAsync(FeedId feedId, string publicAddress, BlockIndex rejoinedAtBlock);
+
+    /// <summary>
+    /// Check if a user is banned from a group feed.
+    /// Returns true if the user exists, has ParticipantType.Banned, and LeftAtBlock is set.
+    /// </summary>
+    Task<bool> IsBannedAsync(FeedId feedId, string publicAddress);
+
+    /// <summary>
     /// Get a participant including those who have left (for cooldown checking).
     /// Unlike GetGroupFeedParticipantAsync, this returns participants regardless of LeftAtBlock.
     /// </summary>
@@ -112,6 +134,12 @@ public interface IFeedsRepository : IRepository
     /// Used for key rotation to know who should receive the new key.
     /// </summary>
     Task<IReadOnlyList<GroupFeedParticipantEntity>> GetActiveParticipantsAsync(FeedId feedId);
+
+    /// <summary>
+    /// Get all participants in a group (including those who left or were banned).
+    /// Used for displaying historical membership events in the chat.
+    /// </summary>
+    Task<IReadOnlyList<GroupFeedParticipantEntity>> GetAllParticipantsAsync(FeedId feedId);
 
     /// <summary>
     /// Add a new key generation with encrypted keys to a group feed.

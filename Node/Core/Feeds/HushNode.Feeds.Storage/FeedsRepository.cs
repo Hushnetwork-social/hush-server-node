@@ -66,6 +66,24 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .ToListAsync();
     }
 
+    public async Task<IEnumerable<GroupFeed>> RetrieveLeftGroupFeedsForAddress(string publicSigningAddress)
+    {
+        // Retrieve group feeds where the user has left (LeftAtBlock != null).
+        // This allows users to still see their message history after leaving a group.
+        // We don't filter by blockIndex since these are historical feeds.
+        return await this.Context.GroupFeeds
+            .Include(g => g.Participants)
+            .Include(g => g.KeyGenerations)
+                .ThenInclude(kg => kg.EncryptedKeys)
+            .Where(g =>
+                !g.IsDeleted &&
+                g.Participants.Any(p =>
+                    p.ParticipantPublicAddress == publicSigningAddress &&
+                    p.LeftAtBlock != null && // User has left
+                    p.ParticipantType != ParticipantType.Banned)) // Banned users should not see the group
+            .ToListAsync();
+    }
+
     public async Task<Feed?> GetFeedByIdAsync(FeedId feedId) =>
         await this.Context.Feeds
             .Include(x => x.Participants)
@@ -139,14 +157,14 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .AnyAsync(p =>
                 p.FeedId == feedId &&
                 p.ParticipantPublicAddress == publicAddress &&
-                p.ParticipantType == ParticipantType.Admin &&
+                (p.ParticipantType == ParticipantType.Admin || p.ParticipantType == ParticipantType.Owner) &&
                 p.LeftAtBlock == null);
 
     public async Task<int> GetAdminCountAsync(FeedId feedId) =>
         await this.Context.GroupFeedParticipants
             .CountAsync(p =>
                 p.FeedId == feedId &&
-                p.ParticipantType == ParticipantType.Admin &&
+                (p.ParticipantType == ParticipantType.Admin || p.ParticipantType == ParticipantType.Owner) &&
                 p.LeftAtBlock == null);
 
     // ===== Group Feed Metadata Operations (FEAT-009 Phase 4) =====
@@ -201,6 +219,34 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 .SetProperty(p => p.ParticipantType, participantType));
     }
 
+    public async Task UpdateParticipantBanAsync(FeedId feedId, string publicAddress, BlockIndex bannedAtBlock)
+    {
+        await this.Context.GroupFeedParticipants
+            .Where(p => p.FeedId == feedId && p.ParticipantPublicAddress == publicAddress)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(p => p.ParticipantType, ParticipantType.Banned)
+                .SetProperty(p => p.LeftAtBlock, bannedAtBlock)
+                .SetProperty(p => p.LastLeaveBlock, bannedAtBlock));
+    }
+
+    public async Task UpdateParticipantUnbanAsync(FeedId feedId, string publicAddress, BlockIndex rejoinedAtBlock)
+    {
+        await this.Context.GroupFeedParticipants
+            .Where(p => p.FeedId == feedId && p.ParticipantPublicAddress == publicAddress)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(p => p.ParticipantType, ParticipantType.Member)
+                .SetProperty(p => p.LeftAtBlock, (BlockIndex?)null)
+                .SetProperty(p => p.JoinedAtBlock, rejoinedAtBlock));
+    }
+
+    public async Task<bool> IsBannedAsync(FeedId feedId, string publicAddress) =>
+        await this.Context.GroupFeedParticipants
+            .AnyAsync(p =>
+                p.FeedId == feedId &&
+                p.ParticipantPublicAddress == publicAddress &&
+                p.ParticipantType == ParticipantType.Banned &&
+                p.LeftAtBlock != null);
+
     public async Task<GroupFeedParticipantEntity?> GetParticipantWithHistoryAsync(FeedId feedId, string publicAddress) =>
         await this.Context.GroupFeedParticipants
             .FirstOrDefaultAsync(p =>
@@ -213,6 +259,11 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 p.FeedId == feedId &&
                 p.LeftAtBlock == null &&
                 p.ParticipantType != ParticipantType.Banned)
+            .ToListAsync();
+
+    public async Task<IReadOnlyList<GroupFeedParticipantEntity>> GetAllParticipantsAsync(FeedId feedId) =>
+        await this.Context.GroupFeedParticipants
+            .Where(p => p.FeedId == feedId)
             .ToListAsync();
 
     public async Task AddKeyGenerationAsync(FeedId feedId, GroupFeedKeyGenerationEntity keyGeneration)

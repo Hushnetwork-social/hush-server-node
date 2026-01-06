@@ -16,9 +16,23 @@ service HushFeed {
   // Group Feed Query Operations
   rpc GetGroupMembers (GetGroupMembersRequest) returns (GetGroupMembersResponse);
   rpc GetKeyGenerations (GetKeyGenerationsRequest) returns (GetKeyGenerationsResponse);
+  rpc GetGroupFeed (GetGroupFeedRequest) returns (GetGroupFeedResponse);
+
+  // Group Feed Creation & Membership Operations
+  rpc CreateGroupFeed (NewGroupFeedRequest) returns (NewGroupFeedResponse);
+  rpc JoinGroupFeed (JoinGroupFeedRequest) returns (JoinGroupFeedResponse);
+  rpc LeaveGroupFeed (LeaveGroupFeedRequest) returns (LeaveGroupFeedResponse);
 
   // Group Feed Admin Operations
   rpc AddMemberToGroupFeed (AddMemberToGroupFeedRequest) returns (AddMemberToGroupFeedResponse);
+  rpc BlockMember (BlockMemberRequest) returns (BlockMemberResponse);
+  rpc UnblockMember (UnblockMemberRequest) returns (UnblockMemberResponse);
+  rpc BanFromGroupFeed (BanFromGroupFeedRequest) returns (BanFromGroupFeedResponse);
+  rpc UnbanFromGroupFeed (UnbanFromGroupFeedRequest) returns (UnbanFromGroupFeedResponse);
+  rpc PromoteToAdmin (PromoteToAdminRequest) returns (PromoteToAdminResponse);
+  rpc UpdateGroupFeedTitle (UpdateGroupFeedTitleRequest) returns (UpdateGroupFeedTitleResponse);
+  rpc UpdateGroupFeedDescription (UpdateGroupFeedDescriptionRequest) returns (UpdateGroupFeedDescriptionResponse);
+  rpc DeleteGroupFeed (DeleteGroupFeedRequest) returns (DeleteGroupFeedResponse);
 
   /*
   rpc CreatePersonalFeed (CreatePersonalFeedRequest) returns (CreatePersonalFeedReply);
@@ -132,6 +146,8 @@ message GroupFeedMemberProto {
   string PublicAddress = 1;
   int32 ParticipantType = 2;  // Maps to ParticipantType enum
   int64 JoinedAtBlock = 3;
+  optional int64 LeftAtBlock = 4;  // Set if member has left or been banned
+  optional string DisplayName = 5;  // Display name at time of query
 }
 
 // --- Task 3.1: Group Feed Creation ---
@@ -312,12 +328,14 @@ message GetGroupFeedRequest {
 }
 
 message GetGroupFeedResponse {
-  string FeedId = 1;
-  string Title = 2;
-  string Description = 3;
-  bool IsPublic = 4;
-  int32 MemberCount = 5;
-  int32 CurrentKeyGeneration = 6;
+  bool Success = 1;
+  string Message = 2;
+  string FeedId = 3;
+  string Title = 4;
+  string Description = 5;
+  bool IsPublic = 6;
+  int32 MemberCount = 7;
+  int32 CurrentKeyGeneration = 8;
 }
 
 message GetGroupMembersRequest {
