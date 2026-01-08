@@ -9,8 +9,7 @@ namespace HushNode.Feeds;
 /// <summary>
 /// Content handler for DeleteGroupFeed transactions.
 /// Validates that:
-/// - Sender is an admin in the group
-/// - Sender is the LAST admin (only admin remaining)
+/// - Sender is an admin in the group (any admin can delete)
 /// - Group exists and is not already deleted
 /// </summary>
 public class DeleteGroupFeedContentHandler(
@@ -49,18 +48,11 @@ public class DeleteGroupFeedContentHandler(
             return null!;
         }
 
-        // Validation: Sender must be admin
+        // Validation: Sender must be admin (any admin can delete)
         var isAdmin = this._feedsStorageService.IsAdminAsync(payload.FeedId, adminAddress).GetAwaiter().GetResult();
         if (!isAdmin)
         {
             return null!;
-        }
-
-        // Validation: Sender must be the LAST admin (only admin remaining)
-        var adminCount = this._feedsStorageService.GetAdminCountAsync(payload.FeedId).GetAwaiter().GetResult();
-        if (adminCount > 1)
-        {
-            return null!; // Cannot delete while other admins exist
         }
 
         // All validations passed - sign the transaction

@@ -651,7 +651,7 @@ public class FeedsGrpcService(
             var userAddress = request.JoiningUserPublicAddress ?? string.Empty;
             var userEncryptKey = request.HasJoiningUserPublicEncryptKey ? request.JoiningUserPublicEncryptKey : null;
 
-            // Check if group exists and is public
+            // Check if group exists, is not deleted, and is public
             var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
             if (groupFeed == null)
             {
@@ -659,6 +659,15 @@ public class FeedsGrpcService(
                 {
                     Success = false,
                     Message = "Group feed not found"
+                };
+            }
+
+            if (groupFeed.IsDeleted)
+            {
+                return new JoinGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "This group has been deleted"
                 };
             }
 
@@ -769,6 +778,26 @@ public class FeedsGrpcService(
             var feedId = FeedIdHandler.CreateFromString(request.FeedId);
             var userAddress = request.LeavingUserPublicAddress ?? string.Empty;
 
+            // Check if group is deleted - all actions are frozen after deletion
+            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
+            if (groupFeed == null)
+            {
+                return new LeaveGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "Group not found"
+                };
+            }
+
+            if (groupFeed.IsDeleted)
+            {
+                return new LeaveGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "This group has been deleted. All actions are frozen."
+                };
+            }
+
             // Check if user is a member
             var participant = await this._feedsStorageService.GetParticipantWithHistoryAsync(feedId, userAddress);
             if (participant == null || participant.LeftAtBlock != null)
@@ -845,6 +874,26 @@ public class FeedsGrpcService(
             var adminAddress = request.AdminPublicAddress ?? string.Empty;
             var newMemberAddress = request.NewMemberPublicAddress ?? string.Empty;
             var newMemberEncryptKey = request.NewMemberPublicEncryptKey ?? string.Empty;
+
+            // Step 0: Check if group is deleted - all actions are frozen after deletion
+            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
+            if (groupFeed == null)
+            {
+                return new AddMemberToGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "Group not found"
+                };
+            }
+
+            if (groupFeed.IsDeleted)
+            {
+                return new AddMemberToGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "This group has been deleted. All actions are frozen."
+                };
+            }
 
             // Step 1: Validate admin has permission
             var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
@@ -1087,6 +1136,26 @@ public class FeedsGrpcService(
             var adminAddress = request.AdminPublicAddress ?? string.Empty;
             var blockedUserAddress = request.BlockedUserPublicAddress ?? string.Empty;
 
+            // Step 0: Check if group is deleted - all actions are frozen after deletion
+            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
+            if (groupFeed == null)
+            {
+                return new BlockMemberResponse
+                {
+                    Success = false,
+                    Message = "Group not found"
+                };
+            }
+
+            if (groupFeed.IsDeleted)
+            {
+                return new BlockMemberResponse
+                {
+                    Success = false,
+                    Message = "This group has been deleted. All actions are frozen."
+                };
+            }
+
             // Step 1: Validate admin has permission
             var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
             if (!isAdmin)
@@ -1159,6 +1228,26 @@ public class FeedsGrpcService(
             var adminAddress = request.AdminPublicAddress ?? string.Empty;
             var unblockedUserAddress = request.UnblockedUserPublicAddress ?? string.Empty;
 
+            // Step 0: Check if group is deleted - all actions are frozen after deletion
+            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
+            if (groupFeed == null)
+            {
+                return new UnblockMemberResponse
+                {
+                    Success = false,
+                    Message = "Group not found"
+                };
+            }
+
+            if (groupFeed.IsDeleted)
+            {
+                return new UnblockMemberResponse
+                {
+                    Success = false,
+                    Message = "This group has been deleted. All actions are frozen."
+                };
+            }
+
             // Step 1: Validate admin has permission
             var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
             if (!isAdmin)
@@ -1216,6 +1305,26 @@ public class FeedsGrpcService(
             var feedId = FeedIdHandler.CreateFromString(request.FeedId);
             var adminAddress = request.AdminPublicAddress ?? string.Empty;
             var bannedUserAddress = request.BannedUserPublicAddress ?? string.Empty;
+
+            // Step 0: Check if group is deleted - all actions are frozen after deletion
+            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
+            if (groupFeed == null)
+            {
+                return new BanFromGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "Group not found"
+                };
+            }
+
+            if (groupFeed.IsDeleted)
+            {
+                return new BanFromGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "This group has been deleted. All actions are frozen."
+                };
+            }
 
             // Step 1: Validate admin has permission
             var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
@@ -1297,6 +1406,26 @@ public class FeedsGrpcService(
             var adminAddress = request.AdminPublicAddress ?? string.Empty;
             var unbannedUserAddress = request.UnbannedUserPublicAddress ?? string.Empty;
 
+            // Step 0: Check if group is deleted - all actions are frozen after deletion
+            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
+            if (groupFeed == null)
+            {
+                return new UnbanFromGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "Group not found"
+                };
+            }
+
+            if (groupFeed.IsDeleted)
+            {
+                return new UnbanFromGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "This group has been deleted. All actions are frozen."
+                };
+            }
+
             // Step 1: Validate admin has permission
             var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
             if (!isAdmin)
@@ -1369,6 +1498,26 @@ public class FeedsGrpcService(
             var feedId = FeedIdHandler.CreateFromString(request.FeedId);
             var adminAddress = request.AdminPublicAddress ?? string.Empty;
             var memberAddress = request.MemberPublicAddress ?? string.Empty;
+
+            // Step 0: Check if group is deleted - all actions are frozen after deletion
+            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
+            if (groupFeed == null)
+            {
+                return new PromoteToAdminResponse
+                {
+                    Success = false,
+                    Message = "Group not found"
+                };
+            }
+
+            if (groupFeed.IsDeleted)
+            {
+                return new PromoteToAdminResponse
+                {
+                    Success = false,
+                    Message = "This group has been deleted. All actions are frozen."
+                };
+            }
 
             // Step 1: Validate requester is admin/owner
             var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
@@ -1443,6 +1592,26 @@ public class FeedsGrpcService(
             var adminAddress = request.AdminPublicAddress ?? string.Empty;
             var newTitle = request.NewTitle ?? string.Empty;
 
+            // Step 0: Check if group is deleted - all actions are frozen after deletion
+            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
+            if (groupFeed == null)
+            {
+                return new UpdateGroupFeedTitleResponse
+                {
+                    Success = false,
+                    Message = "Group not found"
+                };
+            }
+
+            if (groupFeed.IsDeleted)
+            {
+                return new UpdateGroupFeedTitleResponse
+                {
+                    Success = false,
+                    Message = "This group has been deleted. All actions are frozen."
+                };
+            }
+
             // Step 1: Validate admin has permission
             var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
             if (!isAdmin)
@@ -1510,6 +1679,26 @@ public class FeedsGrpcService(
             var adminAddress = request.AdminPublicAddress ?? string.Empty;
             var newDescription = request.NewDescription ?? string.Empty;
 
+            // Step 0: Check if group is deleted - all actions are frozen after deletion
+            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
+            if (groupFeed == null)
+            {
+                return new UpdateGroupFeedDescriptionResponse
+                {
+                    Success = false,
+                    Message = "Group not found"
+                };
+            }
+
+            if (groupFeed.IsDeleted)
+            {
+                return new UpdateGroupFeedDescriptionResponse
+                {
+                    Success = false,
+                    Message = "This group has been deleted. All actions are frozen."
+                };
+            }
+
             // Step 1: Validate admin has permission
             var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
             if (!isAdmin)
@@ -1566,6 +1755,26 @@ public class FeedsGrpcService(
         {
             var feedId = FeedIdHandler.CreateFromString(request.FeedId);
             var adminAddress = request.AdminPublicAddress ?? string.Empty;
+
+            // Step 0: Check if group is deleted - all actions are frozen after deletion
+            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
+            if (groupFeed == null)
+            {
+                return new UpdateGroupFeedSettingsResponse
+                {
+                    Success = false,
+                    Message = "Group not found"
+                };
+            }
+
+            if (groupFeed.IsDeleted)
+            {
+                return new UpdateGroupFeedSettingsResponse
+                {
+                    Success = false,
+                    Message = "This group has been deleted. All actions are frozen."
+                };
+            }
 
             // Step 1: Validate admin has permission
             var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
@@ -1637,19 +1846,43 @@ public class FeedsGrpcService(
             var feedId = FeedIdHandler.CreateFromString(request.FeedId);
             var adminAddress = request.AdminPublicAddress ?? string.Empty;
 
-            // Step 1: Validate requester is the owner
-            var participant = await this._feedsStorageService.GetParticipantWithHistoryAsync(feedId, adminAddress);
-            if (participant == null || participant.ParticipantType != ParticipantType.Owner)
+            // Step 1: Check if group exists and is not already deleted
+            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
+            if (groupFeed == null)
             {
                 return new DeleteGroupFeedResponse
                 {
                     Success = false,
-                    Message = "Only the group owner can delete the group"
+                    Message = "Group not found"
                 };
             }
 
-            // Step 2: Delete the group (soft delete - marks as deleted)
+            if (groupFeed.IsDeleted)
+            {
+                return new DeleteGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "Group has already been deleted"
+                };
+            }
+
+            // Step 2: Validate requester is an admin (any admin can delete)
+            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
+            if (!isAdmin)
+            {
+                return new DeleteGroupFeedResponse
+                {
+                    Success = false,
+                    Message = "Only administrators can delete the group"
+                };
+            }
+
+            // Step 3: Delete the group (soft delete - marks as deleted)
             await this._feedsStorageService.MarkGroupFeedDeletedAsync(feedId);
+
+            // Step 4: Update feed BlockIndex to notify clients
+            var currentBlock = this._blockchainCache.LastBlockIndex;
+            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, currentBlock);
 
             Console.WriteLine($"[DeleteGroupFeed] Success");
             return new DeleteGroupFeedResponse

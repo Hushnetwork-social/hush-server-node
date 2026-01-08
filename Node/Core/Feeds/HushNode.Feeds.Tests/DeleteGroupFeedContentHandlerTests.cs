@@ -48,9 +48,9 @@ public class DeleteGroupFeedContentHandlerTests
     #region Delete Validation Tests
 
     [Fact]
-    public void ValidateAndSign_WithLastAdminDeleting_ShouldSucceed()
+    public void ValidateAndSign_WithAdminDeleting_ShouldSucceed()
     {
-        // Arrange
+        // Arrange - Any admin can delete the group
         var mocker = new AutoMocker();
         MockServices.ConfigureCredentialsProvider(mocker);
 
@@ -73,9 +73,9 @@ public class DeleteGroupFeedContentHandlerTests
     }
 
     [Fact]
-    public void ValidateAndSign_WithMultipleAdmins_ShouldReturnNull()
+    public void ValidateAndSign_WithMultipleAdmins_ShouldSucceed()
     {
-        // Arrange - Cannot delete when other admins exist
+        // Arrange - Any admin can delete, even when multiple admins exist
         var mocker = new AutoMocker();
         MockServices.ConfigureCredentialsProvider(mocker);
 
@@ -94,7 +94,7 @@ public class DeleteGroupFeedContentHandlerTests
         var result = handler.ValidateAndSign(transaction);
 
         // Assert
-        result.Should().BeNull();
+        result.Should().NotBeNull();
     }
 
     [Fact]
