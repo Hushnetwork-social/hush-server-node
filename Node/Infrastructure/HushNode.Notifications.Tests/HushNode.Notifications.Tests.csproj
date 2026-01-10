@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HushNode.Notifications\HushNode.Notifications.csproj" />
+    <ProjectReference Include="..\HushNode.Notifications.gRPC\HushNode.Notifications.gRPC.csproj" />
     <ProjectReference Include="..\..\Core\Feeds\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
     <ProjectReference Include="..\..\Core\Identity\HushNode.Identity\HushNode.Identity.csproj" />
   </ItemGroup>
