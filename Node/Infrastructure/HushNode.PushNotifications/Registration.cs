@@ -1,4 +1,5 @@
 using HushNode.Interfaces;
+using HushNode.PushNotifications.Providers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,6 +51,12 @@ public static class Registration
 
         // Register storage service
         services.AddTransient<IDeviceTokenStorageService, DeviceTokenStorageService>();
+
+        // Register FCM provider (singleton - Firebase SDK is thread-safe)
+        services.AddSingleton<IFcmProvider, FcmProvider>();
+
+        // Register push delivery service (transient - stateless service)
+        services.AddTransient<IPushDeliveryService, PushDeliveryService>();
 
         // Register background cleanup service
         services.AddHostedService<TokenCleanupService>();
