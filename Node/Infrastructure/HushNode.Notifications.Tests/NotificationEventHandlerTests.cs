@@ -429,6 +429,7 @@ public class NotificationEventHandlerTests
         SetupIdentityService(mocker, senderAddress, "Sender Name");
         SetupNotificationService(mocker);
         SetupUnreadTrackingService(mocker);
+        SetupConnectionTracker(mocker, participantAddress); // User is online - receives gRPC notification
 
         string? capturedPreview = null;
         mocker.GetMock<INotificationService>()
@@ -446,7 +447,7 @@ public class NotificationEventHandlerTests
         // Act
         await sut.HandleAsync(evt);
 
-        // Assert
+        // Assert - gRPC notifications for online users can include message preview
         capturedPreview.Should().NotBeNull();
         capturedPreview!.Length.Should().BeLessOrEqualTo(255);
         capturedPreview.Should().EndWith("...");
@@ -735,7 +736,7 @@ public class NotificationEventHandlerRoutingTests
         // Assert
         capturedPayload.Should().NotBeNull();
         capturedPayload!.Title.Should().Be(senderName);
-        capturedPayload.Body.Should().Be(messageContent);
+        capturedPayload.Body.Should().Be("New message"); // Privacy: generic message instead of content
         capturedPayload.FeedId.Should().Be(feedId.ToString());
         capturedPayload.Data.Should().ContainKey("type");
         capturedPayload.Data!["type"].Should().Be("new_message");
@@ -747,20 +748,20 @@ public class NotificationEventHandlerRoutingTests
 
     #endregion
 
-    #region Message Truncation Tests
+    #region Push Notification Privacy Tests
 
     [Fact]
-    public async Task HandleAsync_LongMessage_TruncatedTo100CharsForPush()
+    public async Task HandleAsync_PushNotification_UsesGenericMessageForPrivacy()
     {
         // Arrange
         var mocker = new AutoMocker();
         var feedId = new FeedId(Guid.NewGuid());
         var senderAddress = "sender-address";
         var recipientAddress = "recipient-address";
-        var longContent = new string('A', 150); // 150 characters
+        var encryptedContent = "7hRheBqPTNTLclyNj+goulPaqzbB7SXbioyl6..."; // Simulated encrypted content
 
         var feed = CreateFeed(feedId, senderAddress, recipientAddress);
-        var feedMessage = CreateFeedMessage(feedId, senderAddress, longContent);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress, encryptedContent);
 
         SetupFeedsStorageService(mocker, feed, groupFeed: null);
         SetupIdentityService(mocker, senderAddress, "Sender Name");
@@ -780,21 +781,21 @@ public class NotificationEventHandlerRoutingTests
         // Act
         await sut.HandleAsync(evt);
 
-        // Assert
+        // Assert - Push notifications should use generic "New message" for privacy
+        // (actual message content is encrypted and should not be sent via push)
         capturedPayload.Should().NotBeNull();
-        capturedPayload!.Body.Length.Should().BeLessOrEqualTo(100);
-        capturedPayload.Body.Should().EndWith("...");
+        capturedPayload!.Body.Should().Be("New message");
     }
 
     [Fact]
-    public async Task HandleAsync_ShortMessage_NotTruncatedForPush()
+    public async Task HandleAsync_PushNotification_DoesNotExposeMessageContent()
     {
         // Arrange
         var mocker = new AutoMocker();
         var feedId = new FeedId(Guid.NewGuid());
         var senderAddress = "sender-address";
         var recipientAddress = "recipient-address";
-        var shortContent = "Hello!";
+        var shortContent = "Hello!"; // Even short messages should not be exposed
 
         var feed = CreateFeed(feedId, senderAddress, recipientAddress);
         var feedMessage = CreateFeedMessage(feedId, senderAddress, shortContent);
@@ -817,9 +818,10 @@ public class NotificationEventHandlerRoutingTests
         // Act
         await sut.HandleAsync(evt);
 
-        // Assert
+        // Assert - Privacy: message content should not appear in push notification
         capturedPayload.Should().NotBeNull();
-        capturedPayload!.Body.Should().Be(shortContent);
+        capturedPayload!.Body.Should().NotContain(shortContent);
+        capturedPayload.Body.Should().Be("New message");
     }
 
     [Fact]

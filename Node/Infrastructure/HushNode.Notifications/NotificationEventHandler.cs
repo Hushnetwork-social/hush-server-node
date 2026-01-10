@@ -27,12 +27,6 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
     private readonly IPushDeliveryService _pushDeliveryService;
     private readonly ILogger<NotificationEventHandler> _logger;
 
-    /// <summary>
-    /// Maximum length for push notification message preview.
-    /// Shorter than gRPC (255) to fit mobile notification limits.
-    /// </summary>
-    private const int PushMessageMaxLength = 100;
-
     public NotificationEventHandler(
         INotificationService notificationService,
         IUnreadTrackingService unreadTrackingService,
@@ -194,16 +188,11 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
                     userIdTruncated,
                     feedId);
 
-                // Truncate message preview for push (100 chars vs 255 for gRPC)
-                var pushMessagePreview = TruncateMessage(messagePreview, PushMessageMaxLength);
-                if (string.IsNullOrEmpty(pushMessagePreview))
-                {
-                    pushMessagePreview = "New message";
-                }
-
+                // Use generic message for push notifications (privacy: don't send encrypted content)
+                // The actual message will be decrypted when user opens the app
                 var pushPayload = new PushPayload(
                     Title: senderName,
-                    Body: pushMessagePreview,
+                    Body: "New message",
                     FeedId: feedId,
                     Data: new Dictionary<string, string>
                     {
