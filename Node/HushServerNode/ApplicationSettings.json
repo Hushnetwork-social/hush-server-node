@@ -52,5 +52,11 @@
         "PrivateEncryptKey":     "3e91fbdb10e7c8ea35544b259db37805aa53ddf28f024042524a43ee4faa2fcf",
         "IsPublic": true,
         "Mnemonic": "parade sadness moral visual detect valid route rural top rally parent mountain wool brisk disorder people village erosion abandon great mass brother result random"
+    },
+
+    "Firebase": {
+        "ProjectId": "hushnetwork",
+        "ServiceAccountPath": "./secrets/firebase-sa.json",
+        "Enabled": true
     }
 }
