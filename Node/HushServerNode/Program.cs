@@ -19,6 +19,7 @@ using HushNode.Reactions;
 using HushNode.Reactions.gRPC;
 using HushNode.Caching;
 using HushNode.Notifications.gRPC;
+using HushNode.PushNotifications;
 
 namespace HushServerNode;
 
@@ -91,7 +92,8 @@ public class Program
             .RegisterHushNodeIndexing()
             .RegisterHushNodeMemPool()
             .RegisterInternalModuleIdentity()
-            .RegisterNotificationGrpc();
+            .RegisterNotificationGrpc()
+            .RegisterPushNotificationsModule();
 
         var app = builder.Build();
 

@@ -21,6 +21,7 @@
 <ItemGroup>
     <ProjectReference Include="..\HushNode.Notifications\HushNode.Notifications.csproj" />
     <ProjectReference Include="..\HushNode.Interfaces\HushNode.Interfaces.csproj" />
+    <ProjectReference Include="..\HushNode.PushNotifications\HushNode.PushNotifications.csproj" />
 </ItemGroup>
 
 </Project>

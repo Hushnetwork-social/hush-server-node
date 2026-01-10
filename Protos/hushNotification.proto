@@ -14,6 +14,11 @@ service HushNotification {
 
   // Get current unread counts for all feeds
   rpc GetUnreadCounts(GetUnreadCountsRequest) returns (GetUnreadCountsReply);
+
+  // Device Token Management (Push Notifications)
+  rpc RegisterDeviceToken(RegisterDeviceTokenRequest) returns (RegisterDeviceTokenResponse);
+  rpc UnregisterDeviceToken(UnregisterDeviceTokenRequest) returns (UnregisterDeviceTokenResponse);
+  rpc GetActiveDeviceTokens(GetActiveDeviceTokensRequest) returns (GetActiveDeviceTokensResponse);
 }
 
 // Subscribe request
@@ -67,4 +72,56 @@ message GetUnreadCountsRequest {
 
 message GetUnreadCountsReply {
   map<string, int32> Counts = 1;  // feedId -> unread count
+}
+
+// =====================================================
+// Device Token Management (Push Notifications)
+// =====================================================
+
+// Platform types for push notifications
+enum PushPlatform {
+  PUSH_PLATFORM_UNSPECIFIED = 0;
+  PUSH_PLATFORM_ANDROID = 1;
+  PUSH_PLATFORM_IOS = 2;
+  PUSH_PLATFORM_WEB = 3;
+}
+
+// Register a device token for push notifications
+message RegisterDeviceTokenRequest {
+  string UserId = 1;
+  PushPlatform Platform = 2;
+  string Token = 3;
+  string DeviceName = 4;  // Optional: device name for user reference
+}
+
+message RegisterDeviceTokenResponse {
+  bool Success = 1;
+  string Message = 2;  // Optional: error message if failed
+}
+
+// Unregister a device token (when user logs out or disables notifications)
+message UnregisterDeviceTokenRequest {
+  string UserId = 1;
+  string Token = 2;
+}
+
+message UnregisterDeviceTokenResponse {
+  bool Success = 1;
+  string Message = 2;  // Optional: error message if failed
+}
+
+// Get active device tokens for a user (internal use by push delivery service)
+message GetActiveDeviceTokensRequest {
+  string UserId = 1;
+}
+
+message GetActiveDeviceTokensResponse {
+  repeated DeviceTokenInfo Tokens = 1;
+}
+
+// Device token information
+message DeviceTokenInfo {
+  string Token = 1;
+  PushPlatform Platform = 2;
+  string DeviceName = 3;
 }

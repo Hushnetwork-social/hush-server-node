@@ -1,23 +1,27 @@
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using HushNode.PushNotifications;
+using HushNode.PushNotifications.Models;
 using ProtoTypes = HushNetwork.proto;
 using InternalModels = HushNode.Notifications.Models;
 
 namespace HushNode.Notifications.gRPC;
 
 /// <summary>
-/// gRPC service implementation for real-time notifications.
+/// gRPC service implementation for real-time notifications and device token management.
 /// Exposes notification functionality via gRPC server streaming.
 /// </summary>
 public class NotificationGrpcService(
     INotificationService notificationService,
     IUnreadTrackingService unreadTrackingService,
     IConnectionTracker connectionTracker,
+    IDeviceTokenStorageService deviceTokenStorageService,
     ILogger<NotificationGrpcService> logger) : ProtoTypes.HushNotification.HushNotificationBase
 {
     private readonly INotificationService _notificationService = notificationService;
     private readonly IUnreadTrackingService _unreadTrackingService = unreadTrackingService;
     private readonly IConnectionTracker _connectionTracker = connectionTracker;
+    private readonly IDeviceTokenStorageService _deviceTokenStorageService = deviceTokenStorageService;
     private readonly ILogger<NotificationGrpcService> _logger = logger;
 
     /// <summary>
@@ -148,6 +152,211 @@ public class NotificationGrpcService(
         }
     }
 
+    #region Device Token Management
+
+    /// <summary>
+    /// Registers a device token for push notifications.
+    /// Supports upsert behavior - updates if token already exists.
+    /// </summary>
+    public override async Task<ProtoTypes.RegisterDeviceTokenResponse> RegisterDeviceToken(
+        ProtoTypes.RegisterDeviceTokenRequest request,
+        ServerCallContext context)
+    {
+        // Validate required fields
+        if (string.IsNullOrWhiteSpace(request.UserId))
+        {
+            return new ProtoTypes.RegisterDeviceTokenResponse
+            {
+                Success = false,
+                Message = "User ID is required"
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Token))
+        {
+            return new ProtoTypes.RegisterDeviceTokenResponse
+            {
+                Success = false,
+                Message = "Token is required"
+            };
+        }
+
+        if (request.Platform == ProtoTypes.PushPlatform.Unspecified)
+        {
+            return new ProtoTypes.RegisterDeviceTokenResponse
+            {
+                Success = false,
+                Message = "Platform is required"
+            };
+        }
+
+        try
+        {
+            var platform = MapProtoPlatformToModel(request.Platform);
+            var success = await _deviceTokenStorageService.RegisterTokenAsync(
+                request.UserId,
+                platform,
+                request.Token,
+                string.IsNullOrWhiteSpace(request.DeviceName) ? null : request.DeviceName);
+
+            _logger.LogDebug(
+                "RegisterDeviceToken: UserId={UserId}, Platform={Platform}, Success={Success}",
+                request.UserId, platform, success);
+
+            return new ProtoTypes.RegisterDeviceTokenResponse
+            {
+                Success = success,
+                Message = success ? string.Empty : "Failed to register token"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error registering device token: UserId={UserId}, Platform={Platform}",
+                request.UserId, request.Platform);
+
+            return new ProtoTypes.RegisterDeviceTokenResponse
+            {
+                Success = false,
+                Message = "Internal error registering token"
+            };
+        }
+    }
+
+    /// <summary>
+    /// Unregisters (deactivates) a device token.
+    /// Operation is idempotent - unregistering non-existent token is not an error.
+    /// </summary>
+    public override async Task<ProtoTypes.UnregisterDeviceTokenResponse> UnregisterDeviceToken(
+        ProtoTypes.UnregisterDeviceTokenRequest request,
+        ServerCallContext context)
+    {
+        // Validate required fields
+        if (string.IsNullOrWhiteSpace(request.UserId))
+        {
+            return new ProtoTypes.UnregisterDeviceTokenResponse
+            {
+                Success = false,
+                Message = "User ID is required"
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Token))
+        {
+            return new ProtoTypes.UnregisterDeviceTokenResponse
+            {
+                Success = false,
+                Message = "Token is required"
+            };
+        }
+
+        try
+        {
+            var success = await _deviceTokenStorageService.UnregisterTokenAsync(
+                request.UserId,
+                request.Token);
+
+            _logger.LogDebug(
+                "UnregisterDeviceToken: UserId={UserId}, Success={Success}",
+                request.UserId, success);
+
+            return new ProtoTypes.UnregisterDeviceTokenResponse
+            {
+                Success = success,
+                Message = success ? string.Empty : "Failed to unregister token"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error unregistering device token: UserId={UserId}",
+                request.UserId);
+
+            return new ProtoTypes.UnregisterDeviceTokenResponse
+            {
+                Success = false,
+                Message = "Internal error unregistering token"
+            };
+        }
+    }
+
+    /// <summary>
+    /// Gets all active device tokens for a user.
+    /// Used internally by the push delivery service.
+    /// </summary>
+    public override async Task<ProtoTypes.GetActiveDeviceTokensResponse> GetActiveDeviceTokens(
+        ProtoTypes.GetActiveDeviceTokensRequest request,
+        ServerCallContext context)
+    {
+        var response = new ProtoTypes.GetActiveDeviceTokensResponse();
+
+        if (string.IsNullOrWhiteSpace(request.UserId))
+        {
+            return response; // Return empty response for invalid request
+        }
+
+        try
+        {
+            var tokens = await _deviceTokenStorageService.GetActiveTokensForUserAsync(request.UserId);
+
+            foreach (var token in tokens)
+            {
+                response.Tokens.Add(new ProtoTypes.DeviceTokenInfo
+                {
+                    Token = token.Token,
+                    Platform = MapModelPlatformToProto(token.Platform),
+                    DeviceName = token.DeviceName ?? string.Empty
+                });
+            }
+
+            _logger.LogDebug(
+                "GetActiveDeviceTokens: UserId={UserId}, TokenCount={TokenCount}",
+                request.UserId, response.Tokens.Count);
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error getting active device tokens: UserId={UserId}",
+                request.UserId);
+
+            return response; // Return empty response on error
+        }
+    }
+
+    /// <summary>
+    /// Maps proto PushPlatform enum to model PushPlatform enum.
+    /// </summary>
+    private static PushPlatform MapProtoPlatformToModel(ProtoTypes.PushPlatform protoPlatform)
+    {
+        return protoPlatform switch
+        {
+            ProtoTypes.PushPlatform.Android => PushPlatform.Android,
+            ProtoTypes.PushPlatform.Ios => PushPlatform.iOS,
+            ProtoTypes.PushPlatform.Web => PushPlatform.Web,
+            _ => PushPlatform.Unknown
+        };
+    }
+
+    /// <summary>
+    /// Maps model PushPlatform enum to proto PushPlatform enum.
+    /// </summary>
+    private static ProtoTypes.PushPlatform MapModelPlatformToProto(PushPlatform modelPlatform)
+    {
+        return modelPlatform switch
+        {
+            PushPlatform.Android => ProtoTypes.PushPlatform.Android,
+            PushPlatform.iOS => ProtoTypes.PushPlatform.Ios,
+            PushPlatform.Web => ProtoTypes.PushPlatform.Web,
+            _ => ProtoTypes.PushPlatform.Unspecified
+        };
+    }
+
+    #endregion
+
+    #region Internal Event Mapping
+
     /// <summary>
     /// Maps internal FeedEvent model to proto FeedEvent message.
     /// </summary>
@@ -188,4 +397,6 @@ public class NotificationGrpcService(
             _ => ProtoTypes.EventType.Unspecified
         };
     }
+
+    #endregion
 }

@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Grpc.Core;
 using HushNode.Notifications.gRPC;
+using HushNode.PushNotifications;
+using HushNode.PushNotifications.Models;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.AutoMock;
@@ -250,6 +252,456 @@ public class NotificationGrpcServiceTests
         capturedConnectionId.Should().NotBeNullOrEmpty();
         Guid.TryParse(capturedConnectionId, out _).Should().BeTrue(
             "Connection ID should be a valid GUID string");
+    }
+
+    #endregion
+
+    #region RegisterDeviceToken Tests
+
+    [Fact]
+    public async Task RegisterDeviceToken_WithValidRequest_ReturnsSuccess()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Setup(x => x.RegisterTokenAsync(
+                TestUserId,
+                PushPlatform.Android,
+                "test-fcm-token",
+                "Test Device"))
+            .ReturnsAsync(true);
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.RegisterDeviceTokenRequest
+        {
+            UserId = TestUserId,
+            Platform = ProtoTypes.PushPlatform.Android,
+            Token = "test-fcm-token",
+            DeviceName = "Test Device"
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.RegisterDeviceToken(request, context);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Message.Should().BeEmpty();
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Verify(x => x.RegisterTokenAsync(
+                TestUserId,
+                PushPlatform.Android,
+                "test-fcm-token",
+                "Test Device"), Times.Once);
+    }
+
+    [Fact]
+    public async Task RegisterDeviceToken_WithEmptyUserId_ReturnsFailure()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.RegisterDeviceTokenRequest
+        {
+            UserId = "",
+            Platform = ProtoTypes.PushPlatform.Android,
+            Token = "test-fcm-token"
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.RegisterDeviceToken(request, context);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("User ID is required");
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Verify(x => x.RegisterTokenAsync(
+                It.IsAny<string>(),
+                It.IsAny<PushPlatform>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RegisterDeviceToken_WithEmptyToken_ReturnsFailure()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.RegisterDeviceTokenRequest
+        {
+            UserId = TestUserId,
+            Platform = ProtoTypes.PushPlatform.Android,
+            Token = ""
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.RegisterDeviceToken(request, context);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("Token is required");
+    }
+
+    [Fact]
+    public async Task RegisterDeviceToken_WithUnspecifiedPlatform_ReturnsFailure()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.RegisterDeviceTokenRequest
+        {
+            UserId = TestUserId,
+            Platform = ProtoTypes.PushPlatform.Unspecified,
+            Token = "test-fcm-token"
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.RegisterDeviceToken(request, context);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("Platform is required");
+    }
+
+    [Fact]
+    public async Task RegisterDeviceToken_WhenStorageServiceThrows_ReturnsFailure()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Setup(x => x.RegisterTokenAsync(
+                It.IsAny<string>(),
+                It.IsAny<PushPlatform>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
+            .ThrowsAsync(new Exception("Database error"));
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.RegisterDeviceTokenRequest
+        {
+            UserId = TestUserId,
+            Platform = ProtoTypes.PushPlatform.Android,
+            Token = "test-fcm-token"
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.RegisterDeviceToken(request, context);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("Internal error registering token");
+    }
+
+    [Fact]
+    public async Task RegisterDeviceToken_MapsIosPlatformCorrectly()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        PushPlatform? capturedPlatform = null;
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Setup(x => x.RegisterTokenAsync(
+                It.IsAny<string>(),
+                It.IsAny<PushPlatform>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
+            .Callback<string, PushPlatform, string, string?>((_, p, _, _) => capturedPlatform = p)
+            .ReturnsAsync(true);
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.RegisterDeviceTokenRequest
+        {
+            UserId = TestUserId,
+            Platform = ProtoTypes.PushPlatform.Ios,
+            Token = "test-apns-token"
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        await service.RegisterDeviceToken(request, context);
+
+        // Assert
+        capturedPlatform.Should().Be(PushPlatform.iOS);
+    }
+
+    [Fact]
+    public async Task RegisterDeviceToken_MapsWebPlatformCorrectly()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        PushPlatform? capturedPlatform = null;
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Setup(x => x.RegisterTokenAsync(
+                It.IsAny<string>(),
+                It.IsAny<PushPlatform>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
+            .Callback<string, PushPlatform, string, string?>((_, p, _, _) => capturedPlatform = p)
+            .ReturnsAsync(true);
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.RegisterDeviceTokenRequest
+        {
+            UserId = TestUserId,
+            Platform = ProtoTypes.PushPlatform.Web,
+            Token = "test-web-token"
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        await service.RegisterDeviceToken(request, context);
+
+        // Assert
+        capturedPlatform.Should().Be(PushPlatform.Web);
+    }
+
+    #endregion
+
+    #region UnregisterDeviceToken Tests
+
+    [Fact]
+    public async Task UnregisterDeviceToken_WithValidRequest_ReturnsSuccess()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Setup(x => x.UnregisterTokenAsync(TestUserId, "test-fcm-token"))
+            .ReturnsAsync(true);
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.UnregisterDeviceTokenRequest
+        {
+            UserId = TestUserId,
+            Token = "test-fcm-token"
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.UnregisterDeviceToken(request, context);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Message.Should().BeEmpty();
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Verify(x => x.UnregisterTokenAsync(TestUserId, "test-fcm-token"), Times.Once);
+    }
+
+    [Fact]
+    public async Task UnregisterDeviceToken_WithEmptyUserId_ReturnsFailure()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.UnregisterDeviceTokenRequest
+        {
+            UserId = "",
+            Token = "test-fcm-token"
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.UnregisterDeviceToken(request, context);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("User ID is required");
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Verify(x => x.UnregisterTokenAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UnregisterDeviceToken_WithEmptyToken_ReturnsFailure()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.UnregisterDeviceTokenRequest
+        {
+            UserId = TestUserId,
+            Token = ""
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.UnregisterDeviceToken(request, context);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("Token is required");
+    }
+
+    [Fact]
+    public async Task UnregisterDeviceToken_WhenStorageServiceThrows_ReturnsFailure()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Setup(x => x.UnregisterTokenAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ThrowsAsync(new Exception("Database error"));
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.UnregisterDeviceTokenRequest
+        {
+            UserId = TestUserId,
+            Token = "test-fcm-token"
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.UnregisterDeviceToken(request, context);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("Internal error unregistering token");
+    }
+
+    #endregion
+
+    #region GetActiveDeviceTokens Tests
+
+    [Fact]
+    public async Task GetActiveDeviceTokens_WithValidUserId_ReturnsMappedTokens()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var tokens = new List<DeviceToken>
+        {
+            new() { Token = "token1", Platform = PushPlatform.Android, DeviceName = "Pixel 7" },
+            new() { Token = "token2", Platform = PushPlatform.iOS, DeviceName = "iPhone 14" }
+        };
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Setup(x => x.GetActiveTokensForUserAsync(TestUserId))
+            .ReturnsAsync(tokens);
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.GetActiveDeviceTokensRequest { UserId = TestUserId };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.GetActiveDeviceTokens(request, context);
+
+        // Assert
+        result.Tokens.Should().HaveCount(2);
+        result.Tokens[0].Token.Should().Be("token1");
+        result.Tokens[0].Platform.Should().Be(ProtoTypes.PushPlatform.Android);
+        result.Tokens[0].DeviceName.Should().Be("Pixel 7");
+        result.Tokens[1].Token.Should().Be("token2");
+        result.Tokens[1].Platform.Should().Be(ProtoTypes.PushPlatform.Ios);
+        result.Tokens[1].DeviceName.Should().Be("iPhone 14");
+    }
+
+    [Fact]
+    public async Task GetActiveDeviceTokens_WithEmptyUserId_ReturnsEmptyList()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.GetActiveDeviceTokensRequest { UserId = "" };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.GetActiveDeviceTokens(request, context);
+
+        // Assert
+        result.Tokens.Should().BeEmpty();
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Verify(x => x.GetActiveTokensForUserAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetActiveDeviceTokens_WithNoTokens_ReturnsEmptyList()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Setup(x => x.GetActiveTokensForUserAsync(TestUserId))
+            .ReturnsAsync(new List<DeviceToken>());
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.GetActiveDeviceTokensRequest { UserId = TestUserId };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.GetActiveDeviceTokens(request, context);
+
+        // Assert
+        result.Tokens.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetActiveDeviceTokens_WhenStorageServiceThrows_ReturnsEmptyList()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Setup(x => x.GetActiveTokensForUserAsync(It.IsAny<string>()))
+            .ThrowsAsync(new Exception("Database error"));
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.GetActiveDeviceTokensRequest { UserId = TestUserId };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.GetActiveDeviceTokens(request, context);
+
+        // Assert
+        result.Tokens.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetActiveDeviceTokens_MapsWebPlatformCorrectly()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var tokens = new List<DeviceToken>
+        {
+            new() { Token = "web-token", Platform = PushPlatform.Web, DeviceName = "Chrome Browser" }
+        };
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Setup(x => x.GetActiveTokensForUserAsync(TestUserId))
+            .ReturnsAsync(tokens);
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.GetActiveDeviceTokensRequest { UserId = TestUserId };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.GetActiveDeviceTokens(request, context);
+
+        // Assert
+        result.Tokens.Should().HaveCount(1);
+        result.Tokens[0].Platform.Should().Be(ProtoTypes.PushPlatform.Web);
+    }
+
+    [Fact]
+    public async Task GetActiveDeviceTokens_HandlesNullDeviceName()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var tokens = new List<DeviceToken>
+        {
+            new() { Token = "token1", Platform = PushPlatform.Android, DeviceName = null }
+        };
+        mocker.GetMock<IDeviceTokenStorageService>()
+            .Setup(x => x.GetActiveTokensForUserAsync(TestUserId))
+            .ReturnsAsync(tokens);
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.GetActiveDeviceTokensRequest { UserId = TestUserId };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.GetActiveDeviceTokens(request, context);
+
+        // Assert
+        result.Tokens.Should().HaveCount(1);
+        result.Tokens[0].DeviceName.Should().BeEmpty();
     }
 
     #endregion
