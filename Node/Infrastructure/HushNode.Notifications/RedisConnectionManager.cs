@@ -28,17 +28,17 @@ public class RedisConnectionManager : IDisposable
     /// <summary>
     /// Gets the Redis database for key-value operations.
     /// </summary>
-    public IDatabase Database => _connection.Value.GetDatabase();
+    public virtual IDatabase Database => _connection.Value.GetDatabase();
 
     /// <summary>
     /// Gets the Redis subscriber for pub/sub operations.
     /// </summary>
-    public ISubscriber Subscriber => _connection.Value.GetSubscriber();
+    public virtual ISubscriber Subscriber => _connection.Value.GetSubscriber();
 
     /// <summary>
     /// Gets the key prefix for all Redis keys.
     /// </summary>
-    public string KeyPrefix => _settings.InstanceName;
+    public virtual string KeyPrefix => _settings.InstanceName;
 
     /// <summary>
     /// Whether Redis is connected and available.
@@ -59,7 +59,7 @@ public class RedisConnectionManager : IDisposable
     /// <param name="userId">The user ID.</param>
     /// <param name="feedId">The feed ID.</param>
     /// <returns>The Redis key for this unread count.</returns>
-    public string GetUnreadKey(string userId, string feedId)
+    public virtual string GetUnreadKey(string userId, string feedId)
         => $"{_settings.InstanceName}unread:{userId}:{feedId}";
 
     /// <summary>
@@ -67,8 +67,23 @@ public class RedisConnectionManager : IDisposable
     /// </summary>
     /// <param name="userId">The user ID.</param>
     /// <returns>The Redis key pattern.</returns>
-    public string GetUnreadPattern(string userId)
+    public virtual string GetUnreadPattern(string userId)
         => $"{_settings.InstanceName}unread:{userId}:*";
+
+    /// <summary>
+    /// Gets the Redis key for user connections (SET of connection IDs).
+    /// </summary>
+    /// <param name="userId">The user ID.</param>
+    /// <returns>The Redis key for this user's connections.</returns>
+    public virtual string GetConnectionsKey(string userId)
+        => $"{_settings.InstanceName}connections:{userId}";
+
+    /// <summary>
+    /// Gets the pattern for scanning all connection keys.
+    /// </summary>
+    /// <returns>The Redis key pattern for all connection keys.</returns>
+    public virtual string GetConnectionsPattern()
+        => $"{_settings.InstanceName}connections:*";
 
     private ConnectionMultiplexer CreateConnection()
     {
