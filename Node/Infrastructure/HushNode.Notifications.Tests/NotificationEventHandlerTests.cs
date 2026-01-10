@@ -2,6 +2,8 @@ using FluentAssertions;
 using HushNode.Events;
 using HushNode.Feeds.Storage;
 using HushNode.Identity;
+using HushNode.PushNotifications;
+using HushNode.PushNotifications.Models;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Blockchain.Model;
 using HushShared.Feeds.Model;
@@ -40,6 +42,8 @@ public class NotificationEventHandlerTests
         SetupIdentityService(mocker, senderAddress, "Sender Name");
         SetupNotificationService(mocker);
         SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
 
         var sut = mocker.CreateInstance<NotificationEventHandler>();
         var evt = new NewFeedMessageCreatedEvent(feedMessage);
@@ -86,6 +90,8 @@ public class NotificationEventHandlerTests
         SetupIdentityService(mocker, senderAddress, "Sender Name");
         SetupNotificationService(mocker);
         SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
 
         var sut = mocker.CreateInstance<NotificationEventHandler>();
         var evt = new NewFeedMessageCreatedEvent(feedMessage);
@@ -118,6 +124,8 @@ public class NotificationEventHandlerTests
         SetupIdentityService(mocker, senderAddress, expectedSenderName);
         SetupNotificationService(mocker);
         SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
 
         var sut = mocker.CreateInstance<NotificationEventHandler>();
         var evt = new NewFeedMessageCreatedEvent(feedMessage);
@@ -155,6 +163,8 @@ public class NotificationEventHandlerTests
         SetupIdentityService(mocker, senderAddress, "Sender Name");
         SetupNotificationService(mocker);
         SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
 
         var sut = mocker.CreateInstance<NotificationEventHandler>();
         var evt = new NewFeedMessageCreatedEvent(feedMessage);
@@ -203,6 +213,8 @@ public class NotificationEventHandlerTests
         SetupIdentityService(mocker, senderAddress, "Sender Name");
         SetupNotificationService(mocker);
         SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
 
         var sut = mocker.CreateInstance<NotificationEventHandler>();
         var evt = new NewFeedMessageCreatedEvent(feedMessage);
@@ -244,6 +256,8 @@ public class NotificationEventHandlerTests
         SetupIdentityService(mocker, senderAddress, "Sender Name");
         SetupNotificationService(mocker);
         SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
 
         var sut = mocker.CreateInstance<NotificationEventHandler>();
         var evt = new NewFeedMessageCreatedEvent(feedMessage);
@@ -283,6 +297,8 @@ public class NotificationEventHandlerTests
         SetupIdentityService(mocker, senderAddress, "Sender Name");
         SetupNotificationService(mocker);
         SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
 
         var sut = mocker.CreateInstance<NotificationEventHandler>();
         var evt = new NewFeedMessageCreatedEvent(feedMessage);
@@ -311,6 +327,8 @@ public class NotificationEventHandlerTests
         SetupIdentityService(mocker, senderAddress, "Sender Name");
         SetupNotificationService(mocker);
         SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
 
         var sut = mocker.CreateInstance<NotificationEventHandler>();
         var evt = new NewFeedMessageCreatedEvent(feedMessage);
@@ -376,6 +394,8 @@ public class NotificationEventHandlerTests
             .ThrowsAsync(new Exception("Identity not found"));
         SetupNotificationService(mocker);
         SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
 
         var sut = mocker.CreateInstance<NotificationEventHandler>();
         var evt = new NewFeedMessageCreatedEvent(feedMessage);
@@ -545,6 +565,450 @@ public class NotificationEventHandlerTests
         mocker.GetMock<IUnreadTrackingService>()
             .Setup(x => x.IncrementUnreadAsync(It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(1);
+    }
+
+    /// <summary>
+    /// Sets up connection tracker to return online status for specified users.
+    /// All other users are considered offline.
+    /// </summary>
+    private static void SetupConnectionTracker(AutoMocker mocker, params string[] onlineUsers)
+    {
+        mocker.GetMock<IConnectionTracker>()
+            .Setup(x => x.IsUserOnlineAsync(It.IsAny<string>()))
+            .ReturnsAsync((string userId) => onlineUsers.Contains(userId));
+    }
+
+    /// <summary>
+    /// Sets up connection tracker to mark all users as online.
+    /// </summary>
+    private static void SetupConnectionTrackerAllOnline(AutoMocker mocker)
+    {
+        mocker.GetMock<IConnectionTracker>()
+            .Setup(x => x.IsUserOnlineAsync(It.IsAny<string>()))
+            .ReturnsAsync(true);
+    }
+
+    /// <summary>
+    /// Sets up connection tracker to mark all users as offline.
+    /// </summary>
+    private static void SetupConnectionTrackerAllOffline(AutoMocker mocker)
+    {
+        mocker.GetMock<IConnectionTracker>()
+            .Setup(x => x.IsUserOnlineAsync(It.IsAny<string>()))
+            .ReturnsAsync(false);
+    }
+
+    /// <summary>
+    /// Sets up push delivery service to capture push payloads.
+    /// </summary>
+    private static void SetupPushDeliveryService(AutoMocker mocker)
+    {
+        mocker.GetMock<IPushDeliveryService>()
+            .Setup(x => x.SendPushAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Returns(Task.CompletedTask);
+    }
+
+    #endregion
+}
+
+/// <summary>
+/// Tests for notification routing - verifies online users get gRPC and offline users get push.
+/// </summary>
+public class NotificationEventHandlerRoutingTests
+{
+    #region Online User Routing Tests
+
+    [Fact]
+    public async Task HandleAsync_OnlineUser_ReceivesGrpcNotification()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var recipientAddress = "recipient-address";
+
+        var feed = CreateFeed(feedId, senderAddress, recipientAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress);
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTracker(mocker, recipientAddress); // recipient is online
+        SetupPushDeliveryService(mocker);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - gRPC notification sent, no push
+        mocker.GetMock<INotificationService>()
+            .Verify(x => x.PublishNewMessageAsync(
+                recipientAddress,
+                feedId.ToString(),
+                It.IsAny<string>(),
+                It.IsAny<string>()), Times.Once);
+
+        mocker.GetMock<IPushDeliveryService>()
+            .Verify(x => x.SendPushAsync(
+                recipientAddress,
+                It.IsAny<PushPayload>()), Times.Never);
+    }
+
+    #endregion
+
+    #region Offline User Routing Tests
+
+    [Fact]
+    public async Task HandleAsync_OfflineUser_ReceivesPushNotification()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var recipientAddress = "recipient-address";
+
+        var feed = CreateFeed(feedId, senderAddress, recipientAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress);
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOffline(mocker); // recipient is offline
+        SetupPushDeliveryService(mocker);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - push notification sent, no gRPC
+        mocker.GetMock<IPushDeliveryService>()
+            .Verify(x => x.SendPushAsync(
+                recipientAddress,
+                It.IsAny<PushPayload>()), Times.Once);
+
+        mocker.GetMock<INotificationService>()
+            .Verify(x => x.PublishNewMessageAsync(
+                recipientAddress,
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_OfflineUser_PushPayloadContainsCorrectData()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var recipientAddress = "recipient-address";
+        var senderName = "Alice";
+        var messageContent = "Hello, how are you?";
+
+        var feed = CreateFeed(feedId, senderAddress, recipientAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress, messageContent);
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, senderName);
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOffline(mocker);
+
+        PushPayload? capturedPayload = null;
+        mocker.GetMock<IPushDeliveryService>()
+            .Setup(x => x.SendPushAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Callback<string, PushPayload>((_, payload) => capturedPayload = payload)
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert
+        capturedPayload.Should().NotBeNull();
+        capturedPayload!.Title.Should().Be(senderName);
+        capturedPayload.Body.Should().Be(messageContent);
+        capturedPayload.FeedId.Should().Be(feedId.ToString());
+        capturedPayload.Data.Should().ContainKey("type");
+        capturedPayload.Data!["type"].Should().Be("new_message");
+        capturedPayload.Data.Should().ContainKey("feedId");
+        capturedPayload.Data["feedId"].Should().Be(feedId.ToString());
+        capturedPayload.Data.Should().ContainKey("senderId");
+        capturedPayload.Data["senderId"].Should().Be(senderAddress);
+    }
+
+    #endregion
+
+    #region Message Truncation Tests
+
+    [Fact]
+    public async Task HandleAsync_LongMessage_TruncatedTo100CharsForPush()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var recipientAddress = "recipient-address";
+        var longContent = new string('A', 150); // 150 characters
+
+        var feed = CreateFeed(feedId, senderAddress, recipientAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress, longContent);
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOffline(mocker);
+
+        PushPayload? capturedPayload = null;
+        mocker.GetMock<IPushDeliveryService>()
+            .Setup(x => x.SendPushAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Callback<string, PushPayload>((_, payload) => capturedPayload = payload)
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert
+        capturedPayload.Should().NotBeNull();
+        capturedPayload!.Body.Length.Should().BeLessOrEqualTo(100);
+        capturedPayload.Body.Should().EndWith("...");
+    }
+
+    [Fact]
+    public async Task HandleAsync_ShortMessage_NotTruncatedForPush()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var recipientAddress = "recipient-address";
+        var shortContent = "Hello!";
+
+        var feed = CreateFeed(feedId, senderAddress, recipientAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress, shortContent);
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOffline(mocker);
+
+        PushPayload? capturedPayload = null;
+        mocker.GetMock<IPushDeliveryService>()
+            .Setup(x => x.SendPushAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Callback<string, PushPayload>((_, payload) => capturedPayload = payload)
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert
+        capturedPayload.Should().NotBeNull();
+        capturedPayload!.Body.Should().Be(shortContent);
+    }
+
+    [Fact]
+    public async Task HandleAsync_EmptyMessage_UsesPlaceholderForPush()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var recipientAddress = "recipient-address";
+
+        var feed = CreateFeed(feedId, senderAddress, recipientAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress, string.Empty);
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOffline(mocker);
+
+        PushPayload? capturedPayload = null;
+        mocker.GetMock<IPushDeliveryService>()
+            .Setup(x => x.SendPushAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Callback<string, PushPayload>((_, payload) => capturedPayload = payload)
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert
+        capturedPayload.Should().NotBeNull();
+        capturedPayload!.Body.Should().Be("New message");
+    }
+
+    #endregion
+
+    #region Mixed Recipients Tests
+
+    [Fact]
+    public async Task HandleAsync_MixedOnlineOffline_RoutesCorrectly()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var onlineRecipient1 = "online-recipient-1";
+        var onlineRecipient2 = "online-recipient-2";
+        var offlineRecipient = "offline-recipient";
+
+        var feed = CreateFeed(feedId, senderAddress, onlineRecipient1, onlineRecipient2, offlineRecipient);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress);
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTracker(mocker, onlineRecipient1, onlineRecipient2); // only these two are online
+        SetupPushDeliveryService(mocker);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - 2 gRPC notifications, 1 push notification
+        mocker.GetMock<INotificationService>()
+            .Verify(x => x.PublishNewMessageAsync(
+                onlineRecipient1,
+                feedId.ToString(),
+                It.IsAny<string>(),
+                It.IsAny<string>()), Times.Once);
+
+        mocker.GetMock<INotificationService>()
+            .Verify(x => x.PublishNewMessageAsync(
+                onlineRecipient2,
+                feedId.ToString(),
+                It.IsAny<string>(),
+                It.IsAny<string>()), Times.Once);
+
+        mocker.GetMock<IPushDeliveryService>()
+            .Verify(x => x.SendPushAsync(
+                offlineRecipient,
+                It.IsAny<PushPayload>()), Times.Once);
+
+        // Verify sender gets nothing
+        mocker.GetMock<INotificationService>()
+            .Verify(x => x.PublishNewMessageAsync(
+                senderAddress,
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()), Times.Never);
+
+        mocker.GetMock<IPushDeliveryService>()
+            .Verify(x => x.SendPushAsync(
+                senderAddress,
+                It.IsAny<PushPayload>()), Times.Never);
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    private static Feed CreateFeed(FeedId feedId, params string[] participantAddresses)
+    {
+        var feed = new Feed(feedId, "Test Feed", FeedType.Chat, new BlockIndex(100));
+        feed.Participants = participantAddresses
+            .Select(addr => new FeedParticipant(feedId, addr, ParticipantType.Member, "encrypted-key") { Feed = feed })
+            .ToArray();
+        return feed;
+    }
+
+    private static FeedMessage CreateFeedMessage(FeedId feedId, string senderAddress, string content = "Test message")
+    {
+        return new FeedMessage(
+            new FeedMessageId(Guid.NewGuid()),
+            feedId,
+            content,
+            senderAddress,
+            Timestamp.Current,
+            new BlockIndex(100));
+    }
+
+    private static void SetupFeedsStorageService(AutoMocker mocker, Feed? regularFeed, GroupFeed? groupFeed)
+    {
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetFeedByIdAsync(It.IsAny<FeedId>()))
+            .ReturnsAsync(regularFeed);
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetGroupFeedAsync(It.IsAny<FeedId>()))
+            .ReturnsAsync(groupFeed);
+    }
+
+    private static void SetupIdentityService(AutoMocker mocker, string publicAddress, string displayName)
+    {
+        var profile = new Profile(
+            displayName,
+            displayName.Length > 10 ? displayName.Substring(0, 10) : displayName,
+            publicAddress,
+            "encrypt-key",
+            true,
+            new BlockIndex(100));
+
+        mocker.GetMock<IIdentityService>()
+            .Setup(x => x.RetrieveIdentityAsync(publicAddress))
+            .ReturnsAsync(profile);
+    }
+
+    private static void SetupNotificationService(AutoMocker mocker)
+    {
+        mocker.GetMock<INotificationService>()
+            .Setup(x => x.PublishNewMessageAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+    }
+
+    private static void SetupUnreadTrackingService(AutoMocker mocker)
+    {
+        mocker.GetMock<IUnreadTrackingService>()
+            .Setup(x => x.IncrementUnreadAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(1);
+    }
+
+    private static void SetupConnectionTracker(AutoMocker mocker, params string[] onlineUsers)
+    {
+        mocker.GetMock<IConnectionTracker>()
+            .Setup(x => x.IsUserOnlineAsync(It.IsAny<string>()))
+            .ReturnsAsync((string userId) => onlineUsers.Contains(userId));
+    }
+
+    private static void SetupConnectionTrackerAllOffline(AutoMocker mocker)
+    {
+        mocker.GetMock<IConnectionTracker>()
+            .Setup(x => x.IsUserOnlineAsync(It.IsAny<string>()))
+            .ReturnsAsync(false);
+    }
+
+    private static void SetupPushDeliveryService(AutoMocker mocker)
+    {
+        mocker.GetMock<IPushDeliveryService>()
+            .Setup(x => x.SendPushAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Returns(Task.CompletedTask);
     }
 
     #endregion
