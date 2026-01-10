@@ -10,6 +10,7 @@
     <ProjectReference Include="..\..\Core\HushNode.Events\HushNode.Events.csproj" />
     <ProjectReference Include="..\..\Core\Feeds\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
     <ProjectReference Include="..\..\Core\Identity\HushNode.Identity\HushNode.Identity.csproj" />
+    <ProjectReference Include="..\HushNode.PushNotifications\HushNode.PushNotifications.csproj" />
     <ProjectReference Include="..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
   </ItemGroup>
 
