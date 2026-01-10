@@ -76,12 +76,14 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
             var feed = await _feedsStorageService.GetFeedByIdAsync(feedMessage.FeedId);
             if (feed != null)
             {
-                // Regular feed - notify all participants
+                // Regular feed (1:1 Chat) - notify all participants
+                // feedName is null for 1:1 chats, so notification shows sender name
                 await NotifyFeedParticipantsAsync(
                     feed.Participants.Select(p => p.ParticipantPublicAddress),
                     feedMessage,
                     senderName,
-                    messagePreview);
+                    messagePreview,
+                    feedName: null);
                 return;
             }
 
@@ -95,11 +97,13 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
                                 p.ParticipantType != ParticipantType.Banned)
                     .Select(p => p.ParticipantPublicAddress);
 
+                // Pass group title so notification shows "GroupName" + "Sender: New message"
                 await NotifyFeedParticipantsAsync(
                     activeParticipants,
                     feedMessage,
                     senderName,
-                    messagePreview);
+                    messagePreview,
+                    feedName: groupFeed.Title);
                 return;
             }
 
@@ -115,11 +119,13 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
     /// Notifies all participants except the message sender.
     /// Routes to gRPC (online users) or Push (offline users) based on connection status.
     /// </summary>
+    /// <param name="feedName">The feed/group name. Null for 1:1 chats.</param>
     private async Task NotifyFeedParticipantsAsync(
         IEnumerable<string> participantAddresses,
         FeedMessage feedMessage,
         string senderName,
-        string messagePreview)
+        string messagePreview,
+        string? feedName)
     {
         var feedId = feedMessage.FeedId.ToString();
         var senderAddress = feedMessage.IssuerPublicAddress ?? string.Empty;
@@ -141,7 +147,8 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
                 feedId,
                 senderName,
                 senderAddress,
-                messagePreview);
+                messagePreview,
+                feedName);
         }
     }
 
@@ -153,12 +160,14 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
     /// <param name="senderName">The sender's display name.</param>
     /// <param name="senderAddress">The sender's public signing address.</param>
     /// <param name="messagePreview">The message preview (for gRPC: 255 chars).</param>
+    /// <param name="feedName">The feed/group name. Null for 1:1 chats.</param>
     private async Task RouteNotificationAsync(
         string recipientAddress,
         string feedId,
         string senderName,
         string senderAddress,
-        string messagePreview)
+        string messagePreview,
+        string? feedName)
     {
         var userIdTruncated = recipientAddress.Substring(0, Math.Min(20, recipientAddress.Length));
 
@@ -188,11 +197,13 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
                     userIdTruncated,
                     feedId);
 
-                // Use generic message for push notifications (privacy: don't send encrypted content)
-                // The actual message will be decrypted when user opens the app
+                // Format notification differently for group vs 1:1 chats
+                // Group: Title = "Group Name", Body = "Sender: New message"
+                // 1:1:   Title = "Sender Name", Body = "New message"
+                var isGroupMessage = !string.IsNullOrEmpty(feedName);
                 var pushPayload = new PushPayload(
-                    Title: senderName,
-                    Body: "New message",
+                    Title: isGroupMessage ? feedName! : senderName,
+                    Body: isGroupMessage ? $"{senderName}: New message" : "New message",
                     FeedId: feedId,
                     Data: new Dictionary<string, string>
                     {

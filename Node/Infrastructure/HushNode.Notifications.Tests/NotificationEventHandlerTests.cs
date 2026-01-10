@@ -861,6 +861,94 @@ public class NotificationEventHandlerRoutingTests
 
     #endregion
 
+    #region Group Message Push Notification Format Tests
+
+    [Fact]
+    public async Task HandleAsync_GroupFeed_OfflineUser_PushShowsGroupNameAsTitleAndSenderInBody()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var recipientAddress = "recipient-address";
+        var senderName = "Esqueleto";
+        var groupName = "HushNetwork Support";
+
+        var groupFeed = CreateGroupFeedWithTitle(feedId, groupName, senderAddress, recipientAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress);
+
+        SetupFeedsStorageService(mocker, regularFeed: null, groupFeed);
+        SetupIdentityService(mocker, senderAddress, senderName);
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOffline(mocker);
+
+        PushPayload? capturedPayload = null;
+        mocker.GetMock<IPushDeliveryService>()
+            .Setup(x => x.SendPushAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Callback<string, PushPayload>((_, payload) => capturedPayload = payload)
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - Group messages should show group name as title, sender in body
+        capturedPayload.Should().NotBeNull();
+        capturedPayload!.Title.Should().Be(groupName);
+        capturedPayload.Body.Should().Be($"{senderName}: New message");
+    }
+
+    [Fact]
+    public async Task HandleAsync_RegularFeed_OfflineUser_PushShowsSenderNameAsTitle()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var recipientAddress = "recipient-address";
+        var senderName = "Alice";
+
+        var feed = CreateFeed(feedId, senderAddress, recipientAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress);
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, senderName);
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOffline(mocker);
+
+        PushPayload? capturedPayload = null;
+        mocker.GetMock<IPushDeliveryService>()
+            .Setup(x => x.SendPushAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Callback<string, PushPayload>((_, payload) => capturedPayload = payload)
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - 1:1 messages should show sender name as title, generic body
+        capturedPayload.Should().NotBeNull();
+        capturedPayload!.Title.Should().Be(senderName);
+        capturedPayload.Body.Should().Be("New message");
+    }
+
+    private static GroupFeed CreateGroupFeedWithTitle(FeedId feedId, string title, params string[] participantAddresses)
+    {
+        var groupFeed = new GroupFeed(feedId, title, "Description", false, new BlockIndex(100), 0);
+        groupFeed.Participants = participantAddresses
+            .Select(addr => new GroupFeedParticipantEntity(feedId, addr, ParticipantType.Member, new BlockIndex(100)))
+            .ToList();
+        return groupFeed;
+    }
+
+    #endregion
+
     #region Mixed Recipients Tests
 
     [Fact]
