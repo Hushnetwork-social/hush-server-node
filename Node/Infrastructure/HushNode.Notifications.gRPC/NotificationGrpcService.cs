@@ -12,25 +12,33 @@ namespace HushNode.Notifications.gRPC;
 public class NotificationGrpcService(
     INotificationService notificationService,
     IUnreadTrackingService unreadTrackingService,
+    IConnectionTracker connectionTracker,
     ILogger<NotificationGrpcService> logger) : ProtoTypes.HushNotification.HushNotificationBase
 {
     private readonly INotificationService _notificationService = notificationService;
     private readonly IUnreadTrackingService _unreadTrackingService = unreadTrackingService;
+    private readonly IConnectionTracker _connectionTracker = connectionTracker;
     private readonly ILogger<NotificationGrpcService> _logger = logger;
 
     /// <summary>
     /// Server streaming RPC - subscribes client to real-time events.
     /// First sends an UNREAD_COUNT_SYNC event with all current counts,
     /// then streams NEW_MESSAGE and MESSAGES_READ events as they occur.
+    /// Tracks connection status for notification routing decisions.
     /// </summary>
     public override async Task SubscribeToEvents(
         ProtoTypes.SubscribeToEventsRequest request,
         IServerStreamWriter<ProtoTypes.FeedEvent> responseStream,
         ServerCallContext context)
     {
+        var connectionId = Guid.NewGuid().ToString();
+
         _logger.LogInformation(
-            "Client subscribing to events: UserId={UserId}, Platform={Platform}, DeviceId={DeviceId}",
-            request.UserId, request.Platform, request.DeviceId);
+            "Client subscribing to events: UserId={UserId}, ConnectionId={ConnectionId}, Platform={Platform}, DeviceId={DeviceId}",
+            request.UserId, connectionId, request.Platform, request.DeviceId);
+
+        // Mark user as online when subscription starts
+        await _connectionTracker.MarkOnlineAsync(request.UserId, connectionId);
 
         try
         {
@@ -41,7 +49,9 @@ public class NotificationGrpcService(
                 // Check if client disconnected before attempting to write
                 if (context.CancellationToken.IsCancellationRequested)
                 {
-                    _logger.LogInformation("Client disconnected before write: UserId={UserId}", request.UserId);
+                    _logger.LogInformation(
+                        "Client disconnected before write: UserId={UserId}, ConnectionId={ConnectionId}",
+                        request.UserId, connectionId);
                     break;
                 }
 
@@ -51,17 +61,31 @@ public class NotificationGrpcService(
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("Client disconnected: UserId={UserId}", request.UserId);
+            _logger.LogInformation(
+                "Client disconnected: UserId={UserId}, ConnectionId={ConnectionId}",
+                request.UserId, connectionId);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("request is complete"))
         {
             // Client disconnected during write - this is expected during page refresh
-            _logger.LogInformation("Client connection closed during write: UserId={UserId}", request.UserId);
+            _logger.LogInformation(
+                "Client connection closed during write: UserId={UserId}, ConnectionId={ConnectionId}",
+                request.UserId, connectionId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in event stream for UserId={UserId}", request.UserId);
+            _logger.LogError(ex,
+                "Error in event stream for UserId={UserId}, ConnectionId={ConnectionId}",
+                request.UserId, connectionId);
             throw;
+        }
+        finally
+        {
+            // Always mark user as offline when subscription ends
+            await _connectionTracker.MarkOfflineAsync(request.UserId, connectionId);
+            _logger.LogInformation(
+                "Client subscription ended: UserId={UserId}, ConnectionId={ConnectionId}",
+                request.UserId, connectionId);
         }
     }
 
