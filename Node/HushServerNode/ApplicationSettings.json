@@ -6,7 +6,8 @@
             "Microsoft.EntityFrameworkCore": "Warning",
             "HushNode.Blockchain": "Debug",
             "HushNode.Reactions": "Debug",
-            "HushNode.Notifications": "Information",
+            "HushNode.Notifications": "Debug",
+            "HushNode.PushNotifications": "Debug",
             "HushNode.Feeds": "Information",
             "Olimpo": "Information"
         }

@@ -117,6 +117,12 @@ public class FcmProvider : IFcmProvider
             return;
         }
 
+        _logger.LogDebug(
+            "Building FCM message. Title: '{Title}', Body: '{Body}', FeedId: {FeedId}",
+            payload.Title,
+            payload.Body,
+            payload.FeedId);
+
         var message = BuildMessage(fcmToken, payload);
 
         try
@@ -164,6 +170,18 @@ public class FcmProvider : IFcmProvider
         if (!string.IsNullOrEmpty(payload.FeedId) && !data.ContainsKey("feedId"))
         {
             data["feedId"] = payload.FeedId;
+        }
+
+        // IMPORTANT: Include title and body in data payload as well
+        // The Android client reads from data["title"] and data["body"] in FcmService.extractNotificationData
+        if (!string.IsNullOrEmpty(payload.Title) && !data.ContainsKey("title"))
+        {
+            data["title"] = payload.Title;
+        }
+
+        if (!string.IsNullOrEmpty(payload.Body) && !data.ContainsKey("body"))
+        {
+            data["body"] = payload.Body;
         }
 
         return new Message
