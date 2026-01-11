@@ -34,5 +34,11 @@
     "CredentialsProfile": {
         "CredentialsFile": "./stacker-credentials.dat",
         "CredentialsPasswordEnvVar": "HUSH_CREDENTIALS_PASSWORD"
+    },
+
+    "Firebase": {
+        "ProjectId": "hushnetwork",
+        "ServiceAccountPath": "./firebase-sa.json",
+        "Enabled": true
     }
 }
