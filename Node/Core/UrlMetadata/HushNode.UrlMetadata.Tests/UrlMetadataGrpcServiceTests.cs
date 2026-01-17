@@ -5,56 +5,43 @@ using HushNode.UrlMetadata.gRPC;
 using HushNode.UrlMetadata.Models;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Moq.AutoMock;
 using Xunit;
 using InternalResult = HushNode.UrlMetadata.Models.UrlMetadataResult;
 
 namespace HushNode.UrlMetadata.Tests;
 
+/// <summary>
+/// Tests for UrlMetadataGrpcService to ensure URL metadata fetching works correctly.
+/// Each test follows AAA pattern with isolated setup to prevent flaky tests.
+/// </summary>
 public class UrlMetadataGrpcServiceTests
 {
-    private readonly Mock<IOpenGraphParser> _parserMock;
-    private readonly Mock<IUrlBlocklist> _blocklistMock;
-    private readonly Mock<IUrlMetadataCacheService> _cacheServiceMock;
-    private readonly Mock<IImageProcessor> _imageProcessorMock;
-    private readonly Mock<ILogger<UrlMetadataGrpcService>> _loggerMock;
-    private readonly UrlMetadataGrpcService _service;
-    private readonly ServerCallContext _context;
-
-    public UrlMetadataGrpcServiceTests()
-    {
-        _parserMock = new Mock<IOpenGraphParser>();
-        _blocklistMock = new Mock<IUrlBlocklist>();
-        _cacheServiceMock = new Mock<IUrlMetadataCacheService>();
-        _imageProcessorMock = new Mock<IImageProcessor>();
-        _loggerMock = new Mock<ILogger<UrlMetadataGrpcService>>();
-        _context = new TestServerCallContext();
-
-        _service = new UrlMetadataGrpcService(
-            _parserMock.Object,
-            _blocklistMock.Object,
-            _cacheServiceMock.Object,
-            _imageProcessorMock.Object,
-            _loggerMock.Object);
-    }
+    #region GetUrlMetadata Tests
 
     [Fact]
     public async Task GetUrlMetadata_ValidUrl_ReturnsMetadata()
     {
         // Arrange
+        var mocker = new AutoMocker();
         var url = "https://example.com";
         var expectedResult = InternalResult.CreateSuccess(
             url, "example.com", "Example Title", "Example Description",
             "https://example.com/image.jpg", "base64ImageData");
 
-        _blocklistMock.Setup(b => b.IsBlocked(url)).Returns(false);
-        _cacheServiceMock
+        mocker.GetMock<IUrlBlocklist>()
+            .Setup(b => b.IsBlocked(url))
+            .Returns(false);
+
+        mocker.GetMock<IUrlMetadataCacheService>()
             .Setup(c => c.GetOrFetchAsync(url, It.IsAny<Func<Task<InternalResult>>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedResult);
 
+        var service = mocker.CreateInstance<UrlMetadataGrpcService>();
         var request = new GetUrlMetadataRequest { Url = url };
 
         // Act
-        var response = await _service.GetUrlMetadata(request, _context);
+        var response = await service.GetUrlMetadata(request, CreateMockServerCallContext());
 
         // Assert
         response.Success.Should().BeTrue();
@@ -70,39 +57,49 @@ public class UrlMetadataGrpcServiceTests
     public async Task GetUrlMetadata_BlockedUrl_ReturnsFailure()
     {
         // Arrange
+        var mocker = new AutoMocker();
         var url = "https://malware-distribution.example/page";
 
-        _blocklistMock.Setup(b => b.IsBlocked(url)).Returns(true);
+        mocker.GetMock<IUrlBlocklist>()
+            .Setup(b => b.IsBlocked(url))
+            .Returns(true);
 
+        var service = mocker.CreateInstance<UrlMetadataGrpcService>();
         var request = new GetUrlMetadataRequest { Url = url };
 
         // Act
-        var response = await _service.GetUrlMetadata(request, _context);
+        var response = await service.GetUrlMetadata(request, CreateMockServerCallContext());
 
         // Assert
         response.Success.Should().BeFalse();
         response.ErrorMessage.Should().Be("URL is blocked");
-        _cacheServiceMock.Verify(c => c.GetOrFetchAsync(
-            It.IsAny<string>(), It.IsAny<Func<Task<InternalResult>>>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        mocker.GetMock<IUrlMetadataCacheService>()
+            .Verify(c => c.GetOrFetchAsync(
+                It.IsAny<string>(), It.IsAny<Func<Task<InternalResult>>>(), It.IsAny<CancellationToken>()),
+                Times.Never);
     }
 
     [Fact]
     public async Task GetUrlMetadata_FetchFailure_ReturnsFailure()
     {
         // Arrange
+        var mocker = new AutoMocker();
         var url = "https://example.com";
         var failedResult = InternalResult.CreateFailure(url, "example.com", "HTTP 404: Not Found");
 
-        _blocklistMock.Setup(b => b.IsBlocked(url)).Returns(false);
-        _cacheServiceMock
+        mocker.GetMock<IUrlBlocklist>()
+            .Setup(b => b.IsBlocked(url))
+            .Returns(false);
+
+        mocker.GetMock<IUrlMetadataCacheService>()
             .Setup(c => c.GetOrFetchAsync(url, It.IsAny<Func<Task<InternalResult>>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(failedResult);
 
+        var service = mocker.CreateInstance<UrlMetadataGrpcService>();
         var request = new GetUrlMetadataRequest { Url = url };
 
         // Act
-        var response = await _service.GetUrlMetadata(request, _context);
+        var response = await service.GetUrlMetadata(request, CreateMockServerCallContext());
 
         // Assert
         response.Success.Should().BeFalse();
@@ -110,27 +107,61 @@ public class UrlMetadataGrpcServiceTests
     }
 
     [Fact]
+    public async Task GetUrlMetadata_CacheReturnsNull_ReturnsFailure()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var url = "https://example.com";
+
+        mocker.GetMock<IUrlBlocklist>()
+            .Setup(b => b.IsBlocked(url))
+            .Returns(false);
+
+        mocker.GetMock<IUrlMetadataCacheService>()
+            .Setup(c => c.GetOrFetchAsync(url, It.IsAny<Func<Task<InternalResult>>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((InternalResult?)null);
+
+        var service = mocker.CreateInstance<UrlMetadataGrpcService>();
+        var request = new GetUrlMetadataRequest { Url = url };
+
+        // Act
+        var response = await service.GetUrlMetadata(request, CreateMockServerCallContext());
+
+        // Assert
+        response.Success.Should().BeFalse();
+        response.ErrorMessage.Should().Be("Failed to fetch metadata");
+    }
+
+    #endregion
+
+    #region GetUrlMetadataBatch Tests
+
+    [Fact]
     public async Task GetUrlMetadataBatch_MultipleUrls_ReturnsResultsInOrder()
     {
         // Arrange
+        var mocker = new AutoMocker();
         var urls = new[] { "https://example1.com", "https://example2.com", "https://example3.com" };
 
-        _blocklistMock.Setup(b => b.IsBlocked(It.IsAny<string>())).Returns(false);
+        mocker.GetMock<IUrlBlocklist>()
+            .Setup(b => b.IsBlocked(It.IsAny<string>()))
+            .Returns(false);
 
         for (int i = 0; i < urls.Length; i++)
         {
             var url = urls[i];
             var result = InternalResult.CreateSuccess(url, $"example{i + 1}.com", $"Title {i + 1}", null, null, null);
-            _cacheServiceMock
+            mocker.GetMock<IUrlMetadataCacheService>()
                 .Setup(c => c.GetOrFetchAsync(url, It.IsAny<Func<Task<InternalResult>>>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(result);
         }
 
+        var service = mocker.CreateInstance<UrlMetadataGrpcService>();
         var request = new GetUrlMetadataBatchRequest();
         request.Urls.AddRange(urls);
 
         // Act
-        var response = await _service.GetUrlMetadataBatch(request, _context);
+        var response = await service.GetUrlMetadataBatch(request, CreateMockServerCallContext());
 
         // Assert
         response.Results.Should().HaveCount(3);
@@ -146,19 +177,24 @@ public class UrlMetadataGrpcServiceTests
     public async Task GetUrlMetadataBatch_ExceedsLimit_OnlyProcessesFirst10()
     {
         // Arrange
+        var mocker = new AutoMocker();
         var urls = Enumerable.Range(1, 15).Select(i => $"https://example{i}.com").ToList();
 
-        _blocklistMock.Setup(b => b.IsBlocked(It.IsAny<string>())).Returns(false);
-        _cacheServiceMock
+        mocker.GetMock<IUrlBlocklist>()
+            .Setup(b => b.IsBlocked(It.IsAny<string>()))
+            .Returns(false);
+
+        mocker.GetMock<IUrlMetadataCacheService>()
             .Setup(c => c.GetOrFetchAsync(It.IsAny<string>(), It.IsAny<Func<Task<InternalResult>>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string url, Func<Task<InternalResult>> fetchFunc, CancellationToken ct) =>
                 InternalResult.CreateSuccess(url, "example.com", "Title", null, null, null));
 
+        var service = mocker.CreateInstance<UrlMetadataGrpcService>();
         var request = new GetUrlMetadataBatchRequest();
         request.Urls.AddRange(urls);
 
         // Act
-        var response = await _service.GetUrlMetadataBatch(request, _context);
+        var response = await service.GetUrlMetadataBatch(request, CreateMockServerCallContext());
 
         // Assert
         response.Results.Should().HaveCount(10);
@@ -169,27 +205,35 @@ public class UrlMetadataGrpcServiceTests
     public async Task GetUrlMetadataBatch_MixedResults_ReturnsCorrectStatus()
     {
         // Arrange
+        var mocker = new AutoMocker();
         var validUrl = "https://valid.com";
         var blockedUrl = "https://malware-distribution.example";
         var failedUrl = "https://notfound.com";
 
-        _blocklistMock.Setup(b => b.IsBlocked(validUrl)).Returns(false);
-        _blocklistMock.Setup(b => b.IsBlocked(blockedUrl)).Returns(true);
-        _blocklistMock.Setup(b => b.IsBlocked(failedUrl)).Returns(false);
+        mocker.GetMock<IUrlBlocklist>()
+            .Setup(b => b.IsBlocked(validUrl))
+            .Returns(false);
+        mocker.GetMock<IUrlBlocklist>()
+            .Setup(b => b.IsBlocked(blockedUrl))
+            .Returns(true);
+        mocker.GetMock<IUrlBlocklist>()
+            .Setup(b => b.IsBlocked(failedUrl))
+            .Returns(false);
 
-        _cacheServiceMock
+        mocker.GetMock<IUrlMetadataCacheService>()
             .Setup(c => c.GetOrFetchAsync(validUrl, It.IsAny<Func<Task<InternalResult>>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(InternalResult.CreateSuccess(validUrl, "valid.com", "Valid Title", null, null, null));
 
-        _cacheServiceMock
+        mocker.GetMock<IUrlMetadataCacheService>()
             .Setup(c => c.GetOrFetchAsync(failedUrl, It.IsAny<Func<Task<InternalResult>>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(InternalResult.CreateFailure(failedUrl, "notfound.com", "HTTP 404"));
 
+        var service = mocker.CreateInstance<UrlMetadataGrpcService>();
         var request = new GetUrlMetadataBatchRequest();
         request.Urls.AddRange(new[] { validUrl, blockedUrl, failedUrl });
 
         // Act
-        var response = await _service.GetUrlMetadataBatch(request, _context);
+        var response = await service.GetUrlMetadataBatch(request, CreateMockServerCallContext());
 
         // Assert
         response.Results.Should().HaveCount(3);
@@ -204,26 +248,13 @@ public class UrlMetadataGrpcServiceTests
         response.Results[2].ErrorMessage.Should().Be("HTTP 404");
     }
 
-    [Fact]
-    public async Task GetUrlMetadata_CacheReturnsNull_ReturnsFailure()
-    {
-        // Arrange
-        var url = "https://example.com";
+    #endregion
 
-        _blocklistMock.Setup(b => b.IsBlocked(url)).Returns(false);
-        _cacheServiceMock
-            .Setup(c => c.GetOrFetchAsync(url, It.IsAny<Func<Task<InternalResult>>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((InternalResult?)null);
+    #region Helper Methods
 
-        var request = new GetUrlMetadataRequest { Url = url };
+    private static ServerCallContext CreateMockServerCallContext() => new TestServerCallContext();
 
-        // Act
-        var response = await _service.GetUrlMetadata(request, _context);
-
-        // Assert
-        response.Success.Should().BeFalse();
-        response.ErrorMessage.Should().Be("Failed to fetch metadata");
-    }
+    #endregion
 }
 
 /// <summary>
