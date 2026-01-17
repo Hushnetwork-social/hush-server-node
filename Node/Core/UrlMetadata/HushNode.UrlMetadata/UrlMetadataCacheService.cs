@@ -85,8 +85,15 @@ public class UrlMetadataCacheService : IUrlMetadataCacheService
         // Fetch fresh data
         var result = await fetchFunc();
 
-        // Cache the result
-        await SetAsync(result);
+        // Only cache successful results - don't cache failures so they can be retried
+        if (result.Success)
+        {
+            await SetAsync(result);
+        }
+        else
+        {
+            _logger.LogDebug("Not caching failed result for URL: {Url}, Error: {Error}", url, result.ErrorMessage);
+        }
 
         return result;
     }
