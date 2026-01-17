@@ -282,6 +282,109 @@ public class OpenGraphParserTests
 
     #endregion
 
+    #region YouTube oEmbed support
+
+    [Theory]
+    [InlineData("https://www.youtube.com/watch?v=dQw4w9WgXcQ")]
+    [InlineData("https://youtube.com/watch?v=dQw4w9WgXcQ")]
+    [InlineData("https://youtu.be/dQw4w9WgXcQ")]
+    [InlineData("https://www.youtube.com/embed/dQw4w9WgXcQ")]
+    [InlineData("https://youtube.com/shorts/dQw4w9WgXcQ")]
+    public async Task ParseAsync_WithYouTubeUrl_UsesOEmbedApi(string youtubeUrl)
+    {
+        // Arrange
+        var oEmbedResponse = """
+            {
+                "title": "Rick Astley - Never Gonna Give You Up",
+                "author_name": "Rick Astley",
+                "author_url": "https://www.youtube.com/@RickAstley",
+                "thumbnail_url": "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+                "thumbnail_width": 480,
+                "thumbnail_height": 360
+            }
+            """;
+        var parser = CreateParserWithYouTubeOEmbedResponse(oEmbedResponse);
+
+        // Act
+        var result = await parser.ParseAsync(youtubeUrl);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Title.Should().Be("Rick Astley - Never Gonna Give You Up");
+        result.Description.Should().Be("Video by Rick Astley");
+        result.ImageUrl.Should().Be("https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg");
+    }
+
+    [Fact]
+    public async Task ParseAsync_WithYouTubeUrl_WhenOEmbedFails_FallsBackToHtmlParsing()
+    {
+        // Arrange
+        var fallbackHtml = """
+            <html>
+            <head>
+                <meta property="og:title" content="Fallback YouTube Title" />
+                <meta property="og:description" content="Fallback Description" />
+            </head>
+            <body></body>
+            </html>
+            """;
+        var parser = CreateParserWithYouTubeOEmbedFailureAndHtmlFallback(fallbackHtml);
+
+        // Act
+        var result = await parser.ParseAsync("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Title.Should().Be("Fallback YouTube Title");
+        result.Description.Should().Be("Fallback Description");
+    }
+
+    [Fact]
+    public async Task ParseAsync_WithYouTubeOEmbedMissingAuthor_ReturnsNullDescription()
+    {
+        // Arrange
+        var oEmbedResponse = """
+            {
+                "title": "Video Without Author",
+                "thumbnail_url": "https://i.ytimg.com/vi/abc123/hqdefault.jpg"
+            }
+            """;
+        var parser = CreateParserWithYouTubeOEmbedResponse(oEmbedResponse);
+
+        // Act
+        var result = await parser.ParseAsync("https://youtu.be/abc123");
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Title.Should().Be("Video Without Author");
+        result.Description.Should().BeNull();
+        result.ImageUrl.Should().Be("https://i.ytimg.com/vi/abc123/hqdefault.jpg");
+    }
+
+    [Fact]
+    public async Task ParseAsync_WithNonYouTubeUrl_DoesNotUseOEmbed()
+    {
+        // Arrange
+        var html = """
+            <html>
+            <head>
+                <meta property="og:title" content="Regular Website" />
+            </head>
+            <body></body>
+            </html>
+            """;
+        var parser = CreateParserWithMockResponse("https://example.com", html);
+
+        // Act
+        var result = await parser.ParseAsync("https://example.com");
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Title.Should().Be("Regular Website");
+    }
+
+    #endregion
+
     #region Whitespace trimming
 
     [Fact]
@@ -351,6 +454,59 @@ public class OpenGraphParserTests
             {
                 StatusCode = statusCode,
                 ReasonPhrase = statusCode.ToString()
+            });
+
+        var httpClient = new HttpClient(mockHandler.Object);
+        var logger = Mock.Of<ILogger<OpenGraphParser>>();
+
+        return new OpenGraphParser(httpClient, logger);
+    }
+
+    private static OpenGraphParser CreateParserWithYouTubeOEmbedResponse(string oEmbedJson)
+    {
+        var mockHandler = new Mock<HttpMessageHandler>();
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.Host.Contains("youtube.com") && req.RequestUri.PathAndQuery.Contains("oembed")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(oEmbedJson, System.Text.Encoding.UTF8, "application/json")
+            });
+
+        var httpClient = new HttpClient(mockHandler.Object);
+        var logger = Mock.Of<ILogger<OpenGraphParser>>();
+
+        return new OpenGraphParser(httpClient, logger);
+    }
+
+    private static OpenGraphParser CreateParserWithYouTubeOEmbedFailureAndHtmlFallback(string fallbackHtml)
+    {
+        var mockHandler = new Mock<HttpMessageHandler>();
+
+        // oEmbed request fails
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.PathAndQuery.Contains("oembed")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.NotFound
+            });
+
+        // Fallback HTML request succeeds
+        mockHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => !req.RequestUri!.PathAndQuery.Contains("oembed")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(fallbackHtml, System.Text.Encoding.UTF8, "text/html")
             });
 
         var httpClient = new HttpClient(mockHandler.Object);
