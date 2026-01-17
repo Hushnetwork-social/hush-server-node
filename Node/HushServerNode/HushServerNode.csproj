@@ -41,6 +41,7 @@
     <ProjectReference Include="..\Core\Reactions\HushNode.Reactions.gRPC\HushNode.Reactions.gRPC.csproj" />
     <ProjectReference Include="..\Infrastructure\HushNode.Notifications.gRPC\HushNode.Notifications.gRPC.csproj" />
     <ProjectReference Include="..\Infrastructure\HushNode.PushNotifications\HushNode.PushNotifications.csproj" />
+    <ProjectReference Include="..\Core\UrlMetadata\HushNode.UrlMetadata.gRPC\HushNode.UrlMetadata.gRPC.csproj" />
   </ItemGroup>
 
 </Project>

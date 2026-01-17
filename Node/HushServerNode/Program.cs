@@ -20,6 +20,7 @@ using HushNode.Reactions.gRPC;
 using HushNode.Caching;
 using HushNode.Notifications.gRPC;
 using HushNode.PushNotifications;
+using HushNode.UrlMetadata.gRPC;
 
 namespace HushServerNode;
 
@@ -93,7 +94,8 @@ public class Program
             .RegisterHushNodeMemPool()
             .RegisterInternalModuleIdentity()
             .RegisterNotificationGrpc()
-            .RegisterPushNotificationsModule();
+            .RegisterPushNotificationsModule()
+            .RegisterCoreModuleUrlMetadata();
 
         var app = builder.Build();
 
@@ -118,6 +120,7 @@ public class Program
         app.MapGrpcService<ReactionsGrpcService>();
         app.MapGrpcService<MembershipGrpcService>();
         app.MapGrpcService<NotificationGrpcService>();
+        app.MapGrpcService<UrlMetadataGrpcService>();
 
         // Enable gRPC reflection for grpcurl and other testing tools
         app.MapGrpcReflectionService();
