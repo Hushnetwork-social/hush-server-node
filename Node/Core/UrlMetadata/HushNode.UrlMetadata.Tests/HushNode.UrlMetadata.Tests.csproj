@@ -22,6 +22,8 @@
     <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="Moq.AutoMock" Version="3.5.0" />
     <PackageReference Include="FluentAssertions" Version="6.12.1" />
+    <PackageReference Include="SkiaSharp" Version="3.119.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
   </ItemGroup>
 
   <ItemGroup>
@@ -29,6 +31,7 @@
     <ProjectReference Include="..\HushNode.UrlMetadata.gRPC\HushNode.UrlMetadata.gRPC.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Caching\HushNode.Caching.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\HushNode.Notifications\HushNode.Notifications.csproj" />
   </ItemGroup>
 
 </Project>

@@ -111,8 +111,14 @@ public class UrlMetadataResult
         if (string.IsNullOrEmpty(value))
             return value;
 
-        return value.Length <= maxLength
-            ? value
+        if (value.Length <= maxLength)
+            return value;
+
+        // Truncate and add ellipsis
+        const string ellipsis = "...";
+        var truncateAt = maxLength - ellipsis.Length;
+        return truncateAt > 0
+            ? value[..truncateAt] + ellipsis
             : value[..maxLength];
     }
 }
