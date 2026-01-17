@@ -44,9 +44,13 @@ public class UrlMetadataGrpcService : HushUrlMetadata.HushUrlMetadataBase
         GetUrlMetadataRequest request,
         ServerCallContext context)
     {
-        _logger.LogDebug("GetUrlMetadata called for URL: {Url}", request.Url);
+        _logger.LogInformation("[UrlMetadata] GetUrlMetadata called for URL: {Url}", request.Url);
 
         var result = await FetchMetadataAsync(request.Url, context.CancellationToken);
+
+        _logger.LogInformation("[UrlMetadata] Result - Success: {Success}, Title: {Title}",
+            result.Success, result.Title);
+
         return MapToResponse(result);
     }
 

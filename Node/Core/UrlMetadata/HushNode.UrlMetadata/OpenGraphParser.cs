@@ -78,10 +78,19 @@ public class OpenGraphParser : IOpenGraphParser
             // Check for YouTube URLs and use oEmbed API
             if (IsYouTubeUrl(url))
             {
+                _logger.LogInformation("[YouTube] Detected YouTube URL: {Url}", url);
                 var youtubeResult = await ParseYouTubeOEmbedAsync(url, cts.Token);
                 if (youtubeResult != null)
+                {
+                    _logger.LogInformation("[YouTube] oEmbed success - Title: {Title}", youtubeResult.Title);
                     return youtubeResult;
+                }
+                _logger.LogWarning("[YouTube] oEmbed failed, falling back to HTML parsing");
                 // Fall through to standard parsing if oEmbed fails
+            }
+            else
+            {
+                _logger.LogDebug("[OpenGraph] Not a YouTube URL: {Url}", url);
             }
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -253,19 +262,23 @@ public class OpenGraphParser : IOpenGraphParser
         try
         {
             var oEmbedUrl = $"https://www.youtube.com/oembed?url={Uri.EscapeDataString(url)}&format=json";
+            _logger.LogInformation("[YouTube] Fetching oEmbed from: {OEmbedUrl}", oEmbedUrl);
 
             using var request = new HttpRequestMessage(HttpMethod.Get, oEmbedUrl);
             request.Headers.Add("User-Agent", "HushNetwork/1.0 (Link Preview Bot)");
 
             using var response = await _httpClient.SendAsync(request, cancellationToken);
+            _logger.LogInformation("[YouTube] oEmbed response status: {StatusCode}", response.StatusCode);
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogDebug("YouTube oEmbed returned {StatusCode} for URL: {Url}", response.StatusCode, url);
+                _logger.LogWarning("[YouTube] oEmbed returned {StatusCode} for URL: {Url}", response.StatusCode, url);
                 return null;
             }
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogInformation("[YouTube] oEmbed response: {Json}", json.Length > 200 ? json.Substring(0, 200) + "..." : json);
+
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
@@ -276,13 +289,14 @@ public class OpenGraphParser : IOpenGraphParser
             // Use author name as description if available
             var description = !string.IsNullOrWhiteSpace(authorName) ? $"Video by {authorName}" : null;
 
-            _logger.LogDebug("YouTube oEmbed success for {Url}: Title={Title}", url, title);
+            _logger.LogInformation("[YouTube] Parsed - Title: {Title}, Author: {Author}, Thumbnail: {Thumb}",
+                title, authorName, thumbnailUrl);
 
             return OpenGraphResult.CreateSuccess(title, description, thumbnailUrl);
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "YouTube oEmbed failed for URL: {Url}", url);
+            _logger.LogError(ex, "[YouTube] oEmbed failed for URL: {Url}", url);
             return null;
         }
     }

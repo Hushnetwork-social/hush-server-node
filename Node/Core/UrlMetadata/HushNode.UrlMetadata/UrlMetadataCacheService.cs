@@ -76,11 +76,11 @@ public class UrlMetadataCacheService : IUrlMetadataCacheService
         var cached = await GetAsync(url);
         if (cached != null)
         {
-            _logger.LogDebug("Cache hit for URL: {Url}", url);
+            _logger.LogInformation("[UrlMetadataCache] CACHE HIT for URL: {Url} - Title: {Title}", url, cached.Title);
             return cached;
         }
 
-        _logger.LogDebug("Cache miss for URL: {Url}", url);
+        _logger.LogInformation("[UrlMetadataCache] CACHE MISS for URL: {Url} - will fetch fresh", url);
 
         // Fetch fresh data
         var result = await fetchFunc();
