@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+option csharp_namespace = "HushNetwork.proto";
+
+package rpcHush;
+
+// URL Metadata Service - Fetches Open Graph metadata for link previews
+service HushUrlMetadata {
+  // Get metadata for a single URL
+  rpc GetUrlMetadata(GetUrlMetadataRequest) returns (GetUrlMetadataResponse);
+
+  // Get metadata for multiple URLs (batch request, max 10 URLs)
+  rpc GetUrlMetadataBatch(GetUrlMetadataBatchRequest) returns (GetUrlMetadataBatchResponse);
+}
+
+// ============================================
+// Get URL Metadata (Single)
+// ============================================
+
+message GetUrlMetadataRequest {
+  string url = 1;  // The URL to fetch metadata for
+}
+
+message GetUrlMetadataResponse {
+  bool success = 1;              // True if metadata was fetched successfully
+  string title = 2;              // Page title (max 200 chars)
+  string description = 3;        // Page description (max 500 chars)
+  string image_url = 4;          // Original og:image URL (empty if none)
+  string image_base64 = 5;       // Resized image as base64 (max 400px width, empty if none)
+  string domain = 6;             // Extracted domain from URL (e.g., "www.example.com")
+  string error_message = 7;      // Error message if success=false
+}
+
+// ============================================
+// Get URL Metadata (Batch)
+// ============================================
+
+message GetUrlMetadataBatchRequest {
+  repeated string urls = 1;      // List of URLs to fetch metadata for (max 10)
+}
+
+message GetUrlMetadataBatchResponse {
+  repeated UrlMetadataResult results = 1;  // Results in same order as request
+}
+
+// Single result in a batch response
+message UrlMetadataResult {
+  string url = 1;                // The original URL that was requested
+  bool success = 2;              // True if metadata was fetched successfully
+  string title = 3;              // Page title (max 200 chars)
+  string description = 4;        // Page description (max 500 chars)
+  string image_url = 5;          // Original og:image URL (empty if none)
+  string image_base64 = 6;       // Resized image as base64 (max 400px width, empty if none)
+  string domain = 7;             // Extracted domain from URL (e.g., "www.example.com")
+  string error_message = 8;      // Error message if success=false
+}
