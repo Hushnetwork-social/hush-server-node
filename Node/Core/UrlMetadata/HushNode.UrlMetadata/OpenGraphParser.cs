@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using HushNode.UrlMetadata.Models;
 using Microsoft.Extensions.Logging;
@@ -72,6 +74,15 @@ public class OpenGraphParser : IOpenGraphParser
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(TimeoutSeconds));
+
+            // Check for YouTube URLs and use oEmbed API
+            if (IsYouTubeUrl(url))
+            {
+                var youtubeResult = await ParseYouTubeOEmbedAsync(url, cts.Token);
+                if (youtubeResult != null)
+                    return youtubeResult;
+                // Fall through to standard parsing if oEmbed fails
+            }
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Add("User-Agent", "HushNetwork/1.0 (Link Preview Bot)");
@@ -216,4 +227,65 @@ public class OpenGraphParser : IOpenGraphParser
 
         return null;
     }
+
+    #region YouTube oEmbed Support
+
+    /// <summary>
+    /// YouTube URL patterns to detect.
+    /// </summary>
+    private static readonly Regex YouTubeUrlPattern = new(
+        @"^https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)[\w-]+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Checks if a URL is a YouTube video URL.
+    /// </summary>
+    private static bool IsYouTubeUrl(string url)
+    {
+        return YouTubeUrlPattern.IsMatch(url);
+    }
+
+    /// <summary>
+    /// Parses YouTube video metadata using the oEmbed API.
+    /// </summary>
+    private async Task<OpenGraphResult?> ParseYouTubeOEmbedAsync(string url, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var oEmbedUrl = $"https://www.youtube.com/oembed?url={Uri.EscapeDataString(url)}&format=json";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, oEmbedUrl);
+            request.Headers.Add("User-Agent", "HushNetwork/1.0 (Link Preview Bot)");
+
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogDebug("YouTube oEmbed returned {StatusCode} for URL: {Url}", response.StatusCode, url);
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var title = root.TryGetProperty("title", out var titleProp) ? titleProp.GetString() : null;
+            var authorName = root.TryGetProperty("author_name", out var authorProp) ? authorProp.GetString() : null;
+            var thumbnailUrl = root.TryGetProperty("thumbnail_url", out var thumbProp) ? thumbProp.GetString() : null;
+
+            // Use author name as description if available
+            var description = !string.IsNullOrWhiteSpace(authorName) ? $"Video by {authorName}" : null;
+
+            _logger.LogDebug("YouTube oEmbed success for {Url}: Title={Title}", url, title);
+
+            return OpenGraphResult.CreateSuccess(title, description, thumbnailUrl);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "YouTube oEmbed failed for URL: {Url}", url);
+            return null;
+        }
+    }
+
+    #endregion
 }
