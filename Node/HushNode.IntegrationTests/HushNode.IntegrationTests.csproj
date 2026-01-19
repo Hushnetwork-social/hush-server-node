@@ -8,6 +8,11 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
+  <!-- Copy xunit.runner.json to output to disable parallel test execution -->
+  <ItemGroup>
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />

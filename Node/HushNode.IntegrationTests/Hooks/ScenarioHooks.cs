@@ -14,6 +14,7 @@ namespace HushNode.IntegrationTests.Hooks;
 internal sealed class ScenarioHooks
 {
     private static HushTestFixture? _fixture;
+    private static readonly SemaphoreSlim _scenarioLock = new(1, 1);
     private readonly ScenarioContext _scenarioContext;
 
     /// <summary>
@@ -61,10 +62,14 @@ internal sealed class ScenarioHooks
 
     /// <summary>
     /// Resets database and Redis, then starts a fresh node for each scenario.
+    /// Uses a semaphore to ensure scenarios run sequentially (xUnit may try to run them in parallel).
     /// </summary>
     [BeforeScenario]
     public async Task BeforeScenario()
     {
+        // Ensure only one scenario runs at a time
+        await _scenarioLock.WaitAsync();
+
         if (_fixture == null)
         {
             throw new InvalidOperationException("Test fixture not initialized. BeforeTestRun may not have executed.");
@@ -84,22 +89,31 @@ internal sealed class ScenarioHooks
 
     /// <summary>
     /// Disposes the node after each scenario completes (pass or fail).
+    /// Releases the semaphore to allow the next scenario to run.
     /// </summary>
     [AfterScenario]
     public async Task AfterScenario()
     {
-        // Dispose GrpcClientFactory
-        if (_scenarioContext.TryGetValue(GrpcFactoryKey, out var grpcFactoryObj)
-            && grpcFactoryObj is GrpcClientFactory grpcFactory)
+        try
         {
-            grpcFactory.Dispose();
-        }
+            // Dispose GrpcClientFactory
+            if (_scenarioContext.TryGetValue(GrpcFactoryKey, out var grpcFactoryObj)
+                && grpcFactoryObj is GrpcClientFactory grpcFactory)
+            {
+                grpcFactory.Dispose();
+            }
 
-        // Dispose node
-        if (_scenarioContext.TryGetValue(NodeKey, out var nodeObj)
-            && nodeObj is HushServerNodeCore node)
+            // Dispose node
+            if (_scenarioContext.TryGetValue(NodeKey, out var nodeObj)
+                && nodeObj is HushServerNodeCore node)
+            {
+                await node.DisposeAsync();
+            }
+        }
+        finally
         {
-            await node.DisposeAsync();
+            // Always release the semaphore to allow next scenario to run
+            _scenarioLock.Release();
         }
     }
 

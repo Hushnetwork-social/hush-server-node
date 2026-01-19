@@ -5,6 +5,7 @@ using HushNode.Blockchain.Storage;
 using HushNode.Blockchain.Workflows;
 using HushShared.Blockchain.TransactionModel;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Olimpo;
 
@@ -22,7 +23,8 @@ public static class HushNodeBlockchainHostBuild
             services.AddSingleton<IBootstrapper, HushNodeBlockchainBootstrapper>();
 
             services.AddSingleton<IChainFoundationService, ChainFoundationService>();
-            services.AddSingleton<IBlockProductionSchedulerService, BlockProductionSchedulerService>();
+            // Use TryAddSingleton so test configurations can override this with their own scheduler
+            services.TryAddSingleton<IBlockProductionSchedulerService, BlockProductionSchedulerService>();
             services.AddSingleton<IBlockAssemblerWorkflow, BlockAssemblerWorkflow>();
 
             services.RegisterBlockchainStorageServices(hostContext);

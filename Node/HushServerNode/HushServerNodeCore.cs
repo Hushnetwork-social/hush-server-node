@@ -126,6 +126,36 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                 }
             }
         }
+
+        // In test mode, wait until the node is fully initialized
+        // by polling the blockchain height (genesis block will be at index 1)
+        if (_isTestMode)
+        {
+            await WaitForNodeReadyAsync();
+        }
+    }
+
+    /// <summary>
+    /// Waits for the node to be fully initialized using ASP.NET Core's application lifetime.
+    /// This waits for all hosted services to start, which is sufficient for gRPC readiness.
+    /// </summary>
+    private async Task WaitForNodeReadyAsync()
+    {
+        var lifetime = _app.Services.GetRequiredService<IHostApplicationLifetime>();
+
+        var maxAttempts = 100; // 10 seconds max (100 * 100ms)
+        for (var i = 0; i < maxAttempts; i++)
+        {
+            // ApplicationStarted token is cancelled when all hosted services have started
+            if (lifetime.ApplicationStarted.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+
+        throw new TimeoutException("Node did not become ready within 10 seconds.");
     }
 
     /// <summary>
@@ -180,10 +210,19 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         else
         {
             // Test mode: use in-memory configuration with dynamic ports
+            // Configure block producer credentials from TestIdentities
+            var blockProducer = Testing.TestIdentities.BlockProducer;
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:HushNetworkDb"] = testConfig.ConnectionString,
-                ["BlockchainSettings:MaxEmptyBlocksBeforePause"] = "100" // High value for tests
+                ["BlockchainSettings:MaxEmptyBlocksBeforePause"] = "100", // High value for tests
+                // Configure block producer (stacker) credentials
+                ["CredentialsProfile:ProfileName"] = blockProducer.DisplayName,
+                ["CredentialsProfile:PublicSigningAddress"] = blockProducer.PublicSigningAddress,
+                ["CredentialsProfile:PrivateSigningKey"] = blockProducer.PrivateSigningKey,
+                ["CredentialsProfile:PublicEncryptAddress"] = blockProducer.PublicEncryptAddress,
+                ["CredentialsProfile:PrivateEncryptKey"] = blockProducer.PrivateEncryptKey,
+                ["CredentialsProfile:IsPublic"] = "false"
             });
 
             // Use port 0 for dynamic port allocation
@@ -198,6 +237,14 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         using (var scope = app.Services.CreateScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+
+            if (testConfig != null)
+            {
+                // In test mode: ensure a clean database by deleting everything first
+                // This handles any leftover state from previous test runs
+                dbContext.Database.EnsureDeleted();
+            }
+
             dbContext.Database.Migrate();
         }
 

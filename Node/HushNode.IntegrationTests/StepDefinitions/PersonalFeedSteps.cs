@@ -77,7 +77,7 @@ public sealed class PersonalFeedSteps
         response.Successfull.Should().BeTrue($"Identity registration for {userName} should succeed: {response.Message}");
     }
 
-    [Then(@"(.*) should have a personal feed")]
+    [Then(@"([A-Za-z]+) should have a personal feed")]
     public async Task ThenUserShouldHaveAPersonalFeed(string userName)
     {
         var identity = GetTestIdentity(userName);

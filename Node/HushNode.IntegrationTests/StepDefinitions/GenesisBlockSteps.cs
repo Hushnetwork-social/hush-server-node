@@ -4,6 +4,7 @@ using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
 using HushServerNode;
 using HushServerNode.Testing;
+using HushShared.Converters;
 using TechTalk.SpecFlow;
 
 namespace HushNode.IntegrationTests.StepDefinitions;
@@ -25,13 +26,14 @@ public sealed class GenesisBlockSteps
     public async Task GivenAFreshHushServerNodeWithoutAnyBlocks()
     {
         // The node is started fresh by BeforeScenario hook with reset database
-        // Verify the node is running by checking we can connect
+        // Note: The node automatically creates the genesis block during initialization
+        // So a "fresh" node will actually be at block 1 (genesis), not block 0
         var grpcFactory = GetGrpcFactory();
         var blockchainClient = grpcFactory.CreateClient<HushBlockchain.HushBlockchainClient>();
 
-        // Initial state should be block 0 (no blocks produced yet)
+        // Initial state should be block 1 (genesis block auto-created)
         var response = await blockchainClient.GetBlockchainHeightAsync(new GetBlockchainHeightRequest());
-        response.Index.Should().Be(0, "fresh node should start with no blocks");
+        response.Index.Should().Be(1, "fresh node should have genesis block at index 1");
     }
 
     [Given(@"BlockProducer credentials are configured")]
@@ -60,6 +62,16 @@ public sealed class GenesisBlockSteps
         response.Index.Should().Be(expectedIndex, $"block height should be {expectedIndex} after genesis block");
     }
 
+    [Then(@"the blockchain should be at index (.*)")]
+    public async Task ThenTheBlockchainShouldBeAtIndex(int expectedIndex)
+    {
+        var grpcFactory = GetGrpcFactory();
+        var blockchainClient = grpcFactory.CreateClient<HushBlockchain.HushBlockchainClient>();
+
+        var response = await blockchainClient.GetBlockchainHeightAsync(new GetBlockchainHeightRequest());
+        response.Index.Should().Be(expectedIndex, $"block height should be {expectedIndex}");
+    }
+
     [Then(@"the BlockProducer should have (.*) HUSH balance")]
     public async Task ThenTheBlockProducerShouldHaveHUSHBalance(int expectedBalance)
     {
@@ -72,7 +84,7 @@ public sealed class GenesisBlockSteps
             Address = TestIdentities.BlockProducer.PublicSigningAddress
         });
 
-        decimal.Parse(response.Balance).Should().Be(expectedBalance,
+        DecimalStringConverter.StringToDecimal(response.Balance).Should().Be(expectedBalance,
             $"BlockProducer should have {expectedBalance} HUSH after producing a block");
     }
 

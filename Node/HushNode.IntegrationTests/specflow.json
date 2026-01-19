@@ -11,5 +11,8 @@
   },
   "bindingCulture": {
     "name": "en-US"
+  },
+  "runtime": {
+    "missingOrPendingStepsOutcome": "Error"
   }
 }

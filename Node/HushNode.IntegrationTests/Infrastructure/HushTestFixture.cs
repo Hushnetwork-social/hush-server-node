@@ -50,8 +50,10 @@ internal sealed class HushTestFixture : IAsyncLifetime
 
         await Task.WhenAll(postgresTask, redisTask);
 
-        // Establish Redis connection for FLUSHDB operations
-        _redisConnection = await ConnectionMultiplexer.ConnectAsync(_redisContainer!.GetConnectionString());
+        // Establish Redis connection for FLUSHDB operations (requires allowAdmin)
+        var redisOptions = ConfigurationOptions.Parse(_redisContainer!.GetConnectionString());
+        redisOptions.AllowAdmin = true;
+        _redisConnection = await ConnectionMultiplexer.ConnectAsync(redisOptions);
     }
 
     /// <summary>
@@ -82,32 +84,32 @@ internal sealed class HushTestFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Resets the database by dropping all tables and reapplying migrations.
-    /// Call this before each scenario for test isolation.
+    /// Resets the database by dropping and recreating the public schema.
+    /// This ensures complete isolation between test scenarios.
     /// </summary>
     public async Task ResetDatabaseAsync()
     {
-        // Use raw SQL to drop all tables, then let the node recreate schema via migrations
         await using var connection = new NpgsqlConnection(PostgresConnectionString);
         await connection.OpenAsync();
 
-        // Drop all tables in the public schema
-        await using var dropCommand = connection.CreateCommand();
-        dropCommand.CommandText = """
-            DO $$
-            DECLARE
-                r RECORD;
-            BEGIN
-                -- Drop all tables
-                FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-                    EXECUTE 'DROP TABLE IF EXISTS "' || r.tablename || '" CASCADE';
-                END LOOP;
-
-                -- Drop EF migrations history if exists
-                DROP TABLE IF EXISTS "__EFMigrationsHistory" CASCADE;
-            END $$;
+        // Terminate any other connections to allow dropping schema
+        await using var terminateCommand = connection.CreateCommand();
+        terminateCommand.CommandText = """
+            SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity
+            WHERE datname = current_database()
+            AND pid <> pg_backend_pid();
             """;
-        await dropCommand.ExecuteNonQueryAsync();
+        await terminateCommand.ExecuteNonQueryAsync();
+
+        // Drop and recreate the public schema - cleanest way to reset
+        await using var resetCommand = connection.CreateCommand();
+        resetCommand.CommandText = """
+            DROP SCHEMA public CASCADE;
+            CREATE SCHEMA public;
+            GRANT ALL ON SCHEMA public TO public;
+            """;
+        await resetCommand.ExecuteNonQueryAsync();
     }
 
     /// <summary>

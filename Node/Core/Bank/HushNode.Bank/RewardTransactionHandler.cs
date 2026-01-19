@@ -17,6 +17,7 @@ public class RewardTransactionHandler(
 
     public async Task HandleRewardTransactionAsync(ValidatedTransaction<RewardPayload> rewardTransaction)
     {
+        Console.WriteLine($"[RewardTransactionHandler] Processing reward for: {rewardTransaction.UserSignature.Signatory}");
         await _handlerSemaphore.WaitAsync();
         var addressBalance = await this._bankStorageService.RetrieveTokenBalanceForAddress(
             rewardTransaction.UserSignature.Signatory,

@@ -92,15 +92,16 @@ namespace HushNode.IntegrationTests.Features
             this.TestTearDown();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="User registration creates personal feed")]
+        [Xunit.SkippableFactAttribute(DisplayName="User registration creates personal feed", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "Personal Feed Creation")]
         [Xunit.TraitAttribute("Description", "User registration creates personal feed")]
         public void UserRegistrationCreatesPersonalFeed()
         {
-            string[] tagsOfScenario = ((string[])(null));
+            string[] tagsOfScenario = new string[] {
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("User registration creates personal feed", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 10
+#line 12
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -113,19 +114,19 @@ namespace HushNode.IntegrationTests.Features
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 11
+#line 13
     testRunner.Given("user \"Alice\" is not registered", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 12
+#line 14
     testRunner.When("Alice registers her identity via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 13
+#line 15
     testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 14
+#line 16
     testRunner.Then("Alice should have a personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 15
+#line 17
     testRunner.And("Alice\'s display name should be \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
