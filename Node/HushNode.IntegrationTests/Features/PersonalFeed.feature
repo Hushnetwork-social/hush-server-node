@@ -7,6 +7,7 @@ Feature: Personal Feed Creation
   Background:
     Given a HushServerNode at block 1
 
+  @Walkthrough
   Scenario: User registration creates personal feed
     Given user "Alice" is not registered
     When Alice registers her identity via gRPC

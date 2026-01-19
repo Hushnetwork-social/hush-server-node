@@ -8,17 +8,20 @@ Feature: Genesis Block Creation
   # This scenario verifies that the genesis block was created correctly.
   # The genesis block only contains a reward transaction for the block producer.
   # Personal feeds require explicit identity registration (a separate feature).
+  @Walkthrough
   Scenario: Genesis block is created on fresh node startup
     Given a fresh HushServerNode without any blocks
     And BlockProducer credentials are configured
     Then the genesis block should exist at index 1
 
+  @Walkthrough
   Scenario: Genesis block contains reward transaction
     Given a fresh HushServerNode without any blocks
     And BlockProducer credentials are configured
     Then the genesis block should exist at index 1
     And the BlockProducer should have 5 HUSH balance
 
+  @Walkthrough
   Scenario: Block production adds to blockchain
     Given a fresh HushServerNode without any blocks
     When a block is produced

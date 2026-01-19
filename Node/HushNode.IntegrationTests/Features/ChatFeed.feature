@@ -9,6 +9,7 @@ Feature: Chat Feed and Messaging
     And user "Alice" is registered with a personal feed
     And user "Bob" is registered with a personal feed
 
+  @Walkthrough
   Scenario: Chat feed creation
     When Alice requests a ChatFeed with Bob via gRPC
     And a block is produced
