@@ -34,16 +34,25 @@
 
     <!-- gRPC client for black-box testing -->
     <PackageReference Include="Grpc.Net.Client" Version="2.67.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.29.3" />
+    <PackageReference Include="Grpc.Tools" Version="2.67.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- gRPC Client Proto Files -->
+  <ItemGroup>
+    <Protobuf Include="..\..\Protos\hushBlockchain.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
+    <Protobuf Include="..\..\Protos\hushBank.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
+    <Protobuf Include="..\..\Protos\hushFeed.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
+    <Protobuf Include="..\..\Protos\hushIdentity.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
+    <Protobuf Include="..\..\Protos\hushReactions.proto" GrpcServices="None" ProtoRoot="..\..\Protos\" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Reference HushServerNode for internal class access via InternalsVisibleTo -->
     <ProjectReference Include="..\HushServerNode\HushServerNode.csproj" />
-  </ItemGroup>
-
-  <!-- SpecFlow feature files -->
-  <ItemGroup>
-    <SpecFlowFeatureFiles Include="Features\**\*.feature" />
   </ItemGroup>
 
 </Project>
