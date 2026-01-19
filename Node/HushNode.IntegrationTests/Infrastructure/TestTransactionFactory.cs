@@ -42,6 +42,31 @@ internal static class TestTransactionFactory
     }
 
     /// <summary>
+    /// Creates a signed personal feed creation transaction.
+    /// This must be submitted AFTER identity registration, in the same or subsequent block.
+    /// </summary>
+    /// <param name="identity">The identity to create a personal feed for.</param>
+    /// <returns>JSON-serialized signed transaction ready for submission.</returns>
+    public static string CreatePersonalFeed(TestIdentity identity)
+    {
+        // Generate AES key for the feed and encrypt it with the owner's public encryption key
+        var feedAesKey = EncryptKeys.GenerateAesKey();
+        var encryptedFeedKey = EncryptKeys.Encrypt(feedAesKey, identity.PublicEncryptAddress);
+
+        var unsignedTransaction = NewPersonalFeedPayloadHandler.CreateNewPersonalFeedTransaction(encryptedFeedKey);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            identity.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<NewPersonalFeedPayload>(
+            unsignedTransaction,
+            new SignatureInfo(identity.PublicSigningAddress, signature));
+
+        return signedTransaction.ToJson();
+    }
+
+    /// <summary>
     /// Creates a signed chat feed creation transaction.
     /// </summary>
     /// <param name="initiator">The identity initiating the chat.</param>

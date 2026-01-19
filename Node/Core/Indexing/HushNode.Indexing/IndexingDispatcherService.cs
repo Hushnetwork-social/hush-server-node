@@ -34,5 +34,8 @@ public class IndexingDispatcherService :
             });
 
         await Task.WhenAll(processingTasks);
+
+        // Signal that all indexing for this block is complete
+        await this._eventAggregator.PublishAsync(new BlockIndexCompletedEvent(message.Block.BlockIndex));
     }
 }

@@ -114,16 +114,15 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Genesis block contains reward transaction", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="Genesis block contains reward transaction")]
         [Xunit.TraitAttribute("FeatureTitle", "Genesis Block Creation")]
         [Xunit.TraitAttribute("Description", "Genesis block contains reward transaction")]
         public void GenesisBlockContainsRewardTransaction()
         {
-            string[] tagsOfScenario = new string[] {
-                    "ignore"};
+            string[] tagsOfScenario = ((string[])(null));
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Genesis block contains reward transaction", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 19
+#line 16
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -133,32 +132,31 @@ namespace HushNode.IntegrationTests.Features
             else
             {
                 this.ScenarioStart();
-#line 20
+#line 17
     testRunner.Given("a fresh HushServerNode without any blocks", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 21
+#line 18
     testRunner.And("BlockProducer credentials are configured", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 22
+#line 19
     testRunner.Then("the genesis block should exist at index 1", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 23
+#line 20
     testRunner.And("the BlockProducer should have 5 HUSH balance", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Block production adds to blockchain", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="Block production adds to blockchain")]
         [Xunit.TraitAttribute("FeatureTitle", "Genesis Block Creation")]
         [Xunit.TraitAttribute("Description", "Block production adds to blockchain")]
         public void BlockProductionAddsToBlockchain()
         {
-            string[] tagsOfScenario = new string[] {
-                    "ignore"};
+            string[] tagsOfScenario = ((string[])(null));
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Block production adds to blockchain", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 29
+#line 22
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -168,16 +166,16 @@ namespace HushNode.IntegrationTests.Features
             else
             {
                 this.ScenarioStart();
-#line 30
+#line 23
     testRunner.Given("a fresh HushServerNode without any blocks", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 31
+#line 24
     testRunner.When("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 32
+#line 25
     testRunner.Then("the blockchain should be at index 2", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 33
+#line 26
     testRunner.And("the BlockProducer should have 10 HUSH balance", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }

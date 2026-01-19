@@ -10,7 +10,10 @@ namespace HushServerNode.Testing;
 /// </summary>
 internal sealed class BlockProductionControl : IDisposable
 {
-    private readonly Subject<long> _blockTrigger = new();
+    // Use ReplaySubject to ensure values aren't lost if emitted before subscriber subscribes.
+    // This fixes the race condition where ProduceBlockAsync() is called before
+    // BlockProductionSchedulerService.Handle(BlockchainInitializedEvent) subscribes.
+    private readonly ReplaySubject<long> _blockTrigger = new(bufferSize: 1);
     private readonly object _lock = new();
     private TaskCompletionSource<bool>? _pendingBlockCompletion;
     private long _triggerCount;

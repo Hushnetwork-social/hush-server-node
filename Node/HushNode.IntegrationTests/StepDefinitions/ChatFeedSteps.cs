@@ -38,17 +38,28 @@ public sealed class ChatFeedSteps
 
         if (!hasPersonalFeed.FeedAvailable)
         {
-            // Register the identity
             var blockchainClient = grpcFactory.CreateClient<HushBlockchain.HushBlockchainClient>();
-            var signedTransactionJson = TestTransactionFactory.CreateIdentityRegistration(identity);
 
-            var response = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+            // Step 1: Register the identity
+            var identityTxJson = TestTransactionFactory.CreateIdentityRegistration(identity);
+            var identityResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
             {
-                SignedTransaction = signedTransactionJson
+                SignedTransaction = identityTxJson
             });
-            response.Successfull.Should().BeTrue($"Identity registration for {userName} should succeed");
+            identityResponse.Successfull.Should().BeTrue($"Identity registration for {userName} should succeed");
 
-            // Produce a block to commit the registration
+            // Step 2: Produce block to commit identity first
+            await blockControl.ProduceBlockAsync();
+
+            // Step 3: Create personal feed (in separate block to avoid serialization conflict)
+            var personalFeedTxJson = TestTransactionFactory.CreatePersonalFeed(identity);
+            var feedResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+            {
+                SignedTransaction = personalFeedTxJson
+            });
+            feedResponse.Successfull.Should().BeTrue($"Personal feed creation for {userName} should succeed");
+
+            // Step 4: Produce block to commit personal feed
             await blockControl.ProduceBlockAsync();
         }
 

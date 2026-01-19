@@ -83,7 +83,7 @@ public class BlockProductionSchedulerServiceTests
     #region Finalization Callback Tests
 
     [Fact]
-    public void Handle_BlockCreatedEvent_ShouldInvokeCallback()
+    public async Task HandleAsync_BlockIndexCompletedEvent_ShouldInvokeCallback()
     {
         // Arrange
         var mocks = CreateMocks();
@@ -103,14 +103,14 @@ public class BlockProductionSchedulerServiceTests
             callback);
 
         // Act
-        service.Handle(new BlockCreatedEvent(CreateMockFinalizedBlock()));
+        await service.HandleAsync(new BlockIndexCompletedEvent(new BlockIndex(1)));
 
         // Assert
         callbackInvoked.Should().BeTrue();
     }
 
     [Fact]
-    public void Handle_BlockCreatedEvent_WithoutCallback_ShouldNotThrow()
+    public async Task HandleAsync_BlockCreatedEvent_WithoutCallback_ShouldNotThrow()
     {
         // Arrange
         var mocks = CreateMocks();
@@ -124,14 +124,14 @@ public class BlockProductionSchedulerServiceTests
             mocks.Logger);
 
         // Act
-        var act = () => service.Handle(new BlockCreatedEvent(CreateMockFinalizedBlock()));
+        var act = async () => await service.HandleAsync(new BlockCreatedEvent(CreateMockFinalizedBlock()));
 
         // Assert
-        act.Should().NotThrow();
+        await act.Should().NotThrowAsync();
     }
 
     [Fact]
-    public void Handle_BlockCreatedEvent_WithNullCallback_ShouldNotThrow()
+    public async Task HandleAsync_BlockCreatedEvent_WithNullCallback_ShouldNotThrow()
     {
         // Arrange
         var mocks = CreateMocks();
@@ -149,10 +149,62 @@ public class BlockProductionSchedulerServiceTests
             onBlockFinalized: null);
 
         // Act
-        var act = () => service.Handle(new BlockCreatedEvent(CreateMockFinalizedBlock()));
+        var act = async () => await service.HandleAsync(new BlockCreatedEvent(CreateMockFinalizedBlock()));
 
         // Assert
-        act.Should().NotThrow();
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task HandleAsync_BlockCreatedEvent_ShouldNotInvokeCallback()
+    {
+        // Arrange - BlockCreatedEvent should NOT invoke callback (that's BlockIndexCompletedEvent's job)
+        var mocks = CreateMocks();
+        var testSubject = new Subject<long>();
+        var callbackInvoked = false;
+        Action callback = () => callbackInvoked = true;
+
+        var service = new BlockProductionSchedulerService(
+            mocks.BlockAssembler,
+            mocks.MemPool,
+            mocks.BlockchainStorage,
+            mocks.BlockchainCache,
+            mocks.EventAggregator,
+            mocks.BlockchainSettings,
+            mocks.Logger,
+            () => testSubject.AsObservable(),
+            callback);
+
+        // Act
+        await service.HandleAsync(new BlockCreatedEvent(CreateMockFinalizedBlock()));
+
+        // Assert
+        callbackInvoked.Should().BeFalse("BlockCreatedEvent should not invoke callback - only BlockIndexCompletedEvent should");
+    }
+
+    [Fact]
+    public async Task HandleAsync_BlockIndexCompletedEvent_WithNullCallback_ShouldNotThrow()
+    {
+        // Arrange
+        var mocks = CreateMocks();
+        var testSubject = new Subject<long>();
+
+        var service = new BlockProductionSchedulerService(
+            mocks.BlockAssembler,
+            mocks.MemPool,
+            mocks.BlockchainStorage,
+            mocks.BlockchainCache,
+            mocks.EventAggregator,
+            mocks.BlockchainSettings,
+            mocks.Logger,
+            () => testSubject.AsObservable(),
+            onBlockFinalized: null);
+
+        // Act
+        var act = async () => await service.HandleAsync(new BlockIndexCompletedEvent(new BlockIndex(1)));
+
+        // Assert
+        await act.Should().NotThrowAsync();
     }
 
     #endregion
@@ -160,7 +212,7 @@ public class BlockProductionSchedulerServiceTests
     #region Integration with BlockProductionControl Tests
 
     [Fact]
-    public async Task Integration_WithBlockProductionControl_ShouldCompleteWhenFinalized()
+    public async Task Integration_WithBlockProductionControl_ShouldCompleteWhenIndexingFinalized()
     {
         // Arrange
         var mocks = CreateMocks();
@@ -189,8 +241,8 @@ public class BlockProductionSchedulerServiceTests
         var produceTask = control.ProduceBlockAsync(TimeSpan.FromSeconds(5));
         await Task.Delay(50); // Let it start
 
-        // Simulate block finalization by calling Handle
-        service.Handle(new BlockCreatedEvent(CreateMockFinalizedBlock()));
+        // Simulate indexing completion by calling HandleAsync with BlockIndexCompletedEvent
+        await service.HandleAsync(new BlockIndexCompletedEvent(new BlockIndex(1)));
 
         // Assert
         await produceTask;

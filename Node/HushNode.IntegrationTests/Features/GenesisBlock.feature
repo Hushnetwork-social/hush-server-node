@@ -13,19 +13,12 @@ Feature: Genesis Block Creation
     And BlockProducer credentials are configured
     Then the genesis block should exist at index 1
 
-  # TODO: Balance check is flaky - block persistence sometimes hangs during test.
-  # Needs investigation of database connection pooling/timeout in test context.
-  @ignore
   Scenario: Genesis block contains reward transaction
     Given a fresh HushServerNode without any blocks
     And BlockProducer credentials are configured
     Then the genesis block should exist at index 1
     And the BlockProducer should have 5 HUSH balance
 
-  # TODO: This scenario times out - needs investigation of BlockProductionControl observable subscription.
-  # The BlockProductionSchedulerService subscribes to the observable in Handle(BlockchainInitializedEvent),
-  # but the trigger signal from BlockProductionControl.ProduceBlockAsync() isn't being received.
-  @ignore
   Scenario: Block production adds to blockchain
     Given a fresh HushServerNode without any blocks
     When a block is produced

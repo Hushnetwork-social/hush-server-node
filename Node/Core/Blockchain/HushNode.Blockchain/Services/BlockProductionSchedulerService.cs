@@ -14,7 +14,8 @@ namespace HushNode.Blockchain.Services;
 public class BlockProductionSchedulerService :
     IBlockProductionSchedulerService,
     IHandle<BlockchainInitializedEvent>,
-    IHandle<BlockCreatedEvent>,
+    IHandleAsync<BlockCreatedEvent>,
+    IHandleAsync<BlockIndexCompletedEvent>,
     IHandle<TransactionReceivedEvent>
 {
     private readonly IBlockAssemblerWorkflow _blockAssemblerWorkflow;
@@ -88,6 +89,10 @@ public class BlockProductionSchedulerService :
         this._blockGeneratorLoop = observableFactory != null
             ? observableFactory()
             : Observable.Interval(TimeSpan.FromSeconds(3));
+
+        this._logger.LogInformation(
+            "BlockProductionSchedulerService created. TestMode={TestMode}, HasOnBlockFinalized={HasCallback}",
+            this._isTestMode, this._onBlockFinalized != null);
     }
 
     public void Handle(BlockchainInitializedEvent message)
@@ -95,6 +100,9 @@ public class BlockProductionSchedulerService :
         // TODO [AboimPinto]: There are several business logic to generate a Block.
         //                    If this is a PrivateNetwork, there is no aditional logic.
         //                    If this is attached to the main network, should follow the Block Producer rotation.
+
+        this._logger.LogInformation("BlockchainInitializedEvent received. TestMode={TestMode}, OnBlockFinalized={HasCallback}",
+            this._isTestMode, this._onBlockFinalized != null);
 
         this._blockGeneratorLoop.Subscribe(async x =>
         {
@@ -162,10 +170,18 @@ public class BlockProductionSchedulerService :
         });
     }
 
-    public void Handle(BlockCreatedEvent message)
+    public Task HandleAsync(BlockCreatedEvent message)
     {
+        // Block has been created and saved - allow scheduling next block
         this._canSchedule = true;
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(BlockIndexCompletedEvent message)
+    {
+        // All indexing for the block is complete - signal test can continue
         this._onBlockFinalized?.Invoke();
+        return Task.CompletedTask;
     }
 
     public void Handle(TransactionReceivedEvent message)

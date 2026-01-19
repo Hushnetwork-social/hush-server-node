@@ -7,8 +7,6 @@ Feature: Personal Feed Creation
   Background:
     Given a HushServerNode at block 1
 
-  # TODO: This scenario times out on "a block is produced" - needs BlockProductionControl investigation.
-  @ignore
   Scenario: User registration creates personal feed
     Given user "Alice" is not registered
     When Alice registers her identity via gRPC

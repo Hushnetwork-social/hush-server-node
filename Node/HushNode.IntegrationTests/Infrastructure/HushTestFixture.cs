@@ -125,11 +125,13 @@ internal sealed class HushTestFixture : IAsyncLifetime
     /// <summary>
     /// Creates and starts a new HushServerNodeCore configured for testing.
     /// </summary>
+    /// <param name="diagnosticCapture">Optional diagnostic capture for collecting logs.</param>
     /// <returns>A running HushServerNodeCore instance</returns>
-    public async Task<(HushServerNodeCore Node, BlockProductionControl BlockControl, GrpcClientFactory GrpcFactory)> StartNodeAsync()
+    public async Task<(HushServerNodeCore Node, BlockProductionControl BlockControl, GrpcClientFactory GrpcFactory)> StartNodeAsync(
+        DiagnosticCapture? diagnosticCapture = null)
     {
         var blockControl = new BlockProductionControl();
-        var node = HushServerNodeCore.CreateForTesting(blockControl, PostgresConnectionString);
+        var node = HushServerNodeCore.CreateForTesting(blockControl, PostgresConnectionString, diagnosticCapture);
 
         await node.StartAsync();
 

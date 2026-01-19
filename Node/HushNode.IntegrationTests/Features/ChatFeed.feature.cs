@@ -98,16 +98,15 @@ namespace HushNode.IntegrationTests.Features
             this.TestTearDown();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Chat feed creation", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="Chat feed creation")]
         [Xunit.TraitAttribute("FeatureTitle", "Chat Feed and Messaging")]
         [Xunit.TraitAttribute("Description", "Chat feed creation")]
         public void ChatFeedCreation()
         {
-            string[] tagsOfScenario = new string[] {
-                    "ignore"};
+            string[] tagsOfScenario = ((string[])(null));
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Chat feed creation", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 14
+#line 12
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -120,32 +119,31 @@ namespace HushNode.IntegrationTests.Features
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 15
+#line 13
     testRunner.When("Alice requests a ChatFeed with Bob via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 16
+#line 14
     testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 17
+#line 15
     testRunner.Then("Alice should have a ChatFeed with Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 18
+#line 16
     testRunner.And("Bob should have a ChatFeed with Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Sending a message in chat", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="Sending a message in chat")]
         [Xunit.TraitAttribute("FeatureTitle", "Chat Feed and Messaging")]
         [Xunit.TraitAttribute("Description", "Sending a message in chat")]
         public void SendingAMessageInChat()
         {
-            string[] tagsOfScenario = new string[] {
-                    "ignore"};
+            string[] tagsOfScenario = ((string[])(null));
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Sending a message in chat", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 22
+#line 18
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -158,19 +156,19 @@ namespace HushNode.IntegrationTests.Features
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 23
+#line 19
     testRunner.Given("Alice has a ChatFeed with Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 24
+#line 20
     testRunner.When("Alice sends message \"Hello Bob!\" to the ChatFeed via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 25
+#line 21
     testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 26
+#line 22
     testRunner.Then("Bob should see the message \"Hello Bob!\" in the ChatFeed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 27
+#line 23
     testRunner.And("Alice should see the message \"Hello Bob!\" in the ChatFeed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }

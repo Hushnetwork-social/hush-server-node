@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -78,11 +81,13 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
     /// </summary>
     /// <param name="blockProductionControl">The block production control for synchronous block triggers.</param>
     /// <param name="connectionString">PostgreSQL connection string for test database.</param>
+    /// <param name="diagnosticLoggerProvider">Optional logger provider for capturing diagnostic output.</param>
     public static HushServerNodeCore CreateForTesting(
         BlockProductionControl blockProductionControl,
-        string connectionString)
+        string connectionString,
+        ILoggerProvider? diagnosticLoggerProvider = null)
     {
-        var testConfig = new TestConfiguration(blockProductionControl, connectionString);
+        var testConfig = new TestConfiguration(blockProductionControl, connectionString, diagnosticLoggerProvider);
         var app = BuildApplication(Array.Empty<string>(), testConfig);
         return new HushServerNodeCore(app, blockProductionControl, isTestMode: true);
     }
@@ -106,32 +111,32 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         // Start the application
         _runTask = _app.RunAsync();
 
-        // Wait briefly for Kestrel to start and bind ports
-        await Task.Delay(100);
-
-        // Extract actual bound ports from Kestrel
-        var addresses = _app.Urls;
-        foreach (var address in addresses)
-        {
-            if (Uri.TryCreate(address, UriKind.Absolute, out var uri))
-            {
-                // The first port is native gRPC (HTTP/2), second is gRPC-Web (HTTP/1.1)
-                if (GrpcPort == 0)
-                {
-                    GrpcPort = uri.Port;
-                }
-                else
-                {
-                    GrpcWebPort = uri.Port;
-                }
-            }
-        }
-
         // In test mode, wait until the node is fully initialized
-        // by polling the blockchain height (genesis block will be at index 1)
         if (_isTestMode)
         {
             await WaitForNodeReadyAsync();
+        }
+
+        // Extract actual bound ports from Kestrel using IServerAddressesFeature
+        var server = _app.Services.GetRequiredService<IServer>();
+        var addressFeature = server.Features.Get<IServerAddressesFeature>();
+        if (addressFeature != null)
+        {
+            foreach (var address in addressFeature.Addresses)
+            {
+                if (Uri.TryCreate(address, UriKind.Absolute, out var uri))
+                {
+                    // The first port is native gRPC (HTTP/2), second is gRPC-Web (HTTP/1.1)
+                    if (GrpcPort == 0)
+                    {
+                        GrpcPort = uri.Port;
+                    }
+                    else
+                    {
+                        GrpcWebPort = uri.Port;
+                    }
+                }
+            }
         }
     }
 
@@ -317,25 +322,34 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             .RegisterPushNotificationsModule()
             .RegisterCoreModuleUrlMetadata();
 
-        // In test mode, replace the BlockProductionSchedulerService with one using injected observable
+        // In test mode, REPLACE the default scheduler with one using injected observable
+        // Must use ConfigureServices to ensure this runs after RegisterCoreModuleBlockchain's callback
         if (testConfig != null)
         {
             var (observableFactory, onBlockFinalized) = testConfig.BlockProductionControl.GetSchedulerConfiguration();
 
-            // Remove the default registration and add our custom one
-            builder.Services.AddSingleton<IBlockProductionSchedulerService>(sp =>
+            builder.Host.ConfigureServices((_, services) =>
             {
-                return new BlockProductionSchedulerService(
-                    sp.GetRequiredService<IBlockAssemblerWorkflow>(),
-                    sp.GetRequiredService<IMemPoolService>(),
-                    sp.GetRequiredService<IBlockchainStorageService>(),
-                    sp.GetRequiredService<IBlockchainCache>(),
-                    sp.GetRequiredService<IEventAggregator>(),
-                    sp.GetRequiredService<IOptions<BlockchainSettings>>(),
-                    sp.GetRequiredService<ILogger<BlockProductionSchedulerService>>(),
-                    observableFactory,
-                    onBlockFinalized);
+                services.Replace(ServiceDescriptor.Singleton<IBlockProductionSchedulerService>(sp =>
+                {
+                    return new BlockProductionSchedulerService(
+                        sp.GetRequiredService<IBlockAssemblerWorkflow>(),
+                        sp.GetRequiredService<IMemPoolService>(),
+                        sp.GetRequiredService<IBlockchainStorageService>(),
+                        sp.GetRequiredService<IBlockchainCache>(),
+                        sp.GetRequiredService<IEventAggregator>(),
+                        sp.GetRequiredService<IOptions<BlockchainSettings>>(),
+                        sp.GetRequiredService<ILogger<BlockProductionSchedulerService>>(),
+                        observableFactory,
+                        onBlockFinalized);
+                }));
             });
+
+            // Add diagnostic logger provider if supplied
+            if (testConfig.DiagnosticLoggerProvider != null)
+            {
+                builder.Logging.AddProvider(testConfig.DiagnosticLoggerProvider);
+            }
         }
     }
 
@@ -371,5 +385,6 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
 
     private sealed record TestConfiguration(
         BlockProductionControl BlockProductionControl,
-        string ConnectionString);
+        string ConnectionString,
+        ILoggerProvider? DiagnosticLoggerProvider);
 }

@@ -2,6 +2,7 @@ using HushNode.IntegrationTests.Infrastructure;
 using HushServerNode;
 using HushServerNode.Testing;
 using TechTalk.SpecFlow;
+using TechTalk.SpecFlow.Infrastructure;
 
 namespace HushNode.IntegrationTests.Hooks;
 
@@ -32,9 +33,17 @@ internal sealed class ScenarioHooks
     /// </summary>
     public const string GrpcFactoryKey = "GrpcClientFactory";
 
-    public ScenarioHooks(ScenarioContext scenarioContext)
+    /// <summary>
+    /// Context key for accessing the DiagnosticCapture instance.
+    /// </summary>
+    public const string DiagnosticsKey = "DiagnosticCapture";
+
+    private readonly ISpecFlowOutputHelper _outputHelper;
+
+    public ScenarioHooks(ScenarioContext scenarioContext, ISpecFlowOutputHelper outputHelper)
     {
         _scenarioContext = scenarioContext;
+        _outputHelper = outputHelper;
     }
 
     /// <summary>
@@ -78,17 +87,22 @@ internal sealed class ScenarioHooks
         // Reset data stores for clean slate
         await _fixture.ResetAllAsync();
 
-        // Start a fresh node for this scenario
-        var (node, blockControl, grpcFactory) = await _fixture.StartNodeAsync();
+        // Create diagnostic capture for this scenario
+        var diagnostics = new DiagnosticCapture();
+
+        // Start a fresh node for this scenario with diagnostic capture
+        var (node, blockControl, grpcFactory) = await _fixture.StartNodeAsync(diagnostics);
 
         // Store in ScenarioContext for step definitions
         _scenarioContext[NodeKey] = node;
         _scenarioContext[BlockControlKey] = blockControl;
         _scenarioContext[GrpcFactoryKey] = grpcFactory;
+        _scenarioContext[DiagnosticsKey] = diagnostics;
     }
 
     /// <summary>
     /// Disposes the node after each scenario completes (pass or fail).
+    /// Outputs diagnostic logs on test failure.
     /// Releases the semaphore to allow the next scenario to run.
     /// </summary>
     [AfterScenario]
@@ -96,6 +110,12 @@ internal sealed class ScenarioHooks
     {
         try
         {
+            // Output diagnostics on test failure
+            if (_scenarioContext.TestError != null)
+            {
+                OutputDiagnosticLogs();
+            }
+
             // Dispose GrpcClientFactory
             if (_scenarioContext.TryGetValue(GrpcFactoryKey, out var grpcFactoryObj)
                 && grpcFactoryObj is GrpcClientFactory grpcFactory)
@@ -109,12 +129,58 @@ internal sealed class ScenarioHooks
             {
                 await node.DisposeAsync();
             }
+
+            // Dispose diagnostic capture
+            if (_scenarioContext.TryGetValue(DiagnosticsKey, out var diagnosticsObj)
+                && diagnosticsObj is DiagnosticCapture diagnostics)
+            {
+                diagnostics.Dispose();
+            }
         }
         finally
         {
             // Always release the semaphore to allow next scenario to run
             _scenarioLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Outputs captured diagnostic logs when a test fails.
+    /// </summary>
+    private void OutputDiagnosticLogs()
+    {
+        if (!_scenarioContext.TryGetValue(DiagnosticsKey, out var diagnosticsObj)
+            || diagnosticsObj is not DiagnosticCapture diagnostics)
+        {
+            return;
+        }
+
+        var logs = diagnostics.GetCapturedLogs();
+        if (string.IsNullOrWhiteSpace(logs))
+        {
+            _outputHelper.WriteLine("=== HushServerNode Diagnostic Logs ===");
+            _outputHelper.WriteLine("(No logs captured)");
+            return;
+        }
+
+        _outputHelper.WriteLine("=== HushServerNode Diagnostic Logs ===");
+        _outputHelper.WriteLine($"Captured {diagnostics.EntryCount} log entries:");
+        _outputHelper.WriteLine("");
+
+        // Truncate if too large
+        const int maxLength = 50000;
+        if (logs.Length > maxLength)
+        {
+            var truncated = logs.Substring(logs.Length - maxLength);
+            _outputHelper.WriteLine("... (truncated, showing last 50KB)");
+            _outputHelper.WriteLine(truncated);
+        }
+        else
+        {
+            _outputHelper.WriteLine(logs);
+        }
+
+        _outputHelper.WriteLine("=== End Diagnostic Logs ===");
     }
 
     /// <summary>
