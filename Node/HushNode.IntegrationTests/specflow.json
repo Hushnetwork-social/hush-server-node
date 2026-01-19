@@ -1,0 +1,18 @@
+{
+  "$schema": "https://specflow.org/specflow-config.json",
+  "generator": {
+    "addNonParallelizableMarkerForTags": ["serial"]
+  },
+  "stepAssemblies": [],
+  "trace": {
+    "stepDefinitionSkeletonStyle": "RegexAttribute",
+    "traceSuccessfulSteps": true,
+    "traceTimings": true
+  },
+  "bindingCulture": {
+    "name": "en-US"
+  },
+  "runtime": {
+    "missingOrPendingStepsOutcome": "Error"
+  }
+}

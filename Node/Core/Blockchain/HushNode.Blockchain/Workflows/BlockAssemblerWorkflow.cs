@@ -30,7 +30,7 @@ public class BlockAssemblerWorkflow(
     public async Task AssembleGenesisBlockAsync()
     {
         var genesisUnsignedBlock = UnsignedBlockHandler.CreateGenesis(
-            Timestamp.Current, 
+            Timestamp.Current,
             this._blockchainCache.NextBlockId);
 
         var blockProducerCredentials = this._credentialsProvider.GetCredentials();

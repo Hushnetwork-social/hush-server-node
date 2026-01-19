@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!-- Copy xunit.runner.json to output to disable parallel test execution -->
+  <ItemGroup>
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" Version="6.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="6.12.1" />
+
+    <!-- TestContainers for PostgreSQL and Redis -->
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.3.0" />
+    <PackageReference Include="Testcontainers.Redis" Version="4.3.0" />
+
+    <!-- Database and Redis clients for test operations -->
+    <PackageReference Include="Npgsql" Version="9.0.2" />
+    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
+
+    <!-- Explicit EF Core version to resolve version conflicts with HushServerNode -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.2" />
+
+    <!-- SpecFlow for BDD-style Gherkin tests -->
+    <PackageReference Include="SpecFlow.xUnit" Version="3.9.74" />
+
+    <!-- gRPC client for black-box testing -->
+    <PackageReference Include="Grpc.Net.Client" Version="2.67.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.29.3" />
+    <PackageReference Include="Grpc.Tools" Version="2.67.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- gRPC Client Proto Files -->
+  <ItemGroup>
+    <Protobuf Include="..\..\Protos\hushBlockchain.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
+    <Protobuf Include="..\..\Protos\hushBank.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
+    <Protobuf Include="..\..\Protos\hushFeed.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
+    <Protobuf Include="..\..\Protos\hushIdentity.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
+    <Protobuf Include="..\..\Protos\hushReactions.proto" GrpcServices="None" ProtoRoot="..\..\Protos\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reference HushServerNode for internal class access via InternalsVisibleTo -->
+    <ProjectReference Include="..\HushServerNode\HushServerNode.csproj" />
+  </ItemGroup>
+
+</Project>

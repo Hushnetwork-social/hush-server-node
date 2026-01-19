@@ -45,7 +45,8 @@ public class FeedMessageTransactionHandler(
 
         await this._feedMessageStorageService.CreateFeedMessageAsync(feedMessage);
 
-        // Publish event for notification system (via EventAggregator - no hard reference)
-        await this._eventAggregator.PublishAsync(new NewFeedMessageCreatedEvent(feedMessage));
+        // Publish event for notification system (fire-and-forget - don't block indexing)
+        // Notifications are secondary to blockchain state and should not delay BlockIndexCompletedEvent
+        _ = this._eventAggregator.PublishAsync(new NewFeedMessageCreatedEvent(feedMessage));
     }
 }

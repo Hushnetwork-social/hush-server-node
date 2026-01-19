@@ -24,15 +24,18 @@ public class IndexingDispatcherService :
     public async Task HandleAsync(BlockCreatedEvent message)
     {
         var processingTasks = message.Block.Transactions
-            .Select(async transaction => 
+            .Select(async transaction =>
             {
                 var strategyTasks = this._indexStrategies
                     .Where(strategy => strategy.CanHandle(transaction))
                     .Select(strategy => strategy.HandleAsync(transaction));
-                    
+
                 await Task.WhenAll(strategyTasks);
             });
 
         await Task.WhenAll(processingTasks);
+
+        // Signal that all indexing for this block is complete
+        await this._eventAggregator.PublishAsync(new BlockIndexCompletedEvent(message.Block.BlockIndex));
     }
 }

@@ -20,9 +20,13 @@ public class EventAggregator : IEventAggregator
     {
         var subscriberType = subscriber.GetType();
 
+        this._logger.LogInformation("EventAggregator.Subscribe: {SubscriberType}, HashCode={HashCode}",
+            subscriberType.Name, subscriber.GetHashCode());
+
         // If a subscriber of this type already exists, replace it
         if (this._subscribersList.ContainsKey(subscriberType))
         {
+            this._logger.LogWarning("Replacing existing subscriber: {SubscriberType}", subscriberType.Name);
             this._subscribersList[subscriberType] = subscriber;
         }
         else
