@@ -30,7 +30,9 @@ using HushNode.Reactions;
 using HushNode.Reactions.gRPC;
 using HushNode.Caching;
 using HushNode.Notifications.gRPC;
+using HushNode.Notifications.Models;
 using HushNode.PushNotifications;
+using StackExchange.Redis;
 using HushNode.UrlMetadata.gRPC;
 using HushServerNode.Testing;
 
@@ -118,7 +120,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         }
 
         // Extract actual bound ports from Kestrel using IServerAddressesFeature
-        var server = _app.Services.GetRequiredService<IServer>();
+        var server = _app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>();
         var addressFeature = server.Features.Get<IServerAddressesFeature>();
         if (addressFeature != null)
         {
@@ -321,6 +323,19 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             .RegisterNotificationGrpc()
             .RegisterPushNotificationsModule()
             .RegisterCoreModuleUrlMetadata();
+
+        // Register feed message cache service (FEAT-046)
+        // This must come after RegisterNotificationGrpc which registers IConnectionMultiplexer
+        builder.Host.ConfigureServices((context, services) =>
+        {
+            services.AddSingleton<IFeedMessageCacheService>(sp =>
+            {
+                var connectionMultiplexer = sp.GetRequiredService<IConnectionMultiplexer>();
+                var redisSettings = sp.GetRequiredService<IOptions<RedisSettings>>().Value;
+                var logger = sp.GetRequiredService<ILogger<FeedMessageCacheService>>();
+                return new FeedMessageCacheService(connectionMultiplexer, redisSettings.InstanceName, logger);
+            });
+        });
 
         // In test mode, REPLACE the default scheduler with one using injected observable
         // Must use ConfigureServices to ensure this runs after RegisterCoreModuleBlockchain's callback
