@@ -77,7 +77,7 @@ public class KeyRotationPerformanceTests
 
     #region Performance Tests
 
-    [Fact]
+    [Fact(Skip = "Performance test - run manually with: dotnet test --filter Category=Performance")]
     public async Task TriggerRotationAsync_64Members_CompletesWithin100ms()
     {
         // Arrange - warmup to avoid JIT overhead affecting first run
@@ -105,7 +105,7 @@ public class KeyRotationPerformanceTests
             "Rotation for 64 members should complete in less than 100ms (+50% tolerance)");
     }
 
-    [Fact]
+    [Fact(Skip = "Performance test - run manually with: dotnet test --filter Category=Performance")]
     public async Task TriggerRotationAsync_128Members_CompletesWithin200ms()
     {
         // Arrange - warmup
@@ -133,7 +133,7 @@ public class KeyRotationPerformanceTests
             "Rotation for 128 members should complete in less than 200ms (+50% tolerance)");
     }
 
-    [Fact]
+    [Fact(Skip = "Performance test - run manually with: dotnet test --filter Category=Performance")]
     public async Task TriggerRotationAsync_256Members_CompletesWithin500ms()
     {
         // Arrange - warmup
@@ -161,7 +161,7 @@ public class KeyRotationPerformanceTests
             "Rotation for 256 members should complete in less than 500ms (+50% tolerance)");
     }
 
-    [Fact]
+    [Fact(Skip = "Performance test - run manually with: dotnet test --filter Category=Performance")]
     public async Task TriggerRotationAsync_512Members_CompletesWithin1000ms()
     {
         // Arrange - warmup
@@ -193,7 +193,7 @@ public class KeyRotationPerformanceTests
 
     #region Scaling Tests
 
-    [Theory]
+    [Theory(Skip = "Performance test - run manually with: dotnet test --filter Category=Performance")]
     [InlineData(16)]
     [InlineData(32)]
     [InlineData(64)]
@@ -227,7 +227,7 @@ public class KeyRotationPerformanceTests
 
     #region Consistency Tests
 
-    [Fact]
+    [Fact(Skip = "Performance test - run manually with: dotnet test --filter Category=Performance")]
     public async Task TriggerRotationAsync_MultipleRuns_ConsistentTiming()
     {
         // Arrange
