@@ -84,6 +84,13 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                 feedMessage.Property(x => x.KeyGeneration)
                     .HasColumnType("int")
                     .IsRequired(false);
+
+                // FEAT-046: Indexes for efficient feed message cache fallback queries
+                feedMessage.HasIndex(x => new { x.FeedId, x.BlockIndex })
+                    .HasDatabaseName("IX_FeedMessage_FeedId_BlockIndex");
+
+                feedMessage.HasIndex(x => new { x.IssuerPublicAddress, x.BlockIndex })
+                    .HasDatabaseName("IX_FeedMessage_IssuerPublicAddress_BlockIndex");
             });
     }
 

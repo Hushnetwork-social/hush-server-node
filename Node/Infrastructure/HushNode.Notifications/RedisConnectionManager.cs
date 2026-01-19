@@ -26,6 +26,11 @@ public class RedisConnectionManager : IDisposable
     }
 
     /// <summary>
+    /// Gets the underlying connection multiplexer for advanced operations.
+    /// </summary>
+    public virtual IConnectionMultiplexer Connection => _connection.Value;
+
+    /// <summary>
     /// Gets the Redis database for key-value operations.
     /// </summary>
     public virtual IDatabase Database => _connection.Value.GetDatabase();

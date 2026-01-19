@@ -1,0 +1,458 @@
+using FluentAssertions;
+using Grpc.Core;
+using HushNetwork.proto;
+using HushNode.Caching;
+using HushNode.Feeds.gRPC;
+using HushNode.Feeds.Storage;
+using HushNode.Feeds.Tests.Fixtures;
+using HushNode.Identity;
+using HushShared.Blockchain.BlockModel;
+using HushShared.Blockchain.Model;
+using HushShared.Feeds.Model;
+using HushShared.Identity.Model;
+using Microsoft.Extensions.Logging;
+using Moq;
+using Moq.AutoMock;
+using Xunit;
+
+namespace HushNode.Feeds.Tests;
+
+/// <summary>
+/// FEAT-046: Tests for FeedsGrpcService cache integration.
+/// Verifies cache-first pattern, cache-aside pattern, and fallback behavior.
+/// Each test follows AAA pattern with isolated setup to prevent flaky tests.
+/// </summary>
+public class FeedsGrpcServiceCacheTests
+{
+    #region Cache Hit Tests
+
+    [Fact]
+    public async Task GetFeedMessagesForAddress_CacheHit_ReturnsFromCache()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        var feed = CreateFeed(feedId, "Test Feed", FeedType.Personal, 50);
+        feed.Participants = new[]
+        {
+            CreateFeedParticipant(feedId, userAddress, ParticipantType.Owner, "encryptedKey", feed)
+        };
+
+        // Cached messages start at block 90, and we request since block 90
+        // This means sinceBlockIndex (90) >= oldestCachedBlock (90), so NO gap detected
+        var cachedMessages = new[]
+        {
+            CreateFeedMessage(feedId, userAddress, "Cached message 1", new BlockIndex(90)),
+            CreateFeedMessage(feedId, userAddress, "Cached message 2", new BlockIndex(95))
+        };
+
+        // Mock feeds storage to return the feed
+        var mockFeedsStorageService = mocker.GetMock<IFeedsStorageService>();
+        mockFeedsStorageService
+            .Setup(x => x.RetrieveFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(new[] { feed });
+
+        // Mock cache to return cached messages (CACHE HIT)
+        var mockCacheService = mocker.GetMock<IFeedMessageCacheService>();
+        mockCacheService
+            .Setup(x => x.GetMessagesAsync(feedId, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(cachedMessages);
+
+        // Mock identity service for display name
+        var mockIdentityService = mocker.GetMock<IIdentityService>();
+        mockIdentityService
+            .Setup(x => x.RetrieveIdentityAsync(userAddress))
+            .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetFeedMessagesForAddressRequest
+        {
+            ProfilePublicKey = userAddress,
+            BlockIndex = 90  // Request since block 90, oldest cached is 90 -> no gap
+        };
+
+        // Act
+        var result = await service.GetFeedMessagesForAddress(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Messages.Should().HaveCount(2);
+        result.Messages[0].MessageContent.Should().Be("Cached message 1");
+        result.Messages[1].MessageContent.Should().Be("Cached message 2");
+
+        // Verify PostgreSQL storage was NOT called (cache hit)
+        var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockMessageStorageService.Verify(
+            x => x.RetrieveLastFeedMessagesForFeedAsync(It.IsAny<FeedId>(), It.IsAny<BlockIndex>()),
+            Times.Never,
+            "PostgreSQL should NOT be queried on cache hit");
+    }
+
+    #endregion
+
+    #region Cache Miss Tests
+
+    [Fact]
+    public async Task GetFeedMessagesForAddress_CacheMiss_QueriesPostgresAndPopulatesCache()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        var feed = CreateFeed(feedId, "Test Feed", FeedType.Personal, 50);
+        feed.Participants = new[]
+        {
+            CreateFeedParticipant(feedId, userAddress, ParticipantType.Owner, "encryptedKey", feed)
+        };
+
+        var dbMessages = new[]
+        {
+            CreateFeedMessage(feedId, userAddress, "DB message 1", new BlockIndex(90)),
+            CreateFeedMessage(feedId, userAddress, "DB message 2", new BlockIndex(95))
+        };
+
+        // Mock feeds storage to return the feed
+        var mockFeedsStorageService = mocker.GetMock<IFeedsStorageService>();
+        mockFeedsStorageService
+            .Setup(x => x.RetrieveFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(new[] { feed });
+
+        // Mock cache to return null (CACHE MISS)
+        var mockCacheService = mocker.GetMock<IFeedMessageCacheService>();
+        mockCacheService
+            .Setup(x => x.GetMessagesAsync(feedId, It.IsAny<BlockIndex>()))
+            .ReturnsAsync((IEnumerable<FeedMessage>?)null);
+        mockCacheService
+            .Setup(x => x.PopulateCacheAsync(feedId, It.IsAny<IEnumerable<FeedMessage>>()))
+            .Returns(Task.CompletedTask);
+
+        // Mock PostgreSQL storage to return messages
+        var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockMessageStorageService
+            .Setup(x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(dbMessages);
+
+        // Mock identity service for display name
+        var mockIdentityService = mocker.GetMock<IIdentityService>();
+        mockIdentityService
+            .Setup(x => x.RetrieveIdentityAsync(userAddress))
+            .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetFeedMessagesForAddressRequest
+        {
+            ProfilePublicKey = userAddress,
+            BlockIndex = 80
+        };
+
+        // Act
+        var result = await service.GetFeedMessagesForAddress(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Messages.Should().HaveCount(2);
+        result.Messages[0].MessageContent.Should().Be("DB message 1");
+        result.Messages[1].MessageContent.Should().Be("DB message 2");
+
+        // Verify PostgreSQL was queried (cache miss)
+        mockMessageStorageService.Verify(
+            x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.IsAny<BlockIndex>()),
+            Times.Once,
+            "PostgreSQL should be queried on cache miss");
+
+        // Verify cache was populated (cache-aside pattern)
+        mockCacheService.Verify(
+            x => x.PopulateCacheAsync(feedId, It.IsAny<IEnumerable<FeedMessage>>()),
+            Times.Once,
+            "Cache should be populated after cache miss");
+    }
+
+    #endregion
+
+    #region Cache Gap Tests
+
+    [Fact]
+    public async Task GetFeedMessagesForAddress_CacheGap_FallsBackToPostgres()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        var feed = CreateFeed(feedId, "Test Feed", FeedType.Personal, 50);
+        feed.Participants = new[]
+        {
+            CreateFeedParticipant(feedId, userAddress, ParticipantType.Owner, "encryptedKey", feed)
+        };
+
+        // Cache contains messages from block 90+, but client asks for messages since block 50
+        // This creates a gap: cache doesn't have blocks 51-89
+        var cachedMessages = new[]
+        {
+            CreateFeedMessage(feedId, userAddress, "Cached message 1", new BlockIndex(90)),
+            CreateFeedMessage(feedId, userAddress, "Cached message 2", new BlockIndex(95))
+        };
+
+        var dbMessages = new[]
+        {
+            CreateFeedMessage(feedId, userAddress, "DB message from block 60", new BlockIndex(60)),
+            CreateFeedMessage(feedId, userAddress, "DB message from block 70", new BlockIndex(70)),
+            CreateFeedMessage(feedId, userAddress, "DB message from block 90", new BlockIndex(90)),
+            CreateFeedMessage(feedId, userAddress, "DB message from block 95", new BlockIndex(95))
+        };
+
+        // Mock feeds storage to return the feed
+        var mockFeedsStorageService = mocker.GetMock<IFeedsStorageService>();
+        mockFeedsStorageService
+            .Setup(x => x.RetrieveFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(new[] { feed });
+
+        // Mock cache to return messages (but with a gap)
+        var mockCacheService = mocker.GetMock<IFeedMessageCacheService>();
+        mockCacheService
+            .Setup(x => x.GetMessagesAsync(feedId, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(cachedMessages);
+
+        // Mock PostgreSQL storage to return complete messages
+        var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockMessageStorageService
+            .Setup(x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(dbMessages);
+
+        // Mock identity service for display name
+        var mockIdentityService = mocker.GetMock<IIdentityService>();
+        mockIdentityService
+            .Setup(x => x.RetrieveIdentityAsync(userAddress))
+            .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetFeedMessagesForAddressRequest
+        {
+            ProfilePublicKey = userAddress,
+            BlockIndex = 50  // Asking for messages since block 50, but cache only has 90+
+        };
+
+        // Act
+        var result = await service.GetFeedMessagesForAddress(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Messages.Should().HaveCount(4, "Should return all messages from PostgreSQL due to cache gap");
+
+        // Verify PostgreSQL was queried (cache gap detected)
+        mockMessageStorageService.Verify(
+            x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.IsAny<BlockIndex>()),
+            Times.Once,
+            "PostgreSQL should be queried when cache gap is detected");
+    }
+
+    #endregion
+
+    #region Redis Unavailable Tests
+
+    [Fact]
+    public async Task GetFeedMessagesForAddress_RedisUnavailable_FallsBackToPostgres()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        var feed = CreateFeed(feedId, "Test Feed", FeedType.Personal, 50);
+        feed.Participants = new[]
+        {
+            CreateFeedParticipant(feedId, userAddress, ParticipantType.Owner, "encryptedKey", feed)
+        };
+
+        var dbMessages = new[]
+        {
+            CreateFeedMessage(feedId, userAddress, "DB message 1", new BlockIndex(90)),
+            CreateFeedMessage(feedId, userAddress, "DB message 2", new BlockIndex(95))
+        };
+
+        // Mock feeds storage to return the feed
+        var mockFeedsStorageService = mocker.GetMock<IFeedsStorageService>();
+        mockFeedsStorageService
+            .Setup(x => x.RetrieveFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(new[] { feed });
+
+        // Mock cache to throw exception (Redis unavailable)
+        var mockCacheService = mocker.GetMock<IFeedMessageCacheService>();
+        mockCacheService
+            .Setup(x => x.GetMessagesAsync(feedId, It.IsAny<BlockIndex>()))
+            .ThrowsAsync(new Exception("Redis connection failed"));
+
+        // Mock PostgreSQL storage to return messages
+        var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockMessageStorageService
+            .Setup(x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(dbMessages);
+
+        // Mock identity service for display name
+        var mockIdentityService = mocker.GetMock<IIdentityService>();
+        mockIdentityService
+            .Setup(x => x.RetrieveIdentityAsync(userAddress))
+            .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetFeedMessagesForAddressRequest
+        {
+            ProfilePublicKey = userAddress,
+            BlockIndex = 80
+        };
+
+        // Act - should NOT throw, should fall back gracefully
+        var result = await service.GetFeedMessagesForAddress(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Messages.Should().HaveCount(2);
+        result.Messages[0].MessageContent.Should().Be("DB message 1");
+        result.Messages[1].MessageContent.Should().Be("DB message 2");
+
+        // Verify PostgreSQL was queried as fallback
+        mockMessageStorageService.Verify(
+            x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.IsAny<BlockIndex>()),
+            Times.Once,
+            "PostgreSQL should be queried when Redis is unavailable");
+    }
+
+    #endregion
+
+    #region Filtering Tests
+
+    [Fact]
+    public async Task GetFeedMessagesForAddress_FiltersByBlockIndex()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        var feed = CreateFeed(feedId, "Test Feed", FeedType.Personal, 50);
+        feed.Participants = new[]
+        {
+            CreateFeedParticipant(feedId, userAddress, ParticipantType.Owner, "encryptedKey", feed)
+        };
+
+        // Cache returns messages after the requested block index
+        // Simulating the filtering that happens in FeedMessageCacheService.GetMessagesAsync
+        // The cache service filters to only return messages with BlockIndex > sinceBlockIndex
+        // Oldest cached message is at 95, we request since 90 -> gap detected (90 < 95)
+        // So we set up sinceBlockIndex >= oldestCachedBlock to avoid gap detection
+        var cachedMessagesAfterFilter = new[]
+        {
+            CreateFeedMessage(feedId, userAddress, "Message at block 95", new BlockIndex(95)),
+            CreateFeedMessage(feedId, userAddress, "Message at block 100", new BlockIndex(100))
+        };
+
+        // Mock feeds storage to return the feed
+        var mockFeedsStorageService = mocker.GetMock<IFeedsStorageService>();
+        mockFeedsStorageService
+            .Setup(x => x.RetrieveFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(new[] { feed });
+
+        // Mock cache to return filtered messages
+        var mockCacheService = mocker.GetMock<IFeedMessageCacheService>();
+        mockCacheService
+            .Setup(x => x.GetMessagesAsync(feedId, It.Is<BlockIndex>(b => b.Value == 95)))
+            .ReturnsAsync(cachedMessagesAfterFilter);
+
+        // Mock identity service for display name
+        var mockIdentityService = mocker.GetMock<IIdentityService>();
+        mockIdentityService
+            .Setup(x => x.RetrieveIdentityAsync(userAddress))
+            .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetFeedMessagesForAddressRequest
+        {
+            ProfilePublicKey = userAddress,
+            BlockIndex = 95  // Request messages since block 95, oldest cached is 95 -> no gap
+        };
+
+        // Act
+        var result = await service.GetFeedMessagesForAddress(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Messages.Should().HaveCount(2);
+        result.Messages.Should().OnlyContain(m => m.BlockIndex >= 95,
+            "Only messages with BlockIndex >= 95 should be returned (filtering is done by cache service)");
+
+        // Verify cache was called with correct block index
+        mockCacheService.Verify(
+            x => x.GetMessagesAsync(feedId, It.Is<BlockIndex>(b => b.Value == 95)),
+            Times.Once,
+            "Cache should be queried with the correct block index filter");
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    private static Feed CreateFeed(FeedId feedId, string alias, FeedType feedType, long blockIndex)
+    {
+        return new Feed(feedId, alias, feedType, new BlockIndex(blockIndex));
+    }
+
+    private static FeedParticipant CreateFeedParticipant(
+        FeedId feedId,
+        string participantPublicAddress,
+        ParticipantType participantType,
+        string encryptedFeedKey,
+        Feed feed)
+    {
+        return new FeedParticipant(feedId, participantPublicAddress, participantType, encryptedFeedKey)
+        {
+            Feed = feed
+        };
+    }
+
+    private static FeedMessage CreateFeedMessage(
+        FeedId feedId,
+        string issuerAddress,
+        string messageContent,
+        BlockIndex blockIndex)
+    {
+        return new FeedMessage(
+            FeedMessageId: new FeedMessageId(Guid.NewGuid()),
+            FeedId: feedId,
+            MessageContent: messageContent,
+            IssuerPublicAddress: issuerAddress,
+            Timestamp: new Timestamp(DateTime.UtcNow),
+            BlockIndex: blockIndex);
+    }
+
+    private static ServerCallContext CreateMockServerCallContext()
+    {
+        return new MockServerCallContext();
+    }
+
+    /// <summary>
+    /// Minimal mock implementation of ServerCallContext for testing.
+    /// </summary>
+    private class MockServerCallContext : ServerCallContext
+    {
+        protected override string MethodCore => "TestMethod";
+        protected override string HostCore => "localhost";
+        protected override string PeerCore => "test-peer";
+        protected override DateTime DeadlineCore => DateTime.MaxValue;
+        protected override Metadata RequestHeadersCore => new();
+        protected override CancellationToken CancellationTokenCore => CancellationToken.None;
+        protected override Metadata ResponseTrailersCore => new();
+        protected override Status StatusCore { get; set; }
+        protected override WriteOptions? WriteOptionsCore { get; set; }
+        protected override AuthContext AuthContextCore => new("test", new Dictionary<string, List<AuthProperty>>());
+
+        protected override ContextPropagationToken CreatePropagationTokenCore(ContextPropagationOptions? options)
+        {
+            throw new NotImplementedException();
+        }
+
+        protected override Task WriteResponseHeadersAsyncCore(Metadata responseHeaders)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    #endregion
+}

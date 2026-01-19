@@ -1,6 +1,7 @@
 using HushNode.Notifications.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using StackExchange.Redis;
 
 namespace HushNode.Notifications;
 
@@ -25,6 +26,10 @@ public static class Registration
 
         // Register Redis connection manager as singleton
         services.AddSingleton<RedisConnectionManager>();
+
+        // Register IConnectionMultiplexer as forwarding registration for services that need it
+        services.AddSingleton<IConnectionMultiplexer>(sp =>
+            sp.GetRequiredService<RedisConnectionManager>().Connection);
 
         // Register services
         services.AddSingleton<IUnreadTrackingService, UnreadTrackingService>();

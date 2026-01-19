@@ -30,7 +30,9 @@ using HushNode.Reactions;
 using HushNode.Reactions.gRPC;
 using HushNode.Caching;
 using HushNode.Notifications.gRPC;
+using HushNode.Notifications.Models;
 using HushNode.PushNotifications;
+using StackExchange.Redis;
 using HushNode.UrlMetadata.gRPC;
 using HushServerNode.Testing;
 
@@ -81,13 +83,15 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
     /// </summary>
     /// <param name="blockProductionControl">The block production control for synchronous block triggers.</param>
     /// <param name="connectionString">PostgreSQL connection string for test database.</param>
+    /// <param name="redisConnectionString">Optional Redis connection string for test Redis.</param>
     /// <param name="diagnosticLoggerProvider">Optional logger provider for capturing diagnostic output.</param>
     public static HushServerNodeCore CreateForTesting(
         BlockProductionControl blockProductionControl,
         string connectionString,
+        string? redisConnectionString = null,
         ILoggerProvider? diagnosticLoggerProvider = null)
     {
-        var testConfig = new TestConfiguration(blockProductionControl, connectionString, diagnosticLoggerProvider);
+        var testConfig = new TestConfiguration(blockProductionControl, connectionString, redisConnectionString, diagnosticLoggerProvider);
         var app = BuildApplication(Array.Empty<string>(), testConfig);
         return new HushServerNodeCore(app, blockProductionControl, isTestMode: true);
     }
@@ -118,7 +122,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         }
 
         // Extract actual bound ports from Kestrel using IServerAddressesFeature
-        var server = _app.Services.GetRequiredService<IServer>();
+        var server = _app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>();
         var addressFeature = server.Features.Get<IServerAddressesFeature>();
         if (addressFeature != null)
         {
@@ -217,7 +221,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             // Test mode: use in-memory configuration with dynamic ports
             // Configure block producer credentials from TestIdentities
             var blockProducer = Testing.TestIdentities.BlockProducer;
-            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            var configValues = new Dictionary<string, string?>
             {
                 ["ConnectionStrings:HushNetworkDb"] = testConfig.ConnectionString,
                 ["BlockchainSettings:MaxEmptyBlocksBeforePause"] = "100", // High value for tests
@@ -228,7 +232,16 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                 ["CredentialsProfile:PublicEncryptAddress"] = blockProducer.PublicEncryptAddress,
                 ["CredentialsProfile:PrivateEncryptKey"] = blockProducer.PrivateEncryptKey,
                 ["CredentialsProfile:IsPublic"] = "false"
-            });
+            };
+
+            // Add Redis configuration if provided (FEAT-046)
+            if (testConfig.RedisConnectionString != null)
+            {
+                configValues["Redis:ConnectionString"] = testConfig.RedisConnectionString;
+                configValues["Redis:InstanceName"] = "HushTest:";
+            }
+
+            builder.Configuration.AddInMemoryCollection(configValues);
 
             // Use port 0 for dynamic port allocation
             ConfigureKestrel(builder.WebHost, nativeGrpcPort: 0, grpcWebPort: 0);
@@ -322,6 +335,19 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             .RegisterPushNotificationsModule()
             .RegisterCoreModuleUrlMetadata();
 
+        // Register feed message cache service (FEAT-046)
+        // This must come after RegisterNotificationGrpc which registers IConnectionMultiplexer
+        builder.Host.ConfigureServices((context, services) =>
+        {
+            services.AddSingleton<IFeedMessageCacheService>(sp =>
+            {
+                var connectionMultiplexer = sp.GetRequiredService<IConnectionMultiplexer>();
+                var redisSettings = sp.GetRequiredService<IOptions<RedisSettings>>().Value;
+                var logger = sp.GetRequiredService<ILogger<FeedMessageCacheService>>();
+                return new FeedMessageCacheService(connectionMultiplexer, redisSettings.InstanceName, logger);
+            });
+        });
+
         // In test mode, REPLACE the default scheduler with one using injected observable
         // Must use ConfigureServices to ensure this runs after RegisterCoreModuleBlockchain's callback
         if (testConfig != null)
@@ -386,5 +412,6 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
     private sealed record TestConfiguration(
         BlockProductionControl BlockProductionControl,
         string ConnectionString,
+        string? RedisConnectionString,
         ILoggerProvider? DiagnosticLoggerProvider);
 }

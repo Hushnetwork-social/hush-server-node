@@ -10,6 +10,7 @@ using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
 using MessageReactionTallyModel = HushShared.Reactions.Model.MessageReactionTally;
 using Google.Protobuf;
+using Microsoft.Extensions.Logging;
 using Olimpo;
 using Olimpo.EntityFramework.Persistency;
 
@@ -18,17 +19,21 @@ namespace HushNode.Feeds.gRPC;
 public class FeedsGrpcService(
     IFeedsStorageService feedsStorageService,
     IFeedMessageStorageService feedMessageStorageService,
+    IFeedMessageCacheService feedMessageCacheService,
     IIdentityService identityService,
     IIdentityStorageService identityStorageService,
     IBlockchainCache blockchainCache,
-    IUnitOfWorkProvider<ReactionsDbContext> reactionsUnitOfWorkProvider) : HushFeed.HushFeedBase
+    IUnitOfWorkProvider<ReactionsDbContext> reactionsUnitOfWorkProvider,
+    ILogger<FeedsGrpcService> logger) : HushFeed.HushFeedBase
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
+    private readonly IFeedMessageCacheService _feedMessageCacheService = feedMessageCacheService;
     private readonly IIdentityService _identityService = identityService;
     private readonly IIdentityStorageService _identityStorageService = identityStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IUnitOfWorkProvider<ReactionsDbContext> _reactionsUnitOfWorkProvider = reactionsUnitOfWorkProvider;
+    private readonly ILogger<FeedsGrpcService> _logger = logger;
 
     /// <summary>Maximum number of members supported in a single key rotation.</summary>
     private const int MaxMembersPerRotation = 512;
@@ -128,13 +133,18 @@ public class FeedsGrpcService(
 
             foreach(var feed in lastFeedsFromAddress)
             {
-                Console.WriteLine($"[GetFeedMessagesForAddress] Processing feed: {feed.FeedId}, Type: {feed.FeedType}");
+                _logger.LogDebug(
+                    "Processing feed {FeedId}, Type: {FeedType}",
+                    feed.FeedId,
+                    feed.FeedType);
 
-                // Get the last messages from each feed
-                var lastFeedMessages = await this._feedMessageStorageService
-                    .RetrieveLastFeedMessagesForFeedAsync(feed.FeedId, blockIndex);
+                // FEAT-046: Get messages with cache-first pattern
+                var lastFeedMessages = await GetMessagesWithCacheFallbackAsync(feed.FeedId, blockIndex);
 
-                Console.WriteLine($"[GetFeedMessagesForAddress] Found {lastFeedMessages.Count()} messages for feed {feed.FeedId}");
+                _logger.LogDebug(
+                    "Found {MessageCount} messages for feed {FeedId}",
+                    lastFeedMessages.Count(),
+                    feed.FeedId);
 
                 foreach (var feedMessage in lastFeedMessages)
                 {
@@ -265,6 +275,98 @@ public class FeedsGrpcService(
         }
 
         return proto;
+    }
+
+    /// <summary>
+    /// FEAT-046: Gets messages with cache-first pattern.
+    /// Tries Redis cache first, falls back to PostgreSQL on miss or gap.
+    /// Implements cache-aside pattern (populates cache on miss).
+    /// </summary>
+    private async Task<IEnumerable<FeedMessage>> GetMessagesWithCacheFallbackAsync(
+        FeedId feedId,
+        BlockIndex sinceBlockIndex)
+    {
+        try
+        {
+            // 1. Try cache first
+            var cachedMessages = await this._feedMessageCacheService.GetMessagesAsync(feedId, sinceBlockIndex);
+
+            if (cachedMessages != null)
+            {
+                var messagesList = cachedMessages.ToList();
+
+                // Cache hit - check for gaps if we have messages and a block filter
+                if (messagesList.Count > 0 && sinceBlockIndex.Value > 0)
+                {
+                    var oldestCachedBlock = messagesList.Min(m => m.BlockIndex.Value);
+
+                    if (sinceBlockIndex.Value < oldestCachedBlock)
+                    {
+                        // Cache gap detected - need to query PostgreSQL for complete data
+                        _logger.LogDebug(
+                            "Cache gap for feed {FeedId}: requested since block {SinceBlock}, oldest cached is {OldestCached}. Falling back to PostgreSQL.",
+                            feedId,
+                            sinceBlockIndex.Value,
+                            oldestCachedBlock);
+
+                        return await this._feedMessageStorageService
+                            .RetrieveLastFeedMessagesForFeedAsync(feedId, sinceBlockIndex);
+                    }
+                }
+
+                // Cache hit, no gap - return cached messages
+                _logger.LogDebug(
+                    "Cache HIT for feed {FeedId}: returning {MessageCount} cached messages",
+                    feedId,
+                    messagesList.Count);
+
+                return messagesList;
+            }
+
+            // 2. Cache miss - query PostgreSQL
+            _logger.LogDebug(
+                "Cache MISS for feed {FeedId}: querying PostgreSQL",
+                feedId);
+
+            var dbMessages = await this._feedMessageStorageService
+                .RetrieveLastFeedMessagesForFeedAsync(feedId, sinceBlockIndex);
+
+            var dbMessagesList = dbMessages.ToList();
+
+            // 3. Cache-aside: Populate cache with fetched messages (only if we have messages)
+            if (dbMessagesList.Count > 0)
+            {
+                try
+                {
+                    await this._feedMessageCacheService.PopulateCacheAsync(feedId, dbMessagesList);
+                    _logger.LogDebug(
+                        "Populated cache for feed {FeedId} with {MessageCount} messages",
+                        feedId,
+                        dbMessagesList.Count);
+                }
+                catch (Exception ex)
+                {
+                    // Log and continue - cache population failure should not fail the request
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to populate cache for feed {FeedId}. Returning PostgreSQL results.",
+                        feedId);
+                }
+            }
+
+            return dbMessagesList;
+        }
+        catch (Exception ex)
+        {
+            // Redis error - fall back to PostgreSQL
+            _logger.LogWarning(
+                ex,
+                "Cache operation failed for feed {FeedId}. Falling back to PostgreSQL.",
+                feedId);
+
+            return await this._feedMessageStorageService
+                .RetrieveLastFeedMessagesForFeedAsync(feedId, sinceBlockIndex);
+        }
     }
 
     private Task<string> ExtractBroascastAlias(Feed feed)
