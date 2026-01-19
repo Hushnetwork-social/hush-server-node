@@ -131,7 +131,11 @@ internal sealed class HushTestFixture : IAsyncLifetime
         DiagnosticCapture? diagnosticCapture = null)
     {
         var blockControl = new BlockProductionControl();
-        var node = HushServerNodeCore.CreateForTesting(blockControl, PostgresConnectionString, diagnosticCapture);
+        var node = HushServerNodeCore.CreateForTesting(
+            blockControl,
+            PostgresConnectionString,
+            RedisConnectionString,  // FEAT-046: Pass Redis connection for cache testing
+            diagnosticCapture);
 
         await node.StartAsync();
 
@@ -148,6 +152,53 @@ internal sealed class HushTestFixture : IAsyncLifetime
         await Task.WhenAll(
             ResetDatabaseAsync(),
             FlushRedisAsync());
+    }
+
+    /// <summary>
+    /// Executes a scalar SQL query against the PostgreSQL database.
+    /// </summary>
+    /// <typeparam name="T">The type of the result.</typeparam>
+    /// <param name="sql">The SQL query to execute.</param>
+    /// <returns>The result of the query, or default if null.</returns>
+    public async Task<T?> ExecuteScalarAsync<T>(string sql)
+    {
+        await using var connection = new NpgsqlConnection(PostgresConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+
+        var result = await command.ExecuteScalarAsync();
+        return result is DBNull ? default : (T?)result;
+    }
+
+    /// <summary>
+    /// Executes a SQL query and returns all rows as a list of dynamic objects.
+    /// </summary>
+    /// <param name="sql">The SQL query to execute.</param>
+    /// <returns>List of rows as dictionaries.</returns>
+    public async Task<List<Dictionary<string, object?>>> ExecuteQueryAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(PostgresConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+
+        var results = new List<Dictionary<string, object?>>();
+        await using var reader = await command.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            var row = new Dictionary<string, object?>();
+            for (int i = 0; i < reader.FieldCount; i++)
+            {
+                row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+            }
+            results.Add(row);
+        }
+
+        return results;
     }
 
     private async Task StartPostgresContainerAsync()

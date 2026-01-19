@@ -49,6 +49,18 @@ internal static class TestTransactionFactory
     /// <returns>JSON-serialized signed transaction ready for submission.</returns>
     public static string CreatePersonalFeed(TestIdentity identity)
     {
+        var (transaction, _) = CreatePersonalFeedWithKey(identity);
+        return transaction;
+    }
+
+    /// <summary>
+    /// Creates a signed personal feed creation transaction and returns the AES key.
+    /// This must be submitted AFTER identity registration, in the same or subsequent block.
+    /// </summary>
+    /// <param name="identity">The identity to create a personal feed for.</param>
+    /// <returns>Tuple of (JSON transaction, AES key) for later message encryption.</returns>
+    public static (string Transaction, string AesKey) CreatePersonalFeedWithKey(TestIdentity identity)
+    {
         // Generate AES key for the feed and encrypt it with the owner's public encryption key
         var feedAesKey = EncryptKeys.GenerateAesKey();
         var encryptedFeedKey = EncryptKeys.Encrypt(feedAesKey, identity.PublicEncryptAddress);
@@ -63,7 +75,7 @@ internal static class TestTransactionFactory
             unsignedTransaction,
             new SignatureInfo(identity.PublicSigningAddress, signature));
 
-        return signedTransaction.ToJson();
+        return (signedTransaction.ToJson(), feedAesKey);
     }
 
     /// <summary>
