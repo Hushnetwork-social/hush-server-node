@@ -25,11 +25,16 @@ public class BlockProductionSchedulerService :
     private readonly ILogger<BlockProductionSchedulerService> _logger;
     private readonly BlockchainSettings _blockchainSettings;
     private readonly IObservable<long> _blockGeneratorLoop;
+    private readonly bool _isTestMode;
+    private readonly Action? _onBlockFinalized;
 
     private bool _canSchedule = true;
     private int _consecutiveEmptyBlockCount = 0;
     private bool _isPausedForEmptyBlocks = false;
 
+    /// <summary>
+    /// Creates a BlockProductionSchedulerService for production use with default 3-second interval.
+    /// </summary>
     public BlockProductionSchedulerService(
         IBlockAssemblerWorkflow blockAssemblerWorkflow,
         IMemPoolService memPool,
@@ -38,6 +43,34 @@ public class BlockProductionSchedulerService :
         IEventAggregator eventAggregator,
         IOptions<BlockchainSettings> blockchainSettings,
         ILogger<BlockProductionSchedulerService> logger)
+        : this(blockAssemblerWorkflow, memPool, blockchainStorageService, blockchainCache,
+               eventAggregator, blockchainSettings, logger, observableFactory: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a BlockProductionSchedulerService with optional observable factory injection for testing.
+    /// When observableFactory is provided, the service runs in test mode which bypasses empty block pause logic.
+    /// </summary>
+    /// <param name="observableFactory">
+    /// Optional factory function that returns the observable to trigger block production.
+    /// If null, uses Observable.Interval(3 seconds) for production mode.
+    /// If provided, enables test mode which bypasses empty block pause logic.
+    /// </param>
+    /// <param name="onBlockFinalized">
+    /// Optional callback invoked when a block is finalized (persisted to database).
+    /// Used by BlockProductionControl to signal completion of ProduceBlockAsync.
+    /// </param>
+    public BlockProductionSchedulerService(
+        IBlockAssemblerWorkflow blockAssemblerWorkflow,
+        IMemPoolService memPool,
+        IBlockchainStorageService blockchainStorageService,
+        IBlockchainCache blockchainCache,
+        IEventAggregator eventAggregator,
+        IOptions<BlockchainSettings> blockchainSettings,
+        ILogger<BlockProductionSchedulerService> logger,
+        Func<IObservable<long>>? observableFactory,
+        Action? onBlockFinalized = null)
     {
         this._blockAssemblerWorkflow = blockAssemblerWorkflow;
         this._memPool = memPool;
@@ -46,10 +79,15 @@ public class BlockProductionSchedulerService :
         this._eventAggregator = eventAggregator;
         this._blockchainSettings = blockchainSettings.Value;
         this._logger = logger;
+        this._isTestMode = observableFactory != null;
+        this._onBlockFinalized = onBlockFinalized;
 
         this._eventAggregator.Subscribe(this);
 
-        this._blockGeneratorLoop = Observable.Interval(TimeSpan.FromSeconds(3));
+        // Use provided factory or default to 3-second interval for production
+        this._blockGeneratorLoop = observableFactory != null
+            ? observableFactory()
+            : Observable.Interval(TimeSpan.FromSeconds(3));
     }
 
     public void Handle(BlockchainInitializedEvent message)
@@ -60,7 +98,8 @@ public class BlockProductionSchedulerService :
 
         this._blockGeneratorLoop.Subscribe(async x =>
         {
-            if (this._isPausedForEmptyBlocks)
+            // In test mode, bypass the empty block pause check entirely
+            if (!this._isTestMode && this._isPausedForEmptyBlocks)
             {
                 this._logger.LogInformation("Block production paused - waiting for transactions...");
                 return;
@@ -99,7 +138,8 @@ public class BlockProductionSchedulerService :
                         this._consecutiveEmptyBlockCount,
                         this._blockchainSettings.MaxEmptyBlocksBeforePause);
 
-                    if (this._consecutiveEmptyBlockCount >= this._blockchainSettings.MaxEmptyBlocksBeforePause)
+                    // In test mode, skip the pause logic entirely
+                    if (!this._isTestMode && this._consecutiveEmptyBlockCount >= this._blockchainSettings.MaxEmptyBlocksBeforePause)
                     {
                         this._isPausedForEmptyBlocks = true;
                         this._logger.LogWarning(
@@ -125,6 +165,7 @@ public class BlockProductionSchedulerService :
     public void Handle(BlockCreatedEvent message)
     {
         this._canSchedule = true;
+        this._onBlockFinalized?.Invoke();
     }
 
     public void Handle(TransactionReceivedEvent message)

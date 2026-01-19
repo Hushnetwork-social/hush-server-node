@@ -20,13 +20,30 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="6.12.1" />
-    <PackageReference Include="System.Reactive" Version="6.0.1" />
-    <PackageReference Include="Moq" Version="4.20.72" />
-    <PackageReference Include="Moq.AutoMock" Version="3.5.0" />
+
+    <!-- TestContainers for PostgreSQL and Redis -->
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.3.0" />
+    <PackageReference Include="Testcontainers.Redis" Version="4.3.0" />
+
+    <!-- Database and Redis clients for test operations -->
+    <PackageReference Include="Npgsql" Version="9.0.2" />
+    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
+
+    <!-- SpecFlow for BDD-style Gherkin tests -->
+    <PackageReference Include="SpecFlow.xUnit" Version="3.9.74" />
+
+    <!-- gRPC client for black-box testing -->
+    <PackageReference Include="Grpc.Net.Client" Version="2.67.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Reference HushServerNode for internal class access via InternalsVisibleTo -->
     <ProjectReference Include="..\HushServerNode\HushServerNode.csproj" />
+  </ItemGroup>
+
+  <!-- SpecFlow feature files -->
+  <ItemGroup>
+    <SpecFlowFeatureFiles Include="Features\**\*.feature" />
   </ItemGroup>
 
 </Project>

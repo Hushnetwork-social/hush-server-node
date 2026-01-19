@@ -29,6 +29,18 @@ internal sealed class BlockProductionControl : IDisposable
     public Func<IObservable<long>> CreateObservableFactory() => () => Observable;
 
     /// <summary>
+    /// Gets the configuration tuple for BlockProductionSchedulerService.
+    /// Returns the observable factory and finalization callback for wiring up the scheduler.
+    /// </summary>
+    /// <returns>
+    /// A tuple containing:
+    /// - observableFactory: The factory that provides the block trigger observable
+    /// - onBlockFinalized: The callback to invoke when a block is finalized
+    /// </returns>
+    public (Func<IObservable<long>> observableFactory, Action onBlockFinalized) GetSchedulerConfiguration()
+        => (CreateObservableFactory(), OnBlockFinalized);
+
+    /// <summary>
     /// Triggers block production and waits for the block to be finalized.
     /// This method is synchronous from the caller's perspective - it returns
     /// only after the block has been persisted to the database.
