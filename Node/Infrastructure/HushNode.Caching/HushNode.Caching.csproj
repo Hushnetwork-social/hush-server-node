@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\Shared\HushShared.Blockchain.BlockModel\HushShared.Blockchain.BlockModel.csproj" />
+    <ProjectReference Include="..\..\..\Shared\HushShared.Feeds.Model\HushShared.Feeds.Model.csproj" />
   </ItemGroup>
 
 </Project>
