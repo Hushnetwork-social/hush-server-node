@@ -6,6 +6,10 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- Suppress CS0436: Type conflicts with imported type from referenced gRPC projects.
+         This is expected - integration tests generate their own gRPC client types from proto files
+         while also referencing HushServerNode which transitively includes the server gRPC projects. -->
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
   </PropertyGroup>
 
   <!-- Copy xunit.runner.json to output to disable parallel test execution -->
