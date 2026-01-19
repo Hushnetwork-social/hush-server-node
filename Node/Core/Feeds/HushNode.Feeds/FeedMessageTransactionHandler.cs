@@ -3,19 +3,24 @@ using HushNode.Events;
 using HushNode.Feeds.Storage;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Feeds.Model;
+using Microsoft.Extensions.Logging;
 using Olimpo;
 
 namespace HushNode.Feeds;
 
 public class FeedMessageTransactionHandler(
     IFeedMessageStorageService feedMessageStorageService,
+    IFeedMessageCacheService feedMessageCacheService,
     IBlockchainCache blockchainCache,
-    IEventAggregator eventAggregator)
+    IEventAggregator eventAggregator,
+    ILogger<FeedMessageTransactionHandler> logger)
     : IFeedMessageTransactionHandler
 {
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
+    private readonly IFeedMessageCacheService _feedMessageCacheService = feedMessageCacheService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
+    private readonly ILogger<FeedMessageTransactionHandler> _logger = logger;
 
     public async Task HandleFeedMessageTransaction(ValidatedTransaction<NewFeedMessagePayload> validatedTransaction)
     {
@@ -24,14 +29,15 @@ public class FeedMessageTransactionHandler(
         // Validation: Warn if IssuerPublicAddress is empty
         if (string.IsNullOrEmpty(issuerPublicAddress))
         {
-            Console.WriteLine($"[FeedMessageTransactionHandler] WARNING: UserSignature.Signatory is EMPTY for message {validatedTransaction.Payload.FeedMessageId}");
-            Console.WriteLine($"[FeedMessageTransactionHandler] Transaction will be stored but message ownership detection will fail.");
-            // Note: For now we still store the message, but in the future we could reject it
-            // throw new InvalidOperationException("Transaction rejected: UserSignature.Signatory cannot be empty");
+            _logger.LogWarning(
+                "UserSignature.Signatory is EMPTY for message {MessageId}. Message ownership detection will fail.",
+                validatedTransaction.Payload.FeedMessageId);
         }
         else
         {
-            Console.WriteLine($"[FeedMessageTransactionHandler] IssuerPublicAddress: {issuerPublicAddress.Substring(0, Math.Min(30, issuerPublicAddress.Length))}...");
+            _logger.LogDebug(
+                "Processing feed message from {IssuerAddress}",
+                issuerPublicAddress.Substring(0, Math.Min(30, issuerPublicAddress.Length)));
         }
 
         var feedMessage = new FeedMessage(
@@ -43,7 +49,27 @@ public class FeedMessageTransactionHandler(
             this._blockchainCache.LastBlockIndex,
             ReplyToMessageId: validatedTransaction.Payload.ReplyToMessageId);
 
+        // Write to PostgreSQL (source of truth)
         await this._feedMessageStorageService.CreateFeedMessageAsync(feedMessage);
+
+        // Write to Redis cache (FEAT-046: write-through pattern)
+        // Log and continue on failure - Redis failure should not break the write path
+        try
+        {
+            await this._feedMessageCacheService.AddMessageAsync(feedMessage.FeedId, feedMessage);
+            _logger.LogDebug(
+                "Cached message {MessageId} for feed {FeedId}",
+                feedMessage.FeedMessageId,
+                feedMessage.FeedId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to cache message {MessageId} for feed {FeedId}. PostgreSQL write succeeded.",
+                feedMessage.FeedMessageId,
+                feedMessage.FeedId);
+        }
 
         // Publish event for notification system (fire-and-forget - don't block indexing)
         // Notifications are secondary to blockchain state and should not delay BlockIndexCompletedEvent
