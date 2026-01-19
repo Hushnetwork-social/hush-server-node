@@ -88,8 +88,18 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
     }
 
     /// <summary>
+    /// Runs the node and blocks until shutdown is requested.
+    /// Used for production mode where the node runs until terminated.
+    /// </summary>
+    public async Task RunAsync()
+    {
+        await _app.RunAsync();
+    }
+
+    /// <summary>
     /// Starts the node and returns immediately.
     /// The node continues running until DisposeAsync is called.
+    /// Used for test mode where the caller controls the node lifecycle.
     /// </summary>
     public async Task StartAsync()
     {
@@ -160,7 +170,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         if (testConfig == null)
         {
             // Production mode: use standard configuration
-            Program.ConfigureConfigurationBuilder(builder.Configuration);
+            ConfigureConfigurationBuilder(builder.Configuration);
 
             var nativeGrpcPort = builder.Configuration.GetValue<int>("ServerInfo:ListeningPort", 4665);
             var grpcWebPort = builder.Configuration.GetValue<int>("ServerInfo:GrpcWebPort", 4666);
@@ -297,6 +307,19 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         app.MapGrpcService<UrlMetadataGrpcService>();
 
         app.MapGrpcReflectionService();
+    }
+
+    private static IConfigurationBuilder ConfigureConfigurationBuilder(IConfigurationBuilder configurationBuilder)
+    {
+        // Get the directory where the executable is located
+        var basePath = AppContext.BaseDirectory;
+
+        configurationBuilder
+            .SetBasePath(basePath)
+            .AddJsonFile("ApplicationSettings.json")
+            .AddEnvironmentVariables();
+
+        return configurationBuilder;
     }
 
     private sealed record TestConfiguration(
