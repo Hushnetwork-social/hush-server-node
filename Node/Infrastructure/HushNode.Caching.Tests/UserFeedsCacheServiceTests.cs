@@ -158,7 +158,7 @@ public class UserFeedsCacheServiceTests
             .ReturnsAsync(new RedisValue[] { feedId.ToString() });
 
         databaseMock
-            .Setup(x => x.KeyExpireAsync(ExpectedKey, UserFeedsCacheConstants.CacheTtl, CommandFlags.None))
+            .Setup(x => x.KeyExpireAsync(ExpectedKey, UserFeedsCacheConstants.CacheTtl, ExpireWhen.Always, CommandFlags.None))
             .ReturnsAsync(true);
 
         // Act
@@ -166,7 +166,7 @@ public class UserFeedsCacheServiceTests
 
         // Assert
         databaseMock.Verify(
-            x => x.KeyExpireAsync(ExpectedKey, UserFeedsCacheConstants.CacheTtl, CommandFlags.None),
+            x => x.KeyExpireAsync(ExpectedKey, UserFeedsCacheConstants.CacheTtl, ExpireWhen.Always, CommandFlags.None),
             Times.Once);
     }
 
@@ -210,7 +210,7 @@ public class UserFeedsCacheServiceTests
 
         // Assert
         transactionMock.Verify(
-            x => x.KeyExpireAsync(ExpectedKey, UserFeedsCacheConstants.CacheTtl, CommandFlags.None),
+            x => x.KeyExpireAsync(ExpectedKey, UserFeedsCacheConstants.CacheTtl, ExpireWhen.Always, CommandFlags.None),
             Times.Once);
     }
 
@@ -301,7 +301,7 @@ public class UserFeedsCacheServiceTests
 
         // Assert
         transactionMock.Verify(
-            x => x.KeyExpireAsync(ExpectedKey, UserFeedsCacheConstants.CacheTtl, CommandFlags.None),
+            x => x.KeyExpireAsync(ExpectedKey, UserFeedsCacheConstants.CacheTtl, ExpireWhen.Always, CommandFlags.None),
             Times.Once);
     }
 
