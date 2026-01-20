@@ -9,6 +9,9 @@
     <ProjectReference Include="..\..\..\Shared\HushShared.Blockchain.BlockModel\HushShared.Blockchain.BlockModel.csproj" />
     <ProjectReference Include="..\..\..\Shared\HushShared.Blockchain.Model\HushShared.Blockchain.Model.csproj" />
     <ProjectReference Include="..\..\..\Shared\HushShared.Feeds.Model\HushShared.Feeds.Model.csproj" />
+    <ProjectReference Include="..\..\..\Shared\HushShared.Identity.Model\HushShared.Identity.Model.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
+    <ProjectReference Include="..\..\Core\HushNode.Events\HushNode.Events.csproj" />
     <ProjectReference Include="..\HushNode.Interfaces\HushNode.Interfaces.csproj" />
   </ItemGroup>
 
