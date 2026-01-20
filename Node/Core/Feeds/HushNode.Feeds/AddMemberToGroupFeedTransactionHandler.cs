@@ -13,12 +13,14 @@ namespace HushNode.Feeds;
 public class AddMemberToGroupFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
     IBlockchainCache blockchainCache,
-    IKeyRotationService keyRotationService)
+    IKeyRotationService keyRotationService,
+    IUserFeedsCacheService userFeedsCacheService)
     : IAddMemberToGroupFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IKeyRotationService _keyRotationService = keyRotationService;
+    private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
 
     public async Task HandleAddMemberToGroupFeedTransactionAsync(ValidatedTransaction<AddMemberToGroupFeedPayload> transaction)
     {
@@ -62,5 +64,9 @@ public class AddMemberToGroupFeedTransactionHandler(
             RotationTrigger.Join,
             joiningMemberAddress: newMemberAddress,
             leavingMemberAddress: null);
+
+        // Update the added user's feed list cache (FEAT-049)
+        // Cache update is fire-and-forget - failure does not affect the transaction
+        await this._userFeedsCacheService.AddFeedToUserCacheAsync(newMemberAddress, payload.FeedId);
     }
 }

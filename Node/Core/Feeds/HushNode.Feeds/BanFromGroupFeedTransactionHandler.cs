@@ -1,3 +1,4 @@
+using HushNode.Caching;
 using HushNode.Feeds.Storage;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Feeds.Model;
@@ -12,11 +13,13 @@ namespace HushNode.Feeds;
 /// </summary>
 public class BanFromGroupFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
-    IKeyRotationService keyRotationService)
+    IKeyRotationService keyRotationService,
+    IUserFeedsCacheService userFeedsCacheService)
     : IBanFromGroupFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IKeyRotationService _keyRotationService = keyRotationService;
+    private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
 
     public async Task HandleBanFromGroupFeedTransactionAsync(ValidatedTransaction<BanFromGroupFeedPayload> banTransaction)
     {
@@ -35,5 +38,9 @@ public class BanFromGroupFeedTransactionHandler(
             RotationTrigger.Ban,
             joiningMemberAddress: null,
             leavingMemberAddress: payload.BannedUserPublicAddress);
+
+        // Step 3: Update the banned user's feed list cache (FEAT-049)
+        // Cache update is fire-and-forget - failure does not affect the transaction
+        await this._userFeedsCacheService.RemoveFeedFromUserCacheAsync(payload.BannedUserPublicAddress, payload.FeedId);
     }
 }
