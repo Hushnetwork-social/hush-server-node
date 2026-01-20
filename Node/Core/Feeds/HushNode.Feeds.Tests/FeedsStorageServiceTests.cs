@@ -1,8 +1,10 @@
 using FluentAssertions;
+using HushNode.Caching;
 using HushNode.Feeds.Storage;
 using HushNode.Feeds.Tests.Fixtures;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.AutoMock;
 using Olimpo.EntityFramework.Persistency;
@@ -699,6 +701,256 @@ public class FeedsStorageServiceTests
 
         // Assert
         mockUnitOfWork.Verify(x => x.CommitAsync(), Times.Once);
+    }
+
+    #endregion
+
+    #region GetFeedIdsForUserAsync Cache Integration Tests (FEAT-049)
+
+    /// <summary>
+    /// FEAT-049: Verifies that cached feed IDs are returned on cache hit.
+    /// The repository should NOT be called when cache has data.
+    /// </summary>
+    [Fact]
+    public async Task GetFeedIdsForUserAsync_CacheHit_ShouldReturnCachedDataAndNotQueryRepository()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var cachedFeedIds = new List<FeedId>
+        {
+            TestDataFactory.CreateFeedId(),
+            TestDataFactory.CreateFeedId()
+        };
+
+        // Setup cache to return cached data (cache hit)
+        mocker.GetMock<IUserFeedsCacheService>()
+            .Setup(x => x.GetUserFeedsAsync(userAddress))
+            .ReturnsAsync(cachedFeedIds);
+
+        // Setup repository (should NOT be called)
+        var mockRepository = new Mock<IFeedsRepository>();
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.GetFeedIdsForUserAsync(userAddress);
+
+        // Assert
+        result.Should().BeEquivalentTo(cachedFeedIds);
+        result.Should().HaveCount(2);
+
+        // Verify repository was NOT called (cache hit = no DB query)
+        mockRepository.Verify(x => x.GetFeedIdsForUserAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    /// <summary>
+    /// FEAT-049: Verifies that on cache miss, the repository is queried and cache is populated.
+    /// </summary>
+    [Fact]
+    public async Task GetFeedIdsForUserAsync_CacheMiss_ShouldQueryRepositoryAndPopulateCache()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var dbFeedIds = new List<FeedId>
+        {
+            TestDataFactory.CreateFeedId(),
+            TestDataFactory.CreateFeedId(),
+            TestDataFactory.CreateFeedId()
+        };
+
+        // Setup cache to return null (cache miss)
+        mocker.GetMock<IUserFeedsCacheService>()
+            .Setup(x => x.GetUserFeedsAsync(userAddress))
+            .ReturnsAsync((IReadOnlyList<FeedId>?)null);
+
+        mocker.GetMock<IUserFeedsCacheService>()
+            .Setup(x => x.SetUserFeedsAsync(userAddress, It.IsAny<IEnumerable<FeedId>>()))
+            .Returns(Task.CompletedTask);
+
+        // Setup repository to return data
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.GetFeedIdsForUserAsync(userAddress))
+            .ReturnsAsync(dbFeedIds);
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.GetFeedIdsForUserAsync(userAddress);
+
+        // Assert
+        result.Should().BeEquivalentTo(dbFeedIds);
+        result.Should().HaveCount(3);
+
+        // Verify repository was called (cache miss = DB query)
+        mockRepository.Verify(x => x.GetFeedIdsForUserAsync(userAddress), Times.Once);
+
+        // Verify cache was populated
+        mocker.GetMock<IUserFeedsCacheService>()
+            .Verify(x => x.SetUserFeedsAsync(userAddress, It.Is<IEnumerable<FeedId>>(ids => ids.Count() == 3)), Times.Once);
+    }
+
+    /// <summary>
+    /// FEAT-049: Verifies that empty results are NOT cached.
+    /// This prevents caching an empty state that may change when the user joins feeds.
+    /// </summary>
+    [Fact]
+    public async Task GetFeedIdsForUserAsync_EmptyResult_ShouldNotCacheEmptyList()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var emptyFeedIds = new List<FeedId>();
+
+        // Setup cache to return null (cache miss)
+        mocker.GetMock<IUserFeedsCacheService>()
+            .Setup(x => x.GetUserFeedsAsync(userAddress))
+            .ReturnsAsync((IReadOnlyList<FeedId>?)null);
+
+        // Setup repository to return empty list
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.GetFeedIdsForUserAsync(userAddress))
+            .ReturnsAsync(emptyFeedIds);
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.GetFeedIdsForUserAsync(userAddress);
+
+        // Assert
+        result.Should().BeEmpty();
+
+        // Verify cache was NOT populated (empty result = no cache)
+        mocker.GetMock<IUserFeedsCacheService>()
+            .Verify(x => x.SetUserFeedsAsync(It.IsAny<string>(), It.IsAny<IEnumerable<FeedId>>()), Times.Never);
+    }
+
+    /// <summary>
+    /// FEAT-049: Verifies that cache service exceptions are handled gracefully.
+    /// On Redis failure, the method should fall back to PostgreSQL.
+    /// </summary>
+    [Fact]
+    public async Task GetFeedIdsForUserAsync_CacheException_ShouldFallbackToRepository()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var dbFeedIds = new List<FeedId>
+        {
+            TestDataFactory.CreateFeedId()
+        };
+
+        // Setup cache to throw exception (simulating Redis failure)
+        mocker.GetMock<IUserFeedsCacheService>()
+            .Setup(x => x.GetUserFeedsAsync(userAddress))
+            .ThrowsAsync(new Exception("Redis connection failed"));
+
+        // Setup repository to return data
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.GetFeedIdsForUserAsync(userAddress))
+            .ReturnsAsync(dbFeedIds);
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.GetFeedIdsForUserAsync(userAddress);
+
+        // Assert - Should return DB result despite cache failure
+        result.Should().BeEquivalentTo(dbFeedIds);
+        result.Should().HaveCount(1);
+
+        // Verify repository was called (fallback to DB)
+        mockRepository.Verify(x => x.GetFeedIdsForUserAsync(userAddress), Times.Once);
+    }
+
+    /// <summary>
+    /// FEAT-049: Verifies that cache population failure does not affect the return value.
+    /// If SetUserFeedsAsync throws, the DB result should still be returned.
+    /// </summary>
+    [Fact]
+    public async Task GetFeedIdsForUserAsync_CachePopulationFailure_ShouldStillReturnDbResult()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var dbFeedIds = new List<FeedId>
+        {
+            TestDataFactory.CreateFeedId(),
+            TestDataFactory.CreateFeedId()
+        };
+
+        // Setup cache to return null (cache miss)
+        mocker.GetMock<IUserFeedsCacheService>()
+            .Setup(x => x.GetUserFeedsAsync(userAddress))
+            .ReturnsAsync((IReadOnlyList<FeedId>?)null);
+
+        // Setup cache population to throw (simulating Redis write failure)
+        mocker.GetMock<IUserFeedsCacheService>()
+            .Setup(x => x.SetUserFeedsAsync(userAddress, It.IsAny<IEnumerable<FeedId>>()))
+            .ThrowsAsync(new Exception("Redis write failed"));
+
+        // Setup repository to return data
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.GetFeedIdsForUserAsync(userAddress))
+            .ReturnsAsync(dbFeedIds);
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.GetFeedIdsForUserAsync(userAddress);
+
+        // Assert - Should return DB result despite cache population failure
+        result.Should().BeEquivalentTo(dbFeedIds);
+        result.Should().HaveCount(2);
     }
 
     #endregion
