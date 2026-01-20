@@ -5,7 +5,7 @@ using HushNode.Caching;
 using HushNode.Feeds.gRPC;
 using HushNode.Feeds.Storage;
 using HushNode.Feeds.Tests.Fixtures;
-using HushNode.Identity;
+using HushNode.Identity.Storage;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Blockchain.Model;
 using HushShared.Feeds.Model;

@@ -1,6 +1,6 @@
 using HushNode.Events;
 using HushNode.Feeds.Storage;
-using HushNode.Identity;
+using HushNode.Identity.Storage;
 using HushNode.PushNotifications;
 using HushNode.PushNotifications.Models;
 using HushShared.Feeds.Model;
