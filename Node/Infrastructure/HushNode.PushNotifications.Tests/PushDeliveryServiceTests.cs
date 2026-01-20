@@ -1,4 +1,5 @@
 using FluentAssertions;
+using HushNode.Caching;
 using HushNode.PushNotifications.Exceptions;
 using HushNode.Interfaces.Models;
 using HushNode.PushNotifications.Models;
@@ -34,13 +35,14 @@ public class PushDeliveryServiceTests
             .Setup(x => x.GetActiveTokensForUserAsync(userId))
             .ReturnsAsync(deviceTokens);
 
+        var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
         mockFcmProvider
             .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
             .Returns(Task.CompletedTask);
 
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello from Bob");
 
         // Act
@@ -63,9 +65,10 @@ public class PushDeliveryServiceTests
             .Setup(x => x.GetActiveTokensForUserAsync(userId))
             .ReturnsAsync(Enumerable.Empty<DeviceToken>());
 
+        var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -103,6 +106,7 @@ public class PushDeliveryServiceTests
             .Setup(x => x.UnregisterTokenAsync(userId, "invalid-token"))
             .ReturnsAsync(true);
 
+        var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
         // First token succeeds
         mockFcmProvider
@@ -114,7 +118,7 @@ public class PushDeliveryServiceTests
             .ThrowsAsync(new InvalidTokenException("Token is unregistered"));
 
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act - should not throw, even though one token is invalid
@@ -153,13 +157,14 @@ public class PushDeliveryServiceTests
             .Setup(x => x.UnregisterTokenAsync(It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
+        var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
         mockFcmProvider
             .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
             .ThrowsAsync(new InvalidTokenException("Token is unregistered"));
 
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -188,6 +193,7 @@ public class PushDeliveryServiceTests
             .Setup(x => x.GetActiveTokensForUserAsync(userId))
             .ReturnsAsync(deviceTokens);
 
+        var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
         mockFcmProvider
             .Setup(x => x.SendAsync("error-token", It.IsAny<PushPayload>()))
@@ -197,7 +203,7 @@ public class PushDeliveryServiceTests
             .Returns(Task.CompletedTask);
 
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -236,13 +242,14 @@ public class PushDeliveryServiceTests
         var deviceToken = CreateDeviceToken(userId, PushPlatform.Android, "android-token");
 
         var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
         mockFcmProvider
             .Setup(x => x.SendAsync("android-token", It.IsAny<PushPayload>()))
             .Returns(Task.CompletedTask);
 
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -264,13 +271,14 @@ public class PushDeliveryServiceTests
             .Setup(x => x.UnregisterTokenAsync(userId, "invalid-token"))
             .ReturnsAsync(true);
 
+        var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
         mockFcmProvider
             .Setup(x => x.SendAsync("invalid-token", It.IsAny<PushPayload>()))
             .ThrowsAsync(new InvalidTokenException("Token is unregistered"));
 
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -291,9 +299,10 @@ public class PushDeliveryServiceTests
         var deviceToken = CreateDeviceToken(userId, PushPlatform.iOS, "ios-token");
 
         var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -321,9 +330,10 @@ public class PushDeliveryServiceTests
         var deviceToken = CreateDeviceToken(userId, PushPlatform.Web, "web-token");
 
         var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -341,9 +351,10 @@ public class PushDeliveryServiceTests
         var deviceToken = CreateDeviceToken(userId, PushPlatform.Unknown, "unknown-token");
 
         var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -351,6 +362,226 @@ public class PushDeliveryServiceTests
 
         // Assert - FCM provider should NOT be called for Unknown
         mockFcmProvider.Verify(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()), Times.Never);
+    }
+
+    #endregion
+
+    #region Cache Integration Tests (FEAT-047 Phase 4)
+
+    [Fact]
+    public async Task SendPushAsync_CacheHit_ReadsFromCache()
+    {
+        // Arrange
+        var userId = "user-abc123def456ghi789jkl";
+        var cachedTokens = new List<DeviceToken>
+        {
+            CreateDeviceToken(userId, PushPlatform.Android, "cached-token")
+        };
+
+        var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        var mockCacheService = new Mock<IPushTokenCacheService>();
+        mockCacheService
+            .Setup(x => x.GetTokensAsync(userId))
+            .ReturnsAsync(cachedTokens);
+
+        var mockFcmProvider = new Mock<IFcmProvider>();
+        mockFcmProvider
+            .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Returns(Task.CompletedTask);
+
+        var mockLogger = CreateLogger();
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var payload = new PushPayload("New Message", "Hello");
+
+        // Act
+        await sut.SendPushAsync(userId, payload);
+
+        // Assert - cache was checked
+        mockCacheService.Verify(x => x.GetTokensAsync(userId), Times.Once);
+        // Storage service should NOT be called (cache hit)
+        mockTokenStorage.Verify(x => x.GetActiveTokensForUserAsync(It.IsAny<string>()), Times.Never);
+        // Push should still be sent
+        mockFcmProvider.Verify(x => x.SendAsync("cached-token", payload), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendPushAsync_CacheMiss_FallsBackToDatabase()
+    {
+        // Arrange
+        var userId = "user-abc123def456ghi789jkl";
+        var dbTokens = new List<DeviceToken>
+        {
+            CreateDeviceToken(userId, PushPlatform.Android, "db-token")
+        };
+
+        var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        mockTokenStorage
+            .Setup(x => x.GetActiveTokensForUserAsync(userId))
+            .ReturnsAsync(dbTokens);
+
+        var mockCacheService = new Mock<IPushTokenCacheService>();
+        mockCacheService
+            .Setup(x => x.GetTokensAsync(userId))
+            .ReturnsAsync((IEnumerable<DeviceToken>?)null); // Cache miss
+
+        var mockFcmProvider = new Mock<IFcmProvider>();
+        mockFcmProvider
+            .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Returns(Task.CompletedTask);
+
+        var mockLogger = CreateLogger();
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var payload = new PushPayload("New Message", "Hello");
+
+        // Act
+        await sut.SendPushAsync(userId, payload);
+
+        // Assert - cache was checked first
+        mockCacheService.Verify(x => x.GetTokensAsync(userId), Times.Once);
+        // Then database was queried
+        mockTokenStorage.Verify(x => x.GetActiveTokensForUserAsync(userId), Times.Once);
+        // Cache should be populated
+        mockCacheService.Verify(x => x.SetTokensAsync(userId, It.IsAny<IEnumerable<DeviceToken>>()), Times.Once);
+        // Push should still be sent
+        mockFcmProvider.Verify(x => x.SendAsync("db-token", payload), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendPushAsync_CachePopulationFails_StillDeliversPush()
+    {
+        // Arrange
+        var userId = "user-abc123def456ghi789jkl";
+        var dbTokens = new List<DeviceToken>
+        {
+            CreateDeviceToken(userId, PushPlatform.Android, "db-token")
+        };
+
+        var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        mockTokenStorage
+            .Setup(x => x.GetActiveTokensForUserAsync(userId))
+            .ReturnsAsync(dbTokens);
+
+        var mockCacheService = new Mock<IPushTokenCacheService>();
+        mockCacheService
+            .Setup(x => x.GetTokensAsync(userId))
+            .ReturnsAsync((IEnumerable<DeviceToken>?)null); // Cache miss
+        mockCacheService
+            .Setup(x => x.SetTokensAsync(userId, It.IsAny<IEnumerable<DeviceToken>>()))
+            .ThrowsAsync(new Exception("Redis connection failed"));
+
+        var mockFcmProvider = new Mock<IFcmProvider>();
+        mockFcmProvider
+            .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Returns(Task.CompletedTask);
+
+        var mockLogger = CreateLogger();
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var payload = new PushPayload("New Message", "Hello");
+
+        // Act - should not throw
+        var act = async () => await sut.SendPushAsync(userId, payload);
+
+        // Assert
+        await act.Should().NotThrowAsync();
+
+        // Push should still be delivered
+        mockFcmProvider.Verify(x => x.SendAsync("db-token", payload), Times.Once);
+
+        // Warning should be logged for cache population failure
+        mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((o, t) => o.ToString()!.Contains("Failed to populate cache")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SendPushAsync_CacheUnavailable_FallsBackToDatabase()
+    {
+        // Arrange
+        var userId = "user-abc123def456ghi789jkl";
+        var dbTokens = new List<DeviceToken>
+        {
+            CreateDeviceToken(userId, PushPlatform.Android, "db-token")
+        };
+
+        var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        mockTokenStorage
+            .Setup(x => x.GetActiveTokensForUserAsync(userId))
+            .ReturnsAsync(dbTokens);
+
+        var mockCacheService = new Mock<IPushTokenCacheService>();
+        mockCacheService
+            .Setup(x => x.GetTokensAsync(userId))
+            .ThrowsAsync(new Exception("Redis unavailable"));
+
+        var mockFcmProvider = new Mock<IFcmProvider>();
+        mockFcmProvider
+            .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Returns(Task.CompletedTask);
+
+        var mockLogger = CreateLogger();
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var payload = new PushPayload("New Message", "Hello");
+
+        // Act - should not throw
+        var act = async () => await sut.SendPushAsync(userId, payload);
+
+        // Assert
+        await act.Should().NotThrowAsync();
+
+        // Database should be queried as fallback
+        mockTokenStorage.Verify(x => x.GetActiveTokensForUserAsync(userId), Times.Once);
+
+        // Push should still be delivered
+        mockFcmProvider.Verify(x => x.SendAsync("db-token", payload), Times.Once);
+
+        // Warning should be logged
+        mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((o, t) => o.ToString()!.Contains("falling back to database")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SendPushAsync_SuccessfulPush_UpdatesLastUsedAtInCache()
+    {
+        // Arrange
+        var userId = "user-abc123def456ghi789jkl";
+        var deviceTokens = new List<DeviceToken>
+        {
+            CreateDeviceToken(userId, PushPlatform.Android, "token-1")
+        };
+
+        var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        mockTokenStorage
+            .Setup(x => x.GetActiveTokensForUserAsync(userId))
+            .ReturnsAsync(deviceTokens);
+
+        var mockCacheService = CreateCacheService();
+        var mockFcmProvider = new Mock<IFcmProvider>();
+        mockFcmProvider
+            .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Returns(Task.CompletedTask);
+
+        var mockLogger = CreateLogger();
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var payload = new PushPayload("New Message", "Hello");
+
+        // Act
+        await sut.SendPushAsync(userId, payload);
+
+        // Assert - cache should be updated with new LastUsedAt
+        mockCacheService.Verify(
+            x => x.AddOrUpdateTokenAsync(userId, It.IsAny<DeviceToken>()),
+            Times.Once);
     }
 
     #endregion
@@ -375,6 +606,34 @@ public class PushDeliveryServiceTests
     private static Mock<ILogger<PushDeliveryService>> CreateLogger()
     {
         return new Mock<ILogger<PushDeliveryService>>();
+    }
+
+    private static Mock<IPushTokenCacheService> CreateCacheService()
+    {
+        var mock = new Mock<IPushTokenCacheService>();
+        // Default: cache miss (returns null)
+        mock.Setup(x => x.GetTokensAsync(It.IsAny<string>()))
+            .ReturnsAsync((IEnumerable<DeviceToken>?)null);
+        return mock;
+    }
+
+    /// <summary>
+    /// Creates PushDeliveryService with all mocks. Returns the service and mocks for verification.
+    /// </summary>
+    private static (PushDeliveryService sut, Mock<IDeviceTokenStorageService> storageServiceMock, Mock<IPushTokenCacheService> cacheServiceMock, Mock<IFcmProvider> fcmProviderMock, Mock<ILogger<PushDeliveryService>> loggerMock) CreateServiceWithMocks()
+    {
+        var storageServiceMock = new Mock<IDeviceTokenStorageService>();
+        var cacheServiceMock = CreateCacheService();
+        var fcmProviderMock = new Mock<IFcmProvider>();
+        var loggerMock = CreateLogger();
+
+        var sut = new PushDeliveryService(
+            storageServiceMock.Object,
+            cacheServiceMock.Object,
+            fcmProviderMock.Object,
+            loggerMock.Object);
+
+        return (sut, storageServiceMock, cacheServiceMock, fcmProviderMock, loggerMock);
     }
 
     #endregion
