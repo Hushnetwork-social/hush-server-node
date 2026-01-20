@@ -24,11 +24,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\HushNode.Caching\HushNode.Caching.csproj" />
-    <ProjectReference Include="..\HushNode.Interfaces\HushNode.Interfaces.csproj" />
-    <ProjectReference Include="..\..\..\Shared\HushShared.Identity.Model\HushShared.Identity.Model.csproj" />
-    <ProjectReference Include="..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
-    <ProjectReference Include="..\..\Core\HushNode.Events\HushNode.Events.csproj" />
+    <ProjectReference Include="..\HushNode.Identity\HushNode.Identity.csproj" />
+    <ProjectReference Include="..\HushNode.Identity.Storage\HushNode.Identity.Storage.csproj" />
+    <ProjectReference Include="..\..\Feeds\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\HushNode.Caching\HushNode.Caching.csproj" />
+    <ProjectReference Include="..\..\HushNode.Events\HushNode.Events.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
   </ItemGroup>
 
 </Project>

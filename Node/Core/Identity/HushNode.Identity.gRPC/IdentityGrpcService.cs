@@ -5,13 +5,15 @@ using HushShared.Identity.Model;
 
 namespace HushNode.Identity.gRPC;
 
-public class IdentityGrpcService(IIdentityStorageService identityStorageService) : HushIdentity.HushIdentityBase
+public class IdentityGrpcService(IIdentityService identityService, IIdentityStorageService identityStorageService) : HushIdentity.HushIdentityBase
 {
+    private readonly IIdentityService _identityService = identityService;
     private readonly IIdentityStorageService _identityStorageService = identityStorageService;
 
     public override async Task<GetIdentityReply> GetIdentity(GetIdentityRequest request, ServerCallContext context)
     {
-        var profileBase = await this._identityStorageService.RetrieveIdentityAsync(request.PublicSigningAddress);
+        // Use IIdentityService which includes cache-aside pattern (FEAT-048)
+        var profileBase = await this._identityService.RetrieveIdentityAsync(request.PublicSigningAddress);
         
         var reply = new GetIdentityReply();
         if (profileBase is NonExistingProfile)
