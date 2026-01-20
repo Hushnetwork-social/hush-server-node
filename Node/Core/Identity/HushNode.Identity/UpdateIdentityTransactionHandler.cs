@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
+using Olimpo;
 using Olimpo.EntityFramework.Persistency;
 using HushNode.Caching;
+using HushNode.Events;
 using HushNode.Feeds.Storage;
 using HushNode.Identity.Storage;
 using HushShared.Blockchain.TransactionModel.States;
@@ -12,12 +14,14 @@ public class UpdateIdentityTransactionHandler(
     IUnitOfWorkProvider<IdentityDbContext> unitOfWorkProvider,
     IFeedsStorageService feedsStorageService,
     IBlockchainCache blockchainCache,
+    IEventAggregator eventAggregator,
     ILogger<UpdateIdentityTransactionHandler> logger)
     : IUpdateIdentityTransactionHandler
 {
     private readonly IUnitOfWorkProvider<IdentityDbContext> _unitOfWorkProvider = unitOfWorkProvider;
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
+    private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly ILogger<UpdateIdentityTransactionHandler> _logger = logger;
 
     public async Task HandleUpdateIdentityTransaction(ValidatedTransaction<UpdateIdentityPayload> transaction)
@@ -65,6 +69,9 @@ public class UpdateIdentityTransactionHandler(
         // This ensures other clients can detect the identity change via feed sync
         await this._feedsStorageService.UpdateFeedsBlockIndexForParticipantAsync(publicSigningAddress, blockIndex);
 
-        this._logger.LogInformation("Identity alias updated: {Address} -> {NewAlias} (feeds updated)", publicSigningAddress, newAlias);
+        // Publish event to invalidate identity cache
+        await this._eventAggregator.PublishAsync(new IdentityUpdatedEvent(publicSigningAddress));
+
+        this._logger.LogInformation("Identity alias updated: {Address} -> {NewAlias} (feeds updated, cache invalidated)", publicSigningAddress, newAlias);
     }
 }
