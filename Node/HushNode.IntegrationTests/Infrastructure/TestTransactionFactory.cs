@@ -127,6 +127,52 @@ internal static class TestTransactionFactory
     }
 
     /// <summary>
+    /// Creates a signed group feed creation transaction.
+    /// </summary>
+    /// <param name="creator">The identity creating the group.</param>
+    /// <param name="groupName">The name of the group.</param>
+    /// <returns>Tuple of (JSON transaction, FeedId, AES key) for later message encryption.</returns>
+    public static (string Transaction, FeedId FeedId, string AesKey) CreateGroupFeed(
+        TestIdentity creator,
+        string groupName)
+    {
+        var feedId = FeedId.NewFeedId;
+        var aesKey = EncryptKeys.GenerateAesKey();
+
+        // Encrypt the AES key for the creator using their public encrypt key
+        var creatorEncryptedKey = EncryptKeys.Encrypt(aesKey, creator.PublicEncryptAddress);
+
+        var creatorParticipant = new GroupFeedParticipant(
+            feedId,
+            creator.PublicSigningAddress,
+            ParticipantType.Owner,
+            creatorEncryptedKey,
+            KeyGeneration: 1);
+
+        var payload = new NewGroupFeedPayload(
+            feedId,
+            groupName,
+            Description: $"Test group: {groupName}",
+            IsPublic: false,
+            [creatorParticipant]);
+
+        var unsignedTransaction = UnsignedTransactionHandler.CreateNew(
+            NewGroupFeedPayloadHandler.NewGroupFeedPayloadKind,
+            Timestamp.Current,
+            payload);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            creator.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<NewGroupFeedPayload>(
+            unsignedTransaction,
+            new SignatureInfo(creator.PublicSigningAddress, signature));
+
+        return (signedTransaction.ToJson(), feedId, aesKey);
+    }
+
+    /// <summary>
     /// Creates a signed feed message transaction.
     /// </summary>
     /// <param name="sender">The identity sending the message.</param>

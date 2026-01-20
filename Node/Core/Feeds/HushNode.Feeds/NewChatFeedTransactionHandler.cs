@@ -11,12 +11,14 @@ namespace HushNode.Feeds;
 public class NewChatFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
     IBlockchainCache blockchainCache,
-    IEventAggregator eventAggregator)
+    IEventAggregator eventAggregator,
+    IUserFeedsCacheService userFeedsCacheService)
     : INewChatFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
+    private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
 
     public Task HandleNewChatFeedTransactionAsync(ValidatedTransaction<NewChatFeedPayload> newChatFeedTransaction)
     {
@@ -60,6 +62,13 @@ public class NewChatFeedTransactionHandler(
             newChatFeedPayload.FeedId,
             participantAddresses.ToArray(),
             newChatFeedPayload.FeedType));
+
+        // Update both participants' feed list caches (FEAT-049)
+        // Cache updates are fire-and-forget - failure does not affect the transaction
+        foreach (var participantAddress in participantAddresses)
+        {
+            _ = this._userFeedsCacheService.AddFeedToUserCacheAsync(participantAddress, newChatFeedPayload.FeedId);
+        }
 
         return Task.CompletedTask;
     }

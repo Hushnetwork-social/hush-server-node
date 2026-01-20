@@ -1,14 +1,20 @@
+using HushNode.Caching;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
+using Microsoft.Extensions.Logging;
 using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Feeds.Storage;
 
 public class FeedsStorageService(
-    IUnitOfWorkProvider<FeedsDbContext> unitOfWorkProvider) 
+    IUnitOfWorkProvider<FeedsDbContext> unitOfWorkProvider,
+    IUserFeedsCacheService userFeedsCacheService,
+    ILogger<FeedsStorageService> logger)
     : IFeedsStorageService
 {
     private readonly IUnitOfWorkProvider<FeedsDbContext> _unitOfWorkProvider = unitOfWorkProvider;
+    private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
+    private readonly ILogger<FeedsStorageService> _logger = logger;
 
     public async Task CreateGroupFeed(GroupFeed groupFeed)
     {
@@ -150,11 +156,75 @@ public class FeedsStorageService(
             .GetRepository<IFeedsRepository>()
             .GetFeedByIdAsync(feedId);
 
-    public async Task<IReadOnlyList<FeedId>> GetFeedIdsForUserAsync(string publicAddress) =>
-        await this._unitOfWorkProvider
-            .CreateReadOnly()
-            .GetRepository<IFeedsRepository>()
-            .GetFeedIdsForUserAsync(publicAddress);
+    /// <summary>
+    /// Gets all feed IDs for a user with cache-aside pattern (FEAT-049).
+    /// Tries Redis cache first, falls back to PostgreSQL on miss.
+    /// </summary>
+    public async Task<IReadOnlyList<FeedId>> GetFeedIdsForUserAsync(string publicAddress)
+    {
+        try
+        {
+            // 1. Try cache first
+            var cachedFeedIds = await this._userFeedsCacheService.GetUserFeedsAsync(publicAddress);
+
+            if (cachedFeedIds != null)
+            {
+                // Cache hit - return cached data
+                _logger.LogDebug(
+                    "Cache HIT for user {UserAddress}: returning {FeedCount} cached feed IDs",
+                    publicAddress,
+                    cachedFeedIds.Count);
+
+                return cachedFeedIds;
+            }
+
+            // 2. Cache miss - query PostgreSQL
+            _logger.LogDebug(
+                "Cache MISS for user {UserAddress}: querying PostgreSQL",
+                publicAddress);
+
+            var dbFeedIds = await this._unitOfWorkProvider
+                .CreateReadOnly()
+                .GetRepository<IFeedsRepository>()
+                .GetFeedIdsForUserAsync(publicAddress);
+
+            // 3. Cache-aside: Populate cache with fetched feed IDs (only if non-empty)
+            if (dbFeedIds.Count > 0)
+            {
+                try
+                {
+                    await this._userFeedsCacheService.SetUserFeedsAsync(publicAddress, dbFeedIds);
+                    _logger.LogDebug(
+                        "Populated cache for user {UserAddress} with {FeedCount} feed IDs",
+                        publicAddress,
+                        dbFeedIds.Count);
+                }
+                catch (Exception ex)
+                {
+                    // Log and continue - cache population failure should not fail the request
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to populate cache for user {UserAddress}. Returning PostgreSQL results.",
+                        publicAddress);
+                }
+            }
+
+            return dbFeedIds;
+        }
+        catch (Exception ex)
+        {
+            // Redis error - fall back to PostgreSQL
+            _logger.LogWarning(
+                ex,
+                "Cache operation failed for user {UserAddress}. Falling back to PostgreSQL.",
+                publicAddress);
+
+            return await this._unitOfWorkProvider
+                .CreateReadOnly()
+                .GetRepository<IFeedsRepository>()
+                .GetFeedIdsForUserAsync(publicAddress);
+        }
+    }
 
     public async Task UpdateFeedsBlockIndexForParticipantAsync(string publicSigningAddress, BlockIndex blockIndex)
     {

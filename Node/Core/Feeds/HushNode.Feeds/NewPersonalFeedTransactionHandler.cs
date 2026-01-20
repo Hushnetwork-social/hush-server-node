@@ -12,12 +12,14 @@ public class NewPersonalFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
     IBlockchainCache blockchainCache,
     IEventAggregator eventAggregator,
-    ILogger<NewPersonalFeedTransactionHandler> logger) : INewPersonalFeedTransactionHandler
+    ILogger<NewPersonalFeedTransactionHandler> logger,
+    IUserFeedsCacheService userFeedsCacheService) : INewPersonalFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly ILogger<NewPersonalFeedTransactionHandler> _logger = logger;
+    private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
 
     public async Task HandleNewPersonalFeedTransactionAsync(ValidatedTransaction<NewPersonalFeedPayload> newPersonalFeedTransaction)
     {
@@ -69,6 +71,10 @@ public class NewPersonalFeedTransactionHandler(
                 newPersonalFeedPayload.FeedId,
                 new[] { signatoryAddress },
                 newPersonalFeedPayload.FeedType));
+
+            // Update the owner's feed list cache (FEAT-049)
+            // Cache update is fire-and-forget - failure does not affect the transaction
+            await this._userFeedsCacheService.AddFeedToUserCacheAsync(signatoryAddress, newPersonalFeedPayload.FeedId);
         }
         else
         {

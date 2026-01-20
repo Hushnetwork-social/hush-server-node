@@ -13,12 +13,14 @@ namespace HushNode.Feeds;
 public class LeaveGroupFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
     IBlockchainCache blockchainCache,
-    IKeyRotationService keyRotationService)
+    IKeyRotationService keyRotationService,
+    IUserFeedsCacheService userFeedsCacheService)
     : ILeaveGroupFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IKeyRotationService _keyRotationService = keyRotationService;
+    private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
 
     public async Task HandleLeaveGroupFeedTransactionAsync(ValidatedTransaction<LeaveGroupFeedPayload> transaction)
     {
@@ -66,5 +68,9 @@ public class LeaveGroupFeedTransactionHandler(
                 joiningMemberAddress: null,
                 leavingMemberAddress: leavingUserAddress);
         }
+
+        // Update the leaving user's feed list cache (FEAT-049)
+        // Cache update is fire-and-forget - failure does not affect the transaction
+        await this._userFeedsCacheService.RemoveFeedFromUserCacheAsync(leavingUserAddress, payload.FeedId);
     }
 }
