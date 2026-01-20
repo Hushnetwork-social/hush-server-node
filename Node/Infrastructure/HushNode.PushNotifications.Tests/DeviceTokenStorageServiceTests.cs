@@ -1,4 +1,5 @@
 using FluentAssertions;
+using HushNode.Caching;
 using HushNode.Interfaces.Models;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -304,12 +305,226 @@ public class DeviceTokenStorageServiceTests
 
     #endregion
 
+    #region Cache Integration Tests
+
+    [Fact]
+    public async Task RegisterTokenAsync_NewToken_UpdatesCache()
+    {
+        // Arrange
+        var (sut, repositoryMock, _, cacheServiceMock) = CreateStorageServiceWithCache();
+
+        repositoryMock
+            .Setup(x => x.GetByTokenAsync(TestToken))
+            .ReturnsAsync((DeviceToken?)null);
+
+        // Act
+        await sut.RegisterTokenAsync(TestUserId, PushPlatform.Android, TestToken, TestDeviceName);
+
+        // Assert
+        cacheServiceMock.Verify(
+            x => x.AddOrUpdateTokenAsync(TestUserId, It.Is<DeviceToken>(t => t.Token == TestToken)),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task RegisterTokenAsync_ExistingTokenSameUser_UpdatesCache()
+    {
+        // Arrange
+        var (sut, repositoryMock, _, cacheServiceMock) = CreateStorageServiceWithCache();
+
+        var existingToken = new DeviceToken
+        {
+            Id = "existing-id",
+            UserId = TestUserId, // Same user
+            Platform = PushPlatform.iOS,
+            Token = TestToken,
+            DeviceName = "Old Device",
+            CreatedAt = DateTime.UtcNow.AddDays(-30),
+            LastUsedAt = DateTime.UtcNow.AddDays(-7),
+            IsActive = false
+        };
+
+        repositoryMock
+            .Setup(x => x.GetByTokenAsync(TestToken))
+            .ReturnsAsync(existingToken);
+
+        // Act
+        await sut.RegisterTokenAsync(TestUserId, PushPlatform.Android, TestToken, TestDeviceName);
+
+        // Assert
+        cacheServiceMock.Verify(
+            x => x.AddOrUpdateTokenAsync(TestUserId, existingToken),
+            Times.Once);
+        cacheServiceMock.Verify(
+            x => x.RemoveTokenAsync(It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RegisterTokenAsync_TokenReassigned_UpdatesBothUsersCaches()
+    {
+        // Arrange
+        var (sut, repositoryMock, _, cacheServiceMock) = CreateStorageServiceWithCache();
+        const string oldUserId = "old-user-id";
+
+        var existingToken = new DeviceToken
+        {
+            Id = "existing-id",
+            UserId = oldUserId, // Different user
+            Platform = PushPlatform.iOS,
+            Token = TestToken,
+            DeviceName = "Old Device",
+            CreatedAt = DateTime.UtcNow.AddDays(-30),
+            LastUsedAt = DateTime.UtcNow.AddDays(-7),
+            IsActive = true
+        };
+
+        repositoryMock
+            .Setup(x => x.GetByTokenAsync(TestToken))
+            .ReturnsAsync(existingToken);
+
+        // Act
+        await sut.RegisterTokenAsync(TestUserId, PushPlatform.Android, TestToken, TestDeviceName);
+
+        // Assert - old user's cache should be invalidated
+        cacheServiceMock.Verify(
+            x => x.RemoveTokenAsync(oldUserId, existingToken.Id),
+            Times.Once);
+        // Assert - new user's cache should be updated
+        cacheServiceMock.Verify(
+            x => x.AddOrUpdateTokenAsync(TestUserId, existingToken),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task RegisterTokenAsync_DbFails_CacheNotUpdated()
+    {
+        // Arrange
+        var (sut, repositoryMock, _, cacheServiceMock) = CreateStorageServiceWithCache();
+
+        repositoryMock
+            .Setup(x => x.GetByTokenAsync(TestToken))
+            .ThrowsAsync(new Exception("Database error"));
+
+        // Act
+        await sut.RegisterTokenAsync(TestUserId, PushPlatform.Android, TestToken, TestDeviceName);
+
+        // Assert
+        cacheServiceMock.Verify(
+            x => x.AddOrUpdateTokenAsync(It.IsAny<string>(), It.IsAny<DeviceToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RegisterTokenAsync_CacheFails_StillReturnsTrue()
+    {
+        // Arrange
+        var (sut, repositoryMock, _, cacheServiceMock) = CreateStorageServiceWithCache();
+
+        repositoryMock
+            .Setup(x => x.GetByTokenAsync(TestToken))
+            .ReturnsAsync((DeviceToken?)null);
+
+        cacheServiceMock
+            .Setup(x => x.AddOrUpdateTokenAsync(It.IsAny<string>(), It.IsAny<DeviceToken>()))
+            .ThrowsAsync(new Exception("Redis error"));
+
+        // Act
+        var result = await sut.RegisterTokenAsync(TestUserId, PushPlatform.Android, TestToken, TestDeviceName);
+
+        // Assert - should still return true because PostgreSQL is source of truth
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UnregisterTokenAsync_RemovesFromCache()
+    {
+        // Arrange
+        var (sut, repositoryMock, _, cacheServiceMock) = CreateStorageServiceWithCache();
+        const string tokenId = "token-id";
+
+        var existingToken = new DeviceToken
+        {
+            Id = tokenId,
+            UserId = TestUserId,
+            Token = TestToken,
+            IsActive = true
+        };
+
+        repositoryMock
+            .Setup(x => x.GetByTokenAsync(TestToken))
+            .ReturnsAsync(existingToken);
+
+        // Act
+        await sut.UnregisterTokenAsync(TestUserId, TestToken);
+
+        // Assert
+        cacheServiceMock.Verify(
+            x => x.RemoveTokenAsync(TestUserId, tokenId),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task UnregisterTokenAsync_DbFails_CacheNotUpdated()
+    {
+        // Arrange
+        var (sut, repositoryMock, _, cacheServiceMock) = CreateStorageServiceWithCache();
+
+        repositoryMock
+            .Setup(x => x.GetByTokenAsync(TestToken))
+            .ThrowsAsync(new Exception("Database error"));
+
+        // Act
+        await sut.UnregisterTokenAsync(TestUserId, TestToken);
+
+        // Assert
+        cacheServiceMock.Verify(
+            x => x.RemoveTokenAsync(It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task DeactivateStaleTokensAsync_RemovesFromCache()
+    {
+        // Arrange
+        var (sut, repositoryMock, _, cacheServiceMock) = CreateStorageServiceWithCache();
+        var threshold = DateTime.UtcNow.AddDays(-30);
+
+        var staleTokens = new List<DeviceToken>
+        {
+            new() { Id = "1", UserId = "user1", Token = "token1", LastUsedAt = DateTime.UtcNow.AddDays(-60) },
+            new() { Id = "2", UserId = "user2", Token = "token2", LastUsedAt = DateTime.UtcNow.AddDays(-45) },
+            new() { Id = "3", UserId = "user1", Token = "token3", LastUsedAt = DateTime.UtcNow.AddDays(-31) }
+        };
+
+        repositoryMock
+            .Setup(x => x.GetStaleTokensAsync(threshold))
+            .ReturnsAsync(staleTokens);
+
+        // Act
+        await sut.DeactivateStaleTokensAsync(threshold);
+
+        // Assert
+        cacheServiceMock.Verify(x => x.RemoveTokenAsync("user1", "1"), Times.Once);
+        cacheServiceMock.Verify(x => x.RemoveTokenAsync("user2", "2"), Times.Once);
+        cacheServiceMock.Verify(x => x.RemoveTokenAsync("user1", "3"), Times.Once);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private (DeviceTokenStorageService sut, Mock<IDeviceTokenRepository> repositoryMock, Mock<IWritableUnitOfWork<PushNotificationsDbContext>> unitOfWorkMock) CreateStorageService()
     {
+        var (sut, repositoryMock, unitOfWorkMock, _) = CreateStorageServiceWithCache();
+        return (sut, repositoryMock, unitOfWorkMock);
+    }
+
+    private (DeviceTokenStorageService sut, Mock<IDeviceTokenRepository> repositoryMock, Mock<IWritableUnitOfWork<PushNotificationsDbContext>> unitOfWorkMock, Mock<IPushTokenCacheService> cacheServiceMock) CreateStorageServiceWithCache()
+    {
         var loggerMock = new Mock<ILogger<DeviceTokenStorageService>>();
         var repositoryMock = new Mock<IDeviceTokenRepository>();
+        var cacheServiceMock = new Mock<IPushTokenCacheService>();
 
         // Create mock for writable unit of work
         var unitOfWorkMock = new Mock<IWritableUnitOfWork<PushNotificationsDbContext>>();
@@ -339,9 +554,9 @@ public class DeviceTokenStorageServiceTests
             .Setup(x => x.CreateReadOnly())
             .Returns(readOnlyUnitOfWorkMock.Object);
 
-        var sut = new DeviceTokenStorageService(unitOfWorkProviderMock.Object, loggerMock.Object);
+        var sut = new DeviceTokenStorageService(unitOfWorkProviderMock.Object, cacheServiceMock.Object, loggerMock.Object);
 
-        return (sut, repositoryMock, unitOfWorkMock);
+        return (sut, repositoryMock, unitOfWorkMock, cacheServiceMock);
     }
 
     #endregion

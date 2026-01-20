@@ -24,6 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\HushNode.Caching\HushNode.Caching.csproj" />
     <ProjectReference Include="..\HushNode.PushNotifications\HushNode.PushNotifications.csproj" />
     <ProjectReference Include="..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />
   </ItemGroup>
