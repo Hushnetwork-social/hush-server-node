@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HushNode.Caching\HushNode.Caching.csproj" />
+    <ProjectReference Include="..\HushNode.Interfaces\HushNode.Interfaces.csproj" />
   </ItemGroup>
 
 </Project>

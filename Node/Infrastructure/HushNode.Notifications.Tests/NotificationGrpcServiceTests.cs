@@ -2,7 +2,7 @@ using FluentAssertions;
 using Grpc.Core;
 using HushNode.Notifications.gRPC;
 using HushNode.PushNotifications;
-using HushNode.PushNotifications.Models;
+using HushNode.Interfaces.Models;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.AutoMock;

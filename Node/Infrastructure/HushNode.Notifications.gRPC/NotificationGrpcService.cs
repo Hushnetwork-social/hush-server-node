@@ -1,7 +1,7 @@
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using HushNode.PushNotifications;
-using HushNode.PushNotifications.Models;
+using HushNode.Interfaces.Models;
 using ProtoTypes = HushNetwork.proto;
 using InternalModels = HushNode.Notifications.Models;
 

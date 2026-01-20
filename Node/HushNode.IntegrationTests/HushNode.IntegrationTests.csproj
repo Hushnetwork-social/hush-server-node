@@ -60,6 +60,7 @@
     <Protobuf Include="..\..\Protos\hushBank.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
     <Protobuf Include="..\..\Protos\hushFeed.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
     <Protobuf Include="..\..\Protos\hushIdentity.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
+    <Protobuf Include="..\..\Protos\hushNotification.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
     <Protobuf Include="..\..\Protos\hushReactions.proto" GrpcServices="None" ProtoRoot="..\..\Protos\" />
   </ItemGroup>
 

@@ -1,4 +1,4 @@
-namespace HushNode.PushNotifications.Models;
+namespace HushNode.Interfaces.Models;
 
 /// <summary>
 /// Represents a device token for push notifications.

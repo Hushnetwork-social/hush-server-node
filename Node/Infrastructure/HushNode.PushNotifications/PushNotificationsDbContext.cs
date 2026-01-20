@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using HushNode.PushNotifications.Models;
+using HushNode.Interfaces.Models;
 
 namespace HushNode.PushNotifications;
 

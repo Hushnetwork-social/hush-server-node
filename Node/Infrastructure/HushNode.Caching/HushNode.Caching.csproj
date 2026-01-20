@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.1" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
   </ItemGroup>
 
@@ -9,6 +9,7 @@
     <ProjectReference Include="..\..\..\Shared\HushShared.Blockchain.BlockModel\HushShared.Blockchain.BlockModel.csproj" />
     <ProjectReference Include="..\..\..\Shared\HushShared.Blockchain.Model\HushShared.Blockchain.Model.csproj" />
     <ProjectReference Include="..\..\..\Shared\HushShared.Feeds.Model\HushShared.Feeds.Model.csproj" />
+    <ProjectReference Include="..\HushNode.Interfaces\HushNode.Interfaces.csproj" />
   </ItemGroup>
 
 </Project>

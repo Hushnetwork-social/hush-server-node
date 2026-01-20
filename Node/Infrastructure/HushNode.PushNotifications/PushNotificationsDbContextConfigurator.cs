@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using HushNode.Interfaces;
-using HushNode.PushNotifications.Models;
+using HushNode.Interfaces.Models;
 
 namespace HushNode.PushNotifications;
 
