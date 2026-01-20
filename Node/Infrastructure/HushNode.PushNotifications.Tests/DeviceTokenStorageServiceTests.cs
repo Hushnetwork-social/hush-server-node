@@ -1,5 +1,5 @@
 using FluentAssertions;
-using HushNode.PushNotifications.Models;
+using HushNode.Interfaces.Models;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Olimpo.EntityFramework.Persistency;

@@ -1,4 +1,4 @@
-namespace HushNode.PushNotifications.Models;
+namespace HushNode.Interfaces.Models;
 
 /// <summary>
 /// Represents the platform type for push notifications.

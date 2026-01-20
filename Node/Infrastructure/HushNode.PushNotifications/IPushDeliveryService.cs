@@ -1,3 +1,4 @@
+using HushNode.Interfaces.Models;
 using HushNode.PushNotifications.Models;
 
 namespace HushNode.PushNotifications;

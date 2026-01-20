@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Olimpo.EntityFramework.Persistency;
-using HushNode.PushNotifications.Models;
+using HushNode.Interfaces.Models;
 
 namespace HushNode.PushNotifications;
 

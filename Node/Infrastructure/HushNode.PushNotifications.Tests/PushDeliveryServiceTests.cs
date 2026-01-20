@@ -1,5 +1,6 @@
 using FluentAssertions;
 using HushNode.PushNotifications.Exceptions;
+using HushNode.Interfaces.Models;
 using HushNode.PushNotifications.Models;
 using HushNode.PushNotifications.Providers;
 using Microsoft.Extensions.Logging;
