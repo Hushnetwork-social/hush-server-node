@@ -456,3 +456,278 @@ public class FeedsGrpcServiceCacheTests
 
     #endregion
 }
+
+/// <summary>
+/// FEAT-050: Tests for GetKeyGenerations cache integration.
+/// Verifies cache-first pattern for group feed key generations.
+/// Each test follows AAA pattern with isolated setup to prevent flaky tests.
+/// </summary>
+public class FeedsGrpcServiceKeyGenerationsCacheTests
+{
+    #region Cache Hit Tests
+
+    [Fact]
+    public async Task GetKeyGenerations_CacheHit_ReturnsFromCache()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var userAddress = "user-address";
+
+        // Create cached key generations
+        var cachedKeyGens = new CachedKeyGenerations
+        {
+            KeyGenerations = new List<KeyGenerationCacheDto>
+            {
+                new()
+                {
+                    Version = 0,
+                    ValidFromBlock = 100,
+                    ValidToBlock = 200,
+                    EncryptedKeysByMember = new Dictionary<string, string>
+                    {
+                        [userAddress] = "encrypted-key-v0"
+                    }
+                },
+                new()
+                {
+                    Version = 1,
+                    ValidFromBlock = 200,
+                    ValidToBlock = null,
+                    EncryptedKeysByMember = new Dictionary<string, string>
+                    {
+                        [userAddress] = "encrypted-key-v1"
+                    }
+                }
+            }
+        };
+
+        // Mock cache to return key generations (CACHE HIT)
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.GetKeyGenerationsAsync(feedId))
+            .ReturnsAsync(cachedKeyGens);
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetKeyGenerationsRequest
+        {
+            FeedId = feedId.ToString(),
+            UserPublicAddress = userAddress
+        };
+
+        // Act
+        var result = await service.GetKeyGenerations(request, CreateMockServerCallContext());
+
+        // Assert
+        result.KeyGenerations.Should().HaveCount(2);
+        result.KeyGenerations[0].KeyGeneration.Should().Be(0);
+        result.KeyGenerations[0].EncryptedKey.Should().Be("encrypted-key-v0");
+        result.KeyGenerations[1].KeyGeneration.Should().Be(1);
+        result.KeyGenerations[1].EncryptedKey.Should().Be("encrypted-key-v1");
+
+        // Verify database was NOT queried
+        mocker.GetMock<IFeedsStorageService>()
+            .Verify(x => x.GetAllKeyGenerationsAsync(It.IsAny<FeedId>()),
+                Times.Never,
+                "Database should NOT be queried on cache hit");
+    }
+
+    [Fact]
+    public async Task GetKeyGenerations_CacheHit_FiltersKeysByUser()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var userAddress = "user-address";
+        var otherUserAddress = "other-user-address";
+
+        // Create cached key generations with mixed user keys
+        var cachedKeyGens = new CachedKeyGenerations
+        {
+            KeyGenerations = new List<KeyGenerationCacheDto>
+            {
+                new()
+                {
+                    Version = 0,
+                    ValidFromBlock = 100,
+                    ValidToBlock = null,
+                    EncryptedKeysByMember = new Dictionary<string, string>
+                    {
+                        [userAddress] = "user-encrypted-key",
+                        [otherUserAddress] = "other-user-encrypted-key"
+                    }
+                },
+                new()
+                {
+                    Version = 1,
+                    ValidFromBlock = 200,
+                    ValidToBlock = null,
+                    // User doesn't have key for this generation (joined later)
+                    EncryptedKeysByMember = new Dictionary<string, string>
+                    {
+                        [otherUserAddress] = "other-user-encrypted-key-v1"
+                    }
+                }
+            }
+        };
+
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.GetKeyGenerationsAsync(feedId))
+            .ReturnsAsync(cachedKeyGens);
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetKeyGenerationsRequest
+        {
+            FeedId = feedId.ToString(),
+            UserPublicAddress = userAddress
+        };
+
+        // Act
+        var result = await service.GetKeyGenerations(request, CreateMockServerCallContext());
+
+        // Assert - Only returns generations where user has a key
+        result.KeyGenerations.Should().HaveCount(1);
+        result.KeyGenerations[0].KeyGeneration.Should().Be(0);
+        result.KeyGenerations[0].EncryptedKey.Should().Be("user-encrypted-key");
+    }
+
+    #endregion
+
+    #region Cache Miss Tests
+
+    [Fact]
+    public async Task GetKeyGenerations_CacheMiss_QueriesDatabaseAndPopulatesCache()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var userAddress = "user-address";
+
+        // Mock cache to return null (CACHE MISS)
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.GetKeyGenerationsAsync(feedId))
+            .ReturnsAsync((CachedKeyGenerations?)null);
+
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.SetKeyGenerationsAsync(feedId, It.IsAny<CachedKeyGenerations>()))
+            .Returns(Task.CompletedTask);
+
+        // Mock database to return key generations
+        var dbKeyGenerations = new List<GroupFeedKeyGenerationEntity>
+        {
+            new(feedId, 0, new BlockIndex(100), RotationTrigger.Join)
+            {
+                EncryptedKeys = new List<GroupFeedEncryptedKeyEntity>
+                {
+                    new(feedId, 0, userAddress, "db-encrypted-key-v0")
+                }
+            }
+        };
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetAllKeyGenerationsAsync(feedId))
+            .ReturnsAsync(dbKeyGenerations);
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetKeyGenerationsRequest
+        {
+            FeedId = feedId.ToString(),
+            UserPublicAddress = userAddress
+        };
+
+        // Act
+        var result = await service.GetKeyGenerations(request, CreateMockServerCallContext());
+
+        // Assert
+        result.KeyGenerations.Should().HaveCount(1);
+        result.KeyGenerations[0].KeyGeneration.Should().Be(0);
+        result.KeyGenerations[0].EncryptedKey.Should().Be("db-encrypted-key-v0");
+
+        // Verify database was queried
+        mocker.GetMock<IFeedsStorageService>()
+            .Verify(x => x.GetAllKeyGenerationsAsync(feedId),
+                Times.Once,
+                "Database should be queried on cache miss");
+
+        // Verify cache was populated
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Verify(x => x.SetKeyGenerationsAsync(feedId, It.IsAny<CachedKeyGenerations>()),
+                Times.Once,
+                "Cache should be populated after database query");
+    }
+
+    [Fact]
+    public async Task GetKeyGenerations_CacheMiss_EmptyResult_DoesNotPopulateCache()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var userAddress = "user-address";
+
+        // Mock cache to return null (CACHE MISS)
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.GetKeyGenerationsAsync(feedId))
+            .ReturnsAsync((CachedKeyGenerations?)null);
+
+        // Mock database to return empty list
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetAllKeyGenerationsAsync(feedId))
+            .ReturnsAsync(new List<GroupFeedKeyGenerationEntity>());
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetKeyGenerationsRequest
+        {
+            FeedId = feedId.ToString(),
+            UserPublicAddress = userAddress
+        };
+
+        // Act
+        var result = await service.GetKeyGenerations(request, CreateMockServerCallContext());
+
+        // Assert
+        result.KeyGenerations.Should().BeEmpty();
+
+        // Verify cache was NOT populated (no point caching empty result)
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Verify(x => x.SetKeyGenerationsAsync(feedId, It.IsAny<CachedKeyGenerations>()),
+                Times.Never,
+                "Cache should NOT be populated when no key generations exist");
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    private static ServerCallContext CreateMockServerCallContext()
+    {
+        return new MockServerCallContext();
+    }
+
+    /// <summary>
+    /// Minimal mock implementation of ServerCallContext for testing.
+    /// </summary>
+    private class MockServerCallContext : ServerCallContext
+    {
+        protected override string MethodCore => "TestMethod";
+        protected override string HostCore => "localhost";
+        protected override string PeerCore => "test-peer";
+        protected override DateTime DeadlineCore => DateTime.MaxValue;
+        protected override Metadata RequestHeadersCore => new();
+        protected override CancellationToken CancellationTokenCore => CancellationToken.None;
+        protected override Metadata ResponseTrailersCore => new();
+        protected override Status StatusCore { get; set; }
+        protected override WriteOptions? WriteOptionsCore { get; set; }
+        protected override AuthContext AuthContextCore => new("test", new Dictionary<string, List<AuthProperty>>());
+
+        protected override ContextPropagationToken CreatePropagationTokenCore(ContextPropagationOptions? options)
+        {
+            throw new NotImplementedException();
+        }
+
+        protected override Task WriteResponseHeadersAsyncCore(Metadata responseHeaders)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    #endregion
+}
