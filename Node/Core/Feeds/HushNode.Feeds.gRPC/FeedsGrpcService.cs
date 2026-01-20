@@ -20,6 +20,7 @@ public class FeedsGrpcService(
     IFeedsStorageService feedsStorageService,
     IFeedMessageStorageService feedMessageStorageService,
     IFeedMessageCacheService feedMessageCacheService,
+    IFeedParticipantsCacheService feedParticipantsCacheService,
     IIdentityService identityService,
     IIdentityStorageService identityStorageService,
     IBlockchainCache blockchainCache,
@@ -29,6 +30,7 @@ public class FeedsGrpcService(
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
     private readonly IFeedMessageCacheService _feedMessageCacheService = feedMessageCacheService;
+    private readonly IFeedParticipantsCacheService _feedParticipantsCacheService = feedParticipantsCacheService;
     private readonly IIdentityService _identityService = identityService;
     private readonly IIdentityStorageService _identityStorageService = identityStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
@@ -489,16 +491,88 @@ public class FeedsGrpcService(
         Console.WriteLine($"[GetKeyGenerations] FeedId: {request.FeedId}, UserAddress: {userAddress.Substring(0, Math.Min(10, userAddress.Length))}...");
 
         var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-        var keyGenerations = await this._feedsStorageService.GetKeyGenerationsForUserAsync(feedId, userAddress);
-
         var response = new GetKeyGenerationsResponse();
 
-        foreach (var kg in keyGenerations)
+        // FEAT-050: Try cache first for key generations
+        var cachedKeyGenerations = await this._feedParticipantsCacheService.GetKeyGenerationsAsync(feedId);
+        if (cachedKeyGenerations != null)
+        {
+            Console.WriteLine($"[GetKeyGenerations] Cache hit, processing {cachedKeyGenerations.KeyGenerations.Count} key generations");
+
+            // Filter cached key generations for this user
+            foreach (var cachedKg in cachedKeyGenerations.KeyGenerations)
+            {
+                // Check if this user has an encrypted key for this generation
+                if (!cachedKg.EncryptedKeysByMember.TryGetValue(userAddress, out var userEncryptedKey))
+                {
+                    // User doesn't have a key for this generation (wasn't a member)
+                    continue;
+                }
+
+                var keyGenProto = new KeyGenerationProto
+                {
+                    KeyGeneration = cachedKg.Version,
+                    EncryptedKey = userEncryptedKey,
+                    ValidFromBlock = cachedKg.ValidFromBlock
+                };
+
+                // ValidToBlock is optional - only set if present
+                if (cachedKg.ValidToBlock.HasValue)
+                {
+                    keyGenProto.ValidToBlock = cachedKg.ValidToBlock.Value;
+                }
+
+                response.KeyGenerations.Add(keyGenProto);
+            }
+
+            Console.WriteLine($"[GetKeyGenerations] Returning {response.KeyGenerations.Count} key generations for user (from cache)");
+            return response;
+        }
+
+        Console.WriteLine($"[GetKeyGenerations] Cache miss, querying database");
+
+        // Cache miss - query ALL key generations from database and populate cache
+        var allKeyGenerations = await this._feedsStorageService.GetAllKeyGenerationsAsync(feedId);
+
+        if (allKeyGenerations.Count > 0)
+        {
+            // Convert to cache DTOs and populate cache (fire-and-forget)
+            // ValidToBlock is the ValidFromBlock of the next generation, or null for the latest
+            var keyGenList = allKeyGenerations.ToList();
+            var cacheDtos = new List<KeyGenerationCacheDto>();
+            for (int i = 0; i < keyGenList.Count; i++)
+            {
+                var kg = keyGenList[i];
+                var validToBlock = (i < keyGenList.Count - 1) ? keyGenList[i + 1].ValidFromBlock.Value : (long?)null;
+
+                cacheDtos.Add(new KeyGenerationCacheDto
+                {
+                    Version = kg.KeyGeneration,
+                    ValidFromBlock = kg.ValidFromBlock.Value,
+                    ValidToBlock = validToBlock,
+                    EncryptedKeysByMember = kg.EncryptedKeys.ToDictionary(
+                        ek => ek.MemberPublicAddress,
+                        ek => ek.EncryptedAesKey)
+                });
+            }
+
+            var cacheWrapper = new CachedKeyGenerations { KeyGenerations = cacheDtos };
+            _ = this._feedParticipantsCacheService.SetKeyGenerationsAsync(feedId, cacheWrapper);
+        }
+
+        // Filter and return key generations for this user
+        foreach (var kg in allKeyGenerations)
         {
             // Find this user's encrypted key for this KeyGeneration
             var userEncryptedKey = kg.EncryptedKeys
                 .FirstOrDefault(ek => ek.MemberPublicAddress == userAddress)
                 ?.EncryptedAesKey ?? string.Empty;
+
+            if (string.IsNullOrEmpty(userEncryptedKey))
+            {
+                // User doesn't have a key for this generation
+                continue;
+            }
 
             var keyGenProto = new KeyGenerationProto
             {

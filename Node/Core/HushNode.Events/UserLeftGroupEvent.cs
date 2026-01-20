@@ -1,3 +1,4 @@
+using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
 
 namespace HushNode.Events;
@@ -6,7 +7,7 @@ namespace HushNode.Events;
 /// Event published when a user leaves a group feed.
 /// Used by the cache service to remove the user from the cached participants list.
 /// </summary>
-public class UserLeftGroupEvent(FeedId feedId, string userPublicAddress, long blockIndex)
+public class UserLeftGroupEvent(FeedId feedId, string userPublicAddress, BlockIndex blockIndex)
 {
     /// <summary>
     /// The ID of the group feed the user left.
@@ -21,5 +22,5 @@ public class UserLeftGroupEvent(FeedId feedId, string userPublicAddress, long bl
     /// <summary>
     /// The block index when the leave occurred.
     /// </summary>
-    public long BlockIndex { get; } = blockIndex;
+    public BlockIndex BlockIndex { get; } = blockIndex;
 }

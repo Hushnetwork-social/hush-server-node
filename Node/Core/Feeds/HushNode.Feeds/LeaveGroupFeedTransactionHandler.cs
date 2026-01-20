@@ -1,7 +1,9 @@
 using HushNode.Caching;
+using HushNode.Events;
 using HushNode.Feeds.Storage;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Feeds.Model;
+using Olimpo;
 
 namespace HushNode.Feeds;
 
@@ -14,13 +16,15 @@ public class LeaveGroupFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
     IBlockchainCache blockchainCache,
     IKeyRotationService keyRotationService,
-    IUserFeedsCacheService userFeedsCacheService)
+    IUserFeedsCacheService userFeedsCacheService,
+    IEventAggregator eventAggregator)
     : ILeaveGroupFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IKeyRotationService _keyRotationService = keyRotationService;
     private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
+    private readonly IEventAggregator _eventAggregator = eventAggregator;
 
     public async Task HandleLeaveGroupFeedTransactionAsync(ValidatedTransaction<LeaveGroupFeedPayload> transaction)
     {
@@ -72,5 +76,12 @@ public class LeaveGroupFeedTransactionHandler(
         // Update the leaving user's feed list cache (FEAT-049)
         // Cache update is fire-and-forget - failure does not affect the transaction
         await this._userFeedsCacheService.RemoveFeedFromUserCacheAsync(leavingUserAddress, payload.FeedId);
+
+        // Publish event for feed participants cache invalidation (FEAT-050)
+        // Fire and forget - cache invalidation is secondary to blockchain state
+        _ = this._eventAggregator.PublishAsync(new UserLeftGroupEvent(
+            payload.FeedId,
+            leavingUserAddress,
+            currentBlock));
     }
 }

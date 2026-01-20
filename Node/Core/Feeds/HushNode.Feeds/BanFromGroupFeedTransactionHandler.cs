@@ -1,7 +1,9 @@
 using HushNode.Caching;
+using HushNode.Events;
 using HushNode.Feeds.Storage;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Feeds.Model;
+using Olimpo;
 
 namespace HushNode.Feeds;
 
@@ -13,17 +15,22 @@ namespace HushNode.Feeds;
 /// </summary>
 public class BanFromGroupFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
+    IBlockchainCache blockchainCache,
     IKeyRotationService keyRotationService,
-    IUserFeedsCacheService userFeedsCacheService)
+    IUserFeedsCacheService userFeedsCacheService,
+    IEventAggregator eventAggregator)
     : IBanFromGroupFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
+    private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IKeyRotationService _keyRotationService = keyRotationService;
     private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
+    private readonly IEventAggregator _eventAggregator = eventAggregator;
 
     public async Task HandleBanFromGroupFeedTransactionAsync(ValidatedTransaction<BanFromGroupFeedPayload> banTransaction)
     {
         var payload = banTransaction.Payload;
+        var currentBlock = this._blockchainCache.LastBlockIndex;
 
         // Step 1: Update participant status from Member/Blocked to Banned
         await this._feedsStorageService.UpdateParticipantTypeAsync(
@@ -42,5 +49,12 @@ public class BanFromGroupFeedTransactionHandler(
         // Step 3: Update the banned user's feed list cache (FEAT-049)
         // Cache update is fire-and-forget - failure does not affect the transaction
         await this._userFeedsCacheService.RemoveFeedFromUserCacheAsync(payload.BannedUserPublicAddress, payload.FeedId);
+
+        // Step 4: Publish event for feed participants cache invalidation (FEAT-050)
+        // Fire and forget - cache invalidation is secondary to blockchain state
+        _ = this._eventAggregator.PublishAsync(new UserBannedFromGroupEvent(
+            payload.FeedId,
+            payload.BannedUserPublicAddress,
+            currentBlock));
     }
 }

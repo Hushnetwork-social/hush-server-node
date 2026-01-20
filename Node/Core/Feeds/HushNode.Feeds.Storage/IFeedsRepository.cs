@@ -202,6 +202,12 @@ public interface IFeedsRepository : IRepository
     Task<IReadOnlyList<GroupFeedKeyGenerationEntity>> GetKeyGenerationsForUserAsync(FeedId feedId, string publicAddress);
 
     /// <summary>
+    /// Get all KeyGenerations for a group feed (includes all encrypted keys for all members).
+    /// Used for cache population (FEAT-050).
+    /// </summary>
+    Task<IReadOnlyList<GroupFeedKeyGenerationEntity>> GetAllKeyGenerationsAsync(FeedId feedId);
+
+    /// <summary>
     /// Update the BlockIndex of a feed.
     /// Used to signal to clients that the feed has changed (e.g., membership change).
     /// </summary>

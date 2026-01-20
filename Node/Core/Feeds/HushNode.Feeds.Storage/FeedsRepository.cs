@@ -358,6 +358,13 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .OrderBy(kg => kg.KeyGeneration)
             .ToListAsync();
 
+    public async Task<IReadOnlyList<GroupFeedKeyGenerationEntity>> GetAllKeyGenerationsAsync(FeedId feedId) =>
+        await this.Context.GroupFeedKeyGenerations
+            .Include(kg => kg.EncryptedKeys)
+            .Where(kg => kg.FeedId == feedId)
+            .OrderBy(kg => kg.KeyGeneration)
+            .ToListAsync();
+
     public async Task UpdateFeedBlockIndexAsync(FeedId feedId, BlockIndex blockIndex)
     {
         await this.Context.Feeds

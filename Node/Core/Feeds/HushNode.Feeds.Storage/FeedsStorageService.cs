@@ -463,6 +463,12 @@ public class FeedsStorageService(
             .GetRepository<IFeedsRepository>()
             .GetKeyGenerationsForUserAsync(feedId, publicAddress);
 
+    public async Task<IReadOnlyList<GroupFeedKeyGenerationEntity>> GetAllKeyGenerationsAsync(FeedId feedId) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetAllKeyGenerationsAsync(feedId);
+
     public async Task UpdateFeedBlockIndexAsync(FeedId feedId, BlockIndex blockIndex)
     {
         using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
