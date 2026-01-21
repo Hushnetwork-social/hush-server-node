@@ -50,6 +50,12 @@ public class FeedsGrpcServiceTests
             .Setup(x => x.RetrieveIdentityAsync(userAddress))
             .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
 
+        // FEAT-051: Mock read position storage to return empty dictionary
+        var mockReadPositionService = mocker.GetMock<IFeedReadPositionStorageService>();
+        mockReadPositionService
+            .Setup(x => x.GetReadPositionsForUserAsync(userAddress))
+            .ReturnsAsync(new Dictionary<FeedId, BlockIndex>());
+
         var service = mocker.CreateInstance<FeedsGrpcService>();
         var request = new GetFeedForAddressRequest { ProfilePublicKey = userAddress, BlockIndex = 0 };
 
@@ -87,6 +93,12 @@ public class FeedsGrpcServiceTests
         mockIdentityService
             .Setup(x => x.RetrieveIdentityAsync(otherUserAddress))
             .ReturnsAsync(new Profile("OtherUser", "OU", otherUserAddress, "encryptKey", true, new BlockIndex(50)));
+
+        // FEAT-051: Mock read position storage to return empty dictionary
+        var mockReadPositionService = mocker.GetMock<IFeedReadPositionStorageService>();
+        mockReadPositionService
+            .Setup(x => x.GetReadPositionsForUserAsync(userAddress))
+            .ReturnsAsync(new Dictionary<FeedId, BlockIndex>());
 
         var service = mocker.CreateInstance<FeedsGrpcService>();
         var request = new GetFeedForAddressRequest { ProfilePublicKey = userAddress, BlockIndex = 0 };
@@ -240,6 +252,12 @@ public class FeedsGrpcServiceTests
             .Setup(x => x.GetGroupFeedAsync(feedId))
             .ReturnsAsync(new GroupFeed(feedId, groupTitle, "Test Description", false, new BlockIndex(100), 0));
 
+        // FEAT-051: Mock read position storage to return empty dictionary
+        var mockReadPositionService = mocker.GetMock<IFeedReadPositionStorageService>();
+        mockReadPositionService
+            .Setup(x => x.GetReadPositionsForUserAsync(userAddress))
+            .ReturnsAsync(new Dictionary<FeedId, BlockIndex>());
+
         var service = mocker.CreateInstance<FeedsGrpcService>();
         var request = new GetFeedForAddressRequest { ProfilePublicKey = userAddress, BlockIndex = 0 };
 
@@ -302,6 +320,12 @@ public class FeedsGrpcServiceTests
         mockIdentityService
             .Setup(x => x.RetrieveIdentityAsync(otherUserAddress))
             .ReturnsAsync(new Profile("OtherUser", "OU", otherUserAddress, "encryptKey", true, new BlockIndex(50)));
+
+        // FEAT-051: Mock read position storage to return empty dictionary
+        var mockReadPositionService = mocker.GetMock<IFeedReadPositionStorageService>();
+        mockReadPositionService
+            .Setup(x => x.GetReadPositionsForUserAsync(userAddress))
+            .ReturnsAsync(new Dictionary<FeedId, BlockIndex>());
 
         var service = mocker.CreateInstance<FeedsGrpcService>();
         var request = new GetFeedForAddressRequest { ProfilePublicKey = userAddress, BlockIndex = 0 };
