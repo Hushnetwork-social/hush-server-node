@@ -38,6 +38,11 @@ internal sealed class ScenarioHooks
     /// </summary>
     public const string DiagnosticsKey = "DiagnosticCapture";
 
+    /// <summary>
+    /// Context key for accessing the HushTestFixture instance.
+    /// </summary>
+    public const string FixtureKey = "HushTestFixture";
+
     private readonly ISpecFlowOutputHelper _outputHelper;
 
     public ScenarioHooks(ScenarioContext scenarioContext, ISpecFlowOutputHelper outputHelper)
@@ -98,6 +103,7 @@ internal sealed class ScenarioHooks
         _scenarioContext[BlockControlKey] = blockControl;
         _scenarioContext[GrpcFactoryKey] = grpcFactory;
         _scenarioContext[DiagnosticsKey] = diagnostics;
+        _scenarioContext[FixtureKey] = _fixture;
     }
 
     /// <summary>
@@ -223,5 +229,19 @@ internal sealed class ScenarioHooks
         }
 
         throw new InvalidOperationException("GrpcClientFactory not found in ScenarioContext.");
+    }
+
+    /// <summary>
+    /// Gets the HushTestFixture from ScenarioContext.
+    /// </summary>
+    public HushTestFixture GetFixture()
+    {
+        if (_scenarioContext.TryGetValue(FixtureKey, out var fixtureObj)
+            && fixtureObj is HushTestFixture fixture)
+        {
+            return fixture;
+        }
+
+        throw new InvalidOperationException("HushTestFixture not found in ScenarioContext.");
     }
 }

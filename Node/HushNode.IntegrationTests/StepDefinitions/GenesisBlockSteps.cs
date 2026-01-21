@@ -45,13 +45,6 @@ public sealed class GenesisBlockSteps
         TestIdentities.BlockProducer.PublicSigningAddress.Should().NotBeNullOrWhiteSpace();
     }
 
-    [When(@"a block is produced")]
-    public async Task WhenABlockIsProduced()
-    {
-        var blockControl = GetBlockControl();
-        await blockControl.ProduceBlockAsync();
-    }
-
     [Then(@"the genesis block should exist at index (.*)")]
     public async Task ThenTheGenesisBlockShouldExistAtIndex(int expectedIndex)
     {
