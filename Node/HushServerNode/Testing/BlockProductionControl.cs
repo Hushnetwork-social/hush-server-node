@@ -88,6 +88,10 @@ internal sealed class BlockProductionControl : IDisposable
                 throw new TimeoutException(
                     $"Block production did not complete within {effectiveTimeout.TotalSeconds} seconds.");
             }
+
+            // Small delay to ensure database commits are fully visible to subsequent queries.
+            // This prevents flaky tests caused by read-after-write timing issues.
+            await Task.Delay(50);
         }
         finally
         {

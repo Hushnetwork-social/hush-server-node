@@ -30,10 +30,6 @@ public sealed class CommonSteps
     {
         var blockControl = GetBlockControl();
         await blockControl.ProduceBlockAsync();
-
-        // Small delay to ensure database commits are fully visible to subsequent queries.
-        // This prevents flaky tests caused by read-after-write timing issues.
-        await Task.Delay(50);
     }
 
     private BlockProductionControl GetBlockControl()
