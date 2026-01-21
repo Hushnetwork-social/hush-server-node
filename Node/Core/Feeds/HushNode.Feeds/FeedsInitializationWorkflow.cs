@@ -34,11 +34,21 @@ public class FeedsInitializationWorkflow(
 
     private void CretatePersonalFeedForLocalUser()
     {
-        // Generate AES key for the personal feed and encrypt it with the user's RSA public key
+        // Check if encryption keys are available
+        var publicEncryptAddress = this._credentialsProfileOptions.Value.PublicEncryptAddress;
+        if (string.IsNullOrEmpty(publicEncryptAddress))
+        {
+            Console.WriteLine("[Feeds] WARNING: Cannot create personal feed - PublicEncryptAddress is missing from credentials.");
+            Console.WriteLine("[Feeds] The stacker credentials file needs to be regenerated with encryption keys.");
+            Console.WriteLine("[Feeds] Personal feed creation skipped. Some features may not work correctly.");
+            return;
+        }
+
+        // Generate AES key for the personal feed and encrypt it with the user's ECIES public key
         var feedAesKey = EncryptKeys.GenerateAesKey();
         var encryptedFeedKey = EncryptKeys.Encrypt(
             feedAesKey,
-            this._credentialsProfileOptions.Value.PublicEncryptAddress);
+            publicEncryptAddress);
 
         var validatedTransaction = NewPersonalFeedPayloadHandler
             .CreateNewPersonalFeedTransaction(encryptedFeedKey)
