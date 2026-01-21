@@ -130,6 +130,34 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 .SetProperty(f => f.BlockIndex, blockIndex));
     }
 
+    public async Task<IReadOnlyList<FeedId>> GetGroupFeedIdsForUserAsync(string publicAddress)
+    {
+        // Get GroupFeed IDs where user is a participant (any status - for cache invalidation)
+        return await this.Context.GroupFeedParticipants
+            .Where(gp => gp.ParticipantPublicAddress == publicAddress)
+            .Select(gp => gp.FeedId)
+            .Distinct()
+            .ToListAsync();
+    }
+
+    public async Task UpdateGroupFeedsLastUpdatedAtBlockForParticipantAsync(string publicSigningAddress, BlockIndex blockIndex)
+    {
+        // Get all GroupFeed IDs where this user is a participant
+        var groupFeedIds = await this.Context.GroupFeedParticipants
+            .Where(gp => gp.ParticipantPublicAddress == publicSigningAddress)
+            .Select(gp => gp.FeedId)
+            .Distinct()
+            .ToListAsync();
+
+        if (groupFeedIds.Count == 0) return;
+
+        // Update LastUpdatedAtBlock for all these GroupFeeds
+        await this.Context.GroupFeeds
+            .Where(g => groupFeedIds.Contains(g.FeedId))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(g => g.LastUpdatedAtBlock, blockIndex));
+    }
+
     // ===== Group Feed Admin Operations (FEAT-009) =====
 
     public async Task<GroupFeed?> GetGroupFeedAsync(FeedId feedId) =>

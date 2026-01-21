@@ -113,40 +113,56 @@ public class FeedReadPositionStorageService(
         if (string.IsNullOrEmpty(userId))
             return false;
 
-        // Step 1: Write to database first (source of truth)
-        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
-        var repository = writableUnitOfWork.GetRepository<IFeedReadPositionRepository>();
-
-        var updated = await repository.UpsertReadPositionAsync(userId, feedId, blockIndex);
-        await writableUnitOfWork.CommitAsync();
-
-        if (updated)
+        try
         {
-            this._logger.LogDebug(
-                "Marked feed as read in database: user={UserId} feed={FeedId} blockIndex={BlockIndex}",
-                userId,
-                feedId,
-                blockIndex.Value);
+            // Step 1: Write to database first (source of truth)
+            using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+            var repository = writableUnitOfWork.GetRepository<IFeedReadPositionRepository>();
 
-            // Step 2: Update cache (write-through, graceful degradation)
-            var cacheUpdated = await this._cacheService.SetReadPositionAsync(userId, feedId, blockIndex);
-            if (!cacheUpdated)
+            var updated = await repository.UpsertReadPositionAsync(userId, feedId, blockIndex);
+            await writableUnitOfWork.CommitAsync();
+
+            if (updated)
             {
-                this._logger.LogWarning(
-                    "Failed to update read position cache for user={UserId} feed={FeedId}. Database is consistent.",
+                this._logger.LogDebug(
+                    "Marked feed as read in database: user={UserId} feed={FeedId} blockIndex={BlockIndex}",
                     userId,
-                    feedId);
+                    feedId,
+                    blockIndex.Value);
+
+                // Step 2: Update cache (write-through, graceful degradation)
+                var cacheUpdated = await this._cacheService.SetReadPositionAsync(userId, feedId, blockIndex);
+                if (!cacheUpdated)
+                {
+                    this._logger.LogWarning(
+                        "Failed to update read position cache for user={UserId} feed={FeedId}. Database is consistent.",
+                        userId,
+                        feedId);
+                }
             }
+            else
+            {
+                this._logger.LogDebug(
+                    "Read position not updated (max wins): user={UserId} feed={FeedId} blockIndex={BlockIndex}",
+                    userId,
+                    feedId,
+                    blockIndex.Value);
+            }
+
+            return updated;
         }
-        else
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
         {
+            // Concurrent update detected - another request already updated the value.
+            // This is expected when multiple browser tabs or React re-renders trigger
+            // simultaneous markFeedAsRead calls. The first call succeeded, so we
+            // return true to indicate the operation effectively completed.
             this._logger.LogDebug(
-                "Read position not updated (max wins): user={UserId} feed={FeedId} blockIndex={BlockIndex}",
+                "Concurrent read position update ignored (already updated): user={UserId} feed={FeedId} blockIndex={BlockIndex}",
                 userId,
                 feedId,
                 blockIndex.Value);
+            return true;
         }
-
-        return updated;
     }
 }

@@ -394,6 +394,15 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                 return new FeedParticipantsCacheEventHandler(cacheService, eventAggregator, logger);
             });
 
+            // Register group members cache service (caches members with display names)
+            services.AddSingleton<IGroupMembersCacheService>(sp =>
+            {
+                var connectionMultiplexer = sp.GetRequiredService<IConnectionMultiplexer>();
+                var redisSettings = sp.GetRequiredService<IOptions<RedisSettings>>().Value;
+                var logger = sp.GetRequiredService<ILogger<GroupMembersCacheService>>();
+                return new GroupMembersCacheService(connectionMultiplexer, redisSettings.InstanceName, logger);
+            });
+
             // Register feed read position cache service (FEAT-051)
             services.AddSingleton<IFeedReadPositionCacheService>(sp =>
             {

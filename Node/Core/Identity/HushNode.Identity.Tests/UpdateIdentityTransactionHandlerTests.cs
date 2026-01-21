@@ -156,6 +156,7 @@ public class UpdateIdentityTransactionHandlerTests
         var writableUnitOfWorkMock = new Mock<IWritableUnitOfWork<IdentityDbContext>>();
         var identityRepoMock = new Mock<IIdentityRepository>();
         var feedsServiceMock = new Mock<IFeedsStorageService>();
+        var groupMembersCacheMock = new Mock<IGroupMembersCacheService>();
         var blockchainCacheMock = new Mock<IBlockchainCache>();
         var eventAggregatorMock = new Mock<IEventAggregator>();
         var loggerMock = new Mock<ILogger<UpdateIdentityTransactionHandler>>();
@@ -184,9 +185,15 @@ public class UpdateIdentityTransactionHandlerTests
             .Setup(x => x.CommitAsync())
             .Returns(Task.CompletedTask);
 
+        // Setup default empty response for GetGroupFeedIdsForUserAsync
+        feedsServiceMock
+            .Setup(x => x.GetGroupFeedIdsForUserAsync(It.IsAny<string>()))
+            .ReturnsAsync(new List<HushShared.Feeds.Model.FeedId>());
+
         var sut = new UpdateIdentityTransactionHandler(
             unitOfWorkProviderMock.Object,
             feedsServiceMock.Object,
+            groupMembersCacheMock.Object,
             blockchainCacheMock.Object,
             eventAggregatorMock.Object,
             loggerMock.Object);

@@ -338,6 +338,40 @@ public class FeedReadPositionStorageServiceTests
         result.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task MarkFeedAsReadAsync_WhenConcurrentUpdate_ReturnsTrue()
+    {
+        // Arrange
+        // This test verifies that when multiple concurrent requests try to update the same
+        // read position, the service gracefully handles DbUpdateConcurrencyException and
+        // returns true (since another request already completed the update).
+        var (service, cacheService, repository, writableUnitOfWork) = CreateServiceWithWritable();
+        var blockIndex = new BlockIndex(500);
+
+        repository
+            .Setup(x => x.UpsertReadPositionAsync(TestUserId, TestFeedId, blockIndex))
+            .ReturnsAsync(true);
+
+        writableUnitOfWork
+            .Setup(x => x.GetRepository<IFeedReadPositionRepository>())
+            .Returns(repository.Object);
+
+        // Simulate concurrent update exception on commit
+        writableUnitOfWork
+            .Setup(x => x.CommitAsync())
+            .ThrowsAsync(new Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException(
+                "Concurrent update detected"));
+
+        // Act
+        var result = await service.MarkFeedAsReadAsync(TestUserId, TestFeedId, blockIndex);
+
+        // Assert
+        result.Should().BeTrue(); // Should return true because the update was already done by another request
+        cacheService.Verify(
+            x => x.SetReadPositionAsync(It.IsAny<string>(), It.IsAny<FeedId>(), It.IsAny<BlockIndex>()),
+            Times.Never); // Cache should not be updated when exception occurs
+    }
+
     #endregion
 
     #region Helper Methods

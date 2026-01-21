@@ -11,7 +11,8 @@ public record GroupFeed(
     string Description,
     bool IsPublic,
     BlockIndex CreatedAtBlock,
-    int CurrentKeyGeneration)
+    int CurrentKeyGeneration,
+    BlockIndex? LastUpdatedAtBlock = null)
 {
     /// <summary>
     /// Indicates if the group has been soft-deleted.

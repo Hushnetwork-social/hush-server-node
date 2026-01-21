@@ -13,6 +13,7 @@ namespace HushNode.Identity;
 public class UpdateIdentityTransactionHandler(
     IUnitOfWorkProvider<IdentityDbContext> unitOfWorkProvider,
     IFeedsStorageService feedsStorageService,
+    IGroupMembersCacheService groupMembersCacheService,
     IBlockchainCache blockchainCache,
     IEventAggregator eventAggregator,
     ILogger<UpdateIdentityTransactionHandler> logger)
@@ -20,6 +21,7 @@ public class UpdateIdentityTransactionHandler(
 {
     private readonly IUnitOfWorkProvider<IdentityDbContext> _unitOfWorkProvider = unitOfWorkProvider;
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
+    private readonly IGroupMembersCacheService _groupMembersCacheService = groupMembersCacheService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly ILogger<UpdateIdentityTransactionHandler> _logger = logger;
@@ -65,13 +67,34 @@ public class UpdateIdentityTransactionHandler(
 
         await writableUnitOfWork.CommitAsync();
 
-        // Update BlockIndex on all feeds where this user is a participant
-        // This ensures other clients can detect the identity change via feed sync
+        // Update BlockIndex on all regular feeds (Chat/Personal) where this user is a participant
         await this._feedsStorageService.UpdateFeedsBlockIndexForParticipantAsync(publicSigningAddress, blockIndex);
+
+        // Get all GroupFeed IDs where this user is a participant (for cache invalidation)
+        var groupFeedIds = await this._feedsStorageService.GetGroupFeedIdsForUserAsync(publicSigningAddress);
+
+        if (groupFeedIds.Count > 0)
+        {
+            // Update LastUpdatedAtBlock on all GroupFeeds where this user is a participant
+            // This signals to UI clients that something changed in the feed
+            await this._feedsStorageService.UpdateGroupFeedsLastUpdatedAtBlockForParticipantAsync(publicSigningAddress, blockIndex);
+
+            // Invalidate group members cache for all affected feeds
+            // Next GetGroupMembers call will fetch fresh data with the new display name
+            await this._groupMembersCacheService.InvalidateGroupMembersForUserAsync(publicSigningAddress, groupFeedIds);
+
+            this._logger.LogInformation(
+                "Identity alias updated: {Address} -> {NewAlias} (updated {FeedCount} regular feeds, {GroupCount} group feeds, cache invalidated)",
+                publicSigningAddress, newAlias, 0, groupFeedIds.Count);
+        }
+        else
+        {
+            this._logger.LogInformation(
+                "Identity alias updated: {Address} -> {NewAlias} (no group feeds to update)",
+                publicSigningAddress, newAlias);
+        }
 
         // Publish event to invalidate identity cache
         await this._eventAggregator.PublishAsync(new IdentityUpdatedEvent(publicSigningAddress));
-
-        this._logger.LogInformation("Identity alias updated: {Address} -> {NewAlias} (feeds updated, cache invalidated)", publicSigningAddress, newAlias);
     }
 }

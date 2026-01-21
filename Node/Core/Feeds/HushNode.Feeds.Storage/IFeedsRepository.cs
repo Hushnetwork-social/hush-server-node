@@ -46,6 +46,18 @@ public interface IFeedsRepository : IRepository
     /// </summary>
     Task UpdateFeedsBlockIndexForParticipantAsync(string publicSigningAddress, BlockIndex blockIndex);
 
+    /// <summary>
+    /// Get all GroupFeed IDs where the user is a participant (active or left).
+    /// Used for cache invalidation when a user's display name changes.
+    /// </summary>
+    Task<IReadOnlyList<FeedId>> GetGroupFeedIdsForUserAsync(string publicAddress);
+
+    /// <summary>
+    /// Update the LastUpdatedAtBlock of all GroupFeeds where the user is a participant.
+    /// Called when a user updates their identity so other clients can detect the change.
+    /// </summary>
+    Task UpdateGroupFeedsLastUpdatedAtBlockForParticipantAsync(string publicSigningAddress, BlockIndex blockIndex);
+
     // ===== Group Feed Admin Operations (FEAT-009) =====
 
     /// <summary>

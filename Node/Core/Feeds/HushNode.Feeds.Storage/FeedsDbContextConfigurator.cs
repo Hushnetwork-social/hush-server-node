@@ -209,6 +209,16 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                     .IsUnique()
                     .HasFilter("\"InviteCode\" IS NOT NULL");
 
+                // LastUpdatedAtBlock: Used to signal UI that group metadata/participants changed
+                // Updated when: participant name changes, group settings change, etc.
+                groupFeed.Property(x => x.LastUpdatedAtBlock)
+                    .HasConversion(
+                        x => x != null ? x.Value : (long?)null,
+                        x => x != null ? new BlockIndex(x.Value) : null
+                    )
+                    .HasColumnType("bigint")
+                    .IsRequired(false);
+
                 groupFeed.HasMany(x => x.Participants)
                     .WithOne(x => x.GroupFeed)
                     .HasForeignKey(x => x.FeedId);

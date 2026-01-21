@@ -21,6 +21,7 @@ public class FeedsGrpcService(
     IFeedMessageStorageService feedMessageStorageService,
     IFeedMessageCacheService feedMessageCacheService,
     IFeedParticipantsCacheService feedParticipantsCacheService,
+    IGroupMembersCacheService groupMembersCacheService,
     IFeedReadPositionStorageService feedReadPositionStorageService,
     IIdentityService identityService,
     IIdentityStorageService identityStorageService,
@@ -32,6 +33,7 @@ public class FeedsGrpcService(
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
     private readonly IFeedMessageCacheService _feedMessageCacheService = feedMessageCacheService;
     private readonly IFeedParticipantsCacheService _feedParticipantsCacheService = feedParticipantsCacheService;
+    private readonly IGroupMembersCacheService _groupMembersCacheService = groupMembersCacheService;
     private readonly IFeedReadPositionStorageService _feedReadPositionStorageService = feedReadPositionStorageService;
     private readonly IIdentityService _identityService = identityService;
     private readonly IIdentityStorageService _identityStorageService = identityStorageService;
@@ -471,15 +473,47 @@ public class FeedsGrpcService(
         Console.WriteLine($"[GetGroupMembers] FeedId: {request.FeedId}");
 
         var feedId = FeedIdHandler.CreateFromString(request.FeedId);
+        var response = new GetGroupMembersResponse();
 
-        // Get ALL participants (active and left) for historical membership tracking
+        // Cache-aside pattern: Try cache first
+        var cachedMembers = await this._groupMembersCacheService.GetGroupMembersAsync(feedId);
+
+        if (cachedMembers != null)
+        {
+            Console.WriteLine($"[GetGroupMembers] Cache hit - {cachedMembers.Members.Count} members");
+
+            // Convert cached members to proto response
+            foreach (var member in cachedMembers.Members)
+            {
+                var memberProto = new GroupFeedMemberProto
+                {
+                    PublicAddress = member.PublicAddress,
+                    ParticipantType = member.ParticipantType,
+                    JoinedAtBlock = member.JoinedAtBlock,
+                    DisplayName = member.DisplayName
+                };
+
+                if (member.LeftAtBlock != null)
+                {
+                    memberProto.LeftAtBlock = member.LeftAtBlock.Value;
+                }
+
+                response.Members.Add(memberProto);
+            }
+
+            return response;
+        }
+
+        Console.WriteLine($"[GetGroupMembers] Cache miss - fetching from DB");
+
+        // Cache miss: Get from database and resolve display names
         var allParticipants = await this._feedsStorageService.GetAllParticipantsAsync(feedId);
 
-        var response = new GetGroupMembersResponse();
+        var membersToCache = new List<CachedGroupMember>();
 
         foreach (var participant in allParticipants)
         {
-            // Get display name for each participant
+            // Get display name for each participant (uses identity cache internally)
             var displayName = await this.ExtractDisplayName(participant.ParticipantPublicAddress);
 
             var memberProto = new GroupFeedMemberProto
@@ -497,9 +531,20 @@ public class FeedsGrpcService(
             }
 
             response.Members.Add(memberProto);
+
+            // Build cache entry
+            membersToCache.Add(new CachedGroupMember(
+                participant.ParticipantPublicAddress,
+                displayName,
+                (int)participant.ParticipantType,
+                participant.JoinedAtBlock.Value,
+                participant.LeftAtBlock?.Value));
         }
 
-        Console.WriteLine($"[GetGroupMembers] Returning {response.Members.Count} members (including {allParticipants.Count(p => p.LeftAtBlock != null)} who left)");
+        // Populate cache for future requests
+        await this._groupMembersCacheService.SetGroupMembersAsync(feedId, new CachedGroupMembers(membersToCache));
+
+        Console.WriteLine($"[GetGroupMembers] Returning {response.Members.Count} members (cached for future requests)");
         return response;
     }
 

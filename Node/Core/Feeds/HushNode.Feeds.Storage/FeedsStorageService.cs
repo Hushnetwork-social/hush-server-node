@@ -237,6 +237,23 @@ public class FeedsStorageService(
         await writableUnitOfWork.CommitAsync();
     }
 
+    public async Task<IReadOnlyList<FeedId>> GetGroupFeedIdsForUserAsync(string publicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetGroupFeedIdsForUserAsync(publicAddress);
+
+    public async Task UpdateGroupFeedsLastUpdatedAtBlockForParticipantAsync(string publicSigningAddress, BlockIndex blockIndex)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .UpdateGroupFeedsLastUpdatedAtBlockForParticipantAsync(publicSigningAddress, blockIndex);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
     // ===== Group Feed Admin Operations (FEAT-009) =====
 
     public async Task<GroupFeed?> GetGroupFeedAsync(FeedId feedId) =>
