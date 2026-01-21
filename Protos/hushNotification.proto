@@ -59,10 +59,12 @@ message FeedEvent {
 message MarkFeedAsReadRequest {
   string UserId = 1;
   string FeedId = 2;
+  int64 UpToBlockIndex = 3;  // FEAT-051: Block index up to which user has read (optional, 0 = mark all as read)
 }
 
 message MarkFeedAsReadReply {
   bool Success = 1;
+  string Message = 2;  // FEAT-051: Error message if failed
 }
 
 // Get unread counts request

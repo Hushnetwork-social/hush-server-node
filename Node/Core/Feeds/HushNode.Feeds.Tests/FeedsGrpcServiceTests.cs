@@ -100,6 +100,108 @@ public class FeedsGrpcServiceTests
         result.Feeds[0].FeedTitle.Should().Be("OtherUser");
     }
 
+    #region FEAT-051: LastReadBlockIndex Tests
+
+    [Fact]
+    public async Task GetFeedsForAddress_WithReadPositions_ShouldIncludeLastReadBlockIndex()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var feedIdWithPosition = TestDataFactory.CreateFeedId();
+        var feedIdWithoutPosition = TestDataFactory.CreateFeedId();
+
+        var feedWithPosition = CreateFeed(feedIdWithPosition, "Feed With Position", FeedType.Personal, 100);
+        feedWithPosition.Participants = new[]
+        {
+            CreateFeedParticipant(feedIdWithPosition, userAddress, ParticipantType.Owner, "encryptedKey", feedWithPosition)
+        };
+
+        var feedWithoutPosition = CreateFeed(feedIdWithoutPosition, "Feed Without Position", FeedType.Personal, 101);
+        feedWithoutPosition.Participants = new[]
+        {
+            CreateFeedParticipant(feedIdWithoutPosition, userAddress, ParticipantType.Owner, "encryptedKey", feedWithoutPosition)
+        };
+
+        var mockFeedsStorageService = mocker.GetMock<IFeedsStorageService>();
+        mockFeedsStorageService
+            .Setup(x => x.RetrieveFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(new[] { feedWithPosition, feedWithoutPosition });
+
+        // FEAT-051: Mock read position storage to return position for one feed
+        var mockReadPositionService = mocker.GetMock<IFeedReadPositionStorageService>();
+        mockReadPositionService
+            .Setup(x => x.GetReadPositionsForUserAsync(userAddress))
+            .ReturnsAsync(new Dictionary<FeedId, BlockIndex>
+            {
+                { feedIdWithPosition, new BlockIndex(500) }
+                // feedIdWithoutPosition not in dictionary - should default to 0
+            });
+
+        var mockIdentityService = mocker.GetMock<IIdentityService>();
+        mockIdentityService
+            .Setup(x => x.RetrieveIdentityAsync(userAddress))
+            .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetFeedForAddressRequest { ProfilePublicKey = userAddress, BlockIndex = 0 };
+
+        // Act
+        var result = await service.GetFeedsForAddress(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Feeds.Should().HaveCount(2);
+
+        var feedWithPositionResult = result.Feeds.First(f => f.FeedId == feedIdWithPosition.ToString());
+        feedWithPositionResult.LastReadBlockIndex.Should().Be(500, "Feed with read position should have LastReadBlockIndex = 500");
+
+        var feedWithoutPositionResult = result.Feeds.First(f => f.FeedId == feedIdWithoutPosition.ToString());
+        feedWithoutPositionResult.LastReadBlockIndex.Should().Be(0, "Feed without read position should have LastReadBlockIndex = 0");
+    }
+
+    [Fact]
+    public async Task GetFeedsForAddress_WhenReadPositionServiceFails_ShouldReturnFeedsWithZeroReadPosition()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var userAddress = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        var feed = CreateFeed(feedId, "Test Feed", FeedType.Personal, 100);
+        feed.Participants = new[]
+        {
+            CreateFeedParticipant(feedId, userAddress, ParticipantType.Owner, "encryptedKey", feed)
+        };
+
+        var mockFeedsStorageService = mocker.GetMock<IFeedsStorageService>();
+        mockFeedsStorageService
+            .Setup(x => x.RetrieveFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(new[] { feed });
+
+        // FEAT-051: Mock read position storage to throw exception (simulating Redis/DB failure)
+        var mockReadPositionService = mocker.GetMock<IFeedReadPositionStorageService>();
+        mockReadPositionService
+            .Setup(x => x.GetReadPositionsForUserAsync(userAddress))
+            .ThrowsAsync(new Exception("Redis connection failed"));
+
+        var mockIdentityService = mocker.GetMock<IIdentityService>();
+        mockIdentityService
+            .Setup(x => x.RetrieveIdentityAsync(userAddress))
+            .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetFeedForAddressRequest { ProfilePublicKey = userAddress, BlockIndex = 0 };
+
+        // Act
+        var result = await service.GetFeedsForAddress(request, CreateMockServerCallContext());
+
+        // Assert - should still return feeds with default LastReadBlockIndex = 0
+        result.Feeds.Should().HaveCount(1);
+        result.Feeds[0].LastReadBlockIndex.Should().Be(0, "When read position service fails, LastReadBlockIndex should default to 0");
+    }
+
+    #endregion
+
     /// <summary>
     /// This test verifies that Group feeds are correctly returned by GetFeedsForAddress.
     ///

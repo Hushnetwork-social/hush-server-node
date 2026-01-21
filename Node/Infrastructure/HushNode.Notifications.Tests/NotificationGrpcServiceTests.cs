@@ -1,8 +1,11 @@
 using FluentAssertions;
 using Grpc.Core;
+using HushNode.Feeds.Storage;
 using HushNode.Notifications.gRPC;
 using HushNode.PushNotifications;
 using HushNode.Interfaces.Models;
+using HushShared.Blockchain.BlockModel;
+using HushShared.Feeds.Model;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.AutoMock;
@@ -702,6 +705,222 @@ public class NotificationGrpcServiceTests
         // Assert
         result.Tokens.Should().HaveCount(1);
         result.Tokens[0].DeviceName.Should().BeEmpty();
+    }
+
+    #endregion
+
+    #region MarkFeedAsRead Tests (FEAT-051)
+
+    private const string TestFeedId = "11111111-1111-1111-1111-111111111111";  // Valid GUID format for FeedId
+
+    [Fact]
+    public async Task MarkFeedAsRead_WithValidInput_ReturnsSuccessAndCallsStorageService()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var readPositionStorageServiceMock = mocker.GetMock<IFeedReadPositionStorageService>();
+        readPositionStorageServiceMock
+            .Setup(x => x.MarkFeedAsReadAsync(
+                TestUserId,
+                It.IsAny<FeedId>(),
+                It.IsAny<BlockIndex>()))
+            .ReturnsAsync(true);
+
+        mocker.GetMock<IUnreadTrackingService>()
+            .Setup(x => x.MarkFeedAsReadAsync(TestUserId, TestFeedId))
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<INotificationService>()
+            .Setup(x => x.PublishMessagesReadAsync(TestUserId, TestFeedId))
+            .Returns(Task.CompletedTask);
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.MarkFeedAsReadRequest
+        {
+            UserId = TestUserId,
+            FeedId = TestFeedId,
+            UpToBlockIndex = 500
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.MarkFeedAsRead(request, context);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Message.Should().BeEmpty();
+        readPositionStorageServiceMock.Verify(
+            x => x.MarkFeedAsReadAsync(
+                TestUserId,
+                It.Is<FeedId>(f => f.ToString() == TestFeedId),
+                It.Is<BlockIndex>(b => b.Value == 500)),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task MarkFeedAsRead_WithZeroBlockIndex_DoesNotCallReadPositionStorageService()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var readPositionStorageServiceMock = mocker.GetMock<IFeedReadPositionStorageService>();
+
+        mocker.GetMock<IUnreadTrackingService>()
+            .Setup(x => x.MarkFeedAsReadAsync(TestUserId, TestFeedId))
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<INotificationService>()
+            .Setup(x => x.PublishMessagesReadAsync(TestUserId, TestFeedId))
+            .Returns(Task.CompletedTask);
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.MarkFeedAsReadRequest
+        {
+            UserId = TestUserId,
+            FeedId = TestFeedId,
+            UpToBlockIndex = 0  // Zero means "mark all as read" - legacy behavior
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.MarkFeedAsRead(request, context);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        readPositionStorageServiceMock.Verify(
+            x => x.MarkFeedAsReadAsync(
+                It.IsAny<string>(),
+                It.IsAny<FeedId>(),
+                It.IsAny<BlockIndex>()),
+            Times.Never,
+            "Storage service should not be called when UpToBlockIndex is 0");
+    }
+
+    [Fact]
+    public async Task MarkFeedAsRead_WithEmptyFeedId_ReturnsFailure()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.MarkFeedAsReadRequest
+        {
+            UserId = TestUserId,
+            FeedId = "",
+            UpToBlockIndex = 500
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.MarkFeedAsRead(request, context);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("FeedId");
+        mocker.GetMock<IFeedReadPositionStorageService>()
+            .Verify(
+                x => x.MarkFeedAsReadAsync(It.IsAny<string>(), It.IsAny<FeedId>(), It.IsAny<BlockIndex>()),
+                Times.Never);
+    }
+
+    [Fact]
+    public async Task MarkFeedAsRead_WithEmptyUserId_ReturnsFailure()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.MarkFeedAsReadRequest
+        {
+            UserId = "",
+            FeedId = TestFeedId,
+            UpToBlockIndex = 500
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.MarkFeedAsRead(request, context);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("UserId");
+        mocker.GetMock<IFeedReadPositionStorageService>()
+            .Verify(
+                x => x.MarkFeedAsReadAsync(It.IsAny<string>(), It.IsAny<FeedId>(), It.IsAny<BlockIndex>()),
+                Times.Never);
+    }
+
+    [Fact]
+    public async Task MarkFeedAsRead_WhenStorageServiceThrows_ReturnsFailure()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        mocker.GetMock<IFeedReadPositionStorageService>()
+            .Setup(x => x.MarkFeedAsReadAsync(
+                It.IsAny<string>(),
+                It.IsAny<FeedId>(),
+                It.IsAny<BlockIndex>()))
+            .ThrowsAsync(new Exception("Database error"));
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.MarkFeedAsReadRequest
+        {
+            UserId = TestUserId,
+            FeedId = TestFeedId,
+            UpToBlockIndex = 500
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        var result = await service.MarkFeedAsRead(request, context);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task MarkFeedAsRead_AlwaysCallsUnreadTrackingAndNotificationService()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var unreadTrackingMock = mocker.GetMock<IUnreadTrackingService>();
+        var notificationServiceMock = mocker.GetMock<INotificationService>();
+
+        mocker.GetMock<IFeedReadPositionStorageService>()
+            .Setup(x => x.MarkFeedAsReadAsync(
+                It.IsAny<string>(),
+                It.IsAny<FeedId>(),
+                It.IsAny<BlockIndex>()))
+            .ReturnsAsync(true);
+
+        unreadTrackingMock
+            .Setup(x => x.MarkFeedAsReadAsync(TestUserId, TestFeedId))
+            .Returns(Task.CompletedTask);
+
+        notificationServiceMock
+            .Setup(x => x.PublishMessagesReadAsync(TestUserId, TestFeedId))
+            .Returns(Task.CompletedTask);
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.MarkFeedAsReadRequest
+        {
+            UserId = TestUserId,
+            FeedId = TestFeedId,
+            UpToBlockIndex = 500
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        await service.MarkFeedAsRead(request, context);
+
+        // Assert - verify both services are always called
+        unreadTrackingMock.Verify(
+            x => x.MarkFeedAsReadAsync(TestUserId, TestFeedId),
+            Times.Once,
+            "UnreadTrackingService.MarkFeedAsReadAsync should always be called");
+
+        notificationServiceMock.Verify(
+            x => x.PublishMessagesReadAsync(TestUserId, TestFeedId),
+            Times.Once,
+            "NotificationService.PublishMessagesReadAsync should always be called");
     }
 
     #endregion

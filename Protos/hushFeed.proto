@@ -83,6 +83,7 @@ message GetFeedForAddressReply {
     int64 BlockIndex = 5;
 
     repeated FeedParticipant FeedParticipants = 6;
+    int64 LastReadBlockIndex = 7;  // FEAT-051: User's last read position in this feed
   }
 
   repeated Feed Feeds = 1; 

@@ -2,6 +2,9 @@ using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using HushNode.PushNotifications;
 using HushNode.Interfaces.Models;
+using HushNode.Feeds.Storage;
+using HushShared.Blockchain.BlockModel;
+using HushShared.Feeds.Model;
 using ProtoTypes = HushNetwork.proto;
 using InternalModels = HushNode.Notifications.Models;
 
@@ -16,12 +19,14 @@ public class NotificationGrpcService(
     IUnreadTrackingService unreadTrackingService,
     IConnectionTracker connectionTracker,
     IDeviceTokenStorageService deviceTokenStorageService,
+    IFeedReadPositionStorageService readPositionStorageService,
     ILogger<NotificationGrpcService> logger) : ProtoTypes.HushNotification.HushNotificationBase
 {
     private readonly INotificationService _notificationService = notificationService;
     private readonly IUnreadTrackingService _unreadTrackingService = unreadTrackingService;
     private readonly IConnectionTracker _connectionTracker = connectionTracker;
     private readonly IDeviceTokenStorageService _deviceTokenStorageService = deviceTokenStorageService;
+    private readonly IFeedReadPositionStorageService _readPositionStorageService = readPositionStorageService;
     private readonly ILogger<NotificationGrpcService> _logger = logger;
 
     /// <summary>
@@ -94,33 +99,65 @@ public class NotificationGrpcService(
     }
 
     /// <summary>
-    /// Marks all messages in a feed as read for the user.
+    /// Marks messages in a feed as read for the user up to a specific block index.
     /// This resets the unread count to 0 and publishes a MESSAGES_READ event
     /// to all connected devices of the user.
+    /// FEAT-051: Also stores the read position in the database for cross-device sync.
     /// </summary>
     public override async Task<ProtoTypes.MarkFeedAsReadReply> MarkFeedAsRead(
         ProtoTypes.MarkFeedAsReadRequest request,
         ServerCallContext context)
     {
+        // Validate required fields
+        if (string.IsNullOrWhiteSpace(request.UserId))
+        {
+            return new ProtoTypes.MarkFeedAsReadReply
+            {
+                Success = false,
+                Message = "UserId is required"
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(request.FeedId))
+        {
+            return new ProtoTypes.MarkFeedAsReadReply
+            {
+                Success = false,
+                Message = "FeedId is required"
+            };
+        }
+
         _logger.LogDebug(
-            "MarkFeedAsRead: UserId={UserId}, FeedId={FeedId}",
-            request.UserId, request.FeedId);
+            "MarkFeedAsRead: UserId={UserId}, FeedId={FeedId}, UpToBlockIndex={UpToBlockIndex}",
+            request.UserId, request.FeedId, request.UpToBlockIndex);
 
         try
         {
-            // Reset unread count in Redis
+            // FEAT-051: Store read position if block index is provided
+            if (request.UpToBlockIndex > 0)
+            {
+                var feedId = FeedIdHandler.CreateFromString(request.FeedId);
+                var blockIndex = new BlockIndex(request.UpToBlockIndex);
+                await _readPositionStorageService.MarkFeedAsReadAsync(request.UserId, feedId, blockIndex);
+            }
+
+            // Reset unread count in Redis (existing behavior)
             await _unreadTrackingService.MarkFeedAsReadAsync(request.UserId, request.FeedId);
 
-            // Publish event to all connected devices
+            // Publish event to all connected devices (existing behavior)
             await _notificationService.PublishMessagesReadAsync(request.UserId, request.FeedId);
 
-            return new ProtoTypes.MarkFeedAsReadReply { Success = true };
+            return new ProtoTypes.MarkFeedAsReadReply { Success = true, Message = string.Empty };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error marking feed as read: UserId={UserId}, FeedId={FeedId}",
                 request.UserId, request.FeedId);
-            return new ProtoTypes.MarkFeedAsReadReply { Success = false };
+            return new ProtoTypes.MarkFeedAsReadReply
+            {
+                Success = false,
+                Message = "Error marking feed as read"
+            };
         }
     }
 

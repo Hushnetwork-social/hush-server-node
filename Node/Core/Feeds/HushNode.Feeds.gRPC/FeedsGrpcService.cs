@@ -21,6 +21,7 @@ public class FeedsGrpcService(
     IFeedMessageStorageService feedMessageStorageService,
     IFeedMessageCacheService feedMessageCacheService,
     IFeedParticipantsCacheService feedParticipantsCacheService,
+    IFeedReadPositionStorageService feedReadPositionStorageService,
     IIdentityService identityService,
     IIdentityStorageService identityStorageService,
     IBlockchainCache blockchainCache,
@@ -31,6 +32,7 @@ public class FeedsGrpcService(
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
     private readonly IFeedMessageCacheService _feedMessageCacheService = feedMessageCacheService;
     private readonly IFeedParticipantsCacheService _feedParticipantsCacheService = feedParticipantsCacheService;
+    private readonly IFeedReadPositionStorageService _feedReadPositionStorageService = feedReadPositionStorageService;
     private readonly IIdentityService _identityService = identityService;
     private readonly IIdentityStorageService _identityStorageService = identityStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
@@ -71,6 +73,19 @@ public class FeedsGrpcService(
         var lastFeeds = await this._feedsStorageService
             .RetrieveFeedsForAddress(request.ProfilePublicKey, blockIndex);
 
+        // FEAT-051: Batch fetch read positions for all feeds (cache-aside pattern with DB fallback)
+        IReadOnlyDictionary<FeedId, BlockIndex> readPositions;
+        try
+        {
+            readPositions = await _feedReadPositionStorageService.GetReadPositionsForUserAsync(request.ProfilePublicKey);
+        }
+        catch (Exception ex)
+        {
+            // Graceful degradation: if read positions fail, continue with empty dictionary (all feeds show 0)
+            _logger.LogWarning(ex, "Failed to fetch read positions for user {UserId}, defaulting to 0", request.ProfilePublicKey);
+            readPositions = new Dictionary<FeedId, BlockIndex>();
+        }
+
         var reply = new GetFeedForAddressReply();
         foreach(var feed in lastFeeds)
         {
@@ -91,13 +106,18 @@ public class FeedsGrpcService(
             // This ensures clients detect changes when any participant updates their identity
             var effectiveBlockIndex = await GetEffectiveBlockIndex(feed);
 
+            // FEAT-051: Get read position for this feed (default to 0 if not found)
+            var lastReadBlockIndex = readPositions.TryGetValue(feed.FeedId, out var readPosition)
+                ? readPosition.Value
+                : 0;
+
             var replyFeed = new GetFeedForAddressReply.Types.Feed
             {
                 FeedId = feed.FeedId.ToString(),
                 FeedTitle = feedAlias,
                 FeedType = (int)feed.FeedType,
                 BlockIndex = effectiveBlockIndex,
-
+                LastReadBlockIndex = lastReadBlockIndex
             };
 
             foreach(var participant in feed.Participants)
