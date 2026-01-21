@@ -22,6 +22,7 @@ public static class StorageHostBuild
         
         services.AddSingleton<IFeedsStorageService, FeedsStorageService>();
         services.AddSingleton<IFeedMessageStorageService, FeedMessageStorageService>();
+        services.AddSingleton<IFeedReadPositionStorageService, FeedReadPositionStorageService>();
         services.AddTransient<IFeedsRepository, FeedsRepository>();
         services.AddTransient<IFeedMessageRepository, FeedMessageRepository>();
         services.AddTransient<IGroupFeedMemberCommitmentRepository, GroupFeedMemberCommitmentRepository>();
