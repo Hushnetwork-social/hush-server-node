@@ -25,6 +25,7 @@ public static class StorageHostBuild
         services.AddTransient<IFeedsRepository, FeedsRepository>();
         services.AddTransient<IFeedMessageRepository, FeedMessageRepository>();
         services.AddTransient<IGroupFeedMemberCommitmentRepository, GroupFeedMemberCommitmentRepository>();
+        services.AddTransient<IFeedReadPositionRepository, FeedReadPositionRepository>();
 
         services.AddTransient<IDbContextConfigurator, FeedsDbContextConfigurator>();
         services.AddTransient<FeedsDbContextConfigurator>();

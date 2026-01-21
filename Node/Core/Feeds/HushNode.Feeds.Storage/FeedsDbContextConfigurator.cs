@@ -19,6 +19,7 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
         ConfigureGroupFeedKeyGeneration(modelBuilder);
         ConfigureGroupFeedEncryptedKey(modelBuilder);
         ConfigureGroupFeedMemberCommitment(modelBuilder);
+        ConfigureFeedReadPosition(modelBuilder);
     }
 
     private static void ConfigureFeedMessage(ModelBuilder modelBuilder)
@@ -386,6 +387,40 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
 
                 // Index for looking up specific commitment
                 commitment.HasIndex(x => new { x.FeedId, x.UserCommitment });
+            });
+    }
+
+    private static void ConfigureFeedReadPosition(ModelBuilder modelBuilder)
+    {
+        modelBuilder
+            .Entity<FeedReadPositionEntity>(readPosition =>
+            {
+                readPosition.ToTable("FeedReadPosition", "Feeds");
+                readPosition.HasKey(x => new { x.UserId, x.FeedId });
+
+                readPosition.Property(x => x.UserId)
+                    .HasColumnType("varchar(500)");
+
+                readPosition.Property(x => x.FeedId)
+                    .HasConversion(
+                        x => x.ToString(),
+                        x => FeedIdHandler.CreateFromString(x)
+                    )
+                    .HasColumnType("varchar(40)");
+
+                readPosition.Property(x => x.LastReadBlockIndex)
+                    .HasConversion(
+                        x => x.Value,
+                        x => new BlockIndex(x)
+                    )
+                    .HasColumnType("bigint");
+
+                readPosition.Property(x => x.UpdatedAt)
+                    .HasColumnType("timestamp with time zone");
+
+                // Index for efficient lookup by user (for GetReadPositionsForUserAsync)
+                readPosition.HasIndex(x => x.UserId)
+                    .HasDatabaseName("IX_FeedReadPosition_UserId");
             });
     }
 }

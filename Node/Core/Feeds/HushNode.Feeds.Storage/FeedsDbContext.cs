@@ -17,6 +17,7 @@ public class FeedsDbContext(
     public DbSet<GroupFeedKeyGenerationEntity> GroupFeedKeyGenerations { get; set; }
     public DbSet<GroupFeedEncryptedKeyEntity> GroupFeedEncryptedKeys { get; set; }
     public DbSet<GroupFeedMemberCommitment> GroupFeedMemberCommitments { get; set; }
+    public DbSet<FeedReadPositionEntity> FeedReadPositions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
