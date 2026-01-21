@@ -21,6 +21,8 @@ public sealed class CommonSteps
 
     /// <summary>
     /// Triggers block production. Works with Given, When, or And keywords.
+    /// Includes a small delay to ensure database commits are fully propagated
+    /// before subsequent queries (prevents flaky tests).
     /// </summary>
     [Given(@"a block is produced")]
     [When(@"a block is produced")]
@@ -28,6 +30,10 @@ public sealed class CommonSteps
     {
         var blockControl = GetBlockControl();
         await blockControl.ProduceBlockAsync();
+
+        // Small delay to ensure database commits are fully visible to subsequent queries.
+        // This prevents flaky tests caused by read-after-write timing issues.
+        await Task.Delay(50);
     }
 
     private BlockProductionControl GetBlockControl()
