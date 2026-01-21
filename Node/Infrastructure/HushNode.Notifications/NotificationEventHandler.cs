@@ -1,3 +1,4 @@
+using HushNode.Caching;
 using HushNode.Events;
 using HushNode.Feeds.Storage;
 using HushNode.Identity.Storage;
@@ -25,6 +26,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
     private readonly IIdentityService _identityService;
     private readonly IConnectionTracker _connectionTracker;
     private readonly IPushDeliveryService _pushDeliveryService;
+    private readonly IFeedParticipantsCacheService _feedParticipantsCacheService;
     private readonly ILogger<NotificationEventHandler> _logger;
 
     public NotificationEventHandler(
@@ -34,6 +36,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
         IIdentityService identityService,
         IConnectionTracker connectionTracker,
         IPushDeliveryService pushDeliveryService,
+        IFeedParticipantsCacheService feedParticipantsCacheService,
         IEventAggregator eventAggregator,
         ILogger<NotificationEventHandler> logger)
     {
@@ -43,6 +46,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
         _identityService = identityService;
         _connectionTracker = connectionTracker;
         _pushDeliveryService = pushDeliveryService;
+        _feedParticipantsCacheService = feedParticipantsCacheService;
         _logger = logger;
 
         // Subscribe to events via EventAggregator
@@ -72,14 +76,57 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
             // Truncate message preview
             var messagePreview = TruncateMessage(feedMessage.MessageContent, 255);
 
+            // FEAT-050: Try cache first for participants
+            var cachedParticipants = await _feedParticipantsCacheService.GetParticipantsAsync(feedMessage.FeedId);
+            if (cachedParticipants != null)
+            {
+                _logger.LogDebug(
+                    "Cache hit for feed participants: FeedId={FeedId}, ParticipantCount={Count}",
+                    feedMessage.FeedId,
+                    cachedParticipants.Count);
+
+                // We have cached participants, but need to determine feed type for notification formatting
+                // Check if it's a group feed to get the title (lightweight query)
+                var groupFeed = await _feedsStorageService.GetGroupFeedAsync(feedMessage.FeedId);
+                if (groupFeed != null)
+                {
+                    // Group feed - use cached participants with group title
+                    await NotifyFeedParticipantsAsync(
+                        cachedParticipants,
+                        feedMessage,
+                        senderName,
+                        messagePreview,
+                        feedName: groupFeed.Title);
+                }
+                else
+                {
+                    // Chat feed - use cached participants with no title
+                    await NotifyFeedParticipantsAsync(
+                        cachedParticipants,
+                        feedMessage,
+                        senderName,
+                        messagePreview,
+                        feedName: null);
+                }
+                return;
+            }
+
+            _logger.LogDebug("Cache miss for feed participants: FeedId={FeedId}", feedMessage.FeedId);
+
+            // Cache miss - fall back to database queries and populate cache
             // Try to get the feed as a regular Feed first (Personal, Chat)
             var feed = await _feedsStorageService.GetFeedByIdAsync(feedMessage.FeedId);
             if (feed != null)
             {
                 // Regular feed (1:1 Chat) - notify all participants
+                var participantAddresses = feed.Participants.Select(p => p.ParticipantPublicAddress).ToList();
+
+                // Populate cache with participants (fire-and-forget)
+                _ = _feedParticipantsCacheService.SetParticipantsAsync(feedMessage.FeedId, participantAddresses);
+
                 // feedName is null for 1:1 chats, so notification shows sender name
                 await NotifyFeedParticipantsAsync(
-                    feed.Participants.Select(p => p.ParticipantPublicAddress),
+                    participantAddresses,
                     feedMessage,
                     senderName,
                     messagePreview,
@@ -88,14 +135,18 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
             }
 
             // Feed not found in Feeds table - try GroupFeeds table
-            var groupFeed = await _feedsStorageService.GetGroupFeedAsync(feedMessage.FeedId);
-            if (groupFeed != null)
+            var groupFeedFromDb = await _feedsStorageService.GetGroupFeedAsync(feedMessage.FeedId);
+            if (groupFeedFromDb != null)
             {
                 // Group feed - notify active participants (not left, not banned)
-                var activeParticipants = groupFeed.Participants
+                var activeParticipants = groupFeedFromDb.Participants
                     .Where(p => p.LeftAtBlock == null &&
                                 p.ParticipantType != ParticipantType.Banned)
-                    .Select(p => p.ParticipantPublicAddress);
+                    .Select(p => p.ParticipantPublicAddress)
+                    .ToList();
+
+                // Populate cache with active participants (fire-and-forget)
+                _ = _feedParticipantsCacheService.SetParticipantsAsync(feedMessage.FeedId, activeParticipants);
 
                 // Pass group title so notification shows "GroupName" + "Sender: New message"
                 await NotifyFeedParticipantsAsync(
@@ -103,7 +154,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
                     feedMessage,
                     senderName,
                     messagePreview,
-                    feedName: groupFeed.Title);
+                    feedName: groupFeedFromDb.Title);
                 return;
             }
 

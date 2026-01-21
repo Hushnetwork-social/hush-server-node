@@ -1,4 +1,5 @@
 using FluentAssertions;
+using HushNode.Caching;
 using HushNode.Events;
 using HushNode.Feeds.Storage;
 using HushNode.Identity.Storage;
@@ -1085,6 +1086,353 @@ public class NotificationEventHandlerRoutingTests
         mocker.GetMock<IConnectionTracker>()
             .Setup(x => x.IsUserOnlineAsync(It.IsAny<string>()))
             .ReturnsAsync((string userId) => onlineUsers.Contains(userId));
+    }
+
+    private static void SetupConnectionTrackerAllOffline(AutoMocker mocker)
+    {
+        mocker.GetMock<IConnectionTracker>()
+            .Setup(x => x.IsUserOnlineAsync(It.IsAny<string>()))
+            .ReturnsAsync(false);
+    }
+
+    private static void SetupPushDeliveryService(AutoMocker mocker)
+    {
+        mocker.GetMock<IPushDeliveryService>()
+            .Setup(x => x.SendPushAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Returns(Task.CompletedTask);
+    }
+
+    #endregion
+}
+
+/// <summary>
+/// FEAT-050: Tests for NotificationEventHandler cache integration.
+/// Verifies cache-first pattern for feed participants.
+/// Each test follows AAA pattern with isolated setup to prevent flaky tests.
+/// </summary>
+public class NotificationEventHandlerParticipantsCacheTests
+{
+    #region Cache Hit Tests
+
+    [Fact]
+    public async Task HandleAsync_ParticipantsCacheHit_UsesParticipantsFromCache()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var participant1Address = "participant1-address";
+        var participant2Address = "participant2-address";
+
+        var cachedParticipants = new List<string> { senderAddress, participant1Address, participant2Address };
+        var feedMessage = CreateFeedMessage(feedId, senderAddress);
+
+        // Mock cache to return participants (CACHE HIT)
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.GetParticipantsAsync(feedId))
+            .ReturnsAsync(cachedParticipants);
+
+        // Mock group feed lookup (to determine feed type for notification formatting)
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetGroupFeedAsync(feedId))
+            .ReturnsAsync((GroupFeed?)null);
+
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - Cache was used
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Verify(x => x.GetParticipantsAsync(feedId), Times.Once);
+
+        // Assert - Database was NOT queried for participants
+        mocker.GetMock<IFeedsStorageService>()
+            .Verify(x => x.GetFeedByIdAsync(feedId), Times.Never,
+                "Database should NOT be queried on cache hit");
+
+        // Assert - Notifications sent to non-sender participants
+        mocker.GetMock<INotificationService>()
+            .Verify(x => x.PublishNewMessageAsync(
+                participant1Address,
+                feedId.ToString(),
+                It.IsAny<string>(),
+                It.IsAny<string>()), Times.Once);
+
+        mocker.GetMock<INotificationService>()
+            .Verify(x => x.PublishNewMessageAsync(
+                participant2Address,
+                feedId.ToString(),
+                It.IsAny<string>(),
+                It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ParticipantsCacheHit_GroupFeed_UsesGroupTitleForNotification()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var recipientAddress = "recipient-address";
+        var groupTitle = "Test Group";
+
+        var cachedParticipants = new List<string> { senderAddress, recipientAddress };
+        var feedMessage = CreateFeedMessage(feedId, senderAddress);
+
+        var groupFeed = new GroupFeed(feedId, groupTitle, "Description", false, new BlockIndex(100), 0);
+
+        // Mock cache to return participants (CACHE HIT)
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.GetParticipantsAsync(feedId))
+            .ReturnsAsync(cachedParticipants);
+
+        // Mock group feed lookup
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetGroupFeedAsync(feedId))
+            .ReturnsAsync(groupFeed);
+
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOffline(mocker);
+        SetupPushDeliveryService(mocker);
+
+        PushPayload? capturedPayload = null;
+        mocker.GetMock<IPushDeliveryService>()
+            .Setup(x => x.SendPushAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Callback<string, PushPayload>((_, payload) => capturedPayload = payload)
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - Push notification uses group title
+        capturedPayload.Should().NotBeNull();
+        capturedPayload!.Title.Should().Be(groupTitle);
+    }
+
+    #endregion
+
+    #region Cache Miss Tests
+
+    [Fact]
+    public async Task HandleAsync_ParticipantsCacheMiss_RegularFeed_FallsBackToDatabase()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var participantAddress = "participant-address";
+
+        var feed = CreateFeed(feedId, senderAddress, participantAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress);
+
+        // Mock cache to return null (CACHE MISS)
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.GetParticipantsAsync(feedId))
+            .ReturnsAsync((IReadOnlyList<string>?)null);
+
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.SetParticipantsAsync(feedId, It.IsAny<IEnumerable<string>>()))
+            .Returns(Task.CompletedTask);
+
+        // Mock database to return feed
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetFeedByIdAsync(feedId))
+            .ReturnsAsync(feed);
+
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - Database was queried
+        mocker.GetMock<IFeedsStorageService>()
+            .Verify(x => x.GetFeedByIdAsync(feedId), Times.Once,
+                "Database should be queried on cache miss");
+
+        // Assert - Cache was populated
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Verify(x => x.SetParticipantsAsync(feedId, It.IsAny<IEnumerable<string>>()),
+                Times.Once,
+                "Cache should be populated after database fallback");
+
+        // Assert - Notification sent
+        mocker.GetMock<INotificationService>()
+            .Verify(x => x.PublishNewMessageAsync(
+                participantAddress,
+                feedId.ToString(),
+                It.IsAny<string>(),
+                It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ParticipantsCacheMiss_GroupFeed_FallsBackToDatabase()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var activeParticipantAddress = "active-participant-address";
+        var leftParticipantAddress = "left-participant-address";
+
+        var groupFeed = CreateGroupFeedWithLeftMember(feedId, senderAddress, activeParticipantAddress, leftParticipantAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress);
+
+        // Mock cache to return null (CACHE MISS)
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.GetParticipantsAsync(feedId))
+            .ReturnsAsync((IReadOnlyList<string>?)null);
+
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.SetParticipantsAsync(feedId, It.IsAny<IEnumerable<string>>()))
+            .Returns(Task.CompletedTask);
+
+        // Mock database: regular feed not found, group feed found
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetFeedByIdAsync(feedId))
+            .ReturnsAsync((Feed?)null);
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetGroupFeedAsync(feedId))
+            .ReturnsAsync(groupFeed);
+
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - Database was queried for group feed
+        mocker.GetMock<IFeedsStorageService>()
+            .Verify(x => x.GetGroupFeedAsync(feedId), Times.Once,
+                "Group feed database should be queried on cache miss");
+
+        // Assert - Cache was populated with active participants only
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Verify(x => x.SetParticipantsAsync(feedId,
+                It.Is<IEnumerable<string>>(participants =>
+                    participants.Contains(activeParticipantAddress) &&
+                    participants.Contains(senderAddress) &&
+                    !participants.Contains(leftParticipantAddress))),
+                Times.Once,
+                "Cache should be populated with active participants only");
+
+        // Assert - Notification sent only to active participant (not left)
+        mocker.GetMock<INotificationService>()
+            .Verify(x => x.PublishNewMessageAsync(
+                activeParticipantAddress,
+                feedId.ToString(),
+                It.IsAny<string>(),
+                It.IsAny<string>()), Times.Once);
+
+        mocker.GetMock<INotificationService>()
+            .Verify(x => x.PublishNewMessageAsync(
+                leftParticipantAddress,
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()), Times.Never);
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    private static Feed CreateFeed(FeedId feedId, params string[] participantAddresses)
+    {
+        var feed = new Feed(feedId, "Test Feed", FeedType.Chat, new BlockIndex(100));
+        feed.Participants = participantAddresses
+            .Select(addr => new FeedParticipant(feedId, addr, ParticipantType.Member, "encrypted-key") { Feed = feed })
+            .ToArray();
+        return feed;
+    }
+
+    private static GroupFeed CreateGroupFeedWithLeftMember(
+        FeedId feedId, string senderAddress, string activeAddress, string leftAddress)
+    {
+        var groupFeed = new GroupFeed(feedId, "Test Group", "Description", false, new BlockIndex(100), 0);
+        groupFeed.Participants = new List<GroupFeedParticipantEntity>
+        {
+            new(feedId, senderAddress, ParticipantType.Admin, new BlockIndex(100)),
+            new(feedId, activeAddress, ParticipantType.Member, new BlockIndex(100)),
+            new(feedId, leftAddress, ParticipantType.Member, new BlockIndex(100)) { LeftAtBlock = new BlockIndex(150) }
+        };
+        return groupFeed;
+    }
+
+    private static FeedMessage CreateFeedMessage(FeedId feedId, string senderAddress, string content = "Test message")
+    {
+        return new FeedMessage(
+            new FeedMessageId(Guid.NewGuid()),
+            feedId,
+            content,
+            senderAddress,
+            Timestamp.Current,
+            new BlockIndex(100));
+    }
+
+    private static void SetupIdentityService(AutoMocker mocker, string publicAddress, string displayName)
+    {
+        var profile = new Profile(
+            displayName,
+            displayName.Length > 10 ? displayName.Substring(0, 10) : displayName,
+            publicAddress,
+            "encrypt-key",
+            true,
+            new BlockIndex(100));
+
+        mocker.GetMock<IIdentityService>()
+            .Setup(x => x.RetrieveIdentityAsync(publicAddress))
+            .ReturnsAsync(profile);
+    }
+
+    private static void SetupNotificationService(AutoMocker mocker)
+    {
+        mocker.GetMock<INotificationService>()
+            .Setup(x => x.PublishNewMessageAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+    }
+
+    private static void SetupUnreadTrackingService(AutoMocker mocker)
+    {
+        mocker.GetMock<IUnreadTrackingService>()
+            .Setup(x => x.IncrementUnreadAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(1);
+    }
+
+    private static void SetupConnectionTrackerAllOnline(AutoMocker mocker)
+    {
+        mocker.GetMock<IConnectionTracker>()
+            .Setup(x => x.IsUserOnlineAsync(It.IsAny<string>()))
+            .ReturnsAsync(true);
     }
 
     private static void SetupConnectionTrackerAllOffline(AutoMocker mocker)

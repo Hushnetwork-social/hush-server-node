@@ -374,6 +374,25 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                 var logger = sp.GetRequiredService<ILogger<UserFeedsCacheService>>();
                 return new UserFeedsCacheService(connectionMultiplexer, redisSettings.InstanceName, logger);
             });
+
+            // Register feed participants cache service (FEAT-050)
+            services.AddSingleton<IFeedParticipantsCacheService>(sp =>
+            {
+                var connectionMultiplexer = sp.GetRequiredService<IConnectionMultiplexer>();
+                var redisSettings = sp.GetRequiredService<IOptions<RedisSettings>>().Value;
+                var logger = sp.GetRequiredService<ILogger<FeedParticipantsCacheService>>();
+                return new FeedParticipantsCacheService(connectionMultiplexer, redisSettings.InstanceName, logger);
+            });
+
+            // Register feed participants cache event handler (FEAT-050)
+            // This handler subscribes to membership events and updates the cache
+            services.AddSingleton<FeedParticipantsCacheEventHandler>(sp =>
+            {
+                var cacheService = sp.GetRequiredService<IFeedParticipantsCacheService>();
+                var eventAggregator = sp.GetRequiredService<IEventAggregator>();
+                var logger = sp.GetRequiredService<ILogger<FeedParticipantsCacheEventHandler>>();
+                return new FeedParticipantsCacheEventHandler(cacheService, eventAggregator, logger);
+            });
         });
 
         // In test mode, REPLACE the default scheduler with one using injected observable
