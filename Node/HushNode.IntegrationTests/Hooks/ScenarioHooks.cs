@@ -61,10 +61,12 @@ internal sealed class ScenarioHooks
     private static readonly SemaphoreSlim _webClientLock = new(1, 1);
 
     private readonly ISpecFlowOutputHelper _outputHelper;
+    private readonly FeatureContext _featureContext;
 
-    public ScenarioHooks(ScenarioContext scenarioContext, ISpecFlowOutputHelper outputHelper)
+    public ScenarioHooks(ScenarioContext scenarioContext, FeatureContext featureContext, ISpecFlowOutputHelper outputHelper)
     {
         _scenarioContext = scenarioContext;
+        _featureContext = featureContext;
         _outputHelper = outputHelper;
     }
 
@@ -127,11 +129,13 @@ internal sealed class ScenarioHooks
         var diagnostics = new DiagnosticCapture();
 
         // Check if this is an E2E scenario (needs fixed ports for Docker)
-        // Tags include both feature-level and scenario-level tags
-        var allTags = _scenarioContext.ScenarioInfo.Tags;
+        // Combine feature-level and scenario-level tags
+        var featureTags = _featureContext.FeatureInfo.Tags ?? Array.Empty<string>();
+        var scenarioTags = _scenarioContext.ScenarioInfo.Tags ?? Array.Empty<string>();
+        var allTags = featureTags.Concat(scenarioTags).ToArray();
         var isE2E = allTags.Any(t => t.Equals("E2E", StringComparison.OrdinalIgnoreCase));
 
-        _outputHelper.WriteLine($"[ScenarioHooks] Tags: [{string.Join(", ", allTags)}], IsE2E: {isE2E}");
+        _outputHelper.WriteLine($"[ScenarioHooks] FeatureTags: [{string.Join(", ", featureTags)}], ScenarioTags: [{string.Join(", ", scenarioTags)}], IsE2E: {isE2E}");
 
         // Start a fresh node for this scenario with diagnostic capture
         // E2E tests use fixed ports so pre-built Docker images can connect
