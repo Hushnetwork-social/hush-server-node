@@ -43,6 +43,14 @@ internal sealed class ScenarioHooks
     /// </summary>
     public const string FixtureKey = "HushTestFixture";
 
+    /// <summary>
+    /// Context key for accessing the PlaywrightFixture instance.
+    /// </summary>
+    public const string PlaywrightKey = "PlaywrightFixture";
+
+    private static PlaywrightFixture? _playwrightFixture;
+    private static readonly SemaphoreSlim _playwrightLock = new(1, 1);
+
     private readonly ISpecFlowOutputHelper _outputHelper;
 
     public ScenarioHooks(ScenarioContext scenarioContext, ISpecFlowOutputHelper outputHelper)
@@ -62,11 +70,18 @@ internal sealed class ScenarioHooks
     }
 
     /// <summary>
-    /// Stops all containers after all tests complete.
+    /// Stops all containers and disposes Playwright after all tests complete.
     /// </summary>
     [AfterTestRun]
     public static async Task AfterTestRun()
     {
+        // Dispose Playwright if it was initialized
+        if (_playwrightFixture != null)
+        {
+            await _playwrightFixture.DisposeAsync();
+            _playwrightFixture = null;
+        }
+
         if (_fixture != null)
         {
             await _fixture.DisposeAsync();
@@ -104,6 +119,33 @@ internal sealed class ScenarioHooks
         _scenarioContext[GrpcFactoryKey] = grpcFactory;
         _scenarioContext[DiagnosticsKey] = diagnostics;
         _scenarioContext[FixtureKey] = _fixture;
+    }
+
+    /// <summary>
+    /// Initializes Playwright for E2E scenarios (lazy initialization on first use).
+    /// Stores PlaywrightFixture in ScenarioContext for browser access.
+    /// </summary>
+    [BeforeScenario("E2E")]
+    [Scope(Tag = "E2E")]
+    public async Task BeforeE2EScenario()
+    {
+        // Lazy initialization of Playwright (thread-safe)
+        await _playwrightLock.WaitAsync();
+        try
+        {
+            if (_playwrightFixture == null)
+            {
+                _playwrightFixture = new PlaywrightFixture();
+                await _playwrightFixture.InitializeAsync();
+            }
+        }
+        finally
+        {
+            _playwrightLock.Release();
+        }
+
+        // Store in ScenarioContext for E2E step definitions
+        _scenarioContext[PlaywrightKey] = _playwrightFixture;
     }
 
     /// <summary>
@@ -243,5 +285,22 @@ internal sealed class ScenarioHooks
         }
 
         throw new InvalidOperationException("HushTestFixture not found in ScenarioContext.");
+    }
+
+    /// <summary>
+    /// Gets the PlaywrightFixture from ScenarioContext.
+    /// Only available in scenarios tagged with @E2E.
+    /// </summary>
+    public PlaywrightFixture GetPlaywright()
+    {
+        if (_scenarioContext.TryGetValue(PlaywrightKey, out var playwrightObj)
+            && playwrightObj is PlaywrightFixture playwright)
+        {
+            return playwright;
+        }
+
+        throw new InvalidOperationException(
+            "PlaywrightFixture not found in ScenarioContext. " +
+            "Ensure the scenario is tagged with @E2E.");
     }
 }
