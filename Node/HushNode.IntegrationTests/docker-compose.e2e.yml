@@ -1,22 +1,26 @@
 # docker-compose.e2e.yml
 # HushWebClient container for E2E integration tests
 #
-# Usage:
-#   GRPC_PORT=54321 docker compose -f docker-compose.e2e.yml up -d --build --wait
-#   docker compose -f docker-compose.e2e.yml down --remove-orphans
+# IMPORTANT: This uses a PRE-BUILT image to avoid slow rebuilds during tests.
+# The gRPC-Web port is fixed at 14666 (HushServerNodeCore.E2EGrpcWebPort).
 #
-# The GRPC_PORT environment variable is required - it specifies the port
-# where HushServerNodeCore is listening for gRPC connections.
+# First-time setup (run once, or after web client code changes):
+#   docker compose -f docker-compose.e2e.yml build
+#
+# Running tests (uses cached image, no rebuild):
+#   docker compose -f docker-compose.e2e.yml up -d --wait
+#   docker compose -f docker-compose.e2e.yml down --remove-orphans
 
 services:
   hush-web-client:
+    image: hush-web-client-e2e:latest
     build:
-      # Build context is repo root (3 levels up from this file)
+      # Build context is repo root (2 levels up from this file)
       context: ../..
       dockerfile: hush-web-client/Dockerfile
       args:
-        # Dynamic gRPC URL using host.docker.internal to reach the test server
-        - NEXT_PUBLIC_GRPC_URL=http://host.docker.internal:${GRPC_PORT:-4666}
+        # Fixed gRPC-Web port - must match HushServerNodeCore.E2EGrpcWebPort (14666)
+        - NEXT_PUBLIC_GRPC_URL=http://host.docker.internal:14666
         - NEXT_PUBLIC_DEBUG_LOGGING=true
     ports:
       - "3000:3000"

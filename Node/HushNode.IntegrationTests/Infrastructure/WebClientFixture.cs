@@ -43,28 +43,26 @@ internal sealed class WebClientFixture : IAsyncDisposable
     }
 
     /// <summary>
-    /// Starts HushWebClient container with the specified gRPC port.
+    /// Starts HushWebClient container using pre-built image.
+    /// The image must be built first with: docker compose -f docker-compose.e2e.yml build
+    /// Uses fixed gRPC-Web port 14666 (HushServerNodeCore.E2EGrpcWebPort).
     /// </summary>
-    /// <param name="grpcPort">The port HushServerNodeCore is listening on.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public async Task StartAsync(int grpcPort, CancellationToken cancellationToken = default)
+    public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         if (_started)
             return;
 
-        // Start container with dynamic port
+        // Start container using pre-built image (no --build flag for speed)
         var startInfo = new ProcessStartInfo
         {
             FileName = "docker",
-            Arguments = $"compose -f \"{_composeFilePath}\" up -d --build --wait",
+            Arguments = $"compose -f \"{_composeFilePath}\" up -d --wait",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
-
-        // Set GRPC_PORT environment variable
-        startInfo.Environment["GRPC_PORT"] = grpcPort.ToString();
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start docker compose process");
@@ -75,6 +73,16 @@ internal sealed class WebClientFixture : IAsyncDisposable
         {
             var stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken);
             var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+
+            // Check if image doesn't exist - provide helpful message
+            if (stderr.Contains("no such image") || stderr.Contains("pull access denied"))
+            {
+                throw new InvalidOperationException(
+                    $"E2E test image not found. Build it first with:\n" +
+                    $"  cd Node/HushNode.IntegrationTests && docker compose -f docker-compose.e2e.yml build\n\n" +
+                    $"Original error: {stderr}");
+            }
+
             throw new InvalidOperationException(
                 $"Docker compose failed with exit code {process.ExitCode}.\n" +
                 $"Stdout: {stdout}\n" +

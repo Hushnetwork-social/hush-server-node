@@ -124,6 +124,7 @@ internal sealed class HushTestFixture : IAsyncLifetime
 
     /// <summary>
     /// Creates and starts a new HushServerNodeCore configured for testing.
+    /// Uses dynamic ports for test isolation.
     /// </summary>
     /// <param name="diagnosticCapture">Optional diagnostic capture for collecting logs.</param>
     /// <returns>A running HushServerNodeCore instance</returns>
@@ -135,6 +136,29 @@ internal sealed class HushTestFixture : IAsyncLifetime
             blockControl,
             PostgresConnectionString,
             RedisConnectionString,  // FEAT-046: Pass Redis connection for cache testing
+            diagnosticCapture);
+
+        await node.StartAsync();
+
+        var grpcFactory = new GrpcClientFactory("localhost", node.GrpcPort);
+
+        return (node, blockControl, grpcFactory);
+    }
+
+    /// <summary>
+    /// Creates and starts a new HushServerNodeCore configured for E2E testing.
+    /// Uses fixed ports (14665/14666) so pre-built Docker images can connect.
+    /// </summary>
+    /// <param name="diagnosticCapture">Optional diagnostic capture for collecting logs.</param>
+    /// <returns>A running HushServerNodeCore instance</returns>
+    public async Task<(HushServerNodeCore Node, BlockProductionControl BlockControl, GrpcClientFactory GrpcFactory)> StartNodeForE2EAsync(
+        DiagnosticCapture? diagnosticCapture = null)
+    {
+        var blockControl = new BlockProductionControl();
+        var node = HushServerNodeCore.CreateForE2ETesting(
+            blockControl,
+            PostgresConnectionString,
+            RedisConnectionString,
             diagnosticCapture);
 
         await node.StartAsync();

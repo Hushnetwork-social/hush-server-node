@@ -125,8 +125,14 @@ internal sealed class ScenarioHooks
         // Create diagnostic capture for this scenario
         var diagnostics = new DiagnosticCapture();
 
+        // Check if this is an E2E scenario (needs fixed ports for Docker)
+        var isE2E = _scenarioContext.ScenarioInfo.Tags.Contains("E2E");
+
         // Start a fresh node for this scenario with diagnostic capture
-        var (node, blockControl, grpcFactory) = await _fixture.StartNodeAsync(diagnostics);
+        // E2E tests use fixed ports so pre-built Docker images can connect
+        var (node, blockControl, grpcFactory) = isE2E
+            ? await _fixture.StartNodeForE2EAsync(diagnostics)
+            : await _fixture.StartNodeAsync(diagnostics);
 
         // Store in ScenarioContext for step definitions
         _scenarioContext[NodeKey] = node;
@@ -168,13 +174,13 @@ internal sealed class ScenarioHooks
 
     /// <summary>
     /// Starts the WebClient container for E2E scenarios.
-    /// Must be called after the node is started to get the gRPC port.
+    /// Uses pre-built Docker image with fixed gRPC-Web port 14666.
     /// </summary>
     private async Task StartWebClientAsync()
     {
-        // Get the gRPC port from the running node
+        // Verify node is running (it should be started by BeforeScenario)
         if (!_scenarioContext.TryGetValue(NodeKey, out var nodeObj)
-            || nodeObj is not HushServerNodeCore node)
+            || nodeObj is not HushServerNodeCore)
         {
             throw new InvalidOperationException(
                 "Node must be started before WebClient. Ensure BeforeScenario runs before BeforeE2EScenario.");
@@ -190,7 +196,8 @@ internal sealed class ScenarioHooks
 
             if (!_webClientFixture.IsStarted)
             {
-                await _webClientFixture.StartAsync(node.GrpcWebPort);
+                // Uses pre-built image with fixed port - no rebuild needed
+                await _webClientFixture.StartAsync();
             }
         }
         finally

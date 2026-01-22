@@ -97,6 +97,36 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
     }
 
     /// <summary>
+    /// Fixed port for gRPC-Web in E2E tests. Pre-built Docker images use this port.
+    /// </summary>
+    public const int E2EGrpcWebPort = 14666;
+
+    /// <summary>
+    /// Creates a HushServerNodeCore configured for E2E testing with fixed ports.
+    /// Uses fixed ports so pre-built Docker images can connect without rebuilding.
+    /// </summary>
+    /// <param name="blockProductionControl">The block production control for synchronous block triggers.</param>
+    /// <param name="connectionString">PostgreSQL connection string for test database.</param>
+    /// <param name="redisConnectionString">Optional Redis connection string for test Redis.</param>
+    /// <param name="diagnosticLoggerProvider">Optional logger provider for capturing diagnostic output.</param>
+    public static HushServerNodeCore CreateForE2ETesting(
+        BlockProductionControl blockProductionControl,
+        string connectionString,
+        string? redisConnectionString = null,
+        ILoggerProvider? diagnosticLoggerProvider = null)
+    {
+        var testConfig = new TestConfiguration(
+            blockProductionControl,
+            connectionString,
+            redisConnectionString,
+            diagnosticLoggerProvider,
+            FixedGrpcPort: 14665,
+            FixedGrpcWebPort: E2EGrpcWebPort);
+        var app = BuildApplication(Array.Empty<string>(), testConfig);
+        return new HushServerNodeCore(app, blockProductionControl, isTestMode: true);
+    }
+
+    /// <summary>
     /// Runs the node and blocks until shutdown is requested.
     /// Used for production mode where the node runs until terminated.
     /// </summary>
@@ -243,8 +273,10 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
 
             builder.Configuration.AddInMemoryCollection(configValues);
 
-            // Use port 0 for dynamic port allocation
-            ConfigureKestrel(builder.WebHost, nativeGrpcPort: 0, grpcWebPort: 0);
+            // Use fixed ports if specified (for E2E tests), otherwise dynamic ports (port 0)
+            var nativeGrpcPort = testConfig.FixedGrpcPort ?? 0;
+            var grpcWebPort = testConfig.FixedGrpcWebPort ?? 0;
+            ConfigureKestrel(builder.WebHost, nativeGrpcPort, grpcWebPort);
         }
 
         ConfigureServices(builder, testConfig);
@@ -478,5 +510,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         BlockProductionControl BlockProductionControl,
         string ConnectionString,
         string? RedisConnectionString,
-        ILoggerProvider? DiagnosticLoggerProvider);
+        ILoggerProvider? DiagnosticLoggerProvider,
+        int? FixedGrpcPort = null,
+        int? FixedGrpcWebPort = null);
 }
