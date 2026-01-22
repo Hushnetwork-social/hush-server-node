@@ -34,6 +34,7 @@ using HushNode.Notifications.Models;
 using HushNode.PushNotifications;
 using StackExchange.Redis;
 using HushNode.UrlMetadata.gRPC;
+using HushNode.Events;
 using HushServerNode.Testing;
 
 namespace HushServerNode;
@@ -213,14 +214,14 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
     }
 
     /// <summary>
-    /// Waits for the mempool to have at least the specified number of pending transactions.
+    /// Waits for transaction(s) to be received via the TransactionReceivedEvent.
     /// Only available in test mode. Use this to synchronize with web client transaction submissions
-    /// before producing a block.
+    /// before producing a block. Uses event-driven waiting instead of polling.
     /// </summary>
     /// <param name="minTransactions">Minimum number of transactions to wait for. Defaults to 1.</param>
     /// <param name="timeout">Maximum time to wait. Defaults to 10 seconds.</param>
     /// <exception cref="InvalidOperationException">Thrown if not in test mode.</exception>
-    /// <exception cref="TimeoutException">Thrown if the condition is not met within the timeout.</exception>
+    /// <exception cref="TimeoutException">Thrown if the transactions are not received within the timeout.</exception>
     public async Task WaitForPendingTransactionsAsync(int minTransactions = 1, TimeSpan? timeout = null)
     {
         if (!_isTestMode)
@@ -229,22 +230,69 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         }
 
         var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(10);
-        var memPool = _app.Services.GetRequiredService<IMemPoolService>();
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var eventAggregator = _app.Services.GetRequiredService<IEventAggregator>();
 
-        while (stopwatch.Elapsed < effectiveTimeout)
-        {
-            var pendingCount = memPool.GetPendingValidatedTransactionsAsync().Count();
-            if (pendingCount >= minTransactions)
+        var receivedCount = 0;
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Create a temporary subscriber for TransactionReceivedEvent
+        var subscriber = new TransactionEventSubscriber(
+            eventAggregator,
+            transactionId =>
             {
-                return;
-            }
+                receivedCount++;
+                if (receivedCount >= minTransactions)
+                {
+                    tcs.TrySetResult(true);
+                }
+            });
 
-            await Task.Delay(50);
+        try
+        {
+            using var cts = new CancellationTokenSource(effectiveTimeout);
+            cts.Token.Register(() => tcs.TrySetCanceled());
+
+            await tcs.Task;
+        }
+        catch (TaskCanceledException)
+        {
+            throw new TimeoutException(
+                $"Did not receive {minTransactions} transaction(s) within {effectiveTimeout.TotalSeconds} seconds. " +
+                $"Received: {receivedCount}");
+        }
+        finally
+        {
+            subscriber.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Helper class to subscribe to TransactionReceivedEvent for test synchronization.
+    /// </summary>
+    private sealed class TransactionEventSubscriber : IHandleAsync<TransactionReceivedEvent>, IDisposable
+    {
+        private readonly IEventAggregator _eventAggregator;
+        private readonly Action<HushShared.Blockchain.TransactionModel.TransactionId> _onTransactionReceived;
+
+        public TransactionEventSubscriber(
+            IEventAggregator eventAggregator,
+            Action<HushShared.Blockchain.TransactionModel.TransactionId> onTransactionReceived)
+        {
+            _eventAggregator = eventAggregator;
+            _onTransactionReceived = onTransactionReceived;
+            _eventAggregator.Subscribe(this);
         }
 
-        throw new TimeoutException(
-            $"Mempool did not reach {minTransactions} pending transaction(s) within {effectiveTimeout.TotalSeconds} seconds.");
+        public Task HandleAsync(TransactionReceivedEvent message)
+        {
+            _onTransactionReceived(message.TransactionId);
+            return Task.CompletedTask;
+        }
+
+        public void Dispose()
+        {
+            _eventAggregator.Unsubscribe(this);
+        }
     }
 
     public async ValueTask DisposeAsync()
