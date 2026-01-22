@@ -1,5 +1,6 @@
 using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
+using HushServerNode;
 using HushServerNode.Testing;
 using TechTalk.SpecFlow;
 
@@ -21,13 +22,49 @@ public sealed class CommonSteps
 
     /// <summary>
     /// Triggers block production. Works with Given, When, or And keywords.
-    /// Includes a small delay to ensure database commits are fully propagated
-    /// before subsequent queries (prevents flaky tests).
+    /// Waits for BlockIndexCompletedEvent to ensure all indexing is complete
+    /// before returning (guarantees data is persisted and queryable).
     /// </summary>
     [Given(@"a block is produced")]
     [When(@"a block is produced")]
     public async Task ABlockIsProduced()
     {
+        var blockControl = GetBlockControl();
+        await blockControl.ProduceBlockAsync();
+    }
+
+    /// <summary>
+    /// Waits for the transaction to reach the mempool, then produces a block.
+    /// Use this after a UI action that submits a transaction to avoid race conditions.
+    /// The step waits for BlockIndexCompletedEvent to ensure indexing is complete.
+    /// </summary>
+    [When(@"the transaction is processed")]
+    [Given(@"the transaction is processed")]
+    public async Task WhenTheTransactionIsProcessed()
+    {
+        var node = GetNode();
+
+        // Wait for the transaction to reach the mempool
+        await node.WaitForPendingTransactionsAsync(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        // Produce block and wait for indexing to complete (BlockIndexCompletedEvent)
+        var blockControl = GetBlockControl();
+        await blockControl.ProduceBlockAsync();
+    }
+
+    /// <summary>
+    /// Waits for a specific number of transactions to reach the mempool, then produces a block.
+    /// </summary>
+    [When(@"(\d+) transactions? (?:is|are) processed")]
+    [Given(@"(\d+) transactions? (?:is|are) processed")]
+    public async Task WhenTransactionsAreProcessed(int transactionCount)
+    {
+        var node = GetNode();
+
+        // Wait for the transactions to reach the mempool
+        await node.WaitForPendingTransactionsAsync(minTransactions: transactionCount, timeout: TimeSpan.FromSeconds(15));
+
+        // Produce block and wait for indexing to complete (BlockIndexCompletedEvent)
         var blockControl = GetBlockControl();
         await blockControl.ProduceBlockAsync();
     }
@@ -40,5 +77,15 @@ public sealed class CommonSteps
             return blockControl;
         }
         throw new InvalidOperationException("BlockProductionControl not found in ScenarioContext.");
+    }
+
+    private HushServerNodeCore GetNode()
+    {
+        if (_scenarioContext.TryGetValue(ScenarioHooks.NodeKey, out var nodeObj)
+            && nodeObj is HushServerNodeCore node)
+        {
+            return node;
+        }
+        throw new InvalidOperationException("HushServerNodeCore not found in ScenarioContext.");
     }
 }

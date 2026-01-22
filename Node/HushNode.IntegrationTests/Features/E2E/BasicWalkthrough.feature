@@ -13,20 +13,20 @@ Feature: Basic User Walkthrough
     Scenario: New user creates identity through browser
         When the user navigates to "/auth"
         And the user creates a new identity with display name "TestUser"
-        # The web client handles waiting for blockchain transactions internally
-        # The dashboard redirect confirms the identity was created successfully
+        # Wait for identity transaction to reach mempool, produce block, wait for indexing
+        And the transaction is processed
         Then the user should be redirected to "/dashboard"
 
     @PersonalFeed
     Scenario: User sends message to personal feed
-        # Setup: Create identity first
+        # Setup: Create identity first (uses event-based waiting)
         Given the user has created identity "TestUser" via browser
-        And a block is produced
 
         # Action: Send message
         When the user clicks on their personal feed
         And the user sends message "Hello World!"
-        And a block is produced
+        # Wait for message transaction to reach mempool, produce block, wait for indexing
+        And the transaction is processed
 
         # Verification
         Then the message "Hello World!" should be visible in the chat
@@ -36,13 +36,12 @@ Feature: Basic User Walkthrough
     Scenario: User adds reaction to a message
         # Setup: Create identity and send message
         Given the user has created identity "TestUser" via browser
-        And a block is produced
         And the user has sent message "Test message" to their personal feed
-        And a block is produced
 
         # Action: Add reaction (using thumbs-up emoji index 0)
         When the user adds reaction 0 to the message "Test message"
-        And a block is produced
+        # Wait for reaction transaction to reach mempool, produce block, wait for indexing
+        And the transaction is processed
 
         # Verification
         Then the message "Test message" should show a reaction badge

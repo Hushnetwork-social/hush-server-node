@@ -60,6 +60,9 @@ internal sealed class MessageSteps : BrowserStepsBase
 
         // Send the message
         await WhenTheUserSendsMessage(message);
+
+        // Wait for transaction to reach mempool, produce block, wait for indexing
+        await WaitForTransactionAndProduceBlockAsync();
     }
 
     [Then(@"the message ""(.*)"" should be visible in the chat")]

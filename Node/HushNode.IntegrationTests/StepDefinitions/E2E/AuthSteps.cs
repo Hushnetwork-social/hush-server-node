@@ -61,8 +61,10 @@ internal sealed class AuthSteps : BrowserStepsBase
         await createButton.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 10000 });
         await createButton.ClickAsync();
 
-        // Wait for navigation to dashboard (this includes blockchain transaction processing)
-        await page.WaitForURLAsync("**/dashboard**", new PageWaitForURLOptions { Timeout = 60000 });
+        // NOTE: Do NOT wait for redirect here - the test must produce a block first
+        // The web client submits the transaction and waits for confirmation,
+        // but in test mode, blocks are only produced when the test triggers them.
+        // The "transaction is processed" step will wait for mempool and produce block.
 
         // Store display name for later steps
         ScenarioContext["UserDisplayName"] = displayName;
@@ -73,6 +75,13 @@ internal sealed class AuthSteps : BrowserStepsBase
     {
         await WhenTheUserNavigatesTo("/auth");
         await WhenTheUserCreatesIdentity(displayName);
+
+        // Wait for transaction to reach mempool, produce block, wait for indexing
+        await WaitForTransactionAndProduceBlockAsync();
+
+        // Now wait for redirect to dashboard (identity is confirmed)
+        var page = await GetOrCreatePageAsync();
+        await page.WaitForURLAsync("**/dashboard**", new PageWaitForURLOptions { Timeout = 15000 });
     }
 
     [Then(@"the user should be redirected to ""(.*)""")]

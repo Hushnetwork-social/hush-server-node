@@ -2,6 +2,8 @@ using Microsoft.Playwright;
 using TechTalk.SpecFlow;
 using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
+using HushServerNode;
+using HushServerNode.Testing;
 
 namespace HushNode.IntegrationTests.StepDefinitions.E2E;
 
@@ -155,5 +157,48 @@ internal abstract class BrowserStepsBase
     protected async Task WaitForNetworkIdleAsync(IPage page)
     {
         await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+    }
+
+    /// <summary>
+    /// Gets the HushServerNodeCore from ScenarioContext.
+    /// </summary>
+    protected HushServerNodeCore GetNode()
+    {
+        if (ScenarioContext.TryGetValue(ScenarioHooks.NodeKey, out var obj)
+            && obj is HushServerNodeCore node)
+        {
+            return node;
+        }
+        throw new InvalidOperationException("HushServerNodeCore not found in ScenarioContext.");
+    }
+
+    /// <summary>
+    /// Gets the BlockProductionControl from ScenarioContext.
+    /// </summary>
+    protected BlockProductionControl GetBlockControl()
+    {
+        if (ScenarioContext.TryGetValue(ScenarioHooks.BlockControlKey, out var obj)
+            && obj is BlockProductionControl control)
+        {
+            return control;
+        }
+        throw new InvalidOperationException("BlockProductionControl not found in ScenarioContext.");
+    }
+
+    /// <summary>
+    /// Waits for transaction(s) to reach the mempool, produces a block, and waits for indexing.
+    /// Use this after UI actions that submit transactions to ensure data is persisted.
+    /// </summary>
+    /// <param name="minTransactions">Minimum number of transactions to wait for (default: 1).</param>
+    protected async Task WaitForTransactionAndProduceBlockAsync(int minTransactions = 1)
+    {
+        var node = GetNode();
+        var blockControl = GetBlockControl();
+
+        // Wait for transaction(s) to reach the mempool
+        await node.WaitForPendingTransactionsAsync(minTransactions, timeout: TimeSpan.FromSeconds(10));
+
+        // Produce block and wait for indexing to complete (BlockIndexCompletedEvent)
+        await blockControl.ProduceBlockAsync();
     }
 }

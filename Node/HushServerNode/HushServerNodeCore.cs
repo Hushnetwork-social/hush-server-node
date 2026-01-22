@@ -212,6 +212,41 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         await _blockProductionControl.ProduceBlockAsync();
     }
 
+    /// <summary>
+    /// Waits for the mempool to have at least the specified number of pending transactions.
+    /// Only available in test mode. Use this to synchronize with web client transaction submissions
+    /// before producing a block.
+    /// </summary>
+    /// <param name="minTransactions">Minimum number of transactions to wait for. Defaults to 1.</param>
+    /// <param name="timeout">Maximum time to wait. Defaults to 10 seconds.</param>
+    /// <exception cref="InvalidOperationException">Thrown if not in test mode.</exception>
+    /// <exception cref="TimeoutException">Thrown if the condition is not met within the timeout.</exception>
+    public async Task WaitForPendingTransactionsAsync(int minTransactions = 1, TimeSpan? timeout = null)
+    {
+        if (!_isTestMode)
+        {
+            throw new InvalidOperationException("WaitForPendingTransactionsAsync is only available in test mode.");
+        }
+
+        var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(10);
+        var memPool = _app.Services.GetRequiredService<IMemPoolService>();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        while (stopwatch.Elapsed < effectiveTimeout)
+        {
+            var pendingCount = memPool.GetPendingValidatedTransactionsAsync().Count();
+            if (pendingCount >= minTransactions)
+            {
+                return;
+            }
+
+            await Task.Delay(50);
+        }
+
+        throw new TimeoutException(
+            $"Mempool did not reach {minTransactions} pending transaction(s) within {effectiveTimeout.TotalSeconds} seconds.");
+    }
+
     public async ValueTask DisposeAsync()
     {
         await _app.StopAsync();
