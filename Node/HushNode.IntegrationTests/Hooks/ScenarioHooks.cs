@@ -1,3 +1,4 @@
+using System.Linq;
 using HushNode.IntegrationTests.Infrastructure;
 using HushServerNode;
 using HushServerNode.Testing;
@@ -126,13 +127,19 @@ internal sealed class ScenarioHooks
         var diagnostics = new DiagnosticCapture();
 
         // Check if this is an E2E scenario (needs fixed ports for Docker)
-        var isE2E = _scenarioContext.ScenarioInfo.Tags.Contains("E2E");
+        // Tags include both feature-level and scenario-level tags
+        var allTags = _scenarioContext.ScenarioInfo.Tags;
+        var isE2E = allTags.Any(t => t.Equals("E2E", StringComparison.OrdinalIgnoreCase));
+
+        _outputHelper.WriteLine($"[ScenarioHooks] Tags: [{string.Join(", ", allTags)}], IsE2E: {isE2E}");
 
         // Start a fresh node for this scenario with diagnostic capture
         // E2E tests use fixed ports so pre-built Docker images can connect
         var (node, blockControl, grpcFactory) = isE2E
             ? await _fixture.StartNodeForE2EAsync(diagnostics)
             : await _fixture.StartNodeAsync(diagnostics);
+
+        _outputHelper.WriteLine($"[ScenarioHooks] Node started on ports gRPC:{node.GrpcPort}, gRPC-Web:{node.GrpcWebPort}");
 
         // Store in ScenarioContext for step definitions
         _scenarioContext[NodeKey] = node;

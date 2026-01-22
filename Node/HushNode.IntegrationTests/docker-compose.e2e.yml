@@ -27,11 +27,12 @@ services:
     environment:
       - NODE_ENV=production
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
+      # Use node for health check since Next.js standalone may not have wget/curl
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 3s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
     extra_hosts:
       # Enable container to reach host machine
       - "host.docker.internal:host-gateway"
