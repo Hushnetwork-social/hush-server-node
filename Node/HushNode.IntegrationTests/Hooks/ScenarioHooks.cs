@@ -48,8 +48,16 @@ internal sealed class ScenarioHooks
     /// </summary>
     public const string PlaywrightKey = "PlaywrightFixture";
 
+    /// <summary>
+    /// Context key for accessing the WebClientFixture instance.
+    /// </summary>
+    public const string WebClientKey = "WebClientFixture";
+
     private static PlaywrightFixture? _playwrightFixture;
     private static readonly SemaphoreSlim _playwrightLock = new(1, 1);
+
+    private static WebClientFixture? _webClientFixture;
+    private static readonly SemaphoreSlim _webClientLock = new(1, 1);
 
     private readonly ISpecFlowOutputHelper _outputHelper;
 
@@ -75,6 +83,13 @@ internal sealed class ScenarioHooks
     [AfterTestRun]
     public static async Task AfterTestRun()
     {
+        // Dispose WebClient container if it was started
+        if (_webClientFixture != null)
+        {
+            await _webClientFixture.DisposeAsync();
+            _webClientFixture = null;
+        }
+
         // Dispose Playwright if it was initialized
         if (_playwrightFixture != null)
         {
@@ -146,6 +161,44 @@ internal sealed class ScenarioHooks
 
         // Store in ScenarioContext for E2E step definitions
         _scenarioContext[PlaywrightKey] = _playwrightFixture;
+
+        // Start WebClient container with the node's gRPC port
+        await StartWebClientAsync();
+    }
+
+    /// <summary>
+    /// Starts the WebClient container for E2E scenarios.
+    /// Must be called after the node is started to get the gRPC port.
+    /// </summary>
+    private async Task StartWebClientAsync()
+    {
+        // Get the gRPC port from the running node
+        if (!_scenarioContext.TryGetValue(NodeKey, out var nodeObj)
+            || nodeObj is not HushServerNodeCore node)
+        {
+            throw new InvalidOperationException(
+                "Node must be started before WebClient. Ensure BeforeScenario runs before BeforeE2EScenario.");
+        }
+
+        await _webClientLock.WaitAsync();
+        try
+        {
+            if (_webClientFixture == null)
+            {
+                _webClientFixture = new WebClientFixture();
+            }
+
+            if (!_webClientFixture.IsStarted)
+            {
+                await _webClientFixture.StartAsync(node.GrpcWebPort);
+            }
+        }
+        finally
+        {
+            _webClientLock.Release();
+        }
+
+        _scenarioContext[WebClientKey] = _webClientFixture;
     }
 
     /// <summary>
@@ -301,6 +354,23 @@ internal sealed class ScenarioHooks
 
         throw new InvalidOperationException(
             "PlaywrightFixture not found in ScenarioContext. " +
+            "Ensure the scenario is tagged with @E2E.");
+    }
+
+    /// <summary>
+    /// Gets the WebClientFixture from ScenarioContext.
+    /// Only available in scenarios tagged with @E2E.
+    /// </summary>
+    public WebClientFixture GetWebClient()
+    {
+        if (_scenarioContext.TryGetValue(WebClientKey, out var webClientObj)
+            && webClientObj is WebClientFixture webClient)
+        {
+            return webClient;
+        }
+
+        throw new InvalidOperationException(
+            "WebClientFixture not found in ScenarioContext. " +
             "Ensure the scenario is tagged with @E2E.");
     }
 }
