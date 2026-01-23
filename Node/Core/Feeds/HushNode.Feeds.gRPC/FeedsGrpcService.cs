@@ -77,6 +77,13 @@ public class FeedsGrpcService(
             request.ProfilePublicKey?.Substring(0, Math.Min(20, request.ProfilePublicKey?.Length ?? 0)),
             request.BlockIndex);
 
+        // Return empty result if no profile key provided
+        if (string.IsNullOrEmpty(request.ProfilePublicKey))
+        {
+            _logger.LogWarning("[GetFeedsForAddress] No ProfilePublicKey provided, returning empty result");
+            return new GetFeedForAddressReply();
+        }
+
         var lastFeeds = await this._feedsStorageService
             .RetrieveFeedsForAddress(request.ProfilePublicKey, blockIndex);
 
