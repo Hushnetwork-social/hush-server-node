@@ -23,6 +23,8 @@ public class IndexingDispatcherService :
 
     public async Task HandleAsync(BlockCreatedEvent message)
     {
+        Console.WriteLine($"[E2E] IndexingDispatcherService: Processing block {message.Block.BlockIndex.Value} with {message.Block.Transactions.Count()} transaction(s)");
+
         var processingTasks = message.Block.Transactions
             .Select(async transaction =>
             {
@@ -36,6 +38,7 @@ public class IndexingDispatcherService :
         await Task.WhenAll(processingTasks);
 
         // Signal that all indexing for this block is complete
+        Console.WriteLine($"[E2E] IndexingDispatcherService: Publishing BlockIndexCompletedEvent for block {message.Block.BlockIndex.Value}");
         await this._eventAggregator.PublishAsync(new BlockIndexCompletedEvent(message.Block.BlockIndex));
     }
 }

@@ -17,10 +17,21 @@ public class NewReactionIndexStrategy : IIndexStrategy
         _reactionTransactionHandler = reactionTransactionHandler;
     }
 
-    public bool CanHandle(AbstractTransaction transaction) =>
-        NewReactionPayloadHandler.NewReactionPayloadKind == transaction.PayloadKind;
+    public bool CanHandle(AbstractTransaction transaction)
+    {
+        var canHandle = NewReactionPayloadHandler.NewReactionPayloadKind == transaction.PayloadKind;
+        if (canHandle)
+        {
+            Console.WriteLine($"[E2E Reaction] NewReactionIndexStrategy.CanHandle: TRUE - PayloadKind matches");
+        }
+        return canHandle;
+    }
 
-    public async Task HandleAsync(AbstractTransaction transaction) =>
+    public async Task HandleAsync(AbstractTransaction transaction)
+    {
+        Console.WriteLine($"[E2E Reaction] NewReactionIndexStrategy.HandleAsync: Processing reaction transaction {transaction.TransactionId}");
         await _reactionTransactionHandler.HandleReactionTransaction(
             (ValidatedTransaction<NewReactionPayload>)transaction);
+        Console.WriteLine($"[E2E Reaction] NewReactionIndexStrategy.HandleAsync: Completed processing transaction {transaction.TransactionId}");
+    }
 }

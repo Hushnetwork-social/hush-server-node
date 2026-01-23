@@ -17,6 +17,8 @@ public class JoinGroupFeedTransactionHandler(
     IBlockchainCache blockchainCache,
     IKeyRotationService keyRotationService,
     IUserFeedsCacheService userFeedsCacheService,
+    IFeedParticipantsCacheService feedParticipantsCacheService,
+    IGroupMembersCacheService groupMembersCacheService,
     IEventAggregator eventAggregator)
     : IJoinGroupFeedTransactionHandler
 {
@@ -24,6 +26,8 @@ public class JoinGroupFeedTransactionHandler(
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IKeyRotationService _keyRotationService = keyRotationService;
     private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
+    private readonly IFeedParticipantsCacheService _feedParticipantsCacheService = feedParticipantsCacheService;
+    private readonly IGroupMembersCacheService _groupMembersCacheService = groupMembersCacheService;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
 
     public async Task HandleJoinGroupFeedTransactionAsync(ValidatedTransaction<JoinGroupFeedPayload> transaction)
@@ -63,18 +67,52 @@ public class JoinGroupFeedTransactionHandler(
 
         // Trigger key rotation to distribute encryption keys to the new member
         // This ensures the joining user immediately receives keys to send and receive messages
-        await this._keyRotationService.TriggerAndPersistRotationAsync(
+        var keyRotationResult = await this._keyRotationService.TriggerAndPersistRotationAsync(
             payload.FeedId,
             RotationTrigger.Join,
             joiningMemberAddress: joiningUserAddress,
             leavingMemberAddress: null);
 
+        if (!keyRotationResult.IsSuccess)
+        {
+            Console.WriteLine($"[JoinGroupFeed] WARNING: Key rotation failed for feed {payload.FeedId.Value.ToString().Substring(0, 8)}...");
+            Console.WriteLine($"[JoinGroupFeed] Reason: {keyRotationResult.ErrorMessage}");
+            Console.WriteLine($"[JoinGroupFeed] User {joiningUserAddress.Substring(0, 10)}... joined but cannot decrypt messages.");
+        }
+        else
+        {
+            Console.WriteLine($"[JoinGroupFeed] Key rotation succeeded for feed {payload.FeedId.Value.ToString().Substring(0, 8)}... - KeyGen: {keyRotationResult.NewKeyGeneration}");
+
+            // CRITICAL: Invalidate KeyGenerations cache SYNCHRONOUSLY before client queries
+            // The async event (UserJoinedGroupEvent) causes a race condition where the client
+            // queries the cache before invalidation happens
+            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(payload.FeedId);
+            Console.WriteLine($"[JoinGroupFeed] KeyGenerations cache invalidated for feed {payload.FeedId.Value.ToString().Substring(0, 8)}...");
+
+            // CRITICAL: Update LastUpdatedAtBlock so existing members receive new keys in their delta sync
+            // Without this, existing members' delta sync won't return the group (JoinedAtBlock < blockIndex)
+            // and they won't receive the new KeyGeneration needed to decrypt messages from new members
+            await this._feedsStorageService.UpdateGroupFeedLastUpdatedAtBlockAsync(payload.FeedId, currentBlock);
+            Console.WriteLine($"[JoinGroupFeed] LastUpdatedAtBlock set to {currentBlock} for feed {payload.FeedId.Value.ToString().Substring(0, 8)}...");
+        }
+
+        // CRITICAL: Add participant to cache SYNCHRONOUSLY before client queries
+        // The async event publishing causes a race condition where the client
+        // queries GetFeedsForAddress before the cache is updated
+        await this._feedParticipantsCacheService.AddParticipantAsync(payload.FeedId, joiningUserAddress);
+        Console.WriteLine($"[JoinGroupFeed] Participant added to cache for feed {payload.FeedId.Value.ToString().Substring(0, 8)}...");
+
+        // CRITICAL: Invalidate group members cache so GetGroupMembers returns fresh data including the new member
+        // Without this, clients see "You are no longer a member" because the cached member list doesn't include them
+        await this._groupMembersCacheService.InvalidateGroupMembersAsync(payload.FeedId);
+        Console.WriteLine($"[JoinGroupFeed] Group members cache invalidated for feed {payload.FeedId.Value.ToString().Substring(0, 8)}...");
+
         // Update the user's feed list cache (FEAT-049)
         // Cache update is fire-and-forget - failure does not affect the transaction
         await this._userFeedsCacheService.AddFeedToUserCacheAsync(joiningUserAddress, payload.FeedId);
 
-        // Publish event for feed participants cache invalidation (FEAT-050)
-        // Fire and forget - cache invalidation is secondary to blockchain state
+        // Publish event for other listeners (e.g., notifications)
+        // Note: Cache updates are done synchronously above to avoid race conditions
         _ = this._eventAggregator.PublishAsync(new UserJoinedGroupEvent(
             payload.FeedId,
             joiningUserAddress,

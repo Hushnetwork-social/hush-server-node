@@ -59,9 +59,11 @@ public class BlockchainGrpcService(
                     {
                         // add the transaction to the MemPool
                         this._memPoolService.AddVerifiedTransaction(transactionSignedByValidator);
+                        Console.WriteLine($"[E2E] Transaction added to mempool: {transactionSignedByValidator.TransactionId}");
 
                         // notify that a transaction was received (to resume block production if paused)
-                        _ = this._eventAggregator.PublishAsync(new TransactionReceivedEvent());
+                        Console.WriteLine($"[E2E] Publishing TransactionReceivedEvent: {transactionSignedByValidator.TransactionId}");
+                        _ = this._eventAggregator.PublishAsync(new TransactionReceivedEvent(transactionSignedByValidator.TransactionId));
 
                         successful = true;
                         message = "Transaction validated and added to MemPool";

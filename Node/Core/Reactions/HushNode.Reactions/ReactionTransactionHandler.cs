@@ -40,12 +40,18 @@ public class ReactionTransactionHandler : IReactionTransactionHandler
         var payload = validatedTransaction.Payload;
         var issuerPublicAddress = validatedTransaction.UserSignature?.Signatory ?? string.Empty;
 
+        Console.WriteLine($"[E2E Reaction] ReactionTransactionHandler.HandleReactionTransaction: Starting for message {payload.MessageId}");
+        Console.WriteLine($"[E2E Reaction] ReactionTransactionHandler: FeedId={payload.FeedId}, NullifierLength={payload.Nullifier.Length} bytes");
+
         _logger.LogInformation(
             "[ReactionTransactionHandler] Processing reaction for message {MessageId} from {Issuer}",
             payload.MessageId,
             issuerPublicAddress.Length > 20 ? issuerPublicAddress[..20] + "..." : issuerPublicAddress);
 
-        const int maxRetries = 3;
+        const int maxRetries = 5;
+        const int baseDelayMs = 100;
+        var random = new Random();
+
         for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
             // Use serializable transaction for atomic tally update
@@ -167,7 +173,9 @@ public class ReactionTransactionHandler : IReactionTransactionHandler
                 }
 
                 _logger.LogWarning("[ReactionTransactionHandler] Serialization conflict, retrying ({Attempt}/{MaxRetries}) for message {MessageId}", attempt, maxRetries, payload.MessageId);
-                await Task.Delay(50 * attempt); // Exponential backoff
+                // Exponential backoff with jitter to prevent synchronized retries
+                var delay = (baseDelayMs * attempt) + random.Next(0, 50);
+                await Task.Delay(delay);
             }
             catch (Exception ex)
             {

@@ -28,13 +28,21 @@ public sealed class PersonalFeedSteps
         var blockchainClient = grpcFactory.CreateClient<HushBlockchain.HushBlockchainClient>();
 
         // Produce blocks until we reach the target index
+        // This also ensures the BlockProducer's identity and personal feed (created at startup)
+        // are processed in separate blocks before user tests begin.
         var currentHeight = (await blockchainClient.GetBlockchainHeightAsync(new GetBlockchainHeightRequest())).Index;
 
         while (currentHeight < targetBlockIndex)
         {
+            Console.WriteLine($"[E2E] Producing block to reach target {targetBlockIndex}, current: {currentHeight}");
             await blockControl.ProduceBlockAsync();
             currentHeight = (await blockchainClient.GetBlockchainHeightAsync(new GetBlockchainHeightRequest())).Index;
         }
+
+        // Produce one extra block to flush any pending BlockProducer transactions
+        // (identity, personal feed) that were submitted at startup
+        Console.WriteLine("[E2E] Producing extra block to flush pending BlockProducer transactions...");
+        await blockControl.ProduceBlockAsync();
 
         currentHeight.Should().BeGreaterThanOrEqualTo(targetBlockIndex);
     }

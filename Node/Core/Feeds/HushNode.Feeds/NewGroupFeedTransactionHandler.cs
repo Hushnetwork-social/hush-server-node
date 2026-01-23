@@ -26,6 +26,10 @@ public class NewGroupFeedTransactionHandler(
         var creatorAddress = newGroupFeedTransaction.UserSignature?.Signatory
             ?? throw new InvalidOperationException("Transaction must have a valid signatory.");
 
+        Console.WriteLine($"[NewGroupFeed] Processing new group feed transaction");
+        Console.WriteLine($"[NewGroupFeed] FeedId: {payload.FeedId.Value.ToString().Substring(0, 8)}..., Title: {payload.Title}");
+        Console.WriteLine($"[NewGroupFeed] CurrentBlock: {currentBlock.Value}, Creator: {creatorAddress.Substring(0, 10)}...");
+
         // Create the GroupFeed entity
         var groupFeed = new GroupFeed(
             payload.FeedId,
@@ -85,6 +89,19 @@ public class NewGroupFeedTransactionHandler(
 
         // Store the group feed with all related entities
         await this._feedsStorageService.CreateGroupFeed(groupFeed);
+
+        // Generate invite code for public groups immediately so it's available right away
+        if (payload.IsPublic)
+        {
+            var inviteCode = await this._feedsStorageService.GenerateInviteCodeAsync(payload.FeedId);
+            Console.WriteLine($"[NewGroupFeed] Generated invite code: {inviteCode}");
+        }
+
+        Console.WriteLine($"[NewGroupFeed] GroupFeed saved with {groupFeed.Participants.Count} participants");
+        foreach (var p in groupFeed.Participants)
+        {
+            Console.WriteLine($"[NewGroupFeed] Participant: {p.ParticipantPublicAddress.Substring(0, 10)}... Type: {p.ParticipantType}, JoinedAtBlock: {p.JoinedAtBlock.Value}");
+        }
 
         // Publish event for other modules (e.g., Reactions) to handle
         // Fire and forget - don't block feed creation on reaction setup

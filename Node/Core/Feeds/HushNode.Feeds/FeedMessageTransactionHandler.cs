@@ -11,6 +11,7 @@ namespace HushNode.Feeds;
 public class FeedMessageTransactionHandler(
     IFeedMessageStorageService feedMessageStorageService,
     IFeedMessageCacheService feedMessageCacheService,
+    IFeedsStorageService feedsStorageService,
     IBlockchainCache blockchainCache,
     IEventAggregator eventAggregator,
     ILogger<FeedMessageTransactionHandler> logger)
@@ -18,6 +19,7 @@ public class FeedMessageTransactionHandler(
 {
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
     private readonly IFeedMessageCacheService _feedMessageCacheService = feedMessageCacheService;
+    private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly ILogger<FeedMessageTransactionHandler> _logger = logger;
@@ -51,6 +53,18 @@ public class FeedMessageTransactionHandler(
 
         // Write to PostgreSQL (source of truth)
         await this._feedMessageStorageService.CreateFeedMessageAsync(feedMessage);
+
+        // Update the feed's BlockIndex so clients know there's new content
+        // This is critical for sync - clients filter by BlockIndex, so if the feed's
+        // BlockIndex isn't updated, new messages may be filtered out
+        await this._feedsStorageService.UpdateFeedBlockIndexAsync(
+            feedMessage.FeedId,
+            this._blockchainCache.LastBlockIndex);
+
+        _logger.LogDebug(
+            "Updated feed {FeedId} BlockIndex to {BlockIndex} after new message",
+            feedMessage.FeedId,
+            this._blockchainCache.LastBlockIndex.Value);
 
         // Write to Redis cache (FEAT-046: write-through pattern)
         // Log and continue on failure - Redis failure should not break the write path

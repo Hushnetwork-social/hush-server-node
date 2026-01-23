@@ -68,6 +68,7 @@ public class FeedMessageCacheService : IFeedMessageCacheService
     public async Task AddMessageAsync(FeedId feedId, FeedMessage message)
     {
         var key = GetKey(feedId);
+        Console.WriteLine($"[FeedMessageCache] AddMessageAsync called for feed {feedId.ToString().Substring(0, 8)}..., message {message.FeedMessageId.ToString().Substring(0, 8)}..., BlockIndex={message.BlockIndex.Value}");
 
         try
         {
@@ -84,6 +85,7 @@ public class FeedMessageCacheService : IFeedMessageCacheService
             await transaction.ExecuteAsync();
 
             Interlocked.Increment(ref _writeOperations);
+            Console.WriteLine($"[FeedMessageCache] AddMessageAsync SUCCESS for feed {feedId.ToString().Substring(0, 8)}..., key={key}");
             _logger.LogDebug(
                 "Added message {MessageId} to cache for feed {FeedId}",
                 message.FeedMessageId,
@@ -138,10 +140,11 @@ public class FeedMessageCacheService : IFeedMessageCacheService
             }
 
             // Server-side filtering by BlockIndex if requested
+            // Use >= to match the database query (FeedMessageRepository.RetrieveMessagesForFeedAsync)
             IEnumerable<FeedMessage> result = messages;
             if (sinceBlockIndex != null)
             {
-                result = messages.Where(m => m.BlockIndex > sinceBlockIndex);
+                result = messages.Where(m => m.BlockIndex >= sinceBlockIndex);
             }
 
             Interlocked.Increment(ref _cacheHits);

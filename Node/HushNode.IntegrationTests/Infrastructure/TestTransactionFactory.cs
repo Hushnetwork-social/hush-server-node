@@ -131,10 +131,12 @@ internal static class TestTransactionFactory
     /// </summary>
     /// <param name="creator">The identity creating the group.</param>
     /// <param name="groupName">The name of the group.</param>
+    /// <param name="isPublic">Whether the group is public (anyone can join).</param>
     /// <returns>Tuple of (JSON transaction, FeedId, AES key) for later message encryption.</returns>
     public static (string Transaction, FeedId FeedId, string AesKey) CreateGroupFeed(
         TestIdentity creator,
-        string groupName)
+        string groupName,
+        bool isPublic = false)
     {
         var feedId = FeedId.NewFeedId;
         var aesKey = EncryptKeys.GenerateAesKey();
@@ -153,7 +155,7 @@ internal static class TestTransactionFactory
             feedId,
             groupName,
             Description: $"Test group: {groupName}",
-            IsPublic: false,
+            IsPublic: isPublic,
             [creatorParticipant]);
 
         var unsignedTransaction = UnsignedTransactionHandler.CreateNew(
@@ -173,7 +175,7 @@ internal static class TestTransactionFactory
     }
 
     /// <summary>
-    /// Creates a signed feed message transaction.
+    /// Creates a signed feed message transaction for Personal or Chat feeds.
     /// </summary>
     /// <param name="sender">The identity sending the message.</param>
     /// <param name="feedId">The feed to send the message to.</param>
@@ -208,5 +210,47 @@ internal static class TestTransactionFactory
             new SignatureInfo(sender.PublicSigningAddress, signature));
 
         return signedTransaction.ToJson();
+    }
+
+    /// <summary>
+    /// Creates a signed group feed message transaction with explicit KeyGeneration.
+    /// Use this for Group feeds to properly track which key was used for encryption.
+    /// </summary>
+    /// <param name="sender">The identity sending the message.</param>
+    /// <param name="feedId">The group feed to send the message to.</param>
+    /// <param name="message">The plaintext message content.</param>
+    /// <param name="feedAesKey">The AES key for the current key generation.</param>
+    /// <param name="keyGeneration">The key generation number (0-based) used for encryption.</param>
+    /// <returns>Tuple of (JSON transaction, FeedMessageId) for verification.</returns>
+    public static (string Transaction, FeedMessageId MessageId) CreateGroupFeedMessage(
+        TestIdentity sender,
+        FeedId feedId,
+        string message,
+        string feedAesKey,
+        int keyGeneration)
+    {
+        var messageId = FeedMessageId.NewFeedMessageId;
+        var encryptedContent = EncryptKeys.AesEncrypt(message, feedAesKey);
+
+        var payload = new NewGroupFeedMessagePayload(
+            messageId,
+            feedId,
+            encryptedContent,
+            keyGeneration);
+
+        var unsignedTransaction = UnsignedTransactionHandler.CreateNew(
+            NewGroupFeedMessagePayloadHandler.NewGroupFeedMessagePayloadKind,
+            Timestamp.Current,
+            payload);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            sender.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<NewGroupFeedMessagePayload>(
+            unsignedTransaction,
+            new SignatureInfo(sender.PublicSigningAddress, signature));
+
+        return (signedTransaction.ToJson(), messageId);
     }
 }

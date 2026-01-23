@@ -52,7 +52,10 @@ public class FeedsStorageService(
 
     public async Task<bool> CreatePersonalFeedIfNotExists(Feed feed, string publicSigningAddress)
     {
-        const int maxRetries = 3;
+        const int maxRetries = 5;
+        const int baseDelayMs = 100;
+        var random = new Random();
+
         for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
             try
@@ -74,17 +77,40 @@ public class FeedsStorageService(
                 await writableUnitOfWork.CommitAsync();
                 return true;
             }
-            catch (Npgsql.PostgresException ex) when (ex.SqlState == "40001") // Serialization failure
+            catch (Exception ex) when (IsSerializationFailure(ex))
             {
                 if (attempt == maxRetries)
                     throw; // Rethrow on final attempt
 
-                // Wait a bit before retrying (exponential backoff)
-                await Task.Delay(50 * attempt);
+                this._logger.LogWarning(
+                    "Serialization failure creating personal feed (attempt {Attempt}/{MaxRetries}), retrying...",
+                    attempt, maxRetries);
+
+                // Exponential backoff with jitter to prevent synchronized retries
+                // Base delay: 100ms, 200ms, 300ms, 400ms + random jitter (0-50ms)
+                var delay = (baseDelayMs * attempt) + random.Next(0, 50);
+                await Task.Delay(delay);
             }
         }
 
         return false; // Should not reach here
+    }
+
+    /// <summary>
+    /// Checks if the exception is a PostgreSQL serialization failure (40001).
+    /// EF Core wraps PostgresException in DbUpdateException and InvalidOperationException.
+    /// </summary>
+    private static bool IsSerializationFailure(Exception ex)
+    {
+        // Direct PostgresException
+        if (ex is Npgsql.PostgresException pgEx && pgEx.SqlState == "40001")
+            return true;
+
+        // Check inner exceptions (EF Core wraps the original exception)
+        if (ex.InnerException != null && IsSerializationFailure(ex.InnerException))
+            return true;
+
+        return false;
     }
 
     public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex)
@@ -250,6 +276,17 @@ public class FeedsStorageService(
         await writableUnitOfWork
             .GetRepository<IFeedsRepository>()
             .UpdateGroupFeedsLastUpdatedAtBlockForParticipantAsync(publicSigningAddress, blockIndex);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
+    public async Task UpdateGroupFeedLastUpdatedAtBlockAsync(FeedId feedId, BlockIndex blockIndex)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .UpdateGroupFeedLastUpdatedAtBlockAsync(feedId, blockIndex);
 
         await writableUnitOfWork.CommitAsync();
     }
