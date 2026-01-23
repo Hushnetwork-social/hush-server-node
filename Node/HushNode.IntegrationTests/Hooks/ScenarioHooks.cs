@@ -222,6 +222,10 @@ internal sealed class ScenarioHooks
             // Configure video recording directory for this scenario
             _playwrightFixture.VideoDirectory = scenarioFolder;
             _playwrightFixture.EnableVideoRecording = true;
+
+            // Configure trace capture (saved on failure only)
+            _playwrightFixture.TraceDirectory = Path.Combine(scenarioFolder, "traces");
+            _playwrightFixture.EnableTracing = true;
         }
         finally
         {
@@ -911,10 +915,14 @@ internal sealed class ScenarioHooks
 
     /// <summary>
     /// Closes all browser contexts to ensure videos are saved.
+    /// Stops tracing before closing - saves trace on failure, discards on success.
     /// </summary>
     private async Task CloseBrowserContextsAsync()
     {
         var userNames = new[] { "Alice", "Bob", "Charlie" };
+        var scenarioFailed = _scenarioContext.TestError != null;
+        var scenarioName = _scenarioContext.ScenarioInfo.Title;
+
         foreach (var userName in userNames)
         {
             var contextKey = $"E2E_Context_{userName}";
@@ -923,6 +931,15 @@ internal sealed class ScenarioHooks
             {
                 try
                 {
+                    // Stop tracing before closing context (save on failure only)
+                    if (_playwrightFixture != null && _playwrightFixture.EnableTracing)
+                    {
+                        await _playwrightFixture.StopTracingAsync(
+                            context,
+                            scenarioFailed,
+                            $"{scenarioName}-{userName}");
+                    }
+
                     await context.CloseAsync();
                     Console.WriteLine($"[E2E] Browser context closed for {userName} (video saved)");
                 }
