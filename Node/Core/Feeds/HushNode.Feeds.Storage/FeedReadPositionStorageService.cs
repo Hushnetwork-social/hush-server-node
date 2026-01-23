@@ -164,5 +164,20 @@ public class FeedReadPositionStorageService(
                 blockIndex.Value);
             return true;
         }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+            when (ex.InnerException is Npgsql.PostgresException pgEx && pgEx.SqlState == "23505")
+        {
+            // Unique constraint violation - another request already inserted this record.
+            // This happens when two requests simultaneously try to insert a new read position
+            // for the same user+feed combination (classic read-then-write race condition).
+            // The first insert succeeded, so we return true to indicate the operation
+            // effectively completed (the read position is now tracked).
+            this._logger.LogDebug(
+                "Concurrent read position insert ignored (duplicate key): user={UserId} feed={FeedId} blockIndex={BlockIndex}",
+                userId,
+                feedId,
+                blockIndex.Value);
+            return true;
+        }
     }
 }

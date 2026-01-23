@@ -33,21 +33,24 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .Include(x => x.Participants)
             .Where(x =>
                 x.Participants.Any(participant => participant.ParticipantPublicAddress == publicSigningAddress) &&
-                x.BlockIndex > blockIndex)
+                x.BlockIndex >= blockIndex)
             .ToListAsync();
 
     public async Task<IEnumerable<GroupFeed>> RetrieveGroupFeedsForAddress(
         string publicSigningAddress,
         BlockIndex blockIndex)
     {
-        // For group feeds, we use the participant's JoinedAtBlock for the filter.
-        // This ensures that when a user is added to an existing group, they will
-        // see the group in their next sync (since JoinedAtBlock >= blockIndex).
+        // For group feeds, we return groups where either:
+        // 1. User's JoinedAtBlock >= blockIndex (new membership for the user)
+        // 2. Group's LastUpdatedAtBlock >= blockIndex (group was modified, e.g., new member joined)
         //
-        // The query returns groups where:
-        // 1. User is an active participant (not left, not banned, not blocked)
-        // 2. User's JoinedAtBlock is greater than the requested block index
-        //    (meaning they joined after the client's last sync position)
+        // The second condition is CRITICAL for key rotation: when a new member joins,
+        // a new KeyGeneration is created. Existing members need to receive the updated
+        // group data (including new KeyGenerations) to decrypt messages from the new member.
+        // Without this, existing members' delta sync won't return the group and they
+        // can't decrypt messages encrypted with the new KeyGeneration.
+        //
+        // Both cases require the user to be an active participant (not left, not banned, not blocked).
         //
         // EF Core translates BlockIndex comparisons via the value converter,
         // so we use the BlockIndex object directly (not .Value).
@@ -61,8 +64,12 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                     p.ParticipantPublicAddress == publicSigningAddress &&
                     p.LeftAtBlock == null &&
                     p.ParticipantType != ParticipantType.Banned &&
-                    p.ParticipantType != ParticipantType.Blocked &&
-                    p.JoinedAtBlock > blockIndex))
+                    p.ParticipantType != ParticipantType.Blocked) &&
+                // Return group if: user just joined OR group was recently modified (new keys)
+                (g.Participants.Any(p =>
+                    p.ParticipantPublicAddress == publicSigningAddress &&
+                    p.JoinedAtBlock >= blockIndex) ||
+                 g.LastUpdatedAtBlock >= blockIndex))
             .ToListAsync();
     }
 
@@ -154,6 +161,14 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
         // Update LastUpdatedAtBlock for all these GroupFeeds
         await this.Context.GroupFeeds
             .Where(g => groupFeedIds.Contains(g.FeedId))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(g => g.LastUpdatedAtBlock, blockIndex));
+    }
+
+    public async Task UpdateGroupFeedLastUpdatedAtBlockAsync(FeedId feedId, BlockIndex blockIndex)
+    {
+        await this.Context.GroupFeeds
+            .Where(g => g.FeedId == feedId)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(g => g.LastUpdatedAtBlock, blockIndex));
     }

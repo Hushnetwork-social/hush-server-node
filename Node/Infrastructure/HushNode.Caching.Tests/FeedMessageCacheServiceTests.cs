@@ -210,15 +210,15 @@ public class FeedMessageCacheServiceTests
             .Setup(x => x.ListRangeAsync(ExpectedKey, 0, -1, CommandFlags.None))
             .ReturnsAsync(serializedMessages);
 
-        var sinceBlockIndex = new BlockIndex(1); // Only return messages > 1
+        var sinceBlockIndex = new BlockIndex(2); // Only return messages >= 2
 
         // Act
         var result = await sut.GetMessagesAsync(TestFeedId, sinceBlockIndex);
 
         // Assert
         result.Should().NotBeNull();
-        result.Should().HaveCount(2); // Only message2 and message3
-        result!.All(m => m.BlockIndex > sinceBlockIndex).Should().BeTrue();
+        result.Should().HaveCount(2); // Only message2 and message3 (filter uses >=)
+        result!.All(m => m.BlockIndex >= sinceBlockIndex).Should().BeTrue();
     }
 
     [Fact]

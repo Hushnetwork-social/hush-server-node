@@ -48,6 +48,29 @@ public sealed class FeedParticipantsCacheSteps
         _scenarioContext[$"GroupFeedAesKey_{groupName}"] = aesKey;
     }
 
+    [Given(@"(.*) has created a public group feed ""(.*)""")]
+    public async Task GivenUserHasCreatedAPublicGroupFeed(string userName, string groupName)
+    {
+        var identity = GetTestIdentity(userName);
+        var grpcFactory = GetGrpcFactory();
+        var blockControl = GetBlockControl();
+        var blockchainClient = grpcFactory.CreateClient<HushBlockchain.HushBlockchainClient>();
+
+        var (signedTxJson, feedId, aesKey) = TestTransactionFactory.CreateGroupFeed(identity, groupName, isPublic: true);
+
+        var response = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTxJson
+        });
+
+        response.Successfull.Should().BeTrue($"Public group feed creation should succeed: {response.Message}");
+
+        await blockControl.ProduceBlockAsync();
+
+        _scenarioContext[$"GroupFeed_{groupName}"] = feedId;
+        _scenarioContext[$"GroupFeedAesKey_{groupName}"] = aesKey;
+    }
+
     [Given(@"the Redis participants cache for ""(.*)"" is empty")]
     public async Task GivenTheRedisParticipantsCacheForGroupIsEmpty(string groupName)
     {
@@ -268,6 +291,360 @@ public sealed class FeedParticipantsCacheSteps
     {
         await WhenTheKeyGenerationsForGroupAreLookedUpViaGrpc(groupName);
     }
+
+    [When(@"(.*) joins the public group ""(.*)"" via gRPC")]
+    public async Task WhenUserJoinsThePublicGroupViaGrpc(string userName, string groupName)
+    {
+        var identity = GetTestIdentity(userName);
+        var grpcFactory = GetGrpcFactory();
+        var feedClient = grpcFactory.CreateClient<HushFeed.HushFeedClient>();
+
+        var feedId = (FeedId)_scenarioContext[$"GroupFeed_{groupName}"];
+
+        var response = await feedClient.JoinGroupFeedAsync(new JoinGroupFeedRequest
+        {
+            FeedId = feedId.ToString(),
+            JoiningUserPublicAddress = identity.PublicSigningAddress,
+            JoiningUserPublicEncryptKey = identity.PublicEncryptAddress
+        });
+
+        response.Success.Should().BeTrue($"{userName} should be able to join public group: {response.Message}");
+
+        _scenarioContext[$"JoinResponse_{groupName}_{userName}"] = response;
+        _scenarioContext["LastGroupFeedName"] = groupName;
+    }
+
+    [Given(@"(.*) looks up key generations for ""(.*)"" via gRPC")]
+    [When(@"(.*) looks up key generations for ""(.*)"" via gRPC")]
+    public async Task WhenUserLooksUpKeyGenerationsForGroupViaGrpc(string userName, string groupName)
+    {
+        var identity = GetTestIdentity(userName);
+        var grpcFactory = GetGrpcFactory();
+        var feedClient = grpcFactory.CreateClient<HushFeed.HushFeedClient>();
+
+        var feedId = (FeedId)_scenarioContext[$"GroupFeed_{groupName}"];
+
+        var response = await feedClient.GetKeyGenerationsAsync(new GetKeyGenerationsRequest
+        {
+            FeedId = feedId.ToString(),
+            UserPublicAddress = identity.PublicSigningAddress
+        });
+
+        _scenarioContext[$"KeyGenerationsResponse_{groupName}_{userName}"] = response;
+        _scenarioContext["LastGroupFeedName"] = groupName;
+    }
+
+    [Then(@"(.*) should receive at least one key generation for ""(.*)""")]
+    public void ThenUserShouldReceiveAtLeastOneKeyGenerationForGroup(string userName, string groupName)
+    {
+        var response = (GetKeyGenerationsResponse)_scenarioContext[$"KeyGenerationsResponse_{groupName}_{userName}"];
+
+        response.KeyGenerations.Should().NotBeEmpty(
+            $"{userName} should receive key generations after joining group '{groupName}'. " +
+            $"Got {response.KeyGenerations.Count} key generations. " +
+            "If this is 0, the key generations cache was not invalidated after join.");
+    }
+
+    [Then(@"(.*) should receive exactly (\d+) key generation(?:s)? for ""(.*)""")]
+    public void ThenUserShouldReceiveExactlyNKeyGenerationsForGroup(string userName, int expectedCount, string groupName)
+    {
+        var response = (GetKeyGenerationsResponse)_scenarioContext[$"KeyGenerationsResponse_{groupName}_{userName}"];
+
+        response.KeyGenerations.Should().HaveCount(expectedCount,
+            $"{userName} should receive exactly {expectedCount} key generation(s) for group '{groupName}'. " +
+            $"Got {response.KeyGenerations.Count} key generations. " +
+            "This indicates the key rotation did not create a new generation when Bob joined.");
+    }
+
+    [Then(@"the database should have (\d+) key generations for ""(.*)""")]
+    public async Task ThenTheDatabaseShouldHaveNKeyGenerationsForGroup(int expectedCount, string groupName)
+    {
+        var feedId = (FeedId)_scenarioContext[$"GroupFeed_{groupName}"];
+        var grpcFactory = GetGrpcFactory();
+        var feedClient = grpcFactory.CreateClient<HushFeed.HushFeedClient>();
+
+        // Query directly via gRPC (which queries the database)
+        // First, flush the cache to ensure we get fresh data from DB
+        var fixture = GetFixture();
+        var redisDb = fixture.RedisConnection.GetDatabase();
+        var cacheKey = $"HushTest:feed:{feedId.Value}:keys";
+        await redisDb.KeyDeleteAsync(cacheKey);
+
+        // Now query - this will hit the database
+        var identity = GetTestIdentity("Alice");
+        var response = await feedClient.GetKeyGenerationsAsync(new GetKeyGenerationsRequest
+        {
+            FeedId = feedId.ToString(),
+            UserPublicAddress = identity.PublicSigningAddress
+        });
+
+        response.KeyGenerations.Should().HaveCount(expectedCount,
+            $"Database should have {expectedCount} key generation(s) for group '{groupName}'. " +
+            $"Got {response.KeyGenerations.Count}. " +
+            "This indicates the key rotation did not create a new generation when Bob joined.");
+    }
+
+    [Then(@"(.*) should have an encrypted key for KeyGeneration (\d+) in ""(.*)""")]
+    public async Task ThenUserShouldHaveEncryptedKeyForKeyGenerationInGroup(string userName, int keyGeneration, string groupName)
+    {
+        // Query key generations for this specific user
+        var identity = GetTestIdentity(userName);
+        var grpcFactory = GetGrpcFactory();
+        var feedClient = grpcFactory.CreateClient<HushFeed.HushFeedClient>();
+        var feedId = (FeedId)_scenarioContext[$"GroupFeed_{groupName}"];
+
+        var response = await feedClient.GetKeyGenerationsAsync(new GetKeyGenerationsRequest
+        {
+            FeedId = feedId.ToString(),
+            UserPublicAddress = identity.PublicSigningAddress
+        });
+
+        var keyGen = response.KeyGenerations.FirstOrDefault(kg => kg.KeyGeneration == keyGeneration);
+        keyGen.Should().NotBeNull(
+            $"KeyGeneration {keyGeneration} should exist in the response for {userName}. " +
+            $"Got KeyGenerations: [{string.Join(", ", response.KeyGenerations.Select(k => k.KeyGeneration))}]");
+
+        keyGen!.EncryptedKey.Should().NotBeNullOrEmpty(
+            $"{userName} should have an encrypted key for KeyGeneration {keyGeneration} in group '{groupName}'. " +
+            "The GetKeyGenerations response should include this user's encrypted AES key. " +
+            "This means the key rotation did not generate a key for this user.");
+    }
+
+    [When(@"(.*) sends a group message ""(.*)"" to ""(.*)"" with KeyGeneration (\d+)")]
+    public async Task WhenUserSendsGroupMessageWithKeyGeneration(string userName, string message, string groupName, int keyGeneration)
+    {
+        var identity = GetTestIdentity(userName);
+        var grpcFactory = GetGrpcFactory();
+        var blockControl = GetBlockControl();
+        var blockchainClient = grpcFactory.CreateClient<HushBlockchain.HushBlockchainClient>();
+
+        var feedId = (FeedId)_scenarioContext[$"GroupFeed_{groupName}"];
+        var aesKey = (string)_scenarioContext[$"GroupFeedAesKey_{groupName}"];
+
+        var (signedTxJson, messageId) = TestTransactionFactory.CreateGroupFeedMessage(
+            identity, feedId, message, aesKey, keyGeneration);
+
+        var response = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTxJson
+        });
+
+        response.Successfull.Should().BeTrue($"Group message submission should succeed: {response.Message}");
+
+        // Store the message ID for verification
+        _scenarioContext[$"GroupMessage_{groupName}_{message}"] = messageId;
+        _scenarioContext["LastGroupFeedName"] = groupName;
+
+        await blockControl.ProduceBlockAsync();
+    }
+
+    [Then(@"the message ""(.*)"" in ""(.*)"" should have KeyGeneration (\d+)")]
+    public async Task ThenMessageShouldHaveKeyGeneration(string messageContent, string groupName, int expectedKeyGeneration)
+    {
+        var feedId = (FeedId)_scenarioContext[$"GroupFeed_{groupName}"];
+        var messageId = (FeedMessageId)_scenarioContext[$"GroupMessage_{groupName}_{messageContent}"];
+
+        var grpcFactory = GetGrpcFactory();
+        var feedClient = grpcFactory.CreateClient<HushFeed.HushFeedClient>();
+
+        // Get messages for Alice (as she's involved in all scenarios)
+        var identity = GetTestIdentity("Alice");
+        var response = await feedClient.GetFeedMessagesForAddressAsync(new GetFeedMessagesForAddressRequest
+        {
+            ProfilePublicKey = identity.PublicSigningAddress,
+            BlockIndex = 0
+        });
+
+        // Filter messages by feed and message ID
+        var message = response.Messages.FirstOrDefault(m =>
+            m.FeedId == feedId.ToString() && m.FeedMessageId == messageId.ToString());
+
+        message.Should().NotBeNull(
+            $"Message '{messageContent}' should exist in feed '{groupName}'. " +
+            $"MessageId: {messageId}. Found {response.Messages.Count} messages total.");
+
+        message!.KeyGeneration.Should().Be(expectedKeyGeneration,
+            $"Message '{messageContent}' should have KeyGeneration {expectedKeyGeneration}. " +
+            $"Got KeyGeneration {message.KeyGeneration}. This indicates the message was encrypted with the wrong key.");
+    }
+
+    [Then(@"KeyGeneration (\d+) for ""(.*)"" should have no ValidToBlock")]
+    public void ThenKeyGenerationShouldHaveNoValidToBlock(int keyGeneration, string groupName)
+    {
+        // Get the last response for Alice (creator) to verify the key state
+        var response = (GetKeyGenerationsResponse)_scenarioContext[$"KeyGenerationsResponse_{groupName}_Alice"];
+
+        var keyGen = response.KeyGenerations.FirstOrDefault(kg => kg.KeyGeneration == keyGeneration);
+        keyGen.Should().NotBeNull(
+            $"KeyGeneration {keyGeneration} should exist in the response. " +
+            $"Got KeyGenerations: [{string.Join(", ", response.KeyGenerations.Select(k => k.KeyGeneration))}]");
+
+        // ValidToBlock is optional - if not set, HasValidToBlock should be false
+        keyGen!.HasValidToBlock.Should().BeFalse(
+            $"KeyGeneration {keyGeneration} should NOT have ValidToBlock set (meaning it's the active key). " +
+            $"But it has ValidToBlock={keyGen.ValidToBlock}. This indicates the key was expired when it shouldn't be.");
+    }
+
+    [Then(@"KeyGeneration (\d+) for ""(.*)"" should have ValidToBlock set")]
+    public void ThenKeyGenerationShouldHaveValidToBlockSet(int keyGeneration, string groupName)
+    {
+        // Get the last response for Alice (creator) to verify the key state
+        var response = (GetKeyGenerationsResponse)_scenarioContext[$"KeyGenerationsResponse_{groupName}_Alice"];
+
+        var keyGen = response.KeyGenerations.FirstOrDefault(kg => kg.KeyGeneration == keyGeneration);
+        keyGen.Should().NotBeNull(
+            $"KeyGeneration {keyGeneration} should exist in the response. " +
+            $"Got KeyGenerations: [{string.Join(", ", response.KeyGenerations.Select(k => k.KeyGeneration))}]");
+
+        // ValidToBlock should be set when a new key generation is created
+        keyGen!.HasValidToBlock.Should().BeTrue(
+            $"KeyGeneration {keyGeneration} should have ValidToBlock set (meaning it's expired). " +
+            "When a new member joins, the previous key generation should be marked with ValidToBlock.");
+
+        keyGen.ValidToBlock.Should().BeGreaterThan(0,
+            $"KeyGeneration {keyGeneration} ValidToBlock should be a positive block number.");
+    }
+
+    #region Decryption Twin Test Steps
+
+    [When(@"(.*) decrypts (?:her|his) AES key for KeyGeneration (\d+) in ""(.*)""")]
+    public void WhenUserDecryptsAesKeyForKeyGeneration(string userName, int keyGeneration, string groupName)
+    {
+        var identity = GetTestIdentity(userName);
+        var response = (GetKeyGenerationsResponse)_scenarioContext[$"KeyGenerationsResponse_{groupName}_{userName}"];
+
+        var keyGen = response.KeyGenerations.FirstOrDefault(kg => kg.KeyGeneration == keyGeneration);
+        keyGen.Should().NotBeNull(
+            $"{userName} should have KeyGeneration {keyGeneration} in response for {groupName}. " +
+            $"Available: [{string.Join(", ", response.KeyGenerations.Select(k => k.KeyGeneration))}]");
+
+        try
+        {
+            // ECIES decrypt the AES key using user's private encrypt key
+            var decryptedAesKey = Olimpo.EncryptKeys.Decrypt(keyGen!.EncryptedKey, identity.PrivateEncryptKey);
+
+            // Store the decrypted key for later use
+            _scenarioContext[$"DecryptedAesKey_{groupName}_{userName}_KeyGen{keyGeneration}"] = decryptedAesKey;
+            _scenarioContext[$"DecryptionSuccess_{userName}"] = true;
+
+            Console.WriteLine($"[TwinTest] {userName} successfully decrypted KeyGen {keyGeneration} AES key for {groupName}");
+        }
+        catch (Exception ex)
+        {
+            _scenarioContext[$"DecryptionSuccess_{userName}"] = false;
+            _scenarioContext[$"DecryptionError_{userName}"] = ex.Message;
+
+            Console.WriteLine($"[TwinTest] {userName} FAILED to decrypt KeyGen {keyGeneration}: {ex.Message}");
+        }
+    }
+
+    [Then(@"the decryption should succeed for (.*)")]
+    public void ThenTheDecryptionShouldSucceedForUser(string userName)
+    {
+        var success = (bool)_scenarioContext[$"DecryptionSuccess_{userName}"];
+
+        if (!success)
+        {
+            var error = _scenarioContext.TryGetValue($"DecryptionError_{userName}", out var errObj)
+                ? (string)errObj
+                : "Unknown error";
+
+            success.Should().BeTrue(
+                $"{userName}'s AES key decryption should succeed. Error: {error}. " +
+                "This means the server returned an encrypted key that the user cannot decrypt with their private key.");
+        }
+    }
+
+    [When(@"(.*) sends a group message ""(.*)"" to ""(.*)"" using (?:her|his) decrypted KeyGeneration (\d+) key")]
+    public async Task WhenUserSendsGroupMessageUsingDecryptedKey(string userName, string message, string groupName, int keyGeneration)
+    {
+        var identity = GetTestIdentity(userName);
+        var grpcFactory = GetGrpcFactory();
+        var blockControl = GetBlockControl();
+        var blockchainClient = grpcFactory.CreateClient<HushBlockchain.HushBlockchainClient>();
+
+        var feedId = (FeedId)_scenarioContext[$"GroupFeed_{groupName}"];
+
+        // Get the user's decrypted AES key for this KeyGeneration
+        var decryptedAesKey = (string)_scenarioContext[$"DecryptedAesKey_{groupName}_{userName}_KeyGen{keyGeneration}"];
+
+        var (signedTxJson, messageId) = TestTransactionFactory.CreateGroupFeedMessage(
+            identity, feedId, message, decryptedAesKey, keyGeneration);
+
+        var response = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTxJson
+        });
+
+        response.Successfull.Should().BeTrue($"Group message submission should succeed: {response.Message}");
+
+        // Store message info for verification
+        _scenarioContext[$"GroupMessage_{groupName}_{message}"] = messageId;
+        _scenarioContext[$"GroupMessageEncrypted_{groupName}_{message}"] = Olimpo.EncryptKeys.AesEncrypt(message, decryptedAesKey);
+        _scenarioContext["LastGroupFeedName"] = groupName;
+
+        Console.WriteLine($"[TwinTest] {userName} sent message '{message}' encrypted with KeyGen {keyGeneration}");
+
+        await blockControl.ProduceBlockAsync();
+    }
+
+    [Then(@"(.*) should be able to decrypt (.*)'s message ""(.*)"" in ""(.*)""")]
+    public async Task ThenUserShouldBeAbleToDecryptMessage(string decryptingUser, string sendingUser, string expectedMessage, string groupName)
+    {
+        var decryptingIdentity = GetTestIdentity(decryptingUser);
+        var feedId = (FeedId)_scenarioContext[$"GroupFeed_{groupName}"];
+        var messageId = (FeedMessageId)_scenarioContext[$"GroupMessage_{groupName}_{expectedMessage}"];
+
+        var grpcFactory = GetGrpcFactory();
+        var feedClient = grpcFactory.CreateClient<HushFeed.HushFeedClient>();
+
+        // Get the message from the server
+        var response = await feedClient.GetFeedMessagesForAddressAsync(new GetFeedMessagesForAddressRequest
+        {
+            ProfilePublicKey = decryptingIdentity.PublicSigningAddress,
+            BlockIndex = 0
+        });
+
+        var message = response.Messages.FirstOrDefault(m =>
+            m.FeedId == feedId.ToString() && m.FeedMessageId == messageId.ToString());
+
+        message.Should().NotBeNull(
+            $"Message '{expectedMessage}' from {sendingUser} should exist in feed '{groupName}'. " +
+            $"MessageId: {messageId}");
+
+        // Get the KeyGeneration used for this message
+        var messageKeyGen = message!.KeyGeneration;
+        Console.WriteLine($"[TwinTest] Message was encrypted with KeyGen {messageKeyGen}");
+
+        // Get the decrypting user's AES key for this KeyGeneration
+        var contextKey = $"DecryptedAesKey_{groupName}_{decryptingUser}_KeyGen{messageKeyGen}";
+        _scenarioContext.TryGetValue(contextKey, out var aesKeyObj).Should().BeTrue(
+            $"{decryptingUser} should have decrypted AES key for KeyGen {messageKeyGen}. " +
+            $"This simulates the browser having this key in localStorage after sync.");
+
+        var decryptedAesKey = (string)aesKeyObj!;
+
+        // Decrypt the message content
+        try
+        {
+            var decryptedContent = Olimpo.EncryptKeys.AesDecrypt(message.MessageContent, decryptedAesKey);
+
+            decryptedContent.Should().Be(expectedMessage,
+                $"{decryptingUser} should be able to decrypt {sendingUser}'s message to '{expectedMessage}'");
+
+            Console.WriteLine($"[TwinTest] SUCCESS: {decryptingUser} decrypted message: '{decryptedContent}'");
+        }
+        catch (Exception ex)
+        {
+            throw new Exception(
+                $"{decryptingUser} FAILED to decrypt {sendingUser}'s message '{expectedMessage}' " +
+                $"using KeyGen {messageKeyGen}. Error: {ex.Message}. " +
+                "This is the EXACT issue that causes the Playwright E2E test to fail - " +
+                "Alice receives a message encrypted with a key she cannot decrypt.", ex);
+        }
+    }
+
+    #endregion
 
     [When(@"the participants cache service stores participants for ""(.*)""")]
     public async Task WhenTheParticipantsCacheServiceStoresParticipantsForGroup(string groupName)

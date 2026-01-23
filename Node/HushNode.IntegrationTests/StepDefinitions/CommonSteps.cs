@@ -37,19 +37,49 @@ public sealed class CommonSteps
     /// Waits for the transaction to reach the mempool, then produces a block.
     /// Use this after a UI action that submits a transaction to avoid race conditions.
     /// The step waits for BlockIndexCompletedEvent to ensure indexing is complete.
+    ///
+    /// For E2E tests: If a PendingTransactionWaiter was stored in ScenarioContext by a
+    /// previous step (e.g., "the user sends message"), use it to avoid race conditions
+    /// where the event fires before we start listening.
     /// </summary>
     [When(@"the transaction is processed")]
     [Given(@"the transaction is processed")]
     public async Task WhenTheTransactionIsProcessed()
     {
-        var node = GetNode();
+        var blockControl = GetBlockControl();
 
-        // Wait for the transaction to reach the mempool
-        await node.WaitForPendingTransactionsAsync(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+        Console.WriteLine("[E2E] WhenTheTransactionIsProcessed: checking for PendingTransactionWaiter in ScenarioContext");
+
+        // Check for a pre-created waiter from an E2E step (avoids race condition)
+        if (_scenarioContext.TryGetValue("PendingTransactionWaiter", out var waiterObj)
+            && waiterObj is HushServerNodeCore.TransactionWaiter waiter)
+        {
+            Console.WriteLine("[E2E] Found PendingTransactionWaiter in ScenarioContext - using event-based waiting");
+            _scenarioContext.Remove("PendingTransactionWaiter");
+            try
+            {
+                Console.WriteLine("[E2E] Awaiting waiter...");
+                await waiter.WaitAsync();
+                Console.WriteLine("[E2E] Waiter completed successfully");
+            }
+            finally
+            {
+                waiter.Dispose();
+            }
+        }
+        else
+        {
+            // Fallback: wait for transaction to reach mempool
+            // This works for non-E2E tests where there's no race condition
+            Console.WriteLine("[E2E] WARNING: No PendingTransactionWaiter found - using fallback WaitForPendingTransactionsAsync (may race!)");
+            var node = GetNode();
+            await node.WaitForPendingTransactionsAsync(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+        }
 
         // Produce block and wait for indexing to complete (BlockIndexCompletedEvent)
-        var blockControl = GetBlockControl();
+        Console.WriteLine("[E2E] Producing block and waiting for indexing...");
         await blockControl.ProduceBlockAsync();
+        Console.WriteLine("[E2E] Block produced and indexed, continuing test");
     }
 
     /// <summary>

@@ -72,8 +72,17 @@ public class FeedsGrpcService(
         var blockIndex = BlockIndexHandler
             .CreateNew(request.BlockIndex);
 
+        _logger.LogInformation(
+            "[GetFeedsForAddress] Request: ProfilePublicKey={ProfilePublicKey}, BlockIndex={BlockIndex}",
+            request.ProfilePublicKey?.Substring(0, Math.Min(20, request.ProfilePublicKey?.Length ?? 0)),
+            request.BlockIndex);
+
         var lastFeeds = await this._feedsStorageService
             .RetrieveFeedsForAddress(request.ProfilePublicKey, blockIndex);
+
+        _logger.LogInformation(
+            "[GetFeedsForAddress] Found {FeedCount} feed(s) for address",
+            lastFeeds.Count());
 
         // FEAT-051: Batch fetch read positions for all feeds (cache-aside pattern with DB fallback)
         IReadOnlyDictionary<FeedId, BlockIndex> readPositions;
@@ -157,6 +166,8 @@ public class FeedsGrpcService(
 
             foreach(var feed in lastFeedsFromAddress)
             {
+                Console.WriteLine($"[GetFeedMessagesForAddress] Processing feed {feed.FeedId.ToString().Substring(0, 8)}..., Type: {feed.FeedType}, BlockIndex filter: {blockIndex.Value}");
+
                 _logger.LogDebug(
                     "Processing feed {FeedId}, Type: {FeedType}",
                     feed.FeedId,
@@ -164,13 +175,21 @@ public class FeedsGrpcService(
 
                 // FEAT-046: Get messages with cache-first pattern
                 var lastFeedMessages = await GetMessagesWithCacheFallbackAsync(feed.FeedId, blockIndex);
+                var messagesList = lastFeedMessages.ToList();
+
+                Console.WriteLine($"[GetFeedMessagesForAddress] Feed {feed.FeedId.ToString().Substring(0, 8)}... returned {messagesList.Count} messages");
+                foreach (var msg in messagesList)
+                {
+                    var keyGen = msg.KeyGeneration ?? -1;
+                    Console.WriteLine($"[GetFeedMessagesForAddress]   - Message ID: {msg.FeedMessageId.ToString().Substring(0, 8)}..., BlockIndex: {msg.BlockIndex.Value}, KeyGen: {keyGen}");
+                }
 
                 _logger.LogDebug(
                     "Found {MessageCount} messages for feed {FeedId}",
-                    lastFeedMessages.Count(),
+                    messagesList.Count,
                     feed.FeedId);
 
-                foreach (var feedMessage in lastFeedMessages)
+                foreach (var feedMessage in messagesList)
                 {
                     Console.WriteLine($"[GetFeedMessagesForAddress] Processing message: {feedMessage.FeedMessageId}, Timestamp: {feedMessage.Timestamp?.Value}");
 
@@ -313,11 +332,13 @@ public class FeedsGrpcService(
         try
         {
             // 1. Try cache first
+            Console.WriteLine($"[CacheFallback] Feed {feedId.ToString().Substring(0, 8)}...: trying cache with sinceBlockIndex={sinceBlockIndex.Value}");
             var cachedMessages = await this._feedMessageCacheService.GetMessagesAsync(feedId, sinceBlockIndex);
 
             if (cachedMessages != null)
             {
                 var messagesList = cachedMessages.ToList();
+                Console.WriteLine($"[CacheFallback] Feed {feedId.ToString().Substring(0, 8)}...: CACHE HIT - {messagesList.Count} messages");
 
                 // Cache hit - check for gaps if we have messages and a block filter
                 if (messagesList.Count > 0 && sinceBlockIndex.Value > 0)
@@ -348,6 +369,7 @@ public class FeedsGrpcService(
             }
 
             // 2. Cache miss - query PostgreSQL
+            Console.WriteLine($"[CacheFallback] Feed {feedId.ToString().Substring(0, 8)}...: CACHE MISS - querying PostgreSQL");
             _logger.LogDebug(
                 "Cache MISS for feed {FeedId}: querying PostgreSQL",
                 feedId);
@@ -356,6 +378,7 @@ public class FeedsGrpcService(
                 .RetrieveLastFeedMessagesForFeedAsync(feedId, sinceBlockIndex);
 
             var dbMessagesList = dbMessages.ToList();
+            Console.WriteLine($"[CacheFallback] Feed {feedId.ToString().Substring(0, 8)}...: PostgreSQL returned {dbMessagesList.Count} messages");
 
             // 3. Cache-aside: Populate cache with fetched messages (only if we have messages)
             if (dbMessagesList.Count > 0)
@@ -507,7 +530,8 @@ public class FeedsGrpcService(
         Console.WriteLine($"[GetGroupMembers] Cache miss - fetching from DB");
 
         // Cache miss: Get from database and resolve display names
-        var allParticipants = await this._feedsStorageService.GetAllParticipantsAsync(feedId);
+        // Use GetActiveParticipantsAsync to only return current members (excludes left/banned)
+        var allParticipants = await this._feedsStorageService.GetActiveParticipantsAsync(feedId);
 
         var membersToCache = new List<CachedGroupMember>();
 
@@ -990,7 +1014,11 @@ public class FeedsGrpcService(
 
             await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, joinedAtBlock);
 
-            Console.WriteLine($"[JoinGroupFeed] Success - new KeyGeneration: {newKeyGen}");
+            // CRITICAL: Invalidate KeyGenerations cache SYNCHRONOUSLY before returning
+            // This prevents race condition where client queries cache before new keys are visible
+            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(feedId);
+            Console.WriteLine($"[JoinGroupFeed] Success - new KeyGeneration: {newKeyGen}, cache invalidated");
+
             return new JoinGroupFeedResponse
             {
                 Success = true,
@@ -1083,7 +1111,10 @@ public class FeedsGrpcService(
 
             await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, leftAtBlock);
 
-            Console.WriteLine($"[LeaveGroupFeed] Success");
+            // CRITICAL: Invalidate KeyGenerations cache SYNCHRONOUSLY
+            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(feedId);
+            Console.WriteLine($"[LeaveGroupFeed] Success, cache invalidated");
+
             return new LeaveGroupFeedResponse
             {
                 Success = true,
@@ -1215,7 +1246,10 @@ public class FeedsGrpcService(
             Console.WriteLine($"[AddMemberToGroupFeed] Updating feed BlockIndex to trigger client sync");
             await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, currentBlock);
 
-            Console.WriteLine($"[AddMemberToGroupFeed] Success - new KeyGeneration: {newKeyGeneration}");
+            // CRITICAL: Invalidate KeyGenerations cache SYNCHRONOUSLY
+            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(feedId);
+            Console.WriteLine($"[AddMemberToGroupFeed] Success - new KeyGeneration: {newKeyGeneration}, cache invalidated");
+
             return new AddMemberToGroupFeedResponse
             {
                 Success = true,
@@ -1617,7 +1651,10 @@ public class FeedsGrpcService(
 
             await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, bannedAtBlock);
 
-            Console.WriteLine($"[BanFromGroupFeed] Success - new KeyGeneration: {newKeyGen}");
+            // CRITICAL: Invalidate KeyGenerations cache SYNCHRONOUSLY
+            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(feedId);
+            Console.WriteLine($"[BanFromGroupFeed] Success - new KeyGeneration: {newKeyGen}, cache invalidated");
+
             return new BanFromGroupFeedResponse
             {
                 Success = true,
@@ -1710,7 +1747,10 @@ public class FeedsGrpcService(
 
             await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, rejoinedAtBlock);
 
-            Console.WriteLine($"[UnbanFromGroupFeed] Success - new KeyGeneration: {newKeyGen}");
+            // CRITICAL: Invalidate KeyGenerations cache SYNCHRONOUSLY
+            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(feedId);
+            Console.WriteLine($"[UnbanFromGroupFeed] Success - new KeyGeneration: {newKeyGen}, cache invalidated");
+
             return new UnbanFromGroupFeedResponse
             {
                 Success = true,

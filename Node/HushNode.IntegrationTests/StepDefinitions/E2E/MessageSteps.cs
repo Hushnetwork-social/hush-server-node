@@ -1,4 +1,5 @@
 using FluentAssertions;
+using HushServerNode;
 using Microsoft.Playwright;
 using TechTalk.SpecFlow;
 
@@ -19,26 +20,70 @@ internal sealed class MessageSteps : BrowserStepsBase
     {
         var page = await GetOrCreatePageAsync();
 
+        Console.WriteLine($"[E2E] Sending message: '{message}'");
+
         // Wait for message input to be available
-        await WaitForTestIdAsync(page, "message-input");
+        var messageInput = await WaitForTestIdAsync(page, "message-input");
 
         // Fill message input
-        await FillTestIdAsync(page, "message-input", message);
+        await messageInput.FillAsync(message);
 
-        // Click send button
-        await ClickTestIdAsync(page, "send-button");
+        // Find and click send button
+        var sendButton = await WaitForVisibleElementAsync(page, "send-button");
+        var isDisabled = await sendButton.IsDisabledAsync();
+
+        if (isDisabled)
+        {
+            // Take screenshot for debugging
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = "e2e-send-disabled.png" });
+            throw new InvalidOperationException("Send button is disabled - feed may not have encryption key ready");
+        }
+
+        // Start listening for the transaction BEFORE clicking send
+        // Store in ScenarioContext so "the transaction is processed" step can await it
+        var waiter = StartListeningForTransactions(1);
+        ScenarioContext["PendingTransactionWaiter"] = waiter;
+
+        await sendButton.ClickAsync();
+        Console.WriteLine("[E2E] Clicked send button, waiter is listening");
+
+        // Brief delay for the async submission to start
+        await Task.Delay(500);
 
         // Store message for later verification
         ScenarioContext["LastSentMessage"] = message;
+    }
+
+    /// <summary>
+    /// Waits for a visible element with the specified test ID.
+    /// </summary>
+    private async Task<ILocator> WaitForVisibleElementAsync(IPage page, string testId, int timeoutMs = 10000)
+    {
+        var allElements = page.GetByTestId(testId);
+        var startTime = DateTime.UtcNow;
+        var timeout = TimeSpan.FromMilliseconds(timeoutMs);
+
+        while (DateTime.UtcNow - startTime < timeout)
+        {
+            var count = await allElements.CountAsync();
+            for (int i = 0; i < count; i++)
+            {
+                var element = allElements.Nth(i);
+                if (await element.IsVisibleAsync())
+                {
+                    return element;
+                }
+            }
+            await Task.Delay(100);
+        }
+
+        throw new TimeoutException($"No visible element found with data-testid='{testId}' within {timeoutMs}ms");
     }
 
     [Given(@"the user has sent message ""(.*)"" to their personal feed")]
     public async Task GivenTheUserHasSentMessage(string message)
     {
         var page = await GetOrCreatePageAsync();
-        var displayName = ScenarioContext["UserDisplayName"] as string;
-
-        displayName.Should().NotBeNullOrEmpty("Display name must be set before sending message");
 
         // Navigate to dashboard if not already there
         if (!page.Url.Contains("/dashboard"))
@@ -47,22 +92,69 @@ internal sealed class MessageSteps : BrowserStepsBase
             await WaitForNetworkIdleAsync(page);
         }
 
-        // Click on personal feed
-        var feedItem = page.GetByTestId("feed-item").Filter(new LocatorFilterOptions
-        {
-            HasText = displayName
-        });
-
-        await feedItem.First.ClickAsync();
+        // Click on personal feed using semantic testid
+        // Personal feeds have data-testid="feed-item:personal"
+        var personalFeed = await WaitForVisibleFeedAsync(page, "feed-item:personal", 30000);
+        await personalFeed.ClickAsync();
 
         // Wait for message input
         await WaitForTestIdAsync(page, "message-input", 15000);
 
-        // Send the message
+        // Send the message - this creates the waiter and stores it in ScenarioContext
         await WhenTheUserSendsMessage(message);
 
-        // Wait for transaction to reach mempool, produce block, wait for indexing
-        await WaitForTransactionAndProduceBlockAsync();
+        // Retrieve waiter from ScenarioContext and wait for transaction + produce block
+        if (ScenarioContext.TryGetValue("PendingTransactionWaiter", out var waiterObj)
+            && waiterObj is HushServerNodeCore.TransactionWaiter waiter)
+        {
+            ScenarioContext.Remove("PendingTransactionWaiter");
+            try
+            {
+                await AwaitTransactionsAndProduceBlockAsync(waiter);
+            }
+            finally
+            {
+                waiter.Dispose();
+            }
+        }
+        else
+        {
+            throw new InvalidOperationException("No PendingTransactionWaiter found in ScenarioContext after sending message");
+        }
+    }
+
+    /// <summary>
+    /// Waits for a visible feed item with the specified test ID that is also ready for messaging.
+    /// Handles responsive layouts where feeds appear in both sidebar and main content.
+    /// Ready means the feed's encryption key has been decrypted (data-feed-ready="true").
+    /// </summary>
+    private async Task<ILocator> WaitForVisibleFeedAsync(IPage page, string testId, int timeoutMs = 10000)
+    {
+        var allFeeds = page.GetByTestId(testId);
+        var startTime = DateTime.UtcNow;
+        var timeout = TimeSpan.FromMilliseconds(timeoutMs);
+
+        while (DateTime.UtcNow - startTime < timeout)
+        {
+            var count = await allFeeds.CountAsync();
+            for (int i = 0; i < count; i++)
+            {
+                var feed = allFeeds.Nth(i);
+                if (await feed.IsVisibleAsync())
+                {
+                    // Also check if feed is ready (has encryption key decrypted)
+                    var readyAttr = await feed.GetAttributeAsync("data-feed-ready");
+                    if (readyAttr == "true")
+                    {
+                        return feed;
+                    }
+                    Console.WriteLine($"[E2E] Found visible feed {testId} but not ready yet (data-feed-ready={readyAttr})");
+                }
+            }
+            await Task.Delay(100);
+        }
+
+        throw new TimeoutException($"No visible ready feed found with data-testid='{testId}' within {timeoutMs}ms");
     }
 
     [Then(@"the message ""(.*)"" should be visible in the chat")]

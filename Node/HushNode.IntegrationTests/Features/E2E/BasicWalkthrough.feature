@@ -11,11 +11,24 @@ Feature: Basic User Walkthrough
 
     @Identity
     Scenario: New user creates identity through browser
+        # Step 1: Navigate to auth page
         When the user navigates to "/auth"
+
+        # Step 2: Create identity (submits identity transaction to mempool)
         And the user creates a new identity with display name "TestUser"
-        # Wait for identity transaction to reach mempool, produce block, wait for indexing
-        And the transaction is processed
+
+        # Step 3: Wait for identity transaction to be mined into a block
+        And the identity transaction is processed
+
+        # Step 4: Client detects identity confirmed, auto-submits personal feed transaction
+        # Wait for personal feed transaction to be mined into a block
+        And the personal feed transaction is processed
+
+        # Step 5: Client redirects to dashboard after identity is confirmed
         Then the user should be redirected to "/dashboard"
+
+        # Step 6: Dashboard syncs feeds and renders the personal feed
+        And the feed list should show the personal feed for "TestUser"
 
     @PersonalFeed
     Scenario: User sends message to personal feed

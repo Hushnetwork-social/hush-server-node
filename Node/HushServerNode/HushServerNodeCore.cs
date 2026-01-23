@@ -267,6 +267,90 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
     }
 
     /// <summary>
+    /// Starts listening for transactions BEFORE the action that triggers them.
+    /// Returns a waiter that can be awaited after the action is triggered.
+    /// This prevents race conditions where the event fires before the subscriber is created.
+    /// </summary>
+    /// <param name="minTransactions">Minimum number of transactions to wait for. Defaults to 1.</param>
+    /// <param name="timeout">Maximum time to wait. Defaults to 10 seconds.</param>
+    /// <returns>A waiter that should be awaited after triggering the action.</returns>
+    public TransactionWaiter StartListeningForTransactions(int minTransactions = 1, TimeSpan? timeout = null)
+    {
+        if (!_isTestMode)
+        {
+            throw new InvalidOperationException("StartListeningForTransactions is only available in test mode.");
+        }
+
+        var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(10);
+        var eventAggregator = _app.Services.GetRequiredService<IEventAggregator>();
+
+        return new TransactionWaiter(eventAggregator, minTransactions, effectiveTimeout);
+    }
+
+    /// <summary>
+    /// Waiter class that subscribes immediately and can be awaited later.
+    /// Use pattern: var waiter = StartListeningForTransactions(); await action(); await waiter.WaitAsync();
+    /// </summary>
+    public sealed class TransactionWaiter : IDisposable
+    {
+        private readonly TaskCompletionSource<bool> _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TransactionEventSubscriber _subscriber;
+        private readonly CancellationTokenSource _cts;
+        private readonly int _minTransactions;
+        private int _receivedCount;
+        private bool _disposed;
+
+        public TransactionWaiter(IEventAggregator eventAggregator, int minTransactions, TimeSpan timeout)
+        {
+            _minTransactions = minTransactions;
+            _cts = new CancellationTokenSource(timeout);
+            _cts.Token.Register(() => _tcs.TrySetCanceled());
+
+            Console.WriteLine($"[E2E] TransactionWaiter created, waiting for {minTransactions} transaction(s)");
+
+            // Subscribe immediately - this is the key to avoiding the race condition
+            _subscriber = new TransactionEventSubscriber(
+                eventAggregator,
+                transactionId =>
+                {
+                    _receivedCount++;
+                    Console.WriteLine($"[E2E] TransactionWaiter received event: {transactionId}, count: {_receivedCount}/{_minTransactions}");
+                    if (_receivedCount >= _minTransactions)
+                    {
+                        Console.WriteLine($"[E2E] TransactionWaiter completed - all {_minTransactions} transaction(s) received");
+                        _tcs.TrySetResult(true);
+                    }
+                });
+        }
+
+        /// <summary>
+        /// Waits for the required number of transactions to be received.
+        /// Call this AFTER triggering the action that submits transactions.
+        /// </summary>
+        public async Task WaitAsync()
+        {
+            try
+            {
+                await _tcs.Task;
+            }
+            catch (TaskCanceledException)
+            {
+                throw new TimeoutException(
+                    $"Did not receive {_minTransactions} transaction(s) within timeout. " +
+                    $"Received: {_receivedCount}");
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _subscriber.Dispose();
+            _cts.Dispose();
+        }
+    }
+
+    /// <summary>
     /// Helper class to subscribe to TransactionReceivedEvent for test synchronization.
     /// </summary>
     private sealed class TransactionEventSubscriber : IHandleAsync<TransactionReceivedEvent>, IDisposable

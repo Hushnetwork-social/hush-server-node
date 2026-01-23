@@ -25,6 +25,8 @@ internal sealed class ReactionSteps : BrowserStepsBase
         var page = await GetOrCreatePageAsync();
         var emoji = Emojis[emojiIndex];
 
+        Console.WriteLine($"[E2E Reaction] Adding reaction {emoji} (index {emojiIndex}) to message: '{messageText}'");
+
         // Find the message container
         var message = page.GetByTestId("message").Filter(new LocatorFilterOptions
         {
@@ -32,18 +34,32 @@ internal sealed class ReactionSteps : BrowserStepsBase
         });
 
         // Hover over the message to reveal the reaction button
+        Console.WriteLine("[E2E Reaction] Hovering over message...");
         await message.First.HoverAsync();
 
-        // Small delay to let hover UI appear
-        await Task.Delay(300);
+        // Wait for hover UI to appear and for useFeedReactions to derive the ElGamal key
+        // The key derivation is async and takes ~100-200ms, plus React needs time to re-render
+        Console.WriteLine("[E2E Reaction] Waiting for key derivation and re-render (1.5s)...");
+        await Task.Delay(1500);
+
+        // IMPORTANT: Start listening for reaction transaction BEFORE clicking the emoji
+        // This prevents race condition where the event fires before we start listening
+        Console.WriteLine("[E2E Reaction] Creating transaction waiter BEFORE clicking emoji...");
+        var waiter = StartListeningForTransactions(minTransactions: 1);
+        ScenarioContext["PendingTransactionWaiter"] = waiter;
 
         // Click add reaction button
+        Console.WriteLine("[E2E Reaction] Clicking add-reaction-button...");
         await ClickTestIdAsync(page, "add-reaction-button");
 
         // Wait for the emoji picker to appear and click the specific emoji
         var emojiTestId = $"emoji-{emoji}";
+        Console.WriteLine($"[E2E Reaction] Waiting for emoji picker, testid: {emojiTestId}");
         await WaitForTestIdAsync(page, emojiTestId);
+
+        Console.WriteLine($"[E2E Reaction] Clicking emoji: {emoji}");
         await ClickTestIdAsync(page, emojiTestId);
+        Console.WriteLine("[E2E Reaction] Emoji clicked, waiter is now listening for transaction");
 
         // Store for verification
         ScenarioContext["LastReactionEmojiIndex"] = emojiIndex;

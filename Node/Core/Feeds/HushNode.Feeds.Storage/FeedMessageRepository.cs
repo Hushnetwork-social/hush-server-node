@@ -12,19 +12,19 @@ public class FeedMessageRepository : RepositoryBase<FeedsDbContext>, IFeedMessag
             .AddAsync(feedMessage);
 
     public async Task<IEnumerable<FeedMessage>> RetrieveLastFeedMessagesForAddressAsync(
-        string publicSigningAddress, 
-        BlockIndex blockIndex) => 
+        string publicSigningAddress,
+        BlockIndex blockIndex) =>
         await this.Context.FeedMessages
-            .Where(x => 
-                x.IssuerPublicAddress == publicSigningAddress && 
-                x.BlockIndex > blockIndex)
+            .Where(x =>
+                x.IssuerPublicAddress == publicSigningAddress &&
+                x.BlockIndex >= blockIndex)
             .ToListAsync();
 
     public async Task<IEnumerable<FeedMessage>> RetrieveMessagesForFeedAsync(FeedId feedId, BlockIndex blockIndex) =>
         await this.Context.FeedMessages
             .Where(x =>
                 x.FeedId == feedId &&
-                x.BlockIndex > blockIndex)
+                x.BlockIndex >= blockIndex)
             .ToListAsync();
 
     public async Task<FeedMessage?> GetFeedMessageByIdAsync(FeedMessageId messageId) =>

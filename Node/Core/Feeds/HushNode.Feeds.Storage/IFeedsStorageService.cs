@@ -49,6 +49,12 @@ public interface IFeedsStorageService
     /// </summary>
     Task UpdateGroupFeedsLastUpdatedAtBlockForParticipantAsync(string publicSigningAddress, BlockIndex blockIndex);
 
+    /// <summary>
+    /// Update the LastUpdatedAtBlock of a single GroupFeed.
+    /// Called when membership changes (join/leave) so existing members can sync new keys.
+    /// </summary>
+    Task UpdateGroupFeedLastUpdatedAtBlockAsync(FeedId feedId, BlockIndex blockIndex);
+
     // ===== Group Feed Admin Operations (FEAT-009) =====
 
     /// <summary>

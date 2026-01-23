@@ -56,6 +56,8 @@ internal sealed class BlockProductionControl : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        Console.WriteLine("[E2E] BlockProductionControl.ProduceBlockAsync() called");
+
         var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(10);
         TaskCompletionSource<bool> tcs;
 
@@ -68,6 +70,7 @@ internal sealed class BlockProductionControl : IDisposable
         try
         {
             // Trigger block production
+            Console.WriteLine("[E2E] Triggering block production...");
             _blockTrigger.OnNext(Interlocked.Increment(ref _triggerCount));
 
             // Wait for finalization with timeout
@@ -111,6 +114,7 @@ internal sealed class BlockProductionControl : IDisposable
     /// </summary>
     public void OnBlockFinalized()
     {
+        Console.WriteLine("[E2E] BlockProductionControl.OnBlockFinalized() called - block indexed, releasing waiter");
         lock (_lock)
         {
             _pendingBlockCompletion?.TrySetResult(true);

@@ -22,10 +22,14 @@ services:
         # Fixed gRPC-Web port - must match HushServerNodeCore.E2EGrpcWebPort (14666)
         - NEXT_PUBLIC_GRPC_URL=http://host.docker.internal:14666
         - NEXT_PUBLIC_DEBUG_LOGGING=true
+        # Disable auto-sync for E2E tests - sync is triggered manually via window.__e2e_triggerSync()
+        - NEXT_PUBLIC_SYNC_INTERVAL_MS=999999
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+      # Server-side gRPC URL for API routes (must match build-time NEXT_PUBLIC_GRPC_URL)
+      - GRPC_SERVER_URL=http://host.docker.internal:14666
     healthcheck:
       # Use node for health check since Next.js standalone may not have wget/curl
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]

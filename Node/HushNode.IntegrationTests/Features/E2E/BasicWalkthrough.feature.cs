@@ -127,14 +127,23 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 14
+#line 15
         testRunner.When("the user navigates to \"/auth\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 15
+#line 18
         testRunner.And("the user creates a new identity with display name \"TestUser\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 18
+#line 21
+        testRunner.And("the identity transaction is processed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 25
+        testRunner.And("the personal feed transaction is processed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 28
         testRunner.Then("the user should be redirected to \"/dashboard\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 31
+        testRunner.And("the feed list should show the personal feed for \"TestUser\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
             this.ScenarioCleanup();
@@ -150,7 +159,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "PersonalFeed"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("User sends message to personal feed", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 21
+#line 34
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -163,25 +172,22 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 23
+#line 36
         testRunner.Given("the user has created identity \"TestUser\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 24
-        testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 27
+#line 39
         testRunner.When("the user clicks on their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 28
+#line 40
         testRunner.And("the user sends message \"Hello World!\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 29
-        testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line 42
+        testRunner.And("the transaction is processed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 32
+#line 45
         testRunner.Then("the message \"Hello World!\" should be visible in the chat", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 33
+#line 46
         testRunner.And("the message should show \"TestUser\" as the sender", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
@@ -198,7 +204,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "Reactions"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("User adds reaction to a message", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 36
+#line 49
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -211,25 +217,19 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 38
+#line 51
         testRunner.Given("the user has created identity \"TestUser\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 39
-        testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 40
+#line 52
         testRunner.And("the user has sent message \"Test message\" to their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 41
-        testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 44
+#line 55
         testRunner.When("the user adds reaction 0 to the message \"Test message\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 45
-        testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line 57
+        testRunner.And("the transaction is processed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 48
+#line 60
         testRunner.Then("the message \"Test message\" should show a reaction badge", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }

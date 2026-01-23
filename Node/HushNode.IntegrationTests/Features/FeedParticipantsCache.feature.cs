@@ -271,6 +271,272 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Joining user receives key generations after joining public group")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-050 Feed Participants & Group Keys Cache")]
+        [Xunit.TraitAttribute("Description", "Joining user receives key generations after joining public group")]
+        [Xunit.TraitAttribute("Category", "FEAT-050")]
+        [Xunit.TraitAttribute("Category", "KeyGenerations")]
+        [Xunit.TraitAttribute("Category", "JoinGroup")]
+        public void JoiningUserReceivesKeyGenerationsAfterJoiningPublicGroup()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-050",
+                    "KeyGenerations",
+                    "JoinGroup"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Joining user receives key generations after joining public group", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 54
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 55
+    testRunner.Given("Alice has created a public group feed \"JoinKeyTestGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 56
+    testRunner.And("the key generations for \"JoinKeyTestGroup\" have been cached", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 57
+    testRunner.When("Bob joins the public group \"JoinKeyTestGroup\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 58
+    testRunner.And("Bob looks up key generations for \"JoinKeyTestGroup\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 59
+    testRunner.Then("Bob should receive at least one key generation for \"JoinKeyTestGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Existing member receives new key generation after another user joins")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-050 Feed Participants & Group Keys Cache")]
+        [Xunit.TraitAttribute("Description", "Existing member receives new key generation after another user joins")]
+        [Xunit.TraitAttribute("Category", "FEAT-050")]
+        [Xunit.TraitAttribute("Category", "KeyGenerations")]
+        [Xunit.TraitAttribute("Category", "JoinGroup")]
+        [Xunit.TraitAttribute("Category", "Critical")]
+        public void ExistingMemberReceivesNewKeyGenerationAfterAnotherUserJoins()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-050",
+                    "KeyGenerations",
+                    "JoinGroup",
+                    "Critical"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Existing member receives new key generation after another user joins", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 70
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 71
+    testRunner.Given("Alice has created a public group feed \"ExistingMemberKeyGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 73
+    testRunner.And("Alice looks up key generations for \"ExistingMemberKeyGroup\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 74
+    testRunner.Then("Alice should receive exactly 1 key generation for \"ExistingMemberKeyGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 76
+    testRunner.When("Bob joins the public group \"ExistingMemberKeyGroup\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 78
+    testRunner.And("Alice looks up key generations for \"ExistingMemberKeyGroup\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 79
+    testRunner.Then("Alice should receive exactly 2 key generations for \"ExistingMemberKeyGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 80
+    testRunner.And("the database should have 2 key generations for \"ExistingMemberKeyGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 81
+    testRunner.And("Alice should have an encrypted key for KeyGeneration 1 in \"ExistingMemberKeyGroup" +
+                        "\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 82
+    testRunner.And("Bob should have an encrypted key for KeyGeneration 1 in \"ExistingMemberKeyGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Messages are encrypted with the correct key generation before and after member jo" +
+            "ins")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-050 Feed Participants & Group Keys Cache")]
+        [Xunit.TraitAttribute("Description", "Messages are encrypted with the correct key generation before and after member jo" +
+            "ins")]
+        [Xunit.TraitAttribute("Category", "FEAT-050")]
+        [Xunit.TraitAttribute("Category", "KeyGenerations")]
+        [Xunit.TraitAttribute("Category", "Messages")]
+        [Xunit.TraitAttribute("Category", "Critical")]
+        public void MessagesAreEncryptedWithTheCorrectKeyGenerationBeforeAndAfterMemberJoins()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-050",
+                    "KeyGenerations",
+                    "Messages",
+                    "Critical"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Messages are encrypted with the correct key generation before and after member jo" +
+                    "ins", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 88
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 89
+    testRunner.Given("Alice has created a public group feed \"MessageKeyGenGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 91
+    testRunner.When("Alice sends a group message \"Hello before Bob!\" to \"MessageKeyGenGroup\" with KeyG" +
+                        "eneration 0", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 92
+    testRunner.Then("the message \"Hello before Bob!\" in \"MessageKeyGenGroup\" should have KeyGeneration" +
+                        " 0", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 94
+    testRunner.When("Bob joins the public group \"MessageKeyGenGroup\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 95
+    testRunner.And("Alice looks up key generations for \"MessageKeyGenGroup\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 96
+    testRunner.Then("Alice should receive exactly 2 key generations for \"MessageKeyGenGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 98
+    testRunner.When("Alice sends a group message \"Hello after Bob!\" to \"MessageKeyGenGroup\" with KeyGe" +
+                        "neration 1", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 99
+    testRunner.Then("the message \"Hello after Bob!\" in \"MessageKeyGenGroup\" should have KeyGeneration " +
+                        "1", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 101
+    testRunner.When("Bob sends a group message \"Hi from Bob!\" to \"MessageKeyGenGroup\" with KeyGenerati" +
+                        "on 1", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 102
+    testRunner.Then("the message \"Hi from Bob!\" in \"MessageKeyGenGroup\" should have KeyGeneration 1", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Alice can decrypt Bob\'s message after key rotation (Twin Test for E2E)")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-050 Feed Participants & Group Keys Cache")]
+        [Xunit.TraitAttribute("Description", "Alice can decrypt Bob\'s message after key rotation (Twin Test for E2E)")]
+        [Xunit.TraitAttribute("Category", "FEAT-050")]
+        [Xunit.TraitAttribute("Category", "KeyGenerations")]
+        [Xunit.TraitAttribute("Category", "Decryption")]
+        [Xunit.TraitAttribute("Category", "TwinTest")]
+        [Xunit.TraitAttribute("Category", "Critical")]
+        public void AliceCanDecryptBobsMessageAfterKeyRotationTwinTestForE2E()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-050",
+                    "KeyGenerations",
+                    "Decryption",
+                    "TwinTest",
+                    "Critical"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Alice can decrypt Bob\'s message after key rotation (Twin Test for E2E)", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 119
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 121
+    testRunner.Given("Alice has created a public group feed \"DecryptionTestGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 122
+    testRunner.And("Alice looks up key generations for \"DecryptionTestGroup\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 123
+    testRunner.Then("Alice should receive exactly 1 key generation for \"DecryptionTestGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 125
+    testRunner.When("Alice decrypts her AES key for KeyGeneration 0 in \"DecryptionTestGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 126
+    testRunner.Then("the decryption should succeed for Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 129
+    testRunner.When("Bob joins the public group \"DecryptionTestGroup\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 132
+    testRunner.When("Alice looks up key generations for \"DecryptionTestGroup\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 133
+    testRunner.Then("Alice should receive exactly 2 key generations for \"DecryptionTestGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 134
+    testRunner.And("Alice should have an encrypted key for KeyGeneration 1 in \"DecryptionTestGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 137
+    testRunner.When("Alice decrypts her AES key for KeyGeneration 1 in \"DecryptionTestGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 138
+    testRunner.Then("the decryption should succeed for Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 142
+    testRunner.When("Bob looks up key generations for \"DecryptionTestGroup\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 143
+    testRunner.Then("Bob should receive exactly 1 key generation for \"DecryptionTestGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 144
+    testRunner.When("Bob decrypts his AES key for KeyGeneration 1 in \"DecryptionTestGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 145
+    testRunner.Then("the decryption should succeed for Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 147
+    testRunner.When("Bob sends a group message \"Hello Alice, I joined!\" to \"DecryptionTestGroup\" using" +
+                        " his decrypted KeyGeneration 1 key", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 150
+    testRunner.Then("Alice should be able to decrypt Bob\'s message \"Hello Alice, I joined!\" in \"Decryp" +
+                        "tionTestGroup\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable

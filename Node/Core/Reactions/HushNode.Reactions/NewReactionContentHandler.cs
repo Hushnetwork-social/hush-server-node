@@ -38,20 +38,28 @@ public class NewReactionContentHandler : ITransactionContentHandler
         _logger = logger;
     }
 
-    public bool CanValidate(Guid transactionKind) =>
-        NewReactionPayloadHandler.NewReactionPayloadKind == transactionKind;
+    public bool CanValidate(Guid transactionKind)
+    {
+        var canValidate = NewReactionPayloadHandler.NewReactionPayloadKind == transactionKind;
+        Console.WriteLine($"[E2E Reaction] NewReactionContentHandler.CanValidate: {canValidate}, PayloadKind={transactionKind}");
+        return canValidate;
+    }
 
     public AbstractTransaction? ValidateAndSign(AbstractTransaction transaction)
     {
+        Console.WriteLine($"[E2E Reaction] NewReactionContentHandler.ValidateAndSign: Starting validation for transaction {transaction.TransactionId}");
+
         var reactionTransaction = transaction as SignedTransaction<NewReactionPayload>;
 
         if (reactionTransaction == null)
         {
+            Console.WriteLine("[E2E Reaction] NewReactionContentHandler.ValidateAndSign: FAILED - Invalid transaction type");
             _logger.LogWarning("[NewReactionContentHandler] Invalid transaction type");
             return null;
         }
 
         var payload = reactionTransaction.Payload;
+        Console.WriteLine($"[E2E Reaction] NewReactionContentHandler.ValidateAndSign: MessageId={payload.MessageId}, FeedId={payload.FeedId}");
 
         // Validate input sizes
         if (payload.CiphertextC1X.Length != 6 || payload.CiphertextC1Y.Length != 6 ||
@@ -80,12 +88,14 @@ public class NewReactionContentHandler : ITransactionContentHandler
         }
 
         // Sign with block producer credentials
+        Console.WriteLine("[E2E Reaction] NewReactionContentHandler.ValidateAndSign: Validation passed, signing with block producer credentials");
         var blockProducerCredentials = _credentialProvider.GetCredentials();
 
         var signedByValidatorTransaction = reactionTransaction.SignByValidator(
             blockProducerCredentials.PublicSigningAddress,
             blockProducerCredentials.PrivateSigningKey);
 
+        Console.WriteLine($"[E2E Reaction] NewReactionContentHandler.ValidateAndSign: SUCCESS - Transaction signed, adding to mempool");
         _logger.LogInformation("[NewReactionContentHandler] Validated reaction for message {MessageId}", payload.MessageId);
 
         return signedByValidatorTransaction;
