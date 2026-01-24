@@ -12,6 +12,7 @@ service HushFeed {
   rpc IsFeedInBlockchain (IsFeedInBlockchainRequest) returns (IsFeedInBlockchainReply);
   rpc GetFeedsForAddress (GetFeedForAddressRequest) returns (GetFeedForAddressReply);
   rpc GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest) returns (GetFeedMessagesForAddressReply);
+  rpc GetMessageById(GetMessageByIdRequest) returns (GetMessageByIdResponse);  // FEAT-052: Fetch single message by ID
 
   // Group Feed Query Operations
   rpc GetGroupMembers (GetGroupMembersRequest) returns (GetGroupMembersResponse);
@@ -91,8 +92,10 @@ message GetFeedForAddressReply {
 
 message GetFeedMessagesForAddressRequest {
   string ProfilePublicKey = 1;
-  int64 BlockIndex = 2;
-  int64 LastReactionTallyVersion = 3;  // Only return tallies newer than this version
+  int64 BlockIndex = 2;                   // Inclusive: return messages >= this block
+  int64 LastReactionTallyVersion = 3;     // Only return tallies newer than this version
+  optional int32 Limit = 4;               // FEAT-052: Max messages to return (default 100, capped to server max)
+  optional bool FetchLatest = 5;          // FEAT-052: If true, return latest N messages (ignore BlockIndex)
 }
 
 message GetFeedMessagesForAddressReply {
@@ -122,6 +125,23 @@ message GetFeedMessagesForAddressReply {
   repeated FeedMessage Messages = 1;
   repeated MessageReactionTally ReactionTallies = 2;  // Tallies for messages with reactions
   int64 MaxReactionTallyVersion = 3;                  // For incremental sync
+  bool HasMoreMessages = 4;                           // FEAT-052: True if older messages exist before this batch
+  int64 OldestBlockIndex = 5;                         // FEAT-052: Block index of first message in array (for backward pagination)
+}
+
+// =============================================================================
+// FEAT-052: GetMessageById - Fetch single message for deep-linking
+// =============================================================================
+
+message GetMessageByIdRequest {
+  string FeedId = 1;      // Feed containing the message
+  string MessageId = 2;   // ID of the message to retrieve
+}
+
+message GetMessageByIdResponse {
+  bool Success = 1;                                          // True if message found and accessible
+  GetFeedMessagesForAddressReply.FeedMessage Message = 2;    // The message (null if not found or access denied)
+  string Error = 3;                                          // Error message: "Message not found" or "Access denied"
 }
 
 // =============================================================================
