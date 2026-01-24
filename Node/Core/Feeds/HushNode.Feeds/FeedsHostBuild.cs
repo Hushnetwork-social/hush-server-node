@@ -14,6 +14,9 @@ public static class FeedsHostBuild
     {
         builder.ConfigureServices((hostContext, services) =>
         {
+            // FEAT-052: Configure FeedsSettings for pagination
+            services.Configure<FeedsSettings>(hostContext.Configuration.GetSection(FeedsSettings.SectionName));
+
             services.AddSingleton<IBootstrapper, FeedsBootstrapper>();
 
             services.AddSingleton<IFeedsInitializationWorkflow, FeedsInitializationWorkflow>();

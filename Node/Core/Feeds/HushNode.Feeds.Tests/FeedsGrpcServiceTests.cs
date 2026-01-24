@@ -8,8 +8,10 @@ using HushNode.Identity;
 using HushNode.Identity.Storage;
 using HushNode.Reactions.Storage;
 using HushShared.Blockchain.BlockModel;
+using HushShared.Blockchain.Model;
 using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using Olimpo;
 using Moq.AutoMock;
@@ -31,6 +33,7 @@ public class FeedsGrpcServiceTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var userAddress = TestDataFactory.CreateAddress();
         var feedId = TestDataFactory.CreateFeedId();
 
@@ -73,6 +76,7 @@ public class FeedsGrpcServiceTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var userAddress = TestDataFactory.CreateAddress();
         var otherUserAddress = TestDataFactory.CreateAddress();
         var feedId = TestDataFactory.CreateFeedId();
@@ -119,6 +123,7 @@ public class FeedsGrpcServiceTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var userAddress = TestDataFactory.CreateAddress();
         var feedIdWithPosition = TestDataFactory.CreateFeedId();
         var feedIdWithoutPosition = TestDataFactory.CreateFeedId();
@@ -176,6 +181,7 @@ public class FeedsGrpcServiceTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var userAddress = TestDataFactory.CreateAddress();
         var feedId = TestDataFactory.CreateFeedId();
 
@@ -228,6 +234,7 @@ public class FeedsGrpcServiceTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var userAddress = TestDataFactory.CreateAddress();
         var otherMemberAddress = TestDataFactory.CreateAddress();
         var feedId = TestDataFactory.CreateFeedId();
@@ -276,6 +283,7 @@ public class FeedsGrpcServiceTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var userAddress = TestDataFactory.CreateAddress();
         var otherUserAddress = TestDataFactory.CreateAddress();
         var groupMemberAddress = TestDataFactory.CreateAddress();
@@ -349,6 +357,7 @@ public class FeedsGrpcServiceTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var adminAddress = TestDataFactory.CreateAddress();
         var newMemberAddress = TestDataFactory.CreateAddress();
         // Generate valid ECIES keys for testing
@@ -427,6 +436,7 @@ public class FeedsGrpcServiceTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var adminAddress = TestDataFactory.CreateAddress();
         var newMemberAddress = TestDataFactory.CreateAddress();
         var newMemberEncryptKey = TestDataFactory.CreateAddress();
@@ -493,6 +503,7 @@ public class FeedsGrpcServiceTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var nonAdminAddress = TestDataFactory.CreateAddress();
         var newMemberAddress = TestDataFactory.CreateAddress();
         var newMemberEncryptKey = TestDataFactory.CreateAddress();
@@ -534,7 +545,240 @@ public class FeedsGrpcServiceTests
 
     #endregion
 
+    #region FEAT-052: GetMessageById Tests
+
+    [Fact]
+    public async Task GetMessageById_WithValidIds_ShouldReturnMessage()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+        var feedId = TestDataFactory.CreateFeedId();
+        var messageId = new FeedMessageId(Guid.NewGuid());
+        var userAddress = TestDataFactory.CreateAddress();
+
+        var feedMessage = new FeedMessage(
+            messageId, feedId, "Test message content", userAddress,
+            new Timestamp(DateTime.UtcNow), new BlockIndex(100),
+            null, null);
+
+        var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockMessageStorageService
+            .Setup(x => x.GetFeedMessageByIdAsync(messageId))
+            .ReturnsAsync(feedMessage);
+
+        var mockIdentityService = mocker.GetMock<IIdentityService>();
+        mockIdentityService
+            .Setup(x => x.RetrieveIdentityAsync(userAddress))
+            .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetMessageByIdRequest
+        {
+            FeedId = feedId.ToString(),
+            MessageId = messageId.ToString()
+        };
+
+        // Act
+        var result = await service.GetMessageById(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Message.Should().NotBeNull();
+        result.Message.FeedMessageId.Should().Be(messageId.ToString());
+        result.Message.FeedId.Should().Be(feedId.ToString());
+        result.Message.MessageContent.Should().Be("Test message content");
+        result.Message.IssuerName.Should().Be("TestUser");
+    }
+
+    [Fact]
+    public async Task GetMessageById_WithEmptyFeedId_ShouldReturnError()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetMessageByIdRequest
+        {
+            FeedId = "",
+            MessageId = Guid.NewGuid().ToString()
+        };
+
+        // Act
+        var result = await service.GetMessageById(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("FeedId is required");
+    }
+
+    [Fact]
+    public async Task GetMessageById_WithEmptyMessageId_ShouldReturnError()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetMessageByIdRequest
+        {
+            FeedId = TestDataFactory.CreateFeedId().ToString(),
+            MessageId = ""
+        };
+
+        // Act
+        var result = await service.GetMessageById(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("MessageId is required");
+    }
+
+    [Fact]
+    public async Task GetMessageById_MessageNotFound_ShouldReturnError()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+        var feedId = TestDataFactory.CreateFeedId();
+        var messageId = Guid.NewGuid();
+
+        var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockMessageStorageService
+            .Setup(x => x.GetFeedMessageByIdAsync(It.IsAny<FeedMessageId>()))
+            .ReturnsAsync((FeedMessage?)null);
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetMessageByIdRequest
+        {
+            FeedId = feedId.ToString(),
+            MessageId = messageId.ToString()
+        };
+
+        // Act
+        var result = await service.GetMessageById(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("Message not found");
+    }
+
+    [Fact]
+    public async Task GetMessageById_MessageFromDifferentFeed_ShouldReturnError()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+        var requestedFeedId = TestDataFactory.CreateFeedId();
+        var actualFeedId = TestDataFactory.CreateFeedId();
+        var messageId = new FeedMessageId(Guid.NewGuid());
+        var userAddress = TestDataFactory.CreateAddress();
+
+        // Message belongs to a different feed
+        var feedMessage = new FeedMessage(
+            messageId, actualFeedId, "Test message", userAddress,
+            new Timestamp(DateTime.UtcNow), new BlockIndex(100),
+            null, null);
+
+        var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockMessageStorageService
+            .Setup(x => x.GetFeedMessageByIdAsync(messageId))
+            .ReturnsAsync(feedMessage);
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetMessageByIdRequest
+        {
+            FeedId = requestedFeedId.ToString(),
+            MessageId = messageId.ToString()
+        };
+
+        // Act
+        var result = await service.GetMessageById(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("Message not found");
+    }
+
+    [Fact]
+    public async Task GetMessageById_WithInvalidMessageIdFormat_ShouldReturnError()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetMessageByIdRequest
+        {
+            FeedId = TestDataFactory.CreateFeedId().ToString(),
+            MessageId = "not-a-valid-guid"
+        };
+
+        // Act
+        var result = await service.GetMessageById(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("Invalid");
+    }
+
+    [Fact]
+    public async Task GetMessageById_WithReplyToMessageId_ShouldIncludeIt()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+        var feedId = TestDataFactory.CreateFeedId();
+        var messageId = new FeedMessageId(Guid.NewGuid());
+        var replyToMessageId = new FeedMessageId(Guid.NewGuid());
+        var userAddress = TestDataFactory.CreateAddress();
+
+        var feedMessage = new FeedMessage(
+            messageId, feedId, "Reply message", userAddress,
+            new Timestamp(DateTime.UtcNow), new BlockIndex(100),
+            null, replyToMessageId);
+
+        var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockMessageStorageService
+            .Setup(x => x.GetFeedMessageByIdAsync(messageId))
+            .ReturnsAsync(feedMessage);
+
+        var mockIdentityService = mocker.GetMock<IIdentityService>();
+        mockIdentityService
+            .Setup(x => x.RetrieveIdentityAsync(userAddress))
+            .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetMessageByIdRequest
+        {
+            FeedId = feedId.ToString(),
+            MessageId = messageId.ToString()
+        };
+
+        // Act
+        var result = await service.GetMessageById(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Message.ReplyToMessageId.Should().Be(replyToMessageId.ToString());
+    }
+
+    #endregion
+
     #region Helper Methods
+
+    /// <summary>
+    /// Sets up the IConfiguration mock to return proper values for Feeds configuration.
+    /// FEAT-052: Required for pagination configuration.
+    /// </summary>
+    private static void SetupConfigurationMock(AutoMocker mocker, int maxMessagesPerResponse = 100)
+    {
+        var mockConfigSection = new Mock<IConfigurationSection>();
+        mockConfigSection.Setup(s => s.Value).Returns(maxMessagesPerResponse.ToString());
+
+        var mockConfiguration = mocker.GetMock<IConfiguration>();
+        mockConfiguration
+            .Setup(c => c.GetSection("Feeds:MaxMessagesPerResponse"))
+            .Returns(mockConfigSection.Object);
+    }
 
     private static Feed CreateFeed(FeedId feedId, string alias, FeedType feedType, long blockIndex)
     {

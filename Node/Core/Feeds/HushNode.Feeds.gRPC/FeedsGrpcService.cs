@@ -10,6 +10,7 @@ using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
 using MessageReactionTallyModel = HushShared.Reactions.Model.MessageReactionTally;
 using Google.Protobuf;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Olimpo;
 using Olimpo.EntityFramework.Persistency;
@@ -27,6 +28,7 @@ public class FeedsGrpcService(
     IIdentityStorageService identityStorageService,
     IBlockchainCache blockchainCache,
     IUnitOfWorkProvider<ReactionsDbContext> reactionsUnitOfWorkProvider,
+    IConfiguration configuration,
     ILogger<FeedsGrpcService> logger) : HushFeed.HushFeedBase
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
@@ -39,6 +41,7 @@ public class FeedsGrpcService(
     private readonly IIdentityStorageService _identityStorageService = identityStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IUnitOfWorkProvider<ReactionsDbContext> _reactionsUnitOfWorkProvider = reactionsUnitOfWorkProvider;
+    private readonly int _maxMessagesPerResponse = configuration.GetValue<int>("Feeds:MaxMessagesPerResponse", 100);
     private readonly ILogger<FeedsGrpcService> _logger = logger;
 
     /// <summary>Maximum number of members supported in a single key rotation.</summary>
@@ -159,7 +162,13 @@ public class FeedsGrpcService(
     {
         try
         {
-            Console.WriteLine($"[GetFeedMessagesForAddress] Starting for ProfilePublicKey: {request.ProfilePublicKey?.Substring(0, Math.Min(20, request.ProfilePublicKey?.Length ?? 0))}..., BlockIndex: {request.BlockIndex}, LastReactionTallyVersion: {request.LastReactionTallyVersion}");
+            // FEAT-052: Read pagination parameters
+            var fetchLatest = request.HasFetchLatest && request.FetchLatest;
+            var requestedLimit = request.HasLimit ? request.Limit : _maxMessagesPerResponse;
+            // Silently cap to server max
+            var limit = Math.Min(requestedLimit, _maxMessagesPerResponse);
+
+            Console.WriteLine($"[GetFeedMessagesForAddress] Starting for ProfilePublicKey: {request.ProfilePublicKey?.Substring(0, Math.Min(20, request.ProfilePublicKey?.Length ?? 0))}..., BlockIndex: {request.BlockIndex}, FetchLatest: {fetchLatest}, Limit: {limit}, LastReactionTallyVersion: {request.LastReactionTallyVersion}");
 
             var blockIndex = BlockIndexHandler.CreateNew(request.BlockIndex);
 
@@ -171,20 +180,36 @@ public class FeedsGrpcService(
 
             var reply = new GetFeedMessagesForAddressReply();
 
+            // FEAT-052: Track pagination metadata across all feeds
+            var allHasMore = false;
+            var allOldestBlockIndex = long.MaxValue;
+
             foreach(var feed in lastFeedsFromAddress)
             {
-                Console.WriteLine($"[GetFeedMessagesForAddress] Processing feed {feed.FeedId.ToString().Substring(0, 8)}..., Type: {feed.FeedType}, BlockIndex filter: {blockIndex.Value}");
+                Console.WriteLine($"[GetFeedMessagesForAddress] Processing feed {feed.FeedId.ToString().Substring(0, 8)}..., Type: {feed.FeedType}, BlockIndex filter: {blockIndex.Value}, FetchLatest: {fetchLatest}");
 
                 _logger.LogDebug(
                     "Processing feed {FeedId}, Type: {FeedType}",
                     feed.FeedId,
                     feed.FeedType);
 
-                // FEAT-046: Get messages with cache-first pattern
-                var lastFeedMessages = await GetMessagesWithCacheFallbackAsync(feed.FeedId, blockIndex);
-                var messagesList = lastFeedMessages.ToList();
+                // FEAT-052: Use paginated query with cache-first pattern
+                var paginatedResult = await GetMessagesWithCacheFallbackPaginatedAsync(feed.FeedId, blockIndex, limit, fetchLatest);
+                var messagesList = paginatedResult.Messages.ToList();
 
-                Console.WriteLine($"[GetFeedMessagesForAddress] Feed {feed.FeedId.ToString().Substring(0, 8)}... returned {messagesList.Count} messages");
+                // Track if any feed has more messages
+                if (paginatedResult.HasMoreMessages)
+                {
+                    allHasMore = true;
+                }
+
+                // Track the oldest block index across all feeds
+                if (messagesList.Count > 0 && paginatedResult.OldestBlockIndex.Value < allOldestBlockIndex)
+                {
+                    allOldestBlockIndex = paginatedResult.OldestBlockIndex.Value;
+                }
+
+                Console.WriteLine($"[GetFeedMessagesForAddress] Feed {feed.FeedId.ToString().Substring(0, 8)}... returned {messagesList.Count} messages, HasMore: {paginatedResult.HasMoreMessages}");
                 foreach (var msg in messagesList)
                 {
                     var keyGen = msg.KeyGeneration ?? -1;
@@ -242,10 +267,14 @@ public class FeedsGrpcService(
                 }
             }
 
+            // FEAT-052: Set pagination metadata
+            reply.HasMoreMessages = allHasMore;
+            reply.OldestBlockIndex = allOldestBlockIndex == long.MaxValue ? 0 : allOldestBlockIndex;
+
             // Fetch and add reaction tallies (Protocol Omega)
             await AddReactionTallies(request, reply);
 
-            Console.WriteLine($"[GetFeedMessagesForAddress] Returning {reply.Messages.Count} total messages, {reply.ReactionTallies.Count} reaction tallies");
+            Console.WriteLine($"[GetFeedMessagesForAddress] Returning {reply.Messages.Count} total messages, {reply.ReactionTallies.Count} reaction tallies, HasMore: {reply.HasMoreMessages}, OldestBlockIndex: {reply.OldestBlockIndex}");
             return reply;
         }
         catch (Exception ex)
@@ -420,6 +449,125 @@ public class FeedsGrpcService(
 
             return await this._feedMessageStorageService
                 .RetrieveLastFeedMessagesForFeedAsync(feedId, sinceBlockIndex);
+        }
+    }
+
+    /// <summary>
+    /// FEAT-052: Gets paginated messages with cache-first pattern.
+    /// For fetch_latest=true: Tries Redis cache first (contains latest messages), falls back to PostgreSQL.
+    /// For regular pagination: Queries PostgreSQL directly (historical data not in cache).
+    /// Returns pagination metadata (hasMore, oldestBlockIndex).
+    /// </summary>
+    private async Task<PaginatedMessagesResult> GetMessagesWithCacheFallbackPaginatedAsync(
+        FeedId feedId,
+        BlockIndex sinceBlockIndex,
+        int limit,
+        bool fetchLatest)
+    {
+        try
+        {
+            if (fetchLatest)
+            {
+                // For fetch_latest: Try cache first (Redis contains the latest 100 messages)
+                Console.WriteLine($"[CacheFallbackPaginated] Feed {feedId.ToString().Substring(0, 8)}...: fetch_latest=true, trying cache first");
+                var cachedMessages = await this._feedMessageCacheService.GetMessagesAsync(feedId, new BlockIndex(0));
+
+                if (cachedMessages != null)
+                {
+                    var messagesList = cachedMessages.ToList();
+                    Console.WriteLine($"[CacheFallbackPaginated] Feed {feedId.ToString().Substring(0, 8)}...: CACHE HIT - {messagesList.Count} messages");
+
+                    if (messagesList.Count > 0)
+                    {
+                        // Take the latest N messages (already sorted ascending)
+                        var latestMessages = messagesList
+                            .OrderByDescending(m => m.BlockIndex.Value)
+                            .Take(limit)
+                            .OrderBy(m => m.BlockIndex.Value)
+                            .ToList();
+
+                        var oldestBlockIndex = latestMessages.Count > 0
+                            ? latestMessages[0].BlockIndex
+                            : new BlockIndex(0);
+
+                        // Check if there are more messages before the oldest returned
+                        var hasMore = messagesList.Count > limit ||
+                            await HasOlderMessagesInDbAsync(feedId, oldestBlockIndex);
+
+                        return new PaginatedMessagesResult(latestMessages, hasMore, oldestBlockIndex);
+                    }
+                }
+
+                // Cache miss or empty - fall through to PostgreSQL
+                Console.WriteLine($"[CacheFallbackPaginated] Feed {feedId.ToString().Substring(0, 8)}...: CACHE MISS - querying PostgreSQL with fetch_latest");
+            }
+            else
+            {
+                Console.WriteLine($"[CacheFallbackPaginated] Feed {feedId.ToString().Substring(0, 8)}...: regular pagination, querying PostgreSQL directly");
+            }
+
+            // Query PostgreSQL with pagination
+            var result = await this._feedMessageStorageService
+                .GetPaginatedMessagesAsync(feedId, sinceBlockIndex, limit, fetchLatest);
+
+            Console.WriteLine($"[CacheFallbackPaginated] Feed {feedId.ToString().Substring(0, 8)}...: PostgreSQL returned {result.Messages.Count} messages, HasMore: {result.HasMoreMessages}");
+
+            // Cache-aside pattern: Populate cache whenever we fetch from PostgreSQL
+            // This ensures subsequent reads can benefit from the cache
+            if (result.Messages.Count > 0)
+            {
+                try
+                {
+                    await this._feedMessageCacheService.PopulateCacheAsync(feedId, result.Messages.ToList());
+                    _logger.LogDebug(
+                        "Populated cache for feed {FeedId} with {MessageCount} messages",
+                        feedId,
+                        result.Messages.Count);
+                }
+                catch (Exception ex)
+                {
+                    // Log and continue - cache population failure should not fail the request
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to populate cache for feed {FeedId}. Returning PostgreSQL results.",
+                        feedId);
+                }
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            // Redis error - fall back to PostgreSQL
+            _logger.LogWarning(
+                ex,
+                "Cache operation failed for feed {FeedId}. Falling back to PostgreSQL.",
+                feedId);
+
+            return await this._feedMessageStorageService
+                .GetPaginatedMessagesAsync(feedId, sinceBlockIndex, limit, fetchLatest);
+        }
+    }
+
+    /// <summary>
+    /// Helper to check if there are older messages in the database before a given block.
+    /// Used to determine HasMore when cache doesn't contain all messages.
+    /// </summary>
+    private async Task<bool> HasOlderMessagesInDbAsync(FeedId feedId, BlockIndex oldestBlockIndex)
+    {
+        try
+        {
+            // Query for messages older than the oldest cached message
+            var result = await this._feedMessageStorageService
+                .GetPaginatedMessagesAsync(feedId, new BlockIndex(0), 1, fetchLatest: false);
+
+            // If there are any messages and the oldest is before our oldest cached, there's more
+            return result.Messages.Count > 0 && result.Messages[0].BlockIndex.Value < oldestBlockIndex.Value;
+        }
+        catch
+        {
+            // On error, assume there might be more messages
+            return true;
         }
     }
 
@@ -2236,6 +2384,125 @@ public class FeedsGrpcService(
             {
                 Success = false,
                 Message = $"Internal error: {ex.Message}"
+            };
+        }
+    }
+
+    // ===== FEAT-052: GetMessageById Endpoint =====
+
+    public override async Task<GetMessageByIdResponse> GetMessageById(
+        GetMessageByIdRequest request,
+        ServerCallContext context)
+    {
+        Console.WriteLine($"[GetMessageById] FeedId: {request.FeedId}, MessageId: {request.MessageId}");
+
+        try
+        {
+            // Validate required fields
+            if (string.IsNullOrEmpty(request.FeedId))
+            {
+                return new GetMessageByIdResponse
+                {
+                    Success = false,
+                    Error = "FeedId is required"
+                };
+            }
+
+            if (string.IsNullOrEmpty(request.MessageId))
+            {
+                return new GetMessageByIdResponse
+                {
+                    Success = false,
+                    Error = "MessageId is required"
+                };
+            }
+
+            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
+            var messageId = new FeedMessageId(Guid.Parse(request.MessageId));
+
+            // Fetch the message by ID
+            var feedMessage = await this._feedMessageStorageService.GetFeedMessageByIdAsync(messageId);
+
+            if (feedMessage == null)
+            {
+                Console.WriteLine($"[GetMessageById] Message not found: {request.MessageId}");
+                return new GetMessageByIdResponse
+                {
+                    Success = false,
+                    Error = "Message not found"
+                };
+            }
+
+            // Verify the message belongs to the requested feed
+            if (feedMessage.FeedId != feedId)
+            {
+                Console.WriteLine($"[GetMessageById] Message {request.MessageId} does not belong to feed {request.FeedId}");
+                return new GetMessageByIdResponse
+                {
+                    Success = false,
+                    Error = "Message not found"
+                };
+            }
+
+            // Resolve issuer display name
+            var issuerName = await this.ExtractDisplayName(feedMessage.IssuerPublicAddress);
+
+            // Handle potential null or invalid timestamp
+            var timestamp = feedMessage.Timestamp?.Value ?? DateTime.UtcNow;
+
+            var messageProto = new GetFeedMessagesForAddressReply.Types.FeedMessage
+            {
+                FeedMessageId = feedMessage.FeedMessageId.ToString(),
+                FeedId = feedMessage.FeedId.ToString(),
+                MessageContent = feedMessage.MessageContent,
+                IssuerPublicAddress = feedMessage.IssuerPublicAddress,
+                BlockIndex = feedMessage.BlockIndex.Value,
+                IssuerName = issuerName,
+                TimeStamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(
+                    DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)),
+            };
+
+            // Add AuthorCommitment if present (Protocol Omega)
+            if (feedMessage.AuthorCommitment != null)
+            {
+                messageProto.AuthorCommitment = ByteString.CopyFrom(feedMessage.AuthorCommitment);
+            }
+
+            // Add ReplyToMessageId if present
+            if (feedMessage.ReplyToMessageId != null)
+            {
+                messageProto.ReplyToMessageId = feedMessage.ReplyToMessageId.ToString();
+            }
+
+            // Add KeyGeneration if present (Group Feeds)
+            if (feedMessage.KeyGeneration != null)
+            {
+                messageProto.KeyGeneration = feedMessage.KeyGeneration.Value;
+            }
+
+            Console.WriteLine($"[GetMessageById] Success - returning message from feed {feedMessage.FeedId}");
+            return new GetMessageByIdResponse
+            {
+                Success = true,
+                Message = messageProto
+            };
+        }
+        catch (FormatException ex)
+        {
+            Console.WriteLine($"[GetMessageById] Invalid ID format: {ex.Message}");
+            return new GetMessageByIdResponse
+            {
+                Success = false,
+                Error = "Invalid message ID format"
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GetMessageById] ERROR: {ex.GetType().Name}: {ex.Message}");
+            return new GetMessageByIdResponse
+            {
+                Success = false,
+                Error = $"Internal error: {ex.Message}"
             };
         }
     }

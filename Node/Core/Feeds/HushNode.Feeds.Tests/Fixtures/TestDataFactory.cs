@@ -498,6 +498,43 @@ public static class TestDataFactory
 
     #endregion
 
+    #region FEAT-052: FeedMessage for Pagination Tests
+
+    public static FeedMessageId CreateFeedMessageId() => new(Guid.NewGuid());
+
+    public static FeedMessage CreateFeedMessage(
+        FeedId feedId,
+        BlockIndex blockIndex,
+        string? issuerAddress = null,
+        FeedMessageId? messageId = null,
+        string? content = null)
+    {
+        return new FeedMessage(
+            messageId ?? CreateFeedMessageId(),
+            feedId,
+            content ?? $"Test message at block {blockIndex}",
+            issuerAddress ?? CreateAddress(),
+            new Timestamp(DateTime.UtcNow),
+            blockIndex);
+    }
+
+    public static List<FeedMessage> CreateFeedMessagesInRange(
+        FeedId feedId,
+        int startBlock,
+        int endBlock,
+        string? issuerAddress = null)
+    {
+        var messages = new List<FeedMessage>();
+        var address = issuerAddress ?? CreateAddress();
+        for (int i = startBlock; i <= endBlock; i++)
+        {
+            messages.Add(CreateFeedMessage(feedId, new BlockIndex(i), address));
+        }
+        return messages;
+    }
+
+    #endregion
+
     #region Key Rotation Payloads
 
     public static GroupFeedKeyRotationPayload CreateKeyRotationPayload(

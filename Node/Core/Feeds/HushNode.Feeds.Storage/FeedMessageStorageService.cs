@@ -48,4 +48,17 @@ public class FeedMessageStorageService(
             .GetRepository<IFeedMessageRepository>()
             .GetFeedMessageByIdAsync(messageId);
     }
+
+    public async Task<PaginatedMessagesResult> GetPaginatedMessagesAsync(
+        FeedId feedId,
+        BlockIndex sinceBlockIndex,
+        int limit,
+        bool fetchLatest)
+    {
+        using var readOnlyUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
+
+        return await readOnlyUnitOfWork
+            .GetRepository<IFeedMessageRepository>()
+            .GetPaginatedMessagesAsync(feedId, sinceBlockIndex, limit, fetchLatest);
+    }
 }

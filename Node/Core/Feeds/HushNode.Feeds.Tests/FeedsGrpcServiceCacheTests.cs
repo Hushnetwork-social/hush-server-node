@@ -10,6 +10,7 @@ using HushShared.Blockchain.BlockModel;
 using HushShared.Blockchain.Model;
 using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.AutoMock;
@@ -31,6 +32,7 @@ public class FeedsGrpcServiceCacheTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var userAddress = TestDataFactory.CreateAddress();
         var feedId = TestDataFactory.CreateFeedId();
 
@@ -66,11 +68,18 @@ public class FeedsGrpcServiceCacheTests
             .Setup(x => x.RetrieveIdentityAsync(userAddress))
             .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
 
+        // FEAT-052: Mock pagination method (used to check for older messages in cache scenario)
+        var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockMessageStorageService
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync(new PaginatedMessagesResult(new List<FeedMessage>(), false, new BlockIndex(0)));
+
         var service = mocker.CreateInstance<FeedsGrpcService>();
         var request = new GetFeedMessagesForAddressRequest
         {
             ProfilePublicKey = userAddress,
-            BlockIndex = 90  // Request since block 90, oldest cached is 90 -> no gap
+            BlockIndex = 90,  // Request since block 90, oldest cached is 90 -> no gap
+            FetchLatest = true  // FEAT-052: Use fetch_latest to hit cache path
         };
 
         // Act
@@ -80,13 +89,6 @@ public class FeedsGrpcServiceCacheTests
         result.Messages.Should().HaveCount(2);
         result.Messages[0].MessageContent.Should().Be("Cached message 1");
         result.Messages[1].MessageContent.Should().Be("Cached message 2");
-
-        // Verify PostgreSQL storage was NOT called (cache hit)
-        var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
-        mockMessageStorageService.Verify(
-            x => x.RetrieveLastFeedMessagesForFeedAsync(It.IsAny<FeedId>(), It.IsAny<BlockIndex>()),
-            Times.Never,
-            "PostgreSQL should NOT be queried on cache hit");
     }
 
     #endregion
@@ -98,6 +100,7 @@ public class FeedsGrpcServiceCacheTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var userAddress = TestDataFactory.CreateAddress();
         var feedId = TestDataFactory.CreateFeedId();
 
@@ -128,11 +131,11 @@ public class FeedsGrpcServiceCacheTests
             .Setup(x => x.PopulateCacheAsync(feedId, It.IsAny<IEnumerable<FeedMessage>>()))
             .Returns(Task.CompletedTask);
 
-        // Mock PostgreSQL storage to return messages
+        // FEAT-052: Mock pagination method to return messages
         var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
         mockMessageStorageService
-            .Setup(x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.IsAny<BlockIndex>()))
-            .ReturnsAsync(dbMessages);
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync(new PaginatedMessagesResult(dbMessages.ToList(), false, new BlockIndex(90)));
 
         // Mock identity service for display name
         var mockIdentityService = mocker.GetMock<IIdentityService>();
@@ -144,7 +147,8 @@ public class FeedsGrpcServiceCacheTests
         var request = new GetFeedMessagesForAddressRequest
         {
             ProfilePublicKey = userAddress,
-            BlockIndex = 80
+            BlockIndex = 80,
+            FetchLatest = true  // FEAT-052: Use fetch_latest for cache fallback testing
         };
 
         // Act
@@ -155,11 +159,11 @@ public class FeedsGrpcServiceCacheTests
         result.Messages[0].MessageContent.Should().Be("DB message 1");
         result.Messages[1].MessageContent.Should().Be("DB message 2");
 
-        // Verify PostgreSQL was queried (cache miss)
+        // FEAT-052: Verify pagination method was called (cache miss)
         mockMessageStorageService.Verify(
-            x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.IsAny<BlockIndex>()),
+            x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()),
             Times.Once,
-            "PostgreSQL should be queried on cache miss");
+            "Pagination method should be queried on cache miss");
 
         // Verify cache was populated (cache-aside pattern)
         mockCacheService.Verify(
@@ -177,6 +181,7 @@ public class FeedsGrpcServiceCacheTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var userAddress = TestDataFactory.CreateAddress();
         var feedId = TestDataFactory.CreateFeedId();
 
@@ -208,17 +213,17 @@ public class FeedsGrpcServiceCacheTests
             .Setup(x => x.RetrieveFeedsForAddress(userAddress, It.IsAny<BlockIndex>()))
             .ReturnsAsync(new[] { feed });
 
-        // Mock cache to return messages (but with a gap)
+        // Mock cache - for regular pagination (not fetch_latest), cache is not checked
         var mockCacheService = mocker.GetMock<IFeedMessageCacheService>();
         mockCacheService
             .Setup(x => x.GetMessagesAsync(feedId, It.IsAny<BlockIndex>()))
             .ReturnsAsync(cachedMessages);
 
-        // Mock PostgreSQL storage to return complete messages
+        // FEAT-052: Mock pagination method to return complete messages
         var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
         mockMessageStorageService
-            .Setup(x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.IsAny<BlockIndex>()))
-            .ReturnsAsync(dbMessages);
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync(new PaginatedMessagesResult(dbMessages.ToList(), false, new BlockIndex(60)));
 
         // Mock identity service for display name
         var mockIdentityService = mocker.GetMock<IIdentityService>();
@@ -230,20 +235,20 @@ public class FeedsGrpcServiceCacheTests
         var request = new GetFeedMessagesForAddressRequest
         {
             ProfilePublicKey = userAddress,
-            BlockIndex = 50  // Asking for messages since block 50, but cache only has 90+
+            BlockIndex = 50  // FEAT-052: Regular pagination (not fetch_latest) - directly queries DB
         };
 
         // Act
         var result = await service.GetFeedMessagesForAddress(request, CreateMockServerCallContext());
 
         // Assert
-        result.Messages.Should().HaveCount(4, "Should return all messages from PostgreSQL due to cache gap");
+        result.Messages.Should().HaveCount(4, "Should return all messages from PostgreSQL");
 
-        // Verify PostgreSQL was queried (cache gap detected)
+        // FEAT-052: Verify pagination method was queried (regular pagination goes to DB)
         mockMessageStorageService.Verify(
-            x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.IsAny<BlockIndex>()),
+            x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), false),
             Times.Once,
-            "PostgreSQL should be queried when cache gap is detected");
+            "Pagination method should be queried for regular pagination");
     }
 
     #endregion
@@ -255,6 +260,7 @@ public class FeedsGrpcServiceCacheTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var userAddress = TestDataFactory.CreateAddress();
         var feedId = TestDataFactory.CreateFeedId();
 
@@ -282,11 +288,11 @@ public class FeedsGrpcServiceCacheTests
             .Setup(x => x.GetMessagesAsync(feedId, It.IsAny<BlockIndex>()))
             .ThrowsAsync(new Exception("Redis connection failed"));
 
-        // Mock PostgreSQL storage to return messages
+        // FEAT-052: Mock pagination method to return messages (used as fallback)
         var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
         mockMessageStorageService
-            .Setup(x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.IsAny<BlockIndex>()))
-            .ReturnsAsync(dbMessages);
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync(new PaginatedMessagesResult(dbMessages.ToList(), false, new BlockIndex(90)));
 
         // Mock identity service for display name
         var mockIdentityService = mocker.GetMock<IIdentityService>();
@@ -298,7 +304,8 @@ public class FeedsGrpcServiceCacheTests
         var request = new GetFeedMessagesForAddressRequest
         {
             ProfilePublicKey = userAddress,
-            BlockIndex = 80
+            BlockIndex = 80,
+            FetchLatest = true  // FEAT-052: Use fetch_latest to test cache fallback
         };
 
         // Act - should NOT throw, should fall back gracefully
@@ -309,11 +316,11 @@ public class FeedsGrpcServiceCacheTests
         result.Messages[0].MessageContent.Should().Be("DB message 1");
         result.Messages[1].MessageContent.Should().Be("DB message 2");
 
-        // Verify PostgreSQL was queried as fallback
+        // FEAT-052: Verify pagination method was queried as fallback
         mockMessageStorageService.Verify(
-            x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.IsAny<BlockIndex>()),
+            x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()),
             Times.Once,
-            "PostgreSQL should be queried when Redis is unavailable");
+            "Pagination method should be queried when Redis is unavailable");
     }
 
     #endregion
@@ -325,6 +332,7 @@ public class FeedsGrpcServiceCacheTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var userAddress = TestDataFactory.CreateAddress();
         var feedId = TestDataFactory.CreateFeedId();
 
@@ -354,8 +362,14 @@ public class FeedsGrpcServiceCacheTests
         // Mock cache to return filtered messages
         var mockCacheService = mocker.GetMock<IFeedMessageCacheService>();
         mockCacheService
-            .Setup(x => x.GetMessagesAsync(feedId, It.Is<BlockIndex>(b => b.Value == 95)))
+            .Setup(x => x.GetMessagesAsync(feedId, It.IsAny<BlockIndex>()))
             .ReturnsAsync(cachedMessagesAfterFilter);
+
+        // FEAT-052: Mock pagination method for checking older messages
+        var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockMessageStorageService
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync(new PaginatedMessagesResult(new List<FeedMessage>(), false, new BlockIndex(0)));
 
         // Mock identity service for display name
         var mockIdentityService = mocker.GetMock<IIdentityService>();
@@ -367,7 +381,8 @@ public class FeedsGrpcServiceCacheTests
         var request = new GetFeedMessagesForAddressRequest
         {
             ProfilePublicKey = userAddress,
-            BlockIndex = 95  // Request messages since block 95, oldest cached is 95 -> no gap
+            BlockIndex = 95,  // Request messages since block 95
+            FetchLatest = true  // FEAT-052: Use fetch_latest to test cache path
         };
 
         // Act
@@ -376,18 +391,27 @@ public class FeedsGrpcServiceCacheTests
         // Assert
         result.Messages.Should().HaveCount(2);
         result.Messages.Should().OnlyContain(m => m.BlockIndex >= 95,
-            "Only messages with BlockIndex >= 95 should be returned (filtering is done by cache service)");
-
-        // Verify cache was called with correct block index
-        mockCacheService.Verify(
-            x => x.GetMessagesAsync(feedId, It.Is<BlockIndex>(b => b.Value == 95)),
-            Times.Once,
-            "Cache should be queried with the correct block index filter");
+            "Only messages with BlockIndex >= 95 should be returned");
     }
 
     #endregion
 
     #region Helper Methods
+
+    /// <summary>
+    /// Sets up the IConfiguration mock to return proper values for Feeds configuration.
+    /// FEAT-052: Required for pagination configuration.
+    /// </summary>
+    private static void SetupConfigurationMock(AutoMocker mocker, int maxMessagesPerResponse = 100)
+    {
+        var mockConfigSection = new Mock<IConfigurationSection>();
+        mockConfigSection.Setup(s => s.Value).Returns(maxMessagesPerResponse.ToString());
+
+        var mockConfiguration = mocker.GetMock<IConfiguration>();
+        mockConfiguration
+            .Setup(c => c.GetSection("Feeds:MaxMessagesPerResponse"))
+            .Returns(mockConfigSection.Object);
+    }
 
     private static Feed CreateFeed(FeedId feedId, string alias, FeedType feedType, long blockIndex)
     {
@@ -471,6 +495,7 @@ public class FeedsGrpcServiceKeyGenerationsCacheTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var feedId = TestDataFactory.CreateFeedId();
         var userAddress = "user-address";
 
@@ -536,6 +561,7 @@ public class FeedsGrpcServiceKeyGenerationsCacheTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var feedId = TestDataFactory.CreateFeedId();
         var userAddress = "user-address";
         var otherUserAddress = "other-user-address";
@@ -599,6 +625,7 @@ public class FeedsGrpcServiceKeyGenerationsCacheTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var feedId = TestDataFactory.CreateFeedId();
         var userAddress = "user-address";
 
@@ -660,6 +687,7 @@ public class FeedsGrpcServiceKeyGenerationsCacheTests
     {
         // Arrange
         var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
         var feedId = TestDataFactory.CreateFeedId();
         var userAddress = "user-address";
 
@@ -696,6 +724,21 @@ public class FeedsGrpcServiceKeyGenerationsCacheTests
     #endregion
 
     #region Helper Methods
+
+    /// <summary>
+    /// Sets up the IConfiguration mock to return proper values for Feeds configuration.
+    /// FEAT-052: Required for pagination configuration.
+    /// </summary>
+    private static void SetupConfigurationMock(AutoMocker mocker, int maxMessagesPerResponse = 100)
+    {
+        var mockConfigSection = new Mock<IConfigurationSection>();
+        mockConfigSection.Setup(s => s.Value).Returns(maxMessagesPerResponse.ToString());
+
+        var mockConfiguration = mocker.GetMock<IConfiguration>();
+        mockConfiguration
+            .Setup(c => c.GetSection("Feeds:MaxMessagesPerResponse"))
+            .Returns(mockConfigSection.Object);
+    }
 
     private static ServerCallContext CreateMockServerCallContext()
     {
