@@ -34,7 +34,7 @@ public class FeedMessagePaginationTests
 
         var mockRepository = new Mock<IFeedMessageRepository>();
         mockRepository
-            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), limit, false))
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), limit, false, It.IsAny<BlockIndex?>()))
             .ReturnsAsync(paginatedResult);
 
         var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
@@ -75,7 +75,7 @@ public class FeedMessagePaginationTests
 
         var mockRepository = new Mock<IFeedMessageRepository>();
         mockRepository
-            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), limit, true))
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), limit, true, It.IsAny<BlockIndex?>()))
             .ReturnsAsync(paginatedResult);
 
         var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
@@ -117,7 +117,7 @@ public class FeedMessagePaginationTests
 
         var mockRepository = new Mock<IFeedMessageRepository>();
         mockRepository
-            .Setup(x => x.GetPaginatedMessagesAsync(feedId, sinceBlockIndex, limit, false))
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, sinceBlockIndex, limit, false, It.IsAny<BlockIndex?>()))
             .ReturnsAsync(paginatedResult);
 
         var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
@@ -137,7 +137,7 @@ public class FeedMessagePaginationTests
         // Assert
         result.Messages.Should().HaveCount(51); // 50 to 100 inclusive
         result.OldestBlockIndex.Should().Be(new BlockIndex(50));
-        mockRepository.Verify(x => x.GetPaginatedMessagesAsync(feedId, sinceBlockIndex, limit, false), Times.Once);
+        mockRepository.Verify(x => x.GetPaginatedMessagesAsync(feedId, sinceBlockIndex, limit, false, It.IsAny<BlockIndex?>()), Times.Once);
     }
 
     #endregion
@@ -158,7 +158,7 @@ public class FeedMessagePaginationTests
 
         var mockRepository = new Mock<IFeedMessageRepository>();
         mockRepository
-            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<BlockIndex?>()))
             .ReturnsAsync(paginatedResult);
 
         var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
@@ -195,7 +195,7 @@ public class FeedMessagePaginationTests
 
         var mockRepository = new Mock<IFeedMessageRepository>();
         mockRepository
-            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), true))
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), true, It.IsAny<BlockIndex?>()))
             .ReturnsAsync(paginatedResult);
 
         var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
@@ -237,7 +237,7 @@ public class FeedMessagePaginationTests
 
         var mockRepository = new Mock<IFeedMessageRepository>();
         mockRepository
-            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), 100, false))
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), 100, false, It.IsAny<BlockIndex?>()))
             .ReturnsAsync(paginatedResult);
 
         var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
@@ -275,7 +275,7 @@ public class FeedMessagePaginationTests
 
         var mockRepository = new Mock<IFeedMessageRepository>();
         mockRepository
-            .Setup(x => x.GetPaginatedMessagesAsync(feedId, new BlockIndex(101), limit, false))
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, new BlockIndex(101), limit, false, It.IsAny<BlockIndex?>()))
             .ReturnsAsync(paginatedResult);
 
         var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
@@ -315,7 +315,7 @@ public class FeedMessagePaginationTests
 
         var mockRepository = new Mock<IFeedMessageRepository>();
         mockRepository
-            .Setup(x => x.GetPaginatedMessagesAsync(It.IsAny<FeedId>(), It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .Setup(x => x.GetPaginatedMessagesAsync(It.IsAny<FeedId>(), It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<BlockIndex?>()))
             .ReturnsAsync(paginatedResult);
 
         var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
@@ -335,7 +335,7 @@ public class FeedMessagePaginationTests
 
         // Assert
         mockProvider.Verify(x => x.CreateReadOnly(), Times.Once);
-        mockRepository.Verify(x => x.GetPaginatedMessagesAsync(feedId, new BlockIndex(0), 100, false), Times.Once);
+        mockRepository.Verify(x => x.GetPaginatedMessagesAsync(feedId, new BlockIndex(0), 100, false, It.IsAny<BlockIndex?>()), Times.Once);
     }
 
     #endregion

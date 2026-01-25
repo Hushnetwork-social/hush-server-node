@@ -468,16 +468,18 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Client limit cannot exceed server max")]
+        [Xunit.SkippableFactAttribute(DisplayName="Paginate through all messages with multiple requests")]
         [Xunit.TraitAttribute("FeatureTitle", "FEAT-052 Message Pagination")]
-        [Xunit.TraitAttribute("Description", "Client limit cannot exceed server max")]
-        [Xunit.TraitAttribute("Category", "Configuration")]
-        public void ClientLimitCannotExceedServerMax()
+        [Xunit.TraitAttribute("Description", "Paginate through all messages with multiple requests")]
+        [Xunit.TraitAttribute("Category", "Pagination")]
+        [Xunit.TraitAttribute("Category", "MultiRequest")]
+        public void PaginateThroughAllMessagesWithMultipleRequests()
         {
             string[] tagsOfScenario = new string[] {
-                    "Configuration"};
+                    "Pagination",
+                    "MultiRequest"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Client limit cannot exceed server max", null, tagsOfScenario, argumentsOfScenario, featureTags);
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Paginate through all messages with multiple requests", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 91
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
@@ -494,10 +496,126 @@ namespace HushNode.IntegrationTests.Features
 #line 92
     testRunner.Given("the ChatFeed contains 150 messages", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 93
+#line 94
+    testRunner.When("Alice requests messages with fetch_latest true and limit 100 via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 95
+    testRunner.Then("the response should contain exactly 100 messages", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 96
+    testRunner.And("the response has_more_messages should be true", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 97
+    testRunner.And("Alice records the oldest_block_index from the response", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 99
+    testRunner.When("Alice requests older messages before the recorded oldest_block_index via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 100
+    testRunner.Then("the response should contain exactly 50 messages", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 101
+    testRunner.And("the response has_more_messages should be false", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Three requests to paginate 250 messages")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-052 Message Pagination")]
+        [Xunit.TraitAttribute("Description", "Three requests to paginate 250 messages")]
+        [Xunit.TraitAttribute("Category", "Pagination")]
+        [Xunit.TraitAttribute("Category", "MultiRequest")]
+        public void ThreeRequestsToPaginate250Messages()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "Pagination",
+                    "MultiRequest"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Three requests to paginate 250 messages", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 104
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 105
+    testRunner.Given("the ChatFeed contains 250 messages", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 107
+    testRunner.When("Alice requests messages with fetch_latest true and limit 100 via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 108
+    testRunner.Then("the response should contain exactly 100 messages", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 109
+    testRunner.And("the response has_more_messages should be true", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 110
+    testRunner.And("Alice records the oldest_block_index from the response", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 112
+    testRunner.When("Alice requests older messages before the recorded oldest_block_index via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 113
+    testRunner.Then("the response should contain exactly 100 messages", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 114
+    testRunner.And("the response has_more_messages should be true", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 115
+    testRunner.And("Alice records the oldest_block_index from the response", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 117
+    testRunner.When("Alice requests older messages before the recorded oldest_block_index via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 118
+    testRunner.Then("the response should contain exactly 50 messages", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 119
+    testRunner.And("the response has_more_messages should be false", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Client limit cannot exceed server max")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-052 Message Pagination")]
+        [Xunit.TraitAttribute("Description", "Client limit cannot exceed server max")]
+        [Xunit.TraitAttribute("Category", "Configuration")]
+        public void ClientLimitCannotExceedServerMax()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "Configuration"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Client limit cannot exceed server max", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 124
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 125
+    testRunner.Given("the ChatFeed contains 150 messages", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 126
     testRunner.When("Alice requests messages with fetch_latest true and limit 500 via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 94
+#line 127
     testRunner.Then("the response should contain at most 100 messages", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }

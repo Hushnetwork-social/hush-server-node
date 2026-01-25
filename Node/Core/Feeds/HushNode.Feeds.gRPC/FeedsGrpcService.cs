@@ -167,8 +167,12 @@ public class FeedsGrpcService(
             var requestedLimit = request.HasLimit ? request.Limit : _maxMessagesPerResponse;
             // Silently cap to server max
             var limit = Math.Min(requestedLimit, _maxMessagesPerResponse);
+            // FEAT-052: Backward pagination (scroll-up) - get messages BEFORE a specific block
+            BlockIndex? beforeBlockIndex = request.HasBeforeBlockIndex
+                ? BlockIndexHandler.CreateNew(request.BeforeBlockIndex)
+                : null;
 
-            Console.WriteLine($"[GetFeedMessagesForAddress] Starting for ProfilePublicKey: {request.ProfilePublicKey?.Substring(0, Math.Min(20, request.ProfilePublicKey?.Length ?? 0))}..., BlockIndex: {request.BlockIndex}, FetchLatest: {fetchLatest}, Limit: {limit}, LastReactionTallyVersion: {request.LastReactionTallyVersion}");
+            Console.WriteLine($"[GetFeedMessagesForAddress] Starting for ProfilePublicKey: {request.ProfilePublicKey?.Substring(0, Math.Min(20, request.ProfilePublicKey?.Length ?? 0))}..., BlockIndex: {request.BlockIndex}, FetchLatest: {fetchLatest}, Limit: {limit}, BeforeBlockIndex: {beforeBlockIndex?.Value.ToString() ?? "null"}, LastReactionTallyVersion: {request.LastReactionTallyVersion}");
 
             var blockIndex = BlockIndexHandler.CreateNew(request.BlockIndex);
 
@@ -194,7 +198,7 @@ public class FeedsGrpcService(
                     feed.FeedType);
 
                 // FEAT-052: Use paginated query with cache-first pattern
-                var paginatedResult = await GetMessagesWithCacheFallbackPaginatedAsync(feed.FeedId, blockIndex, limit, fetchLatest);
+                var paginatedResult = await GetMessagesWithCacheFallbackPaginatedAsync(feed.FeedId, blockIndex, limit, fetchLatest, beforeBlockIndex);
                 var messagesList = paginatedResult.Messages.ToList();
 
                 // Track if any feed has more messages
@@ -455,6 +459,7 @@ public class FeedsGrpcService(
     /// <summary>
     /// FEAT-052: Gets paginated messages with cache-first pattern.
     /// For fetch_latest=true: Tries Redis cache first (contains latest messages), falls back to PostgreSQL.
+    /// For beforeBlockIndex: Backward pagination (scroll-up) - get messages BEFORE a specific block.
     /// For regular pagination: Queries PostgreSQL directly (historical data not in cache).
     /// Returns pagination metadata (hasMore, oldestBlockIndex).
     /// </summary>
@@ -462,10 +467,25 @@ public class FeedsGrpcService(
         FeedId feedId,
         BlockIndex sinceBlockIndex,
         int limit,
-        bool fetchLatest)
+        bool fetchLatest,
+        BlockIndex? beforeBlockIndex = null)
     {
         try
         {
+            // FEAT-052: Backward pagination (scroll-up) - always queries PostgreSQL directly
+            // Cache contains only the most recent messages, so historical data must come from DB
+            if (beforeBlockIndex != null)
+            {
+                Console.WriteLine($"[CacheFallbackPaginated] Feed {feedId.ToString().Substring(0, 8)}...: backward pagination (beforeBlockIndex={beforeBlockIndex.Value}), querying PostgreSQL directly");
+
+                var backwardResult = await this._feedMessageStorageService
+                    .GetPaginatedMessagesAsync(feedId, sinceBlockIndex, limit, fetchLatest: false, beforeBlockIndex);
+
+                Console.WriteLine($"[CacheFallbackPaginated] Feed {feedId.ToString().Substring(0, 8)}...: PostgreSQL returned {backwardResult.Messages.Count} messages, HasMore: {backwardResult.HasMoreMessages}");
+
+                return backwardResult;
+            }
+
             if (fetchLatest)
             {
                 // For fetch_latest: Try cache first (Redis contains the latest 100 messages)

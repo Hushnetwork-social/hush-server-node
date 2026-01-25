@@ -85,6 +85,39 @@ Feature: FEAT-052 Message Pagination
     Then the response should contain exactly 50 messages
     And all messages should belong to the ChatFeed with Bob
 
+  # ===== Multi-Request Pagination =====
+
+  @Pagination @MultiRequest
+  Scenario: Paginate through all messages with multiple requests
+    Given the ChatFeed contains 150 messages
+    # First request: get latest 100 messages
+    When Alice requests messages with fetch_latest true and limit 100 via gRPC
+    Then the response should contain exactly 100 messages
+    And the response has_more_messages should be true
+    And Alice records the oldest_block_index from the response
+    # Second request: get older messages before the oldest
+    When Alice requests older messages before the recorded oldest_block_index via gRPC
+    Then the response should contain exactly 50 messages
+    And the response has_more_messages should be false
+
+  @Pagination @MultiRequest
+  Scenario: Three requests to paginate 250 messages
+    Given the ChatFeed contains 250 messages
+    # First request: get latest 100
+    When Alice requests messages with fetch_latest true and limit 100 via gRPC
+    Then the response should contain exactly 100 messages
+    And the response has_more_messages should be true
+    And Alice records the oldest_block_index from the response
+    # Second request: get next 100 older
+    When Alice requests older messages before the recorded oldest_block_index via gRPC
+    Then the response should contain exactly 100 messages
+    And the response has_more_messages should be true
+    And Alice records the oldest_block_index from the response
+    # Third request: get remaining 50
+    When Alice requests older messages before the recorded oldest_block_index via gRPC
+    Then the response should contain exactly 50 messages
+    And the response has_more_messages should be false
+
   # ===== Configuration =====
 
   @Configuration

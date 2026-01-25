@@ -179,6 +179,26 @@ public sealed class MessagePaginationSteps
         _scenarioContext["LastMessagesResponse"] = response;
     }
 
+    [When(@"Alice requests older messages before the recorded oldest_block_index via gRPC")]
+    public async Task WhenAliceRequestsOlderMessagesBeforeTheRecordedOldestBlockIndexViaGrpc()
+    {
+        var identity = GetStoredIdentity("Alice");
+        var grpcFactory = GetGrpcFactory();
+        var feedClient = grpcFactory.CreateClient<HushFeed.HushFeedClient>();
+        var recordedOldestBlockIndex = (long)_scenarioContext["RecordedOldestBlockIndex"];
+
+        var response = await feedClient.GetFeedMessagesForAddressAsync(new GetFeedMessagesForAddressRequest
+        {
+            ProfilePublicKey = identity.PublicSigningAddress,
+            BlockIndex = 0,
+            FetchLatest = false,
+            Limit = 100,
+            BeforeBlockIndex = recordedOldestBlockIndex, // FEAT-052: backward pagination
+            LastReactionTallyVersion = 0
+        });
+
+        _scenarioContext["LastMessagesResponse"] = response;
+    }
 
     #endregion
 
@@ -246,6 +266,13 @@ public sealed class MessagePaginationSteps
         // Verify the chat feed messages are present (at least some from Alice-Bob feed)
         response.Messages.Should().Contain(m => m.FeedId == aliceBobFeedId.ToString(),
             "Messages from Alice-Bob chat feed should be present");
+    }
+
+    [Then(@"Alice records the oldest_block_index from the response")]
+    public void ThenAliceRecordsTheOldestBlockIndexFromTheResponse()
+    {
+        var response = GetLastMessagesResponse();
+        _scenarioContext["RecordedOldestBlockIndex"] = response.OldestBlockIndex;
     }
 
     #endregion

@@ -25,10 +25,12 @@ public interface IFeedMessageRepository : IRepository
     /// <param name="sinceBlockIndex">Only return messages with BlockIndex >= this value (inclusive). Ignored if fetchLatest is true.</param>
     /// <param name="limit">Maximum number of messages to return.</param>
     /// <param name="fetchLatest">If true, return the latest N messages ordered ascending (ignore sinceBlockIndex).</param>
+    /// <param name="beforeBlockIndex">Optional upper bound - only return messages with BlockIndex < this value (exclusive). Used for backward pagination (scroll-up).</param>
     /// <returns>Paginated result with messages, hasMore flag, and oldest block index.</returns>
     Task<PaginatedMessagesResult> GetPaginatedMessagesAsync(
         FeedId feedId,
         BlockIndex sinceBlockIndex,
         int limit,
-        bool fetchLatest);
+        bool fetchLatest,
+        BlockIndex? beforeBlockIndex = null);
 }

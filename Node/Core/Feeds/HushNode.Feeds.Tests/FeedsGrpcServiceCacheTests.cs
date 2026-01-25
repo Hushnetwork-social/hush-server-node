@@ -71,7 +71,7 @@ public class FeedsGrpcServiceCacheTests
         // FEAT-052: Mock pagination method (used to check for older messages in cache scenario)
         var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
         mockMessageStorageService
-            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<BlockIndex?>()))
             .ReturnsAsync(new PaginatedMessagesResult(new List<FeedMessage>(), false, new BlockIndex(0)));
 
         var service = mocker.CreateInstance<FeedsGrpcService>();
@@ -134,7 +134,7 @@ public class FeedsGrpcServiceCacheTests
         // FEAT-052: Mock pagination method to return messages
         var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
         mockMessageStorageService
-            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<BlockIndex?>()))
             .ReturnsAsync(new PaginatedMessagesResult(dbMessages.ToList(), false, new BlockIndex(90)));
 
         // Mock identity service for display name
@@ -161,7 +161,7 @@ public class FeedsGrpcServiceCacheTests
 
         // FEAT-052: Verify pagination method was called (cache miss)
         mockMessageStorageService.Verify(
-            x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()),
+            x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<BlockIndex?>()),
             Times.Once,
             "Pagination method should be queried on cache miss");
 
@@ -222,7 +222,7 @@ public class FeedsGrpcServiceCacheTests
         // FEAT-052: Mock pagination method to return complete messages
         var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
         mockMessageStorageService
-            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<BlockIndex?>()))
             .ReturnsAsync(new PaginatedMessagesResult(dbMessages.ToList(), false, new BlockIndex(60)));
 
         // Mock identity service for display name
@@ -246,7 +246,7 @@ public class FeedsGrpcServiceCacheTests
 
         // FEAT-052: Verify pagination method was queried (regular pagination goes to DB)
         mockMessageStorageService.Verify(
-            x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), false),
+            x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), false, It.IsAny<BlockIndex?>()),
             Times.Once,
             "Pagination method should be queried for regular pagination");
     }
@@ -291,7 +291,7 @@ public class FeedsGrpcServiceCacheTests
         // FEAT-052: Mock pagination method to return messages (used as fallback)
         var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
         mockMessageStorageService
-            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<BlockIndex?>()))
             .ReturnsAsync(new PaginatedMessagesResult(dbMessages.ToList(), false, new BlockIndex(90)));
 
         // Mock identity service for display name
@@ -318,7 +318,7 @@ public class FeedsGrpcServiceCacheTests
 
         // FEAT-052: Verify pagination method was queried as fallback
         mockMessageStorageService.Verify(
-            x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()),
+            x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<BlockIndex?>()),
             Times.Once,
             "Pagination method should be queried when Redis is unavailable");
     }
@@ -368,7 +368,7 @@ public class FeedsGrpcServiceCacheTests
         // FEAT-052: Mock pagination method for checking older messages
         var mockMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
         mockMessageStorageService
-            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .Setup(x => x.GetPaginatedMessagesAsync(feedId, It.IsAny<BlockIndex>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<BlockIndex?>()))
             .ReturnsAsync(new PaginatedMessagesResult(new List<FeedMessage>(), false, new BlockIndex(0)));
 
         // Mock identity service for display name

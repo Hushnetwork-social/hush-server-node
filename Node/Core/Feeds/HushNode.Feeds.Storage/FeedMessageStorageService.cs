@@ -53,12 +53,13 @@ public class FeedMessageStorageService(
         FeedId feedId,
         BlockIndex sinceBlockIndex,
         int limit,
-        bool fetchLatest)
+        bool fetchLatest,
+        BlockIndex? beforeBlockIndex = null)
     {
         using var readOnlyUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
 
         return await readOnlyUnitOfWork
             .GetRepository<IFeedMessageRepository>()
-            .GetPaginatedMessagesAsync(feedId, sinceBlockIndex, limit, fetchLatest);
+            .GetPaginatedMessagesAsync(feedId, sinceBlockIndex, limit, fetchLatest, beforeBlockIndex);
     }
 }

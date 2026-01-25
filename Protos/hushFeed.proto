@@ -92,10 +92,11 @@ message GetFeedForAddressReply {
 
 message GetFeedMessagesForAddressRequest {
   string ProfilePublicKey = 1;
-  int64 BlockIndex = 2;                   // Inclusive: return messages >= this block
+  int64 BlockIndex = 2;                   // Inclusive: return messages >= this block (forward pagination)
   int64 LastReactionTallyVersion = 3;     // Only return tallies newer than this version
   optional int32 Limit = 4;               // FEAT-052: Max messages to return (default 100, capped to server max)
   optional bool FetchLatest = 5;          // FEAT-052: If true, return latest N messages (ignore BlockIndex)
+  optional int64 BeforeBlockIndex = 6;    // FEAT-052: Exclusive upper bound - return messages < this block (backward pagination for scroll-up)
 }
 
 message GetFeedMessagesForAddressReply {

@@ -35,7 +35,8 @@ public class FeedMessageRepository : RepositoryBase<FeedsDbContext>, IFeedMessag
         FeedId feedId,
         BlockIndex sinceBlockIndex,
         int limit,
-        bool fetchLatest)
+        bool fetchLatest,
+        BlockIndex? beforeBlockIndex = null)
     {
         if (fetchLatest)
         {
@@ -68,9 +69,41 @@ public class FeedMessageRepository : RepositoryBase<FeedsDbContext>, IFeedMessag
                 HasMoreMessages: hasMore,
                 OldestBlockIndex: oldestBlockIndex);
         }
+        else if (beforeBlockIndex != null)
+        {
+            // FEAT-052: Backward pagination (scroll-up) - get messages BEFORE a specific block
+            // Returns the N most recent messages with BlockIndex < beforeBlockIndex
+            var messages = await this.Context.FeedMessages
+                .Where(x => x.FeedId == feedId && x.BlockIndex < beforeBlockIndex)
+                .OrderByDescending(x => x.BlockIndex)
+                .Take(limit)
+                .ToListAsync();
+
+            // Reverse to get ascending order (oldest first in the batch)
+            messages.Reverse();
+
+            if (messages.Count == 0)
+            {
+                return new PaginatedMessagesResult(
+                    Messages: messages,
+                    HasMoreMessages: false,
+                    OldestBlockIndex: new BlockIndex(0));
+            }
+
+            var oldestBlockIndex = messages[0].BlockIndex;
+
+            // Check if there are even older messages before the oldest returned
+            var hasOlderMessages = await this.Context.FeedMessages
+                .AnyAsync(x => x.FeedId == feedId && x.BlockIndex < oldestBlockIndex);
+
+            return new PaginatedMessagesResult(
+                Messages: messages,
+                HasMoreMessages: hasOlderMessages,
+                OldestBlockIndex: oldestBlockIndex);
+        }
         else
         {
-            // Regular pagination: get messages >= sinceBlockIndex, ordered ascending
+            // Regular forward pagination: get messages >= sinceBlockIndex, ordered ascending
             // Fetch limit + 1 to detect if there are more messages
             var messages = await this.Context.FeedMessages
                 .Where(x => x.FeedId == feedId && x.BlockIndex >= sinceBlockIndex)
