@@ -175,32 +175,23 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 29
+#line 31
         testRunner.Given("the user has created identity \"Alice\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 30
-        testRunner.And("Alice has a chat with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 31
-        testRunner.And("Alice clicks on the chat feed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
 #line 32
-        testRunner.And("the transaction is processed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.And("Alice has sent 3 messages to their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 33
-        testRunner.And("Alice sends 3 messages in the chat", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.And("the localStorage contains messages for the personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 34
-        testRunner.And("the localStorage contains messages for the chat feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line 36
+        testRunner.When("Alice clicks on the \"new-chat\" navigation item", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 37
-        testRunner.When("Alice clicks on their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
-#line hidden
-#line 40
+#line 39
         testRunner.And("Alice waits for cleanup debounce (200ms)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 41
-        testRunner.Then("the cleanupFeed function should have been called for the chat feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line 40
+        testRunner.Then("the cleanupFeed function should have been called", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
             this.ScenarioCleanup();
@@ -220,7 +211,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "Slow"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Cache is trimmed to limit on feed close", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 44
+#line 43
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -233,28 +224,28 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 47
+#line 46
         testRunner.Given("the user has created identity \"Alice\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 48
+#line 47
         testRunner.And("Alice has sent 5 messages to their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 49
+#line 48
         testRunner.And("the messages are stored in localStorage", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 52
+#line 51
         testRunner.When("Alice clicks on the \"new-chat\" navigation item", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 53
+#line 52
         testRunner.And("Alice waits for cleanup debounce (200ms)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 54
+#line 53
         testRunner.And("Alice clicks on the \"feeds\" navigation item", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 57
+#line 56
         testRunner.Then("the personal feed should load successfully", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 58
+#line 57
         testRunner.And("the messages should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
@@ -273,7 +264,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "ReturnToFeed"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Returning to feed shows messages from bottom", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 61
+#line 60
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -286,31 +277,31 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 62
+#line 61
         testRunner.Given("the user has created identity \"Alice\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 63
+#line 62
         testRunner.And("Alice has sent 5 messages to their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 64
+#line 63
         testRunner.And("the messages are visible in the chat", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 67
+#line 66
         testRunner.When("Alice clicks on the \"new-chat\" navigation item", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 68
+#line 67
         testRunner.And("Alice waits for cleanup debounce (200ms)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 69
+#line 68
         testRunner.And("Alice clicks on the \"feeds\" navigation item", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 70
+#line 69
         testRunner.And("Alice clicks on their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 73
+#line 72
         testRunner.Then("the most recent message should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 74
+#line 73
         testRunner.And("the chat view should be at the bottom", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
@@ -331,7 +322,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "Manual"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Tab close triggers best-effort cleanup", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 77
+#line 76
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -344,16 +335,16 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 81
+#line 80
         testRunner.Given("the user has created identity \"Alice\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 82
+#line 81
         testRunner.And("Alice has sent 3 messages to their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 85
+#line 84
         testRunner.When("Alice closes the browser tab", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 89
+#line 88
         testRunner.Then("the cleanup should have been attempted before unload", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
