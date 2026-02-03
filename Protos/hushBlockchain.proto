@@ -21,7 +21,17 @@ message SubmitSignedTransactionRequest {
   string SignedTransaction = 1;
 }
 
+// Transaction status enum for idempotency responses
+enum TransactionStatus {
+  TRANSACTION_STATUS_UNSPECIFIED = 0;  // Default for backward compatibility
+  TRANSACTION_STATUS_ACCEPTED = 1;      // New transaction accepted
+  TRANSACTION_STATUS_ALREADY_EXISTS = 2; // Duplicate found in database (already confirmed)
+  TRANSACTION_STATUS_PENDING = 3;       // Duplicate found in MemPool (still pending)
+  TRANSACTION_STATUS_REJECTED = 4;      // Transaction validation failed
+}
+
 message SubmitSignedTransactionReply {
   bool Successfull = 1;
   string Message = 2;
+  TransactionStatus status = 3;  // NEW: Idempotency status for FEAT-057
 }
