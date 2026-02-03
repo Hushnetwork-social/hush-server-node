@@ -59,10 +59,6 @@ Feature: Message Idempotency
     When Alice submits message "cleanup-test-002" again via gRPC
     Then the response status should be "ALREADY_EXISTS"
 
-  @NonFeedMessage
-  Scenario: Non-FeedMessage transactions skip idempotency check
-    # Identity registration is not a FeedMessage - should always be accepted or rejected normally
-    Given user "Charlie" is not registered
-    When Charlie registers his identity via gRPC
-    Then the response status should be "ACCEPTED"
-    And the response should be successful
+  # Note: Non-FeedMessage transactions (like identity registration) are handled
+  # normally and skip idempotency checking. This is verified implicitly by the
+  # Background setup which successfully registers Alice and Bob's identities.

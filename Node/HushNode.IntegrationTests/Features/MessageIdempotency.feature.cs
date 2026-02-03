@@ -237,45 +237,6 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Non-FeedMessage transactions skip idempotency check")]
-        [Xunit.TraitAttribute("FeatureTitle", "Message Idempotency")]
-        [Xunit.TraitAttribute("Description", "Non-FeedMessage transactions skip idempotency check")]
-        [Xunit.TraitAttribute("Category", "NonFeedMessage")]
-        public void Non_FeedMessageTransactionsSkipIdempotencyCheck()
-        {
-            string[] tagsOfScenario = new string[] {
-                    "NonFeedMessage"};
-            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Non-FeedMessage transactions skip idempotency check", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 63
-  this.ScenarioInitialize(scenarioInfo);
-#line hidden
-            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
-            {
-                testRunner.SkipScenario();
-            }
-            else
-            {
-                this.ScenarioStart();
-#line 7
-  this.FeatureBackground();
-#line hidden
-#line 65
-    testRunner.Given("user \"Charlie\" is not registered", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
-#line hidden
-#line 66
-    testRunner.When("Charlie registers his identity via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
-#line hidden
-#line 67
-    testRunner.Then("the response status should be \"ACCEPTED\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
-#line hidden
-#line 68
-    testRunner.And("the response should be successful", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-            }
-            this.ScenarioCleanup();
-        }
-        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable

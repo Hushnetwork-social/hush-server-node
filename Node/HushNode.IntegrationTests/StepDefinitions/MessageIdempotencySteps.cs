@@ -85,32 +85,9 @@ public sealed class MessageIdempotencySteps
             });
     }
 
-    [When(@"(.*) registers (?:his|her) identity via gRPC")]
-    public async Task WhenUserRegistersIdentityViaGrpc(string userName)
-    {
-        var identity = GetTestIdentity(userName);
-        var grpcFactory = GetGrpcFactory();
-        var blockchainClient = grpcFactory.CreateClient<HushBlockchain.HushBlockchainClient>();
-
-        var transactionJson = TestTransactionFactory.CreateIdentityRegistration(identity);
-
-        _lastResponse = await blockchainClient.SubmitSignedTransactionAsync(
-            new SubmitSignedTransactionRequest
-            {
-                SignedTransaction = transactionJson
-            });
-
-        // Store identity for later steps
-        _scenarioContext[$"Identity_{userName}"] = identity;
-    }
-
-    [Given(@"user ""(.*)"" is not registered")]
-    public void GivenUserIsNotRegistered(string userName)
-    {
-        // This is a precondition - we just ensure we have the test identity available
-        var identity = GetTestIdentity(userName);
-        _scenarioContext[$"Identity_{userName}"] = identity;
-    }
+    // Note: WhenUserRegistersIdentityViaGrpc step is already defined in PersonalFeedSteps.cs
+    // Note: GivenUserIsNotRegistered step is already defined in PersonalFeedSteps.cs
+    // We reuse those step definitions instead of duplicating them here
 
     [Then(@"the response status should be ""(.*)""")]
     public void ThenResponseStatusShouldBe(string expectedStatus)
