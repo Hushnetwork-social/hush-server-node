@@ -253,4 +253,44 @@ internal static class TestTransactionFactory
 
         return (signedTransaction.ToJson(), messageId);
     }
+
+    /// <summary>
+    /// FEAT-057: Creates a signed feed message transaction with a SPECIFIC message ID.
+    /// Use this for idempotency testing - submit the same transaction multiple times to test duplicate handling.
+    /// </summary>
+    /// <param name="sender">The identity sending the message.</param>
+    /// <param name="feedId">The feed to send the message to.</param>
+    /// <param name="messageId">The specific message ID to use (allows re-submission testing).</param>
+    /// <param name="message">The plaintext message content.</param>
+    /// <param name="feedAesKey">The AES key for the feed.</param>
+    /// <returns>JSON-serialized signed transaction ready for submission.</returns>
+    public static string CreateFeedMessageWithId(
+        TestIdentity sender,
+        FeedId feedId,
+        FeedMessageId messageId,
+        string message,
+        string feedAesKey)
+    {
+        var encryptedContent = EncryptKeys.AesEncrypt(message, feedAesKey);
+
+        var payload = new NewFeedMessagePayload(
+            messageId,
+            feedId,
+            encryptedContent);
+
+        var unsignedTransaction = UnsignedTransactionHandler.CreateNew(
+            NewFeedMessagePayloadHandler.NewFeedMessagePayloadKind,
+            Timestamp.Current,
+            payload);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            sender.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<NewFeedMessagePayload>(
+            unsignedTransaction,
+            new SignatureInfo(sender.PublicSigningAddress, signature));
+
+        return signedTransaction.ToJson();
+    }
 }

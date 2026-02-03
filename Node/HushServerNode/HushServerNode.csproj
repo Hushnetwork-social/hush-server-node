@@ -29,6 +29,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Core\Blockchain\HushNode.Blockchain\HushNode.Blockchain.csproj" />
     <ProjectReference Include="..\Core\HushNode.MemPool\HushNode.MemPool.csproj" />
+    <ProjectReference Include="..\Core\Idempotency\HushNode.Idempotency\HushNode.Idempotency.csproj" />
     <ProjectReference Include="..\Core\Indexing\HushNode.Indexing\HushNode.Indexing.csproj" />
     <ProjectReference Include="..\Core\Identity\HushNode.Identity\HushNode.Identity.csproj" />
     <ProjectReference Include="..\Core\Feeds\HushNode.Feeds\HushNode.Feeds.csproj" />
