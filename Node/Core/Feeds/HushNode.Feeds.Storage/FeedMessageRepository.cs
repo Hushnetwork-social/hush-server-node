@@ -31,6 +31,10 @@ public class FeedMessageRepository : RepositoryBase<FeedsDbContext>, IFeedMessag
         await this.Context.FeedMessages
             .FirstOrDefaultAsync(x => x.FeedMessageId == messageId);
 
+    public async Task<bool> ExistsByMessageIdAsync(FeedMessageId messageId) =>
+        await this.Context.FeedMessages
+            .AnyAsync(x => x.FeedMessageId == messageId);
+
     public async Task<PaginatedMessagesResult> GetPaginatedMessagesAsync(
         FeedId feedId,
         BlockIndex sinceBlockIndex,

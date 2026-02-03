@@ -33,4 +33,12 @@ public interface IFeedMessageRepository : IRepository
         int limit,
         bool fetchLatest,
         BlockIndex? beforeBlockIndex = null);
+
+    /// <summary>
+    /// Checks if a message with the given ID exists in the database.
+    /// FEAT-057: Server Message Idempotency - used for duplicate detection.
+    /// </summary>
+    /// <param name="messageId">The message ID to check.</param>
+    /// <returns>True if a message with this ID exists, false otherwise.</returns>
+    Task<bool> ExistsByMessageIdAsync(FeedMessageId messageId);
 }
