@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
-using HushNetwork.proto;
 using HushNode.Feeds.Storage;
+using HushNode.Interfaces.Models;
 using HushShared.Feeds.Model;
 using Microsoft.Extensions.Logging;
 using Olimpo.EntityFramework.Persistency;
@@ -29,7 +29,7 @@ public class IdempotencyService(
     private readonly ConcurrentDictionary<string, bool> _memPoolTracking = new();
 
     /// <inheritdoc />
-    public async Task<TransactionStatus> CheckAsync(FeedMessageId messageId)
+    public async Task<IdempotencyCheckResult> CheckAsync(FeedMessageId messageId)
     {
         var messageIdString = messageId.ToString();
 
@@ -39,7 +39,7 @@ public class IdempotencyService(
             _logger.LogDebug(
                 "FEAT-057: Message {MessageId} found in MemPool - returning PENDING",
                 messageIdString);
-            return TransactionStatus.Pending;
+            return IdempotencyCheckResult.Pending;
         }
 
         // Step 2: Check database (slower)
@@ -55,13 +55,13 @@ public class IdempotencyService(
                 _logger.LogDebug(
                     "FEAT-057: Message {MessageId} found in database - returning ALREADY_EXISTS",
                     messageIdString);
-                return TransactionStatus.AlreadyExists;
+                return IdempotencyCheckResult.AlreadyExists;
             }
 
             _logger.LogDebug(
                 "FEAT-057: Message {MessageId} not found - returning ACCEPTED",
                 messageIdString);
-            return TransactionStatus.Accepted;
+            return IdempotencyCheckResult.Accepted;
         }
         catch (Exception ex)
         {
@@ -70,7 +70,7 @@ public class IdempotencyService(
                 ex,
                 "FEAT-057: Database error checking message {MessageId} - returning REJECTED",
                 messageIdString);
-            return TransactionStatus.Rejected;
+            return IdempotencyCheckResult.Rejected;
         }
     }
 

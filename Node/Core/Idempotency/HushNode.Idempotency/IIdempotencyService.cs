@@ -1,4 +1,4 @@
-using HushNetwork.proto;
+using HushNode.Interfaces.Models;
 using HushShared.Feeds.Model;
 
 namespace HushNode.Idempotency;
@@ -14,12 +14,13 @@ public interface IIdempotencyService
     /// </summary>
     /// <param name="messageId">The message ID to check.</param>
     /// <returns>
-    /// TransactionStatus indicating the result:
-    /// - ACCEPTED: Message is new and can be processed
-    /// - ALREADY_EXISTS: Message already exists in the database (confirmed)
-    /// - PENDING: Message is currently in the MemPool (awaiting confirmation)
+    /// IdempotencyCheckResult indicating the result:
+    /// - Accepted: Message is new and can be processed
+    /// - AlreadyExists: Message already exists in the database (confirmed)
+    /// - Pending: Message is currently in the MemPool (awaiting confirmation)
+    /// - Rejected: Server error occurred (fail-closed)
     /// </returns>
-    Task<TransactionStatus> CheckAsync(FeedMessageId messageId);
+    Task<IdempotencyCheckResult> CheckAsync(FeedMessageId messageId);
 
     /// <summary>
     /// Attempts to track a message ID in the MemPool after successful validation.

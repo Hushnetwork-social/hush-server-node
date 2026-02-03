@@ -1,6 +1,6 @@
 using FluentAssertions;
-using HushNetwork.proto;
 using HushNode.Feeds.Storage;
+using HushNode.Interfaces.Models;
 using HushShared.Feeds.Model;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -52,7 +52,7 @@ public class IdempotencyServiceTests
         var result = await service.CheckAsync(messageId);
 
         // Assert
-        result.Should().Be(TransactionStatus.Accepted);
+        result.Should().Be(IdempotencyCheckResult.Accepted);
         mockRepository.Verify(x => x.ExistsByMessageIdAsync(messageId), Times.Once);
     }
 
@@ -86,7 +86,7 @@ public class IdempotencyServiceTests
         var result = await service.CheckAsync(messageId);
 
         // Assert
-        result.Should().Be(TransactionStatus.AlreadyExists);
+        result.Should().Be(IdempotencyCheckResult.AlreadyExists);
     }
 
     /// <summary>
@@ -120,7 +120,7 @@ public class IdempotencyServiceTests
         var result = await service.CheckAsync(messageId);
 
         // Assert
-        result.Should().Be(TransactionStatus.Pending);
+        result.Should().Be(IdempotencyCheckResult.Pending);
         // Database should NOT be queried - verify it was never called
         mockRepository.Verify(x => x.ExistsByMessageIdAsync(It.IsAny<FeedMessageId>()), Times.Never);
     }
@@ -155,7 +155,7 @@ public class IdempotencyServiceTests
         var result = await service.CheckAsync(messageId);
 
         // Assert
-        result.Should().Be(TransactionStatus.Rejected);
+        result.Should().Be(IdempotencyCheckResult.Rejected);
     }
 
     #endregion

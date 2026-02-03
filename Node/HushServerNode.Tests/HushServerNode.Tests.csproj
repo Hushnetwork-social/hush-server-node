@@ -31,6 +31,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HushServerNode\HushServerNode.csproj" />
+    <ProjectReference Include="..\Core\Blockchain\HushNode.Blockchain.gRPC\HushNode.Blockchain.gRPC.csproj" />
+    <ProjectReference Include="..\Core\Idempotency\HushNode.Idempotency\HushNode.Idempotency.csproj" />
   </ItemGroup>
 
 </Project>
