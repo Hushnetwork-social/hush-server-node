@@ -1,4 +1,4 @@
-@Integration
+@E2E
 Feature: Playwright Infrastructure Verification
     As a developer
     I want to verify that Playwright browser automation is working
