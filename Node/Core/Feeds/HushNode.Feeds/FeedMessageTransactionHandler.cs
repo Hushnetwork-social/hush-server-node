@@ -49,7 +49,9 @@ public class FeedMessageTransactionHandler(
             issuerPublicAddress,
             validatedTransaction.TransactionTimeStamp,
             this._blockchainCache.LastBlockIndex,
-            ReplyToMessageId: validatedTransaction.Payload.ReplyToMessageId);
+            AuthorCommitment: validatedTransaction.Payload.AuthorCommitment,
+            ReplyToMessageId: validatedTransaction.Payload.ReplyToMessageId,
+            KeyGeneration: validatedTransaction.Payload.KeyGeneration);
 
         // Write to PostgreSQL (source of truth)
         await this._feedMessageStorageService.CreateFeedMessageAsync(feedMessage);

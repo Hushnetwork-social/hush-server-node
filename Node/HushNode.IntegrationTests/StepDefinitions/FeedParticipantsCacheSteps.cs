@@ -301,12 +301,16 @@ public sealed class FeedParticipantsCacheSteps
 
         var feedId = (FeedId)_scenarioContext[$"GroupFeed_{groupName}"];
 
+        Console.WriteLine($"[TwinTest] {userName} joining public group '{groupName}' (feedId={feedId.Value})...");
+
         var response = await feedClient.JoinGroupFeedAsync(new JoinGroupFeedRequest
         {
             FeedId = feedId.ToString(),
             JoiningUserPublicAddress = identity.PublicSigningAddress,
             JoiningUserPublicEncryptKey = identity.PublicEncryptAddress
         });
+
+        Console.WriteLine($"[TwinTest] {userName} join result: Success={response.Success}, Message={response.Message}");
 
         response.Success.Should().BeTrue($"{userName} should be able to join public group: {response.Message}");
 
@@ -330,6 +334,13 @@ public sealed class FeedParticipantsCacheSteps
             UserPublicAddress = identity.PublicSigningAddress
         });
 
+        // CRITICAL LOGGING: Show exactly what the server returns
+        Console.WriteLine($"[TwinTest] {userName} GetKeyGenerations for '{groupName}': received {response.KeyGenerations.Count} KeyGeneration(s)");
+        foreach (var kg in response.KeyGenerations)
+        {
+            Console.WriteLine($"[TwinTest]   - KeyGen {kg.KeyGeneration}: ValidFrom={kg.ValidFromBlock}, HasEncryptedKey={!string.IsNullOrEmpty(kg.EncryptedKey)}, EncryptedKeyLength={kg.EncryptedKey?.Length ?? 0}");
+        }
+
         _scenarioContext[$"KeyGenerationsResponse_{groupName}_{userName}"] = response;
         _scenarioContext["LastGroupFeedName"] = groupName;
     }
@@ -350,10 +361,14 @@ public sealed class FeedParticipantsCacheSteps
     {
         var response = (GetKeyGenerationsResponse)_scenarioContext[$"KeyGenerationsResponse_{groupName}_{userName}"];
 
+        Console.WriteLine($"[TwinTest] ASSERTION: {userName} expects {expectedCount} KeyGeneration(s), got {response.KeyGenerations.Count}");
+
         response.KeyGenerations.Should().HaveCount(expectedCount,
             $"{userName} should receive exactly {expectedCount} key generation(s) for group '{groupName}'. " +
             $"Got {response.KeyGenerations.Count} key generations. " +
             "This indicates the key rotation did not create a new generation when Bob joined.");
+
+        Console.WriteLine($"[TwinTest] ASSERTION PASSED: {userName} received exactly {expectedCount} KeyGeneration(s)");
     }
 
     [Then(@"the database should have (\d+) key generations for ""(.*)""")]

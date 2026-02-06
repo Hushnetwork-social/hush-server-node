@@ -87,7 +87,7 @@ public class EncryptKeys
         var agreement = new ECDHBasicAgreement();
         agreement.Init(ephemeralPrivateParams);
         var sharedSecret = agreement.CalculateAgreement(recipientPubKeyParams);
-        var sharedSecretBytes = sharedSecret.ToByteArrayUnsigned();
+        var sharedSecretBytes = NormalizeSharedSecret(sharedSecret);
 
         // Derive AES key from shared secret using HKDF
         var aesKey = DeriveAesKey(sharedSecretBytes, ephemeralPublicPoint.GetEncoded(false));
@@ -148,7 +148,7 @@ public class EncryptKeys
         var agreement = new ECDHBasicAgreement();
         agreement.Init(privateKeyParams);
         var sharedSecret = agreement.CalculateAgreement(ephemeralPubKeyParams);
-        var sharedSecretBytes = sharedSecret.ToByteArrayUnsigned();
+        var sharedSecretBytes = NormalizeSharedSecret(sharedSecret);
 
         // Derive AES key from shared secret using HKDF
         var aesKey = DeriveAesKey(sharedSecretBytes, ephemeralPubKeyBytes);
@@ -178,6 +178,37 @@ public class EncryptKeys
         var aesKey = new byte[AesKeySize];
         generator.GenerateBytes(aesKey, 0, AesKeySize);
         return aesKey;
+    }
+
+    /// <summary>
+    /// Normalizes the ECDH shared secret to exactly 32 bytes.
+    /// BigInteger.ToByteArrayUnsigned() can return fewer than 32 bytes if
+    /// the X coordinate has leading zeros. This method pads to ensure
+    /// compatibility with clients that always use fixed-size arrays.
+    /// </summary>
+    private static byte[] NormalizeSharedSecret(BigInteger sharedSecret)
+    {
+        const int expectedLength = 32; // X coordinate size for secp256k1
+        var bytes = sharedSecret.ToByteArrayUnsigned();
+
+        if (bytes.Length == expectedLength)
+        {
+            return bytes;
+        }
+
+        if (bytes.Length < expectedLength)
+        {
+            // Pad with leading zeros
+            var padded = new byte[expectedLength];
+            Buffer.BlockCopy(bytes, 0, padded, expectedLength - bytes.Length, bytes.Length);
+            return padded;
+        }
+
+        // This shouldn't happen with secp256k1 X coordinates, but handle gracefully
+        // by taking the rightmost 32 bytes
+        var result = new byte[expectedLength];
+        Buffer.BlockCopy(bytes, bytes.Length - expectedLength, result, 0, expectedLength);
+        return result;
     }
 
     #region AES-256-GCM Standalone Methods (for symmetric encryption)

@@ -22,6 +22,7 @@ using HushNode.Indexing;
 using HushNode.Identity;
 using HushNode.Identity.gRPC;
 using HushNode.MemPool;
+using HushNode.Idempotency;
 using HushNode.Bank;
 using HushNode.Bank.gRPC;
 using HushNode.Feeds;
@@ -528,6 +529,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             .RegisterCoreModuleFeeds()
             .RegisterCoreModuleReactions()
             .RegisterHushNodeIndexing()
+            .RegisterIdempotencyModule()
             .RegisterHushNodeMemPool()
             .RegisterInternalModuleIdentity()
             .RegisterNotificationGrpc()

@@ -22,7 +22,9 @@
     <ProjectReference Include="..\HushNode.Blockchain.Storage\HushNode.Blockchain.Storage.csproj" />
     <ProjectReference Include="..\..\HushNode.MemPool\HushNode.MemPool.csproj" />
     <ProjectReference Include="..\..\HushNode.Events\HushNode.Events.csproj" />
+    <ProjectReference Include="..\..\Idempotency\HushNode.Idempotency\HushNode.Idempotency.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Feeds.Model\HushShared.Feeds.Model.csproj" />
   </ItemGroup>
 
 </Project>

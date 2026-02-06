@@ -19,20 +19,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="FluentAssertions" Version="6.12.1" />
-    <PackageReference Include="System.Reactive" Version="6.0.1" />
     <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="Moq.AutoMock" Version="3.5.0" />
-
-    <!-- Explicit EF Core version to resolve version conflicts with HushServerNode -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.2" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.2" />
+    <PackageReference Include="FluentAssertions" Version="6.12.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\HushServerNode\HushServerNode.csproj" />
-    <ProjectReference Include="..\Core\Blockchain\HushNode.Blockchain.gRPC\HushNode.Blockchain.gRPC.csproj" />
-    <ProjectReference Include="..\Core\Idempotency\HushNode.Idempotency\HushNode.Idempotency.csproj" />
+    <ProjectReference Include="..\HushNode.Idempotency\HushNode.Idempotency.csproj" />
   </ItemGroup>
 
 </Project>

@@ -170,34 +170,60 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 61
         testRunner.And("Alice sends message \"Just a sync trigger...\" and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 65
-        testRunner.When("Alice opens the group \"Team Chat\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
-#line hidden
-#line 68
-        testRunner.And("Alice triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 69
-        testRunner.Then("Alice should see that Bob joined the group", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line 66
+        testRunner.Then("Alice should have exactly 2 KeyGenerations for \"Team Chat\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 70
-        testRunner.And("Alice should see message \"Hi Alice, I joined!\" from Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.Then("Alice should receive Bob\'s message \"Hi Alice, I joined!\" with KeyGeneration 1 via" +
+                        " gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 74
-        testRunner.When("Alice adds reaction to Bob\'s message", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+        testRunner.Then("Alice should be able to decrypt the message using KeyGeneration 1", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 75
-        testRunner.And("Alice sends message \"Welcome to the team!\" and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 79
-        testRunner.When("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
-#line hidden
-#line 80
-        testRunner.Then("Bob should see message \"Welcome to the team!\" from Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line 78
+        testRunner.When("Alice opens the group \"Team Chat\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 81
-        testRunner.When("Bob adds reaction to Alice\'s message", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+        testRunner.And("Alice triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 82
+        testRunner.Then("Alice should see that Bob joined the group", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 85
+        testRunner.Then("dump Alice\'s message state for \"Team Chat\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 87
+        testRunner.And("Alice should see message \"Hi Alice, I joined!\" from Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 91
+        testRunner.When("Alice adds reaction to Bob\'s message", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 92
+        testRunner.And("Alice sends message \"Welcome to the team!\" and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 97
+        testRunner.Then("Bob should have exactly 1 KeyGeneration for \"Team Chat\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 101
+        testRunner.Then("Alice\'s message \"Welcome to the team!\" should be on server with KeyGeneration 1", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 104
+        testRunner.Then("Bob should receive Alice\'s message \"Welcome to the team!\" with KeyGeneration 1 vi" +
+                        "a gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 107
+        testRunner.Then("Bob should be able to decrypt the message using KeyGeneration 1", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 109
+        testRunner.When("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 110
+        testRunner.Then("Bob should see message \"Welcome to the team!\" from Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 111
+        testRunner.When("Bob adds reaction to Alice\'s message", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 115
         testRunner.When("Alice triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
             }
