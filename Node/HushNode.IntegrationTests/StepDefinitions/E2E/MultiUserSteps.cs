@@ -439,6 +439,446 @@ internal sealed class MultiUserSteps : BrowserStepsBase
     // =============================================================================
 
     /// <summary>
+    /// CRITICAL ASSERTION: Verifies user has exactly N KeyGenerations for a group via gRPC.
+    /// This is the same assertion as the Twin Test - if this fails, the server is not
+    /// returning the expected KeyGenerations to the user.
+    /// </summary>
+    [Then(@"(.*) should have exactly (\d+) KeyGenerations? for ""(.*)"" via gRPC")]
+    public async Task ThenUserShouldHaveExactlyNKeyGenerationsViaGrpc(string userName, int expectedCount, string groupName)
+    {
+        Console.WriteLine($"[E2E CRITICAL] Verifying {userName} has exactly {expectedCount} KeyGeneration(s) for '{groupName}'...");
+
+        // Get user's public address from localStorage
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        // Debug: List all localStorage keys
+        var allKeys = await page.EvaluateAsync<string[]>(@"() => Object.keys(localStorage)");
+        Console.WriteLine($"[E2E CRITICAL] localStorage keys: [{string.Join(", ", allKeys ?? Array.Empty<string>())}]");
+
+        var userAddress = await page.EvaluateAsync<string>(@"() => {
+            // Try hush-app-storage first (current key used by useAppStore)
+            const appStorage = localStorage.getItem('hush-app-storage');
+            if (appStorage) {
+                try {
+                    const parsed = JSON.parse(appStorage);
+                    const addr = parsed.state?.credentials?.signingPublicKey;
+                    if (addr) {
+                        console.log('[E2E CRITICAL] Found address in hush-app-storage');
+                        return addr;
+                    }
+                } catch (e) {
+                    console.log('[E2E CRITICAL] Failed to parse hush-app-storage: ' + e);
+                }
+            }
+
+            // Fallback: try hush-credentials (legacy key)
+            const creds = localStorage.getItem('hush-credentials');
+            if (creds) {
+                try {
+                    const parsed = JSON.parse(creds);
+                    return parsed.state?.signingPublicKey || null;
+                } catch (e) {
+                    console.log('[E2E CRITICAL] Failed to parse hush-credentials: ' + e);
+                }
+            }
+
+            console.log('[E2E CRITICAL] No credentials found in localStorage');
+            return null;
+        }");
+
+        if (string.IsNullOrEmpty(userAddress))
+        {
+            // Capture a screenshot for debugging
+            await TakeScreenshotAsync("critical-assertion-failed-no-address");
+            throw new InvalidOperationException($"Could not get {userName}'s public address from localStorage. Keys: [{string.Join(", ", allKeys ?? Array.Empty<string>())}]");
+        }
+
+        Console.WriteLine($"[E2E CRITICAL] {userName}'s address: {userAddress.Substring(0, 20)}...");
+
+        // Get the feed ID for the group
+        string? feedId = null;
+
+        if (ScenarioContext.TryGetValue(ScenarioHooks.GrpcFactoryKey, out var factoryObj)
+            && factoryObj is GrpcClientFactory grpcFactory)
+        {
+            var feedClient = grpcFactory.CreateClient<HushFeed.HushFeedClient>();
+
+            // Search for the group
+            var searchResponse = await feedClient.SearchPublicGroupsAsync(new SearchPublicGroupsRequest
+            {
+                SearchQuery = groupName,
+                MaxResults = 10
+            });
+
+            if (searchResponse.Success && searchResponse.Groups.Count > 0)
+            {
+                var group = searchResponse.Groups.FirstOrDefault(g =>
+                    g.Title.Equals(groupName, StringComparison.OrdinalIgnoreCase)) ?? searchResponse.Groups[0];
+                feedId = group.FeedId;
+            }
+
+            if (string.IsNullOrEmpty(feedId))
+            {
+                throw new InvalidOperationException($"Could not find group '{groupName}'");
+            }
+
+            Console.WriteLine($"[E2E CRITICAL] Group '{groupName}' feedId: {feedId}");
+
+            // Store for subsequent steps
+            ScenarioContext["LastVerifiedFeedId"] = feedId;
+            ScenarioContext["LastVerifiedUserAddress"] = userAddress;
+
+            // Get KeyGenerations for this user via gRPC
+            var keysResponse = await feedClient.GetKeyGenerationsAsync(new GetKeyGenerationsRequest
+            {
+                FeedId = feedId,
+                UserPublicAddress = userAddress
+            });
+
+            Console.WriteLine($"[E2E CRITICAL] {userName} GetKeyGenerations returned {keysResponse.KeyGenerations.Count} KeyGeneration(s):");
+            foreach (var kg in keysResponse.KeyGenerations)
+            {
+                Console.WriteLine($"[E2E CRITICAL]   - KeyGen {kg.KeyGeneration}: ValidFrom={kg.ValidFromBlock}, HasEncryptedKey={!string.IsNullOrEmpty(kg.EncryptedKey)}, KeyLength={kg.EncryptedKey?.Length ?? 0}");
+            }
+
+            // THE CRITICAL ASSERTION
+            keysResponse.KeyGenerations.Count.Should().Be(expectedCount,
+                $"[E2E CRITICAL FAILURE] {userName} should have exactly {expectedCount} KeyGeneration(s) for '{groupName}'. " +
+                $"Got {keysResponse.KeyGenerations.Count}. " +
+                "This is the SAME check as the Twin Test. If this fails, the server is not returning " +
+                "the new KeyGeneration to existing members after a new member joins.");
+
+            Console.WriteLine($"[E2E CRITICAL] ASSERTION PASSED: {userName} has exactly {expectedCount} KeyGeneration(s)");
+        }
+        else
+        {
+            throw new InvalidOperationException("Could not get gRPC factory from context");
+        }
+    }
+
+    /// <summary>
+    /// CRITICAL ASSERTION: Verifies user receives a specific message with expected KeyGeneration via gRPC.
+    /// </summary>
+    [Then(@"(.*) should receive (.*)'s message ""(.*)"" with KeyGeneration (\d+) via gRPC")]
+    public async Task ThenUserShouldReceiveMessageWithKeyGeneration(string userName, string senderName, string messageContent, int expectedKeyGen)
+    {
+        Console.WriteLine($"[E2E CRITICAL] Verifying {userName} receives {senderName}'s message with KeyGeneration {expectedKeyGen}...");
+
+        // Get feed ID from context
+        var feedId = ScenarioContext.Get<string>("LastVerifiedFeedId");
+
+        // Get the user's address from localStorage (not from context - we want THIS user's address)
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        var userAddress = await page.EvaluateAsync<string>(@"() => {
+            const appStorage = localStorage.getItem('hush-app-storage');
+            if (!appStorage) return null;
+            const parsed = JSON.parse(appStorage);
+            return parsed.state?.credentials?.signingPublicKey || null;
+        }");
+
+        if (string.IsNullOrEmpty(userAddress))
+        {
+            throw new InvalidOperationException($"Could not get {userName}'s address from localStorage");
+        }
+
+        Console.WriteLine($"[E2E CRITICAL] {userName}'s address: {userAddress.Substring(0, 20)}...");
+
+        // Store for next step
+        ScenarioContext["LastVerifiedUserAddress"] = userAddress;
+
+        if (!ScenarioContext.TryGetValue(ScenarioHooks.GrpcFactoryKey, out var factoryObj)
+            || factoryObj is not GrpcClientFactory grpcFactory)
+        {
+            throw new InvalidOperationException("Could not get gRPC factory from context");
+        }
+
+        var feedClient = grpcFactory.CreateClient<HushFeed.HushFeedClient>();
+
+        // Get messages for this user
+        var messagesResponse = await feedClient.GetFeedMessagesForAddressAsync(new GetFeedMessagesForAddressRequest
+        {
+            ProfilePublicKey = userAddress,
+            BlockIndex = 0
+        });
+
+        Console.WriteLine($"[E2E CRITICAL] Server returned {messagesResponse.Messages.Count} message(s)");
+
+        // Find messages for our feed
+        var feedMessages = messagesResponse.Messages.Where(m => m.FeedId == feedId).ToList();
+        Console.WriteLine($"[E2E CRITICAL] Messages in feed '{feedId}': {feedMessages.Count}");
+
+        foreach (var msg in feedMessages)
+        {
+            Console.WriteLine($"[E2E CRITICAL]   - MsgId={msg.FeedMessageId.Substring(0, 8)}..., KeyGen={msg.KeyGeneration}, ContentLen={msg.MessageContent.Length}, From={msg.IssuerName}");
+        }
+
+        // Find message with expected KeyGeneration FROM the expected sender
+        var targetMessage = feedMessages.FirstOrDefault(m =>
+            m.KeyGeneration == expectedKeyGen &&
+            m.IssuerName == senderName);
+
+        targetMessage.Should().NotBeNull(
+            $"[E2E CRITICAL FAILURE] {userName} should receive a message from {senderName} with KeyGeneration {expectedKeyGen}. " +
+            $"Found {feedMessages.Count} message(s) in feed, KeyGens: [{string.Join(", ", feedMessages.Select(m => $"{m.KeyGeneration} from {m.IssuerName}"))}]");
+
+        Console.WriteLine($"[E2E CRITICAL] Found message with KeyGeneration {expectedKeyGen}:");
+        Console.WriteLine($"[E2E CRITICAL]   MessageId: {targetMessage!.FeedMessageId}");
+        Console.WriteLine($"[E2E CRITICAL]   IssuerName: {targetMessage.IssuerName}");
+        Console.WriteLine($"[E2E CRITICAL]   ContentLength: {targetMessage.MessageContent.Length}");
+        Console.WriteLine($"[E2E CRITICAL]   BlockIndex: {targetMessage.BlockIndex}");
+
+        // Store for next step
+        ScenarioContext["LastVerifiedMessage"] = targetMessage;
+        ScenarioContext["LastExpectedMessageContent"] = messageContent;
+
+        Console.WriteLine($"[E2E CRITICAL] ASSERTION PASSED: Message with KeyGeneration {expectedKeyGen} received");
+    }
+
+    /// <summary>
+    /// CRITICAL ASSERTION: Verifies user can decrypt a message using a specific KeyGeneration.
+    /// </summary>
+    [Then(@"(.*) should be able to decrypt the message using KeyGeneration (\d+)")]
+    public async Task ThenUserShouldBeAbleToDecryptMessage(string userName, int keyGeneration)
+    {
+        Console.WriteLine($"[E2E CRITICAL] Verifying {userName} can decrypt message using KeyGeneration {keyGeneration}...");
+
+        // Get stored data from previous steps
+        var feedId = ScenarioContext.Get<string>("LastVerifiedFeedId");
+        var userAddress = ScenarioContext.Get<string>("LastVerifiedUserAddress");
+        var message = ScenarioContext.Get<GetFeedMessagesForAddressReply.Types.FeedMessage>("LastVerifiedMessage");
+        var expectedContent = ScenarioContext.Get<string>("LastExpectedMessageContent");
+
+        if (!ScenarioContext.TryGetValue(ScenarioHooks.GrpcFactoryKey, out var factoryObj)
+            || factoryObj is not GrpcClientFactory grpcFactory)
+        {
+            throw new InvalidOperationException("Could not get gRPC factory from context");
+        }
+
+        var feedClient = grpcFactory.CreateClient<HushFeed.HushFeedClient>();
+
+        // Get KeyGenerations to find the encrypted AES key
+        var keysResponse = await feedClient.GetKeyGenerationsAsync(new GetKeyGenerationsRequest
+        {
+            FeedId = feedId,
+            UserPublicAddress = userAddress
+        });
+
+        var keyGen = keysResponse.KeyGenerations.FirstOrDefault(k => k.KeyGeneration == keyGeneration);
+        keyGen.Should().NotBeNull($"KeyGeneration {keyGeneration} should exist for {userName}");
+
+        Console.WriteLine($"[E2E CRITICAL] KeyGen {keyGeneration} encrypted key length: {keyGen!.EncryptedKey.Length}");
+
+        // Get user's private key from localStorage to decrypt the AES key
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        var encryptionPrivateKey = await page.EvaluateAsync<string>(@"() => {
+            const appStorage = localStorage.getItem('hush-app-storage');
+            if (!appStorage) return null;
+            const parsed = JSON.parse(appStorage);
+            return parsed.state?.credentials?.encryptionPrivateKey || null;
+        }");
+
+        if (string.IsNullOrEmpty(encryptionPrivateKey))
+        {
+            throw new InvalidOperationException($"Could not get {userName}'s encryption private key from localStorage");
+        }
+
+        Console.WriteLine($"[E2E CRITICAL] Got {userName}'s encryption private key (length={encryptionPrivateKey.Length})");
+
+        // Decrypt the AES key using ECIES
+        string decryptedAesKey;
+        try
+        {
+            decryptedAesKey = Olimpo.EncryptKeys.Decrypt(keyGen.EncryptedKey, encryptionPrivateKey);
+            Console.WriteLine($"[E2E CRITICAL] Successfully decrypted AES key for KeyGeneration {keyGeneration}");
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"[E2E CRITICAL FAILURE] Failed to decrypt AES key for KeyGeneration {keyGeneration}: {ex.Message}");
+        }
+
+        // Decrypt the message content
+        string decryptedContent;
+        try
+        {
+            decryptedContent = Olimpo.EncryptKeys.AesDecrypt(message.MessageContent, decryptedAesKey);
+            Console.WriteLine($"[E2E CRITICAL] Successfully decrypted message content: '{decryptedContent}'");
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"[E2E CRITICAL FAILURE] Failed to decrypt message content: {ex.Message}. " +
+                $"AES key length: {decryptedAesKey.Length}, Content length: {message.MessageContent.Length}");
+        }
+
+        // Verify the decrypted content matches expected
+        decryptedContent.Should().Be(expectedContent,
+            $"[E2E CRITICAL FAILURE] Decrypted content should match expected. " +
+            $"Got: '{decryptedContent}', Expected: '{expectedContent}'");
+
+        Console.WriteLine($"[E2E CRITICAL] ASSERTION PASSED: {userName} successfully decrypted message: '{decryptedContent}'");
+    }
+
+    /// <summary>
+    /// CRITICAL ASSERTION: Verifies a user's message exists on server with expected KeyGeneration.
+    /// </summary>
+    [Then(@"(.*)'s message ""(.*)"" should be on server with KeyGeneration (\d+)")]
+    public async Task ThenUsersMessageShouldBeOnServerWithKeyGeneration(string senderName, string messageContent, int expectedKeyGen)
+    {
+        Console.WriteLine($"[E2E CRITICAL] Verifying {senderName}'s message '{messageContent}' is on server with KeyGeneration {expectedKeyGen}...");
+
+        // Get sender's address from localStorage
+        await SwitchToUserAsync(senderName);
+        var page = GetUserPage(senderName);
+
+        var senderAddress = await page.EvaluateAsync<string>(@"() => {
+            const appStorage = localStorage.getItem('hush-app-storage');
+            if (!appStorage) return null;
+            const parsed = JSON.parse(appStorage);
+            return parsed.state?.credentials?.signingPublicKey || null;
+        }");
+
+        if (string.IsNullOrEmpty(senderAddress))
+        {
+            throw new InvalidOperationException($"Could not get {senderName}'s address from localStorage");
+        }
+
+        Console.WriteLine($"[E2E CRITICAL] {senderName}'s address: {senderAddress.Substring(0, 20)}...");
+
+        // Get feed ID from context
+        var feedId = ScenarioContext.Get<string>("LastVerifiedFeedId");
+
+        if (!ScenarioContext.TryGetValue(ScenarioHooks.GrpcFactoryKey, out var factoryObj)
+            || factoryObj is not GrpcClientFactory grpcFactory)
+        {
+            throw new InvalidOperationException("Could not get gRPC factory from context");
+        }
+
+        var feedClient = grpcFactory.CreateClient<HushFeed.HushFeedClient>();
+
+        // Get messages for the sender
+        var messagesResponse = await feedClient.GetFeedMessagesForAddressAsync(new GetFeedMessagesForAddressRequest
+        {
+            ProfilePublicKey = senderAddress,
+            BlockIndex = 0
+        });
+
+        Console.WriteLine($"[E2E CRITICAL] Server returned {messagesResponse.Messages.Count} message(s) for {senderName}");
+
+        // Find messages in our feed from this sender
+        var feedMessages = messagesResponse.Messages
+            .Where(m => m.FeedId == feedId && m.IssuerPublicAddress == senderAddress)
+            .ToList();
+
+        Console.WriteLine($"[E2E CRITICAL] Messages from {senderName} in feed: {feedMessages.Count}");
+
+        foreach (var msg in feedMessages)
+        {
+            Console.WriteLine($"[E2E CRITICAL]   - MsgId={msg.FeedMessageId.Substring(0, 8)}..., KeyGen={msg.KeyGeneration}, ContentLen={msg.MessageContent.Length}, Block={msg.BlockIndex}");
+        }
+
+        // Find message with expected KeyGeneration
+        var targetMessage = feedMessages.FirstOrDefault(m => m.KeyGeneration == expectedKeyGen);
+
+        targetMessage.Should().NotBeNull(
+            $"[E2E CRITICAL FAILURE] {senderName}'s message should exist with KeyGeneration {expectedKeyGen}. " +
+            $"Found {feedMessages.Count} message(s), KeyGens: [{string.Join(", ", feedMessages.Select(m => m.KeyGeneration))}]");
+
+        Console.WriteLine($"[E2E CRITICAL] Found {senderName}'s message with KeyGeneration {expectedKeyGen}:");
+        Console.WriteLine($"[E2E CRITICAL]   MessageId: {targetMessage!.FeedMessageId}");
+        Console.WriteLine($"[E2E CRITICAL]   BlockIndex: {targetMessage.BlockIndex}");
+        Console.WriteLine($"[E2E CRITICAL]   ContentLength: {targetMessage.MessageContent.Length}");
+
+        // Store for subsequent steps (for Bob to verify)
+        ScenarioContext["LastSenderMessage"] = targetMessage;
+        ScenarioContext["LastSenderMessageContent"] = messageContent;
+
+        Console.WriteLine($"[E2E CRITICAL] ASSERTION PASSED: {senderName}'s message exists with KeyGeneration {expectedKeyGen}");
+    }
+
+    /// <summary>
+    /// DEBUG: Dumps the client-side message state for a group to diagnose rendering issues.
+    /// </summary>
+    [Then(@"dump (.*)'s message state for ""(.*)""")]
+    public async Task ThenDumpUserMessageStateForGroup(string userName, string groupName)
+    {
+        Console.WriteLine($"[E2E DEBUG] Dumping {userName}'s message state for '{groupName}'...");
+
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        // Get the feed ID from context
+        var feedId = ScenarioContext.Get<string>("LastVerifiedFeedId");
+
+        // Dump the feeds store state
+        var storeState = await page.EvaluateAsync<string>(@"(feedId) => {
+            try {
+                const feedsStorage = localStorage.getItem('hush-feeds-storage');
+                if (!feedsStorage) return JSON.stringify({ error: 'No hush-feeds-storage found' });
+
+                const parsed = JSON.parse(feedsStorage);
+                const state = parsed.state;
+
+                // Find the feed
+                const feed = state.feeds?.find(f => f.id === feedId);
+                const messages = state.messages?.[feedId] || [];
+                const groupKeyState = state.groupKeyStates?.[feedId];
+
+                return JSON.stringify({
+                    feedId: feedId,
+                    feedFound: !!feed,
+                    feedName: feed?.name,
+                    feedType: feed?.type,
+                    messageCount: messages.length,
+                    messages: messages.map(m => ({
+                        id: m.id?.substring(0, 8) + '...',
+                        content: m.content?.substring(0, 30) + (m.content?.length > 30 ? '...' : ''),
+                        keyGeneration: m.keyGeneration,
+                        decryptionFailed: m.decryptionFailed,
+                        senderName: m.senderName,
+                        isConfirmed: m.isConfirmed
+                    })),
+                    groupKeyState: groupKeyState ? {
+                        currentKeyGeneration: groupKeyState.currentKeyGeneration,
+                        keyCount: groupKeyState.keyGenerations?.length,
+                        keyGens: groupKeyState.keyGenerations?.map(k => ({
+                            keyGeneration: k.keyGeneration,
+                            hasAesKey: !!k.aesKey
+                        }))
+                    } : null
+                }, null, 2);
+            } catch (e) {
+                return JSON.stringify({ error: e.message });
+            }
+        }", feedId);
+
+        Console.WriteLine($"[E2E DEBUG] Store state:\n{storeState}");
+
+        // Also check the DOM for rendered messages
+        var renderedMessages = await page.EvaluateAsync<string>(@"() => {
+            const messages = document.querySelectorAll('[data-testid=""message""]');
+            const result = [];
+            messages.forEach((msg, i) => {
+                result.push({
+                    index: i,
+                    text: msg.textContent?.substring(0, 50) + (msg.textContent?.length > 50 ? '...' : ''),
+                    visible: msg.offsetParent !== null
+                });
+            });
+            return JSON.stringify(result, null, 2);
+        }");
+
+        Console.WriteLine($"[E2E DEBUG] Rendered messages in DOM:\n{renderedMessages}");
+
+        await TakeScreenshotAsync("debug-message-state");
+    }
+
+    /// <summary>
     /// Verifies user should NOT see a specific message.
     /// </summary>
     [Then(@"(.*) should NOT see message ""(.*)"" in ""(.*)""")]
@@ -800,14 +1240,14 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         var descInput = await WaitForTestIdAsync(page, "group-description-input");
         await descInput.FillAsync($"E2E test group: {groupName}");
 
-        // Create waiter before clicking
+        // Create waiter before clicking - we need to produce a block while the wizard polls
         var waiter = StartListeningForTransactions(minTransactions: 1);
 
-        // Click create
+        // Click create - wizard starts polling for blockchain confirmation internally
         await ClickTestIdAsync(page, "confirm-create-group-button");
-        Console.WriteLine($"[E2E] Clicked create group for '{groupName}'");
+        Console.WriteLine($"[E2E] Clicked create group for '{groupName}' - wizard is now polling");
 
-        // Wait for transaction and produce block
+        // Wait for transaction to arrive at server (wizard submitted it)
         try
         {
             await waiter.WaitAsync();
@@ -817,12 +1257,30 @@ internal sealed class MultiUserSteps : BrowserStepsBase
             waiter.Dispose();
         }
 
+        // Produce block - this indexes the transaction
+        // The wizard is still polling and will find the feed after this
         var blockControl = GetBlockControl();
         await blockControl.ProduceBlockAsync();
-        Console.WriteLine($"[E2E] Group creation block produced");
+        Console.WriteLine($"[E2E] Group creation block produced - wizard polling should find it");
 
-        // Trigger sync
-        await page.EvaluateAsync("() => window.__e2e_triggerSync()");
+        // Wait for wizard to close (it closes only after feed is confirmed on blockchain)
+        var wizard = page.GetByTestId("group-creation-wizard");
+        await Expect(wizard).ToBeHiddenAsync(new LocatorAssertionsToBeHiddenOptions
+        {
+            Timeout = 30000  // Wizard should close within a few poll cycles (1s each)
+        });
+        Console.WriteLine($"[E2E] Wizard closed - feed confirmed on blockchain");
+
+        // Feed should now be visible with data-feed-ready="true" (has encryption key)
+        // Sanitization matches ChatListItem: name.toLowerCase().replace(/[^a-z0-9]/g, '-')
+        var sanitizedGroupName = System.Text.RegularExpressions.Regex.Replace(
+            groupName.ToLowerInvariant(), "[^a-z0-9]", "-");
+        var readyFeedItem = page.Locator($"[data-testid='feed-item:group:{sanitizedGroupName}'][data-feed-ready='true']");
+        await Expect(readyFeedItem).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
+        {
+            Timeout = 15000
+        });
+        Console.WriteLine($"[E2E] Feed item for '{groupName}' is visible with data-feed-ready=true");
 
         // Capture localStorage state after group creation (includes new feed + KeyGen 0)
         await CaptureLocalStorageAsync(page, $"group-created:{groupName}", userName);

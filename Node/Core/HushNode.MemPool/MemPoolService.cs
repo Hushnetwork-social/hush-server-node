@@ -53,11 +53,7 @@ public class MemPoolService(IIdempotencyService idempotencyService) : IMemPoolSe
             {
                 messageIds.Add(feedMessageTx.Payload.FeedMessageId);
             }
-            // Check if this is a NewGroupFeedMessagePayload (group feed message)
-            else if (transaction is SignedTransaction<NewGroupFeedMessagePayload> groupMessageTx)
-            {
-                messageIds.Add(groupMessageTx.Payload.MessageId);
-            }
+            // Group feed messages now use the same NewFeedMessagePayload with KeyGeneration set
         }
 
         return messageIds;

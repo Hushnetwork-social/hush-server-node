@@ -61,12 +61,29 @@ Feature: Multi-User Basic Walkthrough
         And Alice sends message "Just a sync trigger..." and waits for confirmation
         # Screenshot: Alice's personal message confirmed (full sync completed)
 
+        # === VERIFY ALICE HAS 2 KEY GENERATIONS (CRITICAL ASSERTION) ===
+        # This is the same assertion as the Twin Test - Alice MUST have KeyGen 0 AND KeyGen 1
+        Then Alice should have exactly 2 KeyGenerations for "Team Chat" via gRPC
+        # If this fails, the server is not returning KeyGen 1 to Alice
+
+        # === VERIFY ALICE RECEIVES BOB'S MESSAGE WITH KEYGENERATION=1 ===
+        Then Alice should receive Bob's message "Hi Alice, I joined!" with KeyGeneration 1 via gRPC
+        # If this fails, the server is not returning the message or KeyGeneration is wrong
+
+        # === VERIFY ALICE CAN DECRYPT THE MESSAGE ===
+        Then Alice should be able to decrypt the message using KeyGeneration 1
+        # If this fails, the AES key decryption or message decryption is broken
+
         # === NOW ALICE CAN SEE BOB'S MESSAGE ===
         When Alice opens the group "Team Chat"
         # Screenshot: Alice opened group after KeyGen sync
 
         And Alice triggers sync
         Then Alice should see that Bob joined the group
+
+        # === DEBUG: Dump client-side message state ===
+        Then dump Alice's message state for "Team Chat"
+
         And Alice should see message "Hi Alice, I joined!" from Bob
         # Screenshot: Alice sees Bob and his message
 
@@ -76,6 +93,19 @@ Feature: Multi-User Basic Walkthrough
         # Screenshot: Alice's reaction and reply confirmed
 
         # === BOB SEES ALICE'S REACTION AND REPLY, THEN REACTS BACK ===
+        # === VERIFY BOB HAS KEYGENERATION 1 ===
+        Then Bob should have exactly 1 KeyGeneration for "Team Chat" via gRPC
+        # Bob only joined at KeyGen 1, so he should only have KeyGen 1
+
+        # === VERIFY ALICE'S MESSAGE WAS SENT WITH KEYGENERATION 1 ===
+        Then Alice's message "Welcome to the team!" should be on server with KeyGeneration 1
+
+        # === VERIFY BOB RECEIVES ALICE'S MESSAGE ===
+        Then Bob should receive Alice's message "Welcome to the team!" with KeyGeneration 1 via gRPC
+
+        # === VERIFY BOB CAN DECRYPT THE MESSAGE ===
+        Then Bob should be able to decrypt the message using KeyGeneration 1
+
         When Bob triggers sync
         Then Bob should see message "Welcome to the team!" from Alice
         When Bob adds reaction to Alice's message

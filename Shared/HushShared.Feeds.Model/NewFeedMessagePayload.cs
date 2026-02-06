@@ -8,7 +8,9 @@ public record NewFeedMessagePayload(
     FeedMessageId FeedMessageId,
     FeedId FeedId,
     string MessageContent,
-    FeedMessageId? ReplyToMessageId = null) : ITransactionPayloadKind;
+    FeedMessageId? ReplyToMessageId = null,
+    int? KeyGeneration = null,
+    byte[]? AuthorCommitment = null) : ITransactionPayloadKind;
 
 public static class NewFeedMessagePayloadHandler
 {
@@ -18,9 +20,11 @@ public static class NewFeedMessagePayloadHandler
         FeedMessageId feedMessageId,
         FeedId feedId,
         string messageContent,
-        FeedMessageId? replyToMessageId = null) =>
+        FeedMessageId? replyToMessageId = null,
+        int? keyGeneration = null,
+        byte[]? authorCommitment = null) =>
         UnsignedTransactionHandler.CreateNew(
             NewFeedMessagePayloadKind,
             Timestamp.Current,
-            new NewFeedMessagePayload(feedMessageId, feedId, messageContent, replyToMessageId));
+            new NewFeedMessagePayload(feedMessageId, feedId, messageContent, replyToMessageId, keyGeneration, authorCommitment));
 }

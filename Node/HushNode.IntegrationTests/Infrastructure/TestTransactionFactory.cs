@@ -232,14 +232,14 @@ internal static class TestTransactionFactory
         var messageId = FeedMessageId.NewFeedMessageId;
         var encryptedContent = EncryptKeys.AesEncrypt(message, feedAesKey);
 
-        var payload = new NewGroupFeedMessagePayload(
+        var payload = new NewFeedMessagePayload(
             messageId,
             feedId,
             encryptedContent,
-            keyGeneration);
+            KeyGeneration: keyGeneration);
 
         var unsignedTransaction = UnsignedTransactionHandler.CreateNew(
-            NewGroupFeedMessagePayloadHandler.NewGroupFeedMessagePayloadKind,
+            NewFeedMessagePayloadHandler.NewFeedMessagePayloadKind,
             Timestamp.Current,
             payload);
 
@@ -247,7 +247,7 @@ internal static class TestTransactionFactory
             unsignedTransaction.ToJson(),
             sender.PrivateSigningKey);
 
-        var signedTransaction = new SignedTransaction<NewGroupFeedMessagePayload>(
+        var signedTransaction = new SignedTransaction<NewFeedMessagePayload>(
             unsignedTransaction,
             new SignatureInfo(sender.PublicSigningAddress, signature));
 

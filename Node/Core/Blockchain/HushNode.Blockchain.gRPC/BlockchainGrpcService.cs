@@ -148,11 +148,7 @@ public class BlockchainGrpcService(
             return feedMessageTx.Payload.FeedMessageId;
         }
 
-        // Check if this is a NewGroupFeedMessagePayload (group feed message)
-        if (transaction is SignedTransaction<NewGroupFeedMessagePayload> groupMessageTx)
-        {
-            return groupMessageTx.Payload.MessageId;
-        }
+        // Group feed messages now use the same NewFeedMessagePayload with KeyGeneration set
 
         // Not a FeedMessage transaction - no idempotency check needed
         return null;
