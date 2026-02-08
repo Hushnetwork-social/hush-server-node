@@ -19,14 +19,14 @@ namespace HushNode.IntegrationTests.Features
     
     [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
     [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
-    [Xunit.TraitAttribute("Category", "Integration")]
+    [Xunit.TraitAttribute("Category", "E2E")]
     public partial class PlaywrightInfrastructureVerificationFeature : object, Xunit.IClassFixture<PlaywrightInfrastructureVerificationFeature.FixtureData>, System.IDisposable
     {
         
         private static TechTalk.SpecFlow.ITestRunner testRunner;
         
         private static string[] featureTags = new string[] {
-                "Integration"};
+                "E2E"};
         
         private Xunit.Abstractions.ITestOutputHelper _testOutputHelper;
         

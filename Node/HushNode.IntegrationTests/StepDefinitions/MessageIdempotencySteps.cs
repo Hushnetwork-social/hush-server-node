@@ -2,6 +2,8 @@ using FluentAssertions;
 using HushNetwork.proto;
 using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
+using HushShared.Blockchain.Model;
+using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Feeds.Model;
 using HushServerNode.Testing;
 using Olimpo;
@@ -11,6 +13,7 @@ namespace HushNode.IntegrationTests.StepDefinitions;
 
 /// <summary>
 /// Step definitions for FEAT-057: Message Idempotency tests.
+/// Also used by FEAT-058: Client Retry Scenarios for server verification.
 /// Tests the server's ability to detect duplicate message submissions.
 /// </summary>
 [Binding]
@@ -183,4 +186,91 @@ public sealed class MessageIdempotencySteps
 
         throw new InvalidOperationException("GrpcClientFactory not found in ScenarioContext.");
     }
+
+    #region Group Feed Idempotency Steps (FEAT-058)
+
+    /// <summary>
+    /// Creates a group feed message with a specific message ID for idempotency testing.
+    /// </summary>
+    [Given(@"(.*) creates a group message with ID ""(.*)"" for ""(.*)""")]
+    public void GivenUserCreatesGroupMessageWithId(string userName, string messageIdSuffix, string groupName)
+    {
+        var sender = GetTestIdentity(userName);
+        var feedId = (FeedId)_scenarioContext[$"GroupFeed_{groupName}"];
+        var aesKey = (string)_scenarioContext[$"GroupFeedAesKey_{groupName}"];
+
+        // Create a deterministic message ID from the suffix
+        var messageId = CreateDeterministicMessageId(messageIdSuffix);
+        var message = $"Test group message for idempotency: {messageIdSuffix}";
+
+        // Create the transaction JSON (using KeyGeneration 0 as default for new groups)
+        var transactionJson = CreateGroupFeedMessageWithId(sender, feedId, messageId, message, aesKey, keyGeneration: 0);
+
+        // Store for later submission
+        _scenarioContext[$"GroupIdempotencyMessage_{messageIdSuffix}"] = transactionJson;
+        _scenarioContext[$"GroupIdempotencyMessageId_{messageIdSuffix}"] = messageId;
+        _scenarioContext["CurrentGroupIdempotencyMessageSuffix"] = messageIdSuffix;
+        _scenarioContext["CurrentGroupIdempotencyGroupName"] = groupName;
+    }
+
+    [When(@"(.*) submits the group message to ""(.*)"" via gRPC")]
+    public async Task WhenUserSubmitsGroupMessageViaGrpc(string userName, string groupName)
+    {
+        var suffix = (string)_scenarioContext["CurrentGroupIdempotencyMessageSuffix"];
+        var transactionJson = (string)_scenarioContext[$"GroupIdempotencyMessage_{suffix}"];
+
+        var grpcFactory = GetGrpcFactory();
+        var blockchainClient = grpcFactory.CreateClient<HushBlockchain.HushBlockchainClient>();
+
+        _lastResponse = await blockchainClient.SubmitSignedTransactionAsync(
+            new SubmitSignedTransactionRequest
+            {
+                SignedTransaction = transactionJson
+            });
+    }
+
+    [When(@"(.*) submits the same group message again via gRPC")]
+    public async Task WhenUserSubmitsSameGroupMessageAgainViaGrpc(string userName)
+    {
+        // Resubmit the same group message transaction
+        var groupName = (string)_scenarioContext["CurrentGroupIdempotencyGroupName"];
+        await WhenUserSubmitsGroupMessageViaGrpc(userName, groupName);
+    }
+
+    /// <summary>
+    /// Creates a signed group feed message with a specific message ID for idempotency testing.
+    /// </summary>
+    private static string CreateGroupFeedMessageWithId(
+        TestIdentity sender,
+        FeedId feedId,
+        FeedMessageId messageId,
+        string message,
+        string feedAesKey,
+        int keyGeneration)
+    {
+        var encryptedContent = EncryptKeys.AesEncrypt(message, feedAesKey);
+
+        var payload = new NewFeedMessagePayload(
+            messageId,
+            feedId,
+            encryptedContent,
+            KeyGeneration: keyGeneration);
+
+        var unsignedTransaction = UnsignedTransactionHandler.CreateNew(
+            NewFeedMessagePayloadHandler.NewFeedMessagePayloadKind,
+            Timestamp.Current,
+            payload);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            sender.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<NewFeedMessagePayload>(
+            unsignedTransaction,
+            new SignatureInfo(sender.PublicSigningAddress, signature));
+
+        return signedTransaction.ToJson();
+    }
+
+    #endregion
 }
