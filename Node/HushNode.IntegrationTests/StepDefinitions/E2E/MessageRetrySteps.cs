@@ -16,28 +16,31 @@ internal sealed class MessageRetrySteps : BrowserStepsBase
     }
 
     /// <summary>
-    /// Verifies that a message shows the pending status icon (Clock).
-    /// The pending icon has data-testid="message-pending".
+    /// Verifies that a message shows a pending/unconfirmed status icon (Clock or Spinner).
+    /// Accepts either 'pending' (Clock) or 'confirming' (Spinner) since the transition
+    /// from pending to confirming happens very fast with in-memory server.
     /// </summary>
     [Then(@"the message ""(.*)"" should show pending status icon")]
     public async Task ThenMessageShouldShowPendingStatusIcon(string messageText)
     {
         var page = await GetOrCreatePageAsync();
 
-        Console.WriteLine($"[E2E Retry] Looking for pending status icon on message: '{messageText}'");
+        Console.WriteLine($"[E2E Retry] Looking for pending/confirming status icon on message: '{messageText}'");
 
         // Find the message container that contains the message text
         var messageContainer = await FindMessageContainerByTextAsync(page, messageText);
 
-        // Look for the pending status icon within this message
-        var pendingIcon = messageContainer.Locator("[data-testid='message-pending']");
+        // Look for either pending (Clock) or confirming (Spinner) icon
+        // The status transitions from pending -> confirming very quickly
+        var pendingOrConfirmingIcon = messageContainer.Locator(
+            "[data-testid='message-pending'], [data-testid='message-confirming']");
 
-        await Expect(pendingIcon).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
+        await Expect(pendingOrConfirmingIcon.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
         {
             Timeout = 5000
         });
 
-        Console.WriteLine($"[E2E Retry] Found pending icon for message: '{messageText}'");
+        Console.WriteLine($"[E2E Retry] Found pending/confirming icon for message: '{messageText}'");
     }
 
     /// <summary>

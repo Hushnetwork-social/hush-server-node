@@ -1,15 +1,11 @@
 # docker-compose.e2e.yml
 # HushWebClient container for E2E integration tests
 #
-# IMPORTANT: This uses a PRE-BUILT image to avoid slow rebuilds during tests.
+# The image is built automatically on first run if it doesn't exist.
+# After web client code changes, rebuild manually:
+#   cd Node/HushNode.IntegrationTests && docker compose -f docker-compose.e2e.yml build
+#
 # The gRPC-Web port is fixed at 14666 (HushServerNodeCore.E2EGrpcWebPort).
-#
-# First-time setup (run once, or after web client code changes):
-#   docker compose -f docker-compose.e2e.yml build
-#
-# Running tests (uses cached image, no rebuild):
-#   docker compose -f docker-compose.e2e.yml up -d --wait
-#   docker compose -f docker-compose.e2e.yml down --remove-orphans
 
 services:
   hush-web-client:

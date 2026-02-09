@@ -61,6 +61,7 @@ internal sealed class FeedSteps : BrowserStepsBase
         }
     }
 
+    [Given(@"the user clicks on their personal feed")]
     [When(@"the user clicks on their personal feed")]
     public async Task WhenTheUserClicksOnTheirPersonalFeed()
     {

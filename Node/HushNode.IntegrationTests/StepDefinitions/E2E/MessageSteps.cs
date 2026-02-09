@@ -15,6 +15,7 @@ internal sealed class MessageSteps : BrowserStepsBase
     {
     }
 
+    [Given(@"the user sends message ""(.*)""")]
     [When(@"the user sends message ""(.*)""")]
     public async Task WhenTheUserSendsMessage(string message)
     {

@@ -1,6 +1,7 @@
 using HushNode.Caching;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Olimpo.EntityFramework.Persistency;
 
@@ -50,67 +51,81 @@ public class FeedsStorageService(
         await writableUnitOfWork.CommitAsync();
     }
 
+    /// <summary>
+    /// Creates a personal feed if one doesn't already exist for the user.
+    /// Uses PostgreSQL advisory locks to prevent race conditions without blocking readers.
+    ///
+    /// Why advisory locks instead of SERIALIZABLE isolation?
+    /// - SERIALIZABLE transactions acquire "predicate locks" that conflict with ANY reader
+    /// - Client sync continuously reads from the Feeds table (every 3 seconds)
+    /// - This caused frequent 40001 serialization failures in E2E tests
+    /// - Advisory locks only block OTHER writers for the SAME address, not readers
+    /// </summary>
     public async Task<bool> CreatePersonalFeedIfNotExists(Feed feed, string publicSigningAddress)
     {
-        const int maxRetries = 5;
-        const int baseDelayMs = 100;
-        var random = new Random();
-
-        for (int attempt = 1; attempt <= maxRetries; attempt++)
+        // Step 1: Quick check OUTSIDE any transaction (READ COMMITTED, no locks held)
+        // This handles the common case where the feed already exists without any locking
+        var alreadyExists = await this.HasPersonalFeed(publicSigningAddress);
+        if (alreadyExists)
         {
-            try
-            {
-                // Use serializable isolation to prevent race conditions where two transactions
-                // both check HasPersonalFeed=false and then both create a feed
-                using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable(
-                    System.Data.IsolationLevel.Serializable);
-                var repository = writableUnitOfWork.GetRepository<IFeedsRepository>();
-
-                // Check within the same serializable transaction
-                var hasPersonalFeed = await repository.HasPersonalFeed(publicSigningAddress);
-                if (hasPersonalFeed)
-                {
-                    return false; // Personal feed already exists
-                }
-
-                await repository.CreateFeed(feed);
-                await writableUnitOfWork.CommitAsync();
-                return true;
-            }
-            catch (Exception ex) when (IsSerializationFailure(ex))
-            {
-                if (attempt == maxRetries)
-                    throw; // Rethrow on final attempt
-
-                this._logger.LogWarning(
-                    "Serialization failure creating personal feed (attempt {Attempt}/{MaxRetries}), retrying...",
-                    attempt, maxRetries);
-
-                // Exponential backoff with jitter to prevent synchronized retries
-                // Base delay: 100ms, 200ms, 300ms, 400ms + random jitter (0-50ms)
-                var delay = (baseDelayMs * attempt) + random.Next(0, 50);
-                await Task.Delay(delay);
-            }
+            this._logger.LogDebug(
+                "Personal feed already exists for {Address} (fast path)",
+                publicSigningAddress);
+            return false;
         }
 
-        return false; // Should not reach here
+        // Step 2: Acquire advisory lock and create the feed
+        // Advisory locks block OTHER writers for the same address but NOT readers
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        // Hash the address to get a unique lock key for PostgreSQL advisory lock
+        var lockKey = GetAdvisoryLockKey(publicSigningAddress);
+
+        // Acquire transaction-scoped advisory lock (auto-released on commit/rollback)
+        // This will wait if another transaction holds the same lock
+        await writableUnitOfWork.Context.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock({0})", lockKey);
+
+        this._logger.LogDebug(
+            "Acquired advisory lock {LockKey} for personal feed creation",
+            lockKey);
+
+        var repository = writableUnitOfWork.GetRepository<IFeedsRepository>();
+
+        // Re-check after acquiring lock (another transaction might have just created it)
+        var hasPersonalFeed = await repository.HasPersonalFeed(publicSigningAddress);
+        if (hasPersonalFeed)
+        {
+            this._logger.LogDebug(
+                "Personal feed was created by concurrent transaction for {Address}",
+                publicSigningAddress);
+            return false;
+        }
+
+        await repository.CreateFeed(feed);
+        await writableUnitOfWork.CommitAsync();
+
+        this._logger.LogInformation(
+            "Created personal feed {FeedId} for {Address}",
+            feed.FeedId,
+            publicSigningAddress);
+
+        return true;
     }
 
     /// <summary>
-    /// Checks if the exception is a PostgreSQL serialization failure (40001).
-    /// EF Core wraps PostgresException in DbUpdateException and InvalidOperationException.
+    /// Generates a stable advisory lock key for a given public signing address.
+    /// Uses a namespace prefix to avoid collisions with other advisory locks in the system.
     /// </summary>
-    private static bool IsSerializationFailure(Exception ex)
+    private static long GetAdvisoryLockKey(string publicSigningAddress)
     {
-        // Direct PostgresException
-        if (ex is Npgsql.PostgresException pgEx && pgEx.SqlState == "40001")
-            return true;
+        // Namespace constant to avoid collisions with other advisory lock usages
+        // "PF" = Personal Feed = 0x5046 in ASCII
+        const long PERSONAL_FEED_NAMESPACE = 0x5046_0000_0000_0000L;
 
-        // Check inner exceptions (EF Core wraps the original exception)
-        if (ex.InnerException != null && IsSerializationFailure(ex.InnerException))
-            return true;
-
-        return false;
+        // Use string hash code (stable within a single runtime)
+        // Combined with namespace to create unique lock key
+        return PERSONAL_FEED_NAMESPACE | (uint)publicSigningAddress.GetHashCode();
     }
 
     public async Task<IEnumerable<Feed>> RetrieveFeedsForAddress(string publicSigningAddress, BlockIndex blockIndex)
