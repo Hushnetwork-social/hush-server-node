@@ -577,4 +577,12 @@ public class FeedsStorageService(
 
         return code;
     }
+
+    // ===== FEAT-059: Per-Feed Pagination Authorization =====
+
+    public async Task<bool> IsUserParticipantOfFeedAsync(FeedId feedId, string userAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .IsUserParticipantOfFeedAsync(feedId, userAddress);
 }

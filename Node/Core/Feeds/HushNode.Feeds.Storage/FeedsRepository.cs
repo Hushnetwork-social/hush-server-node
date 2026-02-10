@@ -495,5 +495,27 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
         }
         return new string(chars);
     }
+
+    // ===== FEAT-059: Per-Feed Pagination Authorization =====
+
+    public async Task<bool> IsUserParticipantOfFeedAsync(FeedId feedId, string userAddress)
+    {
+        // Check regular feeds (Personal, Chat) first
+        var isRegularParticipant = await this.Context.FeedParticipants
+            .AnyAsync(p =>
+                p.FeedId == feedId &&
+                p.ParticipantPublicAddress == userAddress);
+
+        if (isRegularParticipant)
+            return true;
+
+        // Check group feeds (active participant: not left, not banned)
+        return await this.Context.GroupFeedParticipants
+            .AnyAsync(p =>
+                p.FeedId == feedId &&
+                p.ParticipantPublicAddress == userAddress &&
+                p.LeftAtBlock == null &&
+                p.ParticipantType != ParticipantType.Banned);
+    }
 }
 
