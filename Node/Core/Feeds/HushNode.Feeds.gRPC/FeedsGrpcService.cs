@@ -289,6 +289,134 @@ public class FeedsGrpcService(
         }
     }
 
+    // ===== FEAT-059: Per-feed pagination for scroll-based prefetch =====
+
+    /// <summary>
+    /// Get paginated messages for a specific feed.
+    /// Used by clients for scroll-based prefetch buffering.
+    /// </summary>
+    public override async Task<GetFeedMessagesByIdReply> GetFeedMessagesById(
+        GetFeedMessagesByIdRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            // Parse request parameters
+            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
+            var userAddress = request.UserAddress ?? string.Empty;
+            var limit = request.HasLimit ? request.Limit : _maxMessagesPerResponse;
+            limit = Math.Min(limit, _maxMessagesPerResponse); // Cap to server max
+
+            BlockIndex? beforeBlockIndex = request.HasBeforeBlockIndex
+                ? BlockIndexHandler.CreateNew(request.BeforeBlockIndex)
+                : null;
+
+            _logger.LogDebug(
+                "[GetFeedMessagesById] Request: FeedId={FeedId}, UserAddress={UserAddress}, BeforeBlockIndex={BeforeBlockIndex}, Limit={Limit}",
+                request.FeedId,
+                userAddress.Substring(0, Math.Min(20, userAddress.Length)),
+                beforeBlockIndex?.Value.ToString() ?? "null",
+                limit);
+
+            // Check authorization: user must be a participant of the feed
+            var isAuthorized = await this._feedsStorageService
+                .IsUserParticipantOfFeedAsync(feedId, userAddress);
+
+            if (!isAuthorized)
+            {
+                _logger.LogWarning(
+                    "[GetFeedMessagesById] Authorization failed: User {UserAddress} is not a participant of feed {FeedId}",
+                    userAddress.Substring(0, Math.Min(20, userAddress.Length)),
+                    request.FeedId);
+
+                return new GetFeedMessagesByIdReply
+                {
+                    HasMoreMessages = false,
+                    OldestBlockIndex = 0,
+                    NewestBlockIndex = 0
+                };
+            }
+
+            // Fetch paginated messages using cache-fallback pattern
+            var paginatedResult = await GetMessagesWithCacheFallbackPaginatedAsync(
+                feedId,
+                new BlockIndex(0), // sinceBlockIndex: fetch from beginning
+                limit,
+                fetchLatest: beforeBlockIndex == null, // fetch latest if no cursor provided
+                beforeBlockIndex);
+
+            var messagesList = paginatedResult.Messages.ToList();
+
+            _logger.LogDebug(
+                "[GetFeedMessagesById] Found {MessageCount} messages for feed {FeedId}, HasMore: {HasMore}",
+                messagesList.Count,
+                request.FeedId,
+                paginatedResult.HasMoreMessages);
+
+            // Build response
+            var reply = new GetFeedMessagesByIdReply
+            {
+                HasMoreMessages = paginatedResult.HasMoreMessages,
+                OldestBlockIndex = messagesList.Count > 0 ? paginatedResult.OldestBlockIndex.Value : 0,
+                NewestBlockIndex = messagesList.Count > 0
+                    ? messagesList.Max(m => m.BlockIndex.Value)
+                    : 0
+            };
+
+            // Map messages to proto format
+            foreach (var feedMessage in messagesList)
+            {
+                var issuerName = await this.ExtractDisplayName(feedMessage.IssuerPublicAddress);
+                var timestamp = feedMessage.Timestamp?.Value ?? DateTime.UtcNow;
+
+                var feedMessageProto = new GetFeedMessagesForAddressReply.Types.FeedMessage
+                {
+                    FeedMessageId = feedMessage.FeedMessageId.ToString(),
+                    FeedId = feedMessage.FeedId.ToString(),
+                    MessageContent = feedMessage.MessageContent,
+                    IssuerPublicAddress = feedMessage.IssuerPublicAddress,
+                    BlockIndex = feedMessage.BlockIndex.Value,
+                    IssuerName = issuerName,
+                    TimeStamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(
+                        DateTime.SpecifyKind(timestamp, DateTimeKind.Utc))
+                };
+
+                // Add AuthorCommitment if present (Protocol Omega)
+                if (feedMessage.AuthorCommitment != null)
+                {
+                    feedMessageProto.AuthorCommitment = ByteString.CopyFrom(feedMessage.AuthorCommitment);
+                }
+
+                // Add ReplyToMessageId if present
+                if (feedMessage.ReplyToMessageId != null)
+                {
+                    feedMessageProto.ReplyToMessageId = feedMessage.ReplyToMessageId.ToString();
+                }
+
+                // Add KeyGeneration if present (Group Feeds)
+                if (feedMessage.KeyGeneration != null)
+                {
+                    feedMessageProto.KeyGeneration = feedMessage.KeyGeneration.Value;
+                }
+
+                reply.Messages.Add(feedMessageProto);
+            }
+
+            _logger.LogDebug(
+                "[GetFeedMessagesById] Returning {MessageCount} messages, OldestBlockIndex={OldestBlockIndex}, NewestBlockIndex={NewestBlockIndex}",
+                reply.Messages.Count,
+                reply.OldestBlockIndex,
+                reply.NewestBlockIndex);
+
+            return reply;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[GetFeedMessagesById] Error processing request for feed {FeedId}", request.FeedId);
+            throw;
+        }
+    }
+
     private async Task AddReactionTallies(GetFeedMessagesForAddressRequest request, GetFeedMessagesForAddressReply reply)
     {
         try
