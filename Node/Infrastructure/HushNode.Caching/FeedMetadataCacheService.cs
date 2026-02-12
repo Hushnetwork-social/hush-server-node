@@ -189,6 +189,7 @@ public class FeedMetadataCacheService : IFeedMetadataCacheService
         try
         {
             var removed = await _database.HashDeleteAsync(key, feedId.ToString());
+            Interlocked.Increment(ref _writeOperations);
             _logger.LogDebug(
                 "Removed feed metadata user={UserId} feed={FeedId} removed={Removed}",
                 userId,
@@ -198,6 +199,7 @@ public class FeedMetadataCacheService : IFeedMetadataCacheService
         }
         catch (Exception ex)
         {
+            Interlocked.Increment(ref _writeErrors);
             _logger.LogWarning(
                 ex,
                 "Failed to remove feed metadata for user={UserId} feed={FeedId}. Continuing without cache.",
