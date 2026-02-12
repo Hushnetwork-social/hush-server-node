@@ -725,6 +725,155 @@ public class IdempotencyServiceTests
 
     #endregion
 
+    #region Metrics Tests (MT-001)
+
+    /// <summary>
+    /// MT-001: AlreadyExists counter increments for each duplicate found in database.
+    /// </summary>
+    [Fact]
+    public async Task GetMetrics_AlreadyExistsSubmissions_CounterIncrements()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+
+        var mockRepository = new Mock<IFeedMessageRepository>();
+        mockRepository
+            .Setup(x => x.ExistsByMessageIdAsync(It.IsAny<FeedMessageId>()))
+            .ReturnsAsync(true); // All messages exist in DB
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedMessageRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<IdempotencyService>();
+
+        // Act - Submit 5 duplicate messages
+        for (int i = 0; i < 5; i++)
+        {
+            await service.CheckAsync(CreateMessageId());
+        }
+
+        // Assert
+        var metrics = service.GetMetrics();
+        metrics.AlreadyExistsCount.Should().Be(5);
+        metrics.AcceptedCount.Should().Be(0);
+        metrics.PendingCount.Should().Be(0);
+        metrics.RejectedCount.Should().Be(0);
+    }
+
+    /// <summary>
+    /// MT-001: Pending counter increments for each MemPool duplicate.
+    /// </summary>
+    [Fact]
+    public async Task GetMetrics_PendingSubmissions_CounterIncrements()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+
+        var mockRepository = new Mock<IFeedMessageRepository>();
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedMessageRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<IdempotencyService>();
+
+        // Track 3 messages in MemPool
+        var messageIds = new[] { CreateMessageId(), CreateMessageId(), CreateMessageId() };
+        foreach (var id in messageIds)
+        {
+            service.TryTrackInMemPool(id);
+        }
+
+        // Act - Check all 3 (should return PENDING and increment counter)
+        foreach (var id in messageIds)
+        {
+            await service.CheckAsync(id);
+        }
+
+        // Assert
+        var metrics = service.GetMetrics();
+        metrics.PendingCount.Should().Be(3);
+        metrics.AcceptedCount.Should().Be(0);
+        metrics.AlreadyExistsCount.Should().Be(0);
+    }
+
+    /// <summary>
+    /// MT-001: Mixed DB and MemPool duplicates produce distinct counters.
+    /// </summary>
+    [Fact]
+    public async Task GetMetrics_MixedDbAndMemPoolDuplicates_DistinctCounters()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+
+        // Track 3 messages in MemPool
+        var memPoolIds = new[] { CreateMessageId(), CreateMessageId(), CreateMessageId() };
+
+        // 2 messages exist in DB
+        var dbIds = new[] { CreateMessageId(), CreateMessageId() };
+
+        var mockRepository = new Mock<IFeedMessageRepository>();
+        foreach (var id in dbIds)
+        {
+            mockRepository
+                .Setup(x => x.ExistsByMessageIdAsync(id))
+                .ReturnsAsync(true);
+        }
+        // MemPool IDs don't reach DB (early return), but set up default for safety
+        mockRepository
+            .Setup(x => x.ExistsByMessageIdAsync(It.Is<FeedMessageId>(
+                mid => !dbIds.Contains(mid))))
+            .ReturnsAsync(false);
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedMessageRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<IdempotencyService>();
+
+        // Track MemPool messages
+        foreach (var id in memPoolIds)
+        {
+            service.TryTrackInMemPool(id);
+        }
+
+        // Act - Check MemPool messages (3x PENDING)
+        foreach (var id in memPoolIds)
+        {
+            await service.CheckAsync(id);
+        }
+
+        // Check DB messages (2x ALREADY_EXISTS)
+        foreach (var id in dbIds)
+        {
+            await service.CheckAsync(id);
+        }
+
+        // Assert
+        var metrics = service.GetMetrics();
+        metrics.PendingCount.Should().Be(3, "3 messages were found in MemPool");
+        metrics.AlreadyExistsCount.Should().Be(2, "2 messages were found in DB");
+        metrics.AcceptedCount.Should().Be(0);
+        metrics.RejectedCount.Should().Be(0);
+    }
+
+    #endregion
+
     #region Logging Verification Tests (Task 6.3)
 
     /// <summary>

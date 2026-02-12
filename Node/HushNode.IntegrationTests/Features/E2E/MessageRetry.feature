@@ -98,3 +98,37 @@ Feature: Message Retry Functionality
         # Confirm and verify confirmed icon
         When the transaction is processed
         Then the message "Icon test message" should show confirmed status icon
+
+    @EC-001 @EdgeCase @Automatable
+    Scenario: Messages persist and restore after page reload
+        Given the user has created identity "CrashRecoveryUser" via browser
+        And the user clicks on their personal feed
+        When the user sends message "Crash recovery test"
+        And the transaction is processed
+        Then the message "Crash recovery test" should show confirmed status icon
+        When the page is reloaded
+        And the user waits for rehydration
+        And the user clicks on their personal feed
+        Then the message "Crash recovery test" should be visible in the chat
+        And the message "Crash recovery test" should show confirmed status icon
+
+    @EC-003 @EdgeCase @Automatable
+    Scenario: Warning shown when logging out with pending messages
+        Given the user has created identity "PendingLogoutUser" via browser
+        And the user clicks on their personal feed
+        When the user sends message "Pending logout msg"
+        Then the message "Pending logout msg" should show pending status icon
+        When the user clicks the logout button
+        Then a confirmation dialog should be visible with title "Unsent Messages"
+        When the user clicks "Logout Anyway" in the dialog
+        Then the page should navigate to the auth page
+
+    @EC-004 @EdgeCase @Automatable
+    Scenario: Warning shown when logging out with failed messages
+        Given the user has created identity "FailedLogoutUser" via browser
+        And the user clicks on their personal feed
+        When a failed message is injected into the feeds store
+        And the user clicks the logout button
+        Then a confirmation dialog should be visible with title "Unsent Messages"
+        When the user clicks "Logout Anyway" in the dialog
+        Then the page should navigate to the auth page

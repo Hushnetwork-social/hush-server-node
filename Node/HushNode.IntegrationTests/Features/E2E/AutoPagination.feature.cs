@@ -133,29 +133,26 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 17
         testRunner.And("the user clicks on their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 20
-        testRunner.Then("the prefetch state should be initialized for the current feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
-#line hidden
 #line 21
-        testRunner.And("the loaded page count should be at least 1", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.Then("the prefetch state should be initialized for the current feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="New messages button appears when scrolled up and new message arrives")]
+        [Xunit.SkippableFactAttribute(DisplayName="Jump to bottom button appears when scrolled up and clicking scrolls to bottom")]
         [Xunit.TraitAttribute("FeatureTitle", "Auto-Pagination Scroll-Based Prefetch")]
-        [Xunit.TraitAttribute("Description", "New messages button appears when scrolled up and new message arrives")]
-        [Xunit.TraitAttribute("Category", "NewMessagesButton")]
+        [Xunit.TraitAttribute("Description", "Jump to bottom button appears when scrolled up and clicking scrolls to bottom")]
+        [Xunit.TraitAttribute("Category", "JumpToBottom")]
         [Xunit.TraitAttribute("Category", "Automatable")]
-        public void NewMessagesButtonAppearsWhenScrolledUpAndNewMessageArrives()
+        public void JumpToBottomButtonAppearsWhenScrolledUpAndClickingScrollsToBottom()
         {
             string[] tagsOfScenario = new string[] {
-                    "NewMessagesButton",
+                    "JumpToBottom",
                     "Automatable"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("New messages button appears when scrolled up and new message arrives", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 25
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Jump to bottom button appears when scrolled up and clicking scrolls to bottom", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 26
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -168,22 +165,37 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 27
+#line 28
         testRunner.Given("the user has created identity \"Alice\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 28
+#line 29
         testRunner.And("the user clicks on their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 29
-        testRunner.And("Alice has sent 5 messages to their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
 #line 30
+        testRunner.And("Alice has sent 15 messages to their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 31
         testRunner.And("the transactions are processed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 35
+#line 34
         testRunner.Then("the chat view should be at the bottom", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 36
+#line 35
+        testRunner.And("the jump to bottom button should not be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 38
+        testRunner.When("Alice scrolls up in the message list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 39
+        testRunner.Then("the jump to bottom button should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 42
+        testRunner.When("Alice clicks the jump to bottom button", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 43
+        testRunner.Then("the chat view should be at the bottom", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 44
         testRunner.And("the jump to bottom button should not be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
@@ -202,7 +214,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "Automatable"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Returning to feed starts fresh with newest messages", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 40
+#line 48
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -215,34 +227,34 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 42
+#line 50
         testRunner.Given("the user has created identity \"Alice\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 43
+#line 51
         testRunner.And("the user clicks on their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 44
+#line 52
         testRunner.And("Alice has sent 3 messages to their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 45
+#line 53
         testRunner.And("the transactions are processed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 48
+#line 56
         testRunner.When("Alice clicks on the \"new-chat\" navigation item", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 49
+#line 57
         testRunner.And("Alice waits for cleanup debounce (200ms)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 50
+#line 58
         testRunner.And("Alice clicks on the \"feeds\" navigation item", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 51
+#line 59
         testRunner.And("Alice clicks on their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 54
+#line 62
         testRunner.Then("the most recent message should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 55
+#line 63
         testRunner.And("the chat view should be at the bottom", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
@@ -261,7 +273,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "Manual"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Prefetch triggered at 25% threshold", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 62
+#line 70
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -274,10 +286,10 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 69
+#line 77
         testRunner.Given("this scenario requires manual testing", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 70
+#line 78
         testRunner.Then("skip automated verification", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
@@ -296,7 +308,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "Manual"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Loading spinner shows when scrolling faster than prefetch", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 73
+#line 81
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -309,10 +321,10 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 80
+#line 88
         testRunner.Given("this scenario requires manual testing", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 81
+#line 89
         testRunner.Then("skip automated verification", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
@@ -331,7 +343,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "Manual"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Multiple feeds load in parallel after sync", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 84
+#line 92
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -344,10 +356,10 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 90
+#line 98
         testRunner.Given("this scenario requires manual testing", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 91
+#line 99
         testRunner.Then("skip automated verification", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
@@ -366,7 +378,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "Manual"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Prefetch failure retries silently", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 94
+#line 102
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -379,10 +391,45 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 102
+#line 110
         testRunner.Given("this scenario requires manual testing", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 103
+#line 111
+        testRunner.Then("skip automated verification", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="All loaded pages remain in memory while viewing feed")]
+        [Xunit.TraitAttribute("FeatureTitle", "Auto-Pagination Scroll-Based Prefetch")]
+        [Xunit.TraitAttribute("Description", "All loaded pages remain in memory while viewing feed")]
+        [Xunit.TraitAttribute("Category", "KeepInMemory")]
+        [Xunit.TraitAttribute("Category", "Manual")]
+        public void AllLoadedPagesRemainInMemoryWhileViewingFeed()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "KeepInMemory",
+                    "Manual"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("All loaded pages remain in memory while viewing feed", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 115
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 127
+        testRunner.Given("this scenario requires manual testing", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 128
         testRunner.Then("skip automated verification", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }

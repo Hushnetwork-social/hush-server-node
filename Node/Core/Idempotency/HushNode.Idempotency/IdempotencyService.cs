@@ -28,6 +28,12 @@ public class IdempotencyService(
     /// </summary>
     private readonly ConcurrentDictionary<string, bool> _memPoolTracking = new();
 
+    // MT-001: Atomic counters for idempotency metrics
+    private long _acceptedCount;
+    private long _alreadyExistsCount;
+    private long _pendingCount;
+    private long _rejectedCount;
+
     /// <inheritdoc />
     public async Task<IdempotencyCheckResult> CheckAsync(FeedMessageId messageId)
     {
@@ -36,6 +42,7 @@ public class IdempotencyService(
         // Step 1: Check MemPool FIRST (faster, in-memory O(1))
         if (_memPoolTracking.ContainsKey(messageIdString))
         {
+            Interlocked.Increment(ref _pendingCount);
             _logger.LogDebug(
                 "FEAT-057: Message {MessageId} found in MemPool - returning PENDING",
                 messageIdString);
@@ -52,12 +59,14 @@ public class IdempotencyService(
 
             if (existsInDb)
             {
+                Interlocked.Increment(ref _alreadyExistsCount);
                 _logger.LogDebug(
                     "FEAT-057: Message {MessageId} found in database - returning ALREADY_EXISTS",
                     messageIdString);
                 return IdempotencyCheckResult.AlreadyExists;
             }
 
+            Interlocked.Increment(ref _acceptedCount);
             _logger.LogDebug(
                 "FEAT-057: Message {MessageId} not found - returning ACCEPTED",
                 messageIdString);
@@ -66,6 +75,7 @@ public class IdempotencyService(
         catch (Exception ex)
         {
             // Fail-closed: On database error, reject the transaction
+            Interlocked.Increment(ref _rejectedCount);
             _logger.LogError(
                 ex,
                 "FEAT-057: Database error checking message {MessageId} - returning REJECTED",
@@ -90,6 +100,7 @@ public class IdempotencyService(
         }
         else
         {
+            Interlocked.Increment(ref _pendingCount);
             _logger.LogDebug(
                 "FEAT-057: Message {MessageId} already in MemPool tracking - concurrent duplicate",
                 messageIdString);
@@ -117,5 +128,15 @@ public class IdempotencyService(
                 "FEAT-057: Removed {Count} message(s) from MemPool tracking after block finalization",
                 removedCount);
         }
+    }
+
+    /// <inheritdoc />
+    public IdempotencyMetrics GetMetrics()
+    {
+        return new IdempotencyMetrics(
+            Interlocked.Read(ref _acceptedCount),
+            Interlocked.Read(ref _alreadyExistsCount),
+            Interlocked.Read(ref _pendingCount),
+            Interlocked.Read(ref _rejectedCount));
     }
 }

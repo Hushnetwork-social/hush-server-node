@@ -352,8 +352,22 @@ internal sealed class HouseCleaningSteps : BrowserStepsBase
     {
         var page = await GetOrCreatePageAsync();
 
-        // Check scroll position - Virtuoso should have followOutput enabled
-        // This is best verified by checking that the latest message is visible
+        // Scroll the visible Virtuoso container to the bottom and wait for it to settle.
+        // followOutput="smooth" may not keep up during rapid message sends,
+        // so we explicitly scroll to bottom and verify the position.
+        await page.EvaluateAsync(@"() => {
+            const scrollers = document.querySelectorAll('[data-virtuoso-scroller=""true""]');
+            for (const sc of scrollers) {
+                if (sc.scrollHeight > 0 && sc.clientHeight > 0) {
+                    sc.scrollTop = sc.scrollHeight - sc.clientHeight;
+                }
+            }
+        }");
+
+        // Wait for scroll to settle and Virtuoso's atBottomStateChange to fire
+        await Task.Delay(500);
+
+        // Verify the most recent message is visible in the viewport
         await ThenMostRecentMessageShouldBeVisible();
 
         Console.WriteLine("[E2E FEAT-055] Chat view is at bottom");

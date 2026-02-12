@@ -191,6 +191,47 @@ internal sealed class MessageRetrySteps : BrowserStepsBase
     }
 
     /// <summary>
+    /// EC-001: Reloads the page to simulate crash recovery.
+    /// Uses DOMContentLoaded instead of NetworkIdle because the app has a 3-second
+    /// polling sync cycle that prevents NetworkIdle from ever being reached.
+    /// </summary>
+    [When(@"the page is reloaded")]
+    public async Task WhenThePageIsReloaded()
+    {
+        var page = await GetOrCreatePageAsync();
+
+        Console.WriteLine("[E2E Retry] Reloading page to simulate crash recovery...");
+        await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+
+        // Wait for Next.js hydration and React rendering after DOM is loaded
+        await Task.Delay(3000);
+
+        Console.WriteLine("[E2E Retry] Page reloaded successfully");
+    }
+
+    /// <summary>
+    /// EC-001: Waits for Zustand store rehydration from localStorage after page reload.
+    /// </summary>
+    [When(@"the user waits for rehydration")]
+    public async Task WhenTheUserWaitsForRehydration()
+    {
+        var page = await GetOrCreatePageAsync();
+
+        Console.WriteLine("[E2E Retry] Waiting for store rehydration...");
+
+        // Wait for the app to fully rehydrate from localStorage
+        await Task.Delay(2000);
+
+        // Trigger a sync cycle to refresh data
+        await TriggerSyncAsync(page);
+
+        // Additional wait for sync to complete
+        await Task.Delay(1000);
+
+        Console.WriteLine("[E2E Retry] Store rehydration complete");
+    }
+
+    /// <summary>
     /// Finds a message container by its text content.
     /// </summary>
     private async Task<ILocator> FindMessageContainerByTextAsync(IPage page, string messageText, int timeoutMs = 10000)

@@ -389,6 +389,174 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Messages persist and restore after page reload")]
+        [Xunit.TraitAttribute("FeatureTitle", "Message Retry Functionality")]
+        [Xunit.TraitAttribute("Description", "Messages persist and restore after page reload")]
+        [Xunit.TraitAttribute("Category", "EC-001")]
+        [Xunit.TraitAttribute("Category", "EdgeCase")]
+        [Xunit.TraitAttribute("Category", "Automatable")]
+        public void MessagesPersistAndRestoreAfterPageReload()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "EC-001",
+                    "EdgeCase",
+                    "Automatable"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Messages persist and restore after page reload", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 103
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 104
+        testRunner.Given("the user has created identity \"CrashRecoveryUser\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 105
+        testRunner.And("the user clicks on their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 106
+        testRunner.When("the user sends message \"Crash recovery test\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 107
+        testRunner.And("the transaction is processed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 108
+        testRunner.Then("the message \"Crash recovery test\" should show confirmed status icon", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 109
+        testRunner.When("the page is reloaded", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 110
+        testRunner.And("the user waits for rehydration", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 111
+        testRunner.And("the user clicks on their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 112
+        testRunner.Then("the message \"Crash recovery test\" should be visible in the chat", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 113
+        testRunner.And("the message \"Crash recovery test\" should show confirmed status icon", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Warning shown when logging out with pending messages")]
+        [Xunit.TraitAttribute("FeatureTitle", "Message Retry Functionality")]
+        [Xunit.TraitAttribute("Description", "Warning shown when logging out with pending messages")]
+        [Xunit.TraitAttribute("Category", "EC-003")]
+        [Xunit.TraitAttribute("Category", "EdgeCase")]
+        [Xunit.TraitAttribute("Category", "Automatable")]
+        public void WarningShownWhenLoggingOutWithPendingMessages()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "EC-003",
+                    "EdgeCase",
+                    "Automatable"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Warning shown when logging out with pending messages", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 116
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 117
+        testRunner.Given("the user has created identity \"PendingLogoutUser\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 118
+        testRunner.And("the user clicks on their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 119
+        testRunner.When("the user sends message \"Pending logout msg\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 120
+        testRunner.Then("the message \"Pending logout msg\" should show pending status icon", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 121
+        testRunner.When("the user clicks the logout button", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 122
+        testRunner.Then("a confirmation dialog should be visible with title \"Unsent Messages\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 123
+        testRunner.When("the user clicks \"Logout Anyway\" in the dialog", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 124
+        testRunner.Then("the page should navigate to the auth page", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Warning shown when logging out with failed messages")]
+        [Xunit.TraitAttribute("FeatureTitle", "Message Retry Functionality")]
+        [Xunit.TraitAttribute("Description", "Warning shown when logging out with failed messages")]
+        [Xunit.TraitAttribute("Category", "EC-004")]
+        [Xunit.TraitAttribute("Category", "EdgeCase")]
+        [Xunit.TraitAttribute("Category", "Automatable")]
+        public void WarningShownWhenLoggingOutWithFailedMessages()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "EC-004",
+                    "EdgeCase",
+                    "Automatable"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Warning shown when logging out with failed messages", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 127
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 128
+        testRunner.Given("the user has created identity \"FailedLogoutUser\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 129
+        testRunner.And("the user clicks on their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 130
+        testRunner.When("a failed message is injected into the feeds store", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 131
+        testRunner.And("the user clicks the logout button", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 132
+        testRunner.Then("a confirmation dialog should be visible with title \"Unsent Messages\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 133
+        testRunner.When("the user clicks \"Logout Anyway\" in the dialog", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 134
+        testRunner.Then("the page should navigate to the auth page", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable
