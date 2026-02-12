@@ -418,6 +418,250 @@ public class FeedReadPositionCacheServiceTests
 
     #endregion
 
+    #region Lua Max-Wins Edge Cases (EC-006 — FEAT-060)
+
+    [Fact]
+    public async Task SetReadPositionWithMaxWinsAsync_WhenFieldDoesNotExist_CreatesField()
+    {
+        // Arrange — Lua script handles nil (no existing value) by setting the field
+        var (sut, databaseMock) = CreateCacheService();
+        var blockIndex = new BlockIndex(100);
+
+        databaseMock
+            .Setup(x => x.ScriptEvaluateAsync(
+                It.IsAny<string>(),
+                It.IsAny<RedisKey[]?>(),
+                It.IsAny<RedisValue[]?>(),
+                CommandFlags.None))
+            .ReturnsAsync(RedisResult.Create((RedisValue)1));
+
+        databaseMock
+            .Setup(x => x.KeyExpireAsync(
+                ExpectedHashKey,
+                FeedReadPositionCacheConstants.CacheTtl,
+                ExpireWhen.Always,
+                CommandFlags.None))
+            .ReturnsAsync(true);
+
+        // Act
+        var result = await sut.SetReadPositionWithMaxWinsAsync(TestUserId, TestFeedId, blockIndex);
+
+        // Assert — field created (Lua returned 1 because current was nil)
+        result.Should().BeTrue();
+        databaseMock.Verify(
+            x => x.KeyExpireAsync(
+                ExpectedHashKey,
+                FeedReadPositionCacheConstants.CacheTtl,
+                ExpireWhen.Always,
+                CommandFlags.None),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SetReadPositionWithMaxWinsAsync_ConcurrentUpdates_HighestWins()
+    {
+        // Arrange — simulate two updates: first 700, then 800 (both succeed)
+        // then 500 (rejected because 800 > 500)
+        var (sut, databaseMock) = CreateCacheService();
+        var callCount = 0;
+
+        databaseMock
+            .Setup(x => x.ScriptEvaluateAsync(
+                It.IsAny<string>(),
+                It.IsAny<RedisKey[]?>(),
+                It.IsAny<RedisValue[]?>(),
+                CommandFlags.None))
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                // First two calls succeed (700, 800), third rejected (500 < 800)
+                return RedisResult.Create((RedisValue)(callCount <= 2 ? 1 : 0));
+            });
+
+        databaseMock
+            .Setup(x => x.KeyExpireAsync(
+                It.IsAny<RedisKey>(),
+                It.IsAny<TimeSpan?>(),
+                ExpireWhen.Always,
+                CommandFlags.None))
+            .ReturnsAsync(true);
+
+        // Act
+        var result1 = await sut.SetReadPositionWithMaxWinsAsync(TestUserId, TestFeedId, new BlockIndex(700));
+        var result2 = await sut.SetReadPositionWithMaxWinsAsync(TestUserId, TestFeedId, new BlockIndex(800));
+        var result3 = await sut.SetReadPositionWithMaxWinsAsync(TestUserId, TestFeedId, new BlockIndex(500));
+
+        // Assert — 700 and 800 accepted, 500 rejected (max-wins)
+        result1.Should().BeTrue("700 should be accepted (first write)");
+        result2.Should().BeTrue("800 should be accepted (higher than 700)");
+        result3.Should().BeFalse("500 should be rejected (lower than 800)");
+        sut.WriteOperations.Should().Be(3);
+    }
+
+    #endregion
+
+    #region GetReadPositionsForUserAsync Tests (Migration Fallback — FEAT-060)
+
+    [Fact]
+    public async Task GetReadPositionsForUserAsync_WhenHashExists_ReturnsFromHash()
+    {
+        // Arrange — HASH has data, no SCAN needed
+        var (sut, databaseMock) = CreateCacheService();
+        var entries = new HashEntry[]
+        {
+            new(TestFeedId.ToString(), "500")
+        };
+
+        databaseMock
+            .Setup(x => x.HashGetAllAsync(ExpectedHashKey, CommandFlags.None))
+            .ReturnsAsync(entries);
+
+        // Act
+        var result = await sut.GetReadPositionsForUserAsync(TestUserId);
+
+        // Assert — returned from HASH, no SCAN attempted
+        result.Should().NotBeNull();
+        result!.Count.Should().Be(1);
+        result[TestFeedId].Value.Should().Be(500);
+    }
+
+    [Fact]
+    public async Task GetReadPositionsForUserAsync_WhenHashEmptyAndNoOldKeys_ReturnsNull()
+    {
+        // Arrange — HASH empty, SCAN finds nothing
+        var (sut, databaseMock) = CreateCacheServiceWithServer(out var serverMock);
+
+        databaseMock
+            .Setup(x => x.HashGetAllAsync(ExpectedHashKey, CommandFlags.None))
+            .ReturnsAsync(Array.Empty<HashEntry>());
+
+        serverMock
+            .Setup(x => x.KeysAsync(
+                It.IsAny<int>(),
+                It.IsAny<RedisValue>(),
+                It.IsAny<int>(),
+                It.IsAny<long>(),
+                It.IsAny<int>(),
+                CommandFlags.None))
+            .Returns(CreateAsyncEnumerable());
+
+        // Act
+        var result = await sut.GetReadPositionsForUserAsync(TestUserId);
+
+        // Assert — null returned (caller falls back to PostgreSQL)
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetReadPositionsForUserAsync_WhenOldKeysFound_MigratesToHashAndReturnsMigrated()
+    {
+        // Arrange — HASH empty, SCAN finds old STRING keys
+        var (sut, databaseMock) = CreateCacheServiceWithServer(out var serverMock);
+        var oldKey = $"{KeyPrefix}user:{TestUserId}:read:{TestFeedId}";
+
+        databaseMock
+            .Setup(x => x.HashGetAllAsync(ExpectedHashKey, CommandFlags.None))
+            .ReturnsAsync(Array.Empty<HashEntry>());
+
+        serverMock
+            .Setup(x => x.KeysAsync(
+                It.IsAny<int>(),
+                It.IsAny<RedisValue>(),
+                It.IsAny<int>(),
+                It.IsAny<long>(),
+                It.IsAny<int>(),
+                CommandFlags.None))
+            .Returns(CreateAsyncEnumerable(new RedisKey(oldKey)));
+
+        databaseMock
+            .Setup(x => x.StringGetAsync(oldKey, CommandFlags.None))
+            .ReturnsAsync("500");
+
+        // Setup for HMSET migration
+        databaseMock
+            .Setup(x => x.HashSetAsync(ExpectedHashKey, It.IsAny<HashEntry[]>(), CommandFlags.None))
+            .Returns(Task.CompletedTask);
+
+        databaseMock
+            .Setup(x => x.KeyExpireAsync(
+                ExpectedHashKey,
+                FeedReadPositionCacheConstants.CacheTtl,
+                ExpireWhen.Always,
+                CommandFlags.None))
+            .ReturnsAsync(true);
+
+        // Act
+        var result = await sut.GetReadPositionsForUserAsync(TestUserId);
+
+        // Assert — returns migrated data and writes to HASH
+        result.Should().NotBeNull();
+        result!.Count.Should().Be(1);
+        result[TestFeedId].Value.Should().Be(500);
+        databaseMock.Verify(
+            x => x.HashSetAsync(ExpectedHashKey, It.IsAny<HashEntry[]>(), CommandFlags.None),
+            Times.Once,
+            "Should migrate old keys to HASH via HMSET");
+    }
+
+    [Fact]
+    public async Task GetReadPositionsForUserAsync_IncrementsMigrationOperationsOnMigration()
+    {
+        // Arrange
+        var (sut, databaseMock) = CreateCacheServiceWithServer(out var serverMock);
+        var oldKey = $"{KeyPrefix}user:{TestUserId}:read:{TestFeedId}";
+
+        databaseMock
+            .Setup(x => x.HashGetAllAsync(ExpectedHashKey, CommandFlags.None))
+            .ReturnsAsync(Array.Empty<HashEntry>());
+
+        serverMock
+            .Setup(x => x.KeysAsync(
+                It.IsAny<int>(),
+                It.IsAny<RedisValue>(),
+                It.IsAny<int>(),
+                It.IsAny<long>(),
+                It.IsAny<int>(),
+                CommandFlags.None))
+            .Returns(CreateAsyncEnumerable(new RedisKey(oldKey)));
+
+        databaseMock
+            .Setup(x => x.StringGetAsync(oldKey, CommandFlags.None))
+            .ReturnsAsync("300");
+
+        databaseMock
+            .Setup(x => x.HashSetAsync(ExpectedHashKey, It.IsAny<HashEntry[]>(), CommandFlags.None))
+            .Returns(Task.CompletedTask);
+
+        databaseMock
+            .Setup(x => x.KeyExpireAsync(
+                ExpectedHashKey,
+                FeedReadPositionCacheConstants.CacheTtl,
+                ExpireWhen.Always,
+                CommandFlags.None))
+            .ReturnsAsync(true);
+
+        // Act
+        await sut.GetReadPositionsForUserAsync(TestUserId);
+
+        // Assert
+        sut.MigrationOperations.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetReadPositionsForUserAsync_WhenUserIdIsNull_ReturnsNull()
+    {
+        // Arrange
+        var (sut, _) = CreateCacheService();
+
+        // Act
+        var result = await sut.GetReadPositionsForUserAsync(null!);
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static (FeedReadPositionCacheService sut, Mock<IDatabase> databaseMock)
@@ -437,6 +681,48 @@ public class FeedReadPositionCacheServiceTests
             loggerMock.Object);
 
         return (sut, databaseMock);
+    }
+
+    private static (FeedReadPositionCacheService sut, Mock<IDatabase> databaseMock)
+        CreateCacheServiceWithServer(out Mock<IServer> serverMock)
+    {
+        var connectionMultiplexerMock = new Mock<IConnectionMultiplexer>();
+        var databaseMock = new Mock<IDatabase>();
+        var loggerMock = new Mock<ILogger<FeedReadPositionCacheService>>();
+        serverMock = new Mock<IServer>();
+
+        var endpoint = new System.Net.DnsEndPoint("localhost", 6379);
+
+        connectionMultiplexerMock
+            .Setup(x => x.GetDatabase(It.IsAny<int>(), It.IsAny<object>()))
+            .Returns(databaseMock.Object);
+
+        connectionMultiplexerMock
+            .Setup(x => x.GetEndPoints(It.IsAny<bool>()))
+            .Returns(new System.Net.EndPoint[] { endpoint });
+
+        connectionMultiplexerMock
+            .Setup(x => x.GetServer(endpoint, It.IsAny<object>()))
+            .Returns(serverMock.Object);
+
+        databaseMock.Setup(x => x.Database).Returns(0);
+        databaseMock.Setup(x => x.Multiplexer).Returns(connectionMultiplexerMock.Object);
+
+        var sut = new FeedReadPositionCacheService(
+            connectionMultiplexerMock.Object,
+            KeyPrefix,
+            loggerMock.Object);
+
+        return (sut, databaseMock);
+    }
+
+    private static async IAsyncEnumerable<RedisKey> CreateAsyncEnumerable(params RedisKey[] keys)
+    {
+        foreach (var key in keys)
+        {
+            yield return key;
+            await Task.Yield();
+        }
     }
 
     #endregion
