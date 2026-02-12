@@ -31,9 +31,9 @@ public class FeedReadPositionStorageService(
         if (string.IsNullOrEmpty(userId))
             return DefaultReadPosition;
 
-        // Step 1: Try cache first (cache-aside pattern)
-        var cachedValue = await this._cacheService.GetReadPositionAsync(userId, feedId);
-        if (cachedValue != null)
+        // Step 1: Try HASH cache first (FEAT-060: HGETALL, single round-trip)
+        var cachedPositions = await this._cacheService.GetAllReadPositionsAsync(userId);
+        if (cachedPositions != null && cachedPositions.TryGetValue(feedId, out var cachedValue))
         {
             this._logger.LogDebug(
                 "Read position cache hit for user={UserId} feed={FeedId} value={BlockIndex}",
@@ -58,8 +58,8 @@ public class FeedReadPositionStorageService(
             return DefaultReadPosition;
         }
 
-        // Step 3: Populate cache for future reads (fire and forget, graceful degradation)
-        _ = this._cacheService.SetReadPositionAsync(userId, feedId, dbValue);
+        // Step 3: Populate HASH cache via max-wins (graceful degradation)
+        _ = this._cacheService.SetReadPositionWithMaxWinsAsync(userId, feedId, dbValue);
 
         this._logger.LogDebug(
             "Read position from database for user={UserId} feed={FeedId} value={BlockIndex}",
@@ -76,7 +76,7 @@ public class FeedReadPositionStorageService(
         if (string.IsNullOrEmpty(userId))
             return new Dictionary<FeedId, BlockIndex>();
 
-        // Step 1: Try cache first
+        // Step 1: Try cache first (FEAT-060: HASH → SCAN migration → or null)
         var cachedPositions = await this._cacheService.GetReadPositionsForUserAsync(userId);
         if (cachedPositions != null && cachedPositions.Count > 0)
         {
@@ -98,10 +98,10 @@ public class FeedReadPositionStorageService(
             userId,
             dbPositions.Count);
 
-        // Step 3: Populate cache for individual positions
-        foreach (var (feedId, blockIndex) in dbPositions)
+        // Step 3: Populate HASH cache via bulk set (FEAT-060: HMSET, single round-trip)
+        if (dbPositions.Count > 0)
         {
-            _ = this._cacheService.SetReadPositionAsync(userId, feedId, blockIndex);
+            _ = this._cacheService.SetAllReadPositionsAsync(userId, dbPositions);
         }
 
         return dbPositions;
@@ -130,8 +130,8 @@ public class FeedReadPositionStorageService(
                     feedId,
                     blockIndex.Value);
 
-                // Step 2: Update cache (write-through, graceful degradation)
-                var cacheUpdated = await this._cacheService.SetReadPositionAsync(userId, feedId, blockIndex);
+                // Step 2: Update cache with max-wins (FEAT-060: Lua script, write-through)
+                var cacheUpdated = await this._cacheService.SetReadPositionWithMaxWinsAsync(userId, feedId, blockIndex);
                 if (!cacheUpdated)
                 {
                     this._logger.LogWarning(
