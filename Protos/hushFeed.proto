@@ -13,6 +13,7 @@ service HushFeed {
   rpc GetFeedsForAddress (GetFeedForAddressRequest) returns (GetFeedForAddressReply);
   rpc GetFeedMessagesForAddress(GetFeedMessagesForAddressRequest) returns (GetFeedMessagesForAddressReply);
   rpc GetMessageById(GetMessageByIdRequest) returns (GetMessageByIdResponse);  // FEAT-052: Fetch single message by ID
+  rpc GetFeedMessagesById(GetFeedMessagesByIdRequest) returns (GetFeedMessagesByIdReply);  // FEAT-059: Per-feed pagination for scroll-based prefetch
 
   // Group Feed Query Operations
   rpc GetGroupMembers (GetGroupMembersRequest) returns (GetGroupMembersResponse);
@@ -143,6 +144,24 @@ message GetMessageByIdResponse {
   bool Success = 1;                                          // True if message found and accessible
   GetFeedMessagesForAddressReply.FeedMessage Message = 2;    // The message (null if not found or access denied)
   string Error = 3;                                          // Error message: "Message not found" or "Access denied"
+}
+
+// =============================================================================
+// FEAT-059: GetFeedMessagesById - Per-feed pagination for scroll-based prefetch
+// =============================================================================
+
+message GetFeedMessagesByIdRequest {
+  string FeedId = 1;                      // The specific feed to paginate
+  string UserAddress = 2;                 // User's public signing address (for authorization)
+  optional int64 BeforeBlockIndex = 3;    // Cursor: return messages with blockIndex <= this value (omit for newest)
+  optional int32 Limit = 4;               // Max messages to return (default: 100, capped to server max)
+}
+
+message GetFeedMessagesByIdReply {
+  repeated GetFeedMessagesForAddressReply.FeedMessage Messages = 1;  // Messages in this batch (reuses existing type)
+  bool HasMoreMessages = 2;               // True if more older messages exist beyond this batch
+  int64 OldestBlockIndex = 3;             // Block index of oldest message in batch (cursor for next page)
+  int64 NewestBlockIndex = 4;             // Block index of newest message in batch (for reference)
 }
 
 // =============================================================================

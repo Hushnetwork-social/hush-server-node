@@ -954,4 +954,112 @@ public class FeedsStorageServiceTests
     }
 
     #endregion
+
+    #region IsUserParticipantOfFeedAsync Tests (FEAT-059)
+
+    /// <summary>
+    /// FEAT-059: Verifies that IsUserParticipantOfFeedAsync delegates to repository.
+    /// </summary>
+    [Fact]
+    public async Task IsUserParticipantOfFeedAsync_WhenUserIsParticipant_ShouldReturnTrue()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var userAddress = TestDataFactory.CreateAddress();
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.IsUserParticipantOfFeedAsync(feedId, userAddress))
+            .ReturnsAsync(true);
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.IsUserParticipantOfFeedAsync(feedId, userAddress);
+
+        // Assert
+        result.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// FEAT-059: Verifies that IsUserParticipantOfFeedAsync returns false for non-participants.
+    /// </summary>
+    [Fact]
+    public async Task IsUserParticipantOfFeedAsync_WhenUserIsNotParticipant_ShouldReturnFalse()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var userAddress = TestDataFactory.CreateAddress();
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.IsUserParticipantOfFeedAsync(feedId, userAddress))
+            .ReturnsAsync(false);
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.IsUserParticipantOfFeedAsync(feedId, userAddress);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// FEAT-059: Verifies that IsUserParticipantOfFeedAsync uses read-only unit of work.
+    /// </summary>
+    [Fact]
+    public async Task IsUserParticipantOfFeedAsync_ShouldUseReadOnlyUnitOfWork()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var userAddress = TestDataFactory.CreateAddress();
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.IsUserParticipantOfFeedAsync(feedId, userAddress))
+            .ReturnsAsync(true);
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        var mockProvider = mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>();
+        mockProvider
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        await service.IsUserParticipantOfFeedAsync(feedId, userAddress);
+
+        // Assert
+        mockProvider.Verify(x => x.CreateReadOnly(), Times.Once);
+        mockRepository.Verify(x => x.IsUserParticipantOfFeedAsync(feedId, userAddress), Times.Once);
+    }
+
+    #endregion
 }

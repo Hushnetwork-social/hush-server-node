@@ -1264,10 +1264,12 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         Console.WriteLine($"[E2E] Group creation block produced - wizard polling should find it");
 
         // Wait for wizard to close (it closes only after feed is confirmed on blockchain)
+        // The wizard polls /api/feeds/list up to 30 times with 1s delays (~33s worst case)
+        // so we need a timeout larger than the wizard's max polling duration.
         var wizard = page.GetByTestId("group-creation-wizard");
         await Expect(wizard).ToBeHiddenAsync(new LocatorAssertionsToBeHiddenOptions
         {
-            Timeout = 30000  // Wizard should close within a few poll cycles (1s each)
+            Timeout = 45000
         });
         Console.WriteLine($"[E2E] Wizard closed - feed confirmed on blockchain");
 

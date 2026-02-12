@@ -763,6 +763,261 @@ public class FeedsGrpcServiceTests
 
     #endregion
 
+    #region GetFeedMessagesById Tests (FEAT-059)
+
+    [Fact]
+    public async Task GetFeedMessagesById_WhenUserIsAuthorized_ShouldReturnMessages()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+        var userAddress = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+        var messageId = FeedMessageId.NewFeedMessageId;
+
+        var feedMessage = new FeedMessage(
+            messageId,
+            feedId,
+            "Test message content",
+            userAddress,
+            new Timestamp(DateTime.UtcNow),
+            new BlockIndex(100));
+
+        var paginatedResult = new PaginatedMessagesResult(
+            new List<FeedMessage> { feedMessage },
+            true,
+            new BlockIndex(100));
+
+        // Mock authorization: user is a participant
+        var mockFeedsStorageService = mocker.GetMock<IFeedsStorageService>();
+        mockFeedsStorageService
+            .Setup(x => x.IsUserParticipantOfFeedAsync(feedId, userAddress))
+            .ReturnsAsync(true);
+
+        // Mock message retrieval
+        var mockFeedMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockFeedMessageStorageService
+            .Setup(x => x.GetPaginatedMessagesAsync(
+                feedId,
+                It.IsAny<BlockIndex>(),
+                It.IsAny<int>(),
+                It.IsAny<bool>(),
+                It.IsAny<BlockIndex?>()))
+            .ReturnsAsync(paginatedResult);
+
+        // Mock identity for display name
+        var mockIdentityService = mocker.GetMock<IIdentityService>();
+        mockIdentityService
+            .Setup(x => x.RetrieveIdentityAsync(userAddress))
+            .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetFeedMessagesByIdRequest
+        {
+            FeedId = feedId.ToString(),
+            UserAddress = userAddress
+        };
+
+        // Act
+        var result = await service.GetFeedMessagesById(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Messages.Should().HaveCount(1);
+        result.HasMoreMessages.Should().BeTrue();
+        result.OldestBlockIndex.Should().Be(100);
+        result.NewestBlockIndex.Should().Be(100);
+        result.Messages[0].FeedMessageId.Should().Be(messageId.ToString());
+        result.Messages[0].IssuerName.Should().Be("TestUser");
+    }
+
+    [Fact]
+    public async Task GetFeedMessagesById_WhenUserIsNotAuthorized_ShouldReturnEmptyResponse()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+        var userAddress = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        // Mock authorization: user is NOT a participant
+        var mockFeedsStorageService = mocker.GetMock<IFeedsStorageService>();
+        mockFeedsStorageService
+            .Setup(x => x.IsUserParticipantOfFeedAsync(feedId, userAddress))
+            .ReturnsAsync(false);
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetFeedMessagesByIdRequest
+        {
+            FeedId = feedId.ToString(),
+            UserAddress = userAddress
+        };
+
+        // Act
+        var result = await service.GetFeedMessagesById(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Messages.Should().BeEmpty();
+        result.HasMoreMessages.Should().BeFalse();
+        result.OldestBlockIndex.Should().Be(0);
+        result.NewestBlockIndex.Should().Be(0);
+
+        // Verify storage service was never called
+        mocker.GetMock<IFeedMessageStorageService>()
+            .Verify(x => x.GetPaginatedMessagesAsync(
+                It.IsAny<FeedId>(),
+                It.IsAny<BlockIndex>(),
+                It.IsAny<int>(),
+                It.IsAny<bool>(),
+                It.IsAny<BlockIndex?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetFeedMessagesById_WhenNoLimitSpecified_ShouldUseDefaultLimit()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker, maxMessagesPerResponse: 100);
+        var userAddress = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        var paginatedResult = new PaginatedMessagesResult(
+            new List<FeedMessage>(),
+            false,
+            new BlockIndex(0));
+
+        var mockFeedsStorageService = mocker.GetMock<IFeedsStorageService>();
+        mockFeedsStorageService
+            .Setup(x => x.IsUserParticipantOfFeedAsync(feedId, userAddress))
+            .ReturnsAsync(true);
+
+        var mockFeedMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockFeedMessageStorageService
+            .Setup(x => x.GetPaginatedMessagesAsync(
+                feedId,
+                It.IsAny<BlockIndex>(),
+                100, // Default limit
+                It.IsAny<bool>(),
+                It.IsAny<BlockIndex?>()))
+            .ReturnsAsync(paginatedResult);
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetFeedMessagesByIdRequest
+        {
+            FeedId = feedId.ToString(),
+            UserAddress = userAddress
+            // No Limit specified - should default to 100
+        };
+
+        // Act
+        await service.GetFeedMessagesById(request, CreateMockServerCallContext());
+
+        // Assert - verify the call was made with default limit
+        mockFeedMessageStorageService.Verify(x => x.GetPaginatedMessagesAsync(
+            feedId,
+            It.IsAny<BlockIndex>(),
+            100,
+            true, // fetchLatest when no beforeBlockIndex
+            null), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetFeedMessagesById_WhenEmptyResult_ShouldReturnZeroBlockIndices()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+        var userAddress = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        var paginatedResult = new PaginatedMessagesResult(
+            new List<FeedMessage>(),
+            false,
+            new BlockIndex(0));
+
+        var mockFeedsStorageService = mocker.GetMock<IFeedsStorageService>();
+        mockFeedsStorageService
+            .Setup(x => x.IsUserParticipantOfFeedAsync(feedId, userAddress))
+            .ReturnsAsync(true);
+
+        var mockFeedMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockFeedMessageStorageService
+            .Setup(x => x.GetPaginatedMessagesAsync(
+                feedId,
+                It.IsAny<BlockIndex>(),
+                It.IsAny<int>(),
+                It.IsAny<bool>(),
+                It.IsAny<BlockIndex?>()))
+            .ReturnsAsync(paginatedResult);
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetFeedMessagesByIdRequest
+        {
+            FeedId = feedId.ToString(),
+            UserAddress = userAddress
+        };
+
+        // Act
+        var result = await service.GetFeedMessagesById(request, CreateMockServerCallContext());
+
+        // Assert
+        result.Messages.Should().BeEmpty();
+        result.HasMoreMessages.Should().BeFalse();
+        result.OldestBlockIndex.Should().Be(0);
+        result.NewestBlockIndex.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetFeedMessagesById_WhenBeforeBlockIndexProvided_ShouldPassItToStorageService()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+        var userAddress = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+        var beforeBlockIndex = 500L;
+
+        var paginatedResult = new PaginatedMessagesResult(
+            new List<FeedMessage>(),
+            false,
+            new BlockIndex(0));
+
+        var mockFeedsStorageService = mocker.GetMock<IFeedsStorageService>();
+        mockFeedsStorageService
+            .Setup(x => x.IsUserParticipantOfFeedAsync(feedId, userAddress))
+            .ReturnsAsync(true);
+
+        var mockFeedMessageStorageService = mocker.GetMock<IFeedMessageStorageService>();
+        mockFeedMessageStorageService
+            .Setup(x => x.GetPaginatedMessagesAsync(
+                feedId,
+                It.IsAny<BlockIndex>(),
+                It.IsAny<int>(),
+                false, // fetchLatest is false when beforeBlockIndex is set
+                It.Is<BlockIndex?>(b => b != null && b.Value == beforeBlockIndex)))
+            .ReturnsAsync(paginatedResult);
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new GetFeedMessagesByIdRequest
+        {
+            FeedId = feedId.ToString(),
+            UserAddress = userAddress,
+            BeforeBlockIndex = beforeBlockIndex
+        };
+
+        // Act
+        await service.GetFeedMessagesById(request, CreateMockServerCallContext());
+
+        // Assert - verify beforeBlockIndex was passed correctly
+        mockFeedMessageStorageService.Verify(x => x.GetPaginatedMessagesAsync(
+            feedId,
+            It.IsAny<BlockIndex>(),
+            It.IsAny<int>(),
+            false,
+            It.Is<BlockIndex?>(b => b != null && b.Value == beforeBlockIndex)), Times.Once);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>

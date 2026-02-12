@@ -252,4 +252,13 @@ public interface IFeedsRepository : IRepository
     /// Returns the generated code (8 characters, alphanumeric uppercase).
     /// </summary>
     Task<string> GenerateInviteCodeAsync(FeedId feedId);
+
+    // ===== FEAT-059: Per-Feed Pagination Authorization =====
+
+    /// <summary>
+    /// Check if a user is a participant of a specific feed (Chat or Group).
+    /// Used to authorize per-feed message queries.
+    /// Returns true if user is an active participant (not left, not banned).
+    /// </summary>
+    Task<bool> IsUserParticipantOfFeedAsync(FeedId feedId, string userAddress);
 }

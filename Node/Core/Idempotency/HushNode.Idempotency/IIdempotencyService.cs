@@ -4,6 +4,15 @@ using HushShared.Feeds.Model;
 namespace HushNode.Idempotency;
 
 /// <summary>
+/// MT-001: Snapshot of idempotency check counters.
+/// </summary>
+public record IdempotencyMetrics(
+    long AcceptedCount,
+    long AlreadyExistsCount,
+    long PendingCount,
+    long RejectedCount);
+
+/// <summary>
 /// Service for checking message idempotency to prevent duplicate transaction processing.
 /// FEAT-057: Server Message Idempotency.
 /// </summary>
@@ -36,4 +45,9 @@ public interface IIdempotencyService
     /// </summary>
     /// <param name="messageIds">The message IDs to remove from tracking.</param>
     void RemoveFromTracking(IEnumerable<FeedMessageId> messageIds);
+
+    /// <summary>
+    /// MT-001: Returns a snapshot of idempotency check counters.
+    /// </summary>
+    IdempotencyMetrics GetMetrics();
 }

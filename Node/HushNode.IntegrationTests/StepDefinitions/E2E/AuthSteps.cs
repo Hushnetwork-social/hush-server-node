@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.Playwright;
 using TechTalk.SpecFlow;
@@ -108,8 +109,11 @@ internal sealed class AuthSteps : BrowserStepsBase
         await WhenThePersonalFeedTransactionIsProcessed();
 
         // Step 5: Wait for redirect to dashboard
+        // Use polling-based assertion instead of WaitForURLAsync because Next.js router.push()
+        // is an SPA navigation (history.pushState) that doesn't fire a traditional page "load" event.
+        // WaitForURLAsync with WaitUntil=Load is unreliable for SPA navigations.
         var page = await GetOrCreatePageAsync();
-        await page.WaitForURLAsync("**/dashboard**", new PageWaitForURLOptions { Timeout = 15000 });
+        await Assertions.Expect(page).ToHaveURLAsync(new Regex(@"/dashboard"), new PageAssertionsToHaveURLOptions { Timeout = 15000 });
         Console.WriteLine("[E2E Auth] Redirected to dashboard");
 
         // Step 6: Wait for feeds to be synced, rendered, and encryption keys decrypted
@@ -225,7 +229,7 @@ internal sealed class AuthSteps : BrowserStepsBase
     public async Task ThenTheUserShouldBeRedirectedTo(string expectedPath)
     {
         var page = await GetOrCreatePageAsync();
-        await page.WaitForURLAsync($"**{expectedPath}**", new PageWaitForURLOptions { Timeout = 10000 });
+        await Assertions.Expect(page).ToHaveURLAsync(new Regex(Regex.Escape(expectedPath)), new PageAssertionsToHaveURLOptions { Timeout = 10000 });
     }
 
     /// <summary>

@@ -535,6 +535,30 @@ public static class TestDataFactory
 
     #endregion
 
+    #region FEAT-059: Feed Participant Tests
+
+    /// <summary>
+    /// Creates a Chat Feed with a participant already attached.
+    /// This ensures the required Feed navigation property is properly initialized.
+    /// </summary>
+    public static Feed CreateChatFeedWithParticipant(
+        FeedId feedId,
+        string participantAddress,
+        ParticipantType participantType = ParticipantType.Member,
+        string title = "Test Chat",
+        BlockIndex? blockIndex = null)
+    {
+        var feed = new Feed(feedId, title, FeedType.Chat, blockIndex ?? new BlockIndex(100));
+        var participant = new FeedParticipant(feedId, participantAddress, participantType, CreateEncryptedKey())
+        {
+            Feed = feed
+        };
+        feed.Participants = new[] { participant };
+        return feed;
+    }
+
+    #endregion
+
     #region Key Rotation Payloads
 
     public static GroupFeedKeyRotationPayload CreateKeyRotationPayload(
