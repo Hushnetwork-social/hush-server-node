@@ -70,12 +70,12 @@ public sealed class ReadWatermarksStorageSteps
     public async Task GivenTheRedisReadWatermarkCacheIsFlushed()
     {
         var userId = (string)_scenarioContext["LastMarkAsReadUserId"];
-        var feedId = (FeedId)_scenarioContext["LastMarkAsReadFeedIdTyped"];
         var fixture = GetFixture();
         var redisDb = fixture.RedisConnection.GetDatabase();
 
-        var cacheKey = $"HushTest:{FeedReadPositionCacheConstants.GetReadPositionKey(userId, feedId)}";
-        await redisDb.KeyDeleteAsync(cacheKey);
+        // FEAT-060: Delete the entire HASH key (all read positions for this user)
+        var hashKey = $"HushTest:{FeedReadPositionCacheConstants.GetReadPositionsHashKey(userId)}";
+        await redisDb.KeyDeleteAsync(hashKey);
     }
 
     [When(@"(.*) requests her feeds via GetFeedsForAddress gRPC")]
@@ -118,10 +118,11 @@ public sealed class ReadWatermarksStorageSteps
         var fixture = GetFixture();
         var redisDb = fixture.RedisConnection.GetDatabase();
 
-        var cacheKey = $"HushTest:{FeedReadPositionCacheConstants.GetReadPositionKey(userId, feedId)}";
-        var cachedValue = await redisDb.StringGetAsync(cacheKey);
+        // FEAT-060: Check HASH field instead of individual STRING key
+        var hashKey = $"HushTest:{FeedReadPositionCacheConstants.GetReadPositionsHashKey(userId)}";
+        var cachedValue = await redisDb.HashGetAsync(hashKey, feedId.ToString());
 
-        cachedValue.IsNullOrEmpty.Should().BeFalse("Read position should be in Redis cache");
+        cachedValue.IsNullOrEmpty.Should().BeFalse("Read position should be in Redis HASH cache");
     }
 
     [Then(@"the response should indicate success")]
@@ -135,14 +136,14 @@ public sealed class ReadWatermarksStorageSteps
     public async Task ThenTheRedisReadWatermarkCacheTtlShouldBeApproximatelyDays(int expectedDays)
     {
         var userId = (string)_scenarioContext["LastMarkAsReadUserId"];
-        var feedId = (FeedId)_scenarioContext["LastMarkAsReadFeedIdTyped"];
         var fixture = GetFixture();
         var redisDb = fixture.RedisConnection.GetDatabase();
 
-        var cacheKey = $"HushTest:{FeedReadPositionCacheConstants.GetReadPositionKey(userId, feedId)}";
-        var ttl = await redisDb.KeyTimeToLiveAsync(cacheKey);
+        // FEAT-060: TTL is on the HASH key, not individual STRING key
+        var hashKey = $"HushTest:{FeedReadPositionCacheConstants.GetReadPositionsHashKey(userId)}";
+        var ttl = await redisDb.KeyTimeToLiveAsync(hashKey);
 
-        ttl.Should().NotBeNull("Cache key should have TTL set");
+        ttl.Should().NotBeNull("HASH key should have TTL set");
         ttl!.Value.TotalDays.Should().BeGreaterThan(expectedDays - 2, $"TTL should be close to {expectedDays} days");
         ttl.Value.TotalDays.Should().BeLessOrEqualTo(expectedDays + 1, $"TTL should not exceed {expectedDays + 1} days");
     }
@@ -218,10 +219,11 @@ public sealed class ReadWatermarksStorageSteps
         var fixture = GetFixture();
         var redisDb = fixture.RedisConnection.GetDatabase();
 
-        var cacheKey = $"HushTest:{FeedReadPositionCacheConstants.GetReadPositionKey(userId, feedId)}";
-        var exists = await redisDb.KeyExistsAsync(cacheKey);
+        // FEAT-060: Check HASH field exists instead of individual STRING key
+        var hashKey = $"HushTest:{FeedReadPositionCacheConstants.GetReadPositionsHashKey(userId)}";
+        var exists = await redisDb.HashExistsAsync(hashKey, feedId.ToString());
 
-        exists.Should().BeTrue("Cache should be repopulated after database fallback");
+        exists.Should().BeTrue("HASH field should be repopulated after database fallback");
     }
 
     [Then(@"the watermark should be retrieved from the database")]

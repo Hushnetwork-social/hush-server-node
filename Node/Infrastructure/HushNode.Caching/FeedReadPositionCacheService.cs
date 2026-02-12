@@ -21,6 +21,7 @@ public class FeedReadPositionCacheService : IFeedReadPositionCacheService
     private long _writeOperations;
     private long _writeErrors;
     private long _readErrors;
+    private long _migrationOperations;
 
     /// <summary>
     /// Gets the total number of cache hits.
@@ -46,6 +47,24 @@ public class FeedReadPositionCacheService : IFeedReadPositionCacheService
     /// Gets the total number of read errors.
     /// </summary>
     public long ReadErrors => Interlocked.Read(ref _readErrors);
+
+    /// <summary>
+    /// Gets the total number of migration operations (old STRING keys → HASH).
+    /// </summary>
+    public long MigrationOperations => Interlocked.Read(ref _migrationOperations);
+
+    /// <summary>
+    /// Lua script for atomic max-wins compare-and-set on HASH fields.
+    /// Only updates the field if the new value is greater than the current value.
+    /// </summary>
+    private const string MaxWinsLuaScript = @"
+local current = tonumber(redis.call('HGET', KEYS[1], ARGV[1]))
+local new = tonumber(ARGV[2])
+if current == nil or new > current then
+    redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+    return 1
+end
+return 0";
 
     /// <summary>
     /// Creates a new instance of FeedReadPositionCacheService.
@@ -123,9 +142,13 @@ public class FeedReadPositionCacheService : IFeedReadPositionCacheService
         if (string.IsNullOrEmpty(userId))
             return null;
 
-        // Note: This uses SCAN which is O(n) on the Redis keyspace.
-        // For production with many users, consider maintaining a separate set of feed IDs per user.
-        var pattern = $"{_keyPrefix}user:{userId}:read:*";
+        // Step 1: Try new HASH first (FEAT-060)
+        var hashResult = await GetAllReadPositionsAsync(userId);
+        if (hashResult != null && hashResult.Count > 0)
+            return hashResult;
+
+        // Step 2: Try SCAN old individual STRING keys (migration fallback)
+        var pattern = $"{_keyPrefix}{FeedReadPositionCacheConstants.GetReadPositionScanPattern(userId)}";
 
         try
         {
@@ -149,19 +172,30 @@ public class FeedReadPositionCacheService : IFeedReadPositionCacheService
                 }
             }
 
-            _logger.LogDebug(
-                "Retrieved {Count} cached read positions for user={UserId}",
-                result.Count,
-                userId);
+            if (result.Count > 0)
+            {
+                // Step 3: Migrate old keys to new HASH
+                _logger.LogInformation(
+                    "Migrating {Count} read positions from individual keys to HASH for user={UserId}",
+                    result.Count,
+                    userId);
+                await SetAllReadPositionsAsync(userId, result);
+                Interlocked.Increment(ref _migrationOperations);
+                return result;
+            }
 
-            return result;
+            // Step 4: No old keys found — cache miss (caller falls back to PostgreSQL)
+            _logger.LogDebug(
+                "No legacy read position keys found for user={UserId}",
+                userId);
+            return null;
         }
         catch (Exception ex)
         {
             Interlocked.Increment(ref _readErrors);
             _logger.LogWarning(
                 ex,
-                "Failed to read cached read positions for user={UserId}. Returning null.",
+                "Failed to scan legacy read positions for user={UserId}. Returning null.",
                 userId);
             return null;
         }
@@ -228,11 +262,149 @@ public class FeedReadPositionCacheService : IFeedReadPositionCacheService
         }
     }
 
+    // --- FEAT-060: HASH-based methods ---
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<FeedId, BlockIndex>?> GetAllReadPositionsAsync(string userId)
+    {
+        if (string.IsNullOrEmpty(userId))
+            return null;
+
+        var key = GetHashKey(userId);
+
+        try
+        {
+            var entries = await _database.HashGetAllAsync(key);
+
+            if (entries.Length == 0)
+            {
+                Interlocked.Increment(ref _cacheMisses);
+                _logger.LogDebug(
+                    "Cache miss for read positions hash user={UserId}",
+                    userId);
+                return null;
+            }
+
+            var result = new Dictionary<FeedId, BlockIndex>();
+            foreach (var entry in entries)
+            {
+                if (long.TryParse(entry.Value, out var blockIndexValue))
+                {
+                    var feedId = FeedIdHandler.CreateFromString(entry.Name!);
+                    result[feedId] = new BlockIndex(blockIndexValue);
+                }
+            }
+
+            Interlocked.Increment(ref _cacheHits);
+            _logger.LogDebug(
+                "Cache hit for read positions hash user={UserId} count={Count}",
+                userId,
+                result.Count);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _readErrors);
+            _logger.LogWarning(
+                ex,
+                "Failed to read read positions hash for user={UserId}. Returning null.",
+                userId);
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SetReadPositionWithMaxWinsAsync(string userId, FeedId feedId, BlockIndex blockIndex)
+    {
+        if (string.IsNullOrEmpty(userId))
+            return false;
+
+        var key = GetHashKey(userId);
+
+        try
+        {
+            var result = await _database.ScriptEvaluateAsync(
+                MaxWinsLuaScript,
+                new RedisKey[] { key },
+                new RedisValue[] { feedId.ToString(), blockIndex.Value.ToString() });
+
+            var updated = (int)result == 1;
+
+            if (updated)
+            {
+                // Refresh TTL on successful write
+                await _database.KeyExpireAsync(key, FeedReadPositionCacheConstants.CacheTtl);
+            }
+
+            Interlocked.Increment(ref _writeOperations);
+            _logger.LogDebug(
+                "Max-wins set read position user={UserId} feed={FeedId} value={BlockIndex} updated={Updated}",
+                userId,
+                feedId,
+                blockIndex.Value,
+                updated);
+            return updated;
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _writeErrors);
+            _logger.LogWarning(
+                ex,
+                "Failed to set read position with max-wins for user={UserId} feed={FeedId}. Continuing without cache.",
+                userId,
+                feedId);
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SetAllReadPositionsAsync(string userId, IReadOnlyDictionary<FeedId, BlockIndex> positions)
+    {
+        if (string.IsNullOrEmpty(userId) || positions == null || positions.Count == 0)
+            return false;
+
+        var key = GetHashKey(userId);
+
+        try
+        {
+            var entries = positions
+                .Select(p => new HashEntry(p.Key.ToString(), p.Value.Value.ToString()))
+                .ToArray();
+
+            await _database.HashSetAsync(key, entries);
+            await _database.KeyExpireAsync(key, FeedReadPositionCacheConstants.CacheTtl);
+
+            Interlocked.Increment(ref _writeOperations);
+            _logger.LogDebug(
+                "Bulk set read positions hash user={UserId} count={Count}",
+                userId,
+                positions.Count);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _writeErrors);
+            _logger.LogWarning(
+                ex,
+                "Failed to bulk set read positions for user={UserId}. Continuing without cache.",
+                userId);
+            return false;
+        }
+    }
+
     /// <summary>
-    /// Gets the Redis key for a user's read position, including the instance prefix.
+    /// Gets the Redis key for a user's read position (legacy individual STRING key), including the instance prefix.
     /// </summary>
     private string GetKey(string userId, FeedId feedId)
     {
         return $"{_keyPrefix}{FeedReadPositionCacheConstants.GetReadPositionKey(userId, feedId)}";
+    }
+
+    /// <summary>
+    /// Gets the Redis HASH key for a user's read positions, including the instance prefix.
+    /// </summary>
+    private string GetHashKey(string userId)
+    {
+        return $"{_keyPrefix}{FeedReadPositionCacheConstants.GetReadPositionsHashKey(userId)}";
     }
 }

@@ -116,7 +116,15 @@ internal sealed class AuthSteps : BrowserStepsBase
         await Assertions.Expect(page).ToHaveURLAsync(new Regex(@"/dashboard"), new PageAssertionsToHaveURLOptions { Timeout = 15000 });
         Console.WriteLine("[E2E Auth] Redirected to dashboard");
 
-        // Step 6: Wait for feeds to be synced, rendered, and encryption keys decrypted
+        // Step 6: Explicitly trigger sync to ensure feeds are fetched
+        // With NEXT_PUBLIC_SYNC_INTERVAL_MS=999999, auto-sync is disabled.
+        // The SyncProvider's 500ms initial sync can race with component mounting,
+        // so we explicitly trigger a sync after the dashboard is loaded.
+        Console.WriteLine("[E2E Auth] Triggering explicit sync after dashboard load...");
+        await Task.Delay(1000); // Allow SyncProvider to mount and register syncables
+        await TriggerSyncAsync(page);
+
+        // Step 7: Wait for feeds to be synced, rendered, and encryption keys decrypted
         Console.WriteLine("[E2E Auth] Waiting for feeds to be synced, rendered, and encryption keys decrypted...");
         await WaitForReadyFeedAsync(page, timeoutMs: 30000);
 

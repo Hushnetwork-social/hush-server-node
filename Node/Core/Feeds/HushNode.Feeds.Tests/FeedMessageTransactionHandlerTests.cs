@@ -303,6 +303,141 @@ public class FeedMessageTransactionHandlerTests
 
     #endregion
 
+    #region FEAT-060: Feed Metadata Cache Update Tests
+
+    [Fact]
+    public async Task HandleAsync_WhenMessageFinalized_UpdatesFeedMetaCacheForAllParticipants()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var messageId = new FeedMessageId(Guid.NewGuid());
+        var senderAddress = TestDataFactory.CreateAddress();
+        var participant1 = TestDataFactory.CreateAddress();
+        var participant2 = TestDataFactory.CreateAddress();
+
+        SetupBlockchainCache(mocker, currentBlockIndex: 600);
+
+        mocker.GetMock<IFeedMessageStorageService>()
+            .Setup(x => x.CreateFeedMessageAsync(It.IsAny<FeedMessage>()))
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<IFeedMessageCacheService>()
+            .Setup(x => x.AddMessageAsync(It.IsAny<FeedId>(), It.IsAny<FeedMessage>()))
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.GetParticipantsAsync(feedId))
+            .ReturnsAsync(new[] { participant1, participant2 });
+
+        mocker.GetMock<IFeedMetadataCacheService>()
+            .Setup(x => x.SetLastBlockIndexAsync(
+                It.IsAny<string>(), feedId, It.IsAny<BlockIndex>()))
+            .ReturnsAsync(true);
+
+        mocker.GetMock<IEventAggregator>()
+            .Setup(x => x.PublishAsync(It.IsAny<NewFeedMessageCreatedEvent>()))
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<FeedMessageTransactionHandler>();
+        var transaction = CreateValidatedTransaction(feedId, messageId, senderAddress, "content");
+
+        // Act
+        await sut.HandleFeedMessageTransaction(transaction);
+
+        // Assert — SetLastBlockIndexAsync called for each participant
+        mocker.GetMock<IFeedMetadataCacheService>()
+            .Verify(x => x.SetLastBlockIndexAsync(
+                participant1, feedId, new BlockIndex(600)), Times.Once);
+        mocker.GetMock<IFeedMetadataCacheService>()
+            .Verify(x => x.SetLastBlockIndexAsync(
+                participant2, feedId, new BlockIndex(600)), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenFeedMetaCacheFails_StillCompletesSuccessfully()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var messageId = new FeedMessageId(Guid.NewGuid());
+        var senderAddress = TestDataFactory.CreateAddress();
+
+        SetupBlockchainCache(mocker, currentBlockIndex: 600);
+
+        FeedMessage? storedMessage = null;
+        mocker.GetMock<IFeedMessageStorageService>()
+            .Setup(x => x.CreateFeedMessageAsync(It.IsAny<FeedMessage>()))
+            .Callback<FeedMessage>(msg => storedMessage = msg)
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<IFeedMessageCacheService>()
+            .Setup(x => x.AddMessageAsync(It.IsAny<FeedId>(), It.IsAny<FeedMessage>()))
+            .Returns(Task.CompletedTask);
+
+        // Simulate feed participants cache failure
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.GetParticipantsAsync(feedId))
+            .ThrowsAsync(new Exception("Redis feed_meta failure"));
+
+        mocker.GetMock<IEventAggregator>()
+            .Setup(x => x.PublishAsync(It.IsAny<NewFeedMessageCreatedEvent>()))
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<FeedMessageTransactionHandler>();
+        var transaction = CreateValidatedTransaction(feedId, messageId, senderAddress, "content");
+
+        // Act — should not throw (graceful degradation)
+        await sut.HandleFeedMessageTransaction(transaction);
+
+        // Assert — PostgreSQL write still succeeded
+        storedMessage.Should().NotBeNull("PostgreSQL write should succeed despite feed_meta failure");
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenParticipantCacheMisses_SkipsFeedMetaUpdate()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var messageId = new FeedMessageId(Guid.NewGuid());
+        var senderAddress = TestDataFactory.CreateAddress();
+
+        SetupBlockchainCache(mocker, currentBlockIndex: 600);
+
+        mocker.GetMock<IFeedMessageStorageService>()
+            .Setup(x => x.CreateFeedMessageAsync(It.IsAny<FeedMessage>()))
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<IFeedMessageCacheService>()
+            .Setup(x => x.AddMessageAsync(It.IsAny<FeedId>(), It.IsAny<FeedMessage>()))
+            .Returns(Task.CompletedTask);
+
+        // Participants cache returns null (cache miss)
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.GetParticipantsAsync(feedId))
+            .ReturnsAsync((IReadOnlyList<string>?)null);
+
+        mocker.GetMock<IEventAggregator>()
+            .Setup(x => x.PublishAsync(It.IsAny<NewFeedMessageCreatedEvent>()))
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<FeedMessageTransactionHandler>();
+        var transaction = CreateValidatedTransaction(feedId, messageId, senderAddress, "content");
+
+        // Act
+        await sut.HandleFeedMessageTransaction(transaction);
+
+        // Assert — SetLastBlockIndexAsync should NOT be called when participants are null
+        mocker.GetMock<IFeedMetadataCacheService>()
+            .Verify(x => x.SetLastBlockIndexAsync(
+                It.IsAny<string>(), It.IsAny<FeedId>(), It.IsAny<BlockIndex>()),
+                Times.Never,
+                "Should skip feed_meta update when participants cache returns null");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static void SetupBlockchainCache(AutoMocker mocker, long currentBlockIndex)

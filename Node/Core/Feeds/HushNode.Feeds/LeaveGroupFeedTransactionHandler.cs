@@ -17,6 +17,7 @@ public class LeaveGroupFeedTransactionHandler(
     IBlockchainCache blockchainCache,
     IKeyRotationService keyRotationService,
     IUserFeedsCacheService userFeedsCacheService,
+    IFeedMetadataCacheService feedMetadataCacheService,
     IEventAggregator eventAggregator)
     : ILeaveGroupFeedTransactionHandler
 {
@@ -24,6 +25,7 @@ public class LeaveGroupFeedTransactionHandler(
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IKeyRotationService _keyRotationService = keyRotationService;
     private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
+    private readonly IFeedMetadataCacheService _feedMetadataCacheService = feedMetadataCacheService;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
 
     public async Task HandleLeaveGroupFeedTransactionAsync(ValidatedTransaction<LeaveGroupFeedPayload> transaction)
@@ -76,6 +78,9 @@ public class LeaveGroupFeedTransactionHandler(
         // Update the leaving user's feed list cache (FEAT-049)
         // Cache update is fire-and-forget - failure does not affect the transaction
         await this._userFeedsCacheService.RemoveFeedFromUserCacheAsync(leavingUserAddress, payload.FeedId);
+
+        // FEAT-060: Remove feed_meta entry for leaving member
+        _ = this._feedMetadataCacheService.RemoveFeedMetaAsync(leavingUserAddress, payload.FeedId);
 
         // Publish event for feed participants cache invalidation (FEAT-050)
         // Fire and forget - cache invalidation is secondary to blockchain state

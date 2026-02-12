@@ -19,6 +19,7 @@ public class JoinGroupFeedTransactionHandler(
     IUserFeedsCacheService userFeedsCacheService,
     IFeedParticipantsCacheService feedParticipantsCacheService,
     IGroupMembersCacheService groupMembersCacheService,
+    IFeedMetadataCacheService feedMetadataCacheService,
     IEventAggregator eventAggregator)
     : IJoinGroupFeedTransactionHandler
 {
@@ -28,6 +29,7 @@ public class JoinGroupFeedTransactionHandler(
     private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
     private readonly IFeedParticipantsCacheService _feedParticipantsCacheService = feedParticipantsCacheService;
     private readonly IGroupMembersCacheService _groupMembersCacheService = groupMembersCacheService;
+    private readonly IFeedMetadataCacheService _feedMetadataCacheService = feedMetadataCacheService;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
 
     public async Task HandleJoinGroupFeedTransactionAsync(ValidatedTransaction<JoinGroupFeedPayload> transaction)
@@ -110,6 +112,10 @@ public class JoinGroupFeedTransactionHandler(
         // Update the user's feed list cache (FEAT-049)
         // Cache update is fire-and-forget - failure does not affect the transaction
         await this._userFeedsCacheService.AddFeedToUserCacheAsync(joiningUserAddress, payload.FeedId);
+
+        // FEAT-060: Populate feed_meta with current lastBlockIndex for the joining member
+        _ = this._feedMetadataCacheService.SetLastBlockIndexAsync(
+            joiningUserAddress, payload.FeedId, currentBlock);
 
         // Publish event for other listeners (e.g., notifications)
         // Note: Cache updates are done synchronously above to avoid race conditions

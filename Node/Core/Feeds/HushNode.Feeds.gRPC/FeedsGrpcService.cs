@@ -24,6 +24,7 @@ public class FeedsGrpcService(
     IFeedParticipantsCacheService feedParticipantsCacheService,
     IGroupMembersCacheService groupMembersCacheService,
     IFeedReadPositionStorageService feedReadPositionStorageService,
+    IFeedMetadataCacheService feedMetadataCacheService,
     IIdentityService identityService,
     IIdentityStorageService identityStorageService,
     IBlockchainCache blockchainCache,
@@ -37,6 +38,7 @@ public class FeedsGrpcService(
     private readonly IFeedParticipantsCacheService _feedParticipantsCacheService = feedParticipantsCacheService;
     private readonly IGroupMembersCacheService _groupMembersCacheService = groupMembersCacheService;
     private readonly IFeedReadPositionStorageService _feedReadPositionStorageService = feedReadPositionStorageService;
+    private readonly IFeedMetadataCacheService _feedMetadataCacheService = feedMetadataCacheService;
     private readonly IIdentityService _identityService = identityService;
     private readonly IIdentityStorageService _identityStorageService = identityStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
@@ -94,6 +96,25 @@ public class FeedsGrpcService(
             "[GetFeedsForAddress] Found {FeedCount} feed(s) for address",
             lastFeeds.Count());
 
+        // FEAT-060: Batch fetch lastBlockIndex from Redis (overlay on PostgreSQL values)
+        IReadOnlyDictionary<FeedId, BlockIndex>? cachedBlockIndexes = null;
+        try
+        {
+            cachedBlockIndexes = await _feedMetadataCacheService.GetAllLastBlockIndexesAsync(request.ProfilePublicKey);
+
+            // Cache miss: populate from PostgreSQL feed data
+            if (cachedBlockIndexes == null && lastFeeds.Any())
+            {
+                var blockIndexesToCache = lastFeeds
+                    .ToDictionary(f => f.FeedId, f => f.BlockIndex);
+                _ = _feedMetadataCacheService.SetMultipleLastBlockIndexesAsync(request.ProfilePublicKey, blockIndexesToCache);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch feed metadata from Redis for user {UserId}, using PostgreSQL values", request.ProfilePublicKey);
+        }
+
         // FEAT-051: Batch fetch read positions for all feeds (cache-aside pattern with DB fallback)
         IReadOnlyDictionary<FeedId, BlockIndex> readPositions;
         try
@@ -123,9 +144,17 @@ public class FeedsGrpcService(
                 _ => throw new InvalidOperationException($"the FeedTYype {feed.FeedType} is not supported.")
             };
 
+            // FEAT-060: Overlay lastBlockIndex from Redis if available (more up-to-date than PostgreSQL)
+            var feedBlockIndex = feed.BlockIndex;
+            if (cachedBlockIndexes != null && cachedBlockIndexes.TryGetValue(feed.FeedId, out var cachedBlockIndex)
+                && cachedBlockIndex.Value > feedBlockIndex.Value)
+            {
+                feedBlockIndex = cachedBlockIndex;
+            }
+
             // Calculate effective BlockIndex: MAX of feed BlockIndex and all participants' profile BlockIndex
             // This ensures clients detect changes when any participant updates their identity
-            var effectiveBlockIndex = await GetEffectiveBlockIndex(feed);
+            var effectiveBlockIndex = await GetEffectiveBlockIndex(feed, feedBlockIndex);
 
             // FEAT-051: Get read position for this feed (default to 0 if not found)
             var lastReadBlockIndex = readPositions.TryGetValue(feed.FeedId, out var readPosition)
@@ -773,9 +802,9 @@ public class FeedsGrpcService(
     /// Returns MAX of feed BlockIndex and all participants' profile BlockIndex.
     /// This ensures clients detect when any participant updates their identity.
     /// </summary>
-    private async Task<long> GetEffectiveBlockIndex(Feed feed)
+    private async Task<long> GetEffectiveBlockIndex(Feed feed, BlockIndex? blockIndexOverride = null)
     {
-        var maxBlockIndex = feed.BlockIndex.Value;
+        var maxBlockIndex = blockIndexOverride?.Value ?? feed.BlockIndex.Value;
 
         foreach (var participant in feed.Participants)
         {

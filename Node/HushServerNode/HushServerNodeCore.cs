@@ -612,6 +612,15 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                 var logger = sp.GetRequiredService<ILogger<FeedReadPositionCacheService>>();
                 return new FeedReadPositionCacheService(connectionMultiplexer, redisSettings.InstanceName, logger);
             });
+
+            // Register feed metadata cache service (FEAT-060)
+            services.AddSingleton<IFeedMetadataCacheService>(sp =>
+            {
+                var connectionMultiplexer = sp.GetRequiredService<IConnectionMultiplexer>();
+                var redisSettings = sp.GetRequiredService<IOptions<RedisSettings>>().Value;
+                var logger = sp.GetRequiredService<ILogger<FeedMetadataCacheService>>();
+                return new FeedMetadataCacheService(connectionMultiplexer, redisSettings.InstanceName, logger);
+            });
         });
 
         // In test mode, REPLACE the default scheduler with one using injected observable

@@ -28,10 +28,14 @@ public class FeedReadPositionStorageServiceTests
         // Arrange
         var (service, cacheService, repository, _) = CreateService();
         var expectedBlockIndex = new BlockIndex(500);
+        var cachedPositions = new Dictionary<FeedId, BlockIndex>
+        {
+            { TestFeedId, expectedBlockIndex }
+        };
 
         cacheService
-            .Setup(x => x.GetReadPositionAsync(TestUserId, TestFeedId))
-            .ReturnsAsync(expectedBlockIndex);
+            .Setup(x => x.GetAllReadPositionsAsync(TestUserId))
+            .ReturnsAsync(cachedPositions);
 
         // Act
         var result = await service.GetReadPositionAsync(TestUserId, TestFeedId);
@@ -51,8 +55,8 @@ public class FeedReadPositionStorageServiceTests
         var expectedBlockIndex = new BlockIndex(500);
 
         cacheService
-            .Setup(x => x.GetReadPositionAsync(TestUserId, TestFeedId))
-            .ReturnsAsync((BlockIndex?)null);
+            .Setup(x => x.GetAllReadPositionsAsync(TestUserId))
+            .ReturnsAsync((IReadOnlyDictionary<FeedId, BlockIndex>?)null);
 
         repository
             .Setup(x => x.GetReadPositionAsync(TestUserId, TestFeedId))
@@ -63,7 +67,7 @@ public class FeedReadPositionStorageServiceTests
             .Returns(repository.Object);
 
         cacheService
-            .Setup(x => x.SetReadPositionAsync(TestUserId, TestFeedId, expectedBlockIndex))
+            .Setup(x => x.SetReadPositionWithMaxWinsAsync(TestUserId, TestFeedId, expectedBlockIndex))
             .ReturnsAsync(true);
 
         // Act
@@ -75,7 +79,7 @@ public class FeedReadPositionStorageServiceTests
             x => x.GetReadPositionAsync(TestUserId, TestFeedId),
             Times.Once);
         cacheService.Verify(
-            x => x.SetReadPositionAsync(TestUserId, TestFeedId, expectedBlockIndex),
+            x => x.SetReadPositionWithMaxWinsAsync(TestUserId, TestFeedId, expectedBlockIndex),
             Times.Once);
     }
 
@@ -86,8 +90,8 @@ public class FeedReadPositionStorageServiceTests
         var (service, cacheService, repository, unitOfWork) = CreateService();
 
         cacheService
-            .Setup(x => x.GetReadPositionAsync(TestUserId, TestFeedId))
-            .ReturnsAsync((BlockIndex?)null);
+            .Setup(x => x.GetAllReadPositionsAsync(TestUserId))
+            .ReturnsAsync((IReadOnlyDictionary<FeedId, BlockIndex>?)null);
 
         repository
             .Setup(x => x.GetReadPositionAsync(TestUserId, TestFeedId))
@@ -181,7 +185,7 @@ public class FeedReadPositionStorageServiceTests
             .Returns(repository.Object);
 
         cacheService
-            .Setup(x => x.SetReadPositionAsync(It.IsAny<string>(), It.IsAny<FeedId>(), It.IsAny<BlockIndex>()))
+            .Setup(x => x.SetAllReadPositionsAsync(TestUserId, It.IsAny<IReadOnlyDictionary<FeedId, BlockIndex>>()))
             .ReturnsAsync(true);
 
         // Act
@@ -193,7 +197,7 @@ public class FeedReadPositionStorageServiceTests
             x => x.GetReadPositionsForUserAsync(TestUserId),
             Times.Once);
         cacheService.Verify(
-            x => x.SetReadPositionAsync(TestUserId, TestFeedId, new BlockIndex(500)),
+            x => x.SetAllReadPositionsAsync(TestUserId, It.IsAny<IReadOnlyDictionary<FeedId, BlockIndex>>()),
             Times.Once);
     }
 
@@ -234,7 +238,7 @@ public class FeedReadPositionStorageServiceTests
             .Returns(Task.CompletedTask);
 
         cacheService
-            .Setup(x => x.SetReadPositionAsync(TestUserId, TestFeedId, blockIndex))
+            .Setup(x => x.SetReadPositionWithMaxWinsAsync(TestUserId, TestFeedId, blockIndex))
             .ReturnsAsync(true);
 
         // Act
@@ -247,7 +251,7 @@ public class FeedReadPositionStorageServiceTests
             Times.Once);
         writableUnitOfWork.Verify(x => x.CommitAsync(), Times.Once);
         cacheService.Verify(
-            x => x.SetReadPositionAsync(TestUserId, TestFeedId, blockIndex),
+            x => x.SetReadPositionWithMaxWinsAsync(TestUserId, TestFeedId, blockIndex),
             Times.Once);
     }
 
@@ -276,7 +280,7 @@ public class FeedReadPositionStorageServiceTests
         // Assert
         result.Should().BeFalse();
         cacheService.Verify(
-            x => x.SetReadPositionAsync(It.IsAny<string>(), It.IsAny<FeedId>(), It.IsAny<BlockIndex>()),
+            x => x.SetReadPositionWithMaxWinsAsync(It.IsAny<string>(), It.IsAny<FeedId>(), It.IsAny<BlockIndex>()),
             Times.Never);
     }
 
@@ -300,7 +304,7 @@ public class FeedReadPositionStorageServiceTests
             .Returns(Task.CompletedTask);
 
         cacheService
-            .Setup(x => x.SetReadPositionAsync(TestUserId, TestFeedId, blockIndex))
+            .Setup(x => x.SetReadPositionWithMaxWinsAsync(TestUserId, TestFeedId, blockIndex))
             .ReturnsAsync(false); // Cache update failed
 
         // Act
@@ -368,7 +372,7 @@ public class FeedReadPositionStorageServiceTests
         // Assert
         result.Should().BeTrue(); // Should return true because the update was already done by another request
         cacheService.Verify(
-            x => x.SetReadPositionAsync(It.IsAny<string>(), It.IsAny<FeedId>(), It.IsAny<BlockIndex>()),
+            x => x.SetReadPositionWithMaxWinsAsync(It.IsAny<string>(), It.IsAny<FeedId>(), It.IsAny<BlockIndex>()),
             Times.Never); // Cache should not be updated when exception occurs
     }
 
