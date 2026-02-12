@@ -50,4 +50,36 @@ public interface IFeedReadPositionCacheService
     /// <param name="feedId">The feed ID.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     Task InvalidateCacheAsync(string userId, FeedId feedId);
+
+    // --- FEAT-060: HASH-based methods ---
+
+    /// <summary>
+    /// Gets all read positions for a user from the Redis HASH (FEAT-060).
+    /// Single round-trip via HGETALL, O(hash_size) instead of O(keyspace) SCAN.
+    /// </summary>
+    /// <param name="userId">The user's public signing address.</param>
+    /// <returns>
+    /// Dictionary mapping feed IDs to their read positions, or null on cache miss/error.
+    /// </returns>
+    Task<IReadOnlyDictionary<FeedId, BlockIndex>?> GetAllReadPositionsAsync(string userId);
+
+    /// <summary>
+    /// Atomically sets a read position using max-wins semantics (FEAT-060).
+    /// Only updates the Hash field if the new blockIndex is greater than the current value.
+    /// Uses a Lua script for atomic compare-and-set.
+    /// </summary>
+    /// <param name="userId">The user's public signing address.</param>
+    /// <param name="feedId">The feed ID.</param>
+    /// <param name="blockIndex">The block index up to which the user has read.</param>
+    /// <returns>True if the value was updated (new > current), false otherwise or on error.</returns>
+    Task<bool> SetReadPositionWithMaxWinsAsync(string userId, FeedId feedId, BlockIndex blockIndex);
+
+    /// <summary>
+    /// Bulk-sets all read positions for a user via HMSET (FEAT-060).
+    /// Used for migration from legacy individual keys and cache-miss repopulation from PostgreSQL.
+    /// </summary>
+    /// <param name="userId">The user's public signing address.</param>
+    /// <param name="positions">Dictionary mapping feed IDs to their read positions.</param>
+    /// <returns>True if cache was updated successfully, false on error.</returns>
+    Task<bool> SetAllReadPositionsAsync(string userId, IReadOnlyDictionary<FeedId, BlockIndex> positions);
 }

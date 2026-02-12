@@ -228,6 +228,29 @@ public class FeedReadPositionCacheService : IFeedReadPositionCacheService
         }
     }
 
+    // --- FEAT-060: HASH-based methods (shells — implemented in Phase 3) ---
+
+    /// <inheritdoc />
+    public Task<IReadOnlyDictionary<FeedId, BlockIndex>?> GetAllReadPositionsAsync(string userId)
+    {
+        // Shell — implemented in Phase 3 (Task 3.1)
+        throw new NotImplementedException("GetAllReadPositionsAsync will be implemented in Phase 3 (Task 3.1).");
+    }
+
+    /// <inheritdoc />
+    public Task<bool> SetReadPositionWithMaxWinsAsync(string userId, FeedId feedId, BlockIndex blockIndex)
+    {
+        // Shell — implemented in Phase 3 (Task 3.2)
+        throw new NotImplementedException("SetReadPositionWithMaxWinsAsync will be implemented in Phase 3 (Task 3.2).");
+    }
+
+    /// <inheritdoc />
+    public Task<bool> SetAllReadPositionsAsync(string userId, IReadOnlyDictionary<FeedId, BlockIndex> positions)
+    {
+        // Shell — implemented in Phase 3 (Task 3.3)
+        throw new NotImplementedException("SetAllReadPositionsAsync will be implemented in Phase 3 (Task 3.3).");
+    }
+
     /// <summary>
     /// Gets the Redis key for a user's read position, including the instance prefix.
     /// </summary>
