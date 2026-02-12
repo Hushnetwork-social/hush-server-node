@@ -12,6 +12,8 @@ public class FeedMessageTransactionHandler(
     IFeedMessageStorageService feedMessageStorageService,
     IFeedMessageCacheService feedMessageCacheService,
     IFeedsStorageService feedsStorageService,
+    IFeedMetadataCacheService feedMetadataCacheService,
+    IFeedParticipantsCacheService feedParticipantsCacheService,
     IBlockchainCache blockchainCache,
     IEventAggregator eventAggregator,
     ILogger<FeedMessageTransactionHandler> logger)
@@ -20,6 +22,8 @@ public class FeedMessageTransactionHandler(
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
     private readonly IFeedMessageCacheService _feedMessageCacheService = feedMessageCacheService;
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
+    private readonly IFeedMetadataCacheService _feedMetadataCacheService = feedMetadataCacheService;
+    private readonly IFeedParticipantsCacheService _feedParticipantsCacheService = feedParticipantsCacheService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly ILogger<FeedMessageTransactionHandler> _logger = logger;
@@ -84,6 +88,28 @@ public class FeedMessageTransactionHandler(
                 ex,
                 "Failed to cache message {MessageId} for feed {FeedId}. PostgreSQL write succeeded.",
                 feedMessage.FeedMessageId,
+                feedMessage.FeedId);
+        }
+
+        // FEAT-060: Update feed_meta lastBlockIndex for all participants (write-through)
+        // Fire-and-forget: Redis failure should not block message finalization
+        try
+        {
+            var participants = await this._feedParticipantsCacheService.GetParticipantsAsync(feedMessage.FeedId);
+            if (participants != null)
+            {
+                foreach (var participantAddress in participants)
+                {
+                    _ = this._feedMetadataCacheService.SetLastBlockIndexAsync(
+                        participantAddress, feedMessage.FeedId, this._blockchainCache.LastBlockIndex);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to update feed_meta for feed {FeedId}. PostgreSQL is consistent.",
                 feedMessage.FeedId);
         }
 

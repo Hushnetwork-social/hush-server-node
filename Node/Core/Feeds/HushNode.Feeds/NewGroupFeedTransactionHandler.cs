@@ -11,13 +11,15 @@ public class NewGroupFeedTransactionHandler(
     IFeedsStorageService feedsStorageService,
     IBlockchainCache blockchainCache,
     IEventAggregator eventAggregator,
-    IUserFeedsCacheService userFeedsCacheService)
+    IUserFeedsCacheService userFeedsCacheService,
+    IFeedMetadataCacheService feedMetadataCacheService)
     : INewGroupFeedTransactionHandler
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
+    private readonly IFeedMetadataCacheService _feedMetadataCacheService = feedMetadataCacheService;
 
     public async Task HandleNewGroupFeedTransactionAsync(ValidatedTransaction<NewGroupFeedPayload> newGroupFeedTransaction)
     {
@@ -115,6 +117,9 @@ public class NewGroupFeedTransactionHandler(
         foreach (var participantAddress in participantAddresses)
         {
             await this._userFeedsCacheService.AddFeedToUserCacheAsync(participantAddress, payload.FeedId);
+            // FEAT-060: Populate feed_meta with initial lastBlockIndex
+            _ = this._feedMetadataCacheService.SetLastBlockIndexAsync(
+                participantAddress, payload.FeedId, currentBlock);
         }
     }
 }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
 using Microsoft.Extensions.Logging;
@@ -59,31 +60,151 @@ public class FeedMetadataCacheService : IFeedMetadataCacheService
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyDictionary<FeedId, BlockIndex>?> GetAllLastBlockIndexesAsync(string userId)
+    public async Task<IReadOnlyDictionary<FeedId, BlockIndex>?> GetAllLastBlockIndexesAsync(string userId)
     {
-        // Shell — implemented in Phase 4
-        throw new NotImplementedException("GetAllLastBlockIndexesAsync will be implemented in Phase 4 (Task 4.2).");
+        if (string.IsNullOrEmpty(userId))
+            return null;
+
+        var key = GetKey(userId);
+
+        try
+        {
+            var entries = await _database.HashGetAllAsync(key);
+
+            if (entries.Length == 0)
+            {
+                Interlocked.Increment(ref _cacheMisses);
+                _logger.LogDebug(
+                    "Cache miss for feed metadata hash user={UserId}",
+                    userId);
+                return null;
+            }
+
+            var result = new Dictionary<FeedId, BlockIndex>();
+            foreach (var entry in entries)
+            {
+                var lastBlockIndex = ParseLastBlockIndex(entry.Value);
+                if (lastBlockIndex.HasValue)
+                {
+                    var feedId = FeedIdHandler.CreateFromString(entry.Name!);
+                    result[feedId] = new BlockIndex(lastBlockIndex.Value);
+                }
+            }
+
+            Interlocked.Increment(ref _cacheHits);
+            _logger.LogDebug(
+                "Cache hit for feed metadata hash user={UserId} count={Count}",
+                userId,
+                result.Count);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _readErrors);
+            _logger.LogWarning(
+                ex,
+                "Failed to read feed metadata hash for user={UserId}. Returning null.",
+                userId);
+            return null;
+        }
     }
 
     /// <inheritdoc />
-    public Task<bool> SetLastBlockIndexAsync(string userId, FeedId feedId, BlockIndex lastBlockIndex)
+    public async Task<bool> SetLastBlockIndexAsync(string userId, FeedId feedId, BlockIndex lastBlockIndex)
     {
-        // Shell — implemented in Phase 4
-        throw new NotImplementedException("SetLastBlockIndexAsync will be implemented in Phase 4 (Task 4.1).");
+        if (string.IsNullOrEmpty(userId))
+            return false;
+
+        var key = GetKey(userId);
+
+        try
+        {
+            var json = SerializeLastBlockIndex(lastBlockIndex.Value);
+            await _database.HashSetAsync(key, feedId.ToString(), json);
+            await _database.KeyExpireAsync(key, FeedMetadataCacheConstants.CacheTtl);
+
+            Interlocked.Increment(ref _writeOperations);
+            _logger.LogDebug(
+                "Set feed metadata user={UserId} feed={FeedId} lastBlockIndex={LastBlockIndex}",
+                userId,
+                feedId,
+                lastBlockIndex.Value);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _writeErrors);
+            _logger.LogWarning(
+                ex,
+                "Failed to set feed metadata for user={UserId} feed={FeedId}. Continuing without cache.",
+                userId,
+                feedId);
+            return false;
+        }
     }
 
     /// <inheritdoc />
-    public Task<bool> SetMultipleLastBlockIndexesAsync(string userId, IReadOnlyDictionary<FeedId, BlockIndex> blockIndexes)
+    public async Task<bool> SetMultipleLastBlockIndexesAsync(string userId, IReadOnlyDictionary<FeedId, BlockIndex> blockIndexes)
     {
-        // Shell — implemented in Phase 4
-        throw new NotImplementedException("SetMultipleLastBlockIndexesAsync will be implemented in Phase 4 (Task 4.3).");
+        if (string.IsNullOrEmpty(userId) || blockIndexes == null || blockIndexes.Count == 0)
+            return false;
+
+        var key = GetKey(userId);
+
+        try
+        {
+            var entries = blockIndexes
+                .Select(p => new HashEntry(p.Key.ToString(), SerializeLastBlockIndex(p.Value.Value)))
+                .ToArray();
+
+            await _database.HashSetAsync(key, entries);
+            await _database.KeyExpireAsync(key, FeedMetadataCacheConstants.CacheTtl);
+
+            Interlocked.Increment(ref _writeOperations);
+            _logger.LogDebug(
+                "Bulk set feed metadata hash user={UserId} count={Count}",
+                userId,
+                blockIndexes.Count);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _writeErrors);
+            _logger.LogWarning(
+                ex,
+                "Failed to bulk set feed metadata for user={UserId}. Continuing without cache.",
+                userId);
+            return false;
+        }
     }
 
     /// <inheritdoc />
-    public Task<bool> RemoveFeedMetaAsync(string userId, FeedId feedId)
+    public async Task<bool> RemoveFeedMetaAsync(string userId, FeedId feedId)
     {
-        // Shell — implemented in Phase 4
-        throw new NotImplementedException("RemoveFeedMetaAsync will be implemented in Phase 4 (Task 4.4).");
+        if (string.IsNullOrEmpty(userId))
+            return false;
+
+        var key = GetKey(userId);
+
+        try
+        {
+            var removed = await _database.HashDeleteAsync(key, feedId.ToString());
+            _logger.LogDebug(
+                "Removed feed metadata user={UserId} feed={FeedId} removed={Removed}",
+                userId,
+                feedId,
+                removed);
+            return removed;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to remove feed metadata for user={UserId} feed={FeedId}. Continuing without cache.",
+                userId,
+                feedId);
+            return false;
+        }
     }
 
     /// <summary>
@@ -92,5 +213,35 @@ public class FeedMetadataCacheService : IFeedMetadataCacheService
     private string GetKey(string userId)
     {
         return $"{_keyPrefix}{FeedMetadataCacheConstants.GetFeedMetaHashKey(userId)}";
+    }
+
+    /// <summary>
+    /// Serializes a lastBlockIndex value to JSON format: {"lastBlockIndex": N}.
+    /// </summary>
+    private static string SerializeLastBlockIndex(long lastBlockIndex)
+    {
+        return JsonSerializer.Serialize(new { lastBlockIndex });
+    }
+
+    /// <summary>
+    /// Parses a lastBlockIndex from JSON format: {"lastBlockIndex": N}.
+    /// Returns null if parsing fails.
+    /// </summary>
+    private static long? ParseLastBlockIndex(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("lastBlockIndex", out var prop) && prop.TryGetInt64(out var value))
+                return value;
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
