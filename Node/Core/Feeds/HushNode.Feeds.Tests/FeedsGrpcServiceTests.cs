@@ -155,6 +155,15 @@ public class FeedsGrpcServiceTests
                 // feedIdWithoutPosition not in dictionary - should default to 0
             });
 
+        // FEAT-060: Mock feed metadata cache service for lastBlockIndex overlay
+        var mockFeedMetadataCacheService = mocker.GetMock<HushNode.Caching.IFeedMetadataCacheService>();
+        mockFeedMetadataCacheService
+            .Setup(x => x.GetAllLastBlockIndexesAsync(userAddress))
+            .ReturnsAsync(new Dictionary<FeedId, BlockIndex>
+            {
+                { feedIdWithPosition, new BlockIndex(200) } // Higher than PostgreSQL value of 100
+            });
+
         var mockIdentityService = mocker.GetMock<IIdentityService>();
         mockIdentityService
             .Setup(x => x.RetrieveIdentityAsync(userAddress))
@@ -171,9 +180,11 @@ public class FeedsGrpcServiceTests
 
         var feedWithPositionResult = result.Feeds.First(f => f.FeedId == feedIdWithPosition.ToString());
         feedWithPositionResult.LastReadBlockIndex.Should().Be(500, "Feed with read position should have LastReadBlockIndex = 500");
+        feedWithPositionResult.BlockIndex.Should().Be(200, "Feed BlockIndex should be overlayed from Redis when higher than PostgreSQL");
 
         var feedWithoutPositionResult = result.Feeds.First(f => f.FeedId == feedIdWithoutPosition.ToString());
         feedWithoutPositionResult.LastReadBlockIndex.Should().Be(0, "Feed without read position should have LastReadBlockIndex = 0");
+        feedWithoutPositionResult.BlockIndex.Should().Be(101, "Feed without Redis overlay should use PostgreSQL BlockIndex");
     }
 
     [Fact]
@@ -202,6 +213,12 @@ public class FeedsGrpcServiceTests
             .Setup(x => x.GetReadPositionsForUserAsync(userAddress))
             .ThrowsAsync(new Exception("Redis connection failed"));
 
+        // FEAT-060: Mock feed metadata cache service returning null (Redis failure path)
+        var mockFeedMetadataCacheService = mocker.GetMock<HushNode.Caching.IFeedMetadataCacheService>();
+        mockFeedMetadataCacheService
+            .Setup(x => x.GetAllLastBlockIndexesAsync(userAddress))
+            .ReturnsAsync((IReadOnlyDictionary<FeedId, BlockIndex>?)null);
+
         var mockIdentityService = mocker.GetMock<IIdentityService>();
         mockIdentityService
             .Setup(x => x.RetrieveIdentityAsync(userAddress))
@@ -216,6 +233,7 @@ public class FeedsGrpcServiceTests
         // Assert - should still return feeds with default LastReadBlockIndex = 0
         result.Feeds.Should().HaveCount(1);
         result.Feeds[0].LastReadBlockIndex.Should().Be(0, "When read position service fails, LastReadBlockIndex should default to 0");
+        result.Feeds[0].BlockIndex.Should().Be(100, "When feed metadata cache misses, BlockIndex should use PostgreSQL value");
     }
 
     #endregion

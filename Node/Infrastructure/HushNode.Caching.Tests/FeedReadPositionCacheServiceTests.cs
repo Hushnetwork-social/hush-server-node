@@ -10,6 +10,7 @@ namespace HushNode.Caching.Tests;
 
 /// <summary>
 /// Tests for FeedReadPositionCacheService - caches user read positions in Redis.
+/// Tests cover HASH-based methods (FEAT-060) and legacy STRING methods (FEAT-051).
 /// Each test follows AAA pattern with isolated setup to prevent flaky tests.
 /// </summary>
 public class FeedReadPositionCacheServiceTests
@@ -17,42 +18,50 @@ public class FeedReadPositionCacheServiceTests
     private const string KeyPrefix = "HushFeeds:";
     private const string TestUserId = "0x1234567890abcdef";
     private static readonly FeedId TestFeedId = new(Guid.Parse("00000000-0000-0000-0000-000000000001"));
-    private static readonly string ExpectedKey = $"{KeyPrefix}user:{TestUserId}:read:{TestFeedId}";
+    private static readonly FeedId TestFeedId2 = new(Guid.Parse("00000000-0000-0000-0000-000000000002"));
+    private static readonly string ExpectedHashKey = $"{KeyPrefix}user:{TestUserId}:read_positions";
+    private static readonly string ExpectedLegacyKey = $"{KeyPrefix}user:{TestUserId}:read:{TestFeedId}";
 
-    #region GetReadPositionAsync Tests
+    #region GetAllReadPositionsAsync Tests (HASH — FEAT-060)
 
     [Fact]
-    public async Task GetReadPositionAsync_WhenValueExists_ReturnsCachedValue()
+    public async Task GetAllReadPositionsAsync_WhenHashExists_ReturnsCachedPositions()
     {
         // Arrange
         var (sut, databaseMock) = CreateCacheService();
-        var expectedBlockIndex = 500L;
+        var entries = new HashEntry[]
+        {
+            new(TestFeedId.ToString(), "500"),
+            new(TestFeedId2.ToString(), "300")
+        };
 
         databaseMock
-            .Setup(x => x.StringGetAsync(ExpectedKey, CommandFlags.None))
-            .ReturnsAsync(expectedBlockIndex.ToString());
+            .Setup(x => x.HashGetAllAsync(ExpectedHashKey, CommandFlags.None))
+            .ReturnsAsync(entries);
 
         // Act
-        var result = await sut.GetReadPositionAsync(TestUserId, TestFeedId);
+        var result = await sut.GetAllReadPositionsAsync(TestUserId);
 
         // Assert
         result.Should().NotBeNull();
-        result!.Value.Should().Be(expectedBlockIndex);
+        result!.Count.Should().Be(2);
+        result[TestFeedId].Value.Should().Be(500);
+        result[TestFeedId2].Value.Should().Be(300);
         sut.CacheHits.Should().Be(1);
     }
 
     [Fact]
-    public async Task GetReadPositionAsync_WhenKeyNotExists_ReturnsNull()
+    public async Task GetAllReadPositionsAsync_WhenHashEmpty_ReturnsNull()
     {
         // Arrange
         var (sut, databaseMock) = CreateCacheService();
 
         databaseMock
-            .Setup(x => x.StringGetAsync(ExpectedKey, CommandFlags.None))
-            .ReturnsAsync(RedisValue.Null);
+            .Setup(x => x.HashGetAllAsync(ExpectedHashKey, CommandFlags.None))
+            .ReturnsAsync(Array.Empty<HashEntry>());
 
         // Act
-        var result = await sut.GetReadPositionAsync(TestUserId, TestFeedId);
+        var result = await sut.GetAllReadPositionsAsync(TestUserId);
 
         // Assert
         result.Should().BeNull();
@@ -60,43 +69,43 @@ public class FeedReadPositionCacheServiceTests
     }
 
     [Fact]
-    public async Task GetReadPositionAsync_WhenUserIdIsNull_ReturnsNull()
+    public async Task GetAllReadPositionsAsync_WhenUserIdIsNull_ReturnsNull()
     {
         // Arrange
         var (sut, _) = CreateCacheService();
 
         // Act
-        var result = await sut.GetReadPositionAsync(null!, TestFeedId);
+        var result = await sut.GetAllReadPositionsAsync(null!);
 
         // Assert
         result.Should().BeNull();
     }
 
     [Fact]
-    public async Task GetReadPositionAsync_WhenUserIdIsEmpty_ReturnsNull()
+    public async Task GetAllReadPositionsAsync_WhenUserIdIsEmpty_ReturnsNull()
     {
         // Arrange
         var (sut, _) = CreateCacheService();
 
         // Act
-        var result = await sut.GetReadPositionAsync(string.Empty, TestFeedId);
+        var result = await sut.GetAllReadPositionsAsync(string.Empty);
 
         // Assert
         result.Should().BeNull();
     }
 
     [Fact]
-    public async Task GetReadPositionAsync_WhenRedisThrows_ReturnsNullAndLogsError()
+    public async Task GetAllReadPositionsAsync_WhenRedisThrows_ReturnsNullAndLogsError()
     {
         // Arrange
         var (sut, databaseMock) = CreateCacheService();
 
         databaseMock
-            .Setup(x => x.StringGetAsync(ExpectedKey, CommandFlags.None))
+            .Setup(x => x.HashGetAllAsync(ExpectedHashKey, CommandFlags.None))
             .ThrowsAsync(new RedisConnectionException(ConnectionFailureType.UnableToConnect, "Test error"));
 
         // Act
-        var result = await sut.GetReadPositionAsync(TestUserId, TestFeedId);
+        var result = await sut.GetAllReadPositionsAsync(TestUserId);
 
         // Assert
         result.Should().BeNull();
@@ -104,108 +113,147 @@ public class FeedReadPositionCacheServiceTests
     }
 
     [Fact]
-    public async Task GetReadPositionAsync_WhenValueIsInvalid_ReturnsNullAndLogsMiss()
+    public async Task GetAllReadPositionsAsync_WhenValueIsInvalid_SkipsEntry()
     {
         // Arrange
         var (sut, databaseMock) = CreateCacheService();
+        var entries = new HashEntry[]
+        {
+            new(TestFeedId.ToString(), "500"),
+            new(TestFeedId2.ToString(), "not-a-number")
+        };
 
         databaseMock
-            .Setup(x => x.StringGetAsync(ExpectedKey, CommandFlags.None))
-            .ReturnsAsync("not-a-number");
+            .Setup(x => x.HashGetAllAsync(ExpectedHashKey, CommandFlags.None))
+            .ReturnsAsync(entries);
 
         // Act
-        var result = await sut.GetReadPositionAsync(TestUserId, TestFeedId);
+        var result = await sut.GetAllReadPositionsAsync(TestUserId);
 
         // Assert
-        result.Should().BeNull();
-        sut.CacheMisses.Should().Be(1);
+        result.Should().NotBeNull();
+        result!.Count.Should().Be(1);
+        result[TestFeedId].Value.Should().Be(500);
+        sut.CacheHits.Should().Be(1);
     }
 
     #endregion
 
-    #region SetReadPositionAsync Tests
+    #region SetReadPositionWithMaxWinsAsync Tests (Lua — FEAT-060)
 
     [Fact]
-    public async Task SetReadPositionAsync_SetsValueWithTtl()
+    public async Task SetReadPositionWithMaxWinsAsync_WhenUpdateSucceeds_ReturnsTrueAndRefreshesTtl()
     {
         // Arrange
         var (sut, databaseMock) = CreateCacheService();
         var blockIndex = new BlockIndex(500);
 
         databaseMock
-            .Setup(x => x.StringSetAsync(
-                ExpectedKey,
-                "500",
+            .Setup(x => x.ScriptEvaluateAsync(
+                It.IsAny<string>(),
+                It.IsAny<RedisKey[]?>(),
+                It.IsAny<RedisValue[]?>(),
+                CommandFlags.None))
+            .ReturnsAsync(RedisResult.Create((RedisValue)1));
+
+        databaseMock
+            .Setup(x => x.KeyExpireAsync(
+                ExpectedHashKey,
                 FeedReadPositionCacheConstants.CacheTtl,
-                false,
-                When.Always,
+                ExpireWhen.Always,
                 CommandFlags.None))
             .ReturnsAsync(true);
 
         // Act
-        var result = await sut.SetReadPositionAsync(TestUserId, TestFeedId, blockIndex);
+        var result = await sut.SetReadPositionWithMaxWinsAsync(TestUserId, TestFeedId, blockIndex);
 
         // Assert
         result.Should().BeTrue();
         sut.WriteOperations.Should().Be(1);
         databaseMock.Verify(
-            x => x.StringSetAsync(
-                ExpectedKey,
-                "500",
+            x => x.KeyExpireAsync(
+                ExpectedHashKey,
                 FeedReadPositionCacheConstants.CacheTtl,
-                false,
-                When.Always,
+                ExpireWhen.Always,
                 CommandFlags.None),
             Times.Once);
     }
 
     [Fact]
-    public async Task SetReadPositionAsync_WhenUserIdIsNull_ReturnsFalse()
+    public async Task SetReadPositionWithMaxWinsAsync_WhenCurrentIsHigher_ReturnsFalseAndDoesNotRefreshTtl()
+    {
+        // Arrange
+        var (sut, databaseMock) = CreateCacheService();
+        var blockIndex = new BlockIndex(100);
+
+        databaseMock
+            .Setup(x => x.ScriptEvaluateAsync(
+                It.IsAny<string>(),
+                It.IsAny<RedisKey[]?>(),
+                It.IsAny<RedisValue[]?>(),
+                CommandFlags.None))
+            .ReturnsAsync(RedisResult.Create((RedisValue)0));
+
+        // Act
+        var result = await sut.SetReadPositionWithMaxWinsAsync(TestUserId, TestFeedId, blockIndex);
+
+        // Assert
+        result.Should().BeFalse();
+        sut.WriteOperations.Should().Be(1);
+        databaseMock.Verify(
+            x => x.KeyExpireAsync(
+                It.IsAny<RedisKey>(),
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<ExpireWhen>(),
+                CommandFlags.None),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SetReadPositionWithMaxWinsAsync_WhenUserIdIsNull_ReturnsFalse()
     {
         // Arrange
         var (sut, _) = CreateCacheService();
         var blockIndex = new BlockIndex(500);
 
         // Act
-        var result = await sut.SetReadPositionAsync(null!, TestFeedId, blockIndex);
+        var result = await sut.SetReadPositionWithMaxWinsAsync(null!, TestFeedId, blockIndex);
 
         // Assert
         result.Should().BeFalse();
     }
 
     [Fact]
-    public async Task SetReadPositionAsync_WhenUserIdIsEmpty_ReturnsFalse()
+    public async Task SetReadPositionWithMaxWinsAsync_WhenUserIdIsEmpty_ReturnsFalse()
     {
         // Arrange
         var (sut, _) = CreateCacheService();
         var blockIndex = new BlockIndex(500);
 
         // Act
-        var result = await sut.SetReadPositionAsync(string.Empty, TestFeedId, blockIndex);
+        var result = await sut.SetReadPositionWithMaxWinsAsync(string.Empty, TestFeedId, blockIndex);
 
         // Assert
         result.Should().BeFalse();
     }
 
     [Fact]
-    public async Task SetReadPositionAsync_WhenRedisThrows_ReturnsFalseAndLogsError()
+    public async Task SetReadPositionWithMaxWinsAsync_WhenRedisThrows_ReturnsFalseAndLogsError()
     {
         // Arrange
         var (sut, databaseMock) = CreateCacheService();
         var blockIndex = new BlockIndex(500);
 
         databaseMock
-            .Setup(x => x.StringSetAsync(
-                ExpectedKey,
-                "500",
-                FeedReadPositionCacheConstants.CacheTtl,
-                false,
-                When.Always,
+            .Setup(x => x.ScriptEvaluateAsync(
+                It.IsAny<string>(),
+                It.IsAny<RedisKey[]?>(),
+                It.IsAny<RedisValue[]?>(),
                 CommandFlags.None))
             .ThrowsAsync(new RedisConnectionException(ConnectionFailureType.UnableToConnect, "Test error"));
 
         // Act
-        var result = await sut.SetReadPositionAsync(TestUserId, TestFeedId, blockIndex);
+        var result = await sut.SetReadPositionWithMaxWinsAsync(TestUserId, TestFeedId, blockIndex);
 
         // Assert
         result.Should().BeFalse();
@@ -214,7 +262,108 @@ public class FeedReadPositionCacheServiceTests
 
     #endregion
 
-    #region InvalidateCacheAsync Tests
+    #region SetAllReadPositionsAsync Tests (HMSET — FEAT-060)
+
+    [Fact]
+    public async Task SetAllReadPositionsAsync_WhenPositionsExist_SetsHashAndTtl()
+    {
+        // Arrange
+        var (sut, databaseMock) = CreateCacheService();
+        var positions = new Dictionary<FeedId, BlockIndex>
+        {
+            { TestFeedId, new BlockIndex(500) },
+            { TestFeedId2, new BlockIndex(300) }
+        };
+
+        databaseMock
+            .Setup(x => x.HashSetAsync(ExpectedHashKey, It.IsAny<HashEntry[]>(), CommandFlags.None))
+            .Returns(Task.CompletedTask);
+
+        databaseMock
+            .Setup(x => x.KeyExpireAsync(
+                ExpectedHashKey,
+                FeedReadPositionCacheConstants.CacheTtl,
+                ExpireWhen.Always,
+                CommandFlags.None))
+            .ReturnsAsync(true);
+
+        // Act
+        var result = await sut.SetAllReadPositionsAsync(TestUserId, positions);
+
+        // Assert
+        result.Should().BeTrue();
+        sut.WriteOperations.Should().Be(1);
+        databaseMock.Verify(
+            x => x.HashSetAsync(
+                ExpectedHashKey,
+                It.Is<HashEntry[]>(e => e.Length == 2),
+                CommandFlags.None),
+            Times.Once);
+        databaseMock.Verify(
+            x => x.KeyExpireAsync(
+                ExpectedHashKey,
+                FeedReadPositionCacheConstants.CacheTtl,
+                ExpireWhen.Always,
+                CommandFlags.None),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SetAllReadPositionsAsync_WhenUserIdIsNull_ReturnsFalse()
+    {
+        // Arrange
+        var (sut, _) = CreateCacheService();
+        var positions = new Dictionary<FeedId, BlockIndex>
+        {
+            { TestFeedId, new BlockIndex(500) }
+        };
+
+        // Act
+        var result = await sut.SetAllReadPositionsAsync(null!, positions);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SetAllReadPositionsAsync_WhenPositionsEmpty_ReturnsFalse()
+    {
+        // Arrange
+        var (sut, _) = CreateCacheService();
+        var positions = new Dictionary<FeedId, BlockIndex>();
+
+        // Act
+        var result = await sut.SetAllReadPositionsAsync(TestUserId, positions);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SetAllReadPositionsAsync_WhenRedisThrows_ReturnsFalseAndLogsError()
+    {
+        // Arrange
+        var (sut, databaseMock) = CreateCacheService();
+        var positions = new Dictionary<FeedId, BlockIndex>
+        {
+            { TestFeedId, new BlockIndex(500) }
+        };
+
+        databaseMock
+            .Setup(x => x.HashSetAsync(ExpectedHashKey, It.IsAny<HashEntry[]>(), CommandFlags.None))
+            .ThrowsAsync(new RedisConnectionException(ConnectionFailureType.UnableToConnect, "Test error"));
+
+        // Act
+        var result = await sut.SetAllReadPositionsAsync(TestUserId, positions);
+
+        // Assert
+        result.Should().BeFalse();
+        sut.WriteErrors.Should().Be(1);
+    }
+
+    #endregion
+
+    #region InvalidateCacheAsync Tests (Legacy STRING — FEAT-051)
 
     [Fact]
     public async Task InvalidateCacheAsync_DeletesKey()
@@ -223,7 +372,7 @@ public class FeedReadPositionCacheServiceTests
         var (sut, databaseMock) = CreateCacheService();
 
         databaseMock
-            .Setup(x => x.KeyDeleteAsync(ExpectedKey, CommandFlags.None))
+            .Setup(x => x.KeyDeleteAsync(ExpectedLegacyKey, CommandFlags.None))
             .ReturnsAsync(true);
 
         // Act
@@ -231,7 +380,7 @@ public class FeedReadPositionCacheServiceTests
 
         // Assert
         databaseMock.Verify(
-            x => x.KeyDeleteAsync(ExpectedKey, CommandFlags.None),
+            x => x.KeyDeleteAsync(ExpectedLegacyKey, CommandFlags.None),
             Times.Once);
     }
 
@@ -257,7 +406,7 @@ public class FeedReadPositionCacheServiceTests
         var (sut, databaseMock) = CreateCacheService();
 
         databaseMock
-            .Setup(x => x.KeyDeleteAsync(ExpectedKey, CommandFlags.None))
+            .Setup(x => x.KeyDeleteAsync(ExpectedLegacyKey, CommandFlags.None))
             .ThrowsAsync(new RedisConnectionException(ConnectionFailureType.UnableToConnect, "Test error"));
 
         // Act
