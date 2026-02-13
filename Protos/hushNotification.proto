@@ -53,6 +53,9 @@ message FeedEvent {
 
   // Timestamp (Unix milliseconds)
   int64 TimestampUnixMs = 7;
+
+  // FEAT-063: For MESSAGES_READ events - block index up to which user has read
+  int64 UpToBlockIndex = 8;
 }
 
 // Mark as read request

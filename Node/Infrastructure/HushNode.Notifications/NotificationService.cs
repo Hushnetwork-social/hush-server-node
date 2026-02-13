@@ -132,7 +132,7 @@ public class NotificationService : INotificationService
     }
 
     /// <inheritdoc />
-    public async Task PublishMessagesReadAsync(string userId, string feedId)
+    public async Task PublishMessagesReadAsync(string userId, string feedId, long upToBlockIndex)
     {
         try
         {
@@ -141,6 +141,7 @@ public class NotificationService : INotificationService
                 Type = EventType.MessagesRead,
                 FeedId = feedId,
                 UnreadCount = 0,
+                UpToBlockIndex = upToBlockIndex,
                 Timestamp = DateTime.UtcNow
             };
 

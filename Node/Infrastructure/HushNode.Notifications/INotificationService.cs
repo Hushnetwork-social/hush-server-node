@@ -35,9 +35,11 @@ public interface INotificationService
 
     /// <summary>
     /// Publish a "messages read" event to all connected devices.
-    /// This clears badges on other devices when user reads on one device.
+    /// This updates badges on other devices when user reads on one device.
+    /// FEAT-063: Includes upToBlockIndex so receiving devices can calculate remaining unreads.
     /// </summary>
     /// <param name="userId">The user ID.</param>
     /// <param name="feedId">The feed ID that was marked as read.</param>
-    Task PublishMessagesReadAsync(string userId, string feedId);
+    /// <param name="upToBlockIndex">The block index up to which messages were read.</param>
+    Task PublishMessagesReadAsync(string userId, string feedId, long upToBlockIndex);
 }

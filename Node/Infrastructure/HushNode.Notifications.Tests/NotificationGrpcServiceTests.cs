@@ -731,7 +731,7 @@ public class NotificationGrpcServiceTests
             .Returns(Task.CompletedTask);
 
         mocker.GetMock<INotificationService>()
-            .Setup(x => x.PublishMessagesReadAsync(TestUserId, TestFeedId))
+            .Setup(x => x.PublishMessagesReadAsync(TestUserId, TestFeedId, 500))
             .Returns(Task.CompletedTask);
 
         var service = mocker.CreateInstance<NotificationGrpcService>();
@@ -769,7 +769,7 @@ public class NotificationGrpcServiceTests
             .Returns(Task.CompletedTask);
 
         mocker.GetMock<INotificationService>()
-            .Setup(x => x.PublishMessagesReadAsync(TestUserId, TestFeedId))
+            .Setup(x => x.PublishMessagesReadAsync(TestUserId, TestFeedId, 0))
             .Returns(Task.CompletedTask);
 
         var service = mocker.CreateInstance<NotificationGrpcService>();
@@ -896,7 +896,7 @@ public class NotificationGrpcServiceTests
             .Returns(Task.CompletedTask);
 
         notificationServiceMock
-            .Setup(x => x.PublishMessagesReadAsync(TestUserId, TestFeedId))
+            .Setup(x => x.PublishMessagesReadAsync(TestUserId, TestFeedId, 500))
             .Returns(Task.CompletedTask);
 
         var service = mocker.CreateInstance<NotificationGrpcService>();
@@ -918,9 +918,50 @@ public class NotificationGrpcServiceTests
             "UnreadTrackingService.MarkFeedAsReadAsync should always be called");
 
         notificationServiceMock.Verify(
-            x => x.PublishMessagesReadAsync(TestUserId, TestFeedId),
+            x => x.PublishMessagesReadAsync(TestUserId, TestFeedId, 500),
             Times.Once,
-            "NotificationService.PublishMessagesReadAsync should always be called");
+            "NotificationService.PublishMessagesReadAsync should always be called with upToBlockIndex");
+    }
+
+    [Fact]
+    public async Task MarkFeedAsRead_PassesUpToBlockIndexToPublishMessagesReadAsync()
+    {
+        // Arrange - FEAT-063: Verify upToBlockIndex is passed through to notification service
+        var mocker = new AutoMocker();
+        var notificationServiceMock = mocker.GetMock<INotificationService>();
+
+        mocker.GetMock<IFeedReadPositionStorageService>()
+            .Setup(x => x.MarkFeedAsReadAsync(
+                It.IsAny<string>(),
+                It.IsAny<FeedId>(),
+                It.IsAny<BlockIndex>()))
+            .ReturnsAsync(true);
+
+        mocker.GetMock<IUnreadTrackingService>()
+            .Setup(x => x.MarkFeedAsReadAsync(TestUserId, TestFeedId))
+            .Returns(Task.CompletedTask);
+
+        notificationServiceMock
+            .Setup(x => x.PublishMessagesReadAsync(TestUserId, TestFeedId, 800))
+            .Returns(Task.CompletedTask);
+
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+        var request = new ProtoTypes.MarkFeedAsReadRequest
+        {
+            UserId = TestUserId,
+            FeedId = TestFeedId,
+            UpToBlockIndex = 800
+        };
+        var context = CreateMockServerCallContext(CancellationToken.None);
+
+        // Act
+        await service.MarkFeedAsRead(request, context);
+
+        // Assert - FEAT-063: upToBlockIndex must be passed through
+        notificationServiceMock.Verify(
+            x => x.PublishMessagesReadAsync(TestUserId, TestFeedId, 800),
+            Times.Once,
+            "PublishMessagesReadAsync must receive the exact upToBlockIndex from the request");
     }
 
     #endregion

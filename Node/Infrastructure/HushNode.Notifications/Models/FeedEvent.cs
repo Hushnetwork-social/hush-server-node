@@ -39,4 +39,9 @@ public class FeedEvent
     /// UTC timestamp when the event occurred.
     /// </summary>
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// FEAT-063: For MessagesRead events - block index up to which user has read.
+    /// </summary>
+    public long UpToBlockIndex { get; set; }
 }

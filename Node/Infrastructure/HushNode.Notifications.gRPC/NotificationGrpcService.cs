@@ -144,8 +144,8 @@ public class NotificationGrpcService(
             // Reset unread count in Redis (existing behavior)
             await _unreadTrackingService.MarkFeedAsReadAsync(request.UserId, request.FeedId);
 
-            // Publish event to all connected devices (existing behavior)
-            await _notificationService.PublishMessagesReadAsync(request.UserId, request.FeedId);
+            // FEAT-063: Publish event with upToBlockIndex so receiving devices can calculate remaining unreads
+            await _notificationService.PublishMessagesReadAsync(request.UserId, request.FeedId, request.UpToBlockIndex);
 
             return new ProtoTypes.MarkFeedAsReadReply { Success = true, Message = string.Empty };
         }
@@ -406,7 +406,8 @@ public class NotificationGrpcService(
             SenderName = internalEvent.SenderName ?? string.Empty,
             MessagePreview = internalEvent.MessagePreview ?? string.Empty,
             UnreadCount = internalEvent.UnreadCount ?? 0,
-            TimestampUnixMs = new DateTimeOffset(internalEvent.Timestamp).ToUnixTimeMilliseconds()
+            TimestampUnixMs = new DateTimeOffset(internalEvent.Timestamp).ToUnixTimeMilliseconds(),
+            UpToBlockIndex = internalEvent.UpToBlockIndex
         };
 
         // Add all counts for sync events
