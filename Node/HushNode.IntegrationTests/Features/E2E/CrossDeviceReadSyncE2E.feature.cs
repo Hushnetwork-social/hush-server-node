@@ -227,6 +227,204 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Reading a feed does not change sort order")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-063 Cross-Device Read Sync E2E")]
+        [Xunit.TraitAttribute("Description", "Reading a feed does not change sort order")]
+        [Xunit.TraitAttribute("Category", "F3-E2E-003")]
+        public void ReadingAFeedDoesNotChangeSortOrder()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "F3-E2E-003"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Reading a feed does not change sort order", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 57
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 59
+        testRunner.Given("a browser context for \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 60
+        testRunner.And("\"Alice\" has created identity via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 61
+        testRunner.And("Alice has a backend ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 62
+        testRunner.And("Alice has a backend ChatFeed with \"Charlie\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 64
+        testRunner.When("Bob sends a confirmed backend message \"Hi\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 65
+        testRunner.And("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 66
+        testRunner.Then("the feed list should show ChatFeed with \"Bob\" above ChatFeed with \"Charlie\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 68
+        testRunner.When("Alice opens ChatFeed with \"Bob\" in browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 69
+        testRunner.And("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 70
+        testRunner.Then("the feed list should NOT show unread badge on ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 72
+        testRunner.Then("the feed list should show ChatFeed with \"Bob\" above ChatFeed with \"Charlie\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Messages arriving between read and sync are counted as unread")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-063 Cross-Device Read Sync E2E")]
+        [Xunit.TraitAttribute("Description", "Messages arriving between read and sync are counted as unread")]
+        [Xunit.TraitAttribute("Category", "F3-E2E-004")]
+        public void MessagesArrivingBetweenReadAndSyncAreCountedAsUnread()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "F3-E2E-004"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Messages arriving between read and sync are counted as unread", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 76
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 78
+        testRunner.Given("a browser context for \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 79
+        testRunner.And("\"Alice\" has created identity via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 80
+        testRunner.And("Alice has a backend ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 82
+        testRunner.When("Bob sends a confirmed backend message \"Msg 1\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 83
+        testRunner.And("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 85
+        testRunner.When("Alice opens ChatFeed with \"Bob\" in browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 86
+        testRunner.And("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 87
+        testRunner.Then("the feed list should NOT show unread badge on ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 89
+        testRunner.When("Alice opens her personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 90
+        testRunner.When("Bob sends a confirmed backend message \"Msg 2\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 91
+        testRunner.When("Bob sends a confirmed backend message \"Msg 3\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 92
+        testRunner.And("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 94
+        testRunner.Then("the feed list should show unread badge on ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Concurrent read positions converge to highest watermark")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-063 Cross-Device Read Sync E2E")]
+        [Xunit.TraitAttribute("Description", "Concurrent read positions converge to highest watermark")]
+        [Xunit.TraitAttribute("Category", "F3-E2E-005")]
+        public void ConcurrentReadPositionsConvergeToHighestWatermark()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "F3-E2E-005"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Concurrent read positions converge to highest watermark", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 98
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 100
+        testRunner.Given("a browser context for \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 101
+        testRunner.And("\"Alice\" has created identity via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 102
+        testRunner.And("Alice has a backend ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 104
+        testRunner.When("Bob sends a confirmed backend message \"Msg A\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 105
+        testRunner.When("Bob sends a confirmed backend message \"Msg B\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 106
+        testRunner.And("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 107
+        testRunner.Then("the feed list should show unread badge on ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 109
+        testRunner.Given("a second browser context for \"Alice\" as \"DeviceB\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 110
+        testRunner.When("DeviceB triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 111
+        testRunner.Then("\"DeviceB\" feed list should show unread badge on ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 113
+        testRunner.When("Alice opens ChatFeed with \"Bob\" in browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 114
+        testRunner.And("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 115
+        testRunner.Then("the feed list should NOT show unread badge on ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 117
+        testRunner.When("DeviceB triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 118
+        testRunner.Then("\"DeviceB\" feed list should NOT show unread badge on ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable

@@ -51,3 +51,68 @@ Feature: FEAT-063 Cross-Device Read Sync E2E
         And Alice triggers feed sync
         # Device A should show 1 unread (new message after read)
         Then the feed list should show unread badge on ChatFeed with "Bob"
+
+    # CF-002: Reading a feed should NOT change sort order
+    @F3-E2E-003
+    Scenario: Reading a feed does not change sort order
+        # Setup: Alice creates identity on DeviceA
+        Given a browser context for "Alice"
+        And "Alice" has created identity via browser
+        And Alice has a backend ChatFeed with "Bob"
+        And Alice has a backend ChatFeed with "Charlie"
+        # Bob's feed gets a message at higher blockIndex -> appears above Charlie
+        When Bob sends a confirmed backend message "Hi" to ChatFeed(Alice,Bob)
+        And Alice triggers feed sync
+        Then the feed list should show ChatFeed with "Bob" above ChatFeed with "Charlie"
+        # Alice reads Bob's feed
+        When Alice opens ChatFeed with "Bob" in browser
+        And Alice triggers feed sync
+        Then the feed list should NOT show unread badge on ChatFeed with "Bob"
+        # Sort order unchanged after read
+        Then the feed list should show ChatFeed with "Bob" above ChatFeed with "Charlie"
+
+    # EC-003: Messages arrive between read event and next sync on Device B
+    @F3-E2E-004
+    Scenario: Messages arriving between read and sync are counted as unread
+        # Setup: Alice creates identity on DeviceA
+        Given a browser context for "Alice"
+        And "Alice" has created identity via browser
+        And Alice has a backend ChatFeed with "Bob"
+        # Bob sends first message
+        When Bob sends a confirmed backend message "Msg 1" to ChatFeed(Alice,Bob)
+        And Alice triggers feed sync
+        # Alice reads the feed
+        When Alice opens ChatFeed with "Bob" in browser
+        And Alice triggers feed sync
+        Then the feed list should NOT show unread badge on ChatFeed with "Bob"
+        # Alice navigates away, then Bob sends 2 more messages before next sync
+        When Alice opens her personal feed
+        When Bob sends a confirmed backend message "Msg 2" to ChatFeed(Alice,Bob)
+        When Bob sends a confirmed backend message "Msg 3" to ChatFeed(Alice,Bob)
+        And Alice triggers feed sync
+        # Should show unread (2 messages after read position)
+        Then the feed list should show unread badge on ChatFeed with "Bob"
+
+    # EC-006: Concurrent read position updates converge to max watermark
+    @F3-E2E-005
+    Scenario: Concurrent read positions converge to highest watermark
+        # Setup: Alice creates identity on DeviceA
+        Given a browser context for "Alice"
+        And "Alice" has created identity via browser
+        And Alice has a backend ChatFeed with "Bob"
+        # Bob sends 2 messages
+        When Bob sends a confirmed backend message "Msg A" to ChatFeed(Alice,Bob)
+        When Bob sends a confirmed backend message "Msg B" to ChatFeed(Alice,Bob)
+        And Alice triggers feed sync
+        Then the feed list should show unread badge on ChatFeed with "Bob"
+        # Create DeviceB
+        Given a second browser context for "Alice" as "DeviceB"
+        When DeviceB triggers sync
+        Then "DeviceB" feed list should show unread badge on ChatFeed with "Bob"
+        # Alice reads on Device A (reads all messages)
+        When Alice opens ChatFeed with "Bob" in browser
+        And Alice triggers feed sync
+        Then the feed list should NOT show unread badge on ChatFeed with "Bob"
+        # Device B syncs and should converge to same read position
+        When DeviceB triggers sync
+        Then "DeviceB" feed list should NOT show unread badge on ChatFeed with "Bob"
