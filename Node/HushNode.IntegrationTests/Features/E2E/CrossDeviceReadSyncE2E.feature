@@ -44,6 +44,8 @@ Feature: FEAT-063 Cross-Device Read Sync E2E
         When Alice opens ChatFeed with "Bob" in browser
         And Alice triggers feed sync
         Then the feed list should NOT show unread badge on ChatFeed with "Bob"
+        # Alice navigates away from Bob's chat (so new messages won't auto-read)
+        When Alice opens her personal feed
         # Bob sends another message after Alice read
         When Bob sends a confirmed backend message "Message 2" to ChatFeed(Alice,Bob)
         And Alice triggers feed sync

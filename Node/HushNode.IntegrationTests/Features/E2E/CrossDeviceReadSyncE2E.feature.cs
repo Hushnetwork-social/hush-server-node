@@ -212,12 +212,15 @@ namespace HushNode.IntegrationTests.Features.E2E
         testRunner.Then("the feed list should NOT show unread badge on ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 48
+        testRunner.When("Alice opens her personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 50
         testRunner.When("Bob sends a confirmed backend message \"Message 2\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 49
+#line 51
         testRunner.And("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 51
+#line 53
         testRunner.Then("the feed list should show unread badge on ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
