@@ -1,6 +1,9 @@
 using FluentAssertions;
+using HushNetwork.proto;
 using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
+using HushShared.Feeds.Model;
+using HushServerNode.Testing;
 using Microsoft.Playwright;
 using TechTalk.SpecFlow;
 
@@ -15,9 +18,6 @@ namespace HushNode.IntegrationTests.StepDefinitions.E2E;
 [Binding]
 internal sealed class CrossDeviceReadSyncSteps : BrowserStepsBase
 {
-    private const string DeviceBPageKey = "E2E_Page_DeviceB";
-    private const string DeviceBContextKey = "E2E_Context_DeviceB";
-
     public CrossDeviceReadSyncSteps(ScenarioContext scenarioContext) : base(scenarioContext)
     {
     }
@@ -78,25 +78,40 @@ internal sealed class CrossDeviceReadSyncSteps : BrowserStepsBase
     }
 
     // =========================================================================
-    // When Steps: Device-specific sync triggers
+    // When Steps: Backend messages from Bob
     // =========================================================================
 
     /// <summary>
-    /// Triggers sync on a named device context.
+    /// Sends a confirmed backend message AS BOB to Alice's ChatFeed.
+    /// Bob's messages create unreads for Alice (unlike Alice sending to herself).
     /// </summary>
-    [Given(@"""(.*)"" triggers sync")]
-    [When(@"""(.*)"" triggers sync")]
-    public async Task WhenDeviceTriggersSync(string deviceName)
+    [Given(@"Bob sends a confirmed backend message ""(.*)"" to ChatFeed\(Alice,Bob\)")]
+    [When(@"Bob sends a confirmed backend message ""(.*)"" to ChatFeed\(Alice,Bob\)")]
+    public async Task WhenBobSendsConfirmedBackendMessage(string message)
     {
-        var page = GetDevicePage(deviceName);
+        Console.WriteLine($"[E2E ReadSync] Bob sending confirmed backend message '{message}'...");
 
-        Console.WriteLine($"[E2E ReadSync] '{deviceName}' triggering sync...");
-        await TriggerSyncAsync(page);
+        var bobIdentity = TestIdentities.Bob;
+        var chatKey = GetChatFeedKey("Alice", "Bob");
+        var feedId = (FeedId)ScenarioContext[$"E2E_ChatFeed_{chatKey}"];
+        var aesKey = (string)ScenarioContext[$"E2E_ChatFeedAesKey_{chatKey}"];
 
-        // Wait for feeds to render after sync
-        await Task.Delay(2000);
+        var grpcFactory = GetGrpcFactory();
+        var blockchainClient = grpcFactory.CreateClient<HushBlockchain.HushBlockchainClient>();
 
-        Console.WriteLine($"[E2E ReadSync] '{deviceName}' sync complete");
+        var signedTxJson = TestTransactionFactory.CreateFeedMessage(bobIdentity, feedId, message, aesKey);
+
+        var response = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTxJson
+        });
+        response.Successfull.Should().BeTrue($"Bob's message submission should succeed: {response.Message}");
+
+        // Produce block to confirm the message
+        var blockControl = GetBlockControl();
+        await blockControl.ProduceBlockAsync();
+
+        Console.WriteLine($"[E2E ReadSync] Bob's message '{message}' confirmed in block");
     }
 
     // =========================================================================
@@ -235,5 +250,22 @@ internal sealed class CrossDeviceReadSyncSteps : BrowserStepsBase
             name.ToLowerInvariant(), "[^a-z0-9]", "-");
         sanitized = System.Text.RegularExpressions.Regex.Replace(sanitized, "-+", "-");
         return sanitized.Trim('-');
+    }
+
+    private GrpcClientFactory GetGrpcFactory()
+    {
+        if (ScenarioContext.TryGetValue(ScenarioHooks.GrpcFactoryKey, out var factoryObj)
+            && factoryObj is GrpcClientFactory grpcFactory)
+        {
+            return grpcFactory;
+        }
+        throw new InvalidOperationException("GrpcClientFactory not found in ScenarioContext.");
+    }
+
+    private static string GetChatFeedKey(string user1, string user2)
+    {
+        var names = new[] { user1.Trim().ToLowerInvariant(), user2.Trim().ToLowerInvariant() };
+        Array.Sort(names);
+        return $"{names[0]}_{names[1]}";
     }
 }

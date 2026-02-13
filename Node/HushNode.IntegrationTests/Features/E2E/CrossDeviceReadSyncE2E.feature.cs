@@ -131,7 +131,7 @@ namespace HushNode.IntegrationTests.Features.E2E
         testRunner.And("Alice has a backend ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 19
-        testRunner.When("Alice sends a confirmed backend message \"Hello from Bob\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+        testRunner.When("Bob sends a confirmed backend message \"Hello from Bob\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 20
         testRunner.And("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
@@ -143,7 +143,7 @@ namespace HushNode.IntegrationTests.Features.E2E
         testRunner.Given("a second browser context for \"Alice\" as \"DeviceB\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
 #line 24
-        testRunner.And("\"DeviceB\" triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.When("DeviceB triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 25
         testRunner.Then("\"DeviceB\" feed list should show unread badge on ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
@@ -155,7 +155,7 @@ namespace HushNode.IntegrationTests.Features.E2E
         testRunner.And("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 30
-        testRunner.When("\"DeviceB\" triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+        testRunner.When("DeviceB triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 31
         testRunner.Then("\"DeviceB\" feed list should NOT show unread badge on ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
@@ -197,7 +197,7 @@ namespace HushNode.IntegrationTests.Features.E2E
         testRunner.And("Alice has a backend ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 41
-        testRunner.When("Alice sends a confirmed backend message \"Message 1\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+        testRunner.When("Bob sends a confirmed backend message \"Message 1\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 42
         testRunner.And("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
@@ -212,7 +212,7 @@ namespace HushNode.IntegrationTests.Features.E2E
         testRunner.Then("the feed list should NOT show unread badge on ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 48
-        testRunner.When("Alice sends a confirmed backend message \"Message 2\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+        testRunner.When("Bob sends a confirmed backend message \"Message 2\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 49
         testRunner.And("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");

@@ -16,18 +16,18 @@ Feature: FEAT-063 Cross-Device Read Sync E2E
         And "Alice" has created identity via browser
         And Alice has a backend ChatFeed with "Bob"
         # Bob sends a message to create unread for Alice
-        When Alice sends a confirmed backend message "Hello from Bob" to ChatFeed(Alice,Bob)
+        When Bob sends a confirmed backend message "Hello from Bob" to ChatFeed(Alice,Bob)
         And Alice triggers feed sync
         Then the feed list should show unread badge on ChatFeed with "Bob"
         # Create Device B with same credentials
         Given a second browser context for "Alice" as "DeviceB"
-        And "DeviceB" triggers sync
+        When DeviceB triggers sync
         Then "DeviceB" feed list should show unread badge on ChatFeed with "Bob"
         # Alice reads on Device A (primary context)
         When Alice opens ChatFeed with "Bob" in browser
         And Alice triggers feed sync
         # Verify Device B clears unread badge after sync
-        When "DeviceB" triggers sync
+        When DeviceB triggers sync
         Then "DeviceB" feed list should NOT show unread badge on ChatFeed with "Bob"
 
     # Verify correct unread count when messages arrive after read
@@ -38,14 +38,14 @@ Feature: FEAT-063 Cross-Device Read Sync E2E
         And "Alice" has created identity via browser
         And Alice has a backend ChatFeed with "Bob"
         # Bob sends first message
-        When Alice sends a confirmed backend message "Message 1" to ChatFeed(Alice,Bob)
+        When Bob sends a confirmed backend message "Message 1" to ChatFeed(Alice,Bob)
         And Alice triggers feed sync
         # Alice reads on Device A
         When Alice opens ChatFeed with "Bob" in browser
         And Alice triggers feed sync
         Then the feed list should NOT show unread badge on ChatFeed with "Bob"
         # Bob sends another message after Alice read
-        When Alice sends a confirmed backend message "Message 2" to ChatFeed(Alice,Bob)
+        When Bob sends a confirmed backend message "Message 2" to ChatFeed(Alice,Bob)
         And Alice triggers feed sync
         # Device A should show 1 unread (new message after read)
         Then the feed list should show unread badge on ChatFeed with "Bob"
