@@ -63,5 +63,14 @@
         "ProjectId": "hushnetwork",
         "ServiceAccountPath": "./secrets/firebase-sa.json",
         "Enabled": true
+    },
+
+    "ApnsSettings": {
+        "Enabled": false,
+        "KeyId": "",
+        "TeamId": "",
+        "BundleId": "social.hushnetwork.feeds",
+        "PrivateKeyPath": "",
+        "UseSandbox": true
     }
 }

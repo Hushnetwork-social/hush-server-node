@@ -1,8 +1,9 @@
 namespace HushNode.PushNotifications.Exceptions;
 
 /// <summary>
-/// Exception thrown when an FCM device token is invalid, expired, or unregistered.
+/// Exception thrown when a push notification device token is invalid, expired, or unregistered.
 /// Used to signal that a token should be deactivated.
+/// Applies to both FCM (Android) and APNs (iOS) tokens.
 /// </summary>
 public class InvalidTokenException : Exception
 {
@@ -10,7 +11,7 @@ public class InvalidTokenException : Exception
     /// Initializes a new instance of <see cref="InvalidTokenException"/>.
     /// </summary>
     public InvalidTokenException()
-        : base("The FCM device token is invalid or has been unregistered.")
+        : base("The device token is invalid or has been unregistered.")
     {
     }
 
