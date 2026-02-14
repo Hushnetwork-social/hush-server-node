@@ -52,8 +52,8 @@ public class BanFromGroupFeedTransactionHandler(
         // Cache update is fire-and-forget - failure does not affect the transaction
         await this._userFeedsCacheService.RemoveFeedFromUserCacheAsync(payload.BannedUserPublicAddress, payload.FeedId);
 
-        // FEAT-060: Remove feed_meta entry for banned member
-        _ = this._feedMetadataCacheService.RemoveFeedMetaAsync(payload.BannedUserPublicAddress, payload.FeedId);
+        // FEAT-065: Remove feed_meta entry for banned member
+        _ = this._feedMetadataCacheService.RemoveFeedMetadataAsync(payload.BannedUserPublicAddress, payload.FeedId);
 
         // Step 4: Publish event for feed participants cache invalidation (FEAT-050)
         // Fire and forget - cache invalidation is secondary to blockchain state

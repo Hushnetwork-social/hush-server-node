@@ -117,9 +117,18 @@ public class NewGroupFeedTransactionHandler(
         foreach (var participantAddress in participantAddresses)
         {
             await this._userFeedsCacheService.AddFeedToUserCacheAsync(participantAddress, payload.FeedId);
-            // FEAT-060: Populate feed_meta with initial lastBlockIndex
-            _ = this._feedMetadataCacheService.SetLastBlockIndexAsync(
-                participantAddress, payload.FeedId, currentBlock);
+            // FEAT-065: Populate feed_meta with full metadata
+            var entry = new FeedMetadataEntry
+            {
+                Title = payload.Title,
+                Type = (int)FeedType.Group,
+                LastBlockIndex = currentBlock.Value,
+                Participants = participantAddresses.ToList(),
+                CreatedAtBlock = currentBlock.Value,
+                CurrentKeyGeneration = 0
+            };
+            _ = this._feedMetadataCacheService.SetFeedMetadataAsync(
+                participantAddress, payload.FeedId, entry);
         }
     }
 }

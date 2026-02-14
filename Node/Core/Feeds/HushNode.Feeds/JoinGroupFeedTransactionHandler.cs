@@ -113,9 +113,29 @@ public class JoinGroupFeedTransactionHandler(
         // Cache update is fire-and-forget - failure does not affect the transaction
         await this._userFeedsCacheService.AddFeedToUserCacheAsync(joiningUserAddress, payload.FeedId);
 
-        // FEAT-060: Populate feed_meta with current lastBlockIndex for the joining member
-        _ = this._feedMetadataCacheService.SetLastBlockIndexAsync(
-            joiningUserAddress, payload.FeedId, currentBlock);
+        // FEAT-065: Populate feed_meta with full metadata for the joining member
+        try
+        {
+            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(payload.FeedId);
+            var participants = await this._feedParticipantsCacheService.GetParticipantsAsync(payload.FeedId);
+            var participantList = participants?.ToList() ?? new List<string> { joiningUserAddress };
+
+            var entry = new FeedMetadataEntry
+            {
+                Title = groupFeed?.Title ?? string.Empty,
+                Type = (int)FeedType.Group,
+                LastBlockIndex = currentBlock.Value,
+                Participants = participantList,
+                CreatedAtBlock = groupFeed?.CreatedAtBlock.Value ?? currentBlock.Value,
+                CurrentKeyGeneration = groupFeed?.CurrentKeyGeneration
+            };
+            _ = this._feedMetadataCacheService.SetFeedMetadataAsync(
+                joiningUserAddress, payload.FeedId, entry);
+        }
+        catch (Exception)
+        {
+            // Fire-and-forget: cache failure should not block join transaction
+        }
 
         // Publish event for other listeners (e.g., notifications)
         // Note: Cache updates are done synchronously above to avoid race conditions

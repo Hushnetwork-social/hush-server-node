@@ -91,8 +91,9 @@ public class FeedMessageTransactionHandler(
                 feedMessage.FeedId);
         }
 
-        // FEAT-060: Update feed_meta lastBlockIndex for all participants (write-through)
+        // FEAT-065: Update feed_meta lastBlockIndex for all participants (read-modify-write)
         // Fire-and-forget: Redis failure should not block message finalization
+        // If entry doesn't exist (cache miss), UpdateLastBlockIndexAsync skips silently
         try
         {
             var participants = await this._feedParticipantsCacheService.GetParticipantsAsync(feedMessage.FeedId);
@@ -100,7 +101,7 @@ public class FeedMessageTransactionHandler(
             {
                 foreach (var participantAddress in participants)
                 {
-                    _ = this._feedMetadataCacheService.SetLastBlockIndexAsync(
+                    _ = this._feedMetadataCacheService.UpdateLastBlockIndexAsync(
                         participantAddress, feedMessage.FeedId, this._blockchainCache.LastBlockIndex);
                 }
             }

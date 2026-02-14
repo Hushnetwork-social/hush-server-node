@@ -613,13 +613,22 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                 return new FeedReadPositionCacheService(connectionMultiplexer, redisSettings.InstanceName, logger);
             });
 
-            // Register feed metadata cache service (FEAT-060)
+            // Register feed metadata cache service (FEAT-060, extended by FEAT-065)
             services.AddSingleton<IFeedMetadataCacheService>(sp =>
             {
                 var connectionMultiplexer = sp.GetRequiredService<IConnectionMultiplexer>();
                 var redisSettings = sp.GetRequiredService<IOptions<RedisSettings>>().Value;
                 var logger = sp.GetRequiredService<ILogger<FeedMetadataCacheService>>();
                 return new FeedMetadataCacheService(connectionMultiplexer, redisSettings.InstanceName, logger);
+            });
+
+            // Register identity display name cache service (FEAT-065 E2)
+            services.AddSingleton<IIdentityDisplayNameCacheService>(sp =>
+            {
+                var connectionMultiplexer = sp.GetRequiredService<IConnectionMultiplexer>();
+                var redisSettings = sp.GetRequiredService<IOptions<RedisSettings>>().Value;
+                var logger = sp.GetRequiredService<ILogger<IdentityDisplayNameCacheService>>();
+                return new IdentityDisplayNameCacheService(connectionMultiplexer, redisSettings.InstanceName, logger);
             });
         });
 

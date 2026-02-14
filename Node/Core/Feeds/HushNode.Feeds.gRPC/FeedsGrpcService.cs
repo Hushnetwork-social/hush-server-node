@@ -25,6 +25,7 @@ public class FeedsGrpcService(
     IGroupMembersCacheService groupMembersCacheService,
     IFeedReadPositionStorageService feedReadPositionStorageService,
     IFeedMetadataCacheService feedMetadataCacheService,
+    IIdentityDisplayNameCacheService identityDisplayNameCacheService,
     IIdentityService identityService,
     IIdentityStorageService identityStorageService,
     IBlockchainCache blockchainCache,
@@ -39,6 +40,7 @@ public class FeedsGrpcService(
     private readonly IGroupMembersCacheService _groupMembersCacheService = groupMembersCacheService;
     private readonly IFeedReadPositionStorageService _feedReadPositionStorageService = feedReadPositionStorageService;
     private readonly IFeedMetadataCacheService _feedMetadataCacheService = feedMetadataCacheService;
+    private readonly IIdentityDisplayNameCacheService _identityDisplayNameCacheService = identityDisplayNameCacheService;
     private readonly IIdentityService _identityService = identityService;
     private readonly IIdentityStorageService _identityStorageService = identityStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
@@ -89,6 +91,7 @@ public class FeedsGrpcService(
             return new GetFeedForAddressReply();
         }
 
+        // PostgreSQL feed query still needed for participant encrypted keys
         var lastFeeds = await this._feedsStorageService
             .RetrieveFeedsForAddress(request.ProfilePublicKey, blockIndex);
 
@@ -96,23 +99,21 @@ public class FeedsGrpcService(
             "[GetFeedsForAddress] Found {FeedCount} feed(s) for address",
             lastFeeds.Count());
 
-        // FEAT-060: Batch fetch lastBlockIndex from Redis (overlay on PostgreSQL values)
-        IReadOnlyDictionary<FeedId, BlockIndex>? cachedBlockIndexes = null;
+        // FEAT-065: Try full metadata cache (titles, lastBlockIndex, type, etc.)
+        IReadOnlyDictionary<FeedId, FeedMetadataEntry>? cachedMetadata = null;
         try
         {
-            cachedBlockIndexes = await _feedMetadataCacheService.GetAllLastBlockIndexesAsync(request.ProfilePublicKey);
+            cachedMetadata = await _feedMetadataCacheService.GetAllFeedMetadataAsync(request.ProfilePublicKey);
 
-            // Cache miss: populate from PostgreSQL feed data
-            if (cachedBlockIndexes == null && lastFeeds.Any())
+            // Cache miss: populate from PostgreSQL feed data with resolved titles
+            if (cachedMetadata == null && lastFeeds.Any())
             {
-                var blockIndexesToCache = lastFeeds
-                    .ToDictionary(f => f.FeedId, f => f.BlockIndex);
-                _ = _feedMetadataCacheService.SetMultipleLastBlockIndexesAsync(request.ProfilePublicKey, blockIndexesToCache);
+                cachedMetadata = await PopulateFeedMetadataCacheAsync(request.ProfilePublicKey, lastFeeds);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch feed metadata from Redis for user {UserId}, using PostgreSQL values", request.ProfilePublicKey);
+            _logger.LogWarning(ex, "Failed to fetch feed metadata from Redis for user {UserId}, resolving titles from PostgreSQL", request.ProfilePublicKey);
         }
 
         // FEAT-051: Batch fetch read positions for all feeds (cache-aside pattern with DB fallback)
@@ -123,7 +124,6 @@ public class FeedsGrpcService(
         }
         catch (Exception ex)
         {
-            // Graceful degradation: if read positions fail, continue with empty dictionary (all feeds show 0)
             _logger.LogWarning(ex, "Failed to fetch read positions for user {UserId}, defaulting to 0", request.ProfilePublicKey);
             readPositions = new Dictionary<FeedId, BlockIndex>();
         }
@@ -131,30 +131,30 @@ public class FeedsGrpcService(
         var reply = new GetFeedForAddressReply();
         foreach(var feed in lastFeeds)
         {
-            // TODO [AboimPinto] Here tghe FeedTitle should be calculated
-            // * PersonalFeed -> ProfileAlias + (YOU) / First 10 characters of the public address + (YOU)
-            // * ChatFeed -> Other chat participant ProfileAlias
+            // FEAT-065: Use cached title if available, fall back to PostgreSQL identity lookup
+            string feedAlias;
+            long effectiveBlockIndex;
 
-            var feedAlias = feed.FeedType switch
+            if (cachedMetadata != null && cachedMetadata.TryGetValue(feed.FeedId, out var cachedEntry))
             {
-                FeedType.Personal => await ExtractPersonalFeedAlias(feed),
-                FeedType.Chat => await ExtractChatFeedAlias(feed, request.ProfilePublicKey),
-                FeedType.Group => await ExtractGroupFeedAlias(feed),
-                FeedType.Broadcast => await ExtractBroascastAlias(feed),
-                _ => throw new InvalidOperationException($"the FeedTYype {feed.FeedType} is not supported.")
-            };
-
-            // FEAT-060: Overlay lastBlockIndex from Redis if available (more up-to-date than PostgreSQL)
-            var feedBlockIndex = feed.BlockIndex;
-            if (cachedBlockIndexes != null && cachedBlockIndexes.TryGetValue(feed.FeedId, out var cachedBlockIndex)
-                && cachedBlockIndex.Value > feedBlockIndex.Value)
-            {
-                feedBlockIndex = cachedBlockIndex;
+                // Cache hit: use cached title (no identity lookups needed)
+                feedAlias = cachedEntry.Title ?? string.Empty;
+                // Use MAX of cached lastBlockIndex and PostgreSQL BlockIndex
+                effectiveBlockIndex = Math.Max(cachedEntry.LastBlockIndex, feed.BlockIndex.Value);
             }
-
-            // Calculate effective BlockIndex: MAX of feed BlockIndex and all participants' profile BlockIndex
-            // This ensures clients detect changes when any participant updates their identity
-            var effectiveBlockIndex = await GetEffectiveBlockIndex(feed, feedBlockIndex);
+            else
+            {
+                // Cache miss for this feed: resolve title from PostgreSQL (existing logic)
+                feedAlias = feed.FeedType switch
+                {
+                    FeedType.Personal => await ExtractPersonalFeedAlias(feed),
+                    FeedType.Chat => await ExtractChatFeedAlias(feed, request.ProfilePublicKey),
+                    FeedType.Group => await ExtractGroupFeedAlias(feed),
+                    FeedType.Broadcast => await ExtractBroascastAlias(feed),
+                    _ => throw new InvalidOperationException($"the FeedTYype {feed.FeedType} is not supported.")
+                };
+                effectiveBlockIndex = await GetEffectiveBlockIndex(feed);
+            }
 
             // FEAT-051: Get read position for this feed (default to 0 if not found)
             var lastReadBlockIndex = readPositions.TryGetValue(feed.FeedId, out var readPosition)
@@ -217,6 +217,10 @@ public class FeedsGrpcService(
             var allHasMore = false;
             var allOldestBlockIndex = long.MaxValue;
 
+            // FEAT-065 Pass 1: Collect all messages from all feeds, track unique issuer addresses
+            var allFeedMessages = new List<(FeedMessage Message, int FeedIndex)>();
+            var uniqueIssuers = new HashSet<string>();
+
             foreach(var feed in lastFeedsFromAddress)
             {
                 Console.WriteLine($"[GetFeedMessagesForAddress] Processing feed {feed.FeedId.ToString().Substring(0, 8)}..., Type: {feed.FeedType}, BlockIndex filter: {blockIndex.Value}, FetchLatest: {fetchLatest}");
@@ -230,74 +234,60 @@ public class FeedsGrpcService(
                 var paginatedResult = await GetMessagesWithCacheFallbackPaginatedAsync(feed.FeedId, blockIndex, limit, fetchLatest, beforeBlockIndex);
                 var messagesList = paginatedResult.Messages.ToList();
 
-                // Track if any feed has more messages
                 if (paginatedResult.HasMoreMessages)
-                {
                     allHasMore = true;
-                }
 
-                // Track the oldest block index across all feeds
                 if (messagesList.Count > 0 && paginatedResult.OldestBlockIndex.Value < allOldestBlockIndex)
-                {
                     allOldestBlockIndex = paginatedResult.OldestBlockIndex.Value;
-                }
 
                 Console.WriteLine($"[GetFeedMessagesForAddress] Feed {feed.FeedId.ToString().Substring(0, 8)}... returned {messagesList.Count} messages, HasMore: {paginatedResult.HasMoreMessages}");
-                foreach (var msg in messagesList)
-                {
-                    var keyGen = msg.KeyGeneration ?? -1;
-                    Console.WriteLine($"[GetFeedMessagesForAddress]   - Message ID: {msg.FeedMessageId.ToString().Substring(0, 8)}..., BlockIndex: {msg.BlockIndex.Value}, KeyGen: {keyGen}");
-                }
 
                 _logger.LogDebug(
                     "Found {MessageCount} messages for feed {FeedId}",
                     messagesList.Count,
                     feed.FeedId);
 
-                foreach (var feedMessage in messagesList)
+                foreach (var msg in messagesList)
                 {
-                    Console.WriteLine($"[GetFeedMessagesForAddress] Processing message: {feedMessage.FeedMessageId}, Timestamp: {feedMessage.Timestamp?.Value}");
-
-                    var issuerName = await this.ExtractDisplayName(feedMessage.IssuerPublicAddress);
-                    Console.WriteLine($"[GetFeedMessagesForAddress] IssuerName resolved: {issuerName}");
-
-                    // Handle potential null or invalid timestamp
-                    var timestamp = feedMessage.Timestamp?.Value ?? DateTime.UtcNow;
-                    Console.WriteLine($"[GetFeedMessagesForAddress] Timestamp to convert: {timestamp}, Kind: {timestamp.Kind}");
-
-                    var feedMessageReply = new GetFeedMessagesForAddressReply.Types.FeedMessage
-                    {
-                        FeedMessageId = feedMessage.FeedMessageId.ToString(),
-                        FeedId = feedMessage.FeedId.ToString(),
-                        MessageContent = feedMessage.MessageContent,
-                        IssuerPublicAddress = feedMessage.IssuerPublicAddress,
-                        BlockIndex = feedMessage.BlockIndex.Value,
-                        IssuerName = issuerName,
-                        TimeStamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)),
-                    };
-
-                    // Add AuthorCommitment if present (Protocol Omega)
-                    if (feedMessage.AuthorCommitment != null)
-                    {
-                        feedMessageReply.AuthorCommitment = ByteString.CopyFrom(feedMessage.AuthorCommitment);
-                    }
-
-                    // Add ReplyToMessageId if present (Reply to Message feature)
-                    if (feedMessage.ReplyToMessageId != null)
-                    {
-                        feedMessageReply.ReplyToMessageId = feedMessage.ReplyToMessageId.ToString();
-                    }
-
-                    // Add KeyGeneration if present (Group Feeds)
-                    if (feedMessage.KeyGeneration != null)
-                    {
-                        feedMessageReply.KeyGeneration = feedMessage.KeyGeneration.Value;
-                    }
-
-                    reply.Messages.Add(feedMessageReply);
-
-                    Console.WriteLine($"[GetFeedMessagesForAddress] Message added successfully");
+                    allFeedMessages.Add((msg, 0));
+                    if (!string.IsNullOrEmpty(msg.IssuerPublicAddress))
+                        uniqueIssuers.Add(msg.IssuerPublicAddress);
                 }
+            }
+
+            // FEAT-065 Batch resolve: Single HMGET for all unique issuers
+            var displayNameMap = await BatchResolveDisplayNamesAsync(uniqueIssuers);
+
+            // FEAT-065 Pass 2: Build response using resolved display names (no per-message DB lookups)
+            foreach (var (feedMessage, _) in allFeedMessages)
+            {
+                var issuerName = displayNameMap.TryGetValue(feedMessage.IssuerPublicAddress, out var name)
+                    ? name
+                    : await this.ExtractDisplayName(feedMessage.IssuerPublicAddress); // Fallback
+
+                var timestamp = feedMessage.Timestamp?.Value ?? DateTime.UtcNow;
+
+                var feedMessageReply = new GetFeedMessagesForAddressReply.Types.FeedMessage
+                {
+                    FeedMessageId = feedMessage.FeedMessageId.ToString(),
+                    FeedId = feedMessage.FeedId.ToString(),
+                    MessageContent = feedMessage.MessageContent,
+                    IssuerPublicAddress = feedMessage.IssuerPublicAddress,
+                    BlockIndex = feedMessage.BlockIndex.Value,
+                    IssuerName = issuerName,
+                    TimeStamp = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)),
+                };
+
+                if (feedMessage.AuthorCommitment != null)
+                    feedMessageReply.AuthorCommitment = ByteString.CopyFrom(feedMessage.AuthorCommitment);
+
+                if (feedMessage.ReplyToMessageId != null)
+                    feedMessageReply.ReplyToMessageId = feedMessage.ReplyToMessageId.ToString();
+
+                if (feedMessage.KeyGeneration != null)
+                    feedMessageReply.KeyGeneration = feedMessage.KeyGeneration.Value;
+
+                reply.Messages.Add(feedMessageReply);
             }
 
             // FEAT-052: Set pagination metadata
@@ -748,6 +738,107 @@ public class FeedsGrpcService(
         }
     }
 
+    /// <summary>
+    /// FEAT-065: Populate full feed metadata cache from PostgreSQL on cache miss.
+    /// Resolves titles for all feed types and writes to Redis via HMSET.
+    /// Returns the populated metadata for immediate use.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<FeedId, FeedMetadataEntry>> PopulateFeedMetadataCacheAsync(
+        string userId, IEnumerable<Feed> feeds)
+    {
+        var entries = new Dictionary<FeedId, FeedMetadataEntry>();
+
+        foreach (var feed in feeds)
+        {
+            var title = feed.FeedType switch
+            {
+                FeedType.Personal => await ExtractPersonalFeedAlias(feed),
+                FeedType.Chat => await ExtractChatFeedAlias(feed, userId),
+                FeedType.Group => await ExtractGroupFeedAlias(feed),
+                _ => feed.Alias
+            };
+
+            var participantAddresses = feed.Participants
+                .Select(p => p.ParticipantPublicAddress)
+                .ToList();
+
+            // Get group-specific metadata if applicable
+            int? currentKeyGeneration = null;
+            if (feed.FeedType == FeedType.Group)
+            {
+                var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feed.FeedId);
+                currentKeyGeneration = groupFeed?.CurrentKeyGeneration;
+            }
+
+            entries[feed.FeedId] = new FeedMetadataEntry
+            {
+                Title = title,
+                Type = (int)feed.FeedType,
+                LastBlockIndex = feed.BlockIndex.Value,
+                Participants = participantAddresses,
+                CreatedAtBlock = feed.BlockIndex.Value,
+                CurrentKeyGeneration = currentKeyGeneration
+            };
+        }
+
+        // Write to Redis atomically (fire-and-forget for the write, but return the data)
+        _ = _feedMetadataCacheService.SetMultipleFeedMetadataAsync(userId, entries);
+
+        // Also populate identity display name cache for all participant addresses
+        await PopulateIdentityDisplayNameCacheAsync(feeds);
+
+        return entries;
+    }
+
+    /// <summary>
+    /// FEAT-065 E2: Populate identity display name cache for all unique participant addresses.
+    /// Called during feed metadata cache population to warm the identity cache.
+    /// </summary>
+    private async Task PopulateIdentityDisplayNameCacheAsync(IEnumerable<Feed> feeds)
+    {
+        try
+        {
+            var uniqueAddresses = feeds
+                .SelectMany(f => f.Participants.Select(p => p.ParticipantPublicAddress))
+                .Distinct()
+                .ToList();
+
+            if (uniqueAddresses.Count == 0)
+                return;
+
+            // Check which names are already cached
+            var cachedNames = await _identityDisplayNameCacheService.GetDisplayNamesAsync(uniqueAddresses);
+            if (cachedNames == null)
+                return; // Redis failure, skip population
+
+            // Find addresses with cache misses
+            var missingAddresses = cachedNames
+                .Where(kvp => kvp.Value == null)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            if (missingAddresses.Count == 0)
+                return;
+
+            // Resolve from identity service and populate cache
+            var namesToCache = new Dictionary<string, string>();
+            foreach (var address in missingAddresses)
+            {
+                var displayName = await ExtractDisplayName(address);
+                namesToCache[address] = displayName;
+            }
+
+            if (namesToCache.Count > 0)
+            {
+                _ = _identityDisplayNameCacheService.SetMultipleDisplayNamesAsync(namesToCache);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to populate identity display name cache");
+        }
+    }
+
     private Task<string> ExtractBroascastAlias(Feed feed)
     {
         throw new NotImplementedException();
@@ -780,6 +871,71 @@ public class FeedsGrpcService(
 
         // Fallback: use the alias from the Feed record if GroupFeed lookup fails
         return feed.Alias;
+    }
+
+    /// <summary>
+    /// FEAT-065 E2: Batch resolve display names for a set of addresses.
+    /// Pass 1: HMGET from Redis identity display name cache.
+    /// Pass 2: For cache misses, query PostgreSQL identity service and populate cache.
+    /// Returns a complete map of address → display name.
+    /// </summary>
+    private async Task<Dictionary<string, string>> BatchResolveDisplayNamesAsync(IEnumerable<string> addresses)
+    {
+        var addressList = addresses.ToList();
+        var result = new Dictionary<string, string>();
+
+        if (addressList.Count == 0)
+            return result;
+
+        try
+        {
+            // Pass 1: Batch HMGET from Redis
+            var cachedNames = await _identityDisplayNameCacheService.GetDisplayNamesAsync(addressList);
+
+            if (cachedNames != null)
+            {
+                // Collect hits and misses
+                var missingAddresses = new List<string>();
+                foreach (var kvp in cachedNames)
+                {
+                    if (kvp.Value != null)
+                        result[kvp.Key] = kvp.Value;
+                    else
+                        missingAddresses.Add(kvp.Key);
+                }
+
+                // Pass 2: Resolve misses from PostgreSQL and populate cache
+                if (missingAddresses.Count > 0)
+                {
+                    var namesToCache = new Dictionary<string, string>();
+                    foreach (var address in missingAddresses)
+                    {
+                        var displayName = await ExtractDisplayName(address);
+                        result[address] = displayName;
+                        namesToCache[address] = displayName;
+                    }
+
+                    // Populate cache for future requests
+                    if (namesToCache.Count > 0)
+                        _ = _identityDisplayNameCacheService.SetMultipleDisplayNamesAsync(namesToCache);
+                }
+
+                return result;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to batch resolve display names from Redis, falling back to PostgreSQL");
+        }
+
+        // Redis failure: fall back to per-address PostgreSQL lookup
+        foreach (var address in addressList)
+        {
+            if (!result.ContainsKey(address))
+                result[address] = await ExtractDisplayName(address);
+        }
+
+        return result;
     }
 
     private async Task<string> ExtractDisplayName(string publicSigningAddress)
@@ -2261,6 +2417,25 @@ public class FeedsGrpcService(
             // Update feed BlockIndex to notify clients
             var currentBlock = this._blockchainCache.LastBlockIndex;
             await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, currentBlock);
+
+            // FEAT-065: Cascade title change to all members' feed_meta caches
+            try
+            {
+                var participants = await this._feedParticipantsCacheService.GetParticipantsAsync(feedId);
+                if (participants != null)
+                {
+                    foreach (var memberAddress in participants)
+                    {
+                        _ = this._feedMetadataCacheService.UpdateFeedTitleAsync(
+                            memberAddress, feedId, newTitle);
+                    }
+                }
+            }
+            catch (Exception cascadeEx)
+            {
+                _logger.LogWarning(cascadeEx,
+                    "Failed to cascade group title change to feed_meta caches for feed {FeedId}", feedId);
+            }
 
             Console.WriteLine($"[UpdateGroupFeedTitle] Success");
             return new UpdateGroupFeedTitleResponse

@@ -353,6 +353,53 @@ public class FeedMetadataCacheService : IFeedMetadataCacheService
         }
     }
 
+    /// <inheritdoc />
+    public async Task<bool> UpdateLastBlockIndexAsync(string userId, FeedId feedId, BlockIndex lastBlockIndex)
+    {
+        if (string.IsNullOrEmpty(userId))
+            return false;
+
+        var key = GetKey(userId);
+
+        try
+        {
+            var existingJson = await _database.HashGetAsync(key, feedId.ToString());
+            if (existingJson.IsNullOrEmpty)
+            {
+                _logger.LogDebug(
+                    "UpdateLastBlockIndexAsync: entry not found for user={UserId} feed={FeedId}, skipping",
+                    userId, feedId);
+                return false;
+            }
+
+            var metadata = DeserializeFeedMetadata(existingJson!);
+            if (metadata == null || metadata.IsLegacyFormat)
+            {
+                _logger.LogDebug(
+                    "UpdateLastBlockIndexAsync: invalid/legacy entry for user={UserId} feed={FeedId}, skipping",
+                    userId, feedId);
+                return false;
+            }
+
+            metadata.LastBlockIndex = lastBlockIndex.Value;
+
+            var updatedJson = JsonSerializer.Serialize(metadata);
+            await _database.HashSetAsync(key, feedId.ToString(), updatedJson);
+            await _database.KeyExpireAsync(key, FeedMetadataCacheConstants.CacheTtl);
+
+            Interlocked.Increment(ref _writeOperations);
+            _logger.LogDebug("Updated feed lastBlockIndex user={UserId} feed={FeedId} lastBlockIndex={LastBlockIndex}",
+                userId, feedId, lastBlockIndex.Value);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _writeErrors);
+            _logger.LogWarning(ex, "Failed to update feed lastBlockIndex for user={UserId} feed={FeedId}.", userId, feedId);
+            return false;
+        }
+    }
+
     // ==========================================
     // Private Helpers
     // ==========================================

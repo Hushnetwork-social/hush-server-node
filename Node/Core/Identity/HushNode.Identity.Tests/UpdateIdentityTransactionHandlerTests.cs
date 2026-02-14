@@ -157,6 +157,8 @@ public class UpdateIdentityTransactionHandlerTests
         var identityRepoMock = new Mock<IIdentityRepository>();
         var feedsServiceMock = new Mock<IFeedsStorageService>();
         var groupMembersCacheMock = new Mock<IGroupMembersCacheService>();
+        var feedMetadataCacheMock = new Mock<IFeedMetadataCacheService>();
+        var identityDisplayNameCacheMock = new Mock<IIdentityDisplayNameCacheService>();
         var blockchainCacheMock = new Mock<IBlockchainCache>();
         var eventAggregatorMock = new Mock<IEventAggregator>();
         var loggerMock = new Mock<ILogger<UpdateIdentityTransactionHandler>>();
@@ -190,10 +192,17 @@ public class UpdateIdentityTransactionHandlerTests
             .Setup(x => x.GetGroupFeedIdsForUserAsync(It.IsAny<string>()))
             .ReturnsAsync(new List<HushShared.Feeds.Model.FeedId>());
 
+        // FEAT-065: Setup default empty feeds for cascade
+        feedsServiceMock
+            .Setup(x => x.RetrieveFeedsForAddress(It.IsAny<string>(), It.IsAny<BlockIndex>()))
+            .ReturnsAsync(Enumerable.Empty<HushShared.Feeds.Model.Feed>());
+
         var sut = new UpdateIdentityTransactionHandler(
             unitOfWorkProviderMock.Object,
             feedsServiceMock.Object,
             groupMembersCacheMock.Object,
+            feedMetadataCacheMock.Object,
+            identityDisplayNameCacheMock.Object,
             blockchainCacheMock.Object,
             eventAggregatorMock.Object,
             loggerMock.Object);

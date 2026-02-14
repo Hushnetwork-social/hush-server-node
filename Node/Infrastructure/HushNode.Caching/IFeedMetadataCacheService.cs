@@ -92,4 +92,16 @@ public interface IFeedMetadataCacheService
     /// <param name="newTitle">The new display title.</param>
     /// <returns>True on success, false on error or if entry doesn't exist.</returns>
     Task<bool> UpdateFeedTitleAsync(string userId, FeedId feedId, string newTitle);
+
+    /// <summary>
+    /// Updates only the lastBlockIndex field of an existing feed metadata entry.
+    /// Reads the current entry, updates the lastBlockIndex, and writes back.
+    /// Used by FeedMessageTransactionHandler when a new message is finalized.
+    /// If the entry doesn't exist (cache miss), skips silently — will be populated on next read.
+    /// </summary>
+    /// <param name="userId">The user's public signing address.</param>
+    /// <param name="feedId">The feed ID.</param>
+    /// <param name="lastBlockIndex">The new lastBlockIndex value.</param>
+    /// <returns>True on success, false on error or if entry doesn't exist.</returns>
+    Task<bool> UpdateLastBlockIndexAsync(string userId, FeedId feedId, BlockIndex lastBlockIndex);
 }

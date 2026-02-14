@@ -79,8 +79,8 @@ public class LeaveGroupFeedTransactionHandler(
         // Cache update is fire-and-forget - failure does not affect the transaction
         await this._userFeedsCacheService.RemoveFeedFromUserCacheAsync(leavingUserAddress, payload.FeedId);
 
-        // FEAT-060: Remove feed_meta entry for leaving member
-        _ = this._feedMetadataCacheService.RemoveFeedMetaAsync(leavingUserAddress, payload.FeedId);
+        // FEAT-065: Remove feed_meta entry for leaving member
+        _ = this._feedMetadataCacheService.RemoveFeedMetadataAsync(leavingUserAddress, payload.FeedId);
 
         // Publish event for feed participants cache invalidation (FEAT-050)
         // Fire and forget - cache invalidation is secondary to blockchain state
