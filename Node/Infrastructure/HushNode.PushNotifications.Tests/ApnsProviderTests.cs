@@ -535,6 +535,117 @@ public class ApnsProviderTests
 
     #endregion
 
+    #region Edge Case Tests (Task 5.1 - FEAT-064 Phase 5)
+
+    [Fact]
+    public async Task SendAsync_WithEmptyToken_ApnsRejects_ThrowsInvalidTokenException()
+    {
+        // Arrange
+        var handler = new MockHttpMessageHandler(
+            HttpStatusCode.BadRequest,
+            "{\"reason\": \"BadDeviceToken\"}");
+        var (provider, _, _) = CreateEnabledProvider(handler);
+        var payload = new PushPayload("Test", "Body");
+
+        // Act
+        var act = async () => await provider.SendAsync("", payload);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidTokenException>();
+        handler.LastRequest!.RequestUri!.ToString()
+            .Should().EndWith("/3/device/");
+    }
+
+    [Fact]
+    public async Task SendAsync_WithLongToken_TokenInUrlPath()
+    {
+        // Arrange
+        var longToken = new string('a', 200);
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var (provider, _, _) = CreateEnabledProvider(handler);
+        var payload = new PushPayload("Test", "Body");
+
+        // Act
+        await provider.SendAsync(longToken, payload);
+
+        // Assert
+        handler.LastRequest!.RequestUri!.ToString()
+            .Should().Contain($"/3/device/{longToken}");
+    }
+
+    [Fact]
+    public void BuildApnsPayload_WithEmojiAndUnicode_CorrectlyEncoded()
+    {
+        // Arrange
+        var payload = new PushPayload("Alice \ud83d\udc4b", "Ol\u00e1 mundo! \ud83c\udf0d");
+
+        // Act
+        var json = ApnsProvider.BuildApnsPayload(payload);
+
+        // Assert
+        using var doc = JsonDocument.Parse(json);
+        var alert = doc.RootElement.GetProperty("aps").GetProperty("alert");
+        alert.GetProperty("title").GetString().Should().Be("Alice \ud83d\udc4b");
+        alert.GetProperty("body").GetString().Should().Be("Ol\u00e1 mundo! \ud83c\udf0d");
+    }
+
+    [Fact]
+    public async Task SendAsync_ConcurrentCalls_ShareJwtButMakeSeparateRequests()
+    {
+        // Arrange
+        var handler = new CountingMockHttpMessageHandler(HttpStatusCode.OK);
+        var (provider, _, _) = CreateEnabledProvider(handler);
+        var payload = new PushPayload("Test", "Body");
+
+        // Act
+        var tasks = Enumerable.Range(0, 5)
+            .Select(_ => provider.SendAsync(TestToken, payload))
+            .ToArray();
+        await Task.WhenAll(tasks);
+
+        // Assert - 5 HTTP requests sent, all using same JWT
+        handler.RequestCount.Should().Be(5);
+        handler.AuthTokens.Distinct().Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task SendAsync_400BadDeviceToken_ExceptionMessageContainsBadDeviceToken()
+    {
+        // Arrange
+        var handler = new MockHttpMessageHandler(
+            HttpStatusCode.BadRequest,
+            "{\"reason\": \"BadDeviceToken\"}");
+        var (provider, _, _) = CreateEnabledProvider(handler);
+        var payload = new PushPayload("Test", "Body");
+
+        // Act
+        var act = async () => await provider.SendAsync(TestToken, payload);
+
+        // Assert
+        var ex = await act.Should().ThrowAsync<InvalidTokenException>();
+        ex.Which.Message.Should().Contain("BadDeviceToken");
+    }
+
+    [Fact]
+    public async Task SendAsync_410Unregistered_ExceptionMessageContainsUnregistered()
+    {
+        // Arrange
+        var handler = new MockHttpMessageHandler(
+            HttpStatusCode.Gone,
+            "{\"reason\": \"Unregistered\"}");
+        var (provider, _, _) = CreateEnabledProvider(handler);
+        var payload = new PushPayload("Test", "Body");
+
+        // Act
+        var act = async () => await provider.SendAsync(TestToken, payload);
+
+        // Assert
+        var ex = await act.Should().ThrowAsync<InvalidTokenException>();
+        ex.Which.Message.Should().Contain("unregistered", Exactly.Once(), "message should mention unregistered");
+    }
+
+    #endregion
+
     #region Payload Construction Tests
 
     [Fact]
@@ -710,6 +821,40 @@ public class ApnsProviderTests
             return Task.FromResult(new HttpResponseMessage(statusCode)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json")
+            });
+        }
+    }
+
+    /// <summary>
+    /// Thread-safe mock HTTP handler that counts requests and captures JWT tokens.
+    /// Used for testing concurrent SendAsync calls.
+    /// </summary>
+    private class CountingMockHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly HttpStatusCode _statusCode;
+        private int _requestCount;
+
+        public List<string?> AuthTokens { get; } = new();
+        public int RequestCount => _requestCount;
+
+        public CountingMockHttpMessageHandler(HttpStatusCode statusCode)
+        {
+            _statusCode = statusCode;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _requestCount);
+            lock (AuthTokens)
+            {
+                AuthTokens.Add(request.Headers.Authorization?.Parameter);
+            }
+
+            return Task.FromResult(new HttpResponseMessage(_statusCode)
+            {
+                Content = new StringContent("", Encoding.UTF8, "application/json")
             });
         }
     }
