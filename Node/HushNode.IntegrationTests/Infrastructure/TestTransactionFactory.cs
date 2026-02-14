@@ -293,4 +293,22 @@ internal static class TestTransactionFactory
 
         return signedTransaction.ToJson();
     }
+
+    /// <summary>
+    /// Creates a signed identity update transaction (display name change).
+    /// </summary>
+    public static string CreateIdentityUpdate(TestIdentity identity, string newAlias)
+    {
+        var unsignedTransaction = UpdateIdentityPayloadHandler.CreateNew(newAlias);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            identity.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<UpdateIdentityPayload>(
+            unsignedTransaction,
+            new SignatureInfo(identity.PublicSigningAddress, signature));
+
+        return signedTransaction.ToJson();
+    }
 }
