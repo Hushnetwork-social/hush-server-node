@@ -17,6 +17,7 @@ public class PushDeliveryService : IPushDeliveryService
     private readonly IDeviceTokenStorageService _tokenStorageService;
     private readonly IPushTokenCacheService _pushTokenCacheService;
     private readonly IFcmProvider _fcmProvider;
+    private readonly IApnsProvider _apnsProvider;
     private readonly ILogger<PushDeliveryService> _logger;
 
     /// <summary>
@@ -25,16 +26,19 @@ public class PushDeliveryService : IPushDeliveryService
     /// <param name="tokenStorageService">Service for managing device tokens.</param>
     /// <param name="pushTokenCacheService">Service for caching push tokens in Redis.</param>
     /// <param name="fcmProvider">FCM provider for sending push notifications.</param>
+    /// <param name="apnsProvider">APNs provider for sending push notifications to iOS devices.</param>
     /// <param name="logger">Logger instance.</param>
     public PushDeliveryService(
         IDeviceTokenStorageService tokenStorageService,
         IPushTokenCacheService pushTokenCacheService,
         IFcmProvider fcmProvider,
+        IApnsProvider apnsProvider,
         ILogger<PushDeliveryService> logger)
     {
         _tokenStorageService = tokenStorageService;
         _pushTokenCacheService = pushTokenCacheService;
         _fcmProvider = fcmProvider;
+        _apnsProvider = apnsProvider;
         _logger = logger;
     }
 
@@ -125,18 +129,24 @@ public class PushDeliveryService : IPushDeliveryService
     /// <inheritdoc />
     public async Task SendPushToDeviceAsync(DeviceToken deviceToken, PushPayload payload)
     {
-        // Currently only Android (FCM) is supported
-        if (deviceToken.Platform != PushPlatform.Android)
-        {
-            _logger.LogDebug(
-                "Skipping push notification for unsupported platform {Platform}",
-                deviceToken.Platform);
-            return;
-        }
-
         try
         {
-            await _fcmProvider.SendAsync(deviceToken.Token, payload);
+            switch (deviceToken.Platform)
+            {
+                case PushPlatform.Android:
+                    await _fcmProvider.SendAsync(deviceToken.Token, payload);
+                    break;
+
+                case PushPlatform.iOS:
+                    await _apnsProvider.SendAsync(deviceToken.Token, payload);
+                    break;
+
+                default:
+                    _logger.LogDebug(
+                        "Skipping push notification for unsupported platform {Platform}",
+                        deviceToken.Platform);
+                    return;
+            }
         }
         catch (InvalidTokenException ex)
         {

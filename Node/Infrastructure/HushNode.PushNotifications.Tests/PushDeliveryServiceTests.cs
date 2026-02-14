@@ -41,8 +41,9 @@ public class PushDeliveryServiceTests
             .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
             .Returns(Task.CompletedTask);
 
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello from Bob");
 
         // Act
@@ -67,8 +68,9 @@ public class PushDeliveryServiceTests
 
         var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -117,8 +119,9 @@ public class PushDeliveryServiceTests
             .Setup(x => x.SendAsync("invalid-token", It.IsAny<PushPayload>()))
             .ThrowsAsync(new InvalidTokenException("Token is unregistered"));
 
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act - should not throw, even though one token is invalid
@@ -163,8 +166,9 @@ public class PushDeliveryServiceTests
             .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
             .ThrowsAsync(new InvalidTokenException("Token is unregistered"));
 
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -202,8 +206,9 @@ public class PushDeliveryServiceTests
             .Setup(x => x.SendAsync("good-token", It.IsAny<PushPayload>()))
             .Returns(Task.CompletedTask);
 
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -235,7 +240,7 @@ public class PushDeliveryServiceTests
     #region SendPushToDeviceAsync Tests
 
     [Fact]
-    public async Task SendPushToDeviceAsync_WithAndroidDevice_SendsPush()
+    public async Task SendPushToDeviceAsync_WithAndroidDevice_SendsViaFcm()
     {
         // Arrange
         var userId = "user-abc123def456ghi789jkl";
@@ -248,8 +253,9 @@ public class PushDeliveryServiceTests
             .Setup(x => x.SendAsync("android-token", It.IsAny<PushPayload>()))
             .Returns(Task.CompletedTask);
 
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -257,6 +263,34 @@ public class PushDeliveryServiceTests
 
         // Assert
         mockFcmProvider.Verify(x => x.SendAsync("android-token", payload), Times.Once);
+        mockApnsProvider.Verify(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendPushToDeviceAsync_WithiOSDevice_SendsViaApns()
+    {
+        // Arrange
+        var userId = "user-abc123def456ghi789jkl";
+        var deviceToken = CreateDeviceToken(userId, PushPlatform.iOS, "ios-token");
+
+        var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        var mockCacheService = CreateCacheService();
+        var mockFcmProvider = new Mock<IFcmProvider>();
+        var mockApnsProvider = new Mock<IApnsProvider>();
+        mockApnsProvider
+            .Setup(x => x.SendAsync("ios-token", It.IsAny<PushPayload>()))
+            .Returns(Task.CompletedTask);
+
+        var mockLogger = CreateLogger();
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
+        var payload = new PushPayload("New Message", "Hello");
+
+        // Act
+        await sut.SendPushToDeviceAsync(deviceToken, payload);
+
+        // Assert
+        mockApnsProvider.Verify(x => x.SendAsync("ios-token", payload), Times.Once);
+        mockFcmProvider.Verify(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()), Times.Never);
     }
 
     [Fact]
@@ -277,8 +311,9 @@ public class PushDeliveryServiceTests
             .Setup(x => x.SendAsync("invalid-token", It.IsAny<PushPayload>()))
             .ThrowsAsync(new InvalidTokenException("Token is unregistered"));
 
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -292,34 +327,36 @@ public class PushDeliveryServiceTests
     }
 
     [Fact]
-    public async Task SendPushToDeviceAsync_WithiOSDevice_SkipsNotification()
+    public async Task SendPushToDeviceAsync_WithInvalidiOSToken_DeactivatesAndRethrows()
     {
         // Arrange
         var userId = "user-abc123def456ghi789jkl";
-        var deviceToken = CreateDeviceToken(userId, PushPlatform.iOS, "ios-token");
+        var deviceToken = CreateDeviceToken(userId, PushPlatform.iOS, "invalid-ios-token");
 
         var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        mockTokenStorage
+            .Setup(x => x.UnregisterTokenAsync(userId, "invalid-ios-token"))
+            .ReturnsAsync(true);
+
         var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
+        var mockApnsProvider = new Mock<IApnsProvider>();
+        mockApnsProvider
+            .Setup(x => x.SendAsync("invalid-ios-token", It.IsAny<PushPayload>()))
+            .ThrowsAsync(new InvalidTokenException("APNs device token is invalid (BadDeviceToken)"));
+
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
-        await sut.SendPushToDeviceAsync(deviceToken, payload);
+        var act = async () => await sut.SendPushToDeviceAsync(deviceToken, payload);
 
-        // Assert - FCM provider should NOT be called for iOS
-        mockFcmProvider.Verify(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()), Times.Never);
+        // Assert - should rethrow InvalidTokenException
+        await act.Should().ThrowAsync<InvalidTokenException>();
 
-        // Debug log should indicate skip
-        mockLogger.Verify(
-            x => x.Log(
-                LogLevel.Debug,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((o, t) => o.ToString()!.Contains("unsupported platform")),
-                null,
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once);
+        // Token should be deactivated
+        mockTokenStorage.Verify(x => x.UnregisterTokenAsync(userId, "invalid-ios-token"), Times.Once);
     }
 
     [Fact]
@@ -332,15 +369,17 @@ public class PushDeliveryServiceTests
         var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
         var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
         await sut.SendPushToDeviceAsync(deviceToken, payload);
 
-        // Assert - FCM provider should NOT be called for Web
+        // Assert - neither provider should be called for Web
         mockFcmProvider.Verify(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()), Times.Never);
+        mockApnsProvider.Verify(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()), Times.Never);
     }
 
     [Fact]
@@ -353,15 +392,114 @@ public class PushDeliveryServiceTests
         var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
         var mockCacheService = CreateCacheService();
         var mockFcmProvider = new Mock<IFcmProvider>();
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
         await sut.SendPushToDeviceAsync(deviceToken, payload);
 
-        // Assert - FCM provider should NOT be called for Unknown
+        // Assert - neither provider should be called for Unknown
         mockFcmProvider.Verify(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()), Times.Never);
+        mockApnsProvider.Verify(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()), Times.Never);
+    }
+
+    #endregion
+
+    #region iOS Routing Tests (FEAT-064 Phase 4)
+
+    [Fact]
+    public async Task SendPushAsync_WithMixedPlatforms_RoutesToCorrectProviders()
+    {
+        // Arrange
+        var userId = "user-abc123def456ghi789jkl";
+        var deviceTokens = new List<DeviceToken>
+        {
+            CreateDeviceToken(userId, PushPlatform.Android, "android-token"),
+            CreateDeviceToken(userId, PushPlatform.iOS, "ios-token")
+        };
+
+        var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        mockTokenStorage
+            .Setup(x => x.GetActiveTokensForUserAsync(userId))
+            .ReturnsAsync(deviceTokens);
+
+        var mockCacheService = CreateCacheService();
+        var mockFcmProvider = new Mock<IFcmProvider>();
+        mockFcmProvider
+            .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Returns(Task.CompletedTask);
+
+        var mockApnsProvider = new Mock<IApnsProvider>();
+        mockApnsProvider
+            .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
+            .Returns(Task.CompletedTask);
+
+        var mockLogger = CreateLogger();
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
+        var payload = new PushPayload("New Message", "Hello");
+
+        // Act
+        await sut.SendPushAsync(userId, payload);
+
+        // Assert - Android goes to FCM, iOS goes to APNs
+        mockFcmProvider.Verify(x => x.SendAsync("android-token", payload), Times.Once);
+        mockApnsProvider.Verify(x => x.SendAsync("ios-token", payload), Times.Once);
+
+        // Cross-verify: FCM was NOT called with iOS token, APNs was NOT called with Android token
+        mockFcmProvider.Verify(x => x.SendAsync("ios-token", It.IsAny<PushPayload>()), Times.Never);
+        mockApnsProvider.Verify(x => x.SendAsync("android-token", It.IsAny<PushPayload>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendPushAsync_ApnsErrorDoesNotAffectFcmDelivery()
+    {
+        // Arrange
+        var userId = "user-abc123def456ghi789jkl";
+        var deviceTokens = new List<DeviceToken>
+        {
+            CreateDeviceToken(userId, PushPlatform.iOS, "invalid-ios-token"),
+            CreateDeviceToken(userId, PushPlatform.Android, "good-android-token")
+        };
+
+        var mockTokenStorage = new Mock<IDeviceTokenStorageService>();
+        mockTokenStorage
+            .Setup(x => x.GetActiveTokensForUserAsync(userId))
+            .ReturnsAsync(deviceTokens);
+        mockTokenStorage
+            .Setup(x => x.UnregisterTokenAsync(userId, "invalid-ios-token"))
+            .ReturnsAsync(true);
+
+        var mockCacheService = CreateCacheService();
+        var mockFcmProvider = new Mock<IFcmProvider>();
+        mockFcmProvider
+            .Setup(x => x.SendAsync("good-android-token", It.IsAny<PushPayload>()))
+            .Returns(Task.CompletedTask);
+
+        var mockApnsProvider = new Mock<IApnsProvider>();
+        mockApnsProvider
+            .Setup(x => x.SendAsync("invalid-ios-token", It.IsAny<PushPayload>()))
+            .ThrowsAsync(new InvalidTokenException("APNs device token is invalid"));
+
+        var mockLogger = CreateLogger();
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
+        var payload = new PushPayload("New Message", "Hello");
+
+        // Act - should not throw
+        var act = async () => await sut.SendPushAsync(userId, payload);
+
+        // Assert
+        await act.Should().NotThrowAsync();
+
+        // FCM should still be called for the Android token
+        mockFcmProvider.Verify(x => x.SendAsync("good-android-token", payload), Times.Once);
+
+        // iOS token should be deactivated
+        mockTokenStorage.Verify(x => x.UnregisterTokenAsync(userId, "invalid-ios-token"), Times.Once);
+
+        // Android token should NOT be unregistered
+        mockTokenStorage.Verify(x => x.UnregisterTokenAsync(userId, "good-android-token"), Times.Never);
     }
 
     #endregion
@@ -389,8 +527,9 @@ public class PushDeliveryServiceTests
             .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
             .Returns(Task.CompletedTask);
 
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -429,8 +568,9 @@ public class PushDeliveryServiceTests
             .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
             .Returns(Task.CompletedTask);
 
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -474,8 +614,9 @@ public class PushDeliveryServiceTests
             .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
             .Returns(Task.CompletedTask);
 
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act - should not throw
@@ -523,8 +664,9 @@ public class PushDeliveryServiceTests
             .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
             .Returns(Task.CompletedTask);
 
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act - should not throw
@@ -571,8 +713,9 @@ public class PushDeliveryServiceTests
             .Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
             .Returns(Task.CompletedTask);
 
+        var mockApnsProvider = new Mock<IApnsProvider>();
         var mockLogger = CreateLogger();
-        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockLogger.Object);
+        var sut = new PushDeliveryService(mockTokenStorage.Object, mockCacheService.Object, mockFcmProvider.Object, mockApnsProvider.Object, mockLogger.Object);
         var payload = new PushPayload("New Message", "Hello");
 
         // Act
@@ -620,20 +763,22 @@ public class PushDeliveryServiceTests
     /// <summary>
     /// Creates PushDeliveryService with all mocks. Returns the service and mocks for verification.
     /// </summary>
-    private static (PushDeliveryService sut, Mock<IDeviceTokenStorageService> storageServiceMock, Mock<IPushTokenCacheService> cacheServiceMock, Mock<IFcmProvider> fcmProviderMock, Mock<ILogger<PushDeliveryService>> loggerMock) CreateServiceWithMocks()
+    private static (PushDeliveryService sut, Mock<IDeviceTokenStorageService> storageServiceMock, Mock<IPushTokenCacheService> cacheServiceMock, Mock<IFcmProvider> fcmProviderMock, Mock<IApnsProvider> apnsProviderMock, Mock<ILogger<PushDeliveryService>> loggerMock) CreateServiceWithMocks()
     {
         var storageServiceMock = new Mock<IDeviceTokenStorageService>();
         var cacheServiceMock = CreateCacheService();
         var fcmProviderMock = new Mock<IFcmProvider>();
+        var apnsProviderMock = new Mock<IApnsProvider>();
         var loggerMock = CreateLogger();
 
         var sut = new PushDeliveryService(
             storageServiceMock.Object,
             cacheServiceMock.Object,
             fcmProviderMock.Object,
+            apnsProviderMock.Object,
             loggerMock.Object);
 
-        return (sut, storageServiceMock, cacheServiceMock, fcmProviderMock, loggerMock);
+        return (sut, storageServiceMock, cacheServiceMock, fcmProviderMock, apnsProviderMock, loggerMock);
     }
 
     #endregion

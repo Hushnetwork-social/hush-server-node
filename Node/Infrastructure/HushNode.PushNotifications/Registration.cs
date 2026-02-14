@@ -1,3 +1,4 @@
+using System.Net;
 using HushNode.Interfaces;
 using HushNode.PushNotifications.Providers;
 using Microsoft.EntityFrameworkCore;
@@ -54,6 +55,15 @@ public static class Registration
 
         // Register FCM provider (singleton - Firebase SDK is thread-safe)
         services.AddSingleton<IFcmProvider, FcmProvider>();
+
+        // Register APNs provider (singleton - holds ECDsa key + JWT cache)
+        services.Configure<ApnsSettings>(hostContext.Configuration.GetSection("ApnsSettings"));
+        services.AddHttpClient("ApnsClient")
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                EnableMultipleHttp2Connections = true
+            });
+        services.AddSingleton<IApnsProvider, ApnsProvider>();
 
         // Register push delivery service (transient - stateless service)
         services.AddTransient<IPushDeliveryService, PushDeliveryService>();
