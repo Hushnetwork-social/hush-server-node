@@ -52,6 +52,7 @@ public sealed class FeedMetadataWriteTriggersSteps
     }
 
     [When(@"GetFeedsForAddress is called for Alice")]
+    [Then(@"GetFeedsForAddress is called for Alice")]
     public async Task WhenGetFeedsForAddressIsCalledForAlice()
     {
         var alice = TestIdentities.Alice;

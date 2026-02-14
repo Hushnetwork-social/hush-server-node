@@ -132,6 +132,7 @@ public sealed class ChatFeedSteps
         chatFeeds.Should().NotBeEmpty($"{userName} should have a chat feed with {otherUserName}");
     }
 
+    [Given(@"(.*) sends message ""(.*)"" to the ChatFeed via gRPC")]
     [When(@"(.*) sends message ""(.*)"" to the ChatFeed via gRPC")]
     public async Task WhenUserSendsMessageToChatFeedViaGrpc(string senderName, string message)
     {
