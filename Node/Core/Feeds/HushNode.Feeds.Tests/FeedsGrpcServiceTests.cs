@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Grpc.Core;
 using HushNetwork.proto;
+using HushNode.Caching;
 using HushNode.Feeds.gRPC;
 using HushNode.Feeds.Storage;
 using HushNode.Feeds.Tests.Fixtures;
@@ -155,13 +156,13 @@ public class FeedsGrpcServiceTests
                 // feedIdWithoutPosition not in dictionary - should default to 0
             });
 
-        // FEAT-060: Mock feed metadata cache service for lastBlockIndex overlay
-        var mockFeedMetadataCacheService = mocker.GetMock<HushNode.Caching.IFeedMetadataCacheService>();
+        // FEAT-065: Mock feed metadata cache service for full metadata
+        var mockFeedMetadataCacheService = mocker.GetMock<IFeedMetadataCacheService>();
         mockFeedMetadataCacheService
-            .Setup(x => x.GetAllLastBlockIndexesAsync(userAddress))
-            .ReturnsAsync(new Dictionary<FeedId, BlockIndex>
+            .Setup(x => x.GetAllFeedMetadataAsync(userAddress))
+            .ReturnsAsync(new Dictionary<FeedId, FeedMetadataEntry>
             {
-                { feedIdWithPosition, new BlockIndex(200) } // Higher than PostgreSQL value of 100
+                { feedIdWithPosition, new FeedMetadataEntry { Title = "TestUser (YOU)", Type = (int)FeedType.Personal, LastBlockIndex = 200, Participants = new List<string> { userAddress }, CreatedAtBlock = 1 } }
             });
 
         var mockIdentityService = mocker.GetMock<IIdentityService>();
@@ -213,11 +214,11 @@ public class FeedsGrpcServiceTests
             .Setup(x => x.GetReadPositionsForUserAsync(userAddress))
             .ThrowsAsync(new Exception("Redis connection failed"));
 
-        // FEAT-060: Mock feed metadata cache service returning null (Redis failure path)
-        var mockFeedMetadataCacheService = mocker.GetMock<HushNode.Caching.IFeedMetadataCacheService>();
+        // FEAT-065: Mock feed metadata cache service returning null (Redis failure path)
+        var mockFeedMetadataCacheService = mocker.GetMock<IFeedMetadataCacheService>();
         mockFeedMetadataCacheService
-            .Setup(x => x.GetAllLastBlockIndexesAsync(userAddress))
-            .ReturnsAsync((IReadOnlyDictionary<FeedId, BlockIndex>?)null);
+            .Setup(x => x.GetAllFeedMetadataAsync(userAddress))
+            .ReturnsAsync((IReadOnlyDictionary<FeedId, FeedMetadataEntry>?)null);
 
         var mockIdentityService = mocker.GetMock<IIdentityService>();
         mockIdentityService
@@ -270,13 +271,13 @@ public class FeedsGrpcServiceTests
             .Setup(x => x.RetrieveIdentityAsync(userAddress))
             .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
 
-        // FEAT-060: Redis returns higher lastBlockIndex than PostgreSQL
-        var mockFeedMetadataCacheService = mocker.GetMock<HushNode.Caching.IFeedMetadataCacheService>();
+        // FEAT-065: Redis returns full metadata with higher lastBlockIndex than PostgreSQL
+        var mockFeedMetadataCacheService = mocker.GetMock<IFeedMetadataCacheService>();
         mockFeedMetadataCacheService
-            .Setup(x => x.GetAllLastBlockIndexesAsync(userAddress))
-            .ReturnsAsync(new Dictionary<FeedId, BlockIndex>
+            .Setup(x => x.GetAllFeedMetadataAsync(userAddress))
+            .ReturnsAsync(new Dictionary<FeedId, FeedMetadataEntry>
             {
-                { feedId, new BlockIndex(500) } // Higher than PostgreSQL value of 100
+                { feedId, new FeedMetadataEntry { Title = "TestUser (YOU)", Type = (int)FeedType.Personal, LastBlockIndex = 500, Participants = new List<string> { userAddress }, CreatedAtBlock = 1 } }
             });
 
         var service = mocker.CreateInstance<FeedsGrpcService>();
@@ -321,16 +322,16 @@ public class FeedsGrpcServiceTests
             .Setup(x => x.RetrieveIdentityAsync(userAddress))
             .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
 
-        // FEAT-060: Redis cache miss (returns null)
-        var mockFeedMetadataCacheService = mocker.GetMock<HushNode.Caching.IFeedMetadataCacheService>();
+        // FEAT-065: Redis cache miss (returns null)
+        var mockFeedMetadataCacheService = mocker.GetMock<IFeedMetadataCacheService>();
         mockFeedMetadataCacheService
-            .Setup(x => x.GetAllLastBlockIndexesAsync(userAddress))
-            .ReturnsAsync((IReadOnlyDictionary<FeedId, BlockIndex>?)null);
+            .Setup(x => x.GetAllFeedMetadataAsync(userAddress))
+            .ReturnsAsync((IReadOnlyDictionary<FeedId, FeedMetadataEntry>?)null);
 
-        // Should populate cache from PostgreSQL data
+        // Should populate cache from PostgreSQL data via SetMultipleFeedMetadataAsync
         mockFeedMetadataCacheService
-            .Setup(x => x.SetMultipleLastBlockIndexesAsync(
-                userAddress, It.IsAny<IReadOnlyDictionary<FeedId, BlockIndex>>()))
+            .Setup(x => x.SetMultipleFeedMetadataAsync(
+                userAddress, It.IsAny<IReadOnlyDictionary<FeedId, FeedMetadataEntry>>()))
             .ReturnsAsync(true);
 
         var service = mocker.CreateInstance<FeedsGrpcService>();
@@ -344,10 +345,10 @@ public class FeedsGrpcServiceTests
         result.Feeds[0].BlockIndex.Should().Be(100,
             "BlockIndex should use PostgreSQL value when cache misses");
 
-        // Verify cache was populated
+        // Verify cache was populated with full metadata
         mockFeedMetadataCacheService.Verify(
-            x => x.SetMultipleLastBlockIndexesAsync(
-                userAddress, It.IsAny<IReadOnlyDictionary<FeedId, BlockIndex>>()),
+            x => x.SetMultipleFeedMetadataAsync(
+                userAddress, It.IsAny<IReadOnlyDictionary<FeedId, FeedMetadataEntry>>()),
             Times.Once,
             "Cache should be populated from PostgreSQL data on miss");
     }
@@ -382,11 +383,11 @@ public class FeedsGrpcServiceTests
             .Setup(x => x.RetrieveIdentityAsync(userAddress))
             .ReturnsAsync(new Profile("TestUser", "TU", userAddress, "encryptKey", true, new BlockIndex(50)));
 
-        // FEAT-060: Redis completely unavailable (returns null — graceful degradation)
-        var mockFeedMetadataCacheService = mocker.GetMock<HushNode.Caching.IFeedMetadataCacheService>();
+        // FEAT-065: Redis completely unavailable (returns null — graceful degradation)
+        var mockFeedMetadataCacheService = mocker.GetMock<IFeedMetadataCacheService>();
         mockFeedMetadataCacheService
-            .Setup(x => x.GetAllLastBlockIndexesAsync(userAddress))
-            .ReturnsAsync((IReadOnlyDictionary<FeedId, BlockIndex>?)null);
+            .Setup(x => x.GetAllFeedMetadataAsync(userAddress))
+            .ReturnsAsync((IReadOnlyDictionary<FeedId, FeedMetadataEntry>?)null);
 
         var service = mocker.CreateInstance<FeedsGrpcService>();
         var request = new GetFeedForAddressRequest { ProfilePublicKey = userAddress, BlockIndex = 0 };

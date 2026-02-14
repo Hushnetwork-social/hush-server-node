@@ -331,7 +331,7 @@ public class FeedMessageTransactionHandlerTests
             .ReturnsAsync(new[] { participant1, participant2 });
 
         mocker.GetMock<IFeedMetadataCacheService>()
-            .Setup(x => x.SetLastBlockIndexAsync(
+            .Setup(x => x.UpdateLastBlockIndexAsync(
                 It.IsAny<string>(), feedId, It.IsAny<BlockIndex>()))
             .ReturnsAsync(true);
 
@@ -345,12 +345,12 @@ public class FeedMessageTransactionHandlerTests
         // Act
         await sut.HandleFeedMessageTransaction(transaction);
 
-        // Assert — SetLastBlockIndexAsync called for each participant
+        // Assert — UpdateLastBlockIndexAsync called for each participant
         mocker.GetMock<IFeedMetadataCacheService>()
-            .Verify(x => x.SetLastBlockIndexAsync(
+            .Verify(x => x.UpdateLastBlockIndexAsync(
                 participant1, feedId, new BlockIndex(600)), Times.Once);
         mocker.GetMock<IFeedMetadataCacheService>()
-            .Verify(x => x.SetLastBlockIndexAsync(
+            .Verify(x => x.UpdateLastBlockIndexAsync(
                 participant2, feedId, new BlockIndex(600)), Times.Once);
     }
 
@@ -428,9 +428,9 @@ public class FeedMessageTransactionHandlerTests
         // Act
         await sut.HandleFeedMessageTransaction(transaction);
 
-        // Assert — SetLastBlockIndexAsync should NOT be called when participants are null
+        // Assert — UpdateLastBlockIndexAsync should NOT be called when participants are null
         mocker.GetMock<IFeedMetadataCacheService>()
-            .Verify(x => x.SetLastBlockIndexAsync(
+            .Verify(x => x.UpdateLastBlockIndexAsync(
                 It.IsAny<string>(), It.IsAny<FeedId>(), It.IsAny<BlockIndex>()),
                 Times.Never,
                 "Should skip feed_meta update when participants cache returns null");
