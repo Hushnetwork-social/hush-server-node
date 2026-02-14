@@ -209,6 +209,40 @@ public class FeedMetadataCacheService : IFeedMetadataCacheService
         }
     }
 
+    // ==========================================
+    // FEAT-065 Full Metadata Methods (stub implementations — Phase 3 will complete)
+    // ==========================================
+
+    /// <inheritdoc />
+    public Task<IReadOnlyDictionary<FeedId, FeedMetadataEntry>?> GetAllFeedMetadataAsync(string userId)
+    {
+        throw new NotImplementedException("FEAT-065 Phase 3 will implement this method.");
+    }
+
+    /// <inheritdoc />
+    public Task<bool> SetFeedMetadataAsync(string userId, FeedId feedId, FeedMetadataEntry entry)
+    {
+        throw new NotImplementedException("FEAT-065 Phase 3 will implement this method.");
+    }
+
+    /// <inheritdoc />
+    public Task<bool> SetMultipleFeedMetadataAsync(string userId, IReadOnlyDictionary<FeedId, FeedMetadataEntry> entries)
+    {
+        throw new NotImplementedException("FEAT-065 Phase 3 will implement this method.");
+    }
+
+    /// <inheritdoc />
+    public Task<bool> RemoveFeedMetadataAsync(string userId, FeedId feedId)
+    {
+        throw new NotImplementedException("FEAT-065 Phase 3 will implement this method.");
+    }
+
+    /// <inheritdoc />
+    public Task<bool> UpdateFeedTitleAsync(string userId, FeedId feedId, string newTitle)
+    {
+        throw new NotImplementedException("FEAT-065 Phase 3 will implement this method.");
+    }
+
     /// <summary>
     /// Gets the Redis HASH key for a user's feed metadata, including the instance prefix.
     /// </summary>
