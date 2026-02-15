@@ -44,6 +44,7 @@ Feature: Basic User Walkthrough
         # Verification
         Then the message "Hello World!" should be visible in the chat
         And the message should show "TestUser" as the sender
+        And the message "Hello World!" should show confirmed status icon
 
     @Reactions
     Scenario: User adds reaction to a message

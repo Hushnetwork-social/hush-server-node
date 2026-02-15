@@ -190,6 +190,9 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 46
         testRunner.And("the message should show \"TestUser\" as the sender", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
+#line 47
+        testRunner.And("the message \"Hello World!\" should show confirmed status icon", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
             }
             this.ScenarioCleanup();
         }
@@ -204,7 +207,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "Reactions"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("User adds reaction to a message", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 49
+#line 50
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -217,19 +220,19 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
     this.FeatureBackground();
 #line hidden
-#line 51
+#line 52
         testRunner.Given("the user has created identity \"TestUser\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 52
+#line 53
         testRunner.And("the user has sent message \"Test message\" to their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 55
+#line 56
         testRunner.When("the user adds reaction 0 to the message \"Test message\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 57
+#line 58
         testRunner.And("the transaction is processed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 60
+#line 61
         testRunner.Then("the message \"Test message\" should show a reaction badge", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }

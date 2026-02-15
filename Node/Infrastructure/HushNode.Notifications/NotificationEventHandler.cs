@@ -4,6 +4,7 @@ using HushNode.Feeds.Storage;
 using HushNode.Identity.Storage;
 using HushNode.PushNotifications;
 using HushNode.PushNotifications.Models;
+using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
 using Microsoft.Extensions.Logging;
@@ -27,6 +28,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
     private readonly IConnectionTracker _connectionTracker;
     private readonly IPushDeliveryService _pushDeliveryService;
     private readonly IFeedParticipantsCacheService _feedParticipantsCacheService;
+    private readonly IFeedReadPositionStorageService _feedReadPositionStorageService;
     private readonly ILogger<NotificationEventHandler> _logger;
 
     public NotificationEventHandler(
@@ -37,6 +39,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
         IConnectionTracker connectionTracker,
         IPushDeliveryService pushDeliveryService,
         IFeedParticipantsCacheService feedParticipantsCacheService,
+        IFeedReadPositionStorageService feedReadPositionStorageService,
         IEventAggregator eventAggregator,
         ILogger<NotificationEventHandler> logger)
     {
@@ -47,6 +50,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
         _connectionTracker = connectionTracker;
         _pushDeliveryService = pushDeliveryService;
         _feedParticipantsCacheService = feedParticipantsCacheService;
+        _feedReadPositionStorageService = feedReadPositionStorageService;
         _logger = logger;
 
         // Subscribe to events via EventAggregator
@@ -186,6 +190,11 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
             // Skip the message sender - they don't need notification for their own message
             if (participantAddress == senderAddress)
             {
+                // Auto-advance sender's read position so their own messages are never counted as unread
+                _ = _feedReadPositionStorageService.MarkFeedAsReadAsync(
+                    senderAddress,
+                    feedMessage.FeedId,
+                    feedMessage.BlockIndex);
                 continue;
             }
 

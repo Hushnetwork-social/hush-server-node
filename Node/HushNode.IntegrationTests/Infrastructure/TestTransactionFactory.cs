@@ -311,4 +311,34 @@ internal static class TestTransactionFactory
 
         return signedTransaction.ToJson();
     }
+
+    /// <summary>
+    /// Creates a signed UpdateGroupFeedTitle transaction.
+    /// </summary>
+    /// <param name="admin">The admin identity issuing the title change.</param>
+    /// <param name="feedId">The group feed to rename.</param>
+    /// <param name="newTitle">The new title for the group.</param>
+    /// <returns>JSON-serialized signed transaction ready for submission.</returns>
+    public static string CreateUpdateGroupFeedTitle(TestIdentity admin, FeedId feedId, string newTitle)
+    {
+        var payload = new UpdateGroupFeedTitlePayload(
+            feedId,
+            admin.PublicSigningAddress,
+            newTitle);
+
+        var unsignedTransaction = UnsignedTransactionHandler.CreateNew(
+            UpdateGroupFeedTitlePayloadHandler.UpdateGroupFeedTitlePayloadKind,
+            Timestamp.Current,
+            payload);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            admin.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<UpdateGroupFeedTitlePayload>(
+            unsignedTransaction,
+            new SignatureInfo(admin.PublicSigningAddress, signature));
+
+        return signedTransaction.ToJson();
+    }
 }

@@ -2421,13 +2421,28 @@ public class FeedsGrpcService(
             // FEAT-065: Cascade title change to all members' feed_meta caches
             try
             {
-                var participants = await this._feedParticipantsCacheService.GetParticipantsAsync(feedId);
-                if (participants != null)
+                var participantAddresses = await this._feedParticipantsCacheService.GetParticipantsAsync(feedId);
+
+                if (participantAddresses != null)
                 {
-                    foreach (var memberAddress in participants)
+                    foreach (var memberAddress in participantAddresses)
                     {
                         _ = this._feedMetadataCacheService.UpdateFeedTitleAsync(
                             memberAddress, feedId, newTitle);
+                    }
+                }
+                else
+                {
+                    // Fallback to PostgreSQL when participants SET cache is empty
+                    // (e.g., no messages sent yet, or cache was evicted)
+                    var dbParticipants = await this._feedsStorageService.GetAllParticipantsAsync(feedId);
+                    foreach (var participant in dbParticipants)
+                    {
+                        if (participant.LeftAtBlock == null)
+                        {
+                            _ = this._feedMetadataCacheService.UpdateFeedTitleAsync(
+                                participant.ParticipantPublicAddress, feedId, newTitle);
+                        }
                     }
                 }
             }

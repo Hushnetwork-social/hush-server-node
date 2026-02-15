@@ -4,6 +4,7 @@ using HushNode.IntegrationTests.Infrastructure;
 using HushNode.IntegrationTests.StepDefinitions.E2E;
 using HushServerNode;
 using HushServerNode.Testing;
+using Microsoft.Playwright;
 using TechTalk.SpecFlow;
 using TechTalk.SpecFlow.Infrastructure;
 
@@ -31,6 +32,9 @@ internal sealed class ScenarioHooks
     // Test run folder (shared across all scenarios in this test run)
     private static string? _testRunFolder;
     private static readonly object _testRunFolderLock = new();
+
+    // Screenshot counter for sequential ordering (reset per scenario)
+    private static int _screenshotCounter = 0;
 
     /// <summary>
     /// Context key for accessing the current HushServerNodeCore instance.
@@ -198,6 +202,9 @@ internal sealed class ScenarioHooks
         // Record scenario start time
         _scenarioContext[ScenarioStartTimeKey] = DateTime.Now;
 
+        // Reset screenshot counter for this scenario
+        Interlocked.Exchange(ref _screenshotCounter, 0);
+
         // Initialize executed steps list
         _scenarioContext[ExecutedStepsKey] = new List<StepExecutionInfo>();
 
@@ -348,11 +355,13 @@ internal sealed class ScenarioHooks
     }
 
     /// <summary>
-    /// Records step execution result for E2E scenarios.
+    /// Records step execution result and takes automatic screenshot for E2E scenarios.
+    /// Screenshots are saved to the scenario output folder with sequential numbering.
+    /// Backend-only steps (no browser page) are silently skipped.
     /// </summary>
     [AfterStep]
     [Scope(Tag = "E2E")]
-    public void AfterStep()
+    public async Task AfterStep()
     {
         if (!_scenarioContext.TryGetValue(ExecutedStepsKey, out var stepsObj)
             || stepsObj is not List<StepExecutionInfo> steps)
@@ -376,6 +385,64 @@ internal sealed class ScenarioHooks
         };
 
         steps.Add(stepResult);
+
+        // Take automatic screenshot after every step
+        await TakeAutoScreenshotAsync(stepInfo.Text);
+    }
+
+    /// <summary>
+    /// Takes an automatic screenshot of the current active browser page.
+    /// Silently skips if no browser page is available (backend-only steps).
+    /// </summary>
+    private async Task TakeAutoScreenshotAsync(string stepText)
+    {
+        try
+        {
+            // Get the current active page — try E2E_MainPage first (set by all browser steps)
+            IPage? page = null;
+            if (_scenarioContext.TryGetValue("E2E_MainPage", out var pageObj) && pageObj is IPage mainPage && !mainPage.IsClosed)
+            {
+                page = mainPage;
+            }
+
+            if (page == null)
+            {
+                // No browser page available (backend-only step like "Bob sends a confirmed backend message")
+                return;
+            }
+
+            // Get scenario output folder
+            if (!_scenarioContext.TryGetValue(ScenarioFolderKey, out var folderObj) || folderObj is not string scenarioFolder)
+            {
+                return;
+            }
+
+            var counter = Interlocked.Increment(ref _screenshotCounter);
+
+            // Build a safe filename from step text: "the user opens the user menu" → "the-user-opens-the-user-menu"
+            var safeStepName = Regex.Replace(stepText, @"[^a-zA-Z0-9]+", "-").Trim('-').ToLowerInvariant();
+            if (safeStepName.Length > 80) safeStepName = safeStepName.Substring(0, 80);
+
+            // Include current user name if in multi-user context
+            var userPrefix = "";
+            if (_scenarioContext.TryGetValue("CurrentUser", out var userObj) && userObj is string userName)
+            {
+                userPrefix = $"{userName.ToLowerInvariant()}-";
+            }
+
+            var filename = $"{counter:D3}-{userPrefix}{safeStepName}.png";
+
+            await page.ScreenshotAsync(new PageScreenshotOptions
+            {
+                Path = Path.Combine(scenarioFolder, filename),
+                FullPage = true
+            });
+        }
+        catch (Exception ex)
+        {
+            // Never let screenshot failures break tests
+            Console.WriteLine($"[E2E Screenshot] Auto-screenshot failed: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -878,6 +945,7 @@ internal sealed class ScenarioHooks
 
     /// <summary>
     /// Saves a failure screenshot if the test failed.
+    /// Checks both single-user (E2E_MainPage) and multi-user (E2E_Page_{name}) pages.
     /// </summary>
     private void SaveFailureScreenshot(string scenarioFolder)
     {
@@ -886,29 +954,39 @@ internal sealed class ScenarioHooks
             return; // Test passed, no failure screenshot needed
         }
 
-        // Try to get any active page to screenshot
+        // Try single-user main page first
+        TakeFailureScreenshot("E2E_MainPage", "main", scenarioFolder);
+
+        // Try multi-user named pages
         var userNames = new[] { "Alice", "Bob", "Charlie" };
         foreach (var userName in userNames)
         {
-            var pageKey = $"E2E_Page_{userName}";
-            if (_scenarioContext.TryGetValue(pageKey, out var pageObj)
-                && pageObj is Microsoft.Playwright.IPage page
-                && !page.IsClosed)
+            TakeFailureScreenshot($"E2E_Page_{userName}", userName.ToLowerInvariant(), scenarioFolder);
+        }
+    }
+
+    /// <summary>
+    /// Takes a failure screenshot for a specific page key.
+    /// </summary>
+    private void TakeFailureScreenshot(string pageKey, string label, string scenarioFolder)
+    {
+        if (_scenarioContext.TryGetValue(pageKey, out var pageObj)
+            && pageObj is Microsoft.Playwright.IPage page
+            && !page.IsClosed)
+        {
+            try
             {
-                try
+                var screenshotPath = Path.Combine(scenarioFolder, $"FAILURE-{label}.png");
+                page.ScreenshotAsync(new Microsoft.Playwright.PageScreenshotOptions
                 {
-                    var screenshotPath = Path.Combine(scenarioFolder, $"FAILURE-{userName.ToLowerInvariant()}.png");
-                    page.ScreenshotAsync(new Microsoft.Playwright.PageScreenshotOptions
-                    {
-                        Path = screenshotPath,
-                        FullPage = true
-                    }).GetAwaiter().GetResult();
-                    Console.WriteLine($"[E2E] Failure screenshot saved: FAILURE-{userName.ToLowerInvariant()}.png");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[E2E] Failed to save failure screenshot for {userName}: {ex.Message}");
-                }
+                    Path = screenshotPath,
+                    FullPage = true
+                }).GetAwaiter().GetResult();
+                Console.WriteLine($"[E2E] Failure screenshot saved: FAILURE-{label}.png");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[E2E] Failed to save failure screenshot for {label}: {ex.Message}");
             }
         }
     }
@@ -916,37 +994,49 @@ internal sealed class ScenarioHooks
     /// <summary>
     /// Closes all browser contexts to ensure videos are saved.
     /// Stops tracing before closing - saves trace on failure, discards on success.
+    /// Handles both single-user (E2E_MainContext) and multi-user (E2E_Context_{name}) contexts.
     /// </summary>
     private async Task CloseBrowserContextsAsync()
     {
-        var userNames = new[] { "Alice", "Bob", "Charlie" };
         var scenarioFailed = _scenarioContext.TestError != null;
         var scenarioName = _scenarioContext.ScenarioInfo.Title;
 
+        // Close single-user main context (used by GetOrCreatePageAsync in BrowserStepsBase)
+        await CloseContextAsync("E2E_MainContext", "Main", scenarioFailed, scenarioName);
+
+        // Close multi-user named contexts (used by multi-user step definitions)
+        var userNames = new[] { "Alice", "Bob", "Charlie" };
         foreach (var userName in userNames)
         {
-            var contextKey = $"E2E_Context_{userName}";
-            if (_scenarioContext.TryGetValue(contextKey, out var contextObj)
-                && contextObj is Microsoft.Playwright.IBrowserContext context)
-            {
-                try
-                {
-                    // Stop tracing before closing context (save on failure only)
-                    if (_playwrightFixture != null && _playwrightFixture.EnableTracing)
-                    {
-                        await _playwrightFixture.StopTracingAsync(
-                            context,
-                            scenarioFailed,
-                            $"{scenarioName}-{userName}");
-                    }
+            await CloseContextAsync($"E2E_Context_{userName}", userName, scenarioFailed, scenarioName);
+        }
+    }
 
-                    await context.CloseAsync();
-                    Console.WriteLine($"[E2E] Browser context closed for {userName} (video saved)");
-                }
-                catch (Exception ex)
+    /// <summary>
+    /// Closes a single browser context by its ScenarioContext key.
+    /// </summary>
+    private async Task CloseContextAsync(string contextKey, string label, bool scenarioFailed, string scenarioName)
+    {
+        if (_scenarioContext.TryGetValue(contextKey, out var contextObj)
+            && contextObj is Microsoft.Playwright.IBrowserContext context)
+        {
+            try
+            {
+                // Stop tracing before closing context (save on failure only)
+                if (_playwrightFixture != null && _playwrightFixture.EnableTracing)
                 {
-                    Console.WriteLine($"[E2E] Failed to close context for {userName}: {ex.Message}");
+                    await _playwrightFixture.StopTracingAsync(
+                        context,
+                        scenarioFailed,
+                        $"{scenarioName}-{label}");
                 }
+
+                await context.CloseAsync();
+                Console.WriteLine($"[E2E] Browser context closed for {label} (video saved)");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[E2E] Failed to close context for {label}: {ex.Message}");
             }
         }
     }

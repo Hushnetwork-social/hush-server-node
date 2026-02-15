@@ -61,14 +61,17 @@ internal sealed class AuthSteps : BrowserStepsBase
         var createButton = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Create Account" }).Last;
         await createButton.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 10000 });
 
-        // IMPORTANT: Start listening for identity transaction BEFORE clicking the button.
-        // This prevents race condition where the event fires before we start listening.
-        Console.WriteLine("[E2E Auth] Creating TransactionWaiter BEFORE clicking Create Account...");
-        var waiter = StartListeningForTransactions(minTransactions: 1);
-        ScenarioContext["PendingIdentityTransactionWaiter"] = waiter;
+        // IMPORTANT: The auth page submits BOTH identity TX and personal feed TX in rapid
+        // succession (~17ms apart) without waiting for block confirmation between them.
+        // We use a SINGLE waiter (minTransactions: 2) because the EventAggregator only
+        // allows one subscriber per type — creating two TransactionEventSubscriber instances
+        // causes the first to be replaced by the second.
+        Console.WriteLine("[E2E Auth] Creating single TransactionWaiter (min: 2) BEFORE clicking Create Account...");
+        var authWaiter = StartListeningForTransactions(minTransactions: 2);
+        ScenarioContext["PendingAuthTransactionsWaiter"] = authWaiter;
 
         await createButton.ClickAsync();
-        Console.WriteLine("[E2E Auth] Clicked Create Account, waiter is listening for identity transaction");
+        Console.WriteLine("[E2E Auth] Clicked Create Account, waiter is listening for both TXs");
 
         // NOTE: Do NOT wait for redirect here - the test must produce a block first
         // The web client submits the transaction and waits for confirmation,
@@ -241,87 +244,63 @@ internal sealed class AuthSteps : BrowserStepsBase
     }
 
     /// <summary>
-    /// Waits for the identity transaction to be received in mempool, then produces a block.
-    /// This step must follow "the user creates a new identity" which creates the waiter.
+    /// Waits for BOTH identity and personal feed transactions to arrive in mempool,
+    /// then produces a block that confirms both.
     ///
-    /// IMPORTANT: This step also creates a waiter for the personal feed transaction BEFORE
-    /// producing the identity block. This is critical because the web client auto-submits
-    /// the personal feed transaction as soon as it detects the identity is confirmed.
-    /// If we created the waiter AFTER producing the block, we might miss the event.
+    /// The auth page submits both TXs in rapid succession (~17ms apart) before any block
+    /// is produced. We use a single waiter (minTransactions: 2) created before the click
+    /// because the EventAggregator only supports one subscriber per type.
     /// </summary>
     [When(@"the identity transaction is processed")]
     public async Task WhenTheIdentityTransactionIsProcessed()
     {
-        Console.WriteLine("[E2E Auth] Waiting for identity transaction to be processed...");
+        Console.WriteLine("[E2E Auth] Waiting for identity + personal feed transactions...");
 
-        // Retrieve the waiter that was created in WhenTheUserCreatesIdentity
-        if (!ScenarioContext.TryGetValue("PendingIdentityTransactionWaiter", out var waiterObj)
-            || waiterObj is not HushServerNode.HushServerNodeCore.TransactionWaiter identityWaiter)
+        // Retrieve the single waiter that was created in WhenTheUserCreatesIdentity
+        if (!ScenarioContext.TryGetValue("PendingAuthTransactionsWaiter", out var waiterObj)
+            || waiterObj is not HushServerNode.HushServerNodeCore.TransactionWaiter authWaiter)
         {
             throw new InvalidOperationException(
-                "No PendingIdentityTransactionWaiter found. " +
+                "No PendingAuthTransactionsWaiter found. " +
                 "This step must follow 'the user creates a new identity with display name'.");
         }
 
-        ScenarioContext.Remove("PendingIdentityTransactionWaiter");
+        ScenarioContext.Remove("PendingAuthTransactionsWaiter");
 
         try
         {
-            // Wait for the identity transaction to arrive at the mempool
-            await identityWaiter.WaitAsync();
-            Console.WriteLine("[E2E Auth] Identity transaction received in mempool");
+            // Wait for BOTH transactions to arrive (identity + personal feed, ~17ms apart)
+            await authWaiter.WaitAsync();
+            Console.WriteLine("[E2E Auth] Both transactions received in mempool");
 
-            // CRITICAL: Create the personal feed waiter BEFORE producing the identity block.
-            // The web client will auto-submit the personal feed transaction as soon as it
-            // detects the identity is confirmed. If we wait until after the block is produced,
-            // we might miss the TransactionReceivedEvent (classic race condition).
-            Console.WriteLine("[E2E Auth] Creating personal feed waiter BEFORE producing identity block...");
-            var personalFeedWaiter = StartListeningForTransactions(minTransactions: 1);
-            ScenarioContext["PendingPersonalFeedTransactionWaiter"] = personalFeedWaiter;
-
-            // Now produce the block - this confirms the identity and triggers the client
-            // to sync and submit the personal feed transaction
+            // Produce block — confirms both identity + personal feed in one block
             var blockControl = GetBlockControl();
             await blockControl.ProduceBlockAsync();
-            Console.WriteLine("[E2E Auth] Identity block produced, personal feed waiter is listening");
+            Console.WriteLine("[E2E Auth] Block produced with identity + personal feed TXs");
         }
         finally
         {
-            identityWaiter.Dispose();
+            authWaiter.Dispose();
         }
     }
 
     /// <summary>
-    /// Waits for the personal feed transaction to be received in mempool, then produces a block.
-    /// The waiter was created in WhenTheIdentityTransactionIsProcessed BEFORE the identity
-    /// block was produced, ensuring we don't miss the event due to race conditions.
+    /// Produces a block to advance the chain after the personal feed transaction.
+    ///
+    /// Both the identity and personal feed TXs were already confirmed in the previous step
+    /// ("the identity transaction is processed") because the auth page submits them in rapid
+    /// succession and they're included in the same block. This step produces an additional
+    /// block to allow the web client to detect the confirmation via its polling cycle.
     /// </summary>
     [When(@"the personal feed transaction is processed")]
     public async Task WhenThePersonalFeedTransactionIsProcessed()
     {
-        Console.WriteLine("[E2E Auth] Waiting for personal feed transaction...");
-        Console.WriteLine("[E2E Auth] (Waiter was created before identity block was produced)");
+        Console.WriteLine("[E2E Auth] Personal feed TX was already included in the identity block.");
+        Console.WriteLine("[E2E Auth] Producing additional block for client confirmation polling...");
 
-        // Retrieve the waiter that was created BEFORE the identity block was produced
-        if (!ScenarioContext.TryGetValue("PendingPersonalFeedTransactionWaiter", out var waiterObj)
-            || waiterObj is not HushServerNode.HushServerNodeCore.TransactionWaiter feedWaiter)
-        {
-            throw new InvalidOperationException(
-                "No PendingPersonalFeedTransactionWaiter found. " +
-                "This step must follow 'the identity transaction is processed'.");
-        }
-
-        ScenarioContext.Remove("PendingPersonalFeedTransactionWaiter");
-
-        try
-        {
-            await AwaitTransactionsAndProduceBlockAsync(feedWaiter);
-            Console.WriteLine("[E2E Auth] Personal feed transaction processed and block produced");
-        }
-        finally
-        {
-            feedWaiter.Dispose();
-        }
+        var blockControl = GetBlockControl();
+        await blockControl.ProduceBlockAsync();
+        Console.WriteLine("[E2E Auth] Additional block produced");
     }
 
     /// <summary>

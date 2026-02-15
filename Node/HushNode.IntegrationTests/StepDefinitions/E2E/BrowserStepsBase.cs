@@ -330,89 +330,9 @@ internal abstract class BrowserStepsBase
         return fixture.RedisConnection.GetDatabase();
     }
 
-    #region Screenshot Support
-
-    // Screenshot counter for ordering
-    private static int _screenshotCounter = 0;
-
-    /// <summary>
-    /// Takes a screenshot for debugging E2E tests.
-    /// Screenshots are saved to the test output directory with sequential numbering.
-    /// </summary>
-    /// <param name="stepName">A descriptive name for the step (e.g., "alice-group-created", "bob-joined").</param>
-    /// <param name="userName">Optional user name for multi-user tests (e.g., "Alice", "Bob").</param>
-    protected async Task TakeStepScreenshotAsync(string stepName, string? userName = null)
-    {
-        try
-        {
-            var page = await GetOrCreatePageAsync();
-            var counter = Interlocked.Increment(ref _screenshotCounter);
-
-            // Build filename: 001-alice-group-created.png
-            var userPrefix = !string.IsNullOrEmpty(userName) ? $"{userName.ToLowerInvariant()}-" : "";
-            var filename = $"{counter:D3}-{userPrefix}{stepName}.png";
-
-            // Save to a screenshots folder in the test output directory
-            var screenshotsDir = Path.Combine(Directory.GetCurrentDirectory(), "e2e-screenshots");
-            Directory.CreateDirectory(screenshotsDir);
-
-            var fullPath = Path.Combine(screenshotsDir, filename);
-
-            await page.ScreenshotAsync(new PageScreenshotOptions
-            {
-                Path = fullPath,
-                FullPage = true
-            });
-
-            Console.WriteLine($"[E2E Screenshot] Saved: {filename}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[E2E Screenshot] Failed to take screenshot '{stepName}': {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Takes a screenshot on test failure.
-    /// Call this in AfterScenario hook when a scenario fails.
-    /// </summary>
-    /// <param name="scenarioTitle">The scenario title for the filename.</param>
-    protected async Task TakeFailureScreenshotAsync(string scenarioTitle)
-    {
-        try
-        {
-            var page = await GetOrCreatePageAsync();
-            var safeTitle = string.Join("_", scenarioTitle.Split(Path.GetInvalidFileNameChars()));
-            var filename = $"FAILED-{safeTitle}-{DateTime.Now:HHmmss}.png";
-
-            var screenshotsDir = Path.Combine(Directory.GetCurrentDirectory(), "e2e-screenshots");
-            Directory.CreateDirectory(screenshotsDir);
-
-            var fullPath = Path.Combine(screenshotsDir, filename);
-
-            await page.ScreenshotAsync(new PageScreenshotOptions
-            {
-                Path = fullPath,
-                FullPage = true
-            });
-
-            Console.WriteLine($"[E2E Screenshot] FAILURE screenshot saved: {filename}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[E2E Screenshot] Failed to take failure screenshot: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Resets the screenshot counter. Call this at the start of each scenario.
-    /// </summary>
-    protected static void ResetScreenshotCounter()
-    {
-        _screenshotCounter = 0;
-    }
-
-    #endregion
+    // Screenshot support is centralized in ScenarioHooks.AfterStep —
+    // automatic screenshots are taken after every E2E step without
+    // requiring individual step definitions to call anything.
 
     #region localStorage Timeline
 

@@ -139,6 +139,27 @@ internal sealed class FeedSteps : BrowserStepsBase
         Console.WriteLine("-> Found chat feed");
     }
 
+    [Then(@"the personal feed should NOT show unread badge")]
+    public async Task ThenPersonalFeedShouldNotShowUnreadBadge()
+    {
+        var page = await GetOrCreatePageAsync();
+
+        Console.WriteLine("[E2E OwnMessage] Checking personal feed for unread badge...");
+
+        // Find the personal feed item in the feed list
+        var feedList = page.GetByTestId("feed-list").First;
+        await Expect(feedList).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15000 });
+
+        var personalFeed = feedList.GetByTestId("feed-item:personal");
+        await Expect(personalFeed.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15000 });
+
+        // Assert that the unread badge is NOT visible
+        var unreadBadge = personalFeed.First.GetByTestId("unread-badge");
+        await Expect(unreadBadge).ToBeHiddenAsync(new LocatorAssertionsToBeHiddenOptions { Timeout = 10000 });
+
+        Console.WriteLine("[E2E OwnMessage] Verified: Personal feed has NO unread badge");
+    }
+
     /// <summary>
     /// Sanitizes a name for use in test IDs.
     /// Matches the JavaScript implementation in ChatListItem.tsx.

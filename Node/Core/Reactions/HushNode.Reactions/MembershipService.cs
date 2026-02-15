@@ -94,58 +94,81 @@ public class MembershipService : IMembershipService
     {
         _logger.LogDebug("[MembershipService] RegisterCommitmentAsync called for feed {FeedId}", feedId);
 
-        try
+        const int maxRetries = 5;
+        const int baseDelayMs = 100;
+        var random = new Random();
+
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
-            using var unitOfWork = _unitOfWorkProvider.CreateWritable(System.Data.IsolationLevel.Serializable);
-
-            var commitmentRepo = unitOfWork.GetRepository<ICommitmentRepository>();
-            var merkleRepo = unitOfWork.GetRepository<IMerkleTreeRepository>();
-
-            // Check if already registered
-            var isRegistered = await commitmentRepo.IsCommitmentRegisteredAsync(feedId, userCommitment);
-
-            if (isRegistered)
+            try
             {
-                return RegisterCommitmentResult.AlreadyExists();
+                using var unitOfWork = _unitOfWorkProvider.CreateWritable(System.Data.IsolationLevel.Serializable);
+
+                var commitmentRepo = unitOfWork.GetRepository<ICommitmentRepository>();
+                var merkleRepo = unitOfWork.GetRepository<IMerkleTreeRepository>();
+
+                // Check if already registered
+                var isRegistered = await commitmentRepo.IsCommitmentRegisteredAsync(feedId, userCommitment);
+
+                if (isRegistered)
+                {
+                    return RegisterCommitmentResult.AlreadyExists();
+                }
+
+                // Get current commitment count (this will be the new leaf index)
+                var leafIndex = await merkleRepo.GetCommitmentCountAsync(feedId);
+
+                // Add the new commitment
+                var commitment = new FeedMemberCommitment(
+                    FeedId: feedId,
+                    UserCommitment: userCommitment,
+                    RegisteredAt: DateTime.UtcNow);
+                await commitmentRepo.AddCommitmentAsync(commitment);
+
+                // Get all commitments to compute new root
+                var allCommitments = (await merkleRepo.GetCommitmentsAsync(feedId)).ToList();
+                allCommitments.Add(userCommitment);
+
+                // Compute new Merkle root
+                var newRoot = ComputeMerkleRoot(allCommitments);
+
+                // Save the new root
+                var rootHistory = new MerkleRootHistory(
+                    Id: 0,  // Auto-generated
+                    FeedId: feedId,
+                    MerkleRoot: ToBytes32(newRoot),
+                    BlockHeight: 0,  // TODO: Get current block height
+                    CreatedAt: DateTime.UtcNow);
+                await merkleRepo.SaveRootAsync(rootHistory);
+
+                await unitOfWork.CommitAsync();
+
+                _logger.LogInformation("[MembershipService] Registered commitment for feed {FeedId}, leaf index: {LeafIndex}", feedId, leafIndex);
+
+                return RegisterCommitmentResult.Ok(ToBytes32(newRoot), leafIndex);
             }
+            catch (Npgsql.PostgresException ex) when (ex.SqlState == "40001") // Serialization failure
+            {
+                if (attempt == maxRetries)
+                {
+                    _logger.LogError(ex, "[MembershipService] Serialization failure after {MaxRetries} attempts for feed {FeedId}", maxRetries, feedId);
+                    return RegisterCommitmentResult.Error($"Registration failed after {maxRetries} retries: {ex.Message}");
+                }
 
-            // Get current commitment count (this will be the new leaf index)
-            var leafIndex = await merkleRepo.GetCommitmentCountAsync(feedId);
-
-            // Add the new commitment
-            var commitment = new FeedMemberCommitment(
-                FeedId: feedId,
-                UserCommitment: userCommitment,
-                RegisteredAt: DateTime.UtcNow);
-            await commitmentRepo.AddCommitmentAsync(commitment);
-
-            // Get all commitments to compute new root
-            var allCommitments = (await merkleRepo.GetCommitmentsAsync(feedId)).ToList();
-            allCommitments.Add(userCommitment);
-
-            // Compute new Merkle root
-            var newRoot = ComputeMerkleRoot(allCommitments);
-
-            // Save the new root
-            var rootHistory = new MerkleRootHistory(
-                Id: 0,  // Auto-generated
-                FeedId: feedId,
-                MerkleRoot: ToBytes32(newRoot),
-                BlockHeight: 0,  // TODO: Get current block height
-                CreatedAt: DateTime.UtcNow);
-            await merkleRepo.SaveRootAsync(rootHistory);
-
-            await unitOfWork.CommitAsync();
-
-            _logger.LogInformation("[MembershipService] Registered commitment for feed {FeedId}, leaf index: {LeafIndex}", feedId, leafIndex);
-
-            return RegisterCommitmentResult.Ok(ToBytes32(newRoot), leafIndex);
+                _logger.LogWarning("[MembershipService] Serialization conflict, retrying ({Attempt}/{MaxRetries}) for feed {FeedId}", attempt, maxRetries, feedId);
+                // Exponential backoff with jitter to prevent synchronized retries
+                var delay = (baseDelayMs * attempt) + random.Next(0, 50);
+                await Task.Delay(delay);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[MembershipService] Failed to register commitment for feed {FeedId}", feedId);
+                return RegisterCommitmentResult.Error($"Registration failed: {ex.Message}");
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[MembershipService] Failed to register commitment for feed {FeedId}", feedId);
-            return RegisterCommitmentResult.Error($"Registration failed: {ex.Message}");
-        }
+
+        // Should not reach here, but just in case
+        return RegisterCommitmentResult.Error("Registration failed: exceeded retry attempts");
     }
 
     public async Task<bool> IsCommitmentRegisteredAsync(FeedId feedId, byte[] userCommitment)

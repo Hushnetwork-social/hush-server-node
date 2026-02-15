@@ -232,18 +232,18 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="GetFeedsForAddress populates feed_meta cache on miss")]
+        [Xunit.SkippableFactAttribute(DisplayName="Identity name change updates Personal feed title in own feed_meta")]
         [Xunit.TraitAttribute("FeatureTitle", "FEAT-065 Feed Metadata Write Triggers")]
-        [Xunit.TraitAttribute("Description", "GetFeedsForAddress populates feed_meta cache on miss")]
+        [Xunit.TraitAttribute("Description", "Identity name change updates Personal feed title in own feed_meta")]
         [Xunit.TraitAttribute("Category", "FEAT-065")]
-        [Xunit.TraitAttribute("Category", "F6-003")]
-        public void GetFeedsForAddressPopulatesFeed_MetaCacheOnMiss()
+        [Xunit.TraitAttribute("Category", "F6-008")]
+        public void IdentityNameChangeUpdatesPersonalFeedTitleInOwnFeed_Meta()
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-065",
-                    "F6-003"};
+                    "F6-008"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("GetFeedsForAddress populates feed_meta cache on miss", null, tagsOfScenario, argumentsOfScenario, featureTags);
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Identity name change updates Personal feed title in own feed_meta", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 41
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
@@ -261,12 +261,253 @@ namespace HushNode.IntegrationTests.Features
     testRunner.Given("Alice has a ChatFeed with Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
 #line 43
-    testRunner.When("Alice\'s feed_meta Hash is flushed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+    testRunner.And("Bob\'s feed_meta Hash is flushed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 44
-    testRunner.And("GetFeedsForAddress is called for Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("GetFeedsForAddress is called for Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 45
+    testRunner.When("Bob changes display name to \"Robert\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 46
+    testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 47
+    testRunner.Then("Bob\'s feed_meta Hash should contain his Personal feed with title \"Robert (YOU)\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Identity name change cascades ChatFeed title to other participant")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-065 Feed Metadata Write Triggers")]
+        [Xunit.TraitAttribute("Description", "Identity name change cascades ChatFeed title to other participant")]
+        [Xunit.TraitAttribute("Category", "FEAT-065")]
+        [Xunit.TraitAttribute("Category", "F6-008")]
+        public void IdentityNameChangeCascadesChatFeedTitleToOtherParticipant()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-065",
+                    "F6-008"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Identity name change cascades ChatFeed title to other participant", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 51
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 52
+    testRunner.Given("Alice has a ChatFeed with Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 53
+    testRunner.And("Alice\'s feed_meta Hash is flushed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 54
+    testRunner.And("GetFeedsForAddress is called for Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 55
+    testRunner.When("Bob changes display name to \"Robert\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 56
+    testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 57
+    testRunner.Then("Alice\'s feed_meta Hash should contain the ChatFeed with title \"Robert\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Identity name change reflected in GetFeedsForAddress gRPC response")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-065 Feed Metadata Write Triggers")]
+        [Xunit.TraitAttribute("Description", "Identity name change reflected in GetFeedsForAddress gRPC response")]
+        [Xunit.TraitAttribute("Category", "FEAT-065")]
+        [Xunit.TraitAttribute("Category", "F6-008")]
+        public void IdentityNameChangeReflectedInGetFeedsForAddressGRPCResponse()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-065",
+                    "F6-008"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Identity name change reflected in GetFeedsForAddress gRPC response", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 61
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 62
+    testRunner.Given("Alice has a ChatFeed with Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 63
+    testRunner.And("Alice\'s feed_meta Hash is flushed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 64
+    testRunner.And("GetFeedsForAddress is called for Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 65
+    testRunner.When("Bob changes display name to \"Robert\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 66
+    testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 67
+    testRunner.Then("GetFeedsForAddress for Alice should return the ChatFeed with title \"Robert\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Group title change updates all participants\' feed_meta")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-065 Feed Metadata Write Triggers")]
+        [Xunit.TraitAttribute("Description", "Group title change updates all participants\' feed_meta")]
+        [Xunit.TraitAttribute("Category", "FEAT-065")]
+        [Xunit.TraitAttribute("Category", "GroupTitleCascade")]
+        public void GroupTitleChangeUpdatesAllParticipantsFeed_Meta()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-065",
+                    "GroupTitleCascade"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Group title change updates all participants\' feed_meta", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 71
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 72
+    testRunner.Given("Alice has created a public group feed \"Team Alpha\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 73
+    testRunner.And("Bob joins the public group \"Team Alpha\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 74
+    testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 75
+    testRunner.And("GetFeedsForAddress is called for Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 76
+    testRunner.And("GetFeedsForAddress is called for Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 77
+    testRunner.When("Alice changes group \"Team Alpha\" title to \"Team Beta\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 78
+    testRunner.Then("Alice\'s feed_meta Hash should contain group \"Team Alpha\" with title \"Team Beta\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 79
+    testRunner.And("Bob\'s feed_meta Hash should contain group \"Team Alpha\" with title \"Team Beta\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Group title change reflected in GetFeedsForAddress gRPC response")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-065 Feed Metadata Write Triggers")]
+        [Xunit.TraitAttribute("Description", "Group title change reflected in GetFeedsForAddress gRPC response")]
+        [Xunit.TraitAttribute("Category", "FEAT-065")]
+        [Xunit.TraitAttribute("Category", "GroupTitleCascade")]
+        public void GroupTitleChangeReflectedInGetFeedsForAddressGRPCResponse()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-065",
+                    "GroupTitleCascade"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Group title change reflected in GetFeedsForAddress gRPC response", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 83
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 84
+    testRunner.Given("Alice has created a public group feed \"Team Alpha\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 85
+    testRunner.And("Bob joins the public group \"Team Alpha\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 86
+    testRunner.And("a block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 87
+    testRunner.And("GetFeedsForAddress is called for Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 88
+    testRunner.When("Alice changes group \"Team Alpha\" title to \"Team Beta\" via gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 89
+    testRunner.Then("GetFeedsForAddress for Alice should return group feed with title \"Team Beta\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="GetFeedsForAddress populates feed_meta cache on miss")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-065 Feed Metadata Write Triggers")]
+        [Xunit.TraitAttribute("Description", "GetFeedsForAddress populates feed_meta cache on miss")]
+        [Xunit.TraitAttribute("Category", "FEAT-065")]
+        [Xunit.TraitAttribute("Category", "F6-003")]
+        public void GetFeedsForAddressPopulatesFeed_MetaCacheOnMiss()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-065",
+                    "F6-003"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("GetFeedsForAddress populates feed_meta cache on miss", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 93
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 94
+    testRunner.Given("Alice has a ChatFeed with Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 95
+    testRunner.When("Alice\'s feed_meta Hash is flushed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 96
+    testRunner.And("GetFeedsForAddress is called for Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 97
     testRunner.Then("Alice\'s feed_meta Hash should be repopulated with the ChatFeed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }

@@ -292,6 +292,7 @@ public sealed class FeedParticipantsCacheSteps
         await WhenTheKeyGenerationsForGroupAreLookedUpViaGrpc(groupName);
     }
 
+    [Given(@"(.*) joins the public group ""(.*)"" via gRPC")]
     [When(@"(.*) joins the public group ""(.*)"" via gRPC")]
     public async Task WhenUserJoinsThePublicGroupViaGrpc(string userName, string groupName)
     {

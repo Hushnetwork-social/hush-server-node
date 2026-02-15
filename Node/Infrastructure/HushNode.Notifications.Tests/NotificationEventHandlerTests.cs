@@ -456,6 +456,112 @@ public class NotificationEventHandlerTests
 
     #endregion
 
+    #region Sender Read Position Tests
+
+    [Fact]
+    public async Task HandleAsync_RegularFeed_AdvancesSenderReadPosition()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var participantAddress = "participant-address";
+
+        var feed = CreateFeed(feedId, senderAddress, participantAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress);
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
+        SetupFeedReadPositionStorageService(mocker);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - Sender's read position should be advanced to the message's block index
+        mocker.GetMock<IFeedReadPositionStorageService>()
+            .Verify(x => x.MarkFeedAsReadAsync(
+                senderAddress,
+                feedId,
+                feedMessage.BlockIndex), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_GroupFeed_AdvancesSenderReadPosition()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var participantAddress = "participant-address";
+
+        var groupFeed = CreateGroupFeed(feedId, senderAddress, participantAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress);
+
+        SetupFeedsStorageService(mocker, regularFeed: null, groupFeed);
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
+        SetupFeedReadPositionStorageService(mocker);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - Sender's read position should be advanced for group feeds too
+        mocker.GetMock<IFeedReadPositionStorageService>()
+            .Verify(x => x.MarkFeedAsReadAsync(
+                senderAddress,
+                feedId,
+                feedMessage.BlockIndex), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_SenderReadPositionNotCalledForRecipients()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var participantAddress = "participant-address";
+
+        var feed = CreateFeed(feedId, senderAddress, participantAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress);
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, "Sender Name");
+        SetupNotificationService(mocker);
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
+        SetupFeedReadPositionStorageService(mocker);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - MarkFeedAsReadAsync should only be called for sender, not for recipients
+        mocker.GetMock<IFeedReadPositionStorageService>()
+            .Verify(x => x.MarkFeedAsReadAsync(
+                participantAddress,
+                It.IsAny<FeedId>(),
+                It.IsAny<BlockIndex>()), Times.Never);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static Feed CreateFeed(FeedId feedId, params string[] participantAddresses)
@@ -608,6 +714,19 @@ public class NotificationEventHandlerTests
         mocker.GetMock<IPushDeliveryService>()
             .Setup(x => x.SendPushAsync(It.IsAny<string>(), It.IsAny<PushPayload>()))
             .Returns(Task.CompletedTask);
+    }
+
+    /// <summary>
+    /// Sets up feed read position storage service for sender read position auto-advance.
+    /// </summary>
+    private static void SetupFeedReadPositionStorageService(AutoMocker mocker)
+    {
+        mocker.GetMock<IFeedReadPositionStorageService>()
+            .Setup(x => x.MarkFeedAsReadAsync(
+                It.IsAny<string>(),
+                It.IsAny<FeedId>(),
+                It.IsAny<BlockIndex>()))
+            .ReturnsAsync(true);
     }
 
     #endregion
