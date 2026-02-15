@@ -19,6 +19,14 @@ message GetBlockchainHeightReply {
 
 message SubmitSignedTransactionRequest {
   string SignedTransaction = 1;
+  repeated AttachmentBlob Attachments = 2;  // FEAT-066: Encrypted attachment blobs (side-channel, not part of signed payload)
+}
+
+// FEAT-066: Encrypted attachment binary data sent alongside transaction
+message AttachmentBlob {
+  string AttachmentId = 1;        // Client-generated UUID matching metadata in signed payload
+  bytes EncryptedOriginal = 2;    // AES-256-GCM encrypted original file bytes
+  bytes EncryptedThumbnail = 3;   // AES-256-GCM encrypted thumbnail bytes (empty if no thumbnail)
 }
 
 // Transaction status enum for idempotency responses

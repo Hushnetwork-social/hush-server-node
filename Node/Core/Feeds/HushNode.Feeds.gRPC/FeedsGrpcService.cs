@@ -30,6 +30,7 @@ public class FeedsGrpcService(
     IIdentityStorageService identityStorageService,
     IBlockchainCache blockchainCache,
     IUnitOfWorkProvider<ReactionsDbContext> reactionsUnitOfWorkProvider,
+    IAttachmentStorageService attachmentStorageService,
     IConfiguration configuration,
     ILogger<FeedsGrpcService> logger) : HushFeed.HushFeedBase
 {
@@ -45,8 +46,12 @@ public class FeedsGrpcService(
     private readonly IIdentityStorageService _identityStorageService = identityStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IUnitOfWorkProvider<ReactionsDbContext> _reactionsUnitOfWorkProvider = reactionsUnitOfWorkProvider;
+    private readonly IAttachmentStorageService _attachmentStorageService = attachmentStorageService;
     private readonly int _maxMessagesPerResponse = configuration.GetValue<int>("Feeds:MaxMessagesPerResponse", 100);
     private readonly ILogger<FeedsGrpcService> _logger = logger;
+
+    /// <summary>FEAT-066: Chunk size for streaming attachment downloads (~64KB).</summary>
+    private const int AttachmentChunkSize = 65536;
 
     /// <summary>Maximum number of members supported in a single key rotation.</summary>
     private const int MaxMembersPerRotation = 512;
@@ -287,6 +292,9 @@ public class FeedsGrpcService(
                 if (feedMessage.KeyGeneration != null)
                     feedMessageReply.KeyGeneration = feedMessage.KeyGeneration.Value;
 
+                // FEAT-066: Add attachment metadata from off-chain storage
+                await AddAttachmentRefsAsync(feedMessageReply, feedMessage.FeedMessageId);
+
                 reply.Messages.Add(feedMessageReply);
             }
 
@@ -417,6 +425,9 @@ public class FeedsGrpcService(
                 {
                     feedMessageProto.KeyGeneration = feedMessage.KeyGeneration.Value;
                 }
+
+                // FEAT-066: Add attachment metadata from off-chain storage
+                await AddAttachmentRefsAsync(feedMessageProto, feedMessage.FeedMessageId);
 
                 reply.Messages.Add(feedMessageProto);
             }
@@ -951,6 +962,29 @@ public class FeedsGrpcService(
         return publicSigningAddress.Length > 10
             ? publicSigningAddress.Substring(0, 10) + "..."
             : publicSigningAddress;
+    }
+
+    /// <summary>
+    /// FEAT-066: Add attachment metadata references to a feed message proto response.
+    /// Queries PostgreSQL for attachment entities linked to the given message.
+    /// Messages without attachments get an empty list (backward compatible).
+    /// </summary>
+    private async Task AddAttachmentRefsAsync(
+        GetFeedMessagesForAddressReply.Types.FeedMessage feedMessageProto,
+        FeedMessageId feedMessageId)
+    {
+        var attachments = await this._attachmentStorageService.GetByMessageIdAsync(feedMessageId);
+        foreach (var att in attachments)
+        {
+            feedMessageProto.Attachments.Add(new GetFeedMessagesForAddressReply.Types.AttachmentRef
+            {
+                Id = att.Id,
+                Hash = att.Hash,
+                MimeType = att.MimeType,
+                Size = att.OriginalSize,
+                FileName = att.FileName
+            });
+        }
     }
 
     /// <summary>
@@ -2847,6 +2881,9 @@ public class FeedsGrpcService(
                 messageProto.KeyGeneration = feedMessage.KeyGeneration.Value;
             }
 
+            // FEAT-066: Include attachment metadata
+            await AddAttachmentRefsAsync(messageProto, feedMessage.FeedMessageId);
+
             Console.WriteLine($"[GetMessageById] Success - returning message from feed {feedMessage.FeedId}");
             return new GetMessageByIdResponse
             {
@@ -2872,5 +2909,73 @@ public class FeedsGrpcService(
                 Error = $"Internal error: {ex.Message}"
             };
         }
+    }
+
+    // ===== FEAT-066: Attachment Download =====
+
+    public override async Task DownloadAttachment(
+        DownloadAttachmentRequest request,
+        IServerStreamWriter<AttachmentChunk> responseStream,
+        ServerCallContext context)
+    {
+        // Authorization: requester must be a participant of the feed
+        var feedId = new FeedId(Guid.Parse(request.FeedId));
+        var isAuthorized = await this._feedsStorageService
+            .IsUserParticipantOfFeedAsync(feedId, request.RequesterUserAddress);
+
+        if (!isAuthorized)
+        {
+            _logger.LogWarning(
+                "[DownloadAttachment] Authorization failed: user {UserAddress} is not a participant of feed {FeedId}",
+                request.RequesterUserAddress.Substring(0, Math.Min(20, request.RequesterUserAddress.Length)),
+                request.FeedId);
+            throw new RpcException(new Status(StatusCode.PermissionDenied, "Not a participant of this feed"));
+        }
+
+        // Fetch attachment from storage
+        var attachment = await this._attachmentStorageService.GetByIdAsync(request.AttachmentId);
+        if (attachment == null)
+        {
+            throw new RpcException(new Status(StatusCode.NotFound, $"Attachment '{request.AttachmentId}' not found"));
+        }
+
+        // Select original or thumbnail bytes
+        byte[]? bytesToStream;
+        if (request.ThumbnailOnly)
+        {
+            bytesToStream = attachment.EncryptedThumbnail;
+            if (bytesToStream == null)
+            {
+                throw new RpcException(new Status(StatusCode.NotFound, $"No thumbnail available for attachment '{request.AttachmentId}'"));
+            }
+        }
+        else
+        {
+            bytesToStream = attachment.EncryptedOriginal;
+        }
+
+        // Chunk and stream
+        var totalSize = bytesToStream.Length;
+        var totalChunks = (int)Math.Ceiling((double)totalSize / AttachmentChunkSize);
+
+        for (var i = 0; i < totalChunks; i++)
+        {
+            var offset = i * AttachmentChunkSize;
+            var length = Math.Min(AttachmentChunkSize, totalSize - offset);
+
+            var chunk = new AttachmentChunk
+            {
+                Data = Google.Protobuf.ByteString.CopyFrom(bytesToStream, offset, length),
+                ChunkIndex = i,
+                TotalChunks = i == 0 ? totalChunks : 0,
+                TotalSize = i == 0 ? totalSize : 0
+            };
+
+            await responseStream.WriteAsync(chunk);
+        }
+
+        _logger.LogDebug(
+            "[DownloadAttachment] Streamed {TotalChunks} chunks ({TotalSize} bytes) for attachment {AttachmentId}",
+            totalChunks, totalSize, request.AttachmentId);
     }
 }

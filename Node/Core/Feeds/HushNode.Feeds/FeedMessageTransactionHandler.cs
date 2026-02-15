@@ -15,6 +15,8 @@ public class FeedMessageTransactionHandler(
     IFeedMetadataCacheService feedMetadataCacheService,
     IFeedParticipantsCacheService feedParticipantsCacheService,
     IBlockchainCache blockchainCache,
+    IAttachmentTempStorageService attachmentTempStorageService,
+    IAttachmentStorageService attachmentStorageService,
     IEventAggregator eventAggregator,
     ILogger<FeedMessageTransactionHandler> logger)
     : IFeedMessageTransactionHandler
@@ -25,6 +27,8 @@ public class FeedMessageTransactionHandler(
     private readonly IFeedMetadataCacheService _feedMetadataCacheService = feedMetadataCacheService;
     private readonly IFeedParticipantsCacheService _feedParticipantsCacheService = feedParticipantsCacheService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
+    private readonly IAttachmentTempStorageService _attachmentTempStorageService = attachmentTempStorageService;
+    private readonly IAttachmentStorageService _attachmentStorageService = attachmentStorageService;
     private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly ILogger<FeedMessageTransactionHandler> _logger = logger;
 
@@ -55,10 +59,59 @@ public class FeedMessageTransactionHandler(
             this._blockchainCache.LastBlockIndex,
             AuthorCommitment: validatedTransaction.Payload.AuthorCommitment,
             ReplyToMessageId: validatedTransaction.Payload.ReplyToMessageId,
-            KeyGeneration: validatedTransaction.Payload.KeyGeneration);
+            KeyGeneration: validatedTransaction.Payload.KeyGeneration)
+        {
+            // FEAT-066: Carry attachment refs for notification hints
+            Attachments = validatedTransaction.Payload.Attachments
+        };
 
         // Write to PostgreSQL (source of truth)
         await this._feedMessageStorageService.CreateFeedMessageAsync(feedMessage);
+
+        // FEAT-066: Persist attachments from temp storage to PostgreSQL
+        if (validatedTransaction.Payload.Attachments is { Count: > 0 })
+        {
+            foreach (var attachmentRef in validatedTransaction.Payload.Attachments)
+            {
+                try
+                {
+                    var tempData = await this._attachmentTempStorageService.RetrieveAsync(attachmentRef.Id);
+                    if (tempData is null)
+                    {
+                        _logger.LogWarning(
+                            "Temp file missing for attachment {AttachmentId} on message {MessageId}. Skipping.",
+                            attachmentRef.Id, feedMessage.FeedMessageId);
+                        continue;
+                    }
+
+                    var entity = new AttachmentEntity(
+                        attachmentRef.Id,
+                        tempData.Value.EncryptedOriginal!,
+                        tempData.Value.EncryptedThumbnail,
+                        feedMessage.FeedMessageId,
+                        attachmentRef.Size,
+                        tempData.Value.EncryptedThumbnail?.Length ?? 0,
+                        attachmentRef.MimeType,
+                        attachmentRef.FileName,
+                        attachmentRef.Hash,
+                        DateTime.UtcNow);
+
+                    await this._attachmentStorageService.CreateAttachmentAsync(entity);
+                    await this._attachmentTempStorageService.DeleteAsync(attachmentRef.Id);
+
+                    _logger.LogDebug(
+                        "Persisted attachment {AttachmentId} ({MimeType}, {Size} bytes) for message {MessageId}",
+                        attachmentRef.Id, attachmentRef.MimeType, attachmentRef.Size, feedMessage.FeedMessageId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to persist attachment {AttachmentId} for message {MessageId}. Message write succeeded.",
+                        attachmentRef.Id, feedMessage.FeedMessageId);
+                }
+            }
+        }
 
         // Update the feed's BlockIndex so clients know there's new content
         // This is critical for sync - clients filter by BlockIndex, so if the feed's

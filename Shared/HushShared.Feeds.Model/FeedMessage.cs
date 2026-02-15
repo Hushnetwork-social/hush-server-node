@@ -12,4 +12,10 @@ public record FeedMessage(
     BlockIndex BlockIndex,
     byte[]? AuthorCommitment = null,  // Protocol Omega: Poseidon hash of author's user_secret for ZK proof
     FeedMessageId? ReplyToMessageId = null,  // Reply to Message: Reference to parent message
-    int? KeyGeneration = null);  // Group Feeds: Key generation used to encrypt this message
+    int? KeyGeneration = null)  // Group Feeds: Key generation used to encrypt this message
+{
+    /// <summary>
+    /// FEAT-066: Attachment metadata references (populated at query time, not stored as a DB column).
+    /// </summary>
+    public List<AttachmentReference>? Attachments { get; init; }
+}
