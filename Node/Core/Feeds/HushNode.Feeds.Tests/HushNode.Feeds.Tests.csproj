@@ -23,11 +23,13 @@
     <PackageReference Include="Moq.AutoMock" Version="3.5.0" />
     <PackageReference Include="FluentAssertions" Version="6.12.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\HushNode.Feeds\HushNode.Feeds.csproj" />
     <ProjectReference Include="..\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
+    <ProjectReference Include="..\HushNode.Feeds.gRPC\HushNode.Feeds.gRPC.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Caching\HushNode.Caching.csproj" />
   </ItemGroup>

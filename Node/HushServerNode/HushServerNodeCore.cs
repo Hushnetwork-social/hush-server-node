@@ -491,7 +491,12 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
 
     private static void ConfigureServices(WebApplicationBuilder builder, TestConfiguration? testConfig)
     {
-        builder.Services.AddGrpc();
+        builder.Services.AddGrpc(options =>
+        {
+            // FEAT-066: Increase max message size for attachment uploads (25MB per blob + overhead)
+            options.MaxReceiveMessageSize = 30 * 1024 * 1024; // 30MB
+            options.MaxSendMessageSize = 30 * 1024 * 1024; // 30MB for streaming downloads
+        });
         builder.Services.AddGrpcReflection();
 
         builder.Services.AddCors(options =>

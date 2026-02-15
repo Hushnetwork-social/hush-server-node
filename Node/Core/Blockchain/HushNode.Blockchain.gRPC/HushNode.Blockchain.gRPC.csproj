@@ -1,6 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <InternalsVisibleTo Include="HushServerNode.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Google.Protobuf" Version="3.26.0" />
     <PackageReference Include="Grpc" Version="2.46.6" />
     <PackageReference Include="Grpc.Core" Version="2.46.6" />
@@ -25,6 +29,7 @@
     <ProjectReference Include="..\..\Idempotency\HushNode.Idempotency\HushNode.Idempotency.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Feeds.Model\HushShared.Feeds.Model.csproj" />
+    <ProjectReference Include="..\..\Feeds\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
   </ItemGroup>
 
 </Project>
