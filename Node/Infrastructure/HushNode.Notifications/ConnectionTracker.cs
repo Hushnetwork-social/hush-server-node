@@ -43,7 +43,7 @@ public class ConnectionTracker : IConnectionTracker
                 "Marked user {UserId} online with connection {ConnectionId}",
                 userId, connectionId);
         }
-        catch (RedisConnectionException ex)
+        catch (RedisException ex)
         {
             _logger.LogWarning(ex, "Redis connection error while marking user online");
         }
@@ -63,7 +63,7 @@ public class ConnectionTracker : IConnectionTracker
                 "Marked connection {ConnectionId} offline for user {UserId}",
                 connectionId, userId);
         }
-        catch (RedisConnectionException ex)
+        catch (RedisException ex)
         {
             _logger.LogWarning(ex, "Redis connection error while marking user offline");
         }
@@ -81,7 +81,7 @@ public class ConnectionTracker : IConnectionTracker
 
             return count > 0;
         }
-        catch (RedisConnectionException ex)
+        catch (RedisException ex)
         {
             _logger.LogWarning(ex, "Redis connection error while checking user online status");
             return false;
@@ -118,7 +118,7 @@ public class ConnectionTracker : IConnectionTracker
             _logger.LogDebug("Found {Count} online users", count);
             return count;
         }
-        catch (RedisConnectionException ex)
+        catch (RedisException ex)
         {
             _logger.LogWarning(ex, "Redis connection error while getting online user count");
             return 0;

@@ -34,9 +34,9 @@ public class UnreadTrackingService : IUnreadTrackingService
 
             return (int)newValue;
         }
-        catch (RedisConnectionException ex)
+        catch (RedisException ex)
         {
-            _logger.LogWarning(ex, "Redis connection error while incrementing unread count");
+            _logger.LogWarning(ex, "Redis error while incrementing unread count");
             return 0;
         }
     }
@@ -53,9 +53,9 @@ public class UnreadTrackingService : IUnreadTrackingService
                 "Marked feed as read for user {UserId}, feed {FeedId}",
                 userId, feedId);
         }
-        catch (RedisConnectionException ex)
+        catch (RedisException ex)
         {
-            _logger.LogWarning(ex, "Redis connection error while marking feed as read");
+            _logger.LogWarning(ex, "Redis error while marking feed as read");
         }
     }
 
@@ -95,7 +95,7 @@ public class UnreadTrackingService : IUnreadTrackingService
                 "Retrieved {Count} unread counts for user {UserId}",
                 result.Count, userId);
         }
-        catch (RedisConnectionException ex)
+        catch (RedisException ex)
         {
             _logger.LogWarning(ex, "Redis connection error while getting unread counts");
         }
@@ -118,7 +118,7 @@ public class UnreadTrackingService : IUnreadTrackingService
 
             return 0;
         }
-        catch (RedisConnectionException ex)
+        catch (RedisException ex)
         {
             _logger.LogWarning(ex, "Redis connection error while getting unread count");
             return 0;

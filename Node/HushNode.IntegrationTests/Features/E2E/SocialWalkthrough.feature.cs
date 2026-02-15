@@ -538,211 +538,226 @@ namespace HushNode.IntegrationTests.Features.E2E
         testRunner.Then("the chat with \"Eve\" should be at position 1 in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 252
-        testRunner.When("Alice records the current feed list order", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+        testRunner.When("Alice triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 253
-        testRunner.And("Alice opens the chat with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 254
-        testRunner.And("Alice opens the chat with \"Charlie\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 255
-        testRunner.And("Alice opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.Then("the chat with \"Eve\" should be at position 1 in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 256
-        testRunner.And("Alice opens the chat with \"Eve\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 257
-        testRunner.Then("the feed list order should remain unchanged for Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
-#line hidden
-#line 260
         testRunner.When("Alice records the current feed list order", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
+#line 257
+        testRunner.And("Alice opens the chat with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 258
+        testRunner.And("Alice opens the chat with \"Charlie\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 259
+        testRunner.And("Alice opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 260
+        testRunner.And("Alice opens the chat with \"Eve\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
 #line 261
-        testRunner.And("3 blocks are produced without activity", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 262
-        testRunner.And("Alice triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 263
         testRunner.Then("the feed list order should remain unchanged for Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 269
+#line 264
+        testRunner.When("Alice records the current feed list order", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 265
+        testRunner.And("3 blocks are produced without activity", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 266
+        testRunner.And("Alice triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 267
+        testRunner.Then("the feed list order should remain unchanged for Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 273
         testRunner.When("Charlie opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 270
+#line 274
         testRunner.And("Charlie sends message \"Another message in Open Forum!\" and waits for confirmation" +
                         "", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 272
+#line 276
         testRunner.When("Alice triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
-#line hidden
-#line 273
-        testRunner.And("Alice opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 274
-        testRunner.Then("Alice should see message \"Another message in Open Forum!\" from Charlie", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 277
-        testRunner.Then("the group \"Open Forum\" should be at position 1 in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+        testRunner.And("Alice opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 278
+        testRunner.Then("Alice should see message \"Another message in Open Forum!\" from Charlie", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 281
-        testRunner.When("Bob opens the chat with \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
-#line hidden
-#line 282
-        testRunner.And("Bob sends message \"Hey Alice, quick question!\" and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 284
-        testRunner.When("Alice triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+        testRunner.Then("the group \"Open Forum\" should be at position 1 in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 285
-        testRunner.Then("the chat with \"Bob\" should be at position 1 in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+        testRunner.When("Bob opens the chat with \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 286
-        testRunner.And("the group \"Open Forum\" should be at position 2 in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.And("Bob sends message \"Hey Alice, quick question!\" and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 288
+        testRunner.When("Alice triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 289
+        testRunner.Then("the chat with \"Bob\" should be at position 1 in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 290
+        testRunner.And("the group \"Open Forum\" should be at position 2 in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 293
+        testRunner.When("Alice triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 294
+        testRunner.Then("the chat with \"Bob\" should be at position 1 in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 295
+        testRunner.And("the group \"Open Forum\" should be at position 2 in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 299
         testRunner.Then("Alice should have 6 feeds in their feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 296
+#line 305
         testRunner.When("Alice opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 297
+#line 306
         testRunner.And("Alice replies to message \"Welcome to Open Forum everyone!\" with \"This is a reply " +
                         "in a group!\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 300
+#line 309
         testRunner.When("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 301
+#line 310
         testRunner.And("Bob opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 302
+#line 311
         testRunner.Then("Bob should see message \"This is a reply in a group!\" from Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 303
-        testRunner.And("the reply to \"Welcome to Open Forum everyone!\" should be visible with text \"This " +
-                        "is a reply in a group!\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 306
-        testRunner.When("Charlie triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
-#line hidden
-#line 307
-        testRunner.And("Charlie opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 308
-        testRunner.Then("Charlie should see message \"This is a reply in a group!\" from Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
-#line hidden
-#line 309
+#line 312
         testRunner.And("the reply to \"Welcome to Open Forum everyone!\" should be visible with text \"This " +
                         "is a reply in a group!\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 315
-        testRunner.When("Bob opens the chat with \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+        testRunner.When("Charlie triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 316
+        testRunner.And("Charlie opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 317
+        testRunner.Then("Charlie should see message \"This is a reply in a group!\" from Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 318
+        testRunner.And("the reply to \"Welcome to Open Forum everyone!\" should be visible with text \"This " +
+                        "is a reply in a group!\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 324
+        testRunner.When("Bob opens the chat with \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 327
         testRunner.When("Alice opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 319
+#line 328
         testRunner.And("Alice sends message mentioning \"Bob\" with \"what do you think?\" and waits for conf" +
                         "irmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 322
+#line 331
         testRunner.When("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 323
+#line 332
         testRunner.Then("Bob should see a notification toast from \"Alice\" in group \"Open Forum\" with \"@Bob" +
                         "\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 324
+#line 333
         testRunner.And("Bob should see mention badge on group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 327
+#line 336
         testRunner.When("Bob opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 328
+#line 337
         testRunner.Then("Bob should see mention \"@Bob\" in message containing \"what do you think?\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 331
+#line 340
         testRunner.Then("Bob should NOT see mention badge on group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 334
+#line 343
         testRunner.When("Charlie triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 335
+#line 344
         testRunner.And("Charlie opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 336
+#line 345
         testRunner.Then("Charlie should see mention \"@Bob\" in message containing \"what do you think?\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 342
+#line 351
         testRunner.When("Bob opens the chat with \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 345
+#line 354
         testRunner.When("Alice opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 346
+#line 355
         testRunner.And("Alice sends message \"Everyone check http://www.hushnetwork.social awesome project" +
                         "!\" and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 347
+#line 356
         testRunner.Then("Alice should see a link preview in message containing \"Everyone check\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 350
+#line 359
         testRunner.When("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 351
+#line 360
         testRunner.Then("Bob should see a notification toast from \"Alice\" in group \"Open Forum\" with \"hush" +
                         "network.social\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 352
+#line 361
         testRunner.And("the notification toast should not contain link preview metadata", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 355
+#line 364
         testRunner.When("Bob opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 356
+#line 365
         testRunner.Then("Bob should see a link preview in message containing \"Everyone check\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 359
+#line 368
         testRunner.When("Alice sends message \"Compare http://www.hushnetwork.social and https://www.google" +
                         ".com\" and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 360
+#line 369
         testRunner.Then("Alice should see 2 link previews in message containing \"Compare\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 363
+#line 372
         testRunner.Then("Alice should see previous link preview button disabled in message containing \"Com" +
                         "pare\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 364
+#line 373
         testRunner.And("Alice should see next link preview button enabled in message containing \"Compare\"" +
                         "", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 367
+#line 376
         testRunner.When("Alice clicks next link preview in message containing \"Compare\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 368
+#line 377
         testRunner.Then("Alice should see link preview 2 of 2 in message containing \"Compare\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 371
+#line 380
         testRunner.Then("Alice should see previous link preview button enabled in message containing \"Comp" +
                         "are\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 372
+#line 381
         testRunner.And("Alice should see next link preview button disabled in message containing \"Compare" +
                         "\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 375
+#line 384
         testRunner.When("Charlie triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 376
+#line 385
         testRunner.And("Charlie opens the group \"Open Forum\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 377
+#line 386
         testRunner.Then("Charlie should see a link preview in message containing \"Everyone check\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 378
+#line 387
         testRunner.And("Charlie should see 2 link previews in message containing \"Compare\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }

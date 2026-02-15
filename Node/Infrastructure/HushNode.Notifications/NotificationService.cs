@@ -127,7 +127,7 @@ public class NotificationService : INotificationService
                 "Published NewMessage event to Redis for user {UserId}, feed {FeedId}, channel {Channel}",
                 recipientUserId.Substring(0, Math.Min(20, recipientUserId.Length)), feedId, channel);
         }
-        catch (RedisConnectionException ex)
+        catch (RedisException ex)
         {
             _logger.LogWarning(ex, "Redis connection error while publishing new message event");
         }
@@ -155,7 +155,7 @@ public class NotificationService : INotificationService
                 "Published MessagesRead event for user {UserId}, feed {FeedId}",
                 userId, feedId);
         }
-        catch (RedisConnectionException ex)
+        catch (RedisException ex)
         {
             _logger.LogWarning(ex, "Redis connection error while publishing messages read event");
         }

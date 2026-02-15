@@ -248,6 +248,10 @@ Feature: Social Walkthrough
         # The chat with Eve should be at position 1 (after personal feed at 0)
         Then the chat with "Eve" should be at position 1 in Alice's feed list
 
+        # --- SECOND SYNC: Position must persist (regression: stale server blockIndex overwrite) ---
+        When Alice triggers sync
+        Then the chat with "Eve" should be at position 1 in Alice's feed list
+
         # --- OPENING FEEDS PRESERVES ORDER ---
         When Alice records the current feed list order
         And Alice opens the chat with "Bob"
@@ -281,6 +285,11 @@ Feature: Social Walkthrough
         When Bob opens the chat with "Alice"
         And Bob sends message "Hey Alice, quick question!" and waits for confirmation
 
+        When Alice triggers sync
+        Then the chat with "Bob" should be at position 1 in Alice's feed list
+        And the group "Open Forum" should be at position 2 in Alice's feed list
+
+        # --- SECOND SYNC: Positions must persist (regression: stale server blockIndex overwrite) ---
         When Alice triggers sync
         Then the chat with "Bob" should be at position 1 in Alice's feed list
         And the group "Open Forum" should be at position 2 in Alice's feed list
