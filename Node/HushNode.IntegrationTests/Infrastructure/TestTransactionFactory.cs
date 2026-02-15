@@ -295,6 +295,48 @@ internal static class TestTransactionFactory
     }
 
     /// <summary>
+    /// FEAT-066: Creates a signed feed message transaction WITH attachment metadata.
+    /// Returns the transaction JSON, message ID, and attachment references for verification.
+    /// </summary>
+    /// <param name="sender">The identity sending the message.</param>
+    /// <param name="feedId">The feed to send the message to.</param>
+    /// <param name="message">The plaintext message content.</param>
+    /// <param name="feedAesKey">The AES key for the feed.</param>
+    /// <param name="attachments">List of attachment references to include in the payload.</param>
+    /// <returns>Tuple of (JSON transaction, FeedMessageId) for verification.</returns>
+    public static (string Transaction, FeedMessageId MessageId) CreateFeedMessageWithAttachments(
+        TestIdentity sender,
+        FeedId feedId,
+        string message,
+        string feedAesKey,
+        List<AttachmentReference> attachments)
+    {
+        var messageId = FeedMessageId.NewFeedMessageId;
+        var encryptedContent = EncryptKeys.AesEncrypt(message, feedAesKey);
+
+        var payload = new NewFeedMessagePayload(
+            messageId,
+            feedId,
+            encryptedContent,
+            Attachments: attachments);
+
+        var unsignedTransaction = UnsignedTransactionHandler.CreateNew(
+            NewFeedMessagePayloadHandler.NewFeedMessagePayloadKind,
+            Timestamp.Current,
+            payload);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            sender.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<NewFeedMessagePayload>(
+            unsignedTransaction,
+            new SignatureInfo(sender.PublicSigningAddress, signature));
+
+        return (signedTransaction.ToJson(), messageId);
+    }
+
+    /// <summary>
     /// Creates a signed identity update transaction (display name change).
     /// </summary>
     public static string CreateIdentityUpdate(TestIdentity identity, string newAlias)
