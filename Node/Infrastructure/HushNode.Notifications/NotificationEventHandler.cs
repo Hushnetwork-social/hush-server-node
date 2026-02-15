@@ -247,7 +247,8 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
                     recipientAddress,
                     feedId,
                     senderName,
-                    messagePreview);
+                    messagePreview,
+                    feedName);
             }
             else
             {

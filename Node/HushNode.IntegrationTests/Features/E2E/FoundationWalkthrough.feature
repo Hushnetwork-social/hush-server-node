@@ -1,5 +1,5 @@
-@E2E @BasicWalkthrough @PR @Critical
-Feature: Basic User Walkthrough
+@E2E @FoundationWalkthrough @PR @Critical
+Feature: Foundation User Walkthrough
     As a new user
     I want to create my identity, send a message, and add a reaction
     So that I can verify the full system works end-to-end

@@ -27,11 +27,13 @@ public interface INotificationService
     /// <param name="feedId">The feed ID.</param>
     /// <param name="senderName">Display name of the sender.</param>
     /// <param name="messagePreview">Preview of the message (max 255 chars).</param>
+    /// <param name="feedName">For group feeds: the group name. Null for 1:1 chats.</param>
     Task PublishNewMessageAsync(
         string recipientUserId,
         string feedId,
         string senderName,
-        string messagePreview);
+        string messagePreview,
+        string? feedName = null);
 
     /// <summary>
     /// Publish a "messages read" event to all connected devices.

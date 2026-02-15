@@ -91,6 +91,12 @@ internal sealed class ScenarioHooks
     /// </summary>
     public const string ScenarioStartTimeKey = "ScenarioStartTime";
 
+    /// <summary>
+    /// Context key for tracking registered user names (dynamic list).
+    /// Used by teardown methods to iterate all users instead of hardcoded names.
+    /// </summary>
+    public const string RegisteredUserNamesKey = "RegisteredUserNames";
+
     private static PlaywrightFixture? _playwrightFixture;
     private static readonly SemaphoreSlim _playwrightLock = new(1, 1);
 
@@ -215,6 +221,9 @@ internal sealed class ScenarioHooks
 
         // Initialize browser logs dictionary
         _scenarioContext[BrowserLogsKey] = new Dictionary<string, List<string>>();
+
+        // Initialize dynamic user tracking list
+        _scenarioContext[RegisteredUserNamesKey] = new List<string>();
 
         // Lazy initialization of Playwright (thread-safe)
         await _playwrightLock.WaitAsync();
@@ -574,6 +583,21 @@ internal sealed class ScenarioHooks
             "Ensure the scenario is tagged with @E2E.");
     }
 
+    /// <summary>
+    /// Gets the list of registered user names from ScenarioContext.
+    /// Returns empty list if not initialized (non-E2E scenarios or single-user tests).
+    /// </summary>
+    private List<string> GetRegisteredUserNames()
+    {
+        if (_scenarioContext.TryGetValue(RegisteredUserNamesKey, out var obj)
+            && obj is List<string> userNames)
+        {
+            return userNames;
+        }
+
+        return new List<string>();
+    }
+
     #region E2E Output Folder Management
 
     /// <summary>
@@ -806,10 +830,10 @@ internal sealed class ScenarioHooks
         sb.AppendLine("═══════════════════════════════════════════════════════════════════════════════");
         sb.AppendLine();
 
-        var userNames = new[] { "Alice", "Bob", "Charlie" }; // Common test user names
+        var registeredUsers = GetRegisteredUserNames();
         var hasAnyData = false;
 
-        foreach (var userName in userNames)
+        foreach (var userName in registeredUsers)
         {
             var timelineKey = $"LocalStorageTimeline_{userName}";
             if (!_scenarioContext.TryGetValue(timelineKey, out var timelineObj)
@@ -877,10 +901,10 @@ internal sealed class ScenarioHooks
         sb.AppendLine("═══════════════════════════════════════════════════════════════════════════════");
         sb.AppendLine();
 
-        var userNames = new[] { "Alice", "Bob", "Charlie" }; // Common test user names
+        var registeredUsers = GetRegisteredUserNames();
         var hasAnyData = false;
 
-        foreach (var userName in userNames)
+        foreach (var userName in registeredUsers)
         {
             var networkLogKey = $"NetworkLog_{userName}";
             if (!_scenarioContext.TryGetValue(networkLogKey, out var logObj)
@@ -957,9 +981,8 @@ internal sealed class ScenarioHooks
         // Try single-user main page first
         TakeFailureScreenshot("E2E_MainPage", "main", scenarioFolder);
 
-        // Try multi-user named pages
-        var userNames = new[] { "Alice", "Bob", "Charlie" };
-        foreach (var userName in userNames)
+        // Try multi-user named pages (dynamic)
+        foreach (var userName in GetRegisteredUserNames())
         {
             TakeFailureScreenshot($"E2E_Page_{userName}", userName.ToLowerInvariant(), scenarioFolder);
         }
@@ -1004,9 +1027,8 @@ internal sealed class ScenarioHooks
         // Close single-user main context (used by GetOrCreatePageAsync in BrowserStepsBase)
         await CloseContextAsync("E2E_MainContext", "Main", scenarioFailed, scenarioName);
 
-        // Close multi-user named contexts (used by multi-user step definitions)
-        var userNames = new[] { "Alice", "Bob", "Charlie" };
-        foreach (var userName in userNames)
+        // Close multi-user named contexts (dynamic)
+        foreach (var userName in GetRegisteredUserNames())
         {
             await CloseContextAsync($"E2E_Context_{userName}", userName, scenarioFailed, scenarioName);
         }
@@ -1050,14 +1072,14 @@ internal sealed class ScenarioHooks
         try
         {
             var videoFiles = Directory.GetFiles(scenarioFolder, "*.webm");
-            var userNames = new[] { "alice", "bob", "charlie" };
+            var registeredUsers = GetRegisteredUserNames();
             var userIndex = 0;
 
             foreach (var videoFile in videoFiles.OrderBy(f => File.GetCreationTime(f)))
             {
-                if (userIndex >= userNames.Length) break;
+                if (userIndex >= registeredUsers.Count) break;
 
-                var newName = $"video-{userNames[userIndex]}.webm";
+                var newName = $"video-{registeredUsers[userIndex].ToLowerInvariant()}.webm";
                 var newPath = Path.Combine(scenarioFolder, newName);
 
                 if (!File.Exists(newPath))

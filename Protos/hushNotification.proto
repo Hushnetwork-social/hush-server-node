@@ -56,6 +56,9 @@ message FeedEvent {
 
   // FEAT-063: For MESSAGES_READ events - block index up to which user has read
   int64 UpToBlockIndex = 8;
+
+  // For NEW_MESSAGE events in group feeds: the group name
+  string FeedName = 9;
 }
 
 // Mark as read request

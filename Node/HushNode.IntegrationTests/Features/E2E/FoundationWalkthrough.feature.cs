@@ -20,26 +20,26 @@ namespace HushNode.IntegrationTests.Features.E2E
     [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
     [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     [Xunit.TraitAttribute("Category", "E2E")]
-    [Xunit.TraitAttribute("Category", "BasicWalkthrough")]
+    [Xunit.TraitAttribute("Category", "FoundationWalkthrough")]
     [Xunit.TraitAttribute("Category", "PR")]
     [Xunit.TraitAttribute("Category", "Critical")]
-    public partial class BasicUserWalkthroughFeature : object, Xunit.IClassFixture<BasicUserWalkthroughFeature.FixtureData>, System.IDisposable
+    public partial class FoundationUserWalkthroughFeature : object, Xunit.IClassFixture<FoundationUserWalkthroughFeature.FixtureData>, System.IDisposable
     {
         
         private static TechTalk.SpecFlow.ITestRunner testRunner;
         
         private static string[] featureTags = new string[] {
                 "E2E",
-                "BasicWalkthrough",
+                "FoundationWalkthrough",
                 "PR",
                 "Critical"};
         
         private Xunit.Abstractions.ITestOutputHelper _testOutputHelper;
         
-#line 1 "BasicWalkthrough.feature"
+#line 1 "FoundationWalkthrough.feature"
 #line hidden
         
-        public BasicUserWalkthroughFeature(BasicUserWalkthroughFeature.FixtureData fixtureData, HushNode_IntegrationTests_XUnitAssemblyFixture assemblyFixture, Xunit.Abstractions.ITestOutputHelper testOutputHelper)
+        public FoundationUserWalkthroughFeature(FoundationUserWalkthroughFeature.FixtureData fixtureData, HushNode_IntegrationTests_XUnitAssemblyFixture assemblyFixture, Xunit.Abstractions.ITestOutputHelper testOutputHelper)
         {
             this._testOutputHelper = testOutputHelper;
             this.TestInitialize();
@@ -48,7 +48,7 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Basic User Walkthrough", "    As a new user\r\n    I want to create my identity, send a message, and add a re" +
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Foundation User Walkthrough", "    As a new user\r\n    I want to create my identity, send a message, and add a re" +
                     "action\r\n    So that I can verify the full system works end-to-end", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
@@ -105,7 +105,7 @@ namespace HushNode.IntegrationTests.Features.E2E
         }
         
         [Xunit.SkippableFactAttribute(DisplayName="New user creates identity through browser")]
-        [Xunit.TraitAttribute("FeatureTitle", "Basic User Walkthrough")]
+        [Xunit.TraitAttribute("FeatureTitle", "Foundation User Walkthrough")]
         [Xunit.TraitAttribute("Description", "New user creates identity through browser")]
         [Xunit.TraitAttribute("Category", "Identity")]
         public void NewUserCreatesIdentityThroughBrowser()
@@ -150,7 +150,7 @@ namespace HushNode.IntegrationTests.Features.E2E
         }
         
         [Xunit.SkippableFactAttribute(DisplayName="User sends message to personal feed")]
-        [Xunit.TraitAttribute("FeatureTitle", "Basic User Walkthrough")]
+        [Xunit.TraitAttribute("FeatureTitle", "Foundation User Walkthrough")]
         [Xunit.TraitAttribute("Description", "User sends message to personal feed")]
         [Xunit.TraitAttribute("Category", "PersonalFeed")]
         public void UserSendsMessageToPersonalFeed()
@@ -198,7 +198,7 @@ namespace HushNode.IntegrationTests.Features.E2E
         }
         
         [Xunit.SkippableFactAttribute(DisplayName="User adds reaction to a message")]
-        [Xunit.TraitAttribute("FeatureTitle", "Basic User Walkthrough")]
+        [Xunit.TraitAttribute("FeatureTitle", "Foundation User Walkthrough")]
         [Xunit.TraitAttribute("Description", "User adds reaction to a message")]
         [Xunit.TraitAttribute("Category", "Reactions")]
         public void UserAddsReactionToAMessage()
@@ -246,12 +246,12 @@ namespace HushNode.IntegrationTests.Features.E2E
             
             public FixtureData()
             {
-                BasicUserWalkthroughFeature.FeatureSetup();
+                FoundationUserWalkthroughFeature.FeatureSetup();
             }
             
             void System.IDisposable.Dispose()
             {
-                BasicUserWalkthroughFeature.FeatureTearDown();
+                FoundationUserWalkthroughFeature.FeatureTearDown();
             }
         }
     }

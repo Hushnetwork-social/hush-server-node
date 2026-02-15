@@ -100,7 +100,8 @@ public class NotificationService : INotificationService
         string recipientUserId,
         string feedId,
         string senderName,
-        string messagePreview)
+        string messagePreview,
+        string? feedName = null)
     {
         try
         {
@@ -114,6 +115,7 @@ public class NotificationService : INotificationService
                 SenderName = senderName,
                 MessagePreview = TruncateMessage(messagePreview, 255),
                 UnreadCount = unreadCount,
+                FeedName = feedName,
                 Timestamp = DateTime.UtcNow
             };
 

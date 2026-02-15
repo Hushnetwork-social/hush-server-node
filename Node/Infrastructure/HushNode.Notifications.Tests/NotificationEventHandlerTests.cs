@@ -58,21 +58,24 @@ public class NotificationEventHandlerTests
                 participant1Address,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
         mocker.GetMock<INotificationService>()
             .Verify(x => x.PublishNewMessageAsync(
                 participant2Address,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
         mocker.GetMock<INotificationService>()
             .Verify(x => x.PublishNewMessageAsync(
                 senderAddress,
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Never);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
@@ -140,7 +143,8 @@ public class NotificationEventHandlerTests
                 participantAddress,
                 feedId.ToString(),
                 expectedSenderName,
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
     }
 
     #endregion
@@ -179,21 +183,24 @@ public class NotificationEventHandlerTests
                 participant1Address,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
         mocker.GetMock<INotificationService>()
             .Verify(x => x.PublishNewMessageAsync(
                 participant2Address,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
         mocker.GetMock<INotificationService>()
             .Verify(x => x.PublishNewMessageAsync(
                 senderAddress,
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Never);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
@@ -229,14 +236,16 @@ public class NotificationEventHandlerTests
                 activeParticipantAddress,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
         mocker.GetMock<INotificationService>()
             .Verify(x => x.PublishNewMessageAsync(
                 leftParticipantAddress,
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Never);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
@@ -272,14 +281,16 @@ public class NotificationEventHandlerTests
                 activeParticipantAddress,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
         mocker.GetMock<INotificationService>()
             .Verify(x => x.PublishNewMessageAsync(
                 bannedParticipantAddress,
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Never);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
@@ -343,7 +354,8 @@ public class NotificationEventHandlerTests
                 blockedParticipantAddress,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
     }
 
     #endregion
@@ -374,7 +386,8 @@ public class NotificationEventHandlerTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Never);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
@@ -410,7 +423,8 @@ public class NotificationEventHandlerTests
                 participantAddress,
                 feedId.ToString(),
                 "sender-add...",
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -438,8 +452,9 @@ public class NotificationEventHandlerTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()))
-            .Callback<string, string, string, string>((_, _, _, preview) => capturedPreview = preview)
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
+            .Callback<string, string, string, string, string?>((_, _, _, preview, _) => capturedPreview = preview)
             .Returns(Task.CompletedTask);
 
         var sut = mocker.CreateInstance<NotificationEventHandler>();
@@ -664,7 +679,8 @@ public class NotificationEventHandlerTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()))
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
             .Returns(Task.CompletedTask);
     }
 
@@ -770,7 +786,8 @@ public class NotificationEventHandlerRoutingTests
                 recipientAddress,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
         mocker.GetMock<IPushDeliveryService>()
             .Verify(x => x.SendPushAsync(
@@ -818,7 +835,8 @@ public class NotificationEventHandlerRoutingTests
                 recipientAddress,
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Never);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Never);
     }
 
     [Fact]
@@ -1104,14 +1122,16 @@ public class NotificationEventHandlerRoutingTests
                 onlineRecipient1,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
         mocker.GetMock<INotificationService>()
             .Verify(x => x.PublishNewMessageAsync(
                 onlineRecipient2,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
         mocker.GetMock<IPushDeliveryService>()
             .Verify(x => x.SendPushAsync(
@@ -1124,7 +1144,8 @@ public class NotificationEventHandlerRoutingTests
                 senderAddress,
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Never);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Never);
 
         mocker.GetMock<IPushDeliveryService>()
             .Verify(x => x.SendPushAsync(
@@ -1189,7 +1210,8 @@ public class NotificationEventHandlerRoutingTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()))
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
             .Returns(Task.CompletedTask);
     }
 
@@ -1283,14 +1305,16 @@ public class NotificationEventHandlerParticipantsCacheTests
                 participant1Address,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
         mocker.GetMock<INotificationService>()
             .Verify(x => x.PublishNewMessageAsync(
                 participant2Address,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -1400,7 +1424,8 @@ public class NotificationEventHandlerParticipantsCacheTests
                 participantAddress,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -1467,14 +1492,16 @@ public class NotificationEventHandlerParticipantsCacheTests
                 activeParticipantAddress,
                 feedId.ToString(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Once);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Once);
 
         mocker.GetMock<INotificationService>()
             .Verify(x => x.PublishNewMessageAsync(
                 leftParticipantAddress,
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()), Times.Never);
+                It.IsAny<string>(),
+                It.IsAny<string?>()), Times.Never);
     }
 
     #endregion
@@ -1536,7 +1563,8 @@ public class NotificationEventHandlerParticipantsCacheTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()))
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
             .Returns(Task.CompletedTask);
     }
 

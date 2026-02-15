@@ -1039,6 +1039,15 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         Console.WriteLine($"[E2E] Hovering over message to reveal reaction button...");
         await messageToReact.HoverAsync();
 
+        // Wait for useFeedReactions to derive the ElGamal key (async, ~100-200ms)
+        Console.WriteLine($"[E2E] Waiting for key derivation and re-render (1.5s)...");
+        await Task.Delay(1500);
+
+        // IMPORTANT: Create transaction waiter BEFORE clicking the emoji
+        // to prevent race condition where the event fires before we start listening
+        var waiter = StartListeningForTransactions(minTransactions: 1);
+        ScenarioContext["PendingTransactionWaiter"] = waiter;
+
         // Click reaction button
         var reactionButton = messageToReact.GetByTestId("add-reaction-button");
         await reactionButton.WaitForAsync(new LocatorWaitForOptions { Timeout = 5000, State = WaitForSelectorState.Visible });
@@ -1053,7 +1062,7 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         var firstEmoji = reactionPicker.Locator("button").First;
         await firstEmoji.ClickAsync();
 
-        Console.WriteLine($"[E2E] {userName} added reaction to {targetUserName}'s message");
+        Console.WriteLine($"[E2E] {userName} added reaction to {targetUserName}'s message, waiter listening for transaction");
         await TakeScreenshotAsync("reaction-added");
     }
 
@@ -1110,6 +1119,16 @@ internal sealed class MultiUserSteps : BrowserStepsBase
 
         ScenarioContext[pageKey] = page;
         ScenarioContext[contextKey] = context;
+
+        // Register user name for dynamic teardown
+        if (ScenarioContext.TryGetValue(ScenarioHooks.RegisteredUserNamesKey, out var listObj)
+            && listObj is List<string> registeredUsers)
+        {
+            if (!registeredUsers.Contains(userName))
+            {
+                registeredUsers.Add(userName);
+            }
+        }
 
         // Set this as the current user
         _currentUser = userName;
@@ -1444,7 +1463,546 @@ internal sealed class MultiUserSteps : BrowserStepsBase
     }
 
     // =============================================================================
+    // Chat Navigation Steps
+    // =============================================================================
+
+    /// <summary>
+    /// Opens a chat feed with a specific user (multi-user version).
+    /// </summary>
+    [When(@"(\w+) opens the chat with ""(.*)""")]
+    public async Task WhenUserOpensChat(string userName, string targetName)
+    {
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        var sanitizedTarget = SanitizeName(targetName);
+        var testId = $"feed-item:chat:{sanitizedTarget}";
+
+        Console.WriteLine($"[E2E] {userName} opening chat with '{targetName}' (testid: {testId})...");
+
+        // Wait for feed item to be visible and ready
+        var feedItem = await WaitForReadyFeedAsync(page, testId, 15000);
+        await feedItem.ClickAsync();
+
+        // Wait for chat view to load
+        await WaitForTestIdAsync(page, "message-input", 10000);
+
+        Console.WriteLine($"[E2E] {userName} opened chat with '{targetName}'");
+        await TakeScreenshotAsync("chat-opened");
+    }
+
+    // =============================================================================
+    // Unread Badge Steps
+    // =============================================================================
+
+    /// <summary>
+    /// Verifies user sees unread badge on a specific chat feed.
+    /// </summary>
+    [Then(@"(\w+) should see unread badge on chat with ""(.*)""")]
+    public async Task ThenUserShouldSeeUnreadBadgeOnChat(string userName, string targetName)
+    {
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        var sanitizedTarget = SanitizeName(targetName);
+        var testId = $"feed-item:chat:{sanitizedTarget}";
+
+        Console.WriteLine($"[E2E] Verifying {userName} sees unread badge on chat with '{targetName}'...");
+
+        var feedItem = page.GetByTestId(testId);
+        await Expect(feedItem.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15000 });
+
+        var unreadBadge = feedItem.First.GetByTestId("unread-badge");
+        await Expect(unreadBadge).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10000 });
+
+        Console.WriteLine($"[E2E] {userName} sees unread badge on chat with '{targetName}'");
+        await TakeScreenshotAsync("unread-badge-visible");
+    }
+
+    /// <summary>
+    /// Verifies user does NOT see unread badge on a specific chat feed.
+    /// </summary>
+    [Then(@"(\w+) should NOT see unread badge on chat with ""(.*)""")]
+    public async Task ThenUserShouldNotSeeUnreadBadgeOnChat(string userName, string targetName)
+    {
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        var sanitizedTarget = SanitizeName(targetName);
+        var testId = $"feed-item:chat:{sanitizedTarget}";
+
+        Console.WriteLine($"[E2E] Verifying {userName} does NOT see unread badge on chat with '{targetName}'...");
+
+        var feedItem = page.GetByTestId(testId);
+        await Expect(feedItem.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15000 });
+
+        var unreadBadge = feedItem.First.GetByTestId("unread-badge");
+        await Expect(unreadBadge).ToBeHiddenAsync(new LocatorAssertionsToBeHiddenOptions { Timeout = 10000 });
+
+        Console.WriteLine($"[E2E] {userName} does NOT see unread badge on chat with '{targetName}'");
+        await TakeScreenshotAsync("no-unread-badge");
+    }
+
+    // =============================================================================
+    // Feed Ordering Steps
+    // =============================================================================
+
+    /// <summary>
+    /// Verifies a chat feed is at a specific position in a user's feed list (0-indexed).
+    /// </summary>
+    [Then(@"the chat with ""(.*)"" should be at position (\d+) in (\w+)'s feed list")]
+    public async Task ThenChatShouldBeAtPosition(string targetName, int expectedPosition, string userName)
+    {
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        var sanitizedTarget = SanitizeName(targetName);
+        var expectedTestId = $"feed-item:chat:{sanitizedTarget}";
+
+        Console.WriteLine($"[E2E] Verifying chat with '{targetName}' is at position {expectedPosition} for {userName}...");
+
+        // Get all feed items in order
+        var feedList = page.GetByTestId("feed-list").First;
+        await Expect(feedList).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15000 });
+
+        var allFeedItems = feedList.Locator("[data-testid^='feed-item']");
+        var count = await allFeedItems.CountAsync();
+
+        Console.WriteLine($"[E2E] Feed list has {count} items");
+
+        if (expectedPosition >= count)
+        {
+            throw new InvalidOperationException(
+                $"Expected position {expectedPosition} but feed list only has {count} items");
+        }
+
+        var itemAtPosition = allFeedItems.Nth(expectedPosition);
+        var actualTestId = await itemAtPosition.GetAttributeAsync("data-testid");
+
+        Console.WriteLine($"[E2E] Item at position {expectedPosition}: {actualTestId}");
+        actualTestId.Should().Be(expectedTestId,
+            $"Feed at position {expectedPosition} should be '{expectedTestId}' but was '{actualTestId}'");
+
+        Console.WriteLine($"[E2E] Verified: chat with '{targetName}' is at position {expectedPosition}");
+    }
+
+    /// <summary>
+    /// Verifies a group feed is at a specific position in a user's feed list (0-indexed).
+    /// </summary>
+    [Then(@"the group ""(.*)"" should be at position (\d+) in (\w+)'s feed list")]
+    public async Task ThenGroupShouldBeAtPosition(string groupName, int expectedPosition, string userName)
+    {
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        var sanitizedGroup = SanitizeName(groupName);
+        var expectedTestId = $"feed-item:group:{sanitizedGroup}";
+
+        Console.WriteLine($"[E2E] Verifying group '{groupName}' is at position {expectedPosition} for {userName}...");
+
+        // Get all feed items in order
+        var feedList = page.GetByTestId("feed-list").First;
+        await Expect(feedList).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15000 });
+
+        var allFeedItems = feedList.Locator("[data-testid^='feed-item']");
+        var count = await allFeedItems.CountAsync();
+
+        Console.WriteLine($"[E2E] Feed list has {count} items");
+
+        if (expectedPosition >= count)
+        {
+            throw new InvalidOperationException(
+                $"Expected position {expectedPosition} but feed list only has {count} items");
+        }
+
+        var itemAtPosition = allFeedItems.Nth(expectedPosition);
+        var actualTestId = await itemAtPosition.GetAttributeAsync("data-testid");
+
+        Console.WriteLine($"[E2E] Item at position {expectedPosition}: {actualTestId}");
+        actualTestId.Should().Be(expectedTestId,
+            $"Feed at position {expectedPosition} should be '{expectedTestId}' but was '{actualTestId}'");
+
+        Console.WriteLine($"[E2E] Verified: group '{groupName}' is at position {expectedPosition}");
+    }
+
+    /// <summary>
+    /// Stores the current feed list order for later comparison.
+    /// </summary>
+    [When(@"(\w+) records the current feed list order")]
+    public async Task WhenUserRecordsFeedListOrder(string userName)
+    {
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        var feedList = page.GetByTestId("feed-list").First;
+        var allFeedItems = feedList.Locator("[data-testid^='feed-item']");
+        var count = await allFeedItems.CountAsync();
+
+        var feedOrder = new List<string>();
+        for (int i = 0; i < count; i++)
+        {
+            var testId = await allFeedItems.Nth(i).GetAttributeAsync("data-testid");
+            if (testId != null) feedOrder.Add(testId);
+        }
+
+        ScenarioContext[$"FeedOrder_{userName}"] = feedOrder;
+        Console.WriteLine($"[E2E] Recorded feed list order for {userName}: [{string.Join(", ", feedOrder)}]");
+    }
+
+    /// <summary>
+    /// Verifies the feed list order has not changed since it was recorded.
+    /// </summary>
+    [Then(@"the feed list order should remain unchanged for (\w+)")]
+    public async Task ThenFeedListOrderShouldRemainUnchanged(string userName)
+    {
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        var previousOrder = ScenarioContext.Get<List<string>>($"FeedOrder_{userName}");
+
+        var feedList = page.GetByTestId("feed-list").First;
+        var allFeedItems = feedList.Locator("[data-testid^='feed-item']");
+        var count = await allFeedItems.CountAsync();
+
+        var currentOrder = new List<string>();
+        for (int i = 0; i < count; i++)
+        {
+            var testId = await allFeedItems.Nth(i).GetAttributeAsync("data-testid");
+            if (testId != null) currentOrder.Add(testId);
+        }
+
+        Console.WriteLine($"[E2E] Previous order: [{string.Join(", ", previousOrder)}]");
+        Console.WriteLine($"[E2E] Current order:  [{string.Join(", ", currentOrder)}]");
+
+        currentOrder.Should().Equal(previousOrder,
+            "Feed list order should remain unchanged after idle blocks");
+    }
+
+    /// <summary>
+    /// Verifies the feed list has the expected number of items for a user.
+    /// </summary>
+    [Then(@"(\w+) should have (\d+) feeds in their feed list")]
+    public async Task ThenUserShouldHaveNFeeds(string userName, int expectedCount)
+    {
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        Console.WriteLine($"[E2E] Verifying {userName} has {expectedCount} feeds...");
+
+        var feedList = page.GetByTestId("feed-list").First;
+        await Expect(feedList).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15000 });
+
+        var allFeedItems = feedList.Locator("[data-testid^='feed-item']");
+
+        // Wait for expected count with retries (feeds may still be syncing)
+        const int maxAttempts = 5;
+        int actualCount = 0;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            actualCount = await allFeedItems.CountAsync();
+            if (actualCount == expectedCount)
+            {
+                Console.WriteLine($"[E2E] {userName} has {actualCount} feeds (attempt {attempt})");
+                return;
+            }
+
+            if (attempt < maxAttempts)
+            {
+                Console.WriteLine($"[E2E] {userName} has {actualCount} feeds (expected {expectedCount}), syncing (attempt {attempt})...");
+                await page.EvaluateAsync("() => window.__e2e_triggerSync()");
+                await Task.Delay(2000);
+            }
+        }
+
+        actualCount.Should().Be(expectedCount,
+            $"{userName} should have {expectedCount} feeds but has {actualCount}");
+    }
+
+    // =============================================================================
+    // Private Group Steps
+    // =============================================================================
+
+    /// <summary>
+    /// Creates a private group with initial members via the 3-step wizard (Type -> Members -> Details).
+    /// </summary>
+    [When(@"(\w+) creates a private group ""(.*)"" with members ""(.*)"" via browser")]
+    public async Task WhenUserCreatesPrivateGroupWithMembers(string userName, string groupName, string memberNames)
+    {
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        Console.WriteLine($"[E2E] {userName} creating private group '{groupName}' with members '{memberNames}'...");
+
+        // 1. Click Create Group nav button
+        await ClickTestIdAsync(page, "nav-create-group");
+
+        // 2. Wait for wizard
+        await WaitForTestIdAsync(page, "group-creation-wizard", 10000);
+        await TakeScreenshotAsync("wizard-opened");
+
+        // 3. Select private type
+        await ClickTestIdAsync(page, "group-type-private");
+        await ClickTestIdAsync(page, "type-selection-next-button");
+
+        // 4. Member selection step - search and select each member
+        await WaitForTestIdAsync(page, "member-search-input", 10000);
+
+        var members = memberNames.Split(',').Select(m => m.Trim()).ToArray();
+        foreach (var memberName in members)
+        {
+            // Clear and fill search
+            var searchInput = await WaitForTestIdAsync(page, "member-search-input");
+            await searchInput.FillAsync(memberName);
+
+            // Click search
+            await ClickTestIdAsync(page, "member-search-button");
+
+            // Wait for and click the member result
+            var sanitizedMember = SanitizeName(memberName);
+            var resultTestId = $"member-result:{sanitizedMember}";
+            var memberResult = await WaitForTestIdAsync(page, resultTestId, 10000);
+            await memberResult.ClickAsync();
+
+            Console.WriteLine($"[E2E] Selected member: {memberName}");
+            await TakeScreenshotAsync($"member-selected-{sanitizedMember}");
+        }
+
+        // 5. Click Next to go to Details step
+        await ClickTestIdAsync(page, "member-next-button");
+
+        // 6. Fill group details
+        var nameInput = await WaitForTestIdAsync(page, "group-name-input");
+        await nameInput.FillAsync(groupName);
+
+        var descInput = await WaitForTestIdAsync(page, "group-description-input");
+        await descInput.FillAsync($"E2E private group: {groupName}");
+
+        // 7. Create waiter before clicking create
+        var waiter = StartListeningForTransactions(minTransactions: 1);
+
+        await ClickTestIdAsync(page, "confirm-create-group-button");
+        Console.WriteLine($"[E2E] Clicked create group for '{groupName}'");
+
+        // 8. Wait for transaction and produce block
+        try
+        {
+            await waiter.WaitAsync();
+        }
+        finally
+        {
+            waiter.Dispose();
+        }
+
+        var blockControl = GetBlockControl();
+        await blockControl.ProduceBlockAsync();
+        Console.WriteLine($"[E2E] Group creation block produced");
+
+        // 9. Wait for wizard to close
+        var wizard = page.GetByTestId("group-creation-wizard");
+        await Expect(wizard).ToBeHiddenAsync(new LocatorAssertionsToBeHiddenOptions
+        {
+            Timeout = 45000
+        });
+
+        // 10. Wait for feed to appear with data-feed-ready
+        var sanitizedGroupName = SanitizeName(groupName);
+        var readyFeedItem = page.Locator($"[data-testid='feed-item:group:{sanitizedGroupName}'][data-feed-ready='true']");
+        await Expect(readyFeedItem).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
+        {
+            Timeout = 15000
+        });
+
+        Console.WriteLine($"[E2E] {userName} created private group '{groupName}' with members: {memberNames}");
+        await TakeScreenshotAsync("private-group-created");
+    }
+
+    // =============================================================================
+    // Block Production Steps
+    // =============================================================================
+
+    /// <summary>
+    /// Produces N blocks without any new transactions (idle blocks).
+    /// </summary>
+    [When(@"(\d+) blocks are produced without activity")]
+    public async Task WhenBlocksAreProducedWithoutActivity(int blockCount)
+    {
+        Console.WriteLine($"[E2E] Producing {blockCount} idle blocks...");
+
+        var blockControl = GetBlockControl();
+        for (int i = 0; i < blockCount; i++)
+        {
+            await blockControl.ProduceBlockAsync();
+        }
+
+        Console.WriteLine($"[E2E] {blockCount} idle blocks produced");
+    }
+
+    // =============================================================================
+    // Reaction Steps (extended — by message text)
+    // =============================================================================
+
+    /// <summary>
+    /// User adds reaction to a specific message identified by text.
+    /// </summary>
+    [When(@"(\w+) adds reaction to (\w+)'s message ""(.*)""")]
+    public async Task WhenUserAddsReactionToSpecificMessage(string userName, string targetUserName, string messageText)
+    {
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        Console.WriteLine($"[E2E] {userName} adding reaction to {targetUserName}'s message '{messageText}'...");
+
+        // Find the specific message by text content
+        var targetMessage = page.Locator("[data-testid='message']")
+            .Filter(new LocatorFilterOptions { HasText = messageText });
+
+        await Expect(targetMessage.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 10000 });
+
+        // Hover to reveal reaction button
+        await targetMessage.First.HoverAsync();
+
+        // Wait for useFeedReactions to derive the ElGamal key (async, ~100-200ms)
+        Console.WriteLine($"[E2E] Waiting for key derivation and re-render (1.5s)...");
+        await Task.Delay(1500);
+
+        // IMPORTANT: Create transaction waiter BEFORE clicking the emoji
+        // to prevent race condition where the event fires before we start listening
+        var waiter = StartListeningForTransactions(minTransactions: 1);
+        ScenarioContext["PendingTransactionWaiter"] = waiter;
+
+        // Click reaction button
+        var reactionButton = targetMessage.First.GetByTestId("add-reaction-button");
+        await reactionButton.WaitForAsync(new LocatorWaitForOptions { Timeout = 5000, State = WaitForSelectorState.Visible });
+        await reactionButton.ClickAsync();
+
+        // Pick first emoji (thumbs up)
+        var reactionPicker = page.GetByTestId("reaction-picker");
+        await reactionPicker.WaitForAsync(new LocatorWaitForOptions { Timeout = 5000 });
+        var firstEmoji = reactionPicker.Locator("button").First;
+        await firstEmoji.ClickAsync();
+
+        Console.WriteLine($"[E2E] {userName} added reaction to '{messageText}', waiter listening for transaction");
+        await TakeScreenshotAsync("reaction-added-specific");
+    }
+
+    /// <summary>
+    /// Verifies user sees a reaction on a specific message identified by text.
+    /// </summary>
+    [Then(@"(\w+) should see a reaction on message ""(.*)""")]
+    public async Task ThenUserShouldSeeReactionOnSpecificMessage(string userName, string messageText)
+    {
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        Console.WriteLine($"[E2E] Verifying {userName} sees reaction on message '{messageText}'...");
+
+        var targetMessage = page.Locator("[data-testid='message']")
+            .Filter(new LocatorFilterOptions { HasText = messageText });
+
+        var reactionBar = targetMessage.First.Locator("[data-testid^='reaction-']");
+
+        // Wait for reaction with retries and sync
+        const int maxAttempts = 5;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            var count = await reactionBar.CountAsync();
+            if (count > 0)
+            {
+                Console.WriteLine($"[E2E] {userName} sees reaction on '{messageText}' (attempt {attempt})");
+                await TakeScreenshotAsync("reaction-visible");
+                return;
+            }
+
+            if (attempt < maxAttempts)
+            {
+                Console.WriteLine($"[E2E] Reaction not visible yet (attempt {attempt}), syncing...");
+                await page.EvaluateAsync("() => window.__e2e_triggerSync()");
+                await Task.Delay(2000);
+            }
+        }
+
+        // Final assertion
+        await Expect(reactionBar.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
+        {
+            Timeout = 5000
+        });
+    }
+
+    // =============================================================================
+    // Multi-user Feed Click Steps
+    // =============================================================================
+
+    /// <summary>
+    /// Named user clicks on a chat feed (multi-user version of FeedSteps single-user step).
+    /// </summary>
+    [When(@"(?!the user)(\w+) clicks on the chat feed with ""(.*)""")]
+    public async Task WhenUserClicksOnChatFeed(string userName, string targetName)
+    {
+        await SwitchToUserAsync(userName);
+        var page = GetUserPage(userName);
+
+        var sanitizedTarget = SanitizeName(targetName);
+        var testId = $"feed-item:chat:{sanitizedTarget}";
+
+        Console.WriteLine($"[E2E] {userName} clicking chat feed with '{targetName}'...");
+
+        var feedItem = await WaitForReadyFeedAsync(page, testId, 15000);
+        await feedItem.ClickAsync();
+
+        // Wait for chat view to load
+        await WaitForTestIdAsync(page, "message-input", 10000);
+
+        Console.WriteLine($"[E2E] {userName} opened chat with '{targetName}'");
+    }
+
+    // =============================================================================
     // Helper Methods
+    // =============================================================================
+
+    /// <summary>
+    /// Waits for a feed item to be visible and ready (data-feed-ready="true").
+    /// </summary>
+    private async Task<ILocator> WaitForReadyFeedAsync(IPage page, string testId, int timeoutMs)
+    {
+        var allFeeds = page.GetByTestId(testId);
+        var startTime = DateTime.UtcNow;
+        var timeout = TimeSpan.FromMilliseconds(timeoutMs);
+
+        while (DateTime.UtcNow - startTime < timeout)
+        {
+            var count = await allFeeds.CountAsync();
+            for (int i = 0; i < count; i++)
+            {
+                var feed = allFeeds.Nth(i);
+                if (await feed.IsVisibleAsync())
+                {
+                    var readyAttr = await feed.GetAttributeAsync("data-feed-ready");
+                    if (readyAttr == "true")
+                    {
+                        return feed;
+                    }
+                }
+            }
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException($"Feed '{testId}' did not become ready within {timeoutMs}ms");
+    }
+
+    /// <summary>
+    /// Sanitizes a name for use in test IDs.
+    /// </summary>
+    private static string SanitizeName(string name)
+    {
+        var sanitized = System.Text.RegularExpressions.Regex.Replace(
+            name.ToLowerInvariant(), "[^a-z0-9]", "-");
+        sanitized = System.Text.RegularExpressions.Regex.Replace(sanitized, "-+", "-");
+        return sanitized.Trim('-');
+    }
+
+    // =============================================================================
+    // Original Helper Methods
     // =============================================================================
 
     /// <summary>

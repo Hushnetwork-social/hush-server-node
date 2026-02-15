@@ -44,4 +44,9 @@ public class FeedEvent
     /// FEAT-063: For MessagesRead events - block index up to which user has read.
     /// </summary>
     public long UpToBlockIndex { get; set; }
+
+    /// <summary>
+    /// For NewMessage events in group feeds: the group/feed name.
+    /// </summary>
+    public string? FeedName { get; set; }
 }

@@ -407,7 +407,8 @@ public class NotificationGrpcService(
             MessagePreview = internalEvent.MessagePreview ?? string.Empty,
             UnreadCount = internalEvent.UnreadCount ?? 0,
             TimestampUnixMs = new DateTimeOffset(internalEvent.Timestamp).ToUnixTimeMilliseconds(),
-            UpToBlockIndex = internalEvent.UpToBlockIndex
+            UpToBlockIndex = internalEvent.UpToBlockIndex,
+            FeedName = internalEvent.FeedName ?? string.Empty
         };
 
         // Add all counts for sync events
