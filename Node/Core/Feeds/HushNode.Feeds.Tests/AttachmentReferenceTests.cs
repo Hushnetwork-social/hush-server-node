@@ -180,7 +180,7 @@ public class AttachmentReferenceTests
         // Act
         var entity = new AttachmentEntity(
             id, encrypted, thumbnail, feedMessageId,
-            1024, 256, "image/jpeg", "photo.jpg", DateTime.UtcNow);
+            1024, 256, "image/jpeg", "photo.jpg", "abc123hash", DateTime.UtcNow);
 
         // Assert
         entity.Id.Should().Be(id);
@@ -202,7 +202,7 @@ public class AttachmentReferenceTests
             new byte[] { 1, 2, 3 },
             null, // No thumbnail for non-image files
             new FeedMessageId(Guid.NewGuid()),
-            512, 0, "application/pdf", "report.pdf", DateTime.UtcNow);
+            512, 0, "application/pdf", "report.pdf", "abc123hash", DateTime.UtcNow);
 
         // Assert
         entity.EncryptedThumbnail.Should().BeNull();

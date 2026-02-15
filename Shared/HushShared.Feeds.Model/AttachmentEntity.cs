@@ -16,4 +16,5 @@ public record AttachmentEntity(
     long ThumbnailSize,              // Thumbnail size before encryption (0 if no thumbnail)
     string MimeType,                 // e.g., "image/jpeg"
     string FileName,                 // Original file name
+    string Hash,                     // SHA-256 hex of original plaintext file (64 chars)
     DateTime CreatedAt);             // UTC timestamp

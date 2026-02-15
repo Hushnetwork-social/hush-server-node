@@ -39,7 +39,7 @@ public class AttachmentRepositoryTests : IClassFixture<FeedsInMemoryDbContextFix
             new byte[] { 1, 2, 3, 4 },
             new byte[] { 10, 20 },
             messageId,
-            1024, 256, "image/jpeg", "photo.jpg", DateTime.UtcNow);
+            1024, 256, "image/jpeg", "photo.jpg", "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2", DateTime.UtcNow);
 
         // Act
         await repository.CreateAttachmentAsync(entity);
@@ -67,10 +67,10 @@ public class AttachmentRepositoryTests : IClassFixture<FeedsInMemoryDbContextFix
 
         var att1 = new AttachmentEntity(
             Guid.NewGuid().ToString(), new byte[] { 1 }, null, messageId,
-            100, 0, "image/png", "a.png", DateTime.UtcNow);
+            100, 0, "image/png", "a.png", "hash1hash1hash1hash1hash1hash1hash1hash1hash1hash1hash1hash1hash1", DateTime.UtcNow);
         var att2 = new AttachmentEntity(
             Guid.NewGuid().ToString(), new byte[] { 2 }, null, messageId,
-            200, 0, "image/jpeg", "b.jpg", DateTime.UtcNow);
+            200, 0, "image/jpeg", "b.jpg", "hash2hash2hash2hash2hash2hash2hash2hash2hash2hash2hash2hash2hash2", DateTime.UtcNow);
 
         await repository.CreateAttachmentAsync(att1);
         await repository.CreateAttachmentAsync(att2);
@@ -108,7 +108,7 @@ public class AttachmentRepositoryTests : IClassFixture<FeedsInMemoryDbContextFix
         var entity = new AttachmentEntity(
             id, new byte[] { 1, 2, 3 }, null,
             TestDataFactory.CreateFeedMessageId(),
-            512, 0, "application/pdf", "doc.pdf", DateTime.UtcNow);
+            512, 0, "application/pdf", "doc.pdf", "hashpdfhashpdfhashpdfhashpdfhashpdfhashpdfhashpdfhashpdfhashpdfh", DateTime.UtcNow);
 
         // Act
         await repository.CreateAttachmentAsync(entity);

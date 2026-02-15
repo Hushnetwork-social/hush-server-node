@@ -476,6 +476,9 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                 attachment.Property(x => x.FileName)
                     .HasColumnType("varchar(255)");
 
+                attachment.Property(x => x.Hash)
+                    .HasColumnType("varchar(64)");
+
                 attachment.Property(x => x.CreatedAt)
                     .HasColumnType("timestamp with time zone");
 

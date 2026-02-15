@@ -38,7 +38,7 @@ public class DownloadAttachmentTests
             .Setup(x => x.GetByIdAsync(attachmentId))
             .ReturnsAsync(new AttachmentEntity(
                 attachmentId, originalBytes, new byte[1024], new FeedMessageId(Guid.NewGuid()),
-                200 * 1024, 1024, "image/jpeg", "photo.jpg", DateTime.UtcNow));
+                200 * 1024, 1024, "image/jpeg", "photo.jpg", "abc123", DateTime.UtcNow));
 
         var sut = mocker.CreateInstance<FeedsGrpcService>();
         var request = new DownloadAttachmentRequest
@@ -96,7 +96,7 @@ public class DownloadAttachmentTests
             .Setup(x => x.GetByIdAsync(attachmentId))
             .ReturnsAsync(new AttachmentEntity(
                 attachmentId, new byte[100000], thumbnailBytes, new FeedMessageId(Guid.NewGuid()),
-                100000, 5000, "image/jpeg", "photo.jpg", DateTime.UtcNow));
+                100000, 5000, "image/jpeg", "photo.jpg", "abc123", DateTime.UtcNow));
 
         var sut = mocker.CreateInstance<FeedsGrpcService>();
         var request = new DownloadAttachmentRequest

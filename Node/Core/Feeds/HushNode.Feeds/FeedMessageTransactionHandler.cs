@@ -89,6 +89,7 @@ public class FeedMessageTransactionHandler(
                         tempData.Value.EncryptedThumbnail?.Length ?? 0,
                         attachmentRef.MimeType,
                         attachmentRef.FileName,
+                        attachmentRef.Hash,
                         DateTime.UtcNow);
 
                     await this._attachmentStorageService.CreateAttachmentAsync(entity);

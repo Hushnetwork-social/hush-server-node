@@ -77,8 +77,9 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
             // Get sender display name
             var senderName = await GetDisplayNameAsync(feedMessage.IssuerPublicAddress ?? string.Empty);
 
-            // Truncate message preview
+            // Truncate message preview with FEAT-066 attachment hint
             var messagePreview = TruncateMessage(feedMessage.MessageContent, 255);
+            messagePreview = AppendAttachmentHint(messagePreview, feedMessage.Attachments);
 
             // FEAT-050: Try cache first for participants
             var cachedParticipants = await _feedParticipantsCacheService.GetParticipantsAsync(feedMessage.FeedId);
@@ -327,5 +328,44 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
         if (string.IsNullOrEmpty(content)) return string.Empty;
         if (content.Length <= maxLength) return content;
         return content.Substring(0, maxLength - 3) + "...";
+    }
+
+    /// <summary>
+    /// FEAT-066: Appends an attachment type hint to the notification preview.
+    /// e.g., "Check this out [2 images]" or "report.pdf [document]"
+    /// </summary>
+    private static string AppendAttachmentHint(string preview, List<AttachmentReference>? attachments)
+    {
+        if (attachments is not { Count: > 0 })
+            return preview;
+
+        var category = ClassifyAttachments(attachments);
+        var hint = attachments.Count == 1
+            ? $"[{category}]"
+            : $"[{attachments.Count} {category}s]";
+
+        if (string.IsNullOrEmpty(preview))
+        {
+            // Attachment-only message: show file name or type hint
+            return attachments.Count == 1
+                ? $"{attachments[0].FileName} {hint}"
+                : hint;
+        }
+
+        return $"{preview} {hint}";
+    }
+
+    /// <summary>
+    /// Classifies attachments into a display category based on MIME type.
+    /// </summary>
+    private static string ClassifyAttachments(List<AttachmentReference> attachments)
+    {
+        var firstMime = attachments[0].MimeType;
+
+        if (firstMime.StartsWith("image/")) return "image";
+        if (firstMime.StartsWith("video/")) return "video";
+        if (firstMime.StartsWith("audio/")) return "audio";
+
+        return "file";
     }
 }

@@ -292,6 +292,9 @@ public class FeedsGrpcService(
                 if (feedMessage.KeyGeneration != null)
                     feedMessageReply.KeyGeneration = feedMessage.KeyGeneration.Value;
 
+                // FEAT-066: Add attachment metadata from off-chain storage
+                await AddAttachmentRefsAsync(feedMessageReply, feedMessage.FeedMessageId);
+
                 reply.Messages.Add(feedMessageReply);
             }
 
@@ -422,6 +425,9 @@ public class FeedsGrpcService(
                 {
                     feedMessageProto.KeyGeneration = feedMessage.KeyGeneration.Value;
                 }
+
+                // FEAT-066: Add attachment metadata from off-chain storage
+                await AddAttachmentRefsAsync(feedMessageProto, feedMessage.FeedMessageId);
 
                 reply.Messages.Add(feedMessageProto);
             }
@@ -956,6 +962,29 @@ public class FeedsGrpcService(
         return publicSigningAddress.Length > 10
             ? publicSigningAddress.Substring(0, 10) + "..."
             : publicSigningAddress;
+    }
+
+    /// <summary>
+    /// FEAT-066: Add attachment metadata references to a feed message proto response.
+    /// Queries PostgreSQL for attachment entities linked to the given message.
+    /// Messages without attachments get an empty list (backward compatible).
+    /// </summary>
+    private async Task AddAttachmentRefsAsync(
+        GetFeedMessagesForAddressReply.Types.FeedMessage feedMessageProto,
+        FeedMessageId feedMessageId)
+    {
+        var attachments = await this._attachmentStorageService.GetByMessageIdAsync(feedMessageId);
+        foreach (var att in attachments)
+        {
+            feedMessageProto.Attachments.Add(new GetFeedMessagesForAddressReply.Types.AttachmentRef
+            {
+                Id = att.Id,
+                Hash = att.Hash,
+                MimeType = att.MimeType,
+                Size = att.OriginalSize,
+                FileName = att.FileName
+            });
+        }
     }
 
     /// <summary>
