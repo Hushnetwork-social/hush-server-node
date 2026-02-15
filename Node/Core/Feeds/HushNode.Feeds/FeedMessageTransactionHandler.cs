@@ -59,7 +59,11 @@ public class FeedMessageTransactionHandler(
             this._blockchainCache.LastBlockIndex,
             AuthorCommitment: validatedTransaction.Payload.AuthorCommitment,
             ReplyToMessageId: validatedTransaction.Payload.ReplyToMessageId,
-            KeyGeneration: validatedTransaction.Payload.KeyGeneration);
+            KeyGeneration: validatedTransaction.Payload.KeyGeneration)
+        {
+            // FEAT-066: Carry attachment refs for notification hints
+            Attachments = validatedTransaction.Payload.Attachments
+        };
 
         // Write to PostgreSQL (source of truth)
         await this._feedMessageStorageService.CreateFeedMessageAsync(feedMessage);

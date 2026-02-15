@@ -2881,6 +2881,9 @@ public class FeedsGrpcService(
                 messageProto.KeyGeneration = feedMessage.KeyGeneration.Value;
             }
 
+            // FEAT-066: Include attachment metadata
+            await AddAttachmentRefsAsync(messageProto, feedMessage.FeedMessageId);
+
             Console.WriteLine($"[GetMessageById] Success - returning message from feed {feedMessage.FeedId}");
             return new GetMessageByIdResponse
             {
