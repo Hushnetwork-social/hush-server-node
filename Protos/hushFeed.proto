@@ -39,6 +39,9 @@ service HushFeed {
   rpc UpdateGroupFeedSettings (UpdateGroupFeedSettingsRequest) returns (UpdateGroupFeedSettingsResponse);
   rpc DeleteGroupFeed (DeleteGroupFeedRequest) returns (DeleteGroupFeedResponse);
 
+  // FEAT-066: Attachment download via server-streaming
+  rpc DownloadAttachment(DownloadAttachmentRequest) returns (stream AttachmentChunk);
+
   /*
   rpc CreatePersonalFeed (CreatePersonalFeedRequest) returns (CreatePersonalFeedReply);
   rpc CreateChatFeed (CreateChatFeedRequest) returns (CreateChatFeedReply);
@@ -113,6 +116,16 @@ message GetFeedMessagesForAddressReply {
     bytes AuthorCommitment = 8;  // Protocol Omega: Poseidon(author_secret)
     optional string ReplyToMessageId = 9;  // Reply to Message: parent message reference
     optional int32 KeyGeneration = 10;  // Group Feeds: Key generation used to encrypt this message
+    repeated AttachmentRef Attachments = 11;  // FEAT-066: Attachment metadata references
+  }
+
+  // FEAT-066: Attachment metadata reference (on-chain metadata)
+  message AttachmentRef {
+    string Id = 1;          // UUID
+    string Hash = 2;        // SHA-256 hex of original plaintext file
+    string MimeType = 3;    // e.g., "image/jpeg", "application/pdf"
+    int64 Size = 4;         // Original file size in bytes (before encryption)
+    string FileName = 5;    // Original file name
   }
 
   // Reaction tally for a message (Protocol Omega)
@@ -458,6 +471,24 @@ message SearchPublicGroupsResponse {
   bool Success = 1;
   string Message = 2;
   repeated PublicGroupInfoProto Groups = 3;
+}
+
+// =============================================================================
+// FEAT-066: Attachment Download (server-streaming)
+// =============================================================================
+
+message DownloadAttachmentRequest {
+  string AttachmentId = 1;       // UUID of the attachment to download
+  string FeedId = 2;             // Feed containing the message with this attachment
+  string RequesterUserAddress = 3; // Requester's public signing address (for authorization)
+  bool ThumbnailOnly = 4;       // If true, stream thumbnail instead of original
+}
+
+message AttachmentChunk {
+  bytes Data = 1;                // Chunk payload (~64KB)
+  int32 ChunkIndex = 2;         // 0-based chunk index
+  int32 TotalChunks = 3;        // Total chunk count (only in first chunk, 0 otherwise)
+  int64 TotalSize = 4;          // Total byte size (only in first chunk, 0 otherwise)
 }
 
 /*

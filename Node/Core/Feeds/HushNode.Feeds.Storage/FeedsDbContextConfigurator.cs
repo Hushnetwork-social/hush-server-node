@@ -20,6 +20,7 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
         ConfigureGroupFeedEncryptedKey(modelBuilder);
         ConfigureGroupFeedMemberCommitment(modelBuilder);
         ConfigureFeedReadPosition(modelBuilder);
+        ConfigureAttachment(modelBuilder);
     }
 
     private static void ConfigureFeedMessage(ModelBuilder modelBuilder)
@@ -85,6 +86,9 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                 feedMessage.Property(x => x.KeyGeneration)
                     .HasColumnType("int")
                     .IsRequired(false);
+
+                // FEAT-066: Attachments is a transient property populated at query time, not a DB column
+                feedMessage.Ignore(x => x.Attachments);
 
                 // FEAT-046: Indexes for efficient feed message cache fallback queries
                 feedMessage.HasIndex(x => new { x.FeedId, x.BlockIndex })
@@ -431,6 +435,53 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                 // Index for efficient lookup by user (for GetReadPositionsForUserAsync)
                 readPosition.HasIndex(x => x.UserId)
                     .HasDatabaseName("IX_FeedReadPosition_UserId");
+            });
+    }
+
+    private static void ConfigureAttachment(ModelBuilder modelBuilder)
+    {
+        modelBuilder
+            .Entity<AttachmentEntity>(attachment =>
+            {
+                attachment.ToTable("Attachment", "Feeds");
+                attachment.HasKey(x => x.Id);
+
+                attachment.Property(x => x.Id)
+                    .HasColumnType("varchar(40)");
+
+                attachment.Property(x => x.EncryptedOriginal)
+                    .HasColumnType("bytea")
+                    .IsRequired();
+
+                attachment.Property(x => x.EncryptedThumbnail)
+                    .HasColumnType("bytea")
+                    .IsRequired(false);
+
+                attachment.Property(x => x.FeedMessageId)
+                    .HasConversion(
+                        x => x.ToString(),
+                        x => FeedMessageIdHandler.CreateFromString(x)
+                    )
+                    .HasColumnType("varchar(40)");
+
+                attachment.Property(x => x.OriginalSize)
+                    .HasColumnType("bigint");
+
+                attachment.Property(x => x.ThumbnailSize)
+                    .HasColumnType("bigint");
+
+                attachment.Property(x => x.MimeType)
+                    .HasColumnType("varchar(100)");
+
+                attachment.Property(x => x.FileName)
+                    .HasColumnType("varchar(255)");
+
+                attachment.Property(x => x.CreatedAt)
+                    .HasColumnType("timestamp with time zone");
+
+                // Index for looking up attachments by feed message
+                attachment.HasIndex(x => x.FeedMessageId)
+                    .HasDatabaseName("IX_Attachment_FeedMessageId");
             });
     }
 }

@@ -10,7 +10,8 @@ public record NewFeedMessagePayload(
     string MessageContent,
     FeedMessageId? ReplyToMessageId = null,
     int? KeyGeneration = null,
-    byte[]? AuthorCommitment = null) : ITransactionPayloadKind;
+    byte[]? AuthorCommitment = null,
+    List<AttachmentReference>? Attachments = null) : ITransactionPayloadKind;
 
 public static class NewFeedMessagePayloadHandler
 {
