@@ -48,6 +48,9 @@
     <!-- Playwright for E2E browser automation -->
     <PackageReference Include="Microsoft.Playwright" Version="1.49.0" />
 
+    <!-- SkiaSharp for generating labeled test images (same version as HushNode.UrlMetadata) -->
+    <PackageReference Include="SkiaSharp" Version="3.119.0" />
+
     <!-- gRPC client for black-box testing -->
     <PackageReference Include="Grpc.Net.Client" Version="2.67.0" />
     <PackageReference Include="Google.Protobuf" Version="3.29.3" />

@@ -113,7 +113,7 @@ internal sealed class LinkPreviewSteps : BrowserStepsBase
         var messageBubble = page.Locator("[data-testid='message']")
             .Filter(new LocatorFilterOptions { HasText = messageText });
 
-        var nextButton = messageBubble.First.Locator("[aria-label='Next link preview']");
+        var nextButton = messageBubble.First.Locator("[aria-label='Next item']");
         await Expect(nextButton).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
         {
             Timeout = 5000
@@ -159,7 +159,7 @@ internal sealed class LinkPreviewSteps : BrowserStepsBase
     public async Task ThenUserShouldSeeLinkPreviewButtonState(string userName, string direction, string expectedState, string messageText)
     {
         var page = GetPageForUser(userName);
-        var ariaLabel = direction == "previous" ? "Previous link preview" : "Next link preview";
+        var ariaLabel = direction == "previous" ? "Previous item" : "Next item";
 
         Console.WriteLine($"[E2E] Verifying {direction} link preview button is {expectedState} in message containing '{messageText}' for {userName}...");
 
