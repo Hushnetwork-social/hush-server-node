@@ -206,3 +206,41 @@ Feature: Image Attachment Walkthrough
         And Bob opens the chat with "Alice"
         Then Bob should see message "Incremental add!" from Alice
         And Bob should see thumbnail page indicator "1 / 3"
+
+    @F3-E2E-004
+    Scenario: Alice sends an animated GIF to Bob, who views it in thumbnail and lightbox
+        # === SETUP ===
+        Given a browser context for "Alice"
+        And "Alice" has created identity via browser
+        And a browser context for "Bob"
+        And "Bob" has created identity via browser
+
+        # === CHAT CREATION ===
+        When Alice creates a new chat with "Bob" via browser
+        And Bob triggers sync
+        Then "Bob" should appear in Alice's feed list
+        And "Alice" should appear in Bob's feed list
+
+        # === SEND ANIMATED GIF ===
+        When Alice opens the chat with "Bob"
+        And Alice attaches animated GIF 1 for "Bob" via file picker
+        Then the composer overlay should be visible
+        And the composer overlay should show an image preview
+
+        When Alice types "Check this animated GIF!" in the composer overlay
+        And Alice sends from the composer overlay and waits for confirmation
+        Then the composer overlay should not be visible
+
+        # === BOB RECEIVES AND VIEWS THUMBNAIL ===
+        When Bob triggers sync
+        And Bob opens the chat with "Alice"
+        Then Bob should see message "Check this animated GIF!" from Alice
+        And Bob should see attachment "Animated-1-from-Alice-to-Bob.gif" in the thumbnail
+
+        # === BOB OPENS LIGHTBOX FOR ANIMATED GIF ===
+        When Bob clicks the thumbnail for "Animated-1-from-Alice-to-Bob.gif"
+        Then the lightbox overlay should be visible
+        And the lightbox should show attachment "Animated-1-from-Alice-to-Bob.gif"
+
+        When Bob closes the lightbox
+        Then the lightbox overlay should not be visible

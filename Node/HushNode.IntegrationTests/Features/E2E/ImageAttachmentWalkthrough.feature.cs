@@ -577,6 +577,105 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Alice sends an animated GIF to Bob, who views it in thumbnail and lightbox")]
+        [Xunit.TraitAttribute("FeatureTitle", "Image Attachment Walkthrough")]
+        [Xunit.TraitAttribute("Description", "Alice sends an animated GIF to Bob, who views it in thumbnail and lightbox")]
+        [Xunit.TraitAttribute("Category", "F3-E2E-004")]
+        public void AliceSendsAnAnimatedGIFToBobWhoViewsItInThumbnailAndLightbox()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "F3-E2E-004"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Alice sends an animated GIF to Bob, who views it in thumbnail and lightbox", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 211
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 213
+        testRunner.Given("a browser context for \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 214
+        testRunner.And("\"Alice\" has created identity via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 215
+        testRunner.And("a browser context for \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 216
+        testRunner.And("\"Bob\" has created identity via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 219
+        testRunner.When("Alice creates a new chat with \"Bob\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 220
+        testRunner.And("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 221
+        testRunner.Then("\"Bob\" should appear in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 222
+        testRunner.And("\"Alice\" should appear in Bob\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 225
+        testRunner.When("Alice opens the chat with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 226
+        testRunner.And("Alice attaches animated GIF 1 for \"Bob\" via file picker", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 227
+        testRunner.Then("the composer overlay should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 228
+        testRunner.And("the composer overlay should show an image preview", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 230
+        testRunner.When("Alice types \"Check this animated GIF!\" in the composer overlay", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 231
+        testRunner.And("Alice sends from the composer overlay and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 232
+        testRunner.Then("the composer overlay should not be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 235
+        testRunner.When("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 236
+        testRunner.And("Bob opens the chat with \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 237
+        testRunner.Then("Bob should see message \"Check this animated GIF!\" from Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 238
+        testRunner.And("Bob should see attachment \"Animated-1-from-Alice-to-Bob.gif\" in the thumbnail", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 241
+        testRunner.When("Bob clicks the thumbnail for \"Animated-1-from-Alice-to-Bob.gif\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 242
+        testRunner.Then("the lightbox overlay should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 243
+        testRunner.And("the lightbox should show attachment \"Animated-1-from-Alice-to-Bob.gif\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 245
+        testRunner.When("Bob closes the lightbox", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 246
+        testRunner.Then("the lightbox overlay should not be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable

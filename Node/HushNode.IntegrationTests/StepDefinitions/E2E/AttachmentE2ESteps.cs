@@ -601,6 +601,31 @@ internal sealed class AttachmentE2ESteps : BrowserStepsBase
     }
 
     /// <summary>
+    /// Generates a 3-frame animated GIF (50x50, cycling red/green/blue) and injects
+    /// it via the hidden file input. Tests the full animated GIF pipeline:
+    /// compression bypass, thumbnail (static first frame), lightbox (animated).
+    /// </summary>
+    [When(@"(\w+) attaches animated GIF (\d+) for ""(.*)"" via file picker")]
+    public async Task WhenUserAttachesAnimatedGifViaFilePicker(string userName, int gifIndex, string targetName)
+    {
+        var page = GetPageForUser(userName);
+
+        var (fileName, gifBytes) = TestImageGenerator.GenerateAnimatedTestGif(gifIndex, userName, targetName);
+
+        var fileInput = page.Locator("input[data-testid='file-input']").Last;
+
+        await fileInput.SetInputFilesAsync(new FilePayload
+        {
+            Name = fileName,
+            MimeType = "image/gif",
+            Buffer = gifBytes,
+        });
+
+        Console.WriteLine($"[E2E Attachment] {userName} attached animated GIF: {fileName} ({gifBytes.Length} bytes)");
+        await Task.Delay(500);
+    }
+
+    /// <summary>
     /// Verifies which image is currently displayed in the composer overlay preview
     /// by checking the alt attribute of the visible composer-preview-image.
     /// Works for both single-image (no carousel) and multi-image (carousel) cases,
