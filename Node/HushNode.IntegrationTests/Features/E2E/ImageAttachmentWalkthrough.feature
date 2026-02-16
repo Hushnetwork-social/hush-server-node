@@ -244,3 +244,64 @@ Feature: Image Attachment Walkthrough
 
         When Bob closes the lightbox
         Then the lightbox overlay should not be visible
+
+    @F3-E2E-005
+    Scenario: Alice sends 3 animated GIFs to Bob, who navigates carousel and lightbox
+        # === SETUP ===
+        Given a browser context for "Alice"
+        And "Alice" has created identity via browser
+        And a browser context for "Bob"
+        And "Bob" has created identity via browser
+
+        # === CHAT CREATION ===
+        When Alice creates a new chat with "Bob" via browser
+        And Bob triggers sync
+        Then "Bob" should appear in Alice's feed list
+        And "Alice" should appear in Bob's feed list
+
+        # === ATTACH 3 ANIMATED GIFs AT ONCE ===
+        When Alice opens the chat with "Bob"
+        And Alice attaches animated GIFs 1 through 3 for "Bob" via file picker
+        Then the composer overlay should be visible
+        And the composer should show attachment count "3/5"
+        And the composer should show page indicator "1 / 3"
+
+        # === SEND 3-GIF MESSAGE ===
+        When Alice types "Three animated GIFs!" in the composer overlay
+        And Alice sends from the composer overlay and waits for confirmation
+        Then the composer overlay should not be visible
+
+        # === BOB RECEIVES AND NAVIGATES THUMBNAILS ===
+        When Bob triggers sync
+        And Bob opens the chat with "Alice"
+        Then Bob should see message "Three animated GIFs!" from Alice
+        And Bob should see attachment "Animated-1-from-Alice-to-Bob.gif" in the thumbnail
+
+        Then Bob should see thumbnail page indicator "1 / 3"
+        And the current thumbnail should show "Animated-1-from-Alice-to-Bob.gif"
+
+        When Bob clicks the next thumbnail arrow
+        Then Bob should see thumbnail page indicator "2 / 3"
+        And the current thumbnail should show "Animated-2-from-Alice-to-Bob.gif"
+
+        When Bob clicks the next thumbnail arrow
+        Then Bob should see thumbnail page indicator "3 / 3"
+        And the current thumbnail should show "Animated-3-from-Alice-to-Bob.gif"
+
+        # === BOB OPENS LIGHTBOX FROM POSITION 3 ===
+        When Bob clicks the current thumbnail image
+        Then the lightbox overlay should be visible
+        And the lightbox should show page indicator "3 / 3"
+        And the lightbox should show attachment "Animated-3-from-Alice-to-Bob.gif"
+
+        # === NAVIGATE LIGHTBOX BACK TO FIRST GIF ===
+        When Bob presses the left arrow key
+        Then the lightbox should show page indicator "2 / 3"
+        And the lightbox should show attachment "Animated-2-from-Alice-to-Bob.gif"
+
+        When Bob presses the left arrow key
+        Then the lightbox should show page indicator "1 / 3"
+        And the lightbox should show attachment "Animated-1-from-Alice-to-Bob.gif"
+
+        When Bob closes the lightbox
+        Then the lightbox overlay should not be visible

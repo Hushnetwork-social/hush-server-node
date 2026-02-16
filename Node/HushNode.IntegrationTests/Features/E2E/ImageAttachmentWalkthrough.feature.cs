@@ -676,6 +676,153 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Alice sends 3 animated GIFs to Bob, who navigates carousel and lightbox")]
+        [Xunit.TraitAttribute("FeatureTitle", "Image Attachment Walkthrough")]
+        [Xunit.TraitAttribute("Description", "Alice sends 3 animated GIFs to Bob, who navigates carousel and lightbox")]
+        [Xunit.TraitAttribute("Category", "F3-E2E-005")]
+        public void AliceSends3AnimatedGIFsToBobWhoNavigatesCarouselAndLightbox()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "F3-E2E-005"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Alice sends 3 animated GIFs to Bob, who navigates carousel and lightbox", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 249
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 251
+        testRunner.Given("a browser context for \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 252
+        testRunner.And("\"Alice\" has created identity via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 253
+        testRunner.And("a browser context for \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 254
+        testRunner.And("\"Bob\" has created identity via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 257
+        testRunner.When("Alice creates a new chat with \"Bob\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 258
+        testRunner.And("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 259
+        testRunner.Then("\"Bob\" should appear in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 260
+        testRunner.And("\"Alice\" should appear in Bob\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 263
+        testRunner.When("Alice opens the chat with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 264
+        testRunner.And("Alice attaches animated GIFs 1 through 3 for \"Bob\" via file picker", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 265
+        testRunner.Then("the composer overlay should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 266
+        testRunner.And("the composer should show attachment count \"3/5\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 267
+        testRunner.And("the composer should show page indicator \"1 / 3\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 270
+        testRunner.When("Alice types \"Three animated GIFs!\" in the composer overlay", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 271
+        testRunner.And("Alice sends from the composer overlay and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 272
+        testRunner.Then("the composer overlay should not be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 275
+        testRunner.When("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 276
+        testRunner.And("Bob opens the chat with \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 277
+        testRunner.Then("Bob should see message \"Three animated GIFs!\" from Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 278
+        testRunner.And("Bob should see attachment \"Animated-1-from-Alice-to-Bob.gif\" in the thumbnail", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 280
+        testRunner.Then("Bob should see thumbnail page indicator \"1 / 3\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 281
+        testRunner.And("the current thumbnail should show \"Animated-1-from-Alice-to-Bob.gif\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 283
+        testRunner.When("Bob clicks the next thumbnail arrow", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 284
+        testRunner.Then("Bob should see thumbnail page indicator \"2 / 3\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 285
+        testRunner.And("the current thumbnail should show \"Animated-2-from-Alice-to-Bob.gif\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 287
+        testRunner.When("Bob clicks the next thumbnail arrow", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 288
+        testRunner.Then("Bob should see thumbnail page indicator \"3 / 3\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 289
+        testRunner.And("the current thumbnail should show \"Animated-3-from-Alice-to-Bob.gif\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 292
+        testRunner.When("Bob clicks the current thumbnail image", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 293
+        testRunner.Then("the lightbox overlay should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 294
+        testRunner.And("the lightbox should show page indicator \"3 / 3\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 295
+        testRunner.And("the lightbox should show attachment \"Animated-3-from-Alice-to-Bob.gif\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 298
+        testRunner.When("Bob presses the left arrow key", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 299
+        testRunner.Then("the lightbox should show page indicator \"2 / 3\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 300
+        testRunner.And("the lightbox should show attachment \"Animated-2-from-Alice-to-Bob.gif\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 302
+        testRunner.When("Bob presses the left arrow key", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 303
+        testRunner.Then("the lightbox should show page indicator \"1 / 3\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 304
+        testRunner.And("the lightbox should show attachment \"Animated-1-from-Alice-to-Bob.gif\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 306
+        testRunner.When("Bob closes the lightbox", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 307
+        testRunner.Then("the lightbox overlay should not be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable

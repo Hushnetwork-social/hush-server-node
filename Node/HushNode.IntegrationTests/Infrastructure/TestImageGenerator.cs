@@ -1,4 +1,6 @@
-using System.Text;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Gif;
+using SixLabors.ImageSharp.PixelFormats;
 using SkiaSharp;
 
 namespace HushNode.IntegrationTests.Infrastructure;
@@ -8,6 +10,9 @@ namespace HushNode.IntegrationTests.Infrastructure;
 /// Each image has a unique color, descriptive text, and watermark number
 /// so that test screenshots and verification can identify exactly which
 /// image arrived at which recipient.
+///
+/// PNGs are rendered and encoded with SkiaSharp.
+/// Animated GIFs are rendered with SkiaSharp and encoded with SixLabors.ImageSharp.
 /// </summary>
 internal static class TestImageGenerator
 {
@@ -49,9 +54,19 @@ internal static class TestImageGenerator
     private static byte[] RenderLabeledPng(string label, int imageIndex, SKColor bgColor)
     {
         using var surface = SKSurface.Create(new SKImageInfo(Width, Height));
-        var canvas = surface.Canvas;
+        RenderLabeledFrame(surface.Canvas, label, imageIndex, bgColor);
+        using var image = surface.Snapshot();
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
+    }
 
-        // Fill background
+    /// <summary>
+    /// Renders a labeled frame onto a canvas. Shared by PNG and animated GIF generators.
+    /// Draws: colored background, white border, semi-transparent watermark, centered text.
+    /// </summary>
+    private static void RenderLabeledFrame(
+        SKCanvas canvas, string label, int imageIndex, SKColor bgColor)
+    {
         canvas.Clear(bgColor);
 
         // White border (2px)
@@ -70,12 +85,8 @@ internal static class TestImageGenerator
             Color = new SKColor(255, 255, 255, 60),
             IsAntialias = true,
         };
-        using var watermarkFont = new SKFont
-        {
-            Size = 120,
-        };
-        var watermarkText = $"#{imageIndex}";
-        canvas.DrawText(watermarkText, Width - 140, 110, watermarkFont, watermarkPaint);
+        using var watermarkFont = new SKFont { Size = 120 };
+        canvas.DrawText($"#{imageIndex}", Width - 140, 110, watermarkFont, watermarkPaint);
 
         // Main label text - centered
         using var textPaint = new SKPaint
@@ -83,227 +94,112 @@ internal static class TestImageGenerator
             Color = SKColors.White,
             IsAntialias = true,
         };
-        using var textFont = new SKFont
-        {
-            Size = 22,
-        };
-
-        // Measure text to center it
+        using var textFont = new SKFont { Size = 22 };
         var textWidth = textFont.MeasureText(label);
         var x = (Width - textWidth) / 2;
-        var y = Height / 2 + 8; // slight offset below center (watermark is above)
-
+        var y = Height / 2 + 8;
         canvas.DrawText(label, x, y, textFont, textPaint);
-
-        // Encode as PNG
-        using var image = surface.Snapshot();
-        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-        return data.ToArray();
     }
 
     // =========================================================================
-    // Animated GIF generation
+    // Animated GIF generation (SkiaSharp rendering + ImageSharp GIF encoding)
     // =========================================================================
 
-    private const int GifWidth = 50;
-    private const int GifHeight = 50;
-
     /// <summary>
-    /// Frame colors for the animated GIF: red → green → blue cycle.
+    /// Background colors for animated GIF frames (cycling red → teal → blue).
     /// </summary>
-    private static readonly (byte R, byte G, byte B)[] GifFrameColors =
+    private static readonly SKColor[] GifFrameBgColors =
     [
-        (0xFF, 0x44, 0x44), // Red
-        (0x44, 0xCC, 0x44), // Green
-        (0x44, 0x44, 0xFF), // Blue
+        new SKColor(0xCC, 0x44, 0x44), // Red
+        new SKColor(0x22, 0x88, 0x66), // Teal
+        new SKColor(0x33, 0x66, 0xCC), // Blue
     ];
 
     /// <summary>
-    /// Generates a 3-frame animated GIF (50×50, cycling red→green→blue).
-    /// The GIF loops infinitely via the NETSCAPE2.0 extension.
-    /// Uses the GIF89a format with proper LZW compression.
+    /// Generates a labeled animated GIF (400×200, 3 frames cycling background colors)
+    /// with text "Animated #N from Sender to Target" and a watermark number.
+    /// The GIF loops infinitely. Frames rendered by SkiaSharp, encoded by ImageSharp.
     /// </summary>
-    /// <param name="gifIndex">1-based index for naming.</param>
-    /// <param name="senderName">Display name of sender (e.g., "Alice").</param>
-    /// <param name="targetName">Display name of target (e.g., "Bob").</param>
-    /// <returns>Tuple of (fileName, gifBytes).</returns>
     public static (string FileName, byte[] GifBytes) GenerateAnimatedTestGif(
         int gifIndex, string senderName, string targetName)
     {
         var fileName = $"Animated-{gifIndex}-from-{senderName}-to-{targetName}.gif";
-        var gifBytes = BuildAnimatedGif();
+        var label = $"Animated #{gifIndex} from {senderName} to {targetName}";
+        var gifBytes = BuildLabeledAnimatedGif(label, gifIndex);
         return (fileName, gifBytes);
     }
 
-    private static byte[] BuildAnimatedGif()
+    /// <summary>
+    /// Builds a labeled animated GIF by rendering each frame with SkiaSharp,
+    /// converting to ImageSharp pixel data, and encoding with ImageSharp's GIF encoder.
+    /// </summary>
+    private static byte[] BuildLabeledAnimatedGif(string label, int imageIndex)
     {
-        using var ms = new MemoryStream();
-        using var bw = new BinaryWriter(ms);
-
-        // === GIF89a Header ===
-        bw.Write(Encoding.ASCII.GetBytes("GIF89a"));
-
-        // === Logical Screen Descriptor ===
-        bw.Write((ushort)GifWidth);
-        bw.Write((ushort)GifHeight);
-        // Packed: GCT flag=1, color res=1 (2-bit), sort=0, GCT size=1 (4 entries)
-        bw.Write((byte)0x91);
-        bw.Write((byte)0); // background color index
-        bw.Write((byte)0); // pixel aspect ratio
-
-        // === Global Color Table (4 entries × 3 bytes = 12 bytes) ===
-        foreach (var (r, g, b) in GifFrameColors)
+        var skBitmaps = new List<SKBitmap>();
+        try
         {
-            bw.Write(r);
-            bw.Write(g);
-            bw.Write(b);
-        }
-
-        // 4th entry (filler — GCT must have 2^(N+1) entries)
-        bw.Write((byte)0xFF);
-        bw.Write((byte)0xFF);
-        bw.Write((byte)0xFF);
-
-        // === NETSCAPE2.0 Application Extension (infinite loop) ===
-        bw.Write((byte)0x21); // Extension Introducer
-        bw.Write((byte)0xFF); // Application Extension Label
-        bw.Write((byte)11);   // Block Size
-        bw.Write(Encoding.ASCII.GetBytes("NETSCAPE2.0"));
-        bw.Write((byte)3);    // Sub-block Size
-        bw.Write((byte)1);    // Sub-block ID
-        bw.Write((ushort)0);  // Loop Count (0 = infinite)
-        bw.Write((byte)0);    // Block Terminator
-
-        // === 3 Frames ===
-        for (var frame = 0; frame < 3; frame++)
-        {
-            // Graphic Control Extension
-            bw.Write((byte)0x21); // Extension Introducer
-            bw.Write((byte)0xF9); // Graphic Control Label
-            bw.Write((byte)4);    // Block Size
-            bw.Write((byte)0x00); // Packed: disposal=none, no user input, no transparent
-            bw.Write((ushort)50); // Delay: 50 × 10ms = 500ms
-            bw.Write((byte)0);    // Transparent Color Index
-            bw.Write((byte)0);    // Block Terminator
-
-            // Image Descriptor
-            bw.Write((byte)0x2C); // Image Separator
-            bw.Write((ushort)0);  // Left
-            bw.Write((ushort)0);  // Top
-            bw.Write((ushort)GifWidth);
-            bw.Write((ushort)GifHeight);
-            bw.Write((byte)0x00); // Packed: no local color table
-
-            // Image Data: LZW min code size + compressed data
-            const byte minCodeSize = 2;
-            bw.Write(minCodeSize);
-
-            var pixels = new byte[GifWidth * GifHeight];
-            Array.Fill(pixels, (byte)frame);
-            var lzwData = GifLzwEncode(pixels, minCodeSize);
-
-            // Write as sub-blocks (max 255 bytes each)
-            var offset = 0;
-            while (offset < lzwData.Length)
+            // Step 1: Render all frames with SkiaSharp
+            foreach (var bgColor in GifFrameBgColors)
             {
-                var blockSize = Math.Min(255, lzwData.Length - offset);
-                bw.Write((byte)blockSize);
-                bw.Write(lzwData, offset, blockSize);
-                offset += blockSize;
+                using var surface = SKSurface.Create(new SKImageInfo(Width, Height));
+                RenderLabeledFrame(surface.Canvas, label, imageIndex, bgColor);
+                using var image = surface.Snapshot();
+                skBitmaps.Add(SKBitmap.FromImage(image));
             }
 
-            bw.Write((byte)0); // Block Terminator
+            // Step 2: Create animated GIF with ImageSharp
+            // Build first frame as the root image
+            var firstPixels = SkBitmapToRgba32(skBitmaps[0]);
+            using var gif = Image.LoadPixelData<Rgba32>(firstPixels, Width, Height);
+
+            // Set root frame delay (150 × 10ms = 1.5s per frame → ~4.5s full cycle)
+            var rootMeta = gif.Frames.RootFrame.Metadata.GetGifMetadata();
+            rootMeta.FrameDelay = 150;
+
+            // Add remaining frames
+            for (var f = 1; f < skBitmaps.Count; f++)
+            {
+                var framePixels = SkBitmapToRgba32(skBitmaps[f]);
+                using var frameImage = Image.LoadPixelData<Rgba32>(framePixels, Width, Height);
+                var addedFrame = gif.Frames.AddFrame(frameImage.Frames.RootFrame);
+                var frameMeta = addedFrame.Metadata.GetGifMetadata();
+                frameMeta.FrameDelay = 150;
+            }
+
+            // Set infinite loop
+            var gifMeta = gif.Metadata.GetGifMetadata();
+            gifMeta.RepeatCount = 0;
+
+            // Encode
+            using var ms = new MemoryStream();
+            gif.SaveAsGif(ms, new GifEncoder
+            {
+                ColorTableMode = GifColorTableMode.Global,
+            });
+            return ms.ToArray();
         }
-
-        // === Trailer ===
-        bw.Write((byte)0x3B);
-
-        return ms.ToArray();
+        finally
+        {
+            foreach (var bm in skBitmaps) bm.Dispose();
+        }
     }
 
     /// <summary>
-    /// LZW encoder for GIF image data.
-    /// Implements variable-length code packing (LSB-first) per the GIF spec.
+    /// Converts an SKBitmap to an Rgba32 pixel array for ImageSharp.
     /// </summary>
-    private static byte[] GifLzwEncode(byte[] pixels, int minCodeSize)
+    private static Rgba32[] SkBitmapToRgba32(SKBitmap bitmap)
     {
-        var clearCode = 1 << minCodeSize;
-        var eoiCode = clearCode + 1;
-        var codeSize = minCodeSize + 1;
-        var nextCode = eoiCode + 1;
-        var maxCode = 1 << codeSize;
-
-        // String table: (prefix code, suffix byte) → new code
-        var table = new Dictionary<(int prefix, byte suffix), int>();
-
-        // Bit packer: accumulates variable-length codes into bytes (LSB first)
-        using var output = new MemoryStream();
-        var bitBuffer = 0;
-        var bitsInBuffer = 0;
-
-        void WriteBits(int code, int bits)
+        var pixels = new Rgba32[bitmap.Width * bitmap.Height];
+        var idx = 0;
+        for (var y = 0; y < bitmap.Height; y++)
         {
-            bitBuffer |= code << bitsInBuffer;
-            bitsInBuffer += bits;
-            while (bitsInBuffer >= 8)
+            for (var x = 0; x < bitmap.Width; x++)
             {
-                output.WriteByte((byte)(bitBuffer & 0xFF));
-                bitBuffer >>= 8;
-                bitsInBuffer -= 8;
+                var c = bitmap.GetPixel(x, y);
+                pixels[idx++] = new Rgba32(c.Red, c.Green, c.Blue, c.Alpha);
             }
         }
 
-        // Start with clear code
-        WriteBits(clearCode, codeSize);
-
-        var prefix = (int)pixels[0];
-
-        for (var i = 1; i < pixels.Length; i++)
-        {
-            var suffix = pixels[i];
-            var key = (prefix, suffix);
-
-            if (table.TryGetValue(key, out var existingCode))
-            {
-                prefix = existingCode;
-            }
-            else
-            {
-                WriteBits(prefix, codeSize);
-
-                if (nextCode < 4096)
-                {
-                    table[key] = nextCode++;
-                    if (nextCode >= maxCode && codeSize < 12)
-                    {
-                        codeSize++;
-                        maxCode = 1 << codeSize;
-                    }
-                }
-                else
-                {
-                    // Table full — emit clear code and reset
-                    WriteBits(clearCode, codeSize);
-                    table.Clear();
-                    nextCode = eoiCode + 1;
-                    codeSize = minCodeSize + 1;
-                    maxCode = 1 << codeSize;
-                }
-
-                prefix = suffix;
-            }
-        }
-
-        // Output final prefix and EOI
-        WriteBits(prefix, codeSize);
-        WriteBits(eoiCode, codeSize);
-
-        // Flush remaining bits
-        if (bitsInBuffer > 0)
-        {
-            output.WriteByte((byte)(bitBuffer & 0xFF));
-        }
-
-        return output.ToArray();
+        return pixels;
     }
 }

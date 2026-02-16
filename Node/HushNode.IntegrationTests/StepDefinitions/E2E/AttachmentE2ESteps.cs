@@ -601,9 +601,10 @@ internal sealed class AttachmentE2ESteps : BrowserStepsBase
     }
 
     /// <summary>
-    /// Generates a 3-frame animated GIF (50x50, cycling red/green/blue) and injects
-    /// it via the hidden file input. Tests the full animated GIF pipeline:
-    /// compression bypass, thumbnail (static first frame), lightbox (animated).
+    /// Generates a labeled animated GIF (400x200, 3 frames cycling background colors)
+    /// with text "Animated #N from Sender to Target" and injects it via the hidden
+    /// file input. Tests the full animated GIF pipeline: compression bypass, thumbnail
+    /// (static first frame), lightbox (animated).
     /// </summary>
     [When(@"(\w+) attaches animated GIF (\d+) for ""(.*)"" via file picker")]
     public async Task WhenUserAttachesAnimatedGifViaFilePicker(string userName, int gifIndex, string targetName)
@@ -622,6 +623,35 @@ internal sealed class AttachmentE2ESteps : BrowserStepsBase
         });
 
         Console.WriteLine($"[E2E Attachment] {userName} attached animated GIF: {fileName} ({gifBytes.Length} bytes)");
+        await Task.Delay(500);
+    }
+
+    /// <summary>
+    /// Generates multiple labeled animated GIFs and injects them all at once via the
+    /// hidden file input, same pattern as multi-image attachment.
+    /// </summary>
+    [When(@"(\w+) attaches animated GIFs (\d+) through (\d+) for ""(.*)"" via file picker")]
+    public async Task WhenUserAttachesMultipleAnimatedGifs(string userName, int startIndex, int endIndex, string targetName)
+    {
+        var page = GetPageForUser(userName);
+
+        var payloads = new List<FilePayload>();
+        for (var i = startIndex; i <= endIndex; i++)
+        {
+            var (fileName, gifBytes) = TestImageGenerator.GenerateAnimatedTestGif(i, userName, targetName);
+            payloads.Add(new FilePayload
+            {
+                Name = fileName,
+                MimeType = "image/gif",
+                Buffer = gifBytes,
+            });
+            Console.WriteLine($"[E2E Attachment] Generated animated GIF: {fileName}");
+        }
+
+        var fileInput = page.Locator("input[data-testid='file-input']").Last;
+        await fileInput.SetInputFilesAsync(payloads);
+
+        Console.WriteLine($"[E2E Attachment] {userName} attached {payloads.Count} animated GIFs for {targetName}");
         await Task.Delay(500);
     }
 

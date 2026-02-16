@@ -143,18 +143,28 @@ public class TestImageGeneratorTests
 
         if (codec != null)
         {
-            // SKCodec can parse the GIF structure
-            codec.Info.Width.Should().Be(50);
-            codec.Info.Height.Should().Be(50);
+            // SKCodec can parse the GIF structure (400x200 labeled frames)
+            codec.Info.Width.Should().Be(400);
+            codec.Info.Height.Should().Be(200);
             codec.FrameCount.Should().Be(3, "Animated GIF should have 3 frames");
         }
         else
         {
             // If SKCodec can't parse it, at least verify the binary structure
             // (the E2E browser test is the real validation)
-            gifBytes.Length.Should().BeGreaterThan(100, "GIF should have substantial content");
+            gifBytes.Length.Should().BeGreaterThan(1000, "Labeled GIF should have substantial content");
             Console.WriteLine($"[TestImageGenerator] SKCodec returned null for animated GIF ({gifBytes.Length} bytes)");
             Console.WriteLine("[TestImageGenerator] Will rely on E2E browser test for validation");
         }
+    }
+
+    [Fact]
+    public void GenerateAnimatedTestGif_ShouldProduceReasonablySizedBytes()
+    {
+        var (_, gifBytes) = TestImageGenerator.GenerateAnimatedTestGif(1, "Alice", "Bob");
+
+        // 400x200 3-frame labeled GIF should be substantial but under 500KB
+        gifBytes.Length.Should().BeGreaterThan(1000, "Labeled animated GIF should not be trivially small");
+        gifBytes.Length.Should().BeLessThan(500_000, "Labeled animated GIF should be under 500KB");
     }
 }
