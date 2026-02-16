@@ -577,6 +577,189 @@ public class NotificationEventHandlerTests
 
     #endregion
 
+    #region Attachment Hint Tests (FEAT-067)
+
+    [Fact]
+    public async Task HandleAsync_MessageWithSingleImageAttachment_PreviewIncludesImageHint()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var participantAddress = "participant-address";
+
+        var feed = CreateFeed(feedId, senderAddress, participantAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress, "Check this out") with
+        {
+            Attachments = new List<AttachmentReference>
+            {
+                new("att-1", "hash-1", "image/jpeg", 1024, "photo.jpg")
+            }
+        };
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, "Alice");
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
+
+        string? capturedPreview = null;
+        mocker.GetMock<INotificationService>()
+            .Setup(x => x.PublishNewMessageAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
+            .Callback<string, string, string, string, string?>((_, _, _, preview, _) => capturedPreview = preview)
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - Preview should include attachment hint
+        capturedPreview.Should().NotBeNull();
+        capturedPreview.Should().Be("Check this out [image]");
+    }
+
+    [Fact]
+    public async Task HandleAsync_MessageWithMultipleImageAttachments_PreviewIncludesPluralHint()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var participantAddress = "participant-address";
+
+        var feed = CreateFeed(feedId, senderAddress, participantAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress, "Photos from today") with
+        {
+            Attachments = new List<AttachmentReference>
+            {
+                new("att-1", "hash-1", "image/jpeg", 1024, "photo1.jpg"),
+                new("att-2", "hash-2", "image/png", 2048, "photo2.png"),
+            }
+        };
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, "Alice");
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
+
+        string? capturedPreview = null;
+        mocker.GetMock<INotificationService>()
+            .Setup(x => x.PublishNewMessageAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
+            .Callback<string, string, string, string, string?>((_, _, _, preview, _) => capturedPreview = preview)
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert
+        capturedPreview.Should().NotBeNull();
+        capturedPreview.Should().Be("Photos from today [2 images]");
+    }
+
+    [Fact]
+    public async Task HandleAsync_AttachmentOnlyMessage_PreviewShowsFileNameAndHint()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var participantAddress = "participant-address";
+
+        var feed = CreateFeed(feedId, senderAddress, participantAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress, "") with
+        {
+            Attachments = new List<AttachmentReference>
+            {
+                new("att-1", "hash-1", "application/pdf", 4096, "report.pdf")
+            }
+        };
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, "Alice");
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
+
+        string? capturedPreview = null;
+        mocker.GetMock<INotificationService>()
+            .Setup(x => x.PublishNewMessageAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
+            .Callback<string, string, string, string, string?>((_, _, _, preview, _) => capturedPreview = preview)
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - Attachment-only message shows filename + category
+        capturedPreview.Should().NotBeNull();
+        capturedPreview.Should().Be("report.pdf [file]");
+    }
+
+    [Fact]
+    public async Task HandleAsync_MessageWithNoAttachments_PreviewUnchanged()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var feedId = new FeedId(Guid.NewGuid());
+        var senderAddress = "sender-address";
+        var participantAddress = "participant-address";
+
+        var feed = CreateFeed(feedId, senderAddress, participantAddress);
+        var feedMessage = CreateFeedMessage(feedId, senderAddress, "Hello world");
+
+        SetupFeedsStorageService(mocker, feed, groupFeed: null);
+        SetupIdentityService(mocker, senderAddress, "Alice");
+        SetupUnreadTrackingService(mocker);
+        SetupConnectionTrackerAllOnline(mocker);
+        SetupPushDeliveryService(mocker);
+
+        string? capturedPreview = null;
+        mocker.GetMock<INotificationService>()
+            .Setup(x => x.PublishNewMessageAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
+            .Callback<string, string, string, string, string?>((_, _, _, preview, _) => capturedPreview = preview)
+            .Returns(Task.CompletedTask);
+
+        var sut = mocker.CreateInstance<NotificationEventHandler>();
+        var evt = new NewFeedMessageCreatedEvent(feedMessage);
+
+        // Act
+        await sut.HandleAsync(evt);
+
+        // Assert - No attachment hint appended
+        capturedPreview.Should().NotBeNull();
+        capturedPreview.Should().Be("Hello world");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static Feed CreateFeed(FeedId feedId, params string[] participantAddresses)
