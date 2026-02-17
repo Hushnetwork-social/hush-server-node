@@ -1,0 +1,213 @@
+name: CD - HushServerNode
+
+on:
+  # Trigger on version tags
+  push:
+    tags:
+      - 'HushServerNode-v[0-9]+.[0-9]+.[0-9]+'
+
+  # Manual trigger option
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., 1.2.3). Leave empty to use latest commit.'
+        required: false
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: hushnetwork-social/hushservernode
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: HushServerNode AWS CD
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # ============================================
+      # CHECKOUT & VERSION EXTRACTION
+      # ============================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ -n "${{ inputs.version }}" ]]; then
+              VERSION="${{ inputs.version }}"
+            else
+              VERSION="manual-$(date +%Y%m%d-%H%M%S)"
+            fi
+          else
+            # Extract version from tag: HushServerNode-v1.2.3 -> 1.2.3
+            VERSION=${GITHUB_REF#refs/tags/HushServerNode-v}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      # ============================================
+      # BUILD & PUSH DOCKER IMAGE
+      # ============================================
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Node/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary - Image pushed
+        run: |
+          echo "### Docker Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+
+      # ============================================
+      # DEPLOY TO AWS LIGHTSAIL
+      # ============================================
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AWS_SSH_PRIVATE_KEY }}" > ~/.ssh/lightsail.pem
+          chmod 600 ~/.ssh/lightsail.pem
+
+          # Add host to known_hosts to avoid prompt
+          ssh-keyscan -H ${{ secrets.AWS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Upload Firebase service account to server
+        env:
+          SSH_HOST: ${{ secrets.AWS_HOST }}
+          SSH_USER: ${{ secrets.AWS_SSH_USER }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          # Write the secret directly (stored as raw JSON, not base64)
+          echo "${FIREBASE_SERVICE_ACCOUNT}" > /tmp/firebase-sa.json
+
+          # Verify it's valid JSON
+          if jq empty /tmp/firebase-sa.json 2>/dev/null; then
+            echo "Valid JSON detected"
+          else
+            echo "Invalid JSON in FIREBASE_SERVICE_ACCOUNT secret"
+            exit 1
+          fi
+
+          scp -i ~/.ssh/lightsail.pem /tmp/firebase-sa.json ${SSH_USER}@${SSH_HOST}:/mnt/hush_db_data/config/firebase-sa.json
+          rm -f /tmp/firebase-sa.json
+          echo "Firebase service account uploaded"
+
+      - name: Ensure Firebase config in ApplicationSettings
+        env:
+          SSH_HOST: ${{ secrets.AWS_HOST }}
+          SSH_USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          # Add Firebase config to server's ApplicationSettings.json if not present
+          ssh -i ~/.ssh/lightsail.pem ${SSH_USER}@${SSH_HOST} 'bash -s' << 'CONFIG_SCRIPT'
+            CONFIG_FILE="/mnt/hush_db_data/config/ApplicationSettings.json"
+
+            # Check if Firebase section exists
+            if ! grep -q '"Firebase"' "$CONFIG_FILE"; then
+              echo "Adding Firebase config to ApplicationSettings.json..."
+              # Use jq to add Firebase section
+              jq '. + {"Firebase": {"ProjectId": "hushnetwork", "ServiceAccountPath": "./firebase-sa.json", "Enabled": true}}' \
+                "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+              echo "Firebase config added"
+            else
+              echo "Firebase config already present"
+            fi
+          CONFIG_SCRIPT
+
+      - name: Deploy to AWS Lightsail
+        env:
+          SSH_HOST: ${{ secrets.AWS_HOST }}
+          SSH_USER: ${{ secrets.AWS_SSH_USER }}
+          IMAGE_TAG: ${{ steps.version.outputs.version }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        run: |
+          ssh -i ~/.ssh/lightsail.pem ${SSH_USER}@${SSH_HOST} "IMAGE_TAG=${IMAGE_TAG}" "GHCR_TOKEN=${GHCR_TOKEN}" "GHCR_IMAGE=${GHCR_IMAGE}" 'bash -s' << 'DEPLOY_SCRIPT'
+            set -e
+
+            echo "Starting deployment of version ${IMAGE_TAG}..."
+
+            # Login to GHCR
+            echo "Logging in to GitHub Container Registry..."
+            echo "${GHCR_TOKEN}" | sudo docker login ghcr.io -u github --password-stdin
+
+            # Pull the new image
+            echo "Pulling new image..."
+            sudo docker pull ${GHCR_IMAGE}:${IMAGE_TAG}
+
+            # Stop and remove any existing HushNetworkNode containers (any version)
+            echo "Stopping old container(s)..."
+            sudo docker ps -q --filter "name=HushNetworkNode" | xargs -r sudo docker stop || true
+            sudo docker ps -aq --filter "name=HushNetworkNode" | xargs -r sudo docker rm || true
+
+            # Start new container with version in name
+            CONTAINER_NAME="HushNetworkNode_v${IMAGE_TAG}"
+            echo "Starting new container: ${CONTAINER_NAME}..."
+            sudo docker run -d \
+              --name ${CONTAINER_NAME} \
+              --restart always \
+              --network HushNetwork \
+              -p 4665:4665 \
+              -p 127.0.0.1:4666:4666 \
+              --env-file /mnt/hush_db_data/config/.env \
+              -v /mnt/hush_db_data/config/stacker-credentials.dat:/app/stacker-credentials.dat:ro \
+              -v /mnt/hush_db_data/config/ApplicationSettings.json:/app/ApplicationSettings.json:ro \
+              -v /mnt/hush_db_data/config/firebase-sa.json:/app/firebase-sa.json:ro \
+              ${GHCR_IMAGE}:${IMAGE_TAG}
+
+            # Verify container is running
+            echo "Verifying deployment..."
+            sleep 5
+            if sudo docker ps | grep -q "${CONTAINER_NAME}"; then
+              echo "${CONTAINER_NAME} is running!"
+              sudo docker ps --filter "name=HushNetworkNode" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            else
+              echo "Container failed to start!"
+              sudo docker logs ${CONTAINER_NAME} --tail 50
+              exit 1
+            fi
+
+            echo "Deployment complete!"
+          DEPLOY_SCRIPT
+
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/lightsail.pem
+
+      - name: Deployment Summary
+        run: |
+          echo "### Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Container:** \`HushNetworkNode_v${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Target:** AWS Lightsail (Frankfurt)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Endpoints:**" >> $GITHUB_STEP_SUMMARY
+          echo "- gRPC-Web: \`https://api.hushnetwork.social\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Native gRPC: Port 4665" >> $GITHUB_STEP_SUMMARY

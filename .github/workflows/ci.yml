@@ -1,0 +1,36 @@
+# CI workflow for HushServerNode (.NET)
+# Triggers on any code change (no path filter needed — whole repo is the server)
+
+name: CI - HushServerNode
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: Node
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore
+
+    - name: Unit Tests
+      run: dotnet test --no-build --verbosity normal --filter "Category!=Performance&Category!=E2E"
