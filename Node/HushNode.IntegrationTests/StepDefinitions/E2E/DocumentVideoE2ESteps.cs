@@ -9,7 +9,7 @@ namespace HushNode.IntegrationTests.StepDefinitions.E2E;
 /// Step definitions for document and video attachment E2E tests.
 /// Covers PDF document cards, video thumbnails, mixed type carousels,
 /// and blocked file rejection.
-/// Tests: F4-E2E-001 through F4-E2E-004 from FEAT-068.
+/// Tests: F4-E2E-001 through F4-E2E-005 from FEAT-068.
 /// </summary>
 [Binding]
 internal sealed class DocumentVideoE2ESteps : BrowserStepsBase
@@ -45,24 +45,25 @@ internal sealed class DocumentVideoE2ESteps : BrowserStepsBase
     }
 
     /// <summary>
-    /// Injects a real H.264 MP4 video file (1s, 160x120, blue frame) into the hidden file input.
+    /// Injects a real VP8/WebM video file (1s, 160x120, blue frame) into the hidden file input.
+    /// WebM/VP8 is used because Playwright's Chromium always supports VP8 (open codec).
     /// The browser can decode this and extract frames, so the video-thumbnail path is exercised.
     /// </summary>
     [When(@"(\w+) attaches a video file for ""(.*)"" via file picker")]
     public async Task WhenUserAttachesVideoFileViaFilePicker(string userName, string targetName)
     {
         var page = GetPageForUser(userName);
-        var (fileName, mp4Bytes) = TestFileGenerator.GenerateTestVideo(userName, targetName);
+        var (fileName, videoBytes) = TestFileGenerator.GenerateTestVideo(userName, targetName);
 
         var fileInput = page.Locator("input[data-testid='file-input']").Last;
         await fileInput.SetInputFilesAsync(new FilePayload
         {
             Name = fileName,
-            MimeType = "video/mp4",
-            Buffer = mp4Bytes,
+            MimeType = "video/webm",
+            Buffer = videoBytes,
         });
 
-        Console.WriteLine($"[E2E DocVideo] {userName} attached video: {fileName} ({mp4Bytes.Length} bytes)");
+        Console.WriteLine($"[E2E DocVideo] {userName} attached video: {fileName} ({videoBytes.Length} bytes)");
         // Video frame extraction runs asynchronously - allow time
         await Task.Delay(1500);
     }
@@ -232,6 +233,263 @@ internal sealed class DocumentVideoE2ESteps : BrowserStepsBase
         throw new Exception(
             $"No video element visible for {userName} after 30s. " +
             $"Counts: video-thumbnail={thumbCount}, video-fallback={fallbackCount}, video-skeleton={skeletonCount}");
+    }
+
+    // =========================================================================
+    // Lightbox Video Player Steps (F4-E2E-005)
+    // =========================================================================
+
+    /// <summary>
+    /// Clicks the video thumbnail or fallback element in the message to open the lightbox.
+    /// Handles both video-thumbnail (extracted frame) and video-fallback (no frame).
+    /// </summary>
+    [When(@"(\w+) clicks the video element in the message")]
+    public async Task WhenUserClicksVideoElementInMessage(string userName)
+    {
+        var page = GetPageForUser(userName);
+
+        // Try video-thumbnail first, then video-fallback
+        var thumbnail = page.GetByTestId("video-thumbnail");
+        var fallback = page.GetByTestId("video-fallback");
+
+        if (await thumbnail.CountAsync() > 0 && await thumbnail.First.IsVisibleAsync())
+        {
+            await thumbnail.First.ClickAsync();
+            Console.WriteLine($"[E2E DocVideo] {userName} clicked video-thumbnail to open lightbox");
+        }
+        else if (await fallback.CountAsync() > 0 && await fallback.First.IsVisibleAsync())
+        {
+            await fallback.First.ClickAsync();
+            Console.WriteLine($"[E2E DocVideo] {userName} clicked video-fallback to open lightbox");
+        }
+        else
+        {
+            throw new Exception($"No video element (thumbnail or fallback) found for {userName} to click");
+        }
+
+        // Allow lightbox to open and start downloading full video
+        await Task.Delay(1000);
+    }
+
+    /// <summary>
+    /// Verifies that the video player component is visible in the lightbox.
+    /// The VideoPlayer renders when the full video blob URL is available.
+    /// Uses 30s timeout for full video download + decryption.
+    /// </summary>
+    [Then(@"the lightbox should show a video player")]
+    public async Task ThenLightboxShouldShowVideoPlayer()
+    {
+        var page = await GetOrCreatePageAsync();
+        var player = await WaitForTestIdAsync(page, "video-player", 30000);
+        (await player.IsVisibleAsync()).Should().BeTrue("Video player should be visible in lightbox");
+        Console.WriteLine("[E2E DocVideo] Lightbox shows video player");
+    }
+
+    /// <summary>
+    /// Verifies that the video progress bar is visible in the player.
+    /// </summary>
+    [Then(@"the video progress bar should be visible")]
+    public async Task ThenVideoProgressBarShouldBeVisible()
+    {
+        var page = await GetOrCreatePageAsync();
+        var progressBar = await WaitForTestIdAsync(page, "video-progress-bar", 5000);
+        (await progressBar.IsVisibleAsync()).Should().BeTrue("Video progress bar should be visible");
+        Console.WriteLine("[E2E DocVideo] Video progress bar is visible");
+    }
+
+    /// <summary>
+    /// Verifies that the video time displays are visible (current time + duration).
+    /// The duration may show "--:--" if the browser can't decode the video metadata
+    /// (e.g., Playwright's Chromium without H.264 codec), but the UI elements must exist.
+    /// </summary>
+    [Then(@"the video time displays should be visible")]
+    public async Task ThenVideoTimeDisplaysShouldBeVisible()
+    {
+        var page = await GetOrCreatePageAsync();
+
+        var currentTimeEl = await WaitForTestIdAsync(page, "video-current-time", 5000);
+        (await currentTimeEl.IsVisibleAsync()).Should().BeTrue("Current time display should be visible");
+        var currentTimeText = await currentTimeEl.TextContentAsync();
+
+        var durationEl = await WaitForTestIdAsync(page, "video-duration", 5000);
+        (await durationEl.IsVisibleAsync()).Should().BeTrue("Duration display should be visible");
+        var durationText = await durationEl.TextContentAsync();
+
+        Console.WriteLine($"[E2E DocVideo] Video time displays visible: {currentTimeText} / {durationText}");
+    }
+
+    /// <summary>
+    /// Clicks the play icon overlay to start playback.
+    /// The play icon has pointer-events:auto so it's directly clickable by Playwright,
+    /// and the click counts as a trusted user gesture for autoplay policy.
+    /// </summary>
+    [When(@"(\w+) clicks the video to play")]
+    public async Task WhenUserClicksVideoToPlay(string userName)
+    {
+        var page = GetPageForUser(userName);
+
+        // Scope to lightbox to avoid matching the thumbnail's play icon
+        var lightbox = page.GetByTestId("lightbox-overlay");
+        var playIcon = lightbox.GetByTestId("video-play-icon");
+        await playIcon.ClickAsync();
+        Console.WriteLine($"[E2E DocVideo] {userName} clicked play icon to start playback");
+        await Task.Delay(500);
+    }
+
+    /// <summary>
+    /// Verifies the video is in the playing state by checking the state testid.
+    /// </summary>
+    [Then(@"the video should be playing")]
+    public async Task ThenVideoShouldBePlaying()
+    {
+        var page = await GetOrCreatePageAsync();
+
+        var startTime = DateTime.UtcNow;
+        var timeout = TimeSpan.FromSeconds(5);
+
+        while (DateTime.UtcNow - startTime < timeout)
+        {
+            var isPlaying = await page.GetByTestId("video-state-playing").CountAsync() > 0;
+            if (isPlaying)
+            {
+                Console.WriteLine("[E2E DocVideo] Video is playing (state-playing testid found)");
+                return;
+            }
+
+            // Also check via JavaScript as a secondary signal
+            var jsPaused = await page.EvalOnSelectorAsync<bool>(
+                "[data-testid='video-player-element']", "el => el.paused");
+            if (!jsPaused)
+            {
+                Console.WriteLine("[E2E DocVideo] Video is playing (JS paused=false, waiting for React state)");
+                await Task.Delay(200);
+                continue;
+            }
+
+            await Task.Delay(200);
+        }
+
+        // Diagnostic: check if video is paused or if player exists
+        var hasPaused = await page.GetByTestId("video-state-paused").CountAsync() > 0;
+        var hasPlayer = await page.GetByTestId("video-player").CountAsync() > 0;
+        var videoError = await page.EvalOnSelectorAsync<string?>(
+            "[data-testid='video-player-element']",
+            "el => el.error ? el.error.message : null");
+        throw new Exception(
+            $"Video is not playing after 5s. " +
+            $"video-state-paused={hasPaused}, video-player={hasPlayer}, videoError={videoError}");
+    }
+
+    /// <summary>
+    /// Verifies the Pause icon is visible in the video player overlay.
+    /// </summary>
+    [Then(@"the video pause icon should be visible")]
+    public async Task ThenVideoPauseIconShouldBeVisible()
+    {
+        var page = await GetOrCreatePageAsync();
+        var pauseIcon = await WaitForTestIdAsync(page, "video-pause-icon", 5000);
+        (await pauseIcon.IsVisibleAsync()).Should().BeTrue("Pause icon should be visible when video is playing");
+        Console.WriteLine("[E2E DocVideo] Video pause icon is visible");
+    }
+
+    /// <summary>
+    /// Clicks the pause icon overlay to pause playback.
+    /// The pause icon has pointer-events:auto so it's directly clickable.
+    /// </summary>
+    [When(@"(\w+) clicks the video to pause")]
+    public async Task WhenUserClicksVideoToPause(string userName)
+    {
+        var page = GetPageForUser(userName);
+
+        // Scope to lightbox to avoid any ambiguity
+        var lightbox = page.GetByTestId("lightbox-overlay");
+        var pauseIcon = lightbox.GetByTestId("video-pause-icon");
+        await pauseIcon.ClickAsync();
+        Console.WriteLine($"[E2E DocVideo] {userName} clicked pause icon to pause playback");
+        await Task.Delay(500);
+    }
+
+    /// <summary>
+    /// Verifies the video is in the paused state by checking the state testid.
+    /// </summary>
+    [Then(@"the video should be paused")]
+    public async Task ThenVideoShouldBePaused()
+    {
+        var page = await GetOrCreatePageAsync();
+
+        var startTime = DateTime.UtcNow;
+        var timeout = TimeSpan.FromSeconds(5);
+
+        while (DateTime.UtcNow - startTime < timeout)
+        {
+            var isPaused = await page.GetByTestId("video-state-paused").CountAsync() > 0;
+            if (isPaused)
+            {
+                Console.WriteLine("[E2E DocVideo] Video is paused");
+                return;
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new Exception("Video is not paused after 5s");
+    }
+
+    /// <summary>
+    /// Verifies the Play icon is visible in the video player overlay (shown when paused).
+    /// Named differently from the thumbnail play icon to avoid step binding conflicts.
+    /// </summary>
+    [Then(@"the video play icon should be visible in the player")]
+    public async Task ThenVideoPlayIconShouldBeVisibleInPlayer()
+    {
+        var page = await GetOrCreatePageAsync();
+
+        // The play icon in the video player (not the thumbnail)
+        var lightbox = page.GetByTestId("lightbox-overlay");
+        var playIcon = lightbox.GetByTestId("video-play-icon");
+
+        await Assertions.Expect(playIcon).ToBeVisibleAsync(
+            new LocatorAssertionsToBeVisibleOptions { Timeout = 5000 });
+
+        Console.WriteLine("[E2E DocVideo] Video play icon is visible in player (video is paused)");
+    }
+
+    /// <summary>
+    /// Clicks the progress bar at its left edge to seek to the beginning.
+    /// Uses Playwright's click with position option to click at x=5 (near left edge).
+    /// </summary>
+    [When(@"(\w+) clicks the progress bar at the beginning")]
+    public async Task WhenUserClicksProgressBarAtBeginning(string userName)
+    {
+        var page = GetPageForUser(userName);
+        var progressBar = await WaitForTestIdAsync(page, "video-progress-bar", 5000);
+
+        // Click near the left edge of the progress bar (position x=5)
+        await progressBar.ClickAsync(new LocatorClickOptions
+        {
+            Position = new Position { X = 5, Y = 5 }
+        });
+
+        Console.WriteLine($"[E2E DocVideo] {userName} clicked progress bar at the beginning");
+        await Task.Delay(300);
+    }
+
+    /// <summary>
+    /// Verifies the video current time is near zero (within 0.5s).
+    /// Uses JavaScript evaluation to read the actual video.currentTime.
+    /// </summary>
+    [Then(@"the video current time should be near zero")]
+    public async Task ThenVideoCurrentTimeShouldBeNearZero()
+    {
+        var page = await GetOrCreatePageAsync();
+
+        var currentTime = await page.EvalOnSelectorAsync<double>(
+            "[data-testid='video-player-element']",
+            "el => el.currentTime");
+
+        currentTime.Should().BeLessThan(0.5,
+            $"Video current time should be near zero after seeking to beginning, but was {currentTime:F2}s");
+        Console.WriteLine($"[E2E DocVideo] Video current time is {currentTime:F2}s (near zero)");
     }
 
     // =========================================================================

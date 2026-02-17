@@ -101,6 +101,60 @@ Feature: Document & Video Attachment Walkthrough
         Then Bob should see message "Image and document" from Alice
         And Bob should see thumbnail page indicator "1 / 2"
 
+    @F4-E2E-005
+    Scenario: Bob opens video in lightbox, plays, pauses, seeks via progress bar
+        # === SETUP ===
+        Given a browser context for "Alice"
+        And "Alice" has created identity via browser
+        And a browser context for "Bob"
+        And "Bob" has created identity via browser
+
+        # === CHAT CREATION ===
+        When Alice creates a new chat with "Bob" via browser
+        And Bob triggers sync
+        Then "Bob" should appear in Alice's feed list
+        And "Alice" should appear in Bob's feed list
+
+        # === ATTACH AND SEND VIDEO ===
+        When Alice opens the chat with "Bob"
+        And Alice attaches a video file for "Bob" via file picker
+        Then the composer overlay should be visible
+
+        When Alice types "Watch this!" in the composer overlay
+        And Alice sends from the composer overlay and waits for confirmation
+        Then the composer overlay should not be visible
+
+        # === BOB RECEIVES VIDEO ===
+        When Bob triggers sync
+        And Bob opens the chat with "Alice"
+        Then Bob should see message "Watch this!" from Alice
+        And Bob should see a video element in the message
+
+        # === BOB CLICKS VIDEO → LIGHTBOX OPENS WITH VIDEO PLAYER ===
+        When Bob clicks the video element in the message
+        Then the lightbox overlay should be visible
+        And the lightbox should show a video player
+        And the video progress bar should be visible
+        And the video time displays should be visible
+
+        # === BOB CLICKS VIDEO TO PLAY → SEES PAUSE ICON ===
+        When Bob clicks the video to play
+        Then the video should be playing
+        And the video pause icon should be visible
+
+        # === BOB CLICKS VIDEO TO PAUSE → SEES PLAY ICON ===
+        When Bob clicks the video to pause
+        Then the video should be paused
+        And the video play icon should be visible in the player
+
+        # === BOB SEEKS TO BEGINNING VIA PROGRESS BAR ===
+        When Bob clicks the progress bar at the beginning
+        Then the video current time should be near zero
+
+        # === BOB CLOSES LIGHTBOX ===
+        When Bob closes the lightbox
+        Then the lightbox overlay should not be visible
+
     @F4-E2E-004
     Scenario: Blocked executable file is rejected
         # === SETUP ===

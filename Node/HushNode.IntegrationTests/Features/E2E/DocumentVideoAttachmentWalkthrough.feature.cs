@@ -352,16 +352,16 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Blocked executable file is rejected")]
+        [Xunit.SkippableFactAttribute(DisplayName="Bob opens video in lightbox, plays, pauses, seeks via progress bar")]
         [Xunit.TraitAttribute("FeatureTitle", "Document & Video Attachment Walkthrough")]
-        [Xunit.TraitAttribute("Description", "Blocked executable file is rejected")]
-        [Xunit.TraitAttribute("Category", "F4-E2E-004")]
-        public void BlockedExecutableFileIsRejected()
+        [Xunit.TraitAttribute("Description", "Bob opens video in lightbox, plays, pauses, seeks via progress bar")]
+        [Xunit.TraitAttribute("Category", "F4-E2E-005")]
+        public void BobOpensVideoInLightboxPlaysPausesSeeksViaProgressBar()
         {
             string[] tagsOfScenario = new string[] {
-                    "F4-E2E-004"};
+                    "F4-E2E-005"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Blocked executable file is rejected", null, tagsOfScenario, argumentsOfScenario, featureTags);
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Bob opens video in lightbox, plays, pauses, seeks via progress bar", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 105
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
@@ -393,13 +393,139 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 114
         testRunner.And("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 117
-        testRunner.When("Alice opens the chat with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line 115
+        testRunner.Then("\"Bob\" should appear in Alice\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 118
-        testRunner.And("Alice tries to attach a blocked executable file", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line 116
+        testRunner.And("\"Alice\" should appear in Bob\'s feed list", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 119
+        testRunner.When("Alice opens the chat with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 120
+        testRunner.And("Alice attaches a video file for \"Bob\" via file picker", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 121
+        testRunner.Then("the composer overlay should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 123
+        testRunner.When("Alice types \"Watch this!\" in the composer overlay", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 124
+        testRunner.And("Alice sends from the composer overlay and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 125
+        testRunner.Then("the composer overlay should not be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 128
+        testRunner.When("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 129
+        testRunner.And("Bob opens the chat with \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 130
+        testRunner.Then("Bob should see message \"Watch this!\" from Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 131
+        testRunner.And("Bob should see a video element in the message", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 134
+        testRunner.When("Bob clicks the video element in the message", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 135
+        testRunner.Then("the lightbox overlay should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 136
+        testRunner.And("the lightbox should show a video player", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 137
+        testRunner.And("the video progress bar should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 138
+        testRunner.And("the video time displays should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 141
+        testRunner.When("Bob clicks the video to play", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 142
+        testRunner.Then("the video should be playing", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 143
+        testRunner.And("the video pause icon should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 146
+        testRunner.When("Bob clicks the video to pause", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 147
+        testRunner.Then("the video should be paused", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 148
+        testRunner.And("the video play icon should be visible in the player", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 151
+        testRunner.When("Bob clicks the progress bar at the beginning", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 152
+        testRunner.Then("the video current time should be near zero", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 155
+        testRunner.When("Bob closes the lightbox", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 156
+        testRunner.Then("the lightbox overlay should not be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Blocked executable file is rejected")]
+        [Xunit.TraitAttribute("FeatureTitle", "Document & Video Attachment Walkthrough")]
+        [Xunit.TraitAttribute("Description", "Blocked executable file is rejected")]
+        [Xunit.TraitAttribute("Category", "F4-E2E-004")]
+        public void BlockedExecutableFileIsRejected()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "F4-E2E-004"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Blocked executable file is rejected", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 159
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 161
+        testRunner.Given("a browser context for \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 162
+        testRunner.And("\"Alice\" has created identity via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 163
+        testRunner.And("a browser context for \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 164
+        testRunner.And("\"Bob\" has created identity via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 167
+        testRunner.When("Alice creates a new chat with \"Bob\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 168
+        testRunner.And("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 171
+        testRunner.When("Alice opens the chat with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 172
+        testRunner.And("Alice tries to attach a blocked executable file", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 173
         testRunner.Then("the composer overlay should not be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
