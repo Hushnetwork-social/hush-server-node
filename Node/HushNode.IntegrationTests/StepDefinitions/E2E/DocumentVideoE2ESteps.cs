@@ -45,8 +45,8 @@ internal sealed class DocumentVideoE2ESteps : BrowserStepsBase
     }
 
     /// <summary>
-    /// Injects a minimal MP4 video file into the hidden file input.
-    /// Frame extraction will fail gracefully → fallback UI is rendered.
+    /// Injects a real H.264 MP4 video file (1s, 160x120, blue frame) into the hidden file input.
+    /// The browser can decode this and extract frames, so the video-thumbnail path is exercised.
     /// </summary>
     [When(@"(\w+) attaches a video file for ""(.*)"" via file picker")]
     public async Task WhenUserAttachesVideoFileViaFilePicker(string userName, string targetName)
