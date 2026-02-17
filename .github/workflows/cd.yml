@@ -155,7 +155,7 @@ jobs:
           SSH_USER: ${{ secrets.AWS_SSH_USER }}
         run: |
           # Add Firebase config to server's ApplicationSettings.json if not present
-          ssh -i ~/.ssh/lightsail.pem ${SSH_USER}@${SSH_HOST} 'bash -s' << 'CONFIG_SCRIPT'
+          ssh -i ~/.ssh/lightsail.pem -o ServerAliveInterval=30 -o ServerAliveCountMax=10 ${SSH_USER}@${SSH_HOST} 'bash -s' << 'CONFIG_SCRIPT'
             CONFIG_FILE="/mnt/hush_db_data/config/ApplicationSettings.json"
 
             # Check if Firebase section exists
@@ -178,7 +178,7 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         run: |
-          ssh -i ~/.ssh/lightsail.pem ${SSH_USER}@${SSH_HOST} "IMAGE_TAG=${IMAGE_TAG}" "GHCR_TOKEN=${GHCR_TOKEN}" "GHCR_IMAGE=${GHCR_IMAGE}" 'bash -s' << 'DEPLOY_SCRIPT'
+          ssh -i ~/.ssh/lightsail.pem -o ServerAliveInterval=30 -o ServerAliveCountMax=10 ${SSH_USER}@${SSH_HOST} "IMAGE_TAG=${IMAGE_TAG}" "GHCR_TOKEN=${GHCR_TOKEN}" "GHCR_IMAGE=${GHCR_IMAGE}" 'bash -s' << 'DEPLOY_SCRIPT'
             set -e
 
             echo "Starting deployment of version ${IMAGE_TAG}..."
