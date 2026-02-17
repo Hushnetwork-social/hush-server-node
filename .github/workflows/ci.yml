@@ -6,6 +6,7 @@ name: CI - HushServerNode
 on:
   push:
     branches: [ "master" ]
+    tags-ignore: [ '**' ]
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:

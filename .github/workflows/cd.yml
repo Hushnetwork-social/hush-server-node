@@ -19,7 +19,38 @@ env:
   IMAGE_NAME: hushnetwork-social/hushservernode
 
 jobs:
+  # ============================================
+  # CI GATE — must pass before deploying
+  # ============================================
+  ci:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: Node
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore
+
+    - name: Unit Tests
+      run: dotnet test --no-build --verbosity normal --filter "Category!=Performance&Category!=E2E"
+
+  # ============================================
+  # BUILD, PUSH & DEPLOY — only after CI passes
+  # ============================================
   build-and-deploy:
+    needs: [ci]
     runs-on: ubuntu-latest
     environment: HushServerNode AWS CD
 
