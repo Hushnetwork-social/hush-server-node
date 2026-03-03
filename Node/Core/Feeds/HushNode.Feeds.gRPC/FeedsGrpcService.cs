@@ -22,6 +22,7 @@ public class FeedsGrpcService(
     IFeedMessageStorageService feedMessageStorageService,
     IFeedMessageCacheService feedMessageCacheService,
     IFeedParticipantsCacheService feedParticipantsCacheService,
+    IUserFeedsCacheService userFeedsCacheService,
     IGroupMembersCacheService groupMembersCacheService,
     IFeedReadPositionStorageService feedReadPositionStorageService,
     IFeedMetadataCacheService feedMetadataCacheService,
@@ -38,6 +39,7 @@ public class FeedsGrpcService(
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
     private readonly IFeedMessageCacheService _feedMessageCacheService = feedMessageCacheService;
     private readonly IFeedParticipantsCacheService _feedParticipantsCacheService = feedParticipantsCacheService;
+    private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
     private readonly IGroupMembersCacheService _groupMembersCacheService = groupMembersCacheService;
     private readonly IFeedReadPositionStorageService _feedReadPositionStorageService = feedReadPositionStorageService;
     private readonly IFeedMetadataCacheService _feedMetadataCacheService = feedMetadataCacheService;
@@ -55,6 +57,7 @@ public class FeedsGrpcService(
 
     /// <summary>Maximum number of members supported in a single key rotation.</summary>
     private const int MaxMembersPerRotation = 512;
+    private const int MaxInnerCircleMembersPerRequest = 100;
 
     public override async Task<HasPersonalFeedReply> HasPersonalFeed(
         HasPersonalFeedRequest request, 
@@ -1311,7 +1314,351 @@ public class FeedsGrpcService(
         }
     }
 
+    public override async Task<GetInnerCircleResponse> GetInnerCircle(
+        GetInnerCircleRequest request,
+        ServerCallContext context)
+    {
+        Console.WriteLine($"[GetInnerCircle] Owner: {request.OwnerPublicAddress?.Substring(0, Math.Min(10, request.OwnerPublicAddress?.Length ?? 0))}...");
+
+        try
+        {
+            var ownerPublicAddress = request.OwnerPublicAddress?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(ownerPublicAddress))
+            {
+                return new GetInnerCircleResponse
+                {
+                    Success = false,
+                    Exists = false,
+                    Message = "OwnerPublicAddress is required"
+                };
+            }
+
+            var innerCircle = await this._feedsStorageService.GetInnerCircleByOwnerAsync(ownerPublicAddress);
+            if (innerCircle == null || innerCircle.IsDeleted)
+            {
+                return new GetInnerCircleResponse
+                {
+                    Success = true,
+                    Exists = false,
+                    Message = "Inner Circle not found"
+                };
+            }
+
+            return new GetInnerCircleResponse
+            {
+                Success = true,
+                Exists = true,
+                FeedId = innerCircle.FeedId.ToString(),
+                Message = "Inner Circle found"
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GetInnerCircle] ERROR: {ex.Message}");
+            return new GetInnerCircleResponse
+            {
+                Success = false,
+                Exists = false,
+                Message = $"Internal error: {ex.Message}"
+            };
+        }
+    }
+
     // ===== Group Feed Creation & Membership Operations =====
+
+    public override async Task<CreateInnerCircleResponse> CreateInnerCircle(
+        CreateInnerCircleRequest request,
+        ServerCallContext context)
+    {
+        Console.WriteLine($"[CreateInnerCircle] Owner: {request.OwnerPublicAddress?.Substring(0, Math.Min(10, request.OwnerPublicAddress?.Length ?? 0))}...");
+
+        try
+        {
+            var ownerPublicAddress = request.OwnerPublicAddress?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(ownerPublicAddress))
+            {
+                return new CreateInnerCircleResponse
+                {
+                    Success = false,
+                    Message = "OwnerPublicAddress is required",
+                    ErrorCode = "INNER_CIRCLE_INVALID_MEMBERS"
+                };
+            }
+
+            var existingInnerCircle = await this._feedsStorageService.GetInnerCircleByOwnerAsync(ownerPublicAddress);
+            if (existingInnerCircle != null && !existingInnerCircle.IsDeleted)
+            {
+                return new CreateInnerCircleResponse
+                {
+                    Success = true,
+                    FeedId = existingInnerCircle.FeedId.ToString(),
+                    Message = "Inner Circle already exists",
+                    ErrorCode = "INNER_CIRCLE_ALREADY_EXISTS"
+                };
+            }
+
+            var ownerIdentity = await this._identityStorageService.RetrieveIdentityAsync(ownerPublicAddress);
+            if (ownerIdentity is not Profile ownerProfile || string.IsNullOrWhiteSpace(ownerProfile.PublicEncryptAddress))
+            {
+                return new CreateInnerCircleResponse
+                {
+                    Success = false,
+                    Message = "Owner identity does not have a valid public encryption key",
+                    ErrorCode = "INNER_CIRCLE_INVALID_MEMBERS"
+                };
+            }
+
+            var currentBlock = this._blockchainCache.LastBlockIndex;
+            var feedId = FeedId.NewFeedId;
+            var encryptedOwnerKey = EncryptKeys.Encrypt(EncryptKeys.GenerateAesKey(), ownerProfile.PublicEncryptAddress);
+
+            var groupFeed = new GroupFeed(
+                FeedId: feedId,
+                Title: "Inner Circle",
+                Description: "Auto-managed inner circle",
+                IsPublic: false,
+                CreatedAtBlock: currentBlock,
+                CurrentKeyGeneration: 0,
+                IsInnerCircle: true,
+                OwnerPublicAddress: ownerPublicAddress);
+
+            var keyGeneration = new GroupFeedKeyGenerationEntity(
+                feedId,
+                KeyGeneration: 0,
+                currentBlock,
+                RotationTrigger.Join)
+            {
+                GroupFeed = groupFeed
+            };
+
+            groupFeed.KeyGenerations.Add(keyGeneration);
+
+            var ownerParticipant = new GroupFeedParticipantEntity(
+                feedId,
+                ownerPublicAddress,
+                ParticipantType.Owner,
+                currentBlock,
+                LeftAtBlock: null,
+                LastLeaveBlock: null)
+            {
+                GroupFeed = groupFeed
+            };
+
+            groupFeed.Participants.Add(ownerParticipant);
+
+            keyGeneration.EncryptedKeys.Add(new GroupFeedEncryptedKeyEntity(
+                feedId,
+                KeyGeneration: 0,
+                MemberPublicAddress: ownerPublicAddress,
+                EncryptedAesKey: encryptedOwnerKey)
+            {
+                KeyGenerationEntity = keyGeneration
+            });
+
+            await this._feedsStorageService.CreateGroupFeed(groupFeed);
+            await this._userFeedsCacheService.AddFeedToUserCacheAsync(ownerPublicAddress, feedId);
+
+            _ = this._feedMetadataCacheService.SetFeedMetadataAsync(
+                ownerPublicAddress,
+                feedId,
+                new FeedMetadataEntry
+                {
+                    Title = "Inner Circle",
+                    Type = (int)FeedType.Group,
+                    LastBlockIndex = currentBlock.Value,
+                    Participants = new List<string> { ownerPublicAddress },
+                    CreatedAtBlock = currentBlock.Value,
+                    CurrentKeyGeneration = 0
+                });
+
+            return new CreateInnerCircleResponse
+            {
+                Success = true,
+                FeedId = feedId.ToString(),
+                Message = "Inner Circle created successfully"
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CreateInnerCircle] ERROR: {ex.Message}");
+            return new CreateInnerCircleResponse
+            {
+                Success = false,
+                Message = $"Internal error: {ex.Message}",
+                ErrorCode = "INNER_CIRCLE_INTERNAL_ERROR"
+            };
+        }
+    }
+
+    public override async Task<AddMembersToInnerCircleResponse> AddMembersToInnerCircle(
+        AddMembersToInnerCircleRequest request,
+        ServerCallContext context)
+    {
+        var ownerForLog = request.OwnerPublicAddress?.Substring(0, Math.Min(10, request.OwnerPublicAddress?.Length ?? 0)) ?? string.Empty;
+        Console.WriteLine($"[AddMembersToInnerCircle] Owner: {ownerForLog}..., Members: {request.Members.Count}");
+
+        var response = new AddMembersToInnerCircleResponse();
+
+        try
+        {
+            var ownerPublicAddress = request.OwnerPublicAddress?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(ownerPublicAddress))
+            {
+                response.Success = false;
+                response.Message = "OwnerPublicAddress is required";
+                response.ErrorCode = "INNER_CIRCLE_UNAUTHORIZED";
+                return response;
+            }
+
+            if (request.Members.Count == 0 || request.Members.Count > MaxInnerCircleMembersPerRequest)
+            {
+                response.Success = false;
+                response.Message = $"Members must contain between 1 and {MaxInnerCircleMembersPerRequest} users";
+                response.ErrorCode = "INNER_CIRCLE_MEMBER_LIMIT_EXCEEDED";
+                return response;
+            }
+
+            var innerCircle = await this._feedsStorageService.GetInnerCircleByOwnerAsync(ownerPublicAddress);
+            if (innerCircle == null || innerCircle.IsDeleted)
+            {
+                response.Success = false;
+                response.Message = "Inner Circle not found";
+                response.ErrorCode = "INNER_CIRCLE_NOT_FOUND";
+                return response;
+            }
+
+            var duplicatesInPayload = request.Members
+                .Select(x => (x.PublicAddress ?? string.Empty).Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .GroupBy(x => x, StringComparer.Ordinal)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToList();
+
+            var normalizedMembers = request.Members
+                .GroupBy(x => (x.PublicAddress ?? string.Empty).Trim(), StringComparer.Ordinal)
+                .Select(g => g.First())
+                .ToList();
+
+            var participantsToAdd = new List<GroupFeedParticipantEntity>();
+            var participantsToRejoin = new List<string>();
+            var joiningMemberEncryptKeys = new Dictionary<string, string>(StringComparer.Ordinal);
+            var invalidMembers = new List<string>();
+            var duplicateMembers = new HashSet<string>(duplicatesInPayload, StringComparer.Ordinal);
+
+            var currentBlock = this._blockchainCache.LastBlockIndex;
+
+            foreach (var member in normalizedMembers)
+            {
+                var memberAddress = (member.PublicAddress ?? string.Empty).Trim();
+                var memberEncryptAddress = (member.PublicEncryptAddress ?? string.Empty).Trim();
+
+                if (string.IsNullOrWhiteSpace(memberAddress) || string.IsNullOrWhiteSpace(memberEncryptAddress))
+                {
+                    if (!string.IsNullOrWhiteSpace(memberAddress))
+                    {
+                        invalidMembers.Add(memberAddress);
+                    }
+
+                    continue;
+                }
+
+                var identity = await this._identityStorageService.RetrieveIdentityAsync(memberAddress);
+                if (identity is not Profile profile ||
+                    string.IsNullOrWhiteSpace(profile.PublicEncryptAddress) ||
+                    !string.Equals(profile.PublicEncryptAddress, memberEncryptAddress, StringComparison.Ordinal))
+                {
+                    invalidMembers.Add(memberAddress);
+                    continue;
+                }
+
+                var existingParticipant = await this._feedsStorageService
+                    .GetParticipantWithHistoryAsync(innerCircle.FeedId, memberAddress);
+
+                if (existingParticipant != null && existingParticipant.LeftAtBlock == null)
+                {
+                    duplicateMembers.Add(memberAddress);
+                    continue;
+                }
+
+                if (existingParticipant != null && existingParticipant.LeftAtBlock != null)
+                {
+                    participantsToRejoin.Add(memberAddress);
+                }
+                else
+                {
+                    participantsToAdd.Add(new GroupFeedParticipantEntity(
+                        innerCircle.FeedId,
+                        memberAddress,
+                        ParticipantType.Member,
+                        currentBlock,
+                        LeftAtBlock: null,
+                        LastLeaveBlock: null));
+                }
+
+                joiningMemberEncryptKeys[memberAddress] = memberEncryptAddress;
+            }
+
+            response.DuplicateMembers.AddRange(duplicateMembers.OrderBy(x => x, StringComparer.Ordinal));
+            response.InvalidMembers.AddRange(invalidMembers.Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal));
+
+            if (participantsToAdd.Count == 0 && participantsToRejoin.Count == 0)
+            {
+                if (response.InvalidMembers.Count > 0)
+                {
+                    response.Success = false;
+                    response.Message = "No valid members to add to Inner Circle";
+                    response.ErrorCode = "INNER_CIRCLE_INVALID_MEMBERS";
+                    return response;
+                }
+
+                response.Success = true;
+                response.Message = "No membership changes applied. All members were already in the Inner Circle.";
+                return response;
+            }
+
+            var (rotationSuccess, keyGenerationEntity, rotationError) = await this.BuildInnerCircleKeyRotationEntityAsync(
+                innerCircle.FeedId,
+                joiningMemberEncryptKeys);
+
+            if (!rotationSuccess || keyGenerationEntity == null)
+            {
+                response.Success = false;
+                response.Message = $"Failed to rotate Inner Circle keys: {rotationError}";
+                response.ErrorCode = "INNER_CIRCLE_ROTATION_FAILED";
+                return response;
+            }
+
+            await this._feedsStorageService.ApplyInnerCircleMembershipAndKeyRotationAsync(
+                innerCircle.FeedId,
+                participantsToAdd,
+                participantsToRejoin,
+                currentBlock,
+                keyGenerationEntity,
+                currentBlock);
+
+            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(innerCircle.FeedId);
+            await this._groupMembersCacheService.InvalidateGroupMembersAsync(innerCircle.FeedId);
+
+            foreach (var memberAddress in joiningMemberEncryptKeys.Keys)
+            {
+                await this._feedParticipantsCacheService.AddParticipantAsync(innerCircle.FeedId, memberAddress);
+                await this._userFeedsCacheService.AddFeedToUserCacheAsync(memberAddress, innerCircle.FeedId);
+            }
+
+            response.Success = true;
+            response.Message = "Members added to Inner Circle successfully";
+            return response;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AddMembersToInnerCircle] ERROR: {ex.Message}");
+            response.Success = false;
+            response.Message = $"Internal error: {ex.Message}";
+            response.ErrorCode = "INNER_CIRCLE_INTERNAL_ERROR";
+            return response;
+        }
+    }
 
     public override async Task<NewGroupFeedResponse> CreateGroupFeed(
         NewGroupFeedRequest request,
@@ -1919,6 +2266,95 @@ public class FeedsGrpcService(
         await this._feedsStorageService.CreateKeyRotationAsync(keyGenerationEntity);
 
         return (true, newKeyGeneration, null);
+    }
+
+    private async Task<(bool Success, GroupFeedKeyGenerationEntity? KeyGeneration, string? ErrorMessage)> BuildInnerCircleKeyRotationEntityAsync(
+        FeedId feedId,
+        IReadOnlyDictionary<string, string> joiningMemberEncryptKeys)
+    {
+        var currentMaxKeyGeneration = await this._feedsStorageService.GetMaxKeyGenerationAsync(feedId);
+        if (currentMaxKeyGeneration == null)
+        {
+            return (false, null, $"Inner Circle {feedId} has no key generations.");
+        }
+
+        var newKeyGeneration = currentMaxKeyGeneration.Value + 1;
+        var activeMemberAddresses = (await this._feedsStorageService.GetActiveGroupMemberAddressesAsync(feedId)).ToList();
+
+        foreach (var joiningAddress in joiningMemberEncryptKeys.Keys)
+        {
+            if (!activeMemberAddresses.Contains(joiningAddress, StringComparer.Ordinal))
+            {
+                activeMemberAddresses.Add(joiningAddress);
+            }
+        }
+
+        if (activeMemberAddresses.Count == 0)
+        {
+            return (false, null, "Cannot rotate keys for an empty Inner Circle.");
+        }
+
+        if (activeMemberAddresses.Count > MaxMembersPerRotation)
+        {
+            return (false, null, $"Inner Circle has {activeMemberAddresses.Count} members, exceeding maximum {MaxMembersPerRotation}.");
+        }
+
+        var plaintextAesKey = EncryptKeys.GenerateAesKey();
+        var encryptedKeys = new List<GroupFeedEncryptedKeyEntity>(activeMemberAddresses.Count);
+
+        try
+        {
+            foreach (var memberAddress in activeMemberAddresses)
+            {
+                string publicEncryptKey;
+
+                if (joiningMemberEncryptKeys.TryGetValue(memberAddress, out var joiningMemberKey))
+                {
+                    publicEncryptKey = joiningMemberKey;
+                }
+                else
+                {
+                    var identity = await this._identityStorageService.RetrieveIdentityAsync(memberAddress);
+                    if (identity is not Profile profile || string.IsNullOrWhiteSpace(profile.PublicEncryptAddress))
+                    {
+                        return (false, null, $"Could not retrieve a valid public encryption key for member {memberAddress}.");
+                    }
+
+                    publicEncryptKey = profile.PublicEncryptAddress;
+                }
+
+                string encryptedAesKey;
+                try
+                {
+                    encryptedAesKey = EncryptKeys.Encrypt(plaintextAesKey, publicEncryptKey);
+                }
+                catch (Exception ex) when (ex is FormatException or IndexOutOfRangeException or ArgumentException)
+                {
+                    return (false, null, $"Failed to encrypt key for member {memberAddress}: invalid public key format.");
+                }
+
+                encryptedKeys.Add(new GroupFeedEncryptedKeyEntity(
+                    FeedId: feedId,
+                    KeyGeneration: newKeyGeneration,
+                    MemberPublicAddress: memberAddress,
+                    EncryptedAesKey: encryptedAesKey));
+            }
+        }
+        finally
+        {
+            plaintextAesKey = null!;
+        }
+
+        var keyGeneration = new GroupFeedKeyGenerationEntity(
+            FeedId: feedId,
+            KeyGeneration: newKeyGeneration,
+            ValidFromBlock: this._blockchainCache.LastBlockIndex,
+            RotationTrigger: RotationTrigger.Join)
+        {
+            EncryptedKeys = encryptedKeys
+        };
+
+        return (true, keyGeneration, null);
     }
 
     public override async Task<BlockMemberResponse> BlockMember(

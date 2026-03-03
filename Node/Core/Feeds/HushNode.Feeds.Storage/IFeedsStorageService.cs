@@ -193,6 +193,17 @@ public interface IFeedsStorageService
     /// </summary>
     Task CreateKeyRotationAsync(GroupFeedKeyGenerationEntity keyGeneration);
 
+    /// <summary>
+    /// Applies Inner Circle membership changes and key rotation atomically in a single transaction.
+    /// </summary>
+    Task ApplyInnerCircleMembershipAndKeyRotationAsync(
+        FeedId feedId,
+        IReadOnlyList<GroupFeedParticipantEntity> participantsToAdd,
+        IReadOnlyList<string> participantsToRejoin,
+        BlockIndex rejoinBlockIndex,
+        GroupFeedKeyGenerationEntity keyGeneration,
+        BlockIndex lastUpdatedAtBlock);
+
     // ===== Group Messaging Operations (FEAT-011) =====
 
     /// <summary>

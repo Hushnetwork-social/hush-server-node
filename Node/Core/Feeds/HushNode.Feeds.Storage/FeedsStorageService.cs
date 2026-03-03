@@ -522,6 +522,34 @@ public class FeedsStorageService(
         await writableUnitOfWork.CommitAsync();
     }
 
+    public async Task ApplyInnerCircleMembershipAndKeyRotationAsync(
+        FeedId feedId,
+        IReadOnlyList<GroupFeedParticipantEntity> participantsToAdd,
+        IReadOnlyList<string> participantsToRejoin,
+        BlockIndex rejoinBlockIndex,
+        GroupFeedKeyGenerationEntity keyGeneration,
+        BlockIndex lastUpdatedAtBlock)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+        var repository = writableUnitOfWork.GetRepository<IFeedsRepository>();
+
+        foreach (var participant in participantsToAdd)
+        {
+            await repository.AddParticipantAsync(feedId, participant);
+        }
+
+        foreach (var participantAddress in participantsToRejoin)
+        {
+            await repository.UpdateParticipantRejoinAsync(feedId, participantAddress, rejoinBlockIndex, ParticipantType.Member);
+        }
+
+        await repository.CreateKeyRotationAsync(keyGeneration);
+        await repository.UpdateCurrentKeyGenerationAsync(feedId, keyGeneration.KeyGeneration);
+        await repository.UpdateGroupFeedLastUpdatedAtBlockAsync(feedId, lastUpdatedAtBlock);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
     // ===== Group Messaging Operations (FEAT-011) =====
 
     public async Task<GroupFeedKeyGenerationEntity?> GetKeyGenerationByNumberAsync(FeedId feedId, int keyGeneration) =>

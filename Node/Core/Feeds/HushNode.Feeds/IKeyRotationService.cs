@@ -24,6 +24,15 @@ public interface IKeyRotationService
         string? leavingMemberAddress = null);
 
     /// <summary>
+    /// Triggers a key rotation for a Group Feed using explicit member deltas.
+    /// </summary>
+    Task<KeyRotationResult> TriggerRotationAsync(
+        FeedId feedId,
+        RotationTrigger trigger,
+        IReadOnlyCollection<string>? joiningMemberAddresses,
+        IReadOnlyCollection<string>? leavingMemberAddresses);
+
+    /// <summary>
     /// Triggers a key rotation and persists it to the database in one operation.
     /// This is the preferred method for membership change handlers (Join, Leave, Ban, Unban).
     /// </summary>
@@ -37,6 +46,15 @@ public interface IKeyRotationService
         RotationTrigger trigger,
         string? joiningMemberAddress = null,
         string? leavingMemberAddress = null);
+
+    /// <summary>
+    /// Triggers and persists key rotation using explicit member deltas.
+    /// </summary>
+    Task<KeyRotationResult> TriggerAndPersistRotationAsync(
+        FeedId feedId,
+        RotationTrigger trigger,
+        IReadOnlyCollection<string>? joiningMemberAddresses,
+        IReadOnlyCollection<string>? leavingMemberAddresses);
 }
 
 /// <summary>
