@@ -12,7 +12,9 @@ public record GroupFeed(
     bool IsPublic,
     BlockIndex CreatedAtBlock,
     int CurrentKeyGeneration,
-    BlockIndex? LastUpdatedAtBlock = null)
+    BlockIndex? LastUpdatedAtBlock = null,
+    bool IsInnerCircle = false,
+    string? OwnerPublicAddress = null)
 {
     /// <summary>
     /// Indicates if the group has been soft-deleted.

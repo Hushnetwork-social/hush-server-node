@@ -204,6 +204,18 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                     .HasColumnType("boolean")
                     .HasDefaultValue(false);
 
+                groupFeed.Property(x => x.IsInnerCircle)
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false);
+
+                groupFeed.Property(x => x.OwnerPublicAddress)
+                    .HasColumnType("varchar(500)")
+                    .IsRequired(false);
+
+                groupFeed.HasIndex(x => new { x.OwnerPublicAddress, x.IsInnerCircle })
+                    .IsUnique()
+                    .HasFilter("\"IsInnerCircle\" = TRUE AND \"OwnerPublicAddress\" IS NOT NULL");
+
                 // Invite code for public group sharing (8 chars, alphanumeric uppercase)
                 groupFeed.Property(x => x.InviteCode)
                     .HasColumnType("varchar(12)")

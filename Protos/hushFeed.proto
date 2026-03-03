@@ -21,11 +21,14 @@ service HushFeed {
   rpc GetGroupFeed (GetGroupFeedRequest) returns (GetGroupFeedResponse);
   rpc GetGroupFeedByInviteCode (GetGroupFeedByInviteCodeRequest) returns (GetGroupFeedByInviteCodeResponse);
   rpc SearchPublicGroups (SearchPublicGroupsRequest) returns (SearchPublicGroupsResponse);
+  rpc GetInnerCircle (GetInnerCircleRequest) returns (GetInnerCircleResponse);
 
   // Group Feed Creation & Membership Operations
   rpc CreateGroupFeed (NewGroupFeedRequest) returns (NewGroupFeedResponse);
   rpc JoinGroupFeed (JoinGroupFeedRequest) returns (JoinGroupFeedResponse);
   rpc LeaveGroupFeed (LeaveGroupFeedRequest) returns (LeaveGroupFeedResponse);
+  rpc CreateInnerCircle (CreateInnerCircleRequest) returns (CreateInnerCircleResponse);
+  rpc AddMembersToInnerCircle (AddMembersToInnerCircleRequest) returns (AddMembersToInnerCircleResponse);
 
   // Group Feed Admin Operations
   rpc AddMemberToGroupFeed (AddMemberToGroupFeedRequest) returns (AddMemberToGroupFeedResponse);
@@ -471,6 +474,48 @@ message SearchPublicGroupsResponse {
   bool Success = 1;
   string Message = 2;
   repeated PublicGroupInfoProto Groups = 3;
+}
+
+// --- Inner Circle Operations (FEAT-085) ---
+
+message GetInnerCircleRequest {
+  string OwnerPublicAddress = 1;
+}
+
+message GetInnerCircleResponse {
+  bool Success = 1;
+  string Message = 2;
+  optional string FeedId = 3;
+  bool Exists = 4;
+}
+
+message CreateInnerCircleRequest {
+  string OwnerPublicAddress = 1;
+}
+
+message CreateInnerCircleResponse {
+  bool Success = 1;
+  string Message = 2;
+  optional string FeedId = 3;
+  optional string ErrorCode = 4;
+}
+
+message InnerCircleMemberProto {
+  string PublicAddress = 1;
+  string PublicEncryptAddress = 2;
+}
+
+message AddMembersToInnerCircleRequest {
+  string OwnerPublicAddress = 1;
+  repeated InnerCircleMemberProto Members = 2;
+}
+
+message AddMembersToInnerCircleResponse {
+  bool Success = 1;
+  string Message = 2;
+  optional string ErrorCode = 3;
+  repeated string DuplicateMembers = 4;
+  repeated string InvalidMembers = 5;
 }
 
 // =============================================================================

@@ -314,6 +314,18 @@ public class FeedsStorageService(
             .GetRepository<IFeedsRepository>()
             .GetGroupFeedAsync(feedId);
 
+    public async Task<bool> OwnerHasInnerCircleAsync(string ownerPublicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .OwnerHasInnerCircleAsync(ownerPublicAddress);
+
+    public async Task<GroupFeed?> GetInnerCircleByOwnerAsync(string ownerPublicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetInnerCircleByOwnerAsync(ownerPublicAddress);
+
     public async Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress) =>
         await this._unitOfWorkProvider
             .CreateReadOnly()

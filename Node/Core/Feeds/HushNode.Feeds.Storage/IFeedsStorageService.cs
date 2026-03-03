@@ -63,6 +63,16 @@ public interface IFeedsStorageService
     Task<GroupFeed?> GetGroupFeedAsync(FeedId feedId);
 
     /// <summary>
+    /// Returns true when the owner already has an Inner Circle.
+    /// </summary>
+    Task<bool> OwnerHasInnerCircleAsync(string ownerPublicAddress);
+
+    /// <summary>
+    /// Retrieves the owner's Inner Circle group feed, if it exists.
+    /// </summary>
+    Task<GroupFeed?> GetInnerCircleByOwnerAsync(string ownerPublicAddress);
+
+    /// <summary>
     /// Get a specific participant from a group feed.
     /// </summary>
     Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress);
