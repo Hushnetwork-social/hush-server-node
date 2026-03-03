@@ -25,17 +25,17 @@ public class IndexingDispatcherService :
     {
         Console.WriteLine($"[E2E] IndexingDispatcherService: Processing block {message.Block.BlockIndex.Value} with {message.Block.Transactions.Count()} transaction(s)");
 
-        var processingTasks = message.Block.Transactions
-            .Select(async transaction =>
-            {
-                var strategyTasks = this._indexStrategies
-                    .Where(strategy => strategy.CanHandle(transaction))
-                    .Select(strategy => strategy.HandleAsync(transaction));
+        // Process transactions in block order to avoid write races
+        // on shared domain aggregates (e.g., multiple group/inner-circle
+        // membership mutations in the same block).
+        foreach (var transaction in message.Block.Transactions)
+        {
+            var strategyTasks = this._indexStrategies
+                .Where(strategy => strategy.CanHandle(transaction))
+                .Select(strategy => strategy.HandleAsync(transaction));
 
-                await Task.WhenAll(strategyTasks);
-            });
-
-        await Task.WhenAll(processingTasks);
+            await Task.WhenAll(strategyTasks);
+        }
 
         // Signal that all indexing for this block is complete
         Console.WriteLine($"[E2E] IndexingDispatcherService: Publishing BlockIndexCompletedEvent for block {message.Block.BlockIndex.Value}");
