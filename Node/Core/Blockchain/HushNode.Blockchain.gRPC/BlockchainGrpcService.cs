@@ -124,7 +124,9 @@ public class BlockchainGrpcService(
             {
                 if (item.CanValidate(transaction.PayloadKind))
                 {
-                    var transactionSignedByValidator = item.ValidateAndSign(transaction);
+                    var transactionSignedByValidator = item is IAsyncTransactionContentHandler asyncHandler
+                        ? await asyncHandler.ValidateAndSignAsync(transaction)
+                        : item.ValidateAndSign(transaction);
 
                     if (transactionSignedByValidator == null)
                     {

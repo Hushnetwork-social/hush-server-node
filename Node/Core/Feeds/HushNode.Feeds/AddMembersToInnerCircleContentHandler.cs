@@ -12,7 +12,7 @@ public class AddMembersToInnerCircleContentHandler(
     ICredentialsProvider credentialProvider,
     IFeedsStorageService feedsStorageService,
     IIdentityStorageService identityStorageService)
-    : ITransactionContentHandler
+    : ITransactionContentHandler, IAsyncTransactionContentHandler
 {
     private readonly ICredentialsProvider _credentialProvider = credentialProvider;
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
@@ -23,12 +23,15 @@ public class AddMembersToInnerCircleContentHandler(
     public bool CanValidate(Guid transactionKind) =>
         AddMembersToInnerCirclePayloadHandler.AddMembersToInnerCirclePayloadKind == transactionKind;
 
-    public AbstractTransaction ValidateAndSign(AbstractTransaction transaction)
+    public AbstractTransaction? ValidateAndSign(AbstractTransaction transaction) =>
+        this.ValidateAndSignAsync(transaction).GetAwaiter().GetResult();
+
+    public async Task<AbstractTransaction?> ValidateAndSignAsync(AbstractTransaction transaction)
     {
         var signedTransaction = transaction as SignedTransaction<AddMembersToInnerCirclePayload>;
         if (signedTransaction == null)
         {
-            return null!;
+            return null;
         }
 
         var payload = signedTransaction.Payload;
@@ -37,23 +40,23 @@ public class AddMembersToInnerCircleContentHandler(
 
         if (string.IsNullOrWhiteSpace(ownerAddress))
         {
-            return null!;
+            return null;
         }
 
         if (string.IsNullOrWhiteSpace(signatoryAddress) || signatoryAddress != ownerAddress)
         {
-            return null!;
+            return null;
         }
 
         if (payload.Members == null || payload.Members.Length == 0 || payload.Members.Length > MaxMembersPerTransaction)
         {
-            return null!;
+            return null;
         }
 
-        var innerCircle = this._feedsStorageService.GetInnerCircleByOwnerAsync(ownerAddress).GetAwaiter().GetResult();
+        var innerCircle = await this._feedsStorageService.GetInnerCircleByOwnerAsync(ownerAddress);
         if (innerCircle == null || innerCircle.IsDeleted)
         {
-            return null!;
+            return null;
         }
 
         var normalizedPayloadAddresses = payload.Members
@@ -62,7 +65,7 @@ public class AddMembersToInnerCircleContentHandler(
 
         if (normalizedPayloadAddresses.Any(string.IsNullOrWhiteSpace))
         {
-            return null!;
+            return null;
         }
 
         var duplicateInPayload = normalizedPayloadAddresses
@@ -70,34 +73,34 @@ public class AddMembersToInnerCircleContentHandler(
             .Any(g => g.Count() > 1);
         if (duplicateInPayload)
         {
-            return null!;
+            return null;
         }
 
         foreach (var member in payload.Members)
         {
             if (string.IsNullOrWhiteSpace(member.PublicEncryptAddress))
             {
-                return null!;
+                return null;
             }
 
             var existingParticipant = this._feedsStorageService
-                .GetParticipantWithHistoryAsync(innerCircle.FeedId, member.PublicAddress)
-                .GetAwaiter().GetResult();
+                .GetParticipantWithHistoryAsync(innerCircle.FeedId, member.PublicAddress);
+            var resolvedParticipant = await existingParticipant;
 
-            if (existingParticipant != null && existingParticipant.LeftAtBlock == null)
+            if (resolvedParticipant != null && resolvedParticipant.LeftAtBlock == null)
             {
-                return null!;
+                return null;
             }
 
-            var identity = this._identityStorageService.RetrieveIdentityAsync(member.PublicAddress).GetAwaiter().GetResult();
+            var identity = await this._identityStorageService.RetrieveIdentityAsync(member.PublicAddress);
             if (identity is not Profile profile || string.IsNullOrWhiteSpace(profile.PublicEncryptAddress))
             {
-                return null!;
+                return null;
             }
 
             if (!string.Equals(profile.PublicEncryptAddress, member.PublicEncryptAddress, StringComparison.Ordinal))
             {
-                return null!;
+                return null;
             }
         }
 

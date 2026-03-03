@@ -12,7 +12,7 @@ public class CreateInnerCircleContentHandler(
     ICredentialsProvider credentialProvider,
     IFeedsStorageService feedsStorageService,
     IIdentityStorageService identityStorageService)
-    : ITransactionContentHandler
+    : ITransactionContentHandler, IAsyncTransactionContentHandler
 {
     private readonly ICredentialsProvider _credentialProvider = credentialProvider;
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
@@ -21,12 +21,15 @@ public class CreateInnerCircleContentHandler(
     public bool CanValidate(Guid transactionKind) =>
         CreateInnerCirclePayloadHandler.CreateInnerCirclePayloadKind == transactionKind;
 
-    public AbstractTransaction ValidateAndSign(AbstractTransaction transaction)
+    public AbstractTransaction? ValidateAndSign(AbstractTransaction transaction) =>
+        this.ValidateAndSignAsync(transaction).GetAwaiter().GetResult();
+
+    public async Task<AbstractTransaction?> ValidateAndSignAsync(AbstractTransaction transaction)
     {
         var signedTransaction = transaction as SignedTransaction<CreateInnerCirclePayload>;
         if (signedTransaction == null)
         {
-            return null!;
+            return null;
         }
 
         var payload = signedTransaction.Payload;
@@ -35,24 +38,24 @@ public class CreateInnerCircleContentHandler(
 
         if (string.IsNullOrWhiteSpace(ownerAddress))
         {
-            return null!;
+            return null;
         }
 
         if (string.IsNullOrWhiteSpace(signatoryAddress) || signatoryAddress != ownerAddress)
         {
-            return null!;
+            return null;
         }
 
-        var ownerIdentity = this._identityStorageService.RetrieveIdentityAsync(ownerAddress).GetAwaiter().GetResult();
+        var ownerIdentity = await this._identityStorageService.RetrieveIdentityAsync(ownerAddress);
         if (ownerIdentity is not Profile ownerProfile || string.IsNullOrWhiteSpace(ownerProfile.PublicEncryptAddress))
         {
-            return null!;
+            return null;
         }
 
-        var alreadyExists = this._feedsStorageService.OwnerHasInnerCircleAsync(ownerAddress).GetAwaiter().GetResult();
+        var alreadyExists = await this._feedsStorageService.OwnerHasInnerCircleAsync(ownerAddress);
         if (alreadyExists)
         {
-            return null!;
+            return null;
         }
 
         var blockProducerCredentials = this._credentialProvider.GetCredentials();
