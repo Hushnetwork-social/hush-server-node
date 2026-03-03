@@ -2,7 +2,6 @@
 using HushNetwork.proto;
 using HushNode.Caching;
 using HushNode.Feeds.Storage;
-using HushNode.Identity;
 using HushNode.Identity.Storage;
 using HushNode.Reactions.Storage;
 using HushShared.Blockchain.BlockModel;
@@ -12,7 +11,6 @@ using MessageReactionTallyModel = HushShared.Reactions.Model.MessageReactionTall
 using Google.Protobuf;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Olimpo;
 using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Feeds.gRPC;
@@ -22,13 +20,14 @@ public class FeedsGrpcService(
     IFeedMessageStorageService feedMessageStorageService,
     IFeedMessageCacheService feedMessageCacheService,
     IFeedParticipantsCacheService feedParticipantsCacheService,
-    IUserFeedsCacheService userFeedsCacheService,
     IGroupMembersCacheService groupMembersCacheService,
     IFeedReadPositionStorageService feedReadPositionStorageService,
     IFeedMetadataCacheService feedMetadataCacheService,
     IIdentityDisplayNameCacheService identityDisplayNameCacheService,
+    IInnerCircleApplicationService innerCircleApplicationService,
+    IGroupMembershipApplicationService groupMembershipApplicationService,
+    IGroupAdministrationApplicationService groupAdministrationApplicationService,
     IIdentityService identityService,
-    IIdentityStorageService identityStorageService,
     IBlockchainCache blockchainCache,
     IUnitOfWorkProvider<ReactionsDbContext> reactionsUnitOfWorkProvider,
     IAttachmentStorageService attachmentStorageService,
@@ -39,13 +38,14 @@ public class FeedsGrpcService(
     private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
     private readonly IFeedMessageCacheService _feedMessageCacheService = feedMessageCacheService;
     private readonly IFeedParticipantsCacheService _feedParticipantsCacheService = feedParticipantsCacheService;
-    private readonly IUserFeedsCacheService _userFeedsCacheService = userFeedsCacheService;
     private readonly IGroupMembersCacheService _groupMembersCacheService = groupMembersCacheService;
     private readonly IFeedReadPositionStorageService _feedReadPositionStorageService = feedReadPositionStorageService;
     private readonly IFeedMetadataCacheService _feedMetadataCacheService = feedMetadataCacheService;
     private readonly IIdentityDisplayNameCacheService _identityDisplayNameCacheService = identityDisplayNameCacheService;
+    private readonly IInnerCircleApplicationService _innerCircleApplicationService = innerCircleApplicationService;
+    private readonly IGroupMembershipApplicationService _groupMembershipApplicationService = groupMembershipApplicationService;
+    private readonly IGroupAdministrationApplicationService _groupAdministrationApplicationService = groupAdministrationApplicationService;
     private readonly IIdentityService _identityService = identityService;
-    private readonly IIdentityStorageService _identityStorageService = identityStorageService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IUnitOfWorkProvider<ReactionsDbContext> _reactionsUnitOfWorkProvider = reactionsUnitOfWorkProvider;
     private readonly IAttachmentStorageService _attachmentStorageService = attachmentStorageService;
@@ -54,10 +54,6 @@ public class FeedsGrpcService(
 
     /// <summary>FEAT-066: Chunk size for streaming attachment downloads (~64KB).</summary>
     private const int AttachmentChunkSize = 65536;
-
-    /// <summary>Maximum number of members supported in a single key rotation.</summary>
-    private const int MaxMembersPerRotation = 512;
-    private const int MaxInnerCircleMembersPerRequest = 100;
 
     public override async Task<HasPersonalFeedReply> HasPersonalFeed(
         HasPersonalFeedRequest request, 
@@ -1318,39 +1314,9 @@ public class FeedsGrpcService(
         GetInnerCircleRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[GetInnerCircle] Owner: {request.OwnerPublicAddress?.Substring(0, Math.Min(10, request.OwnerPublicAddress?.Length ?? 0))}...");
-
         try
         {
-            var ownerPublicAddress = request.OwnerPublicAddress?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(ownerPublicAddress))
-            {
-                return new GetInnerCircleResponse
-                {
-                    Success = false,
-                    Exists = false,
-                    Message = "OwnerPublicAddress is required"
-                };
-            }
-
-            var innerCircle = await this._feedsStorageService.GetInnerCircleByOwnerAsync(ownerPublicAddress);
-            if (innerCircle == null || innerCircle.IsDeleted)
-            {
-                return new GetInnerCircleResponse
-                {
-                    Success = true,
-                    Exists = false,
-                    Message = "Inner Circle not found"
-                };
-            }
-
-            return new GetInnerCircleResponse
-            {
-                Success = true,
-                Exists = true,
-                FeedId = innerCircle.FeedId.ToString(),
-                Message = "Inner Circle found"
-            };
+            return await this._innerCircleApplicationService.GetInnerCircleAsync(request.OwnerPublicAddress);
         }
         catch (Exception ex)
         {
@@ -1370,113 +1336,11 @@ public class FeedsGrpcService(
         CreateInnerCircleRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[CreateInnerCircle] Owner: {request.OwnerPublicAddress?.Substring(0, Math.Min(10, request.OwnerPublicAddress?.Length ?? 0))}...");
-
         try
         {
-            var ownerPublicAddress = request.OwnerPublicAddress?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(ownerPublicAddress))
-            {
-                return new CreateInnerCircleResponse
-                {
-                    Success = false,
-                    Message = "OwnerPublicAddress is required",
-                    ErrorCode = "INNER_CIRCLE_INVALID_MEMBERS"
-                };
-            }
-
-            var existingInnerCircle = await this._feedsStorageService.GetInnerCircleByOwnerAsync(ownerPublicAddress);
-            if (existingInnerCircle != null && !existingInnerCircle.IsDeleted)
-            {
-                return new CreateInnerCircleResponse
-                {
-                    Success = true,
-                    FeedId = existingInnerCircle.FeedId.ToString(),
-                    Message = "Inner Circle already exists",
-                    ErrorCode = "INNER_CIRCLE_ALREADY_EXISTS"
-                };
-            }
-
-            var ownerIdentity = await this._identityStorageService.RetrieveIdentityAsync(ownerPublicAddress);
-            if (ownerIdentity is not Profile ownerProfile || string.IsNullOrWhiteSpace(ownerProfile.PublicEncryptAddress))
-            {
-                return new CreateInnerCircleResponse
-                {
-                    Success = false,
-                    Message = "Owner identity does not have a valid public encryption key",
-                    ErrorCode = "INNER_CIRCLE_INVALID_MEMBERS"
-                };
-            }
-
-            var currentBlock = this._blockchainCache.LastBlockIndex;
-            var feedId = FeedId.NewFeedId;
-            var encryptedOwnerKey = EncryptKeys.Encrypt(EncryptKeys.GenerateAesKey(), ownerProfile.PublicEncryptAddress);
-
-            var groupFeed = new GroupFeed(
-                FeedId: feedId,
-                Title: "Inner Circle",
-                Description: "Auto-managed inner circle",
-                IsPublic: false,
-                CreatedAtBlock: currentBlock,
-                CurrentKeyGeneration: 0,
-                IsInnerCircle: true,
-                OwnerPublicAddress: ownerPublicAddress);
-
-            var keyGeneration = new GroupFeedKeyGenerationEntity(
-                feedId,
-                KeyGeneration: 0,
-                currentBlock,
-                RotationTrigger.Join)
-            {
-                GroupFeed = groupFeed
-            };
-
-            groupFeed.KeyGenerations.Add(keyGeneration);
-
-            var ownerParticipant = new GroupFeedParticipantEntity(
-                feedId,
-                ownerPublicAddress,
-                ParticipantType.Owner,
-                currentBlock,
-                LeftAtBlock: null,
-                LastLeaveBlock: null)
-            {
-                GroupFeed = groupFeed
-            };
-
-            groupFeed.Participants.Add(ownerParticipant);
-
-            keyGeneration.EncryptedKeys.Add(new GroupFeedEncryptedKeyEntity(
-                feedId,
-                KeyGeneration: 0,
-                MemberPublicAddress: ownerPublicAddress,
-                EncryptedAesKey: encryptedOwnerKey)
-            {
-                KeyGenerationEntity = keyGeneration
-            });
-
-            await this._feedsStorageService.CreateGroupFeed(groupFeed);
-            await this._userFeedsCacheService.AddFeedToUserCacheAsync(ownerPublicAddress, feedId);
-
-            _ = this._feedMetadataCacheService.SetFeedMetadataAsync(
-                ownerPublicAddress,
-                feedId,
-                new FeedMetadataEntry
-                {
-                    Title = "Inner Circle",
-                    Type = (int)FeedType.Group,
-                    LastBlockIndex = currentBlock.Value,
-                    Participants = new List<string> { ownerPublicAddress },
-                    CreatedAtBlock = currentBlock.Value,
-                    CurrentKeyGeneration = 0
-                });
-
-            return new CreateInnerCircleResponse
-            {
-                Success = true,
-                FeedId = feedId.ToString(),
-                Message = "Inner Circle created successfully"
-            };
+            return await this._innerCircleApplicationService.CreateInnerCircleAsync(
+                request.OwnerPublicAddress,
+                request.RequesterPublicAddress);
         }
         catch (Exception ex)
         {
@@ -1494,169 +1358,22 @@ public class FeedsGrpcService(
         AddMembersToInnerCircleRequest request,
         ServerCallContext context)
     {
-        var ownerForLog = request.OwnerPublicAddress?.Substring(0, Math.Min(10, request.OwnerPublicAddress?.Length ?? 0)) ?? string.Empty;
-        Console.WriteLine($"[AddMembersToInnerCircle] Owner: {ownerForLog}..., Members: {request.Members.Count}");
-
-        var response = new AddMembersToInnerCircleResponse();
-
         try
         {
-            var ownerPublicAddress = request.OwnerPublicAddress?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(ownerPublicAddress))
-            {
-                response.Success = false;
-                response.Message = "OwnerPublicAddress is required";
-                response.ErrorCode = "INNER_CIRCLE_UNAUTHORIZED";
-                return response;
-            }
-
-            if (request.Members.Count == 0 || request.Members.Count > MaxInnerCircleMembersPerRequest)
-            {
-                response.Success = false;
-                response.Message = $"Members must contain between 1 and {MaxInnerCircleMembersPerRequest} users";
-                response.ErrorCode = "INNER_CIRCLE_MEMBER_LIMIT_EXCEEDED";
-                return response;
-            }
-
-            var innerCircle = await this._feedsStorageService.GetInnerCircleByOwnerAsync(ownerPublicAddress);
-            if (innerCircle == null || innerCircle.IsDeleted)
-            {
-                response.Success = false;
-                response.Message = "Inner Circle not found";
-                response.ErrorCode = "INNER_CIRCLE_NOT_FOUND";
-                return response;
-            }
-
-            var duplicatesInPayload = request.Members
-                .Select(x => (x.PublicAddress ?? string.Empty).Trim())
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .GroupBy(x => x, StringComparer.Ordinal)
-                .Where(g => g.Count() > 1)
-                .Select(g => g.Key)
-                .ToList();
-
-            var normalizedMembers = request.Members
-                .GroupBy(x => (x.PublicAddress ?? string.Empty).Trim(), StringComparer.Ordinal)
-                .Select(g => g.First())
-                .ToList();
-
-            var participantsToAdd = new List<GroupFeedParticipantEntity>();
-            var participantsToRejoin = new List<string>();
-            var joiningMemberEncryptKeys = new Dictionary<string, string>(StringComparer.Ordinal);
-            var invalidMembers = new List<string>();
-            var duplicateMembers = new HashSet<string>(duplicatesInPayload, StringComparer.Ordinal);
-
-            var currentBlock = this._blockchainCache.LastBlockIndex;
-
-            foreach (var member in normalizedMembers)
-            {
-                var memberAddress = (member.PublicAddress ?? string.Empty).Trim();
-                var memberEncryptAddress = (member.PublicEncryptAddress ?? string.Empty).Trim();
-
-                if (string.IsNullOrWhiteSpace(memberAddress) || string.IsNullOrWhiteSpace(memberEncryptAddress))
-                {
-                    if (!string.IsNullOrWhiteSpace(memberAddress))
-                    {
-                        invalidMembers.Add(memberAddress);
-                    }
-
-                    continue;
-                }
-
-                var identity = await this._identityStorageService.RetrieveIdentityAsync(memberAddress);
-                if (identity is not Profile profile ||
-                    string.IsNullOrWhiteSpace(profile.PublicEncryptAddress) ||
-                    !string.Equals(profile.PublicEncryptAddress, memberEncryptAddress, StringComparison.Ordinal))
-                {
-                    invalidMembers.Add(memberAddress);
-                    continue;
-                }
-
-                var existingParticipant = await this._feedsStorageService
-                    .GetParticipantWithHistoryAsync(innerCircle.FeedId, memberAddress);
-
-                if (existingParticipant != null && existingParticipant.LeftAtBlock == null)
-                {
-                    duplicateMembers.Add(memberAddress);
-                    continue;
-                }
-
-                if (existingParticipant != null && existingParticipant.LeftAtBlock != null)
-                {
-                    participantsToRejoin.Add(memberAddress);
-                }
-                else
-                {
-                    participantsToAdd.Add(new GroupFeedParticipantEntity(
-                        innerCircle.FeedId,
-                        memberAddress,
-                        ParticipantType.Member,
-                        currentBlock,
-                        LeftAtBlock: null,
-                        LastLeaveBlock: null));
-                }
-
-                joiningMemberEncryptKeys[memberAddress] = memberEncryptAddress;
-            }
-
-            response.DuplicateMembers.AddRange(duplicateMembers.OrderBy(x => x, StringComparer.Ordinal));
-            response.InvalidMembers.AddRange(invalidMembers.Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal));
-
-            if (participantsToAdd.Count == 0 && participantsToRejoin.Count == 0)
-            {
-                if (response.InvalidMembers.Count > 0)
-                {
-                    response.Success = false;
-                    response.Message = "No valid members to add to Inner Circle";
-                    response.ErrorCode = "INNER_CIRCLE_INVALID_MEMBERS";
-                    return response;
-                }
-
-                response.Success = true;
-                response.Message = "No membership changes applied. All members were already in the Inner Circle.";
-                return response;
-            }
-
-            var (rotationSuccess, keyGenerationEntity, rotationError) = await this.BuildInnerCircleKeyRotationEntityAsync(
-                innerCircle.FeedId,
-                joiningMemberEncryptKeys);
-
-            if (!rotationSuccess || keyGenerationEntity == null)
-            {
-                response.Success = false;
-                response.Message = $"Failed to rotate Inner Circle keys: {rotationError}";
-                response.ErrorCode = "INNER_CIRCLE_ROTATION_FAILED";
-                return response;
-            }
-
-            await this._feedsStorageService.ApplyInnerCircleMembershipAndKeyRotationAsync(
-                innerCircle.FeedId,
-                participantsToAdd,
-                participantsToRejoin,
-                currentBlock,
-                keyGenerationEntity,
-                currentBlock);
-
-            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(innerCircle.FeedId);
-            await this._groupMembersCacheService.InvalidateGroupMembersAsync(innerCircle.FeedId);
-
-            foreach (var memberAddress in joiningMemberEncryptKeys.Keys)
-            {
-                await this._feedParticipantsCacheService.AddParticipantAsync(innerCircle.FeedId, memberAddress);
-                await this._userFeedsCacheService.AddFeedToUserCacheAsync(memberAddress, innerCircle.FeedId);
-            }
-
-            response.Success = true;
-            response.Message = "Members added to Inner Circle successfully";
-            return response;
+            return await this._innerCircleApplicationService.AddMembersToInnerCircleAsync(
+                request.OwnerPublicAddress,
+                request.RequesterPublicAddress,
+                request.Members);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[AddMembersToInnerCircle] ERROR: {ex.Message}");
-            response.Success = false;
-            response.Message = $"Internal error: {ex.Message}";
-            response.ErrorCode = "INNER_CIRCLE_INTERNAL_ERROR";
-            return response;
+            return new AddMembersToInnerCircleResponse
+            {
+                Success = false,
+                Message = $"Internal error: {ex.Message}",
+                ErrorCode = "INNER_CIRCLE_INTERNAL_ERROR"
+            };
         }
     }
 
@@ -1775,124 +1492,9 @@ public class FeedsGrpcService(
         JoinGroupFeedRequest request,
         ServerCallContext context)
     {
-        var userAddressLog = request.JoiningUserPublicAddress?.Substring(0, Math.Min(10, request.JoiningUserPublicAddress?.Length ?? 0)) ?? "";
-        var hasEncryptKey = request.HasJoiningUserPublicEncryptKey;
-        Console.WriteLine($"[JoinGroupFeed] FeedId: {request.FeedId}, User: {userAddressLog}..., HasEncryptKey: {hasEncryptKey}");
-
         try
         {
-            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-            var userAddress = request.JoiningUserPublicAddress ?? string.Empty;
-            var userEncryptKey = request.HasJoiningUserPublicEncryptKey ? request.JoiningUserPublicEncryptKey : null;
-
-            // Check if group exists, is not deleted, and is public
-            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
-            if (groupFeed == null)
-            {
-                return new JoinGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Group feed not found"
-                };
-            }
-
-            if (groupFeed.IsDeleted)
-            {
-                return new JoinGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "This group has been deleted"
-                };
-            }
-
-            if (!groupFeed.IsPublic)
-            {
-                return new JoinGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Cannot join private group. An admin must add you."
-                };
-            }
-
-            // Check if user is already a member
-            var existingParticipant = await this._feedsStorageService.GetParticipantWithHistoryAsync(feedId, userAddress);
-            if (existingParticipant != null && existingParticipant.LeftAtBlock == null)
-            {
-                return new JoinGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "You are already a member of this group"
-                };
-            }
-
-            // Check for cooldown period (100 blocks after leaving)
-            if (existingParticipant?.LastLeaveBlock != null)
-            {
-                var currentBlock = this._blockchainCache.LastBlockIndex.Value;
-                var cooldownEnd = existingParticipant.LastLeaveBlock.Value + 100;
-                if (currentBlock < cooldownEnd)
-                {
-                    return new JoinGroupFeedResponse
-                    {
-                        Success = false,
-                        Message = $"Cannot rejoin until block {cooldownEnd}. You left at block {existingParticipant.LastLeaveBlock.Value}."
-                    };
-                }
-            }
-
-            var joinedAtBlock = this._blockchainCache.LastBlockIndex;
-
-            // Add or update participant
-            if (existingParticipant != null)
-            {
-                await this._feedsStorageService.UpdateParticipantRejoinAsync(
-                    feedId,
-                    userAddress,
-                    joinedAtBlock,
-                    ParticipantType.Member);
-            }
-            else
-            {
-                var newParticipant = new GroupFeedParticipantEntity(
-                    feedId,
-                    userAddress,
-                    ParticipantType.Member,
-                    joinedAtBlock,
-                    LeftAtBlock: null,
-                    LastLeaveBlock: null);
-
-                await this._feedsStorageService.AddParticipantAsync(feedId, newParticipant);
-            }
-
-            // Trigger key rotation - pass the user's encrypt key if provided (avoids identity lookup timing issue)
-            var (success, newKeyGen, errorMsg) = await TriggerKeyRotationAsync(
-                feedId,
-                RotationTrigger.Join,
-                joiningMemberAddress: userAddress,
-                leavingMemberAddress: null,
-                joiningMemberPublicEncryptKey: userEncryptKey);
-
-            if (!success)
-            {
-                return new JoinGroupFeedResponse
-                {
-                    Success = false,
-                    Message = $"Joined group but key distribution failed: {errorMsg}"
-                };
-            }
-
-            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, joinedAtBlock);
-
-            // CRITICAL: Invalidate KeyGenerations cache SYNCHRONOUSLY before returning
-            // This prevents race condition where client queries cache before new keys are visible
-            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(feedId);
-            Console.WriteLine($"[JoinGroupFeed] Success - new KeyGeneration: {newKeyGen}, cache invalidated");
-
-            return new JoinGroupFeedResponse
-            {
-                Success = true,
-                Message = "Successfully joined the group"
-            };
+            return await this._groupMembershipApplicationService.JoinGroupFeedAsync(request);
         }
         catch (Exception ex)
         {
@@ -1909,86 +1511,9 @@ public class FeedsGrpcService(
         LeaveGroupFeedRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[LeaveGroupFeed] FeedId: {request.FeedId}, User: {request.LeavingUserPublicAddress?.Substring(0, Math.Min(10, request.LeavingUserPublicAddress?.Length ?? 0))}...");
-
         try
         {
-            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-            var userAddress = request.LeavingUserPublicAddress ?? string.Empty;
-
-            // Check if group is deleted - all actions are frozen after deletion
-            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
-            if (groupFeed == null)
-            {
-                return new LeaveGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Group not found"
-                };
-            }
-
-            if (groupFeed.IsDeleted)
-            {
-                return new LeaveGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "This group has been deleted. All actions are frozen."
-                };
-            }
-
-            // Check if user is a member
-            var participant = await this._feedsStorageService.GetParticipantWithHistoryAsync(feedId, userAddress);
-            if (participant == null || participant.LeftAtBlock != null)
-            {
-                return new LeaveGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "You are not a member of this group"
-                };
-            }
-
-            // Check if user is the last admin
-            if (participant.ParticipantType == ParticipantType.Owner || participant.ParticipantType == ParticipantType.Admin)
-            {
-                var adminCount = await this._feedsStorageService.GetAdminCountAsync(feedId);
-                if (adminCount <= 1)
-                {
-                    return new LeaveGroupFeedResponse
-                    {
-                        Success = false,
-                        Message = "Cannot leave: you are the last admin. Promote another member first or delete the group."
-                    };
-                }
-            }
-
-            var leftAtBlock = this._blockchainCache.LastBlockIndex;
-
-            // Update participant status
-            await this._feedsStorageService.UpdateParticipantLeaveStatusAsync(feedId, userAddress, leftAtBlock);
-
-            // Trigger key rotation (exclude leaving member)
-            var (success, newKeyGen, errorMsg) = await TriggerKeyRotationAsync(
-                feedId,
-                RotationTrigger.Leave,
-                leavingMemberAddress: userAddress);
-
-            if (!success)
-            {
-                Console.WriteLine($"[LeaveGroupFeed] Key rotation failed: {errorMsg}");
-                // Continue anyway - the user has left, key rotation is best-effort
-            }
-
-            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, leftAtBlock);
-
-            // CRITICAL: Invalidate KeyGenerations cache SYNCHRONOUSLY
-            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(feedId);
-            Console.WriteLine($"[LeaveGroupFeed] Success, cache invalidated");
-
-            return new LeaveGroupFeedResponse
-            {
-                Success = true,
-                Message = "Successfully left the group"
-            };
+            return await this._groupMembershipApplicationService.LeaveGroupFeedAsync(request);
         }
         catch (Exception ex)
         {
@@ -2007,123 +1532,9 @@ public class FeedsGrpcService(
         AddMemberToGroupFeedRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[AddMemberToGroupFeed] FeedId: {request.FeedId}, Admin: {request.AdminPublicAddress?.Substring(0, Math.Min(10, request.AdminPublicAddress?.Length ?? 0))}..., NewMember: {request.NewMemberPublicAddress?.Substring(0, Math.Min(10, request.NewMemberPublicAddress?.Length ?? 0))}...");
-
         try
         {
-            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-            var adminAddress = request.AdminPublicAddress ?? string.Empty;
-            var newMemberAddress = request.NewMemberPublicAddress ?? string.Empty;
-            var newMemberEncryptKey = request.NewMemberPublicEncryptKey ?? string.Empty;
-
-            // Step 0: Check if group is deleted - all actions are frozen after deletion
-            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
-            if (groupFeed == null)
-            {
-                return new AddMemberToGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Group not found"
-                };
-            }
-
-            if (groupFeed.IsDeleted)
-            {
-                return new AddMemberToGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "This group has been deleted. All actions are frozen."
-                };
-            }
-
-            // Step 1: Validate admin has permission
-            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
-            if (!isAdmin)
-            {
-                Console.WriteLine($"[AddMemberToGroupFeed] Failed: User is not an admin");
-                return new AddMemberToGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Only administrators can add members to the group"
-                };
-            }
-
-            // Step 2: Check if member is already in the group
-            var existingParticipant = await this._feedsStorageService.GetParticipantWithHistoryAsync(feedId, newMemberAddress);
-            if (existingParticipant != null && existingParticipant.LeftAtBlock == null)
-            {
-                Console.WriteLine($"[AddMemberToGroupFeed] Failed: Member already in group");
-                return new AddMemberToGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "User is already a member of this group"
-                };
-            }
-
-            // Step 3: Get current block height for JoinedAtBlock
-            var currentBlock = this._blockchainCache.LastBlockIndex;
-            var joinedAtBlock = currentBlock;
-
-            // Step 4: Add or update the participant
-            if (existingParticipant != null)
-            {
-                // Participant existed before (re-joining after leaving) - update their status
-                await this._feedsStorageService.UpdateParticipantRejoinAsync(
-                    feedId,
-                    newMemberAddress,
-                    joinedAtBlock,
-                    ParticipantType.Member);
-                Console.WriteLine($"[AddMemberToGroupFeed] Updated existing participant for rejoin");
-            }
-            else
-            {
-                // New participant - create new record
-                var newParticipant = new GroupFeedParticipantEntity(
-                    feedId,
-                    newMemberAddress,
-                    ParticipantType.Member,
-                    joinedAtBlock,
-                    LeftAtBlock: null,
-                    LastLeaveBlock: null);
-
-                await this._feedsStorageService.AddParticipantAsync(feedId, newParticipant);
-                Console.WriteLine($"[AddMemberToGroupFeed] Added new participant");
-            }
-
-            // Step 5: Trigger key rotation to include the new member
-            Console.WriteLine($"[AddMemberToGroupFeed] Triggering key rotation for new member");
-            var rotationResult = await TriggerKeyRotationAsync(
-                feedId,
-                RotationTrigger.Join,
-                joiningMemberAddress: newMemberAddress);
-            var (rotationSuccess, newKeyGeneration, errorMessage) = rotationResult;
-
-            if (!rotationSuccess)
-            {
-                Console.WriteLine($"[AddMemberToGroupFeed] Key rotation failed: {errorMessage}");
-                // Note: Member was added but key rotation failed. This is a partial failure.
-                // The member won't be able to decrypt messages until key rotation succeeds.
-                return new AddMemberToGroupFeedResponse
-                {
-                    Success = false,
-                    Message = $"Member was added but key distribution failed: {errorMessage}"
-                };
-            }
-
-            // Step 6: Update the feed's BlockIndex to signal other clients that there's a change
-            // This ensures existing group members will sync the new KeyGeneration
-            Console.WriteLine($"[AddMemberToGroupFeed] Updating feed BlockIndex to trigger client sync");
-            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, currentBlock);
-
-            // CRITICAL: Invalidate KeyGenerations cache SYNCHRONOUSLY
-            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(feedId);
-            Console.WriteLine($"[AddMemberToGroupFeed] Success - new KeyGeneration: {newKeyGeneration}, cache invalidated");
-
-            return new AddMemberToGroupFeedResponse
-            {
-                Success = true,
-                Message = $"Member added successfully. New key generation: {newKeyGeneration}"
-            };
+            return await this._groupMembershipApplicationService.AddMemberToGroupFeedAsync(request);
         }
         catch (Exception ex)
         {
@@ -2137,306 +1548,13 @@ public class FeedsGrpcService(
         }
     }
 
-    /// <summary>
-    /// Triggers a key rotation for a Group Feed when a member joins.
-    /// Generates a new AES key, encrypts it for all current active members, and stores the key generation.
-    /// </summary>
-    /// <param name="joiningMemberPublicEncryptKey">Optional: The public encrypt key for the joining member.
-    /// When provided, skips identity lookup for the joining member (avoids timing issues when identity isn't confirmed yet).</param>
-    private async Task<(bool Success, int? NewKeyGeneration, string? ErrorMessage)> TriggerKeyRotationAsync(
-        FeedId feedId,
-        RotationTrigger trigger,
-        string? joiningMemberAddress = null,
-        string? leavingMemberAddress = null,
-        string? joiningMemberPublicEncryptKey = null)
-    {
-        // Step 1: Get current max KeyGeneration
-        var currentMaxKeyGeneration = await this._feedsStorageService.GetMaxKeyGenerationAsync(feedId);
-        if (currentMaxKeyGeneration == null)
-        {
-            return (false, null, $"Group feed {feedId} does not exist or has no KeyGenerations.");
-        }
-
-        var newKeyGeneration = currentMaxKeyGeneration.Value + 1;
-
-        // Step 2: Get active member addresses (excludes Banned, includes Admin/Member/Blocked)
-        var memberAddresses = (await this._feedsStorageService.GetActiveGroupMemberAddressesAsync(feedId)).ToList();
-
-        // Adjust member list based on membership change
-        if (!string.IsNullOrEmpty(leavingMemberAddress))
-        {
-            // For Leave/Ban: exclude the leaving/banned member
-            memberAddresses = memberAddresses.Where(a => a != leavingMemberAddress).ToList();
-        }
-
-        if (!string.IsNullOrEmpty(joiningMemberAddress))
-        {
-            // For Join/Unban: include the joining member (might already be in list for Unban)
-            if (!memberAddresses.Contains(joiningMemberAddress))
-            {
-                memberAddresses.Add(joiningMemberAddress);
-            }
-        }
-
-        // Step 3: Validate member count
-        if (memberAddresses.Count == 0)
-        {
-            return (false, null, "Cannot rotate keys for a group with no active members.");
-        }
-
-        if (memberAddresses.Count > MaxMembersPerRotation)
-        {
-            return (false, null, $"Group has {memberAddresses.Count} members, exceeding the maximum of {MaxMembersPerRotation}.");
-        }
-
-        // Step 4: Generate new AES-256 key
-        var plaintextAesKey = EncryptKeys.GenerateAesKey();
-
-        // Step 5: Encrypt the AES key for each member using ECIES
-        var encryptedKeys = new List<GroupFeedEncryptedKeyEntity>();
-        try
-        {
-            foreach (var memberAddress in memberAddresses)
-            {
-                string publicEncryptKey;
-
-                // Check if this is the joining member and we have their key provided directly
-                if (!string.IsNullOrEmpty(joiningMemberPublicEncryptKey) &&
-                    memberAddress == joiningMemberAddress)
-                {
-                    // Use the provided key directly (avoids timing issue where identity isn't in DB yet)
-                    publicEncryptKey = joiningMemberPublicEncryptKey;
-                    Console.WriteLine($"[TriggerKeyRotationAsync] Using provided public encrypt key for joining member {memberAddress.Substring(0, Math.Min(10, memberAddress.Length))}...");
-                }
-                else
-                {
-                    // Fetch the member's public encrypt key from Identity module
-                    var profile = await this._identityStorageService.RetrieveIdentityAsync(memberAddress);
-
-                    if (profile is NonExistingProfile || profile is not Profile fullProfile)
-                    {
-                        return (false, null, $"Could not retrieve identity for member {memberAddress}. Cannot complete key rotation.");
-                    }
-
-                    // Validate public encrypt key before attempting encryption
-                    if (string.IsNullOrEmpty(fullProfile.PublicEncryptAddress))
-                    {
-                        return (false, null, $"Member {memberAddress} has an empty public encrypt key. Cannot complete key rotation.");
-                    }
-
-                    publicEncryptKey = fullProfile.PublicEncryptAddress;
-                }
-
-                // ECIES encrypt the AES key with the member's public encrypt key
-                string encryptedAesKey;
-                try
-                {
-                    encryptedAesKey = EncryptKeys.Encrypt(plaintextAesKey, publicEncryptKey);
-                }
-                catch (Exception ex) when (ex is FormatException or IndexOutOfRangeException or ArgumentException)
-                {
-                    return (false, null, $"ECIES encryption failed for member {memberAddress}: invalid public key format. Cannot complete key rotation.");
-                }
-
-                encryptedKeys.Add(new GroupFeedEncryptedKeyEntity(
-                    FeedId: feedId,
-                    KeyGeneration: newKeyGeneration,
-                    MemberPublicAddress: memberAddress,
-                    EncryptedAesKey: encryptedAesKey));
-            }
-        }
-        finally
-        {
-            // Step 6: Security - zero the plaintext key from memory
-            // Note: In .NET, strings are immutable and cannot be truly zeroed.
-            plaintextAesKey = null!;
-        }
-
-        // Step 7: Create and store the KeyGeneration
-        var validFromBlock = this._blockchainCache.LastBlockIndex.Value;
-        var keyGenerationEntity = new GroupFeedKeyGenerationEntity(
-            FeedId: feedId,
-            KeyGeneration: newKeyGeneration,
-            ValidFromBlock: new BlockIndex(validFromBlock),
-            RotationTrigger: trigger)
-        {
-            EncryptedKeys = encryptedKeys
-        };
-
-        await this._feedsStorageService.CreateKeyRotationAsync(keyGenerationEntity);
-
-        return (true, newKeyGeneration, null);
-    }
-
-    private async Task<(bool Success, GroupFeedKeyGenerationEntity? KeyGeneration, string? ErrorMessage)> BuildInnerCircleKeyRotationEntityAsync(
-        FeedId feedId,
-        IReadOnlyDictionary<string, string> joiningMemberEncryptKeys)
-    {
-        var currentMaxKeyGeneration = await this._feedsStorageService.GetMaxKeyGenerationAsync(feedId);
-        if (currentMaxKeyGeneration == null)
-        {
-            return (false, null, $"Inner Circle {feedId} has no key generations.");
-        }
-
-        var newKeyGeneration = currentMaxKeyGeneration.Value + 1;
-        var activeMemberAddresses = (await this._feedsStorageService.GetActiveGroupMemberAddressesAsync(feedId)).ToList();
-
-        foreach (var joiningAddress in joiningMemberEncryptKeys.Keys)
-        {
-            if (!activeMemberAddresses.Contains(joiningAddress, StringComparer.Ordinal))
-            {
-                activeMemberAddresses.Add(joiningAddress);
-            }
-        }
-
-        if (activeMemberAddresses.Count == 0)
-        {
-            return (false, null, "Cannot rotate keys for an empty Inner Circle.");
-        }
-
-        if (activeMemberAddresses.Count > MaxMembersPerRotation)
-        {
-            return (false, null, $"Inner Circle has {activeMemberAddresses.Count} members, exceeding maximum {MaxMembersPerRotation}.");
-        }
-
-        var plaintextAesKey = EncryptKeys.GenerateAesKey();
-        var encryptedKeys = new List<GroupFeedEncryptedKeyEntity>(activeMemberAddresses.Count);
-
-        try
-        {
-            foreach (var memberAddress in activeMemberAddresses)
-            {
-                string publicEncryptKey;
-
-                if (joiningMemberEncryptKeys.TryGetValue(memberAddress, out var joiningMemberKey))
-                {
-                    publicEncryptKey = joiningMemberKey;
-                }
-                else
-                {
-                    var identity = await this._identityStorageService.RetrieveIdentityAsync(memberAddress);
-                    if (identity is not Profile profile || string.IsNullOrWhiteSpace(profile.PublicEncryptAddress))
-                    {
-                        return (false, null, $"Could not retrieve a valid public encryption key for member {memberAddress}.");
-                    }
-
-                    publicEncryptKey = profile.PublicEncryptAddress;
-                }
-
-                string encryptedAesKey;
-                try
-                {
-                    encryptedAesKey = EncryptKeys.Encrypt(plaintextAesKey, publicEncryptKey);
-                }
-                catch (Exception ex) when (ex is FormatException or IndexOutOfRangeException or ArgumentException)
-                {
-                    return (false, null, $"Failed to encrypt key for member {memberAddress}: invalid public key format.");
-                }
-
-                encryptedKeys.Add(new GroupFeedEncryptedKeyEntity(
-                    FeedId: feedId,
-                    KeyGeneration: newKeyGeneration,
-                    MemberPublicAddress: memberAddress,
-                    EncryptedAesKey: encryptedAesKey));
-            }
-        }
-        finally
-        {
-            plaintextAesKey = null!;
-        }
-
-        var keyGeneration = new GroupFeedKeyGenerationEntity(
-            FeedId: feedId,
-            KeyGeneration: newKeyGeneration,
-            ValidFromBlock: this._blockchainCache.LastBlockIndex,
-            RotationTrigger: RotationTrigger.Join)
-        {
-            EncryptedKeys = encryptedKeys
-        };
-
-        return (true, keyGeneration, null);
-    }
-
     public override async Task<BlockMemberResponse> BlockMember(
         BlockMemberRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[BlockMember] FeedId: {request.FeedId}, Admin: {request.AdminPublicAddress?.Substring(0, Math.Min(10, request.AdminPublicAddress?.Length ?? 0))}..., Blocked: {request.BlockedUserPublicAddress?.Substring(0, Math.Min(10, request.BlockedUserPublicAddress?.Length ?? 0))}...");
-
         try
         {
-            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-            var adminAddress = request.AdminPublicAddress ?? string.Empty;
-            var blockedUserAddress = request.BlockedUserPublicAddress ?? string.Empty;
-
-            // Step 0: Check if group is deleted - all actions are frozen after deletion
-            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
-            if (groupFeed == null)
-            {
-                return new BlockMemberResponse
-                {
-                    Success = false,
-                    Message = "Group not found"
-                };
-            }
-
-            if (groupFeed.IsDeleted)
-            {
-                return new BlockMemberResponse
-                {
-                    Success = false,
-                    Message = "This group has been deleted. All actions are frozen."
-                };
-            }
-
-            // Step 1: Validate admin has permission
-            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
-            if (!isAdmin)
-            {
-                return new BlockMemberResponse
-                {
-                    Success = false,
-                    Message = "Only administrators can block members"
-                };
-            }
-
-            // Step 2: Check if target user is a member
-            var targetParticipant = await this._feedsStorageService.GetParticipantWithHistoryAsync(feedId, blockedUserAddress);
-            if (targetParticipant == null || targetParticipant.LeftAtBlock != null)
-            {
-                return new BlockMemberResponse
-                {
-                    Success = false,
-                    Message = "User is not an active member of this group"
-                };
-            }
-
-            // Step 3: Cannot block admins/owners
-            if (targetParticipant.ParticipantType == ParticipantType.Admin ||
-                targetParticipant.ParticipantType == ParticipantType.Owner)
-            {
-                return new BlockMemberResponse
-                {
-                    Success = false,
-                    Message = "Cannot block an administrator. Demote them first."
-                };
-            }
-
-            // Step 4: Update participant status to Blocked
-            await this._feedsStorageService.UpdateParticipantTypeAsync(
-                feedId,
-                blockedUserAddress,
-                ParticipantType.Blocked);
-
-            // Note: Blocking does NOT trigger key rotation - blocked users can still decrypt messages
-            // They just cannot send new messages. Use Ban for cryptographic exclusion.
-
-            Console.WriteLine($"[BlockMember] Success");
-            return new BlockMemberResponse
-            {
-                Success = true,
-                Message = "Member blocked successfully"
-            };
+            return await this._groupAdministrationApplicationService.BlockMemberAsync(request);
         }
         catch (Exception ex)
         {
@@ -2453,68 +1571,9 @@ public class FeedsGrpcService(
         UnblockMemberRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[UnblockMember] FeedId: {request.FeedId}, Admin: {request.AdminPublicAddress?.Substring(0, Math.Min(10, request.AdminPublicAddress?.Length ?? 0))}..., Unblocked: {request.UnblockedUserPublicAddress?.Substring(0, Math.Min(10, request.UnblockedUserPublicAddress?.Length ?? 0))}...");
-
         try
         {
-            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-            var adminAddress = request.AdminPublicAddress ?? string.Empty;
-            var unblockedUserAddress = request.UnblockedUserPublicAddress ?? string.Empty;
-
-            // Step 0: Check if group is deleted - all actions are frozen after deletion
-            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
-            if (groupFeed == null)
-            {
-                return new UnblockMemberResponse
-                {
-                    Success = false,
-                    Message = "Group not found"
-                };
-            }
-
-            if (groupFeed.IsDeleted)
-            {
-                return new UnblockMemberResponse
-                {
-                    Success = false,
-                    Message = "This group has been deleted. All actions are frozen."
-                };
-            }
-
-            // Step 1: Validate admin has permission
-            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
-            if (!isAdmin)
-            {
-                return new UnblockMemberResponse
-                {
-                    Success = false,
-                    Message = "Only administrators can unblock members"
-                };
-            }
-
-            // Step 2: Check if target user is blocked
-            var targetParticipant = await this._feedsStorageService.GetParticipantWithHistoryAsync(feedId, unblockedUserAddress);
-            if (targetParticipant == null || targetParticipant.ParticipantType != ParticipantType.Blocked)
-            {
-                return new UnblockMemberResponse
-                {
-                    Success = false,
-                    Message = "User is not blocked in this group"
-                };
-            }
-
-            // Step 3: Update participant status back to Member
-            await this._feedsStorageService.UpdateParticipantTypeAsync(
-                feedId,
-                unblockedUserAddress,
-                ParticipantType.Member);
-
-            Console.WriteLine($"[UnblockMember] Success");
-            return new UnblockMemberResponse
-            {
-                Success = true,
-                Message = "Member unblocked successfully"
-            };
+            return await this._groupAdministrationApplicationService.UnblockMemberAsync(request);
         }
         catch (Exception ex)
         {
@@ -2531,93 +1590,9 @@ public class FeedsGrpcService(
         BanFromGroupFeedRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[BanFromGroupFeed] FeedId: {request.FeedId}, Admin: {request.AdminPublicAddress?.Substring(0, Math.Min(10, request.AdminPublicAddress?.Length ?? 0))}..., Banned: {request.BannedUserPublicAddress?.Substring(0, Math.Min(10, request.BannedUserPublicAddress?.Length ?? 0))}...");
-
         try
         {
-            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-            var adminAddress = request.AdminPublicAddress ?? string.Empty;
-            var bannedUserAddress = request.BannedUserPublicAddress ?? string.Empty;
-
-            // Step 0: Check if group is deleted - all actions are frozen after deletion
-            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
-            if (groupFeed == null)
-            {
-                return new BanFromGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Group not found"
-                };
-            }
-
-            if (groupFeed.IsDeleted)
-            {
-                return new BanFromGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "This group has been deleted. All actions are frozen."
-                };
-            }
-
-            // Step 1: Validate admin has permission
-            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
-            if (!isAdmin)
-            {
-                return new BanFromGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Only administrators can ban members"
-                };
-            }
-
-            // Step 2: Check if target user is a member
-            var targetParticipant = await this._feedsStorageService.GetParticipantWithHistoryAsync(feedId, bannedUserAddress);
-            if (targetParticipant == null || targetParticipant.LeftAtBlock != null)
-            {
-                return new BanFromGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "User is not an active member of this group"
-                };
-            }
-
-            // Step 3: Cannot ban admins/owners
-            if (targetParticipant.ParticipantType == ParticipantType.Admin ||
-                targetParticipant.ParticipantType == ParticipantType.Owner)
-            {
-                return new BanFromGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Cannot ban an administrator. Demote them first."
-                };
-            }
-
-            // Step 4: Update participant status to Banned (marks them as left)
-            var bannedAtBlock = this._blockchainCache.LastBlockIndex;
-            await this._feedsStorageService.UpdateParticipantBanAsync(feedId, bannedUserAddress, bannedAtBlock);
-
-            // Step 5: Trigger key rotation to exclude banned user
-            var (success, newKeyGen, errorMsg) = await TriggerKeyRotationAsync(
-                feedId,
-                RotationTrigger.Ban,
-                leavingMemberAddress: bannedUserAddress);
-
-            if (!success)
-            {
-                Console.WriteLine($"[BanFromGroupFeed] Key rotation failed: {errorMsg}");
-            }
-
-            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, bannedAtBlock);
-
-            // CRITICAL: Invalidate KeyGenerations cache SYNCHRONOUSLY
-            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(feedId);
-            Console.WriteLine($"[BanFromGroupFeed] Success - new KeyGeneration: {newKeyGen}, cache invalidated");
-
-            return new BanFromGroupFeedResponse
-            {
-                Success = true,
-                Message = "Member banned successfully"
-            };
+            return await this._groupAdministrationApplicationService.BanFromGroupFeedAsync(request);
         }
         catch (Exception ex)
         {
@@ -2634,86 +1609,9 @@ public class FeedsGrpcService(
         UnbanFromGroupFeedRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[UnbanFromGroupFeed] FeedId: {request.FeedId}, Admin: {request.AdminPublicAddress?.Substring(0, Math.Min(10, request.AdminPublicAddress?.Length ?? 0))}..., Unbanned: {request.UnbannedUserPublicAddress?.Substring(0, Math.Min(10, request.UnbannedUserPublicAddress?.Length ?? 0))}...");
-
         try
         {
-            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-            var adminAddress = request.AdminPublicAddress ?? string.Empty;
-            var unbannedUserAddress = request.UnbannedUserPublicAddress ?? string.Empty;
-
-            // Step 0: Check if group is deleted - all actions are frozen after deletion
-            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
-            if (groupFeed == null)
-            {
-                return new UnbanFromGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Group not found"
-                };
-            }
-
-            if (groupFeed.IsDeleted)
-            {
-                return new UnbanFromGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "This group has been deleted. All actions are frozen."
-                };
-            }
-
-            // Step 1: Validate admin has permission
-            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
-            if (!isAdmin)
-            {
-                return new UnbanFromGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Only administrators can unban members"
-                };
-            }
-
-            // Step 2: Check if target user is banned
-            var isBanned = await this._feedsStorageService.IsBannedAsync(feedId, unbannedUserAddress);
-            if (!isBanned)
-            {
-                return new UnbanFromGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "User is not banned from this group"
-                };
-            }
-
-            // Step 3: Update participant status back to Member and reset timestamps
-            var rejoinedAtBlock = this._blockchainCache.LastBlockIndex;
-            await this._feedsStorageService.UpdateParticipantUnbanAsync(feedId, unbannedUserAddress, rejoinedAtBlock);
-
-            // Step 4: Trigger key rotation to include unbanned user
-            var (success, newKeyGen, errorMsg) = await TriggerKeyRotationAsync(
-                feedId,
-                RotationTrigger.Unban,
-                joiningMemberAddress: unbannedUserAddress);
-
-            if (!success)
-            {
-                return new UnbanFromGroupFeedResponse
-                {
-                    Success = false,
-                    Message = $"Unbanned but key distribution failed: {errorMsg}"
-                };
-            }
-
-            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, rejoinedAtBlock);
-
-            // CRITICAL: Invalidate KeyGenerations cache SYNCHRONOUSLY
-            await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(feedId);
-            Console.WriteLine($"[UnbanFromGroupFeed] Success - new KeyGeneration: {newKeyGen}, cache invalidated");
-
-            return new UnbanFromGroupFeedResponse
-            {
-                Success = true,
-                Message = "Member unbanned successfully"
-            };
+            return await this._groupAdministrationApplicationService.UnbanFromGroupFeedAsync(request);
         }
         catch (Exception ex)
         {
@@ -2730,83 +1628,9 @@ public class FeedsGrpcService(
         PromoteToAdminRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[PromoteToAdmin] FeedId: {request.FeedId}, Admin: {request.AdminPublicAddress?.Substring(0, Math.Min(10, request.AdminPublicAddress?.Length ?? 0))}..., Member: {request.MemberPublicAddress?.Substring(0, Math.Min(10, request.MemberPublicAddress?.Length ?? 0))}...");
-
         try
         {
-            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-            var adminAddress = request.AdminPublicAddress ?? string.Empty;
-            var memberAddress = request.MemberPublicAddress ?? string.Empty;
-
-            // Step 0: Check if group is deleted - all actions are frozen after deletion
-            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
-            if (groupFeed == null)
-            {
-                return new PromoteToAdminResponse
-                {
-                    Success = false,
-                    Message = "Group not found"
-                };
-            }
-
-            if (groupFeed.IsDeleted)
-            {
-                return new PromoteToAdminResponse
-                {
-                    Success = false,
-                    Message = "This group has been deleted. All actions are frozen."
-                };
-            }
-
-            // Step 1: Validate requester is admin/owner
-            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
-            if (!isAdmin)
-            {
-                return new PromoteToAdminResponse
-                {
-                    Success = false,
-                    Message = "Only administrators can promote members"
-                };
-            }
-
-            // Step 2: Check if target user is a member
-            var targetParticipant = await this._feedsStorageService.GetParticipantWithHistoryAsync(feedId, memberAddress);
-            if (targetParticipant == null || targetParticipant.LeftAtBlock != null)
-            {
-                return new PromoteToAdminResponse
-                {
-                    Success = false,
-                    Message = "User is not an active member of this group"
-                };
-            }
-
-            // Step 3: Check if already admin
-            if (targetParticipant.ParticipantType == ParticipantType.Admin ||
-                targetParticipant.ParticipantType == ParticipantType.Owner)
-            {
-                return new PromoteToAdminResponse
-                {
-                    Success = false,
-                    Message = "User is already an administrator"
-                };
-            }
-
-            // Step 4: Update participant status to Admin
-            await this._feedsStorageService.UpdateParticipantTypeAsync(
-                feedId,
-                memberAddress,
-                ParticipantType.Admin);
-
-            // Update feed BlockIndex to notify clients
-            var currentBlock = this._blockchainCache.LastBlockIndex;
-            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, currentBlock);
-
-            Console.WriteLine($"[PromoteToAdmin] Success");
-            return new PromoteToAdminResponse
-            {
-                Success = true,
-                Message = "Member promoted to administrator"
-            };
+            return await this._groupAdministrationApplicationService.PromoteToAdminAsync(request);
         }
         catch (Exception ex)
         {
@@ -2823,111 +1647,9 @@ public class FeedsGrpcService(
         UpdateGroupFeedTitleRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[UpdateGroupFeedTitle] FeedId: {request.FeedId}, Admin: {request.AdminPublicAddress?.Substring(0, Math.Min(10, request.AdminPublicAddress?.Length ?? 0))}..., NewTitle: {request.NewTitle}");
-
         try
         {
-            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-            var adminAddress = request.AdminPublicAddress ?? string.Empty;
-            var newTitle = request.NewTitle ?? string.Empty;
-
-            // Step 0: Check if group is deleted - all actions are frozen after deletion
-            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
-            if (groupFeed == null)
-            {
-                return new UpdateGroupFeedTitleResponse
-                {
-                    Success = false,
-                    Message = "Group not found"
-                };
-            }
-
-            if (groupFeed.IsDeleted)
-            {
-                return new UpdateGroupFeedTitleResponse
-                {
-                    Success = false,
-                    Message = "This group has been deleted. All actions are frozen."
-                };
-            }
-
-            // Step 1: Validate admin has permission
-            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
-            if (!isAdmin)
-            {
-                return new UpdateGroupFeedTitleResponse
-                {
-                    Success = false,
-                    Message = "Only administrators can update the group title"
-                };
-            }
-
-            // Step 2: Validate title
-            if (string.IsNullOrWhiteSpace(newTitle))
-            {
-                return new UpdateGroupFeedTitleResponse
-                {
-                    Success = false,
-                    Message = "Title cannot be empty"
-                };
-            }
-
-            if (newTitle.Length > 100)
-            {
-                return new UpdateGroupFeedTitleResponse
-                {
-                    Success = false,
-                    Message = "Title cannot exceed 100 characters"
-                };
-            }
-
-            // Step 3: Update the title
-            await this._feedsStorageService.UpdateGroupFeedTitleAsync(feedId, newTitle);
-
-            // Update feed BlockIndex to notify clients
-            var currentBlock = this._blockchainCache.LastBlockIndex;
-            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, currentBlock);
-
-            // FEAT-065: Cascade title change to all members' feed_meta caches
-            try
-            {
-                var participantAddresses = await this._feedParticipantsCacheService.GetParticipantsAsync(feedId);
-
-                if (participantAddresses != null)
-                {
-                    foreach (var memberAddress in participantAddresses)
-                    {
-                        _ = this._feedMetadataCacheService.UpdateFeedTitleAsync(
-                            memberAddress, feedId, newTitle);
-                    }
-                }
-                else
-                {
-                    // Fallback to PostgreSQL when participants SET cache is empty
-                    // (e.g., no messages sent yet, or cache was evicted)
-                    var dbParticipants = await this._feedsStorageService.GetAllParticipantsAsync(feedId);
-                    foreach (var participant in dbParticipants)
-                    {
-                        if (participant.LeftAtBlock == null)
-                        {
-                            _ = this._feedMetadataCacheService.UpdateFeedTitleAsync(
-                                participant.ParticipantPublicAddress, feedId, newTitle);
-                        }
-                    }
-                }
-            }
-            catch (Exception cascadeEx)
-            {
-                _logger.LogWarning(cascadeEx,
-                    "Failed to cascade group title change to feed_meta caches for feed {FeedId}", feedId);
-            }
-
-            Console.WriteLine($"[UpdateGroupFeedTitle] Success");
-            return new UpdateGroupFeedTitleResponse
-            {
-                Success = true,
-                Message = "Group title updated successfully"
-            };
+            return await this._groupAdministrationApplicationService.UpdateGroupFeedTitleAsync(request);
         }
         catch (Exception ex)
         {
@@ -2944,68 +1666,9 @@ public class FeedsGrpcService(
         UpdateGroupFeedDescriptionRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[UpdateGroupFeedDescription] FeedId: {request.FeedId}, Admin: {request.AdminPublicAddress?.Substring(0, Math.Min(10, request.AdminPublicAddress?.Length ?? 0))}...");
-
         try
         {
-            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-            var adminAddress = request.AdminPublicAddress ?? string.Empty;
-            var newDescription = request.NewDescription ?? string.Empty;
-
-            // Step 0: Check if group is deleted - all actions are frozen after deletion
-            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
-            if (groupFeed == null)
-            {
-                return new UpdateGroupFeedDescriptionResponse
-                {
-                    Success = false,
-                    Message = "Group not found"
-                };
-            }
-
-            if (groupFeed.IsDeleted)
-            {
-                return new UpdateGroupFeedDescriptionResponse
-                {
-                    Success = false,
-                    Message = "This group has been deleted. All actions are frozen."
-                };
-            }
-
-            // Step 1: Validate admin has permission
-            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
-            if (!isAdmin)
-            {
-                return new UpdateGroupFeedDescriptionResponse
-                {
-                    Success = false,
-                    Message = "Only administrators can update the group description"
-                };
-            }
-
-            // Step 2: Validate description
-            if (newDescription.Length > 500)
-            {
-                return new UpdateGroupFeedDescriptionResponse
-                {
-                    Success = false,
-                    Message = "Description cannot exceed 500 characters"
-                };
-            }
-
-            // Step 3: Update the description
-            await this._feedsStorageService.UpdateGroupFeedDescriptionAsync(feedId, newDescription);
-
-            // Update feed BlockIndex to notify clients
-            var currentBlock = this._blockchainCache.LastBlockIndex;
-            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, currentBlock);
-
-            Console.WriteLine($"[UpdateGroupFeedDescription] Success");
-            return new UpdateGroupFeedDescriptionResponse
-            {
-                Success = true,
-                Message = "Group description updated successfully"
-            };
+            return await this._groupAdministrationApplicationService.UpdateGroupFeedDescriptionAsync(request);
         }
         catch (Exception ex)
         {
@@ -3022,80 +1685,9 @@ public class FeedsGrpcService(
         UpdateGroupFeedSettingsRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[UpdateGroupFeedSettings] FeedId: {request.FeedId}, Admin: {request.AdminPublicAddress?.Substring(0, Math.Min(10, request.AdminPublicAddress?.Length ?? 0))}...");
-
         try
         {
-            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-            var adminAddress = request.AdminPublicAddress ?? string.Empty;
-
-            // Step 0: Check if group is deleted - all actions are frozen after deletion
-            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
-            if (groupFeed == null)
-            {
-                return new UpdateGroupFeedSettingsResponse
-                {
-                    Success = false,
-                    Message = "Group not found"
-                };
-            }
-
-            if (groupFeed.IsDeleted)
-            {
-                return new UpdateGroupFeedSettingsResponse
-                {
-                    Success = false,
-                    Message = "This group has been deleted. All actions are frozen."
-                };
-            }
-
-            // Step 1: Validate admin has permission
-            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
-            if (!isAdmin)
-            {
-                return new UpdateGroupFeedSettingsResponse
-                {
-                    Success = false,
-                    Message = "Only administrators can update group settings"
-                };
-            }
-
-            // Step 2: Validate inputs
-            string? newTitle = request.HasNewTitle ? request.NewTitle : null;
-            string? newDescription = request.HasNewDescription ? request.NewDescription : null;
-            bool? isPublic = request.HasIsPublic ? request.IsPublic : null;
-
-            if (newTitle != null && (newTitle.Length < 1 || newTitle.Length > 100))
-            {
-                return new UpdateGroupFeedSettingsResponse
-                {
-                    Success = false,
-                    Message = "Title must be between 1 and 100 characters"
-                };
-            }
-
-            if (newDescription != null && newDescription.Length > 500)
-            {
-                return new UpdateGroupFeedSettingsResponse
-                {
-                    Success = false,
-                    Message = "Description cannot exceed 500 characters"
-                };
-            }
-
-            // Step 3: Update the settings
-            await this._feedsStorageService.UpdateGroupFeedSettingsAsync(feedId, newTitle, newDescription, isPublic);
-
-            // Update feed BlockIndex to notify clients
-            var currentBlock = this._blockchainCache.LastBlockIndex;
-            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, currentBlock);
-
-            Console.WriteLine($"[UpdateGroupFeedSettings] Success - Title: {newTitle ?? "(unchanged)"}, Description: {(newDescription != null ? "updated" : "(unchanged)")}, IsPublic: {(isPublic.HasValue ? isPublic.Value.ToString() : "(unchanged)")}");
-            return new UpdateGroupFeedSettingsResponse
-            {
-                Success = true,
-                Message = "Group settings updated successfully"
-            };
+            return await this._groupAdministrationApplicationService.UpdateGroupFeedSettingsAsync(request);
         }
         catch (Exception ex)
         {
@@ -3112,57 +1704,9 @@ public class FeedsGrpcService(
         DeleteGroupFeedRequest request,
         ServerCallContext context)
     {
-        Console.WriteLine($"[DeleteGroupFeed] FeedId: {request.FeedId}, Admin: {request.AdminPublicAddress?.Substring(0, Math.Min(10, request.AdminPublicAddress?.Length ?? 0))}...");
-
         try
         {
-            var feedId = FeedIdHandler.CreateFromString(request.FeedId);
-            var adminAddress = request.AdminPublicAddress ?? string.Empty;
-
-            // Step 1: Check if group exists and is not already deleted
-            var groupFeed = await this._feedsStorageService.GetGroupFeedAsync(feedId);
-            if (groupFeed == null)
-            {
-                return new DeleteGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Group not found"
-                };
-            }
-
-            if (groupFeed.IsDeleted)
-            {
-                return new DeleteGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Group has already been deleted"
-                };
-            }
-
-            // Step 2: Validate requester is an admin (any admin can delete)
-            var isAdmin = await this._feedsStorageService.IsAdminAsync(feedId, adminAddress);
-            if (!isAdmin)
-            {
-                return new DeleteGroupFeedResponse
-                {
-                    Success = false,
-                    Message = "Only administrators can delete the group"
-                };
-            }
-
-            // Step 3: Delete the group (soft delete - marks as deleted)
-            await this._feedsStorageService.MarkGroupFeedDeletedAsync(feedId);
-
-            // Step 4: Update feed BlockIndex to notify clients
-            var currentBlock = this._blockchainCache.LastBlockIndex;
-            await this._feedsStorageService.UpdateFeedBlockIndexAsync(feedId, currentBlock);
-
-            Console.WriteLine($"[DeleteGroupFeed] Success");
-            return new DeleteGroupFeedResponse
-            {
-                Success = true,
-                Message = "Group deleted successfully"
-            };
+            return await this._groupAdministrationApplicationService.DeleteGroupFeedAsync(request);
         }
         catch (Exception ex)
         {

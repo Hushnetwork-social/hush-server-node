@@ -41,7 +41,7 @@ public class FeedsGrpcServiceInnerCircleTests
             .Setup(x => x.GetInnerCircleByOwnerAsync(owner))
             .ReturnsAsync(innerCircle);
 
-        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var service = CreateService(mocker);
         var response = await service.GetInnerCircle(
             new GetInnerCircleRequest { OwnerPublicAddress = owner },
             CreateMockServerCallContext());
@@ -73,9 +73,13 @@ public class FeedsGrpcServiceInnerCircleTests
             .Setup(x => x.GetInnerCircleByOwnerAsync(owner))
             .ReturnsAsync(existing);
 
-        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var service = CreateService(mocker);
         var response = await service.CreateInnerCircle(
-            new CreateInnerCircleRequest { OwnerPublicAddress = owner },
+            new CreateInnerCircleRequest
+            {
+                OwnerPublicAddress = owner,
+                RequesterPublicAddress = owner
+            },
             CreateMockServerCallContext());
 
         response.Success.Should().BeTrue();
@@ -84,7 +88,29 @@ public class FeedsGrpcServiceInnerCircleTests
     }
 
     [Fact]
-    public async Task AddMembersToInnerCircle_WhenOnlyDuplicates_ShouldReturnSuccessAndNotPersist()
+    public async Task CreateInnerCircle_WhenRequesterDiffersFromOwner_ShouldReturnUnauthorized()
+    {
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+
+        var owner = TestDataFactory.CreateAddress();
+        var requester = TestDataFactory.CreateAddress();
+        var service = CreateService(mocker);
+
+        var response = await service.CreateInnerCircle(
+            new CreateInnerCircleRequest
+            {
+                OwnerPublicAddress = owner,
+                RequesterPublicAddress = requester
+            },
+            CreateMockServerCallContext());
+
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be("INNER_CIRCLE_UNAUTHORIZED");
+    }
+
+    [Fact]
+    public async Task AddMembersToInnerCircle_WhenOnlyDuplicates_ShouldReturnFailureAndNotPersist()
     {
         var mocker = new AutoMocker();
         SetupConfigurationMock(mocker);
@@ -117,11 +143,12 @@ public class FeedsGrpcServiceInnerCircleTests
             .Setup(x => x.RetrieveIdentityAsync(member))
             .ReturnsAsync(new Profile("member", "mb", member, memberEncrypt, true, new BlockIndex(1)));
 
-        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var service = CreateService(mocker);
         var response = await service.AddMembersToInnerCircle(
             new AddMembersToInnerCircleRequest
             {
                 OwnerPublicAddress = owner,
+                RequesterPublicAddress = owner,
                 Members =
                 {
                     new InnerCircleMemberProto
@@ -133,8 +160,106 @@ public class FeedsGrpcServiceInnerCircleTests
             },
             CreateMockServerCallContext());
 
-        response.Success.Should().BeTrue();
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be("INNER_CIRCLE_DUPLICATE_MEMBERS");
         response.DuplicateMembers.Should().Contain(member);
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Verify(x => x.ApplyInnerCircleMembershipAndKeyRotationAsync(
+                It.IsAny<FeedId>(),
+                It.IsAny<IReadOnlyList<GroupFeedParticipantEntity>>(),
+                It.IsAny<IReadOnlyList<string>>(),
+                It.IsAny<BlockIndex>(),
+                It.IsAny<GroupFeedKeyGenerationEntity>(),
+                It.IsAny<BlockIndex>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AddMembersToInnerCircle_WhenRequesterDiffersFromOwner_ShouldReturnUnauthorized()
+    {
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+
+        var owner = TestDataFactory.CreateAddress();
+        var requester = TestDataFactory.CreateAddress();
+        var service = CreateService(mocker);
+
+        var response = await service.AddMembersToInnerCircle(
+            new AddMembersToInnerCircleRequest
+            {
+                OwnerPublicAddress = owner,
+                RequesterPublicAddress = requester,
+                Members =
+                {
+                    new InnerCircleMemberProto
+                    {
+                        PublicAddress = TestDataFactory.CreateAddress(),
+                        PublicEncryptAddress = new EncryptKeys().PublicKey
+                    }
+                }
+            },
+            CreateMockServerCallContext());
+
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be("INNER_CIRCLE_UNAUTHORIZED");
+    }
+
+    [Fact]
+    public async Task AddMembersToInnerCircle_WhenMixedValidAndInvalid_ShouldFailAndNotPersist()
+    {
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+
+        var owner = TestDataFactory.CreateAddress();
+        var validMember = TestDataFactory.CreateAddress();
+        var invalidMember = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        var ownerEncrypt = new EncryptKeys().PublicKey;
+        var validEncrypt = new EncryptKeys().PublicKey;
+        var wrongEncrypt = new EncryptKeys().PublicKey;
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetInnerCircleByOwnerAsync(owner))
+            .ReturnsAsync(new GroupFeed(feedId, "Inner Circle", "", false, new BlockIndex(10), 0, IsInnerCircle: true, OwnerPublicAddress: owner));
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetParticipantWithHistoryAsync(feedId, validMember))
+            .ReturnsAsync((GroupFeedParticipantEntity?)null);
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetParticipantWithHistoryAsync(feedId, invalidMember))
+            .ReturnsAsync((GroupFeedParticipantEntity?)null);
+
+        mocker.GetMock<IIdentityStorageService>()
+            .Setup(x => x.RetrieveIdentityAsync(owner))
+            .ReturnsAsync(new Profile("owner", "ow", owner, ownerEncrypt, true, new BlockIndex(1)));
+
+        mocker.GetMock<IIdentityStorageService>()
+            .Setup(x => x.RetrieveIdentityAsync(validMember))
+            .ReturnsAsync(new Profile("valid", "vd", validMember, validEncrypt, true, new BlockIndex(1)));
+
+        mocker.GetMock<IIdentityStorageService>()
+            .Setup(x => x.RetrieveIdentityAsync(invalidMember))
+            .ReturnsAsync(new Profile("invalid", "iv", invalidMember, validEncrypt, true, new BlockIndex(1)));
+
+        var service = CreateService(mocker);
+        var response = await service.AddMembersToInnerCircle(
+            new AddMembersToInnerCircleRequest
+            {
+                OwnerPublicAddress = owner,
+                RequesterPublicAddress = owner,
+                Members =
+                {
+                    new InnerCircleMemberProto { PublicAddress = validMember, PublicEncryptAddress = validEncrypt },
+                    new InnerCircleMemberProto { PublicAddress = invalidMember, PublicEncryptAddress = wrongEncrypt }
+                }
+            },
+            CreateMockServerCallContext());
+
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be("INNER_CIRCLE_INVALID_MEMBERS");
+        response.InvalidMembers.Should().Contain(invalidMember);
 
         mocker.GetMock<IFeedsStorageService>()
             .Verify(x => x.ApplyInnerCircleMembershipAndKeyRotationAsync(
@@ -217,11 +342,12 @@ public class FeedsGrpcServiceInnerCircleTests
             .Setup(x => x.AddFeedToUserCacheAsync(member, feedId))
             .Returns(Task.CompletedTask);
 
-        var service = mocker.CreateInstance<FeedsGrpcService>();
+        var service = CreateService(mocker);
         var response = await service.AddMembersToInnerCircle(
             new AddMembersToInnerCircleRequest
             {
                 OwnerPublicAddress = owner,
+                RequesterPublicAddress = owner,
                 Members =
                 {
                     new InnerCircleMemberProto
@@ -259,6 +385,13 @@ public class FeedsGrpcServiceInnerCircleTests
     private static ServerCallContext CreateMockServerCallContext()
     {
         return new MockServerCallContext();
+    }
+
+    private static FeedsGrpcService CreateService(AutoMocker mocker)
+    {
+        var appService = mocker.CreateInstance<InnerCircleApplicationService>();
+        mocker.Use<IInnerCircleApplicationService>(appService);
+        return mocker.CreateInstance<FeedsGrpcService>();
     }
 
     private class MockServerCallContext : ServerCallContext

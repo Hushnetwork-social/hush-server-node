@@ -491,6 +491,7 @@ message GetInnerCircleResponse {
 
 message CreateInnerCircleRequest {
   string OwnerPublicAddress = 1;
+  string RequesterPublicAddress = 2;
 }
 
 message CreateInnerCircleResponse {
@@ -508,6 +509,7 @@ message InnerCircleMemberProto {
 message AddMembersToInnerCircleRequest {
   string OwnerPublicAddress = 1;
   repeated InnerCircleMemberProto Members = 2;
+  string RequesterPublicAddress = 3;
 }
 
 message AddMembersToInnerCircleResponse {
