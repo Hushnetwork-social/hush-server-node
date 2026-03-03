@@ -6,6 +6,7 @@ using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
 using Microsoft.Extensions.Logging;
 using Olimpo;
+using System.Diagnostics;
 
 namespace HushNode.Feeds.gRPC;
 
@@ -69,9 +70,14 @@ public class InnerCircleApplicationService(
     {
         var owner = ownerPublicAddress?.Trim() ?? string.Empty;
         var requester = requesterPublicAddress?.Trim() ?? string.Empty;
+        _logger.LogInformation(
+            "inner_circle.create.requested owner={Owner} requester={Requester}",
+            ToLogSafeAddress(owner),
+            ToLogSafeAddress(requester));
 
         if (string.IsNullOrWhiteSpace(owner))
         {
+            _logger.LogWarning("inner_circle.create.failed reason=owner_missing");
             return new CreateInnerCircleResponse
             {
                 Success = false,
@@ -82,6 +88,10 @@ public class InnerCircleApplicationService(
 
         if (string.IsNullOrWhiteSpace(requester) || !string.Equals(requester, owner, StringComparison.Ordinal))
         {
+            _logger.LogWarning(
+                "inner_circle.create.failed reason=unauthorized owner={Owner} requester={Requester}",
+                ToLogSafeAddress(owner),
+                ToLogSafeAddress(requester));
             return new CreateInnerCircleResponse
             {
                 Success = false,
@@ -93,6 +103,10 @@ public class InnerCircleApplicationService(
         var existingInnerCircle = await this._feedsStorageService.GetInnerCircleByOwnerAsync(owner);
         if (existingInnerCircle != null && !existingInnerCircle.IsDeleted)
         {
+            _logger.LogInformation(
+                "inner_circle.create.succeeded owner={Owner} feedId={FeedId} alreadyExists=true",
+                ToLogSafeAddress(owner),
+                existingInnerCircle.FeedId);
             return new CreateInnerCircleResponse
             {
                 Success = true,
@@ -105,6 +119,9 @@ public class InnerCircleApplicationService(
         var ownerIdentity = await this._identityStorageService.RetrieveIdentityAsync(owner);
         if (ownerIdentity is not Profile ownerProfile || string.IsNullOrWhiteSpace(ownerProfile.PublicEncryptAddress))
         {
+            _logger.LogWarning(
+                "inner_circle.create.failed reason=owner_invalid_encrypt_key owner={Owner}",
+                ToLogSafeAddress(owner));
             return new CreateInnerCircleResponse
             {
                 Success = false,
@@ -175,6 +192,11 @@ public class InnerCircleApplicationService(
                 CreatedAtBlock = currentBlock.Value,
                 CurrentKeyGeneration = 0
             });
+        _logger.LogInformation(
+            "inner_circle.create.succeeded owner={Owner} feedId={FeedId} block={BlockIndex} alreadyExists=false",
+            ToLogSafeAddress(owner),
+            feedId,
+            currentBlock.Value);
 
         return new CreateInnerCircleResponse
         {
@@ -192,12 +214,20 @@ public class InnerCircleApplicationService(
         var response = new AddMembersToInnerCircleResponse();
         var owner = ownerPublicAddress?.Trim() ?? string.Empty;
         var requester = requesterPublicAddress?.Trim() ?? string.Empty;
+        var requestMemberCount = members.Count;
+        var requestStopwatch = Stopwatch.StartNew();
+        _logger.LogInformation(
+            "inner_circle.add_members.requested owner={Owner} requester={Requester} count={MemberCount}",
+            ToLogSafeAddress(owner),
+            ToLogSafeAddress(requester),
+            requestMemberCount);
 
         if (string.IsNullOrWhiteSpace(owner))
         {
             response.Success = false;
             response.Message = "OwnerPublicAddress is required";
             response.ErrorCode = "INNER_CIRCLE_UNAUTHORIZED";
+            _logger.LogWarning("inner_circle.add_members.failed reason=owner_missing count={MemberCount}", requestMemberCount);
             return response;
         }
 
@@ -206,6 +236,11 @@ public class InnerCircleApplicationService(
             response.Success = false;
             response.Message = "Only the profile owner can add members to the Inner Circle";
             response.ErrorCode = "INNER_CIRCLE_UNAUTHORIZED";
+            _logger.LogWarning(
+                "inner_circle.add_members.failed reason=unauthorized owner={Owner} requester={Requester} count={MemberCount}",
+                ToLogSafeAddress(owner),
+                ToLogSafeAddress(requester),
+                requestMemberCount);
             return response;
         }
 
@@ -214,6 +249,11 @@ public class InnerCircleApplicationService(
             response.Success = false;
             response.Message = $"Members must contain between 1 and {MaxInnerCircleMembersPerRequest} users";
             response.ErrorCode = "INNER_CIRCLE_MEMBER_LIMIT_EXCEEDED";
+            _logger.LogWarning(
+                "inner_circle.add_members.failed reason=member_limit_exceeded owner={Owner} count={MemberCount} max={MaxCount}",
+                ToLogSafeAddress(owner),
+                requestMemberCount,
+                MaxInnerCircleMembersPerRequest);
             return response;
         }
 
@@ -223,6 +263,9 @@ public class InnerCircleApplicationService(
             response.Success = false;
             response.Message = "Inner Circle not found";
             response.ErrorCode = "INNER_CIRCLE_NOT_FOUND";
+            _logger.LogWarning(
+                "inner_circle.add_members.failed reason=inner_circle_not_found owner={Owner}",
+                ToLogSafeAddress(owner));
             return response;
         }
 
@@ -309,6 +352,12 @@ public class InnerCircleApplicationService(
             response.ErrorCode = (response.InvalidMembers.Count > 0 || hasMalformedMemberEntry)
                 ? "INNER_CIRCLE_INVALID_MEMBERS"
                 : "INNER_CIRCLE_DUPLICATE_MEMBERS";
+            _logger.LogWarning(
+                "inner_circle.add_members.failed reason=validation owner={Owner} duplicates={DuplicateCount} invalid={InvalidCount} malformed={HasMalformed}",
+                ToLogSafeAddress(owner),
+                response.DuplicateMembers.Count,
+                response.InvalidMembers.Count,
+                hasMalformedMemberEntry);
             return response;
         }
 
@@ -321,6 +370,10 @@ public class InnerCircleApplicationService(
             response.Success = false;
             response.Message = $"Failed to rotate Inner Circle keys: {rotationError}";
             response.ErrorCode = "INNER_CIRCLE_ROTATION_FAILED";
+            _logger.LogWarning(
+                "inner_circle.add_members.failed reason=key_rotation owner={Owner} error={Error}",
+                ToLogSafeAddress(owner),
+                rotationError);
             return response;
         }
 
@@ -341,8 +394,22 @@ public class InnerCircleApplicationService(
             await this._userFeedsCacheService.AddFeedToUserCacheAsync(memberAddress, innerCircle.FeedId);
         }
 
+        _logger.LogInformation(
+            "inner_circle.key_rotation.succeeded owner={Owner} feedId={FeedId} keyGeneration={KeyGeneration} memberCount={MemberCount}",
+            ToLogSafeAddress(owner),
+            innerCircle.FeedId,
+            keyGenerationEntity.KeyGeneration,
+            joiningMemberEncryptKeys.Count);
+
         response.Success = true;
         response.Message = "Members added to Inner Circle successfully";
+        requestStopwatch.Stop();
+        _logger.LogInformation(
+            "inner_circle.add_members.succeeded owner={Owner} feedId={FeedId} count={MemberCount} elapsedMs={ElapsedMs}",
+            ToLogSafeAddress(owner),
+            innerCircle.FeedId,
+            joiningMemberEncryptKeys.Count,
+            requestStopwatch.ElapsedMilliseconds);
         return response;
     }
 
@@ -434,5 +501,15 @@ public class InnerCircleApplicationService(
         };
 
         return (true, keyGeneration, null);
+    }
+
+    private static string ToLogSafeAddress(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            return "(empty)";
+        }
+
+        return address.Length <= 16 ? address : $"{address[..8]}...{address[^8..]}";
     }
 }

@@ -52,6 +52,24 @@ Feature: HushSocial server integration rules
     Then FollowerC should be added to Owner Inner Circle
     And key generation for Owner Inner Circle should be incremented
 
+  @FEAT-085
+  Scenario: Duplicate inner-circle add request returns explicit duplicate without key rotation
+    Given Owner profile mode is Close
+    And Owner Inner Circle already exists
+    And Owner has accepted follow request from FollowerA
+    When Owner tries to add "FollowerA" again to Owner Inner Circle
+    Then FEAT-085 duplicate add response should include "FollowerA"
+    And key generation for Owner Inner Circle should remain unchanged
+
+  @FEAT-085
+  Scenario: Same-block duplicate add-member requests remain deterministic
+    Given Owner profile mode is Close
+    And Owner Inner Circle already exists
+    When Owner submits duplicate add-members requests for "FollowerA" before block indexing
+    And a block is produced
+    Then "FollowerA" should be added to Owner Inner Circle
+    And FEAT-085 same-block duplicate processing should rotate Owner Inner Circle only once
+
   @FEAT-086
   Scenario: Open and close post visibility is enforced by permalink access
     Given Owner profile mode is Close

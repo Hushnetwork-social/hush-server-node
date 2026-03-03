@@ -1320,12 +1320,12 @@ public class FeedsGrpcService(
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[GetInnerCircle] ERROR: {ex.Message}");
+            _logger.LogError(ex, "inner_circle.get.failed");
             return new GetInnerCircleResponse
             {
                 Success = false,
                 Exists = false,
-                Message = $"Internal error: {ex.Message}"
+                Message = "Internal server error"
             };
         }
     }
@@ -1344,11 +1344,11 @@ public class FeedsGrpcService(
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CreateInnerCircle] ERROR: {ex.Message}");
+            _logger.LogError(ex, "inner_circle.create.failed.unhandled");
             return new CreateInnerCircleResponse
             {
                 Success = false,
-                Message = $"Internal error: {ex.Message}",
+                Message = "Internal server error",
                 ErrorCode = "INNER_CIRCLE_INTERNAL_ERROR"
             };
         }
@@ -1367,11 +1367,11 @@ public class FeedsGrpcService(
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[AddMembersToInnerCircle] ERROR: {ex.Message}");
+            _logger.LogError(ex, "inner_circle.add_members.failed.unhandled");
             return new AddMembersToInnerCircleResponse
             {
                 Success = false,
-                Message = $"Internal error: {ex.Message}",
+                Message = "Internal server error",
                 ErrorCode = "INNER_CIRCLE_INTERNAL_ERROR"
             };
         }

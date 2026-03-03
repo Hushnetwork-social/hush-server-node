@@ -10,6 +10,7 @@ using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.AutoMock;
 using Olimpo;
@@ -369,6 +370,81 @@ public class FeedsGrpcServiceInnerCircleTests
                 It.IsAny<BlockIndex>(),
                 It.IsAny<GroupFeedKeyGenerationEntity>(),
                 It.IsAny<BlockIndex>()), Times.Once);
+
+        VerifyLogContains(mocker.GetMock<ILogger<InnerCircleApplicationService>>(), LogLevel.Information, "inner_circle.add_members.requested", Times.Once());
+        VerifyLogContains(mocker.GetMock<ILogger<InnerCircleApplicationService>>(), LogLevel.Information, "inner_circle.key_rotation.succeeded", Times.Once());
+        VerifyLogContains(mocker.GetMock<ILogger<InnerCircleApplicationService>>(), LogLevel.Information, "inner_circle.add_members.succeeded", Times.Once());
+    }
+
+    [Fact]
+    public async Task AddMembersToInnerCircle_WhenValidationFails_ShouldEmitFailedTelemetry()
+    {
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+
+        var owner = TestDataFactory.CreateAddress();
+        var member = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+        var memberEncrypt = new EncryptKeys().PublicKey;
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetInnerCircleByOwnerAsync(owner))
+            .ReturnsAsync(new GroupFeed(feedId, "Inner Circle", "", false, new BlockIndex(10), 0, IsInnerCircle: true, OwnerPublicAddress: owner));
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetParticipantWithHistoryAsync(feedId, member))
+            .ReturnsAsync(new GroupFeedParticipantEntity(feedId, member, ParticipantType.Member, new BlockIndex(10)));
+
+        mocker.GetMock<IIdentityStorageService>()
+            .Setup(x => x.RetrieveIdentityAsync(member))
+            .ReturnsAsync(new Profile("member", "mb", member, memberEncrypt, true, new BlockIndex(1)));
+
+        var service = CreateService(mocker);
+
+        var response = await service.AddMembersToInnerCircle(
+            new AddMembersToInnerCircleRequest
+            {
+                OwnerPublicAddress = owner,
+                RequesterPublicAddress = owner,
+                Members =
+                {
+                    new InnerCircleMemberProto { PublicAddress = member, PublicEncryptAddress = memberEncrypt }
+                }
+            },
+            CreateMockServerCallContext());
+
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be("INNER_CIRCLE_DUPLICATE_MEMBERS");
+
+        VerifyLogContains(mocker.GetMock<ILogger<InnerCircleApplicationService>>(), LogLevel.Warning, "inner_circle.add_members.failed reason=validation", Times.Once());
+    }
+
+    [Fact]
+    public async Task AddMembersToInnerCircle_WhenUnhandledException_ShouldReturnSanitizedInternalError()
+    {
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+
+        var appServiceMock = mocker.GetMock<IInnerCircleApplicationService>();
+        appServiceMock
+            .Setup(x => x.AddMembersToInnerCircleAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<InnerCircleMemberProto>>()))
+            .ThrowsAsync(new InvalidOperationException("sensitive internals"));
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+
+        var response = await service.AddMembersToInnerCircle(
+            new AddMembersToInnerCircleRequest
+            {
+                OwnerPublicAddress = TestDataFactory.CreateAddress(),
+                RequesterPublicAddress = TestDataFactory.CreateAddress(),
+                Members = { new InnerCircleMemberProto { PublicAddress = TestDataFactory.CreateAddress(), PublicEncryptAddress = new EncryptKeys().PublicKey } }
+            },
+            CreateMockServerCallContext());
+
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be("INNER_CIRCLE_INTERNAL_ERROR");
+        response.Message.Should().Be("Internal server error");
+        response.Message.Should().NotContain("sensitive internals");
     }
 
     private static void SetupConfigurationMock(AutoMocker mocker, int maxMessagesPerResponse = 100)
@@ -392,6 +468,18 @@ public class FeedsGrpcServiceInnerCircleTests
         var appService = mocker.CreateInstance<InnerCircleApplicationService>();
         mocker.Use<IInnerCircleApplicationService>(appService);
         return mocker.CreateInstance<FeedsGrpcService>();
+    }
+
+    private static void VerifyLogContains(Mock<ILogger<InnerCircleApplicationService>> loggerMock, LogLevel level, string contains, Times times)
+    {
+        loggerMock.Verify(
+            x => x.Log(
+                level,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains(contains, StringComparison.Ordinal)),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            times);
     }
 
     private class MockServerCallContext : ServerCallContext

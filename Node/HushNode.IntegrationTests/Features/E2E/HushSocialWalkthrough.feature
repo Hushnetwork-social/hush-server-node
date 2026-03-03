@@ -31,6 +31,27 @@ Feature: HushSocial end-to-end walkthrough
     When Owner accepts follow request from FollowerA via browser
     Then Owner should see FollowerA in Inner Circle members
 
+  @FEAT-085
+  Scenario: Circle removal rotates keys and revoked follower loses latest key access
+    Given Owner opens HushSocial privacy settings
+    And Owner sets profile mode to Close
+    And Owner has approved followers "FollowerA, FollowerB" via browser
+    And Owner has created FEAT-085 circle "Dev Circle" via backend
+    And Owner has added "FollowerA, FollowerB" to FEAT-085 circle "Dev Circle" via backend
+    And FollowerB is actively viewing FEAT-085 circle "Dev Circle"
+    When Owner removes FollowerB from FEAT-085 circle "Dev Circle" via backend
+    Then FEAT-085 key generation for circle "Dev Circle" should be incremented
+    And FollowerB should not have FEAT-085 latest key access to circle "Dev Circle"
+    And FollowerA should have FEAT-085 latest key access to circle "Dev Circle"
+
+  @FEAT-085
+  Scenario: Repeated bootstrap sync with unchanged followers does not rotate keys
+    Given Owner opens HushSocial privacy settings
+    And Owner sets profile mode to Close
+    And Owner has approved followers "FollowerA" via browser
+    When Owner triggers FEAT-085 bootstrap sync twice with unchanged followers
+    Then Owner Inner Circle key generation should remain stable after repeated bootstrap
+
   @FEAT-086
   Scenario: Open and close post creation with permalink behavior
     Given Owner opens HushSocial composer

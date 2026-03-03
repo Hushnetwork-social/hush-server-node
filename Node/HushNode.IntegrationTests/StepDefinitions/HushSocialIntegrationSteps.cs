@@ -2,7 +2,9 @@ using FluentAssertions;
 using HushNetwork.proto;
 using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
+using HushShared.Feeds.Model;
 using HushServerNode.Testing;
+using Olimpo;
 using TechTalk.SpecFlow;
 
 namespace HushNode.IntegrationTests.StepDefinitions;
@@ -15,7 +17,12 @@ public sealed class HushSocialIntegrationSteps
     private const string OwnerInnerCircleFeedIdKey = "OwnerInnerCircleFeedId";
     private const string OwnerInnerCircleKeyGenerationBeforeSyncKey = "OwnerInnerCircleKeyGenerationBeforeSync";
     private const string OwnerInnerCircleKeyGenerationAfterSyncKey = "OwnerInnerCircleKeyGenerationAfterSync";
+    private const string OwnerInnerCircleDuplicateAddResponseKey = "OwnerInnerCircleDuplicateAddResponse";
+    private const string OwnerInnerCircleSameBlockKeyGenerationBeforeKey = "OwnerInnerCircleSameBlockKeyGenerationBefore";
+    private const string OwnerInnerCircleSameBlockKeyGenerationAfterKey = "OwnerInnerCircleSameBlockKeyGenerationAfter";
     private const string BootstrapPeerNamesKey = "HushSocialBootstrapPeerNames";
+    private const string PendingFollowersKey = "HushSocialPendingFollowers";
+    private const string ApprovedFollowersKey = "HushSocialApprovedFollowers";
 
     private readonly ScenarioContext _scenarioContext;
 
@@ -40,6 +47,55 @@ public sealed class HushSocialIntegrationSteps
     public void GivenOwnerProfileModeIsClose()
     {
         _scenarioContext["OwnerProfileMode"] = "Close";
+    }
+
+    [When(@"FollowerA requests to follow Owner")]
+    public void WhenFollowerARequestsToFollowOwner()
+    {
+        var pending = GetOrCreateFollowerSet(PendingFollowersKey);
+        pending.Add("FollowerA");
+    }
+
+    [Then(@"the follow request should be pending approval")]
+    public void ThenTheFollowRequestShouldBePendingApproval()
+    {
+        var pending = GetOrCreateFollowerSet(PendingFollowersKey);
+        pending.Should().Contain("FollowerA");
+    }
+
+    [When(@"Owner accepts follow request from FollowerA")]
+    public async Task WhenOwnerAcceptsFollowRequestFromFollowerA()
+    {
+        await AcceptFollowRequestAsync("FollowerA");
+    }
+
+    [Given(@"Owner has accepted follow request from (.*)")]
+    public async Task GivenOwnerHasAcceptedFollowRequestFrom(string followerName)
+    {
+        await AcceptFollowRequestAsync(followerName);
+    }
+
+    [Given(@"Owner has accepted follow requests from ""(.*)""")]
+    public async Task GivenOwnerHasAcceptedFollowRequestsFrom(string csvFollowers)
+    {
+        var followers = ParseCsvUsers(csvFollowers);
+        foreach (var follower in followers)
+        {
+            await AcceptFollowRequestAsync(follower);
+        }
+    }
+
+    [Then(@"FollowerA should be in Owner Inner Circle")]
+    public async Task ThenFollowerAShouldBeInOwnerInnerCircle()
+    {
+        await AssertFollowerInInnerCircleAsync("FollowerA");
+    }
+
+    [Then(@"Owner should see FollowerA in approved followers")]
+    public void ThenOwnerShouldSeeFollowerAInApprovedFollowers()
+    {
+        var approved = GetOrCreateFollowerSet(ApprovedFollowersKey);
+        approved.Should().Contain("FollowerA");
     }
 
     [Given(@"Owner has existing chat feeds with ""(.*)""")]
@@ -122,6 +178,140 @@ public sealed class HushSocialIntegrationSteps
         await EnsureChatFeedExistsAsync(OwnerName, followerName);
     }
 
+    [Given(@"Owner has created circle ""(.*)""")]
+    public async Task GivenOwnerHasCreatedCircle(string circleName)
+    {
+        await EnsureCircleExistsAsync(circleName);
+    }
+
+    [Given(@"Owner has added ""(.*)"" to circle ""(.*)""")]
+    public async Task GivenOwnerHasAddedUsersToCircle(string csvFollowers, string circleName)
+    {
+        var feedId = await EnsureCircleExistsAsync(circleName);
+        var owner = GetTestIdentity(OwnerName);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var followers = ParseCsvUsers(csvFollowers);
+
+        foreach (var followerName in followers)
+        {
+            var follower = GetTestIdentity(followerName);
+            var addResponse = await feedClient.AddMemberToGroupFeedAsync(new AddMemberToGroupFeedRequest
+            {
+                FeedId = feedId.ToString(),
+                AdminPublicAddress = owner.PublicSigningAddress,
+                NewMemberPublicAddress = follower.PublicSigningAddress,
+                NewMemberPublicEncryptKey = follower.PublicEncryptAddress
+            });
+
+            addResponse.Success.Should().BeTrue(
+                $"AddMemberToGroupFeed should succeed for {followerName}: {addResponse.Message}");
+            await GetBlockControl().ProduceBlockAsync();
+        }
+    }
+
+    [Given(@"Owner posts ""(.*)"" to circle ""(.*)""")]
+    public async Task GivenOwnerPostsToCircle(string message, string circleName)
+    {
+        await PublishGroupMessageAsync(circleName, message, contextKeyPrefix: "PreRemoval");
+    }
+
+    [When(@"Owner removes FollowerB from circle ""(.*)""")]
+    public async Task WhenOwnerRemovesFollowerBFromCircle(string circleName)
+    {
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var owner = GetTestIdentity(OwnerName);
+        var followerB = GetTestIdentity("FollowerB");
+        var feedId = await EnsureCircleExistsAsync(circleName);
+
+        var before = await GetCurrentGroupKeyGenerationForUserAsync(feedId, owner.PublicSigningAddress);
+        _scenarioContext[$"CircleKeyGenerationBeforeRemoval_{circleName}"] = before;
+
+        var removeResponse = await feedClient.BanFromGroupFeedAsync(new BanFromGroupFeedRequest
+        {
+            FeedId = feedId.ToString(),
+            AdminPublicAddress = owner.PublicSigningAddress,
+            BannedUserPublicAddress = followerB.PublicSigningAddress,
+            Reason = "FEAT-085 removal test"
+        });
+
+        removeResponse.Success.Should().BeTrue($"BanFromGroupFeed should succeed: {removeResponse.Message}");
+        await GetBlockControl().ProduceBlockAsync();
+
+        var after = await GetCurrentGroupKeyGenerationForUserAsync(feedId, owner.PublicSigningAddress);
+        _scenarioContext[$"CircleKeyGenerationAfterRemoval_{circleName}"] = after;
+    }
+
+    [Then(@"key generation for circle ""(.*)"" should be incremented")]
+    public void ThenKeyGenerationForCircleShouldBeIncremented(string circleName)
+    {
+        var before = (int)_scenarioContext[$"CircleKeyGenerationBeforeRemoval_{circleName}"];
+        var after = (int)_scenarioContext[$"CircleKeyGenerationAfterRemoval_{circleName}"];
+        after.Should().BeGreaterThan(before, "removing a member should rotate group keys");
+    }
+
+    [Then(@"FollowerB should not be able to decrypt new posts in circle ""(.*)""")]
+    public async Task ThenFollowerBShouldNotBeAbleToDecryptNewPostsInCircle(string circleName)
+    {
+        await EnsurePostRemovalMessageExistsAsync(circleName);
+        var feedId = (FeedId)_scenarioContext[$"CircleFeedId_{circleName}"];
+        var messageId = (FeedMessageId)_scenarioContext[$"PostRemovalMessageId_{circleName}"];
+        var messageKeyGeneration = (int)_scenarioContext[$"PostRemovalMessageKeyGeneration_{circleName}"];
+        var followerB = GetTestIdentity("FollowerB");
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+
+        var messages = await feedClient.GetFeedMessagesForAddressAsync(new GetFeedMessagesForAddressRequest
+        {
+            ProfilePublicKey = followerB.PublicSigningAddress,
+            BlockIndex = 0
+        });
+
+        var targetMessage = messages.Messages.FirstOrDefault(message =>
+            message.FeedId == feedId.ToString() &&
+            message.FeedMessageId == messageId.ToString());
+
+        if (targetMessage is null)
+        {
+            return;
+        }
+
+        var keys = await feedClient.GetKeyGenerationsAsync(new GetKeyGenerationsRequest
+        {
+            FeedId = feedId.ToString(),
+            UserPublicAddress = followerB.PublicSigningAddress
+        });
+
+        keys.KeyGenerations.Any(key => key.KeyGeneration == messageKeyGeneration)
+            .Should()
+            .BeFalse("removed members must not receive keys for post-removal generations");
+    }
+
+    [Then(@"FollowerA should be able to decrypt new posts in circle ""(.*)""")]
+    public async Task ThenFollowerAShouldBeAbleToDecryptNewPostsInCircle(string circleName)
+    {
+        await EnsurePostRemovalMessageExistsAsync(circleName);
+        var feedId = (FeedId)_scenarioContext[$"CircleFeedId_{circleName}"];
+        var messageId = (FeedMessageId)_scenarioContext[$"PostRemovalMessageId_{circleName}"];
+        var expectedText = (string)_scenarioContext[$"PostRemovalMessageText_{circleName}"];
+        var followerA = GetTestIdentity("FollowerA");
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+
+        var messages = await feedClient.GetFeedMessagesForAddressAsync(new GetFeedMessagesForAddressRequest
+        {
+            ProfilePublicKey = followerA.PublicSigningAddress,
+            BlockIndex = 0
+        });
+
+        var targetMessage = messages.Messages.FirstOrDefault(message =>
+            message.FeedId == feedId.ToString() &&
+            message.FeedMessageId == messageId.ToString());
+
+        targetMessage.Should().NotBeNull("remaining members should still read post-removal messages");
+
+        var followerAKey = await DecryptLatestAesKeyAsync(feedId, followerA);
+        var decrypted = EncryptKeys.AesDecrypt(targetMessage!.MessageContent, followerAKey.AesKey);
+        decrypted.Should().Be(expectedText);
+    }
+
     [When(@"FEAT-085 background sync runs after chat creation")]
     public async Task WhenFeat085BackgroundSyncRunsAfterChatCreation()
     {
@@ -157,6 +347,12 @@ public sealed class HushSocialIntegrationSteps
             .Contain(followerC.PublicSigningAddress);
     }
 
+    [Then(@"""(.*)"" should be added to Owner Inner Circle")]
+    public async Task ThenFollowerShouldBeAddedToOwnerInnerCircle(string followerName)
+    {
+        await AssertFollowerInInnerCircleAsync(followerName);
+    }
+
     [Then(@"key generation for Owner Inner Circle should be incremented")]
     public void ThenKeyGenerationForOwnerInnerCircleShouldBeIncremented()
     {
@@ -172,6 +368,96 @@ public sealed class HushSocialIntegrationSteps
         var after = (int)afterObj!;
 
         after.Should().BeGreaterThan(before, "adding new inner circle members should rotate the key");
+    }
+
+    [When(@"Owner tries to add ""(.*)"" again to Owner Inner Circle")]
+    public async Task WhenOwnerTriesToAddFollowerAgainToOwnerInnerCircle(string followerName)
+    {
+        var owner = GetTestIdentity(OwnerName);
+        var follower = GetTestIdentity(followerName);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var innerCircleFeedId = await EnsureOwnerInnerCircleExistsAsync();
+
+        var before = await GetOwnerCurrentKeyGenerationAsync(innerCircleFeedId);
+        _scenarioContext[OwnerInnerCircleKeyGenerationBeforeSyncKey] = before;
+
+        var response = await feedClient.AddMembersToInnerCircleAsync(new AddMembersToInnerCircleRequest
+        {
+            OwnerPublicAddress = owner.PublicSigningAddress,
+            RequesterPublicAddress = owner.PublicSigningAddress,
+            Members =
+            {
+                new InnerCircleMemberProto
+                {
+                    PublicAddress = follower.PublicSigningAddress,
+                    PublicEncryptAddress = follower.PublicEncryptAddress
+                }
+            }
+        });
+
+        _scenarioContext[OwnerInnerCircleDuplicateAddResponseKey] = response;
+        var after = await GetOwnerCurrentKeyGenerationAsync(innerCircleFeedId);
+        _scenarioContext[OwnerInnerCircleKeyGenerationAfterSyncKey] = after;
+    }
+
+    [Then(@"FEAT-085 duplicate add response should include ""(.*)""")]
+    public void ThenFeat085DuplicateAddResponseShouldInclude(string followerName)
+    {
+        var response = (AddMembersToInnerCircleResponse)_scenarioContext[OwnerInnerCircleDuplicateAddResponseKey];
+        var follower = GetTestIdentity(followerName);
+
+        response.Success.Should().BeFalse("duplicate add should return explicit failure payload");
+        response.DuplicateMembers.Should().Contain(follower.PublicSigningAddress);
+    }
+
+    [Then(@"key generation for Owner Inner Circle should remain unchanged")]
+    public void ThenKeyGenerationForOwnerInnerCircleShouldRemainUnchanged()
+    {
+        var before = (int)_scenarioContext[OwnerInnerCircleKeyGenerationBeforeSyncKey];
+        var after = (int)_scenarioContext[OwnerInnerCircleKeyGenerationAfterSyncKey];
+        after.Should().Be(before, "duplicate add should not rotate keys");
+    }
+
+    [When(@"Owner submits duplicate add-members requests for ""(.*)"" before block indexing")]
+    public async Task WhenOwnerSubmitsDuplicateAddMembersRequestsForBeforeBlockIndexing(string followerName)
+    {
+        var owner = GetTestIdentity(OwnerName);
+        var follower = GetTestIdentity(followerName);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var innerCircleFeedId = await EnsureOwnerInnerCircleExistsAsync();
+
+        var before = await GetOwnerCurrentKeyGenerationAsync(innerCircleFeedId);
+        _scenarioContext[OwnerInnerCircleSameBlockKeyGenerationBeforeKey] = before;
+
+        var request = new AddMembersToInnerCircleRequest
+        {
+            OwnerPublicAddress = owner.PublicSigningAddress,
+            RequesterPublicAddress = owner.PublicSigningAddress
+        };
+
+        request.Members.Add(new InnerCircleMemberProto
+        {
+            PublicAddress = follower.PublicSigningAddress,
+            PublicEncryptAddress = follower.PublicEncryptAddress
+        });
+
+        var first = await feedClient.AddMembersToInnerCircleAsync(request);
+        first.Success.Should().BeTrue($"First add-members request should be accepted pre-indexing: {first.Message}");
+
+        var second = await feedClient.AddMembersToInnerCircleAsync(request);
+        second.Success.Should().BeFalse("second duplicate add-members request should be rejected deterministically");
+        second.DuplicateMembers.Should().Contain(follower.PublicSigningAddress);
+    }
+
+    [Then(@"FEAT-085 same-block duplicate processing should rotate Owner Inner Circle only once")]
+    public async Task ThenFeat085SameBlockDuplicateProcessingShouldRotateOwnerInnerCircleOnlyOnce()
+    {
+        var innerCircleFeedId = await EnsureOwnerInnerCircleExistsAsync();
+        var before = (int)_scenarioContext[OwnerInnerCircleSameBlockKeyGenerationBeforeKey];
+        var after = await GetOwnerCurrentKeyGenerationAsync(innerCircleFeedId);
+        _scenarioContext[OwnerInnerCircleSameBlockKeyGenerationAfterKey] = after;
+
+        after.Should().Be(before + 1, "same-block duplicate add-members should add once and skip duplicate rotation");
     }
 
     private async Task RunFeat085BootstrapAsync()
@@ -216,6 +502,170 @@ public sealed class HushSocialIntegrationSteps
 
         await GetBlockControl().ProduceBlockAsync();
         _scenarioContext[OwnerInnerCircleFeedIdKey] = innerCircleFeedId;
+    }
+
+    private async Task AcceptFollowRequestAsync(string followerName)
+    {
+        var pending = GetOrCreateFollowerSet(PendingFollowersKey);
+        pending.Remove(followerName);
+
+        await EnsureOwnerInnerCircleExistsAsync();
+        var owner = GetTestIdentity(OwnerName);
+        var follower = GetTestIdentity(followerName);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var response = await feedClient.AddMembersToInnerCircleAsync(new AddMembersToInnerCircleRequest
+        {
+            OwnerPublicAddress = owner.PublicSigningAddress,
+            RequesterPublicAddress = owner.PublicSigningAddress,
+            Members =
+            {
+                new InnerCircleMemberProto
+                {
+                    PublicAddress = follower.PublicSigningAddress,
+                    PublicEncryptAddress = follower.PublicEncryptAddress
+                }
+            }
+        });
+
+        response.Success.Should().BeTrue($"Accept follow should add follower to Inner Circle: {response.Message}");
+        await GetBlockControl().ProduceBlockAsync();
+
+        var approved = GetOrCreateFollowerSet(ApprovedFollowersKey);
+        approved.Add(followerName);
+    }
+
+    private async Task AssertFollowerInInnerCircleAsync(string followerName)
+    {
+        var follower = GetTestIdentity(followerName);
+        var innerCircleFeedId = await EnsureOwnerInnerCircleExistsAsync();
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var members = await feedClient.GetGroupMembersAsync(new GetGroupMembersRequest
+        {
+            FeedId = innerCircleFeedId
+        });
+
+        members.Members
+            .Select(member => member.PublicAddress)
+            .Should()
+            .Contain(follower.PublicSigningAddress);
+    }
+
+    private HashSet<string> GetOrCreateFollowerSet(string key)
+    {
+        if (_scenarioContext.TryGetValue(key, out var followersObj)
+            && followersObj is HashSet<string> followers)
+        {
+            return followers;
+        }
+
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _scenarioContext[key] = set;
+        return set;
+    }
+
+    private async Task<FeedId> EnsureCircleExistsAsync(string circleName)
+    {
+        var circleKey = $"CircleFeedId_{circleName}";
+        if (_scenarioContext.TryGetValue(circleKey, out var existingObj)
+            && existingObj is FeedId existingFeedId)
+        {
+            return existingFeedId;
+        }
+
+        var owner = GetTestIdentity(OwnerName);
+        var blockchainClient = GetGrpcFactory().CreateClient<HushBlockchain.HushBlockchainClient>();
+        var (txJson, feedId, _) = TestTransactionFactory.CreateGroupFeed(owner, circleName);
+
+        var submitResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = txJson
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"Create group '{circleName}' should succeed: {submitResponse.Message}");
+        await GetBlockControl().ProduceBlockAsync();
+
+        _scenarioContext[circleKey] = feedId;
+        return feedId;
+    }
+
+    private async Task<int> GetCurrentGroupKeyGenerationAsync(FeedId feedId)
+    {
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var group = await feedClient.GetGroupFeedAsync(new GetGroupFeedRequest
+        {
+            FeedId = feedId.ToString()
+        });
+
+        group.Success.Should().BeTrue($"GetGroupFeed should succeed: {group.Message}");
+        return group.CurrentKeyGeneration;
+    }
+
+    private async Task<int> GetCurrentGroupKeyGenerationForUserAsync(FeedId feedId, string userPublicAddress)
+    {
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var keys = await feedClient.GetKeyGenerationsAsync(new GetKeyGenerationsRequest
+        {
+            FeedId = feedId.ToString(),
+            UserPublicAddress = userPublicAddress
+        });
+
+        if (keys.KeyGenerations.Count == 0)
+        {
+            return 0;
+        }
+
+        return keys.KeyGenerations.Max(key => key.KeyGeneration);
+    }
+
+    private async Task<(int KeyGeneration, string AesKey)> DecryptLatestAesKeyAsync(FeedId feedId, TestIdentity identity)
+    {
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var keys = await feedClient.GetKeyGenerationsAsync(new GetKeyGenerationsRequest
+        {
+            FeedId = feedId.ToString(),
+            UserPublicAddress = identity.PublicSigningAddress
+        });
+
+        keys.KeyGenerations.Should().NotBeEmpty("authorized user should have key generations");
+        var latest = keys.KeyGenerations.OrderByDescending(key => key.KeyGeneration).First();
+        var aesKey = EncryptKeys.Decrypt(latest.EncryptedKey, identity.PrivateEncryptKey);
+        return (latest.KeyGeneration, aesKey);
+    }
+
+    private async Task PublishGroupMessageAsync(string circleName, string message, string contextKeyPrefix)
+    {
+        var owner = GetTestIdentity(OwnerName);
+        var feedId = await EnsureCircleExistsAsync(circleName);
+        var latestKey = await DecryptLatestAesKeyAsync(feedId, owner);
+        var blockchainClient = GetGrpcFactory().CreateClient<HushBlockchain.HushBlockchainClient>();
+        var (txJson, messageId) = TestTransactionFactory.CreateGroupFeedMessage(
+            owner,
+            feedId,
+            message,
+            latestKey.AesKey,
+            latestKey.KeyGeneration);
+
+        var submitResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = txJson
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"Group message should succeed: {submitResponse.Message}");
+        await GetBlockControl().ProduceBlockAsync();
+
+        _scenarioContext[$"{contextKeyPrefix}MessageId_{circleName}"] = messageId;
+        _scenarioContext[$"{contextKeyPrefix}MessageText_{circleName}"] = message;
+        _scenarioContext[$"{contextKeyPrefix}MessageKeyGeneration_{circleName}"] = latestKey.KeyGeneration;
+    }
+
+    private async Task EnsurePostRemovalMessageExistsAsync(string circleName)
+    {
+        if (_scenarioContext.ContainsKey($"PostRemovalMessageId_{circleName}"))
+        {
+            return;
+        }
+
+        await PublishGroupMessageAsync(circleName, "Post-removal message", "PostRemoval");
     }
 
     private async Task<string> EnsureOwnerInnerCircleExistsAsync()
