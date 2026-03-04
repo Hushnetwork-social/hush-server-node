@@ -22,6 +22,7 @@ service HushFeed {
   rpc GetGroupFeedByInviteCode (GetGroupFeedByInviteCodeRequest) returns (GetGroupFeedByInviteCodeResponse);
   rpc SearchPublicGroups (SearchPublicGroupsRequest) returns (SearchPublicGroupsResponse);
   rpc GetInnerCircle (GetInnerCircleRequest) returns (GetInnerCircleResponse);
+  rpc GetSocialPostPermalink (GetSocialPostPermalinkRequest) returns (GetSocialPostPermalinkResponse);
 
   // Group Feed Creation & Membership Operations
   rpc CreateGroupFeed (NewGroupFeedRequest) returns (NewGroupFeedResponse);
@@ -29,6 +30,7 @@ service HushFeed {
   rpc LeaveGroupFeed (LeaveGroupFeedRequest) returns (LeaveGroupFeedResponse);
   rpc CreateInnerCircle (CreateInnerCircleRequest) returns (CreateInnerCircleResponse);
   rpc AddMembersToInnerCircle (AddMembersToInnerCircleRequest) returns (AddMembersToInnerCircleResponse);
+  rpc CreateSocialPost (CreateSocialPostRequest) returns (CreateSocialPostResponse);
 
   // Group Feed Admin Operations
   rpc AddMemberToGroupFeed (AddMemberToGroupFeedRequest) returns (AddMemberToGroupFeedResponse);
@@ -574,6 +576,86 @@ message GetOwnerCirclesResponse {
   bool Success = 1;
   string Message = 2;
   repeated CircleSummaryProto Circles = 3;
+}
+
+// --- Social Post Contracts (FEAT-086) ---
+
+enum SocialPostVisibilityProto {
+  SOCIAL_POST_VISIBILITY_UNSPECIFIED = 0;
+  SOCIAL_POST_VISIBILITY_OPEN = 1;
+  SOCIAL_POST_VISIBILITY_PRIVATE = 2;
+}
+
+enum SocialPostAttachmentKindProto {
+  SOCIAL_POST_ATTACHMENT_KIND_UNSPECIFIED = 0;
+  SOCIAL_POST_ATTACHMENT_KIND_IMAGE = 1;
+  SOCIAL_POST_ATTACHMENT_KIND_VIDEO = 2;
+}
+
+enum SocialPermalinkAccessStateProto {
+  SOCIAL_PERMALINK_ACCESS_STATE_UNSPECIFIED = 0;
+  SOCIAL_PERMALINK_ACCESS_STATE_ALLOWED = 1;
+  SOCIAL_PERMALINK_ACCESS_STATE_GUEST_DENIED = 2;
+  SOCIAL_PERMALINK_ACCESS_STATE_UNAUTHORIZED_DENIED = 3;
+  SOCIAL_PERMALINK_ACCESS_STATE_NOT_FOUND = 4;
+}
+
+message SocialPostAttachmentProto {
+  string AttachmentId = 1;
+  string MimeType = 2;
+  int64 Size = 3;
+  string FileName = 4;
+  string Hash = 5;
+  SocialPostAttachmentKindProto Kind = 6;
+}
+
+message SocialPostAudienceProto {
+  SocialPostVisibilityProto Visibility = 1;
+  repeated string CircleFeedIds = 2;
+}
+
+message CreateSocialPostRequest {
+  string PostId = 1;
+  string AuthorPublicAddress = 2;
+  string Content = 3;
+  SocialPostAudienceProto Audience = 4;
+  repeated SocialPostAttachmentProto Attachments = 5;
+  int64 CreatedAtUnixMs = 6;
+}
+
+message CreateSocialPostResponse {
+  bool Success = 1;
+  string Message = 2;
+  optional string ErrorCode = 3;
+  optional string Permalink = 4;
+}
+
+message GetSocialPostPermalinkRequest {
+  string PostId = 1;
+  optional string RequesterPublicAddress = 2;
+  bool IsAuthenticated = 3;
+}
+
+message SocialPostOpenGraphProto {
+  string Title = 1;
+  string Description = 2;
+  optional string ImageUrl = 3;
+  bool IsGenericPrivate = 4;
+  string CacheControl = 5;
+}
+
+message GetSocialPostPermalinkResponse {
+  bool Success = 1;
+  string Message = 2;
+  SocialPermalinkAccessStateProto AccessState = 3;
+  optional string PostId = 4;
+  optional string AuthorPublicAddress = 5;
+  optional string Content = 6;
+  optional int64 CreatedAtBlock = 7;
+  repeated string CircleFeedIds = 8;
+  bool CanInteract = 9;
+  SocialPostOpenGraphProto OpenGraph = 10;
+  optional string ErrorCode = 11;
 }
 
 // =============================================================================
