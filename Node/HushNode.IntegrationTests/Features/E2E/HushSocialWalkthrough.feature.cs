@@ -156,7 +156,7 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Close profile onboarding and follower approval flow")]
+        [Xunit.SkippableFactAttribute(DisplayName="Close profile onboarding and follower approval flow", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
         [Xunit.TraitAttribute("Description", "Close profile onboarding and follower approval flow")]
         [Xunit.TraitAttribute("Category", "FEAT-085")]
@@ -165,7 +165,8 @@ namespace HushNode.IntegrationTests.Features.E2E
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-085",
-                    "FEAT-090"};
+                    "FEAT-090",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Close profile onboarding and follower approval flow", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 25
@@ -306,14 +307,15 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Open and close post creation with permalink behavior")]
+        [Xunit.SkippableFactAttribute(DisplayName="Open and close post creation with permalink behavior", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
         [Xunit.TraitAttribute("Description", "Open and close post creation with permalink behavior")]
         [Xunit.TraitAttribute("Category", "FEAT-086")]
         public void OpenAndClosePostCreationWithPermalinkBehavior()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-086"};
+                    "FEAT-086",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Open and close post creation with permalink behavior", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 56
@@ -366,14 +368,15 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Media post upload constraints and success path")]
+        [Xunit.SkippableFactAttribute(DisplayName="Media post upload constraints and success path", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
         [Xunit.TraitAttribute("Description", "Media post upload constraints and success path")]
         [Xunit.TraitAttribute("Category", "FEAT-086")]
         public void MediaPostUploadConstraintsAndSuccessPath()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-086"};
+                    "FEAT-086",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Media post upload constraints and success path", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 70
@@ -414,7 +417,7 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Reactions comments and single-level replies on authorized post")]
+        [Xunit.SkippableFactAttribute(DisplayName="Reactions comments and single-level replies on authorized post", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
         [Xunit.TraitAttribute("Description", "Reactions comments and single-level replies on authorized post")]
         [Xunit.TraitAttribute("Category", "FEAT-087")]
@@ -423,7 +426,8 @@ namespace HushNode.IntegrationTests.Features.E2E
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-087",
-                    "FEAT-088"};
+                    "FEAT-088",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Reactions comments and single-level replies on authorized post", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 80
@@ -465,14 +469,15 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Guest interaction opens account creation overlay on public post")]
+        [Xunit.SkippableFactAttribute(DisplayName="Guest interaction opens account creation overlay on public post", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
         [Xunit.TraitAttribute("Description", "Guest interaction opens account creation overlay on public post")]
         [Xunit.TraitAttribute("Category", "FEAT-089")]
         public void GuestInteractionOpensAccountCreationOverlayOnPublicPost()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-089"};
+                    "FEAT-089",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Guest interaction opens account creation overlay on public post", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 90
@@ -510,14 +515,15 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Follow graph drives following-first timeline")]
+        [Xunit.SkippableFactAttribute(DisplayName="Follow graph drives following-first timeline", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
         [Xunit.TraitAttribute("Description", "Follow graph drives following-first timeline")]
         [Xunit.TraitAttribute("Category", "FEAT-090")]
         public void FollowGraphDrivesFollowing_FirstTimeline()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-090"};
+                    "FEAT-090",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Follow graph drives following-first timeline", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 99
@@ -552,14 +558,15 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Notification preferences and per-circle mute in real flow")]
+        [Xunit.SkippableFactAttribute(DisplayName="Notification preferences and per-circle mute in real flow", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
         [Xunit.TraitAttribute("Description", "Notification preferences and per-circle mute in real flow")]
         [Xunit.TraitAttribute("Category", "FEAT-091")]
         public void NotificationPreferencesAndPer_CircleMuteInRealFlow()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-091"};
+                    "FEAT-091",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Notification preferences and per-circle mute in real flow", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 107

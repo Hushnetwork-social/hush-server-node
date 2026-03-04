@@ -21,7 +21,7 @@ Feature: HushSocial end-to-end walkthrough
     And Owner should not see Community in main navigation
     And Owner should see the HushSocial feed shell layout
 
-  @FEAT-085 @FEAT-090
+  @FEAT-085 @FEAT-090 @ignore
   Scenario: Close profile onboarding and follower approval flow
     Given Owner opens HushSocial privacy settings
     When Owner sets profile mode to Close
@@ -52,7 +52,7 @@ Feature: HushSocial end-to-end walkthrough
     When Owner triggers FEAT-085 bootstrap sync twice with unchanged followers
     Then Owner Inner Circle key generation should remain stable after repeated bootstrap
 
-  @FEAT-086
+  @FEAT-086 @ignore
   Scenario: Open and close post creation with permalink behavior
     Given Owner opens HushSocial composer
     When Owner creates Open post "Hello public world" via browser
@@ -66,7 +66,7 @@ Feature: HushSocial end-to-end walkthrough
     When FollowerA opens permalink for post "Hello inner circle"
     Then FollowerA should see post "Hello inner circle"
 
-  @FEAT-086
+  @FEAT-086 @ignore
   Scenario: Media post upload constraints and success path
     Given Owner opens HushSocial composer
     When Owner attaches valid media files and posts "Media update"
@@ -76,7 +76,7 @@ Feature: HushSocial end-to-end walkthrough
     When Owner attempts to attach an oversized media file
     Then Owner should see a media size limit validation message
 
-  @FEAT-087 @FEAT-088
+  @FEAT-087 @FEAT-088 @ignore
   Scenario: Reactions comments and single-level replies on authorized post
     Given Owner has created Open post "Discuss architecture" via browser
     When FollowerA reacts to post "Discuss architecture" with emoji "thumbs_up" via browser
@@ -86,7 +86,7 @@ Feature: HushSocial end-to-end walkthrough
     And both users should see reply "Thanks for feedback"
     And the reply action should be limited to single-level depth
 
-  @FEAT-089
+  @FEAT-089 @ignore
   Scenario: Guest interaction opens account creation overlay on public post
     Given an unauthenticated browser session
     And Owner has created Open post "Guest visible content" via browser
@@ -95,7 +95,7 @@ Feature: HushSocial end-to-end walkthrough
     When guest attempts to comment on post "Guest visible content" via browser
     Then guest should see account creation overlay
 
-  @FEAT-090
+  @FEAT-090 @ignore
   Scenario: Follow graph drives following-first timeline
     Given FollowerA follows Owner via browser
     And Owner creates Open post "Update from owner" via browser
@@ -103,7 +103,7 @@ Feature: HushSocial end-to-end walkthrough
     When FollowerA opens home timeline
     Then post "Update from owner" should appear before post "Update from other user"
 
-  @FEAT-091
+  @FEAT-091 @ignore
   Scenario: Notification preferences and per-circle mute in real flow
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA via browser

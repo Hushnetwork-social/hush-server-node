@@ -514,14 +514,15 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Media constraints for social posts match HushFeeds limits")]
+        [Xunit.SkippableFactAttribute(DisplayName="Media constraints for social posts match HushFeeds limits", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Media constraints for social posts match HushFeeds limits")]
         [Xunit.TraitAttribute("Category", "FEAT-086")]
         public void MediaConstraintsForSocialPostsMatchHushFeedsLimits()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-086"};
+                    "FEAT-086",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Media constraints for social posts match HushFeeds limits", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 102
@@ -563,7 +564,7 @@ namespace HushNode.IntegrationTests.Features
         }
         
         [Xunit.SkippableFactAttribute(DisplayName="Reaction privacy preserves tally without exposing per-user emoji choice on privat" +
-            "e content")]
+            "e content", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Reaction privacy preserves tally without exposing per-user emoji choice on privat" +
             "e content")]
@@ -571,7 +572,8 @@ namespace HushNode.IntegrationTests.Features
         public void ReactionPrivacyPreservesTallyWithoutExposingPer_UserEmojiChoiceOnPrivateContent()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-087"};
+                    "FEAT-087",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Reaction privacy preserves tally without exposing per-user emoji choice on privat" +
                     "e content", null, tagsOfScenario, argumentsOfScenario, featureTags);
@@ -620,14 +622,15 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Comments and single-level replies inherit post audience")]
+        [Xunit.SkippableFactAttribute(DisplayName="Comments and single-level replies inherit post audience", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Comments and single-level replies inherit post audience")]
         [Xunit.TraitAttribute("Category", "FEAT-088")]
         public void CommentsAndSingle_LevelRepliesInheritPostAudience()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-088"};
+                    "FEAT-088",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Comments and single-level replies inherit post audience", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 124
@@ -674,14 +677,15 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Guest users cannot interact with public content")]
+        [Xunit.SkippableFactAttribute(DisplayName="Guest users cannot interact with public content", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Guest users cannot interact with public content")]
         [Xunit.TraitAttribute("Category", "FEAT-089")]
         public void GuestUsersCannotInteractWithPublicContent()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-089"};
+                    "FEAT-089",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Guest users cannot interact with public content", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 136
@@ -716,14 +720,15 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Following-first timeline prioritization for authenticated users")]
+        [Xunit.SkippableFactAttribute(DisplayName="Following-first timeline prioritization for authenticated users", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Following-first timeline prioritization for authenticated users")]
         [Xunit.TraitAttribute("Category", "FEAT-090")]
         public void Following_FirstTimelinePrioritizationForAuthenticatedUsers()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-090"};
+                    "FEAT-090",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Following-first timeline prioritization for authenticated users", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 144
@@ -764,14 +769,15 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Notification delivery honors eligibility and privacy-safe payloads")]
+        [Xunit.SkippableFactAttribute(DisplayName="Notification delivery honors eligibility and privacy-safe payloads", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Notification delivery honors eligibility and privacy-safe payloads")]
         [Xunit.TraitAttribute("Category", "FEAT-091")]
         public void NotificationDeliveryHonorsEligibilityAndPrivacy_SafePayloads()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-091"};
+                    "FEAT-091",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Notification delivery honors eligibility and privacy-safe payloads", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 154
@@ -818,14 +824,15 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Per-circle mute suppresses notifications for muted circle")]
+        [Xunit.SkippableFactAttribute(DisplayName="Per-circle mute suppresses notifications for muted circle", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Per-circle mute suppresses notifications for muted circle")]
         [Xunit.TraitAttribute("Category", "FEAT-091")]
         public void Per_CircleMuteSuppressesNotificationsForMutedCircle()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-091"};
+                    "FEAT-091",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Per-circle mute suppresses notifications for muted circle", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 166

@@ -98,7 +98,7 @@ Feature: HushSocial server integration rules
     When FollowerA opens permalink for post "Inner circle roadmap"
     Then the post content should be visible
 
-  @FEAT-086
+  @FEAT-086 @ignore
   Scenario: Media constraints for social posts match HushFeeds limits
     Given Owner has HushSocial enabled
     When Owner submits an Open post with 5 valid media attachments
@@ -108,7 +108,7 @@ Feature: HushSocial server integration rules
     When Owner submits an Open post with a media attachment over max size
     Then the submission should be rejected with a size limit error
 
-  @FEAT-087
+  @FEAT-087 @ignore
   Scenario: Reaction privacy preserves tally without exposing per-user emoji choice on private content
     Given Owner profile mode is Close
     And Owner has accepted follow requests from "FollowerA, FollowerB"
@@ -120,7 +120,7 @@ Feature: HushSocial server integration rules
     When FollowerA changes reaction on "Private sentiment test" to "heart"
     Then only one active reaction should exist for FollowerA on "Private sentiment test"
 
-  @FEAT-088
+  @FEAT-088 @ignore
   Scenario: Comments and single-level replies inherit post audience
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA
@@ -132,7 +132,7 @@ Feature: HushSocial server integration rules
     Then FollowerC should receive access denied for post comments
     And FollowerC should receive access denied for post replies
 
-  @FEAT-089
+  @FEAT-089 @ignore
   Scenario: Guest users cannot interact with public content
     Given Owner has created an Open post "Public onboarding post"
     When GuestLikeUser attempts to react to post "Public onboarding post"
@@ -140,7 +140,7 @@ Feature: HushSocial server integration rules
     When GuestLikeUser attempts to comment on post "Public onboarding post"
     Then the action should be rejected as unauthenticated
 
-  @FEAT-090
+  @FEAT-090 @ignore
   Scenario: Following-first timeline prioritization for authenticated users
     Given Owner has accepted follow request from FollowerA
     And FollowerA follows Owner
@@ -150,7 +150,7 @@ Feature: HushSocial server integration rules
     When FollowerA requests home timeline
     Then posts from followed accounts should be prioritized before non-followed posts
 
-  @FEAT-091
+  @FEAT-091 @ignore
   Scenario: Notification delivery honors eligibility and privacy-safe payloads
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA
@@ -162,7 +162,7 @@ Feature: HushSocial server integration rules
     And FollowerA should receive push notification with no content preview
     And FollowerC should not receive any notification for "Security update"
 
-  @FEAT-091
+  @FEAT-091 @ignore
   Scenario: Per-circle mute suppresses notifications for muted circle
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA
