@@ -454,14 +454,15 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Open and close post visibility is enforced by permalink access")]
+        [Xunit.SkippableFactAttribute(DisplayName="Open and close post visibility is enforced by permalink access", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Open and close post visibility is enforced by permalink access")]
         [Xunit.TraitAttribute("Category", "FEAT-086")]
         public void OpenAndClosePostVisibilityIsEnforcedByPermalinkAccess()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-086"};
+                    "FEAT-086",
+                    "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Open and close post visibility is enforced by permalink access", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 88

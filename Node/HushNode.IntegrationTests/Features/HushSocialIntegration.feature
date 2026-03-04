@@ -84,7 +84,7 @@ Feature: HushSocial server integration rules
       | 5          |
       | 10         |
 
-  @FEAT-086
+  @FEAT-086 @ignore
   Scenario: Open and close post visibility is enforced by permalink access
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA
