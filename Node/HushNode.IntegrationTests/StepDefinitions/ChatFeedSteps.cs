@@ -212,7 +212,9 @@ public sealed class ChatFeedSteps
             "bob" => TestIdentities.Bob,
             "charlie" => TestIdentities.Charlie,
             "blockproducer" => TestIdentities.BlockProducer,
-            _ => throw new ArgumentException($"Unknown test user: {userName}")
+            _ => TestIdentities.GenerateFromSeed(
+                $"TEST_{new string(userName.ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray())}_V1",
+                userName)
         };
     }
 

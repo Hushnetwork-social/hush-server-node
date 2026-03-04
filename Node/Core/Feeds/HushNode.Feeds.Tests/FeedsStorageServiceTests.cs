@@ -955,6 +955,116 @@ public class FeedsStorageServiceTests
 
     #endregion
 
+    #region Inner Circle Lookup Tests (FEAT-085)
+
+    [Fact]
+    public async Task OwnerHasInnerCircleAsync_WhenRepositoryReturnsTrue_ShouldReturnTrue()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var ownerAddress = TestDataFactory.CreateAddress();
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.OwnerHasInnerCircleAsync(ownerAddress))
+            .ReturnsAsync(true);
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.OwnerHasInnerCircleAsync(ownerAddress);
+
+        // Assert
+        result.Should().BeTrue();
+        mockRepository.Verify(x => x.OwnerHasInnerCircleAsync(ownerAddress), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetInnerCircleByOwnerAsync_WhenExists_ShouldReturnGroupFeed()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var ownerAddress = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+        var innerCircle = new GroupFeed(
+            feedId,
+            "Inner Circle",
+            "Owner private audience",
+            false,
+            new BlockIndex(10),
+            0,
+            IsInnerCircle: true,
+            OwnerPublicAddress: ownerAddress);
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.GetInnerCircleByOwnerAsync(ownerAddress))
+            .ReturnsAsync(innerCircle);
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        var result = await service.GetInnerCircleByOwnerAsync(ownerAddress);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.FeedId.Should().Be(feedId);
+        result.IsInnerCircle.Should().BeTrue();
+        result.OwnerPublicAddress.Should().Be(ownerAddress);
+    }
+
+    [Fact]
+    public async Task GetInnerCircleByOwnerAsync_ShouldUseReadOnlyUnitOfWork()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var ownerAddress = TestDataFactory.CreateAddress();
+
+        var mockRepository = new Mock<IFeedsRepository>();
+        mockRepository
+            .Setup(x => x.GetInnerCircleByOwnerAsync(ownerAddress))
+            .ReturnsAsync((GroupFeed?)null);
+
+        var mockUnitOfWork = new Mock<IReadOnlyUnitOfWork<FeedsDbContext>>();
+        mockUnitOfWork
+            .Setup(x => x.GetRepository<IFeedsRepository>())
+            .Returns(mockRepository.Object);
+
+        var mockProvider = mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>();
+        mockProvider
+            .Setup(x => x.CreateReadOnly())
+            .Returns(mockUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        // Act
+        await service.GetInnerCircleByOwnerAsync(ownerAddress);
+
+        // Assert
+        mockProvider.Verify(x => x.CreateReadOnly(), Times.Once);
+        mockRepository.Verify(x => x.GetInnerCircleByOwnerAsync(ownerAddress), Times.Once);
+    }
+
+    #endregion
+
     #region IsUserParticipantOfFeedAsync Tests (FEAT-059)
 
     /// <summary>

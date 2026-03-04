@@ -63,6 +63,16 @@ public interface IFeedsStorageService
     Task<GroupFeed?> GetGroupFeedAsync(FeedId feedId);
 
     /// <summary>
+    /// Returns true when the owner already has an Inner Circle.
+    /// </summary>
+    Task<bool> OwnerHasInnerCircleAsync(string ownerPublicAddress);
+
+    /// <summary>
+    /// Retrieves the owner's Inner Circle group feed, if it exists.
+    /// </summary>
+    Task<GroupFeed?> GetInnerCircleByOwnerAsync(string ownerPublicAddress);
+
+    /// <summary>
     /// Get a specific participant from a group feed.
     /// </summary>
     Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress);
@@ -182,6 +192,17 @@ public interface IFeedsStorageService
     /// The KeyGeneration entity should have EncryptedKeys collection populated.
     /// </summary>
     Task CreateKeyRotationAsync(GroupFeedKeyGenerationEntity keyGeneration);
+
+    /// <summary>
+    /// Applies Inner Circle membership changes and key rotation atomically in a single transaction.
+    /// </summary>
+    Task ApplyInnerCircleMembershipAndKeyRotationAsync(
+        FeedId feedId,
+        IReadOnlyList<GroupFeedParticipantEntity> participantsToAdd,
+        IReadOnlyList<string> participantsToRejoin,
+        BlockIndex rejoinBlockIndex,
+        GroupFeedKeyGenerationEntity keyGeneration,
+        BlockIndex lastUpdatedAtBlock);
 
     // ===== Group Messaging Operations (FEAT-011) =====
 

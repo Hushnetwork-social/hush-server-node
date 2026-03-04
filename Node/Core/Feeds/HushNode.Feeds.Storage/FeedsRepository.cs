@@ -180,6 +180,23 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .Include(g => g.Participants)
             .FirstOrDefaultAsync(g => g.FeedId == feedId);
 
+    public async Task<bool> OwnerHasInnerCircleAsync(string ownerPublicAddress) =>
+        await this.Context.GroupFeeds
+            .AnyAsync(g =>
+                g.OwnerPublicAddress == ownerPublicAddress &&
+                g.IsInnerCircle &&
+                !g.IsDeleted);
+
+    public async Task<GroupFeed?> GetInnerCircleByOwnerAsync(string ownerPublicAddress) =>
+        await this.Context.GroupFeeds
+            .Include(g => g.Participants)
+            .Include(g => g.KeyGenerations)
+                .ThenInclude(kg => kg.EncryptedKeys)
+            .FirstOrDefaultAsync(g =>
+                g.OwnerPublicAddress == ownerPublicAddress &&
+                g.IsInnerCircle &&
+                !g.IsDeleted);
+
     public async Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress) =>
         await this.Context.GroupFeedParticipants
             .FirstOrDefaultAsync(p =>

@@ -32,6 +32,22 @@ public class KeyRotationService(
         string? joiningMemberAddress = null,
         string? leavingMemberAddress = null)
     {
+        var joiningAddresses = string.IsNullOrEmpty(joiningMemberAddress)
+            ? null
+            : new[] { joiningMemberAddress };
+        var leavingAddresses = string.IsNullOrEmpty(leavingMemberAddress)
+            ? null
+            : new[] { leavingMemberAddress };
+
+        return await this.TriggerRotationAsync(feedId, trigger, joiningAddresses, leavingAddresses);
+    }
+
+    public async Task<KeyRotationResult> TriggerRotationAsync(
+        FeedId feedId,
+        RotationTrigger trigger,
+        IReadOnlyCollection<string>? joiningMemberAddresses,
+        IReadOnlyCollection<string>? leavingMemberAddresses)
+    {
         // Step 1: Get current max KeyGeneration
         var currentMaxKeyGeneration = await this._feedsStorageService.GetMaxKeyGenerationAsync(feedId);
         if (currentMaxKeyGeneration == null)
@@ -45,18 +61,22 @@ public class KeyRotationService(
         var memberAddresses = (await this._feedsStorageService.GetActiveGroupMemberAddressesAsync(feedId)).ToList();
 
         // Adjust member list based on membership change
-        if (!string.IsNullOrEmpty(leavingMemberAddress))
+        if (leavingMemberAddresses != null && leavingMemberAddresses.Count > 0)
         {
             // For Leave/Ban: exclude the leaving/banned member
-            memberAddresses = memberAddresses.Where(a => a != leavingMemberAddress).ToList();
+            var leavingSet = leavingMemberAddresses.ToHashSet();
+            memberAddresses = memberAddresses.Where(a => !leavingSet.Contains(a)).ToList();
         }
 
-        if (!string.IsNullOrEmpty(joiningMemberAddress))
+        if (joiningMemberAddresses != null)
         {
-            // For Join/Unban: include the joining member (might already be in list for Unban)
-            if (!memberAddresses.Contains(joiningMemberAddress))
+            // For Join/Unban/AddMembers: include joining members (if not already in list)
+            foreach (var joiningMemberAddress in joiningMemberAddresses.Where(x => !string.IsNullOrWhiteSpace(x)))
             {
-                memberAddresses.Add(joiningMemberAddress);
+                if (!memberAddresses.Contains(joiningMemberAddress))
+                {
+                    memberAddresses.Add(joiningMemberAddress);
+                }
             }
         }
 
@@ -143,8 +163,24 @@ public class KeyRotationService(
         string? joiningMemberAddress = null,
         string? leavingMemberAddress = null)
     {
+        var joiningAddresses = string.IsNullOrEmpty(joiningMemberAddress)
+            ? null
+            : new[] { joiningMemberAddress };
+        var leavingAddresses = string.IsNullOrEmpty(leavingMemberAddress)
+            ? null
+            : new[] { leavingMemberAddress };
+
+        return await this.TriggerAndPersistRotationAsync(feedId, trigger, joiningAddresses, leavingAddresses);
+    }
+
+    public async Task<KeyRotationResult> TriggerAndPersistRotationAsync(
+        FeedId feedId,
+        RotationTrigger trigger,
+        IReadOnlyCollection<string>? joiningMemberAddresses,
+        IReadOnlyCollection<string>? leavingMemberAddresses)
+    {
         // Step 1: Generate the key rotation payload
-        var result = await this.TriggerRotationAsync(feedId, trigger, joiningMemberAddress, leavingMemberAddress);
+        var result = await this.TriggerRotationAsync(feedId, trigger, joiningMemberAddresses, leavingMemberAddresses);
 
         if (!result.IsSuccess || result.Payload == null)
         {

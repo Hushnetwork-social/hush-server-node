@@ -314,6 +314,18 @@ public class FeedsStorageService(
             .GetRepository<IFeedsRepository>()
             .GetGroupFeedAsync(feedId);
 
+    public async Task<bool> OwnerHasInnerCircleAsync(string ownerPublicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .OwnerHasInnerCircleAsync(ownerPublicAddress);
+
+    public async Task<GroupFeed?> GetInnerCircleByOwnerAsync(string ownerPublicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetInnerCircleByOwnerAsync(ownerPublicAddress);
+
     public async Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress) =>
         await this._unitOfWorkProvider
             .CreateReadOnly()
@@ -507,6 +519,34 @@ public class FeedsStorageService(
         await repository.UpdateCurrentKeyGenerationAsync(keyGeneration.FeedId, keyGeneration.KeyGeneration);
 
         // Commit atomically
+        await writableUnitOfWork.CommitAsync();
+    }
+
+    public async Task ApplyInnerCircleMembershipAndKeyRotationAsync(
+        FeedId feedId,
+        IReadOnlyList<GroupFeedParticipantEntity> participantsToAdd,
+        IReadOnlyList<string> participantsToRejoin,
+        BlockIndex rejoinBlockIndex,
+        GroupFeedKeyGenerationEntity keyGeneration,
+        BlockIndex lastUpdatedAtBlock)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+        var repository = writableUnitOfWork.GetRepository<IFeedsRepository>();
+
+        foreach (var participant in participantsToAdd)
+        {
+            await repository.AddParticipantAsync(feedId, participant);
+        }
+
+        foreach (var participantAddress in participantsToRejoin)
+        {
+            await repository.UpdateParticipantRejoinAsync(feedId, participantAddress, rejoinBlockIndex, ParticipantType.Member);
+        }
+
+        await repository.CreateKeyRotationAsync(keyGeneration);
+        await repository.UpdateCurrentKeyGenerationAsync(feedId, keyGeneration.KeyGeneration);
+        await repository.UpdateGroupFeedLastUpdatedAtBlockAsync(feedId, lastUpdatedAtBlock);
+
         await writableUnitOfWork.CommitAsync();
     }
 

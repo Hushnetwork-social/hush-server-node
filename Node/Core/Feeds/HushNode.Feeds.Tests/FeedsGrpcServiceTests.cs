@@ -1216,6 +1216,15 @@ public class FeedsGrpcServiceTests
         mockConfiguration
             .Setup(c => c.GetSection("Feeds:MaxMessagesPerResponse"))
             .Returns(mockConfigSection.Object);
+
+        var innerCircleAppService = mocker.CreateInstance<InnerCircleApplicationService>();
+        mocker.Use<IInnerCircleApplicationService>(innerCircleAppService);
+
+        var groupMembershipAppService = mocker.CreateInstance<GroupMembershipApplicationService>();
+        mocker.Use<IGroupMembershipApplicationService>(groupMembershipAppService);
+
+        var groupAdministrationAppService = mocker.CreateInstance<GroupAdministrationApplicationService>();
+        mocker.Use<IGroupAdministrationApplicationService>(groupAdministrationAppService);
     }
 
     private static Feed CreateFeed(FeedId feedId, string alias, FeedType feedType, long blockIndex)

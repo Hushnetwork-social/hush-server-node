@@ -120,6 +120,17 @@ public static class FeedsHostBuild
             services.AddTransient<IUnbanFromGroupFeedTransactionHandler, UnbanFromGroupFeedTransactionHandler>();
 
             // FEAT-011: Group Feed Messaging - unified into NewFeedMessage* handlers (KeyGeneration field)
+
+            // FEAT-085: Inner Circle lifecycle
+            services.AddTransient<ITransactionDeserializerStrategy, CreateInnerCircleDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, CreateInnerCircleIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, CreateInnerCircleContentHandler>();
+            services.AddTransient<ICreateInnerCircleTransactionHandler, CreateInnerCircleTransactionHandler>();
+
+            services.AddTransient<ITransactionDeserializerStrategy, AddMembersToInnerCircleDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, AddMembersToInnerCircleIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, AddMembersToInnerCircleContentHandler>();
+            services.AddTransient<IAddMembersToInnerCircleTransactionHandler, AddMembersToInnerCircleTransactionHandler>();
         });
 
         return builder;

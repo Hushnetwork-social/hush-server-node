@@ -34,6 +34,42 @@ Feature: HushSocial server integration rules
     And FollowerB should not be able to decrypt new posts in circle "Dev Circle"
     And FollowerA should be able to decrypt new posts in circle "Dev Circle"
 
+  @FEAT-085
+  Scenario: Startup bootstrap creates inner circle and links existing chat peers
+    Given Owner profile mode is Close
+    And Owner has existing chat feeds with "FollowerA, FollowerB"
+    And Owner does not have an Inner Circle yet
+    When Owner opens HushFeeds and personal feed bootstrap runs
+    Then Owner Inner Circle should be created
+    And "FollowerA, FollowerB" should be members of Owner Inner Circle
+
+  @FEAT-085
+  Scenario: New chat feed creation triggers add-members-to-inner-circle
+    Given Owner profile mode is Close
+    And Owner Inner Circle already exists
+    And Owner starts a new chat feed with FollowerC
+    When FEAT-085 background sync runs after chat creation
+    Then FollowerC should be added to Owner Inner Circle
+    And key generation for Owner Inner Circle should be incremented
+
+  @FEAT-085
+  Scenario: Duplicate inner-circle add request returns explicit duplicate without key rotation
+    Given Owner profile mode is Close
+    And Owner Inner Circle already exists
+    And Owner has accepted follow request from FollowerA
+    When Owner tries to add "FollowerA" again to Owner Inner Circle
+    Then FEAT-085 duplicate add response should include "FollowerA"
+    And key generation for Owner Inner Circle should remain unchanged
+
+  @FEAT-085
+  Scenario: Same-block duplicate add-member requests remain deterministic
+    Given Owner profile mode is Close
+    And Owner Inner Circle already exists
+    When Owner submits duplicate add-members requests for "FollowerA" before block indexing
+    And a block is produced
+    Then "FollowerA" should be added to Owner Inner Circle
+    And FEAT-085 same-block duplicate processing should rotate Owner Inner Circle only once
+
   @FEAT-086
   Scenario: Open and close post visibility is enforced by permalink access
     Given Owner profile mode is Close
