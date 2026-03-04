@@ -520,6 +520,62 @@ message AddMembersToInnerCircleResponse {
   repeated string InvalidMembers = 5;
 }
 
+// --- Custom Circle Operations (FEAT-092) ---
+
+message CreateCustomCircleRequest {
+  string FeedId = 1;
+  string OwnerPublicAddress = 2;
+  string CircleName = 3;
+  string RequesterPublicAddress = 4;
+}
+
+message CreateCustomCircleResponse {
+  bool Success = 1;
+  string Message = 2;
+  optional string FeedId = 3;
+  optional string ErrorCode = 4;
+}
+
+message CustomCircleMemberProto {
+  string PublicAddress = 1;
+  string PublicEncryptAddress = 2;
+}
+
+message AddMembersToCustomCircleRequest {
+  string FeedId = 1;
+  string OwnerPublicAddress = 2;
+  repeated CustomCircleMemberProto Members = 3;
+  string RequesterPublicAddress = 4;
+}
+
+message AddMembersToCustomCircleResponse {
+  bool Success = 1;
+  string Message = 2;
+  optional string ErrorCode = 3;
+  repeated string DuplicateMembers = 4;
+  repeated string InvalidMembers = 5;
+}
+
+message GetOwnerCirclesRequest {
+  string OwnerPublicAddress = 1;
+}
+
+message CircleSummaryProto {
+  string FeedId = 1;
+  string Name = 2;
+  bool IsInnerCircle = 3;
+  int32 MemberCount = 4;
+  int32 CurrentKeyGeneration = 5;
+  int64 CreatedAtBlock = 6;
+  optional int64 LastUpdatedAtBlock = 7;
+}
+
+message GetOwnerCirclesResponse {
+  bool Success = 1;
+  string Message = 2;
+  repeated CircleSummaryProto Circles = 3;
+}
+
 // =============================================================================
 // FEAT-066: Attachment Download (server-streaming)
 // =============================================================================

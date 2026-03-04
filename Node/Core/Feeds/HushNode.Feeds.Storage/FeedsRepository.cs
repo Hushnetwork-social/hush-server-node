@@ -197,6 +197,50 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 g.IsInnerCircle &&
                 !g.IsDeleted);
 
+    public async Task<int> GetCustomCircleCountByOwnerAsync(string ownerPublicAddress) =>
+        await this.Context.GroupFeeds
+            .CountAsync(g =>
+                g.OwnerPublicAddress == ownerPublicAddress &&
+                !g.IsInnerCircle &&
+                !g.IsDeleted);
+
+    public async Task<bool> OwnerHasCustomCircleNamedAsync(string ownerPublicAddress, string normalizedCircleName)
+    {
+        var normalized = normalizedCircleName.Trim().ToLowerInvariant();
+
+        return await this.Context.GroupFeeds
+            .AnyAsync(g =>
+                g.OwnerPublicAddress == ownerPublicAddress &&
+                !g.IsInnerCircle &&
+                !g.IsDeleted &&
+                g.Title.ToLower() == normalized);
+    }
+
+    public async Task<IReadOnlyList<CustomCircleSummary>> GetCirclesForOwnerAsync(string ownerPublicAddress)
+    {
+        var circles = await this.Context.GroupFeeds
+            .Where(g =>
+                g.OwnerPublicAddress == ownerPublicAddress &&
+                !g.IsDeleted)
+            .Select(g => new CustomCircleSummary(
+                g.FeedId,
+                g.Title,
+                g.IsInnerCircle,
+                g.Participants.Count(p =>
+                    p.LeftAtBlock == null &&
+                    p.ParticipantType != ParticipantType.Banned),
+                g.CurrentKeyGeneration,
+                g.CreatedAtBlock,
+                g.LastUpdatedAtBlock))
+            .ToListAsync();
+
+        return circles
+            .OrderByDescending(c => c.IsInnerCircle)
+            .ThenByDescending(c => c.MemberCount)
+            .ThenBy(c => c.Name)
+            .ToList();
+    }
+
     public async Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress) =>
         await this.Context.GroupFeedParticipants
             .FirstOrDefaultAsync(p =>

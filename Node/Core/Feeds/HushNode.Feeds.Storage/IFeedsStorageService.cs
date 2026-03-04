@@ -73,6 +73,23 @@ public interface IFeedsStorageService
     Task<GroupFeed?> GetInnerCircleByOwnerAsync(string ownerPublicAddress);
 
     /// <summary>
+    /// Returns the number of active custom circles owned by the address (excludes Inner Circle).
+    /// </summary>
+    Task<int> GetCustomCircleCountByOwnerAsync(string ownerPublicAddress);
+
+    /// <summary>
+    /// Returns true if the owner already has a custom circle with the normalized name.
+    /// Normalization is trim + lowercase and comparison is case-insensitive.
+    /// </summary>
+    Task<bool> OwnerHasCustomCircleNamedAsync(string ownerPublicAddress, string normalizedCircleName);
+
+    /// <summary>
+    /// Returns all active owner circles (Inner + custom), projected with member counts.
+    /// Ordered with Inner Circle first, then custom circles by member count descending and name ascending.
+    /// </summary>
+    Task<IReadOnlyList<CustomCircleSummary>> GetCirclesForOwnerAsync(string ownerPublicAddress);
+
+    /// <summary>
     /// Get a specific participant from a group feed.
     /// </summary>
     Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress);
