@@ -344,6 +344,12 @@ public class FeedsStorageService(
             .GetRepository<IFeedsRepository>()
             .GetCirclesForOwnerAsync(ownerPublicAddress);
 
+    public async Task<bool> OwnerHasChatFeedWithMemberAsync(string ownerPublicAddress, string memberPublicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .OwnerHasChatFeedWithMemberAsync(ownerPublicAddress, memberPublicAddress);
+
     public async Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress) =>
         await this._unitOfWorkProvider
             .CreateReadOnly()

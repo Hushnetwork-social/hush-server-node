@@ -131,6 +131,17 @@ public static class FeedsHostBuild
             services.AddTransient<IIndexStrategy, AddMembersToInnerCircleIndexStrategy>();
             services.AddTransient<ITransactionContentHandler, AddMembersToInnerCircleContentHandler>();
             services.AddTransient<IAddMembersToInnerCircleTransactionHandler, AddMembersToInnerCircleTransactionHandler>();
+
+            // FEAT-092: Custom Circle lifecycle (create + add members)
+            services.AddTransient<ITransactionDeserializerStrategy, CreateCustomCircleDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, CreateCustomCircleIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, CreateCustomCircleContentHandler>();
+            services.AddTransient<ICreateCustomCircleTransactionHandler, CreateCustomCircleTransactionHandler>();
+
+            services.AddTransient<ITransactionDeserializerStrategy, AddMembersToCustomCircleDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, AddMembersToCustomCircleIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, AddMembersToCustomCircleContentHandler>();
+            services.AddTransient<IAddMembersToCustomCircleTransactionHandler, AddMembersToCustomCircleTransactionHandler>();
         });
 
         return builder;

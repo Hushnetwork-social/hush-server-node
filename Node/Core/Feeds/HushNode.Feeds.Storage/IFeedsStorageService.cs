@@ -90,6 +90,12 @@ public interface IFeedsStorageService
     Task<IReadOnlyList<CustomCircleSummary>> GetCirclesForOwnerAsync(string ownerPublicAddress);
 
     /// <summary>
+    /// Returns true if owner has a direct chat feed with the target member.
+    /// FEAT-092 uses existing chat feed linkage as followed-user eligibility signal.
+    /// </summary>
+    Task<bool> OwnerHasChatFeedWithMemberAsync(string ownerPublicAddress, string memberPublicAddress);
+
+    /// <summary>
     /// Get a specific participant from a group feed.
     /// </summary>
     Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress);

@@ -241,6 +241,14 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .ToList();
     }
 
+    public async Task<bool> OwnerHasChatFeedWithMemberAsync(string ownerPublicAddress, string memberPublicAddress)
+    {
+        return await this.Context.Feeds
+            .Where(f => f.FeedType == FeedType.Chat)
+            .Where(f => f.Participants.Any(p => p.ParticipantPublicAddress == ownerPublicAddress))
+            .AnyAsync(f => f.Participants.Any(p => p.ParticipantPublicAddress == memberPublicAddress));
+    }
+
     public async Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress) =>
         await this.Context.GroupFeedParticipants
             .FirstOrDefaultAsync(p =>
