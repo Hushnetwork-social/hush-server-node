@@ -70,6 +70,20 @@ Feature: HushSocial server integration rules
     Then "FollowerA" should be added to Owner Inner Circle
     And FEAT-085 same-block duplicate processing should rotate Owner Inner Circle only once
 
+  @FEAT-085
+  Scenario Outline: Same-block create-inner-circle for multiple owners is isolated
+    Given <ownerCount> FEAT-085 owners are registered with personal feeds
+    When all FEAT-085 owners submit CreateInnerCircle before block indexing
+    And a block is produced
+    Then all FEAT-085 owners should have exactly one Inner Circle
+    And all FEAT-085 create responses should be accepted pre-indexing
+
+    Examples:
+      | ownerCount |
+      | 2          |
+      | 5          |
+      | 10         |
+
   @FEAT-086
   Scenario: Open and close post visibility is enforced by permalink access
     Given Owner profile mode is Close

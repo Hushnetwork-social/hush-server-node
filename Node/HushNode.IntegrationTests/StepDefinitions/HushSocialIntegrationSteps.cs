@@ -20,6 +20,8 @@ public sealed class HushSocialIntegrationSteps
     private const string OwnerInnerCircleDuplicateAddResponseKey = "OwnerInnerCircleDuplicateAddResponse";
     private const string OwnerInnerCircleSameBlockKeyGenerationBeforeKey = "OwnerInnerCircleSameBlockKeyGenerationBefore";
     private const string OwnerInnerCircleSameBlockKeyGenerationAfterKey = "OwnerInnerCircleSameBlockKeyGenerationAfter";
+    private const string SameBlockInnerCircleOwnerNamesKey = "SameBlockInnerCircleOwnerNames";
+    private const string SameBlockInnerCircleCreateResponsesKey = "SameBlockInnerCircleCreateResponses";
     private const string BootstrapPeerNamesKey = "HushSocialBootstrapPeerNames";
     private const string PendingFollowersKey = "HushSocialPendingFollowers";
     private const string ApprovedFollowersKey = "HushSocialApprovedFollowers";
@@ -460,6 +462,96 @@ public sealed class HushSocialIntegrationSteps
         after.Should().Be(before + 1, "same-block duplicate add-members should add once and skip duplicate rotation");
     }
 
+    [Given(@"(.*) FEAT-085 owners are registered with personal feeds")]
+    public async Task GivenFeat085OwnersAreRegisteredWithPersonalFeeds(int ownerCount)
+    {
+        ownerCount.Should().BeGreaterThan(0);
+
+        var ownerNames = Enumerable.Range(1, ownerCount)
+            .Select(i => $"RaceOwner{i}")
+            .ToArray();
+
+        foreach (var ownerName in ownerNames)
+        {
+            await EnsureUserRegisteredWithPersonalFeedAsync(ownerName);
+        }
+
+        _scenarioContext[SameBlockInnerCircleOwnerNamesKey] = ownerNames;
+    }
+
+    [When(@"all FEAT-085 owners submit CreateInnerCircle before block indexing")]
+    public async Task WhenAllFeat085OwnersSubmitCreateInnerCircleBeforeBlockIndexing()
+    {
+        _scenarioContext.TryGetValue(SameBlockInnerCircleOwnerNamesKey, out var ownerNamesObj)
+            .Should()
+            .BeTrue("expected owner names prepared by previous step");
+        ownerNamesObj.Should().BeOfType<string[]>();
+        var ownerNames = (string[])ownerNamesObj!;
+
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var responses = new Dictionary<string, CreateInnerCircleResponse>(StringComparer.Ordinal);
+
+        foreach (var ownerName in ownerNames)
+        {
+            var owner = GetTestIdentity(ownerName);
+            var response = await feedClient.CreateInnerCircleAsync(new CreateInnerCircleRequest
+            {
+                OwnerPublicAddress = owner.PublicSigningAddress,
+                RequesterPublicAddress = owner.PublicSigningAddress
+            });
+
+            responses[ownerName] = response;
+        }
+
+        _scenarioContext[SameBlockInnerCircleCreateResponsesKey] = responses;
+    }
+
+    [Then(@"all FEAT-085 create responses should be accepted pre-indexing")]
+    public void ThenAllFeat085CreateResponsesShouldBeAcceptedPreIndexing()
+    {
+        _scenarioContext.TryGetValue(SameBlockInnerCircleCreateResponsesKey, out var responsesObj)
+            .Should()
+            .BeTrue("expected captured CreateInnerCircle responses");
+        responsesObj.Should().BeOfType<Dictionary<string, CreateInnerCircleResponse>>();
+        var responses = (Dictionary<string, CreateInnerCircleResponse>)responsesObj!;
+
+        responses.Should().NotBeEmpty();
+        foreach (var (ownerName, response) in responses)
+        {
+            response.Success.Should().BeTrue(
+                $"CreateInnerCircle should be accepted pre-indexing for {ownerName}: {response.Message}");
+        }
+    }
+
+    [Then(@"all FEAT-085 owners should have exactly one Inner Circle")]
+    public async Task ThenAllFeat085OwnersShouldHaveExactlyOneInnerCircle()
+    {
+        _scenarioContext.TryGetValue(SameBlockInnerCircleOwnerNamesKey, out var ownerNamesObj)
+            .Should()
+            .BeTrue("expected owner names prepared by previous step");
+        ownerNamesObj.Should().BeOfType<string[]>();
+        var ownerNames = (string[])ownerNamesObj!;
+
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var seenFeedIds = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var ownerName in ownerNames)
+        {
+            var owner = GetTestIdentity(ownerName);
+            var response = await feedClient.GetInnerCircleAsync(new GetInnerCircleRequest
+            {
+                OwnerPublicAddress = owner.PublicSigningAddress
+            });
+
+            response.Success.Should().BeTrue($"GetInnerCircle should succeed for {ownerName}: {response.Message}");
+            response.Exists.Should().BeTrue($"Inner Circle should exist for {ownerName}");
+            response.FeedId.Should().NotBeNullOrWhiteSpace($"Inner Circle FeedId should exist for {ownerName}");
+            seenFeedIds.Add(response.FeedId!);
+        }
+
+        seenFeedIds.Count.Should().Be(ownerNames.Length, "each owner should have an isolated Inner Circle feed");
+    }
+
     private async Task RunFeat085BootstrapAsync()
     {
         var grpcFactory = GetGrpcFactory();
@@ -761,6 +853,45 @@ public sealed class HushSocialIntegrationSteps
 
         submitResponse.Successfull.Should().BeTrue($"Chat feed creation should succeed: {submitResponse.Message}");
         await GetBlockControl().ProduceBlockAsync();
+    }
+
+    private async Task EnsureUserRegisteredWithPersonalFeedAsync(string userName)
+    {
+        var identity = GetTestIdentity(userName);
+        var grpcFactory = GetGrpcFactory();
+        var feedClient = grpcFactory.CreateClient<HushFeed.HushFeedClient>();
+
+        var hasPersonalFeed = await feedClient.HasPersonalFeedAsync(new HasPersonalFeedRequest
+        {
+            PublicPublicKey = identity.PublicSigningAddress
+        });
+
+        if (hasPersonalFeed.FeedAvailable)
+        {
+            _scenarioContext[$"Identity_{userName}"] = identity;
+            return;
+        }
+
+        var blockchainClient = grpcFactory.CreateClient<HushBlockchain.HushBlockchainClient>();
+        var blockControl = GetBlockControl();
+
+        var identityTxJson = TestTransactionFactory.CreateIdentityRegistration(identity);
+        var identityResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = identityTxJson
+        });
+        identityResponse.Successfull.Should().BeTrue($"Identity registration for {userName} should succeed");
+        await blockControl.ProduceBlockAsync();
+
+        var personalFeedTxJson = TestTransactionFactory.CreatePersonalFeed(identity);
+        var personalFeedResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = personalFeedTxJson
+        });
+        personalFeedResponse.Successfull.Should().BeTrue($"Personal feed creation for {userName} should succeed");
+        await blockControl.ProduceBlockAsync();
+
+        _scenarioContext[$"Identity_{userName}"] = identity;
     }
 
     private async Task<string[]> ResolveChatPeerNamesForOwnerAsync()
