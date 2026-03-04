@@ -9,4 +9,6 @@ public interface IMemPoolService
     void AddVerifiedTransaction(AbstractTransaction validatedTransaction);
 
     IEnumerable<AbstractTransaction> GetPendingValidatedTransactionsAsync();
+
+    IEnumerable<AbstractTransaction> PeekPendingValidatedTransactions();
 }

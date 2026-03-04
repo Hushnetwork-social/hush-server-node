@@ -1,5 +1,6 @@
 ﻿using FluentAssertions;
 using HushNode.Feeds.Tests.Fixtures;
+using HushNode.MemPool;
 using HushShared.Blockchain.Model;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
@@ -30,6 +31,10 @@ public class CreateInnerCircleContentHandlerTests
         mocker.GetMock<HushNode.Identity.Storage.IIdentityStorageService>()
             .Setup(x => x.RetrieveIdentityAsync(owner))
             .ReturnsAsync(new Profile("Owner", "owner", owner, "owner-encrypt", true, new HushShared.Blockchain.BlockModel.BlockIndex(1)));
+
+        mocker.GetMock<IMemPoolService>()
+            .Setup(x => x.PeekPendingValidatedTransactions())
+            .Returns([]);
 
         var handler = mocker.CreateInstance<CreateInnerCircleContentHandler>();
 
@@ -63,6 +68,40 @@ public class CreateInnerCircleContentHandlerTests
         result.Should().BeNull();
     }
 
+    [Fact]
+    public void ValidateAndSign_WhenSameOwnerCreateIsPendingInMemPool_ShouldReturnNull()
+    {
+        var mocker = new AutoMocker();
+        MockServices.ConfigureCredentialsProvider(mocker);
+
+        var owner = TestDataFactory.CreateAddress();
+        var payload = new CreateInnerCirclePayload(owner);
+        var tx = CreateSigned(payload, owner);
+
+        mocker.GetMock<HushNode.Identity.Storage.IIdentityStorageService>()
+            .Setup(x => x.RetrieveIdentityAsync(owner))
+            .ReturnsAsync(new Profile("Owner", "owner", owner, "owner-encrypt", true, new HushShared.Blockchain.BlockModel.BlockIndex(1)));
+
+        mocker.GetMock<HushNode.Feeds.Storage.IFeedsStorageService>()
+            .Setup(x => x.OwnerHasInnerCircleAsync(owner))
+            .ReturnsAsync(false);
+
+        var pendingTransactions = new[]
+        {
+            (AbstractTransaction)CreateValidated(payload, owner)
+        };
+
+        mocker.GetMock<IMemPoolService>()
+            .Setup(x => x.PeekPendingValidatedTransactions())
+            .Returns(pendingTransactions);
+
+        var handler = mocker.CreateInstance<CreateInnerCircleContentHandler>();
+
+        var result = handler.ValidateAndSign(tx);
+
+        result.Should().BeNull();
+    }
+
     private static SignedTransaction<CreateInnerCirclePayload> CreateSigned(CreateInnerCirclePayload payload, string signatory)
     {
         var unsigned = new UnsignedTransaction<CreateInnerCirclePayload>(
@@ -75,5 +114,13 @@ public class CreateInnerCircleContentHandlerTests
         return new SignedTransaction<CreateInnerCirclePayload>(
             unsigned,
             new SignatureInfo(signatory, "sig"));
+    }
+
+    private static ValidatedTransaction<CreateInnerCirclePayload> CreateValidated(CreateInnerCirclePayload payload, string signatory)
+    {
+        var signed = CreateSigned(payload, signatory);
+        return new ValidatedTransaction<CreateInnerCirclePayload>(
+            signed,
+            new SignatureInfo("validator", "validator-sig"));
     }
 }

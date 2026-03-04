@@ -28,6 +28,9 @@ public class MemPoolService(IIdempotencyService idempotencyService) : IMemPoolSe
         return transactions;
     }
 
+    public IEnumerable<AbstractTransaction> PeekPendingValidatedTransactions() =>
+        this._nextBlockTransactionsCandidate.ToArray();
+
     public void AddVerifiedTransaction(AbstractTransaction validatedTransaction) =>
         this._nextBlockTransactionsCandidate.Add(validatedTransaction);
 
