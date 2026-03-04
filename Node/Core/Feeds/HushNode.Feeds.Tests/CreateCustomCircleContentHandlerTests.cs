@@ -99,6 +99,53 @@ public class CreateCustomCircleContentHandlerTests
         result.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(10)]
+    public void ValidateAndSign_WhenPendingRequestsUseDifferentOwners_ShouldSucceed(int ownerCount)
+    {
+        var mocker = new AutoMocker();
+        MockServices.ConfigureCredentialsProvider(mocker);
+
+        var owner = TestDataFactory.CreateAddress();
+        var payload = new CreateCustomCirclePayload(TestDataFactory.CreateFeedId(), owner, "Close Friends");
+        var tx = CreateSigned(payload, owner);
+
+        mocker.GetMock<HushNode.Identity.Storage.IIdentityStorageService>()
+            .Setup(x => x.RetrieveIdentityAsync(owner))
+            .ReturnsAsync(new Profile("Owner", "owner", owner, "owner-encrypt", true, new HushShared.Blockchain.BlockModel.BlockIndex(1)));
+
+        mocker.GetMock<HushNode.Feeds.Storage.IFeedsStorageService>()
+            .Setup(x => x.GetCustomCircleCountByOwnerAsync(owner))
+            .ReturnsAsync(0);
+        mocker.GetMock<HushNode.Feeds.Storage.IFeedsStorageService>()
+            .Setup(x => x.OwnerHasCustomCircleNamedAsync(owner, "close friends"))
+            .ReturnsAsync(false);
+
+        var pendingTransactions = Enumerable.Range(0, ownerCount)
+            .Select(_ =>
+            {
+                var otherOwner = TestDataFactory.CreateAddress();
+                var pendingPayload = new CreateCustomCirclePayload(
+                    TestDataFactory.CreateFeedId(),
+                    otherOwner,
+                    "close friends");
+                return (AbstractTransaction)CreateValidated(pendingPayload, otherOwner);
+            })
+            .ToArray();
+
+        mocker.GetMock<IMemPoolService>()
+            .Setup(x => x.PeekPendingValidatedTransactions())
+            .Returns(pendingTransactions);
+
+        var handler = mocker.CreateInstance<CreateCustomCircleContentHandler>();
+
+        var result = handler.ValidateAndSign(tx);
+
+        result.Should().NotBeNull("same-name pending requests from different owners must not block this owner");
+    }
+
     private static SignedTransaction<CreateCustomCirclePayload> CreateSigned(CreateCustomCirclePayload payload, string signatory)
     {
         var unsigned = new UnsignedTransaction<CreateCustomCirclePayload>(

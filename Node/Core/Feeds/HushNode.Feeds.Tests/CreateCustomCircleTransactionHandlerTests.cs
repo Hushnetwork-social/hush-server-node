@@ -10,12 +10,61 @@ using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
 using Moq;
 using Moq.AutoMock;
+using Olimpo;
 using Xunit;
 
 namespace HushNode.Feeds.Tests;
 
 public class CreateCustomCircleTransactionHandlerTests
 {
+    [Fact]
+    public async Task HandleCreateCustomCircleTransactionAsync_WithValidRequest_ShouldCreateCircleAndSeedOwner()
+    {
+        var mocker = new AutoMocker();
+
+        var owner = TestDataFactory.CreateAddress();
+        var feedId = TestDataFactory.CreateFeedId();
+        var payload = new CreateCustomCirclePayload(feedId, owner, "Friends");
+
+        mocker.GetMock<IBlockchainCache>()
+            .Setup(x => x.LastBlockIndex)
+            .Returns(new BlockIndex(12));
+
+        mocker.GetMock<HushNode.Identity.Storage.IIdentityStorageService>()
+            .Setup(x => x.RetrieveIdentityAsync(owner))
+            .ReturnsAsync(new Profile("Owner", "owner", owner, new EncryptKeys().PublicKey, true, new BlockIndex(1)));
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetCustomCircleCountByOwnerAsync(owner))
+            .ReturnsAsync(0);
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.OwnerHasCustomCircleNamedAsync(owner, "friends"))
+            .ReturnsAsync(false);
+
+        var createdFeeds = new List<GroupFeed>();
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.CreateGroupFeed(It.IsAny<GroupFeed>()))
+            .Callback<GroupFeed>(createdFeeds.Add)
+            .Returns(Task.CompletedTask);
+
+        var handler = mocker.CreateInstance<CreateCustomCircleTransactionHandler>();
+        var validTx = BuildValidated(payload, owner);
+
+        await handler.HandleCreateCustomCircleTransactionAsync(validTx);
+
+        createdFeeds.Should().ContainSingle();
+        var created = createdFeeds[0];
+        created.FeedId.Should().Be(feedId);
+        created.Title.Should().Be("Friends");
+        created.IsInnerCircle.Should().BeFalse();
+        created.OwnerPublicAddress.Should().Be(owner);
+        created.Participants.Should().ContainSingle(p => p.ParticipantPublicAddress == owner && p.ParticipantType == ParticipantType.Owner);
+        created.KeyGenerations.Should().ContainSingle(kg => kg.KeyGeneration == 0);
+
+        mocker.GetMock<IUserFeedsCacheService>()
+            .Verify(x => x.AddFeedToUserCacheAsync(owner, feedId), Times.Once);
+    }
+
     [Fact]
     public async Task HandleCreateCustomCircleTransactionAsync_WhenNameAlreadyExists_ShouldThrow()
     {
