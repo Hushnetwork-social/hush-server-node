@@ -454,15 +454,14 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Open and close post visibility is enforced by permalink access", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="Open and close post visibility is enforced by permalink access")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Open and close post visibility is enforced by permalink access")]
         [Xunit.TraitAttribute("Category", "FEAT-086")]
         public void OpenAndClosePostVisibilityIsEnforcedByPermalinkAccess()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-086",
-                    "ignore"};
+                    "FEAT-086"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Open and close post visibility is enforced by permalink access", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 88
@@ -503,30 +502,32 @@ namespace HushNode.IntegrationTests.Features
     testRunner.Then("a generic denial message should be returned", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 97
-    testRunner.And("no private metadata should be returned", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("the permalink denial contract should request access from owner", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 98
-    testRunner.When("FollowerA opens permalink for post \"Inner circle roadmap\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+    testRunner.And("no private metadata should be returned", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 99
+    testRunner.When("FollowerA opens permalink for post \"Inner circle roadmap\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 100
     testRunner.Then("the post content should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Media constraints for social posts match HushFeeds limits", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="Composer contract defaults private mode to Inner Circle with last-circle lock")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
-        [Xunit.TraitAttribute("Description", "Media constraints for social posts match HushFeeds limits")]
+        [Xunit.TraitAttribute("Description", "Composer contract defaults private mode to Inner Circle with last-circle lock")]
         [Xunit.TraitAttribute("Category", "FEAT-086")]
-        public void MediaConstraintsForSocialPostsMatchHushFeedsLimits()
+        public void ComposerContractDefaultsPrivateModeToInnerCircleWithLast_CircleLock()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-086",
-                    "ignore"};
+                    "FEAT-086"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Media constraints for social posts match HushFeeds limits", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 102
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Composer contract defaults private mode to Inner Circle with last-circle lock", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 103
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -539,25 +540,121 @@ namespace HushNode.IntegrationTests.Features
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 103
-    testRunner.Given("Owner has HushSocial enabled", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
-#line hidden
 #line 104
-    testRunner.When("Owner submits an Open post with 5 valid media attachments", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+    testRunner.Given("Owner profile mode is Close", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
 #line 105
-    testRunner.Then("the submission should be accepted", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+    testRunner.And("Owner has accepted follow request from FollowerA", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 106
-    testRunner.When("Owner submits an Open post with 6 media attachments", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+    testRunner.And("Owner Inner Circle already exists", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 107
-    testRunner.Then("the submission should be rejected with a count limit error", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+    testRunner.When("Owner requests social composer contract in private mode", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 108
-    testRunner.When("Owner submits an Open post with a media attachment over max size", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+    testRunner.Then("social composer default visibility should be private", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 109
+    testRunner.And("social composer should select Owner Inner Circle by default", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 110
+    testRunner.And("social composer should lock the last selected private circle", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 111
+    testRunner.And("social composer submit should be allowed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Guest private permalink denial returns create-account CTA contract")]
+        [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
+        [Xunit.TraitAttribute("Description", "Guest private permalink denial returns create-account CTA contract")]
+        [Xunit.TraitAttribute("Category", "FEAT-086")]
+        public void GuestPrivatePermalinkDenialReturnsCreate_AccountCTAContract()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-086"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Guest private permalink denial returns create-account CTA contract", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 114
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 115
+    testRunner.Given("Owner profile mode is Close", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 116
+    testRunner.And("Owner has accepted follow request from FollowerA", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 117
+    testRunner.And("Owner has created a Close post \"Guest denied private post\" for Inner Circle", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 118
+    testRunner.When("an unauthenticated user opens permalink for post \"Guest denied private post\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 119
+    testRunner.Then("the permalink denial contract should target guest account creation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 120
+    testRunner.And("no private metadata should be returned", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Media constraints for social posts match HushFeeds limits")]
+        [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
+        [Xunit.TraitAttribute("Description", "Media constraints for social posts match HushFeeds limits")]
+        [Xunit.TraitAttribute("Category", "FEAT-086")]
+        public void MediaConstraintsForSocialPostsMatchHushFeedsLimits()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-086"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Media constraints for social posts match HushFeeds limits", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 123
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 124
+    testRunner.Given("Owner has HushSocial enabled", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 125
+    testRunner.When("Owner submits an Open post with 5 valid media attachments", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 126
+    testRunner.Then("the submission should be accepted", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 127
+    testRunner.When("Owner submits an Open post with 6 media attachments", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 128
+    testRunner.Then("the submission should be rejected with a count limit error", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 129
+    testRunner.When("Owner submits an Open post with a media attachment over max size", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 130
     testRunner.Then("the submission should be rejected with a size limit error", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
@@ -578,7 +675,7 @@ namespace HushNode.IntegrationTests.Features
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Reaction privacy preserves tally without exposing per-user emoji choice on privat" +
                     "e content", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 112
+#line 133
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -591,32 +688,32 @@ namespace HushNode.IntegrationTests.Features
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 113
+#line 134
     testRunner.Given("Owner profile mode is Close", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 114
+#line 135
     testRunner.And("Owner has accepted follow requests from \"FollowerA, FollowerB\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 115
+#line 136
     testRunner.And("Owner has created a Close post \"Private sentiment test\" for Inner Circle", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 116
+#line 137
     testRunner.When("FollowerA reacts to \"Private sentiment test\" with \"thumbs_up\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 117
+#line 138
     testRunner.And("FollowerB reacts to \"Private sentiment test\" with \"fire\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 118
+#line 139
     testRunner.Then("authorized viewers should see reaction tally updates on \"Private sentiment test\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 119
+#line 140
     testRunner.And("the backend should not expose exact reaction choice per individual user to other " +
                         "viewers", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 120
+#line 141
     testRunner.When("FollowerA changes reaction on \"Private sentiment test\" to \"heart\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 121
+#line 142
     testRunner.Then("only one active reaction should exist for FollowerA on \"Private sentiment test\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
@@ -634,7 +731,7 @@ namespace HushNode.IntegrationTests.Features
                     "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Comments and single-level replies inherit post audience", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 124
+#line 145
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -647,31 +744,31 @@ namespace HushNode.IntegrationTests.Features
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 125
+#line 146
     testRunner.Given("Owner profile mode is Close", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 126
+#line 147
     testRunner.And("Owner has accepted follow request from FollowerA", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 127
+#line 148
     testRunner.And("Owner has created a Close post \"Architecture thread\" for Inner Circle", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 128
+#line 149
     testRunner.When("FollowerA comments \"Looks good\" on post \"Architecture thread\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 129
+#line 150
     testRunner.And("Owner replies \"Thanks\" to comment \"Looks good\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 130
+#line 151
     testRunner.Then("FollowerA should see comment \"Looks good\" and reply \"Thanks\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 131
+#line 152
     testRunner.When("FollowerC opens post \"Architecture thread\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 132
+#line 153
     testRunner.Then("FollowerC should receive access denied for post comments", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 133
+#line 154
     testRunner.And("FollowerC should receive access denied for post replies", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
@@ -689,7 +786,7 @@ namespace HushNode.IntegrationTests.Features
                     "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Guest users cannot interact with public content", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 136
+#line 157
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -702,19 +799,19 @@ namespace HushNode.IntegrationTests.Features
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 137
+#line 158
     testRunner.Given("Owner has created an Open post \"Public onboarding post\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 138
+#line 159
     testRunner.When("GuestLikeUser attempts to react to post \"Public onboarding post\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 139
+#line 160
     testRunner.Then("the action should be rejected as unauthenticated", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 140
+#line 161
     testRunner.When("GuestLikeUser attempts to comment on post \"Public onboarding post\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 141
+#line 162
     testRunner.Then("the action should be rejected as unauthenticated", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
@@ -732,7 +829,7 @@ namespace HushNode.IntegrationTests.Features
                     "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Following-first timeline prioritization for authenticated users", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 144
+#line 165
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -745,25 +842,25 @@ namespace HushNode.IntegrationTests.Features
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 145
+#line 166
     testRunner.Given("Owner has accepted follow request from FollowerA", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 146
+#line 167
     testRunner.And("FollowerA follows Owner", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 147
+#line 168
     testRunner.And("FollowerB does not follow Owner", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 148
+#line 169
     testRunner.And("Owner has created Open post \"From followed account\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 149
+#line 170
     testRunner.And("FollowerB has created Open post \"From non-followed account\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 150
+#line 171
     testRunner.When("FollowerA requests home timeline", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 151
+#line 172
     testRunner.Then("posts from followed accounts should be prioritized before non-followed posts", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
@@ -781,7 +878,7 @@ namespace HushNode.IntegrationTests.Features
                     "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Notification delivery honors eligibility and privacy-safe payloads", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 154
+#line 175
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -794,31 +891,31 @@ namespace HushNode.IntegrationTests.Features
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 155
+#line 176
     testRunner.Given("Owner profile mode is Close", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 156
+#line 177
     testRunner.And("Owner has accepted follow request from FollowerA", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 157
+#line 178
     testRunner.And("Owner has not accepted follow request from FollowerC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 158
+#line 179
     testRunner.And("FollowerA has enabled Close post notifications", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 159
+#line 180
     testRunner.And("FollowerA has not muted circle \"Inner Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 160
+#line 181
     testRunner.When("Owner publishes Close post \"Security update\" to Inner Circle", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 161
+#line 182
     testRunner.Then("FollowerA should receive in-app notification for \"Security update\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 162
+#line 183
     testRunner.And("FollowerA should receive push notification with no content preview", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 163
+#line 184
     testRunner.And("FollowerC should not receive any notification for \"Security update\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
@@ -836,7 +933,7 @@ namespace HushNode.IntegrationTests.Features
                     "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Per-circle mute suppresses notifications for muted circle", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 166
+#line 187
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -849,28 +946,28 @@ namespace HushNode.IntegrationTests.Features
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 167
+#line 188
     testRunner.Given("Owner profile mode is Close", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 168
+#line 189
     testRunner.And("Owner has accepted follow request from FollowerA", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 169
+#line 190
     testRunner.And("Owner has created circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 170
+#line 191
     testRunner.And("Owner has added FollowerA to circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 171
+#line 192
     testRunner.And("FollowerA has muted circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 172
+#line 193
     testRunner.When("Owner publishes Close post \"Trade signal\" to circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 173
+#line 194
     testRunner.Then("FollowerA should not receive in-app notification for \"Trade signal\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 174
+#line 195
     testRunner.And("FollowerA should not receive push notification for \"Trade signal\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }

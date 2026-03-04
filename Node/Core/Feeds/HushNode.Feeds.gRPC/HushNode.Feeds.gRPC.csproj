@@ -29,6 +29,8 @@
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Caching\HushNode.Caching.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\HushNode.Notifications\HushNode.Notifications.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\HushNode.PushNotifications\HushNode.PushNotifications.csproj" />
 </ItemGroup>
 
 </Project>

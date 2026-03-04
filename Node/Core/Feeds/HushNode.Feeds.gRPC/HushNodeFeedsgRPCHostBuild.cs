@@ -10,8 +10,11 @@ public static class HushNodeFeedsgRPCHostBuild
     {
         services.AddSingleton<IGrpcDefinition, FeedsGrpcServiceDefinition>();
         services.AddSingleton<IInnerCircleApplicationService, InnerCircleApplicationService>();
+        services.AddSingleton<ISocialComposerApplicationService, SocialComposerApplicationService>();
         services.AddSingleton<IGroupMembershipApplicationService, GroupMembershipApplicationService>();
         services.AddSingleton<IGroupAdministrationApplicationService, GroupAdministrationApplicationService>();
+        services.AddSingleton<ISocialPostNotificationService, SocialPostNotificationService>();
+        services.AddSingleton<ISocialPostApplicationService, SocialPostApplicationService>();
         services.AddSingleton<HushFeed.HushFeedBase, FeedsGrpcService>();
     }
 }

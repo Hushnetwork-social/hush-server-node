@@ -25,6 +25,8 @@ public class FeedsGrpcService(
     IFeedMetadataCacheService feedMetadataCacheService,
     IIdentityDisplayNameCacheService identityDisplayNameCacheService,
     IInnerCircleApplicationService innerCircleApplicationService,
+    ISocialComposerApplicationService socialComposerApplicationService,
+    ISocialPostApplicationService socialPostApplicationService,
     IGroupMembershipApplicationService groupMembershipApplicationService,
     IGroupAdministrationApplicationService groupAdministrationApplicationService,
     IIdentityService identityService,
@@ -43,6 +45,8 @@ public class FeedsGrpcService(
     private readonly IFeedMetadataCacheService _feedMetadataCacheService = feedMetadataCacheService;
     private readonly IIdentityDisplayNameCacheService _identityDisplayNameCacheService = identityDisplayNameCacheService;
     private readonly IInnerCircleApplicationService _innerCircleApplicationService = innerCircleApplicationService;
+    private readonly ISocialComposerApplicationService _socialComposerApplicationService = socialComposerApplicationService;
+    private readonly ISocialPostApplicationService _socialPostApplicationService = socialPostApplicationService;
     private readonly IGroupMembershipApplicationService _groupMembershipApplicationService = groupMembershipApplicationService;
     private readonly IGroupAdministrationApplicationService _groupAdministrationApplicationService = groupAdministrationApplicationService;
     private readonly IIdentityService _identityService = identityService;
@@ -1522,6 +1526,76 @@ public class FeedsGrpcService(
             {
                 Success = false,
                 Message = $"Internal error: {ex.Message}"
+            };
+        }
+    }
+
+    public override async Task<GetSocialComposerContractResponse> GetSocialComposerContract(
+        GetSocialComposerContractRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            return await this._socialComposerApplicationService.GetSocialComposerContractAsync(request);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GetSocialComposerContract] ERROR: {ex.Message}");
+            return new GetSocialComposerContractResponse
+            {
+                Success = false,
+                Message = "Failed to resolve social composer contract.",
+                ErrorCode = "SOCIAL_COMPOSER_CONTRACT_ERROR",
+                DefaultVisibility = SocialPostVisibilityProto.SocialPostVisibilityOpen,
+                CanSubmit = false
+            };
+        }
+    }
+
+    public override async Task<CreateSocialPostResponse> CreateSocialPost(
+        CreateSocialPostRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            return await this._socialPostApplicationService.CreateSocialPostAsync(request);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CreateSocialPost] ERROR: {ex.Message}");
+            return new CreateSocialPostResponse
+            {
+                Success = false,
+                Message = $"Internal error: {ex.Message}",
+                ErrorCode = "SOCIAL_POST_INTERNAL_ERROR"
+            };
+        }
+    }
+
+    public override async Task<GetSocialPostPermalinkResponse> GetSocialPostPermalink(
+        GetSocialPostPermalinkRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            return await this._socialPostApplicationService.GetSocialPostPermalinkAsync(request);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GetSocialPostPermalink] ERROR: {ex.Message}");
+            return new GetSocialPostPermalinkResponse
+            {
+                Success = false,
+                Message = $"Internal error: {ex.Message}",
+                AccessState = SocialPermalinkAccessStateProto.SocialPermalinkAccessStateNotFound,
+                ErrorCode = "SOCIAL_POST_INTERNAL_ERROR",
+                OpenGraph = new SocialPostOpenGraphProto
+                {
+                    Title = "Private post",
+                    Description = "Sign in to view this post.",
+                    IsGenericPrivate = true,
+                    CacheControl = "no-store"
+                }
             };
         }
     }

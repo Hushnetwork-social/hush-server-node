@@ -310,11 +310,9 @@ namespace HushNode.IntegrationTests.Features.E2E
         [Xunit.SkippableFactAttribute(DisplayName="Open and close post creation with permalink behavior", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
         [Xunit.TraitAttribute("Description", "Open and close post creation with permalink behavior")]
-        [Xunit.TraitAttribute("Category", "FEAT-086")]
         public void OpenAndClosePostCreationWithPermalinkBehavior()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-086",
                     "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Open and close post creation with permalink behavior", null, tagsOfScenario, argumentsOfScenario, featureTags);
@@ -371,11 +369,9 @@ namespace HushNode.IntegrationTests.Features.E2E
         [Xunit.SkippableFactAttribute(DisplayName="Media post upload constraints and success path", Skip="Ignored")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
         [Xunit.TraitAttribute("Description", "Media post upload constraints and success path")]
-        [Xunit.TraitAttribute("Category", "FEAT-086")]
         public void MediaPostUploadConstraintsAndSuccessPath()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-086",
                     "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Media post upload constraints and success path", null, tagsOfScenario, argumentsOfScenario, featureTags);

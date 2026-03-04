@@ -25,6 +25,10 @@ public sealed class HushSocialIntegrationSteps
     private const string BootstrapPeerNamesKey = "HushSocialBootstrapPeerNames";
     private const string PendingFollowersKey = "HushSocialPendingFollowers";
     private const string ApprovedFollowersKey = "HushSocialApprovedFollowers";
+    private const string SocialPostsByTitleKey = "Feat086SocialPostsByTitle";
+    private const string LastSocialPostCreateResponseKey = "Feat086LastSocialPostCreateResponse";
+    private const string LastSocialPostPermalinkResponseKey = "Feat086LastSocialPostPermalinkResponse";
+    private const string LastSocialComposerContractResponseKey = "Feat086LastSocialComposerContractResponse";
 
     private readonly ScenarioContext _scenarioContext;
 
@@ -552,6 +556,306 @@ public sealed class HushSocialIntegrationSteps
         seenFeedIds.Count.Should().Be(ownerNames.Length, "each owner should have an isolated Inner Circle feed");
     }
 
+    [Given(@"Owner has created an Open post ""(.*)""")]
+    public async Task GivenOwnerHasCreatedAnOpenPost(string postTitle)
+    {
+        var owner = GetTestIdentity(OwnerName);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+
+        var response = await feedClient.CreateSocialPostAsync(new CreateSocialPostRequest
+        {
+            PostId = Guid.NewGuid().ToString(),
+            AuthorPublicAddress = owner.PublicSigningAddress,
+            Content = postTitle,
+            Audience = new SocialPostAudienceProto
+            {
+                Visibility = SocialPostVisibilityProto.SocialPostVisibilityOpen
+            },
+            CreatedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        });
+
+        response.Success.Should().BeTrue($"Open post creation should succeed: {response.Message}");
+        StoreSocialPost(postTitle, response);
+        _scenarioContext[LastSocialPostCreateResponseKey] = response;
+    }
+
+    [Given(@"Owner has created a Close post ""(.*)"" for Inner Circle")]
+    public async Task GivenOwnerHasCreatedAClosePostForInnerCircle(string postTitle)
+    {
+        var owner = GetTestIdentity(OwnerName);
+        var innerCircleFeedId = await EnsureOwnerInnerCircleExistsAsync();
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+
+        var response = await feedClient.CreateSocialPostAsync(new CreateSocialPostRequest
+        {
+            PostId = Guid.NewGuid().ToString(),
+            AuthorPublicAddress = owner.PublicSigningAddress,
+            Content = postTitle,
+            Audience = new SocialPostAudienceProto
+            {
+                Visibility = SocialPostVisibilityProto.SocialPostVisibilityPrivate,
+                CircleFeedIds = { innerCircleFeedId }
+            },
+            CreatedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        });
+
+        response.Success.Should().BeTrue($"Private post creation should succeed: {response.Message}");
+        StoreSocialPost(postTitle, response);
+        _scenarioContext[LastSocialPostCreateResponseKey] = response;
+    }
+
+    [When(@"Owner requests social composer contract in private mode")]
+    public async Task WhenOwnerRequestsSocialComposerContractInPrivateMode()
+    {
+        var owner = GetTestIdentity(OwnerName);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var response = await feedClient.GetSocialComposerContractAsync(new GetSocialComposerContractRequest
+        {
+            OwnerPublicAddress = owner.PublicSigningAddress,
+            PreferredVisibility = SocialPostVisibilityProto.SocialPostVisibilityPrivate
+        });
+
+        _scenarioContext[LastSocialComposerContractResponseKey] = response;
+    }
+
+    [Then(@"social composer default visibility should be private")]
+    public void ThenSocialComposerDefaultVisibilityShouldBePrivate()
+    {
+        var response = GetLastSocialComposerContractResponse();
+        response.Success.Should().BeTrue($"Composer contract should succeed: {response.Message}");
+        response.DefaultVisibility.Should().Be(SocialPostVisibilityProto.SocialPostVisibilityPrivate);
+    }
+
+    [Then(@"social composer should select Owner Inner Circle by default")]
+    public async Task ThenSocialComposerShouldSelectOwnerInnerCircleByDefault()
+    {
+        var response = GetLastSocialComposerContractResponse();
+        var ownerInnerCircle = await EnsureOwnerInnerCircleExistsAsync();
+        response.SelectedCircleFeedIds.Should().Contain(ownerInnerCircle);
+
+        var innerCircle = response.AvailableCircles.SingleOrDefault(x => x.FeedId == ownerInnerCircle);
+        innerCircle.Should().NotBeNull("inner circle should be present in available circles");
+        innerCircle!.IsSelectedByDefault.Should().BeTrue();
+    }
+
+    [Then(@"social composer should lock the last selected private circle")]
+    public void ThenSocialComposerShouldLockTheLastSelectedPrivateCircle()
+    {
+        var response = GetLastSocialComposerContractResponse();
+        response.SelectedCircleFeedIds.Should().ContainSingle();
+        var selectedFeedId = response.SelectedCircleFeedIds.Single();
+        var selectedCircle = response.AvailableCircles.Single(x => x.FeedId == selectedFeedId);
+        selectedCircle.IsRemovable.Should().BeFalse("last selected private circle must be locked");
+    }
+
+    [Then(@"social composer submit should be allowed")]
+    public void ThenSocialComposerSubmitShouldBeAllowed()
+    {
+        var response = GetLastSocialComposerContractResponse();
+        response.CanSubmit.Should().BeTrue();
+    }
+
+    [When(@"an unauthenticated user opens permalink for post ""(.*)""")]
+    public async Task WhenAnUnauthenticatedUserOpensPermalinkForPost(string postTitle)
+    {
+        var postId = GetStoredPostId(postTitle);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var response = await feedClient.GetSocialPostPermalinkAsync(new GetSocialPostPermalinkRequest
+        {
+            PostId = postId,
+            IsAuthenticated = false
+        });
+
+        _scenarioContext[LastSocialPostPermalinkResponseKey] = response;
+    }
+
+    [When(@"FollowerC opens permalink for post ""(.*)""")]
+    public async Task WhenFollowerCOpensPermalinkForPost(string postTitle)
+    {
+        var follower = GetTestIdentity("FollowerC");
+        await OpenPermalinkAsAuthenticatedUserAsync(postTitle, follower.PublicSigningAddress);
+    }
+
+    [When(@"FollowerA opens permalink for post ""(.*)""")]
+    public async Task WhenFollowerAOpensPermalinkForPost(string postTitle)
+    {
+        var follower = GetTestIdentity("FollowerA");
+        await OpenPermalinkAsAuthenticatedUserAsync(postTitle, follower.PublicSigningAddress);
+    }
+
+    [Then(@"the post content should be visible")]
+    public void ThenThePostContentShouldBeVisible()
+    {
+        var response = GetLastPermalinkResponse();
+        response.AccessState.Should().Be(SocialPermalinkAccessStateProto.SocialPermalinkAccessStateAllowed);
+        response.Content.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Then(@"a generic denial message should be returned")]
+    public void ThenAGenericDenialMessageShouldBeReturned()
+    {
+        var response = GetLastPermalinkResponse();
+        response.AccessState.Should().Be(SocialPermalinkAccessStateProto.SocialPermalinkAccessStateUnauthorizedDenied);
+        response.OpenGraph.IsGenericPrivate.Should().BeTrue();
+        response.OpenGraph.CacheControl.Should().Be("no-store");
+    }
+
+    [Then(@"no private metadata should be returned")]
+    public void ThenNoPrivateMetadataShouldBeReturned()
+    {
+        var response = GetLastPermalinkResponse();
+        response.AuthorPublicAddress.Should().BeNullOrEmpty();
+        response.Content.Should().BeNullOrEmpty();
+        response.CircleFeedIds.Should().BeEmpty();
+        response.CreatedAtBlock.Should().Be(0);
+    }
+
+    [Then(@"the permalink denial contract should target guest account creation")]
+    public void ThenThePermalinkDenialContractShouldTargetGuestAccountCreation()
+    {
+        var response = GetLastPermalinkResponse();
+        response.AccessState.Should().Be(SocialPermalinkAccessStateProto.SocialPermalinkAccessStateGuestDenied);
+        response.DenialKind.Should().Be(SocialPermalinkDenialKindProto.SocialPermalinkDenialKindGuestCreateAccount);
+        response.PrimaryCtaLabel.Should().Be("Create account");
+        response.PrimaryCtaRoute.Should().Be("/register");
+    }
+
+    [Then(@"the permalink denial contract should request access from owner")]
+    public void ThenThePermalinkDenialContractShouldRequestAccessFromOwner()
+    {
+        var response = GetLastPermalinkResponse();
+        response.AccessState.Should().Be(SocialPermalinkAccessStateProto.SocialPermalinkAccessStateUnauthorizedDenied);
+        response.DenialKind.Should().Be(SocialPermalinkDenialKindProto.SocialPermalinkDenialKindUnauthorizedRequestAccess);
+        response.PrimaryCtaLabel.Should().Be("Request access");
+        response.PrimaryCtaRoute.Should().Be("/social/following");
+    }
+
+    [When(@"Owner submits an Open post with 5 valid media attachments")]
+    public async Task WhenOwnerSubmitsAnOpenPostWithFiveValidMediaAttachments()
+    {
+        var owner = GetTestIdentity(OwnerName);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var request = new CreateSocialPostRequest
+        {
+            PostId = Guid.NewGuid().ToString(),
+            AuthorPublicAddress = owner.PublicSigningAddress,
+            Content = "Post with max valid attachments",
+            Audience = new SocialPostAudienceProto
+            {
+                Visibility = SocialPostVisibilityProto.SocialPostVisibilityOpen
+            },
+            CreatedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        };
+
+        for (var i = 0; i < 5; i++)
+        {
+            request.Attachments.Add(new SocialPostAttachmentProto
+            {
+                AttachmentId = $"att-{i + 1}",
+                MimeType = i % 2 == 0 ? "image/png" : "video/mp4",
+                Size = 1024 * (i + 1),
+                FileName = $"file-{i + 1}.bin",
+                Hash = $"hash-{i + 1}",
+                Kind = i % 2 == 0
+                    ? SocialPostAttachmentKindProto.SocialPostAttachmentKindImage
+                    : SocialPostAttachmentKindProto.SocialPostAttachmentKindVideo
+            });
+        }
+
+        var response = await feedClient.CreateSocialPostAsync(request);
+        _scenarioContext[LastSocialPostCreateResponseKey] = response;
+    }
+
+    [Then(@"the submission should be accepted")]
+    public void ThenTheSubmissionShouldBeAccepted()
+    {
+        var response = (CreateSocialPostResponse)_scenarioContext[LastSocialPostCreateResponseKey];
+        response.Success.Should().BeTrue($"Expected social post submission to succeed: {response.Message}");
+    }
+
+    [When(@"Owner submits an Open post with 6 media attachments")]
+    public async Task WhenOwnerSubmitsAnOpenPostWithSixMediaAttachments()
+    {
+        var owner = GetTestIdentity(OwnerName);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var request = new CreateSocialPostRequest
+        {
+            PostId = Guid.NewGuid().ToString(),
+            AuthorPublicAddress = owner.PublicSigningAddress,
+            Content = "Post exceeding attachment count",
+            Audience = new SocialPostAudienceProto
+            {
+                Visibility = SocialPostVisibilityProto.SocialPostVisibilityOpen
+            },
+            CreatedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        };
+
+        for (var i = 0; i < 6; i++)
+        {
+            request.Attachments.Add(new SocialPostAttachmentProto
+            {
+                AttachmentId = $"att-over-{i + 1}",
+                MimeType = "image/png",
+                Size = 1024,
+                FileName = $"over-{i + 1}.png",
+                Hash = $"hash-over-{i + 1}",
+                Kind = SocialPostAttachmentKindProto.SocialPostAttachmentKindImage
+            });
+        }
+
+        var response = await feedClient.CreateSocialPostAsync(request);
+        _scenarioContext[LastSocialPostCreateResponseKey] = response;
+    }
+
+    [Then(@"the submission should be rejected with a count limit error")]
+    public void ThenTheSubmissionShouldBeRejectedWithACountLimitError()
+    {
+        var response = (CreateSocialPostResponse)_scenarioContext[LastSocialPostCreateResponseKey];
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be(SocialPostContractErrorCode.AttachmentCountExceeded.ToString());
+    }
+
+    [When(@"Owner submits an Open post with a media attachment over max size")]
+    public async Task WhenOwnerSubmitsAnOpenPostWithAMediaAttachmentOverMaxSize()
+    {
+        var owner = GetTestIdentity(OwnerName);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+
+        var response = await feedClient.CreateSocialPostAsync(new CreateSocialPostRequest
+        {
+            PostId = Guid.NewGuid().ToString(),
+            AuthorPublicAddress = owner.PublicSigningAddress,
+            Content = "Post exceeding size",
+            Audience = new SocialPostAudienceProto
+            {
+                Visibility = SocialPostVisibilityProto.SocialPostVisibilityOpen
+            },
+            CreatedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Attachments =
+            {
+                new SocialPostAttachmentProto
+                {
+                    AttachmentId = "oversize-1",
+                    MimeType = "video/mp4",
+                    Size = SocialPostContractRules.MaxAttachmentSizeBytes + 1,
+                    FileName = "oversize.mp4",
+                    Hash = "oversize-hash",
+                    Kind = SocialPostAttachmentKindProto.SocialPostAttachmentKindVideo
+                }
+            }
+        });
+
+        _scenarioContext[LastSocialPostCreateResponseKey] = response;
+    }
+
+    [Then(@"the submission should be rejected with a size limit error")]
+    public void ThenTheSubmissionShouldBeRejectedWithASizeLimitError()
+    {
+        var response = (CreateSocialPostResponse)_scenarioContext[LastSocialPostCreateResponseKey];
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be(SocialPostContractErrorCode.AttachmentSizeExceeded.ToString());
+    }
+
     private async Task RunFeat085BootstrapAsync()
     {
         var grpcFactory = GetGrpcFactory();
@@ -946,6 +1250,69 @@ public sealed class HushSocialIntegrationSteps
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(user => !string.IsNullOrWhiteSpace(user))
             .ToArray();
+
+    private void StoreSocialPost(string title, CreateSocialPostResponse response)
+    {
+        var postsByTitle = GetOrCreateSocialPostsByTitle();
+        response.Permalink.Should().NotBeNullOrWhiteSpace("successful post creation should return permalink");
+
+        var postId = response.Permalink!.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+        postsByTitle[title] = postId;
+    }
+
+    private string GetStoredPostId(string title)
+    {
+        var postsByTitle = GetOrCreateSocialPostsByTitle();
+        postsByTitle.TryGetValue(title, out var postId)
+            .Should()
+            .BeTrue($"post '{title}' should have been created and stored");
+        return postId!;
+    }
+
+    private Dictionary<string, string> GetOrCreateSocialPostsByTitle()
+    {
+        if (_scenarioContext.TryGetValue(SocialPostsByTitleKey, out var existing)
+            && existing is Dictionary<string, string> map)
+        {
+            return map;
+        }
+
+        var created = new Dictionary<string, string>(StringComparer.Ordinal);
+        _scenarioContext[SocialPostsByTitleKey] = created;
+        return created;
+    }
+
+    private async Task OpenPermalinkAsAuthenticatedUserAsync(string postTitle, string requesterPublicAddress)
+    {
+        var postId = GetStoredPostId(postTitle);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var response = await feedClient.GetSocialPostPermalinkAsync(new GetSocialPostPermalinkRequest
+        {
+            PostId = postId,
+            IsAuthenticated = true,
+            RequesterPublicAddress = requesterPublicAddress
+        });
+
+        _scenarioContext[LastSocialPostPermalinkResponseKey] = response;
+    }
+
+    private GetSocialPostPermalinkResponse GetLastPermalinkResponse()
+    {
+        _scenarioContext.TryGetValue(LastSocialPostPermalinkResponseKey, out var responseObj)
+            .Should()
+            .BeTrue("expected a previously fetched permalink response");
+        responseObj.Should().BeOfType<GetSocialPostPermalinkResponse>();
+        return (GetSocialPostPermalinkResponse)responseObj!;
+    }
+
+    private GetSocialComposerContractResponse GetLastSocialComposerContractResponse()
+    {
+        _scenarioContext.TryGetValue(LastSocialComposerContractResponseKey, out var responseObj)
+            .Should()
+            .BeTrue("expected a previously fetched social composer contract response");
+        responseObj.Should().BeOfType<GetSocialComposerContractResponse>();
+        return (GetSocialComposerContractResponse)responseObj!;
+    }
 
     private GrpcClientFactory GetGrpcFactory()
     {

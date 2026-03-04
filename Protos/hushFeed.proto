@@ -22,6 +22,7 @@ service HushFeed {
   rpc GetGroupFeedByInviteCode (GetGroupFeedByInviteCodeRequest) returns (GetGroupFeedByInviteCodeResponse);
   rpc SearchPublicGroups (SearchPublicGroupsRequest) returns (SearchPublicGroupsResponse);
   rpc GetInnerCircle (GetInnerCircleRequest) returns (GetInnerCircleResponse);
+  rpc GetSocialComposerContract (GetSocialComposerContractRequest) returns (GetSocialComposerContractResponse);
   rpc GetSocialPostPermalink (GetSocialPostPermalinkRequest) returns (GetSocialPostPermalinkResponse);
 
   // Group Feed Creation & Membership Operations
@@ -636,6 +637,37 @@ message GetSocialPostPermalinkRequest {
   bool IsAuthenticated = 3;
 }
 
+enum SocialPermalinkDenialKindProto {
+  SOCIAL_PERMALINK_DENIAL_KIND_UNSPECIFIED = 0;
+  SOCIAL_PERMALINK_DENIAL_KIND_NONE = 1;
+  SOCIAL_PERMALINK_DENIAL_KIND_GUEST_CREATE_ACCOUNT = 2;
+  SOCIAL_PERMALINK_DENIAL_KIND_UNAUTHORIZED_REQUEST_ACCESS = 3;
+}
+
+message GetSocialComposerContractRequest {
+  string OwnerPublicAddress = 1;
+  SocialPostVisibilityProto PreferredVisibility = 2;
+}
+
+message ComposerCircleContractProto {
+  string FeedId = 1;
+  string CircleName = 2;
+  bool IsInnerCircle = 3;
+  int32 MemberCount = 4;
+  bool IsSelectedByDefault = 5;
+  bool IsRemovable = 6;
+}
+
+message GetSocialComposerContractResponse {
+  bool Success = 1;
+  string Message = 2;
+  SocialPostVisibilityProto DefaultVisibility = 3;
+  repeated ComposerCircleContractProto AvailableCircles = 4;
+  repeated string SelectedCircleFeedIds = 5;
+  bool CanSubmit = 6;
+  optional string ErrorCode = 7;
+}
+
 message SocialPostOpenGraphProto {
   string Title = 1;
   string Description = 2;
@@ -656,6 +688,11 @@ message GetSocialPostPermalinkResponse {
   bool CanInteract = 9;
   SocialPostOpenGraphProto OpenGraph = 10;
   optional string ErrorCode = 11;
+  SocialPermalinkDenialKindProto DenialKind = 12;
+  optional string DenialTitle = 13;
+  optional string DenialBody = 14;
+  optional string PrimaryCtaLabel = 15;
+  optional string PrimaryCtaRoute = 16;
 }
 
 // =============================================================================

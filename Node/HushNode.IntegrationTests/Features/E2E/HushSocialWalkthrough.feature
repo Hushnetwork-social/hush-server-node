@@ -52,7 +52,7 @@ Feature: HushSocial end-to-end walkthrough
     When Owner triggers FEAT-085 bootstrap sync twice with unchanged followers
     Then Owner Inner Circle key generation should remain stable after repeated bootstrap
 
-  @FEAT-086 @ignore
+  @ignore
   Scenario: Open and close post creation with permalink behavior
     Given Owner opens HushSocial composer
     When Owner creates Open post "Hello public world" via browser
@@ -66,7 +66,7 @@ Feature: HushSocial end-to-end walkthrough
     When FollowerA opens permalink for post "Hello inner circle"
     Then FollowerA should see post "Hello inner circle"
 
-  @FEAT-086 @ignore
+  @ignore
   Scenario: Media post upload constraints and success path
     Given Owner opens HushSocial composer
     When Owner attaches valid media files and posts "Media update"

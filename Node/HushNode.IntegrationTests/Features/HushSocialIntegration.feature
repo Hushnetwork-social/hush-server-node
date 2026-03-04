@@ -84,7 +84,7 @@ Feature: HushSocial server integration rules
       | 5          |
       | 10         |
 
-  @FEAT-086 @ignore
+  @FEAT-086
   Scenario: Open and close post visibility is enforced by permalink access
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA
@@ -94,11 +94,32 @@ Feature: HushSocial server integration rules
     Then the post content should be visible
     When FollowerC opens permalink for post "Inner circle roadmap"
     Then a generic denial message should be returned
+    And the permalink denial contract should request access from owner
     And no private metadata should be returned
     When FollowerA opens permalink for post "Inner circle roadmap"
     Then the post content should be visible
 
-  @FEAT-086 @ignore
+  @FEAT-086
+  Scenario: Composer contract defaults private mode to Inner Circle with last-circle lock
+    Given Owner profile mode is Close
+    And Owner has accepted follow request from FollowerA
+    And Owner Inner Circle already exists
+    When Owner requests social composer contract in private mode
+    Then social composer default visibility should be private
+    And social composer should select Owner Inner Circle by default
+    And social composer should lock the last selected private circle
+    And social composer submit should be allowed
+
+  @FEAT-086
+  Scenario: Guest private permalink denial returns create-account CTA contract
+    Given Owner profile mode is Close
+    And Owner has accepted follow request from FollowerA
+    And Owner has created a Close post "Guest denied private post" for Inner Circle
+    When an unauthenticated user opens permalink for post "Guest denied private post"
+    Then the permalink denial contract should target guest account creation
+    And no private metadata should be returned
+
+  @FEAT-086
   Scenario: Media constraints for social posts match HushFeeds limits
     Given Owner has HushSocial enabled
     When Owner submits an Open post with 5 valid media attachments
