@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Google.Protobuf;
 using HushNetwork.proto;
 using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
@@ -1244,10 +1245,17 @@ public sealed class HushSocialIntegrationSteps
             circleFeedIds,
             attachments);
 
-        var submitResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        var request = new SubmitSignedTransactionRequest
         {
             SignedTransaction = signedTransaction
-        });
+        };
+
+        if (attachments is { Count: > 0 })
+        {
+            request.Attachments.AddRange(attachments.Select(CreateAttachmentBlob));
+        }
+
+        var submitResponse = await blockchainClient.SubmitSignedTransactionAsync(request);
 
         if (submitResponse.Successfull)
         {
@@ -1344,5 +1352,21 @@ public sealed class HushSocialIntegrationSteps
         }
 
         throw new InvalidOperationException("BlockProductionControl not found in ScenarioContext.");
+    }
+
+    private static AttachmentBlob CreateAttachmentBlob(SocialPostAttachment attachment)
+    {
+        var size = checked((int)attachment.Size);
+        var buffer = new byte[size];
+        for (var index = 0; index < buffer.Length; index++)
+        {
+            buffer[index] = (byte)(index % 251);
+        }
+
+        return new AttachmentBlob
+        {
+            AttachmentId = attachment.AttachmentId,
+            EncryptedOriginal = ByteString.CopyFrom(buffer)
+        };
     }
 }
