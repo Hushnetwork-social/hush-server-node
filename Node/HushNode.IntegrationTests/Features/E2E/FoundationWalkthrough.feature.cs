@@ -140,7 +140,7 @@ namespace HushNode.IntegrationTests.Features.E2E
         testRunner.And("the personal feed transaction is processed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 28
-        testRunner.Then("the user should be redirected to \"/dashboard\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+        testRunner.Then("the user should be redirected to \"/feeds\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 31
         testRunner.And("the feed list should show the personal feed for \"TestUser\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");

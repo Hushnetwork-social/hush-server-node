@@ -24,10 +24,10 @@ Feature: Foundation User Walkthrough
         # Wait for personal feed transaction to be mined into a block
         And the personal feed transaction is processed
 
-        # Step 5: Client redirects to dashboard after identity is confirmed
-        Then the user should be redirected to "/dashboard"
+        # Step 5: Client redirects to feeds after identity is confirmed
+        Then the user should be redirected to "/feeds"
 
-        # Step 6: Dashboard syncs feeds and renders the personal feed
+        # Step 6: Feeds page syncs feeds and renders the personal feed
         And the feed list should show the personal feed for "TestUser"
 
     @PersonalFeed
