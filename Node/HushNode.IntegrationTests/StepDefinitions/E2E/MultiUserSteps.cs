@@ -294,10 +294,10 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         await blockControl.ProduceBlockAsync();
         Console.WriteLine($"[E2E] Block produced after {userName}'s join");
 
-        // 5. Wait for redirect to dashboard (join completes and redirects)
-        Console.WriteLine($"[E2E] {userName} waiting for redirect to dashboard...");
-        await page.WaitForURLAsync("**/dashboard**", new PageWaitForURLOptions { Timeout = 20000 });
-        Console.WriteLine($"[E2E] {userName} redirected to dashboard");
+        // 5. Wait for redirect to the main app shell (route can vary by feature branch)
+        Console.WriteLine($"[E2E] {userName} waiting for post-join landing...");
+        await WaitForPostAuthLandingAsync(page, userName, 20000);
+        Console.WriteLine($"[E2E] {userName} reached landing URL: {page.Url}");
 
         // Wait for page to load
         await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
@@ -1216,8 +1216,8 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         await blockControl.ProduceBlockAsync();
         Console.WriteLine($"[E2E] Personal feed block produced for '{userName}'");
 
-        // Wait for redirect to dashboard
-        await page.WaitForURLAsync("**/dashboard**", new PageWaitForURLOptions { Timeout = 15000 });
+        // Wait for redirect to main app shell (route can vary by feature branch)
+        await WaitForPostAuthLandingAsync(page, userName, 20000);
 
         // Trigger initial sync
         await page.EvaluateAsync("() => window.__e2e_triggerSync()");
@@ -1988,6 +1988,39 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         }
 
         throw new TimeoutException($"Feed '{testId}' did not become ready within {timeoutMs}ms");
+    }
+
+    /// <summary>
+    /// Waits until the app lands on any valid authenticated route/shell.
+    /// </summary>
+    private async Task WaitForPostAuthLandingAsync(IPage page, string userName, int timeoutMs)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            var url = page.Url.ToLowerInvariant();
+            if (url.Contains("/dashboard") || url.Contains("/feeds") || url.Contains("/social"))
+            {
+                return;
+            }
+
+            var socialShell = page.GetByTestId("social-shell");
+            if (await socialShell.CountAsync() > 0 && await socialShell.First.IsVisibleAsync())
+            {
+                return;
+            }
+
+            var feedList = page.GetByTestId("feed-list");
+            if (await feedList.CountAsync() > 0 && await feedList.First.IsVisibleAsync())
+            {
+                return;
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException(
+            $"Timed out waiting for post-auth landing for '{userName}'. Current URL: {page.Url}");
     }
 
     /// <summary>

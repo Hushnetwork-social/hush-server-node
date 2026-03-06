@@ -60,6 +60,7 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 .ThenInclude(kg => kg.EncryptedKeys)
             .Where(g =>
                 !g.IsDeleted &&
+                !g.IsInnerCircle &&
                 g.Participants.Any(p =>
                     p.ParticipantPublicAddress == publicSigningAddress &&
                     p.LeftAtBlock == null &&
@@ -84,6 +85,7 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 .ThenInclude(kg => kg.EncryptedKeys)
             .Where(g =>
                 !g.IsDeleted &&
+                !g.IsInnerCircle &&
                 g.Participants.Any(p =>
                     p.ParticipantPublicAddress == publicSigningAddress &&
                     p.LeftAtBlock != null && // User has left
@@ -111,7 +113,13 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                          gp.LeftAtBlock == null &&
                          gp.ParticipantType != ParticipantType.Banned &&
                          gp.ParticipantType != ParticipantType.Blocked)
-            .Select(gp => gp.FeedId)
+            .Join(
+                this.Context.GroupFeeds,
+                gp => gp.FeedId,
+                gf => gf.FeedId,
+                (gp, gf) => new { gp.FeedId, gf.IsInnerCircle })
+            .Where(x => !x.IsInnerCircle)
+            .Select(x => x.FeedId)
             .Distinct()
             .ToListAsync();
 
@@ -585,6 +593,37 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
                 p.ParticipantPublicAddress == userAddress &&
                 p.LeftAtBlock == null &&
                 p.ParticipantType != ParticipantType.Banned);
+    }
+
+    public async Task CreateSocialPostAsync(SocialPostEntity socialPost) =>
+        await this.Context.SocialPosts.AddAsync(socialPost);
+
+    public async Task<SocialPostEntity?> GetSocialPostAsync(Guid postId) =>
+        await this.Context.SocialPosts
+            .Include(x => x.AudienceCircles)
+            .FirstOrDefaultAsync(x => x.PostId == postId);
+
+    public async Task<IReadOnlyList<SocialPostEntity>> GetLatestSocialPostsAsync(int limit) =>
+        await this.Context.SocialPosts
+            .Include(x => x.AudienceCircles)
+            .OrderByDescending(x => x.CreatedAtBlock)
+            .Take(limit)
+            .ToListAsync();
+
+    public async Task<bool> IsUserInAnyActiveCircleAsync(string userAddress, IReadOnlyList<FeedId> circleFeedIds)
+    {
+        if (circleFeedIds.Count == 0)
+        {
+            return false;
+        }
+
+        return await this.Context.GroupFeedParticipants
+            .AnyAsync(p =>
+                circleFeedIds.Contains(p.FeedId) &&
+                p.ParticipantPublicAddress == userAddress &&
+                p.LeftAtBlock == null &&
+                p.ParticipantType != ParticipantType.Banned &&
+                p.ParticipantType != ParticipantType.Blocked);
     }
 }
 

@@ -21,10 +21,10 @@ internal sealed class HouseCleaningSteps : BrowserStepsBase
     {
         var page = await GetOrCreatePageAsync();
 
-        // Navigate to dashboard if not already there
-        if (!page.Url.Contains("/dashboard"))
+        // Navigate to app shell if not already there
+        if (!(page.Url.Contains("/feeds") || page.Url.Contains("/dashboard") || page.Url.Contains("/social")))
         {
-            await NavigateToAsync(page, "/dashboard");
+            await NavigateToAsync(page, "/feeds");
             await WaitForNetworkIdleAsync(page);
         }
 
@@ -142,10 +142,10 @@ internal sealed class HouseCleaningSteps : BrowserStepsBase
     {
         var page = await GetOrCreatePageAsync();
 
-        // Navigate to dashboard if not already there
-        if (!page.Url.Contains("/dashboard"))
+        // Navigate to app shell if not already there
+        if (!(page.Url.Contains("/feeds") || page.Url.Contains("/dashboard") || page.Url.Contains("/social")))
         {
-            await NavigateToAsync(page, "/dashboard");
+            await NavigateToAsync(page, "/feeds");
             await WaitForNetworkIdleAsync(page);
         }
 

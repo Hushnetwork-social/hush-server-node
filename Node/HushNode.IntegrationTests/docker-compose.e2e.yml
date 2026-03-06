@@ -11,9 +11,9 @@ services:
   hush-web-client:
     image: hush-web-client-e2e:latest
     build:
-      # Build context is repo root (2 levels up from this file)
-      context: ../..
-      dockerfile: hush-web-client/Dockerfile
+      # Build context is hush-web-client project in monorepo
+      context: ../../../hush-web-client
+      dockerfile: Dockerfile
       args:
         # Fixed gRPC-Web port - must match HushServerNodeCore.E2EGrpcWebPort (14666)
         - NEXT_PUBLIC_GRPC_URL=http://host.docker.internal:14666

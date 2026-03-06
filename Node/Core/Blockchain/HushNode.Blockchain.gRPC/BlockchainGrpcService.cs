@@ -233,6 +233,18 @@ public class BlockchainGrpcService(
             return feedMessageTx.Payload.Attachments;
         }
 
+        if (transaction is SignedTransaction<CreateSocialPostPayload> socialPostTx)
+        {
+            return socialPostTx.Payload.Attachments
+                .Select(attachment => new AttachmentReference(
+                    attachment.AttachmentId,
+                    attachment.Hash,
+                    attachment.MimeType,
+                    attachment.Size,
+                    attachment.FileName))
+                .ToList();
+        }
+
         return null;
     }
 

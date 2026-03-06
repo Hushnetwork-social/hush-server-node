@@ -34,10 +34,16 @@ public class NewFeedMessageContentHandler(
         }
 
         var payload = newFeedMessagePayload.Payload;
+        var targetGroupFeed = this._feedsStorageService.GetGroupFeedAsync(payload.FeedId).GetAwaiter().GetResult();
 
-        // If KeyGeneration is set, this is a group feed message - apply group validation
-        if (payload.KeyGeneration != null)
+        // If target feed is a group, KeyGeneration is mandatory and group validation applies.
+        if (targetGroupFeed != null)
         {
+            if (payload.KeyGeneration == null)
+            {
+                return null;
+            }
+
             var senderAddress = newFeedMessagePayload.UserSignature?.Signatory;
 
             if (string.IsNullOrEmpty(senderAddress))
@@ -46,13 +52,14 @@ public class NewFeedMessageContentHandler(
             }
 
             // Validation: Check group exists and is not deleted
-            var groupFeed = this._feedsStorageService.GetGroupFeedAsync(payload.FeedId).GetAwaiter().GetResult();
-            if (groupFeed == null)
+            if (targetGroupFeed.IsDeleted)
             {
                 return null;
             }
 
-            if (groupFeed.IsDeleted)
+            // Circle feeds (InnerCircle + custom circles) are audience containers, not chat channels.
+            // Any message transaction targeting them must be rejected.
+            if (targetGroupFeed.IsInnerCircle || !string.IsNullOrWhiteSpace(targetGroupFeed.OwnerPublicAddress))
             {
                 return null;
             }
@@ -68,7 +75,7 @@ public class NewFeedMessageContentHandler(
             }
 
             // Validation: Check KeyGeneration
-            if (!ValidateKeyGeneration(payload.KeyGeneration.Value, groupFeed.CurrentKeyGeneration, payload.FeedId))
+            if (!ValidateKeyGeneration(payload.KeyGeneration.Value, targetGroupFeed.CurrentKeyGeneration, payload.FeedId))
             {
                 return null;
             }

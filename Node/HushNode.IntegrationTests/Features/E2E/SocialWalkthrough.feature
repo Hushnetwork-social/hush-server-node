@@ -149,9 +149,9 @@ Feature: Social Walkthrough
         When Alice opens the group "Open Forum"
         And Alice sends message "Early bird message!" and waits for confirmation
 
-        # Bob creates private group "Inner Circle" with Diana+Eve and sends a message
-        When Bob creates a private group "Inner Circle" with members "Diana, Eve" via browser
-        When Bob opens the group "Inner Circle"
+        # Bob creates private group "Founders Circle" with Diana+Eve and sends a message
+        When Bob creates a private group "Founders Circle" with members "Diana, Eve" via browser
+        When Bob opens the group "Founders Circle"
         And Bob sends message "Founders only message!" and waits for confirmation
 
         # =================================================================
@@ -198,11 +198,11 @@ Feature: Social Walkthrough
         # --- KEY GENERATION ISOLATION: Private Group ---
         # Diana and Eve were initial members → they share KeyGen 0 → CAN see Bob's message
         When Diana triggers sync
-        And Diana opens the group "Inner Circle"
+        And Diana opens the group "Founders Circle"
         Then Diana should see message "Founders only message!" from Bob
 
         When Eve triggers sync
-        And Eve opens the group "Inner Circle"
+        And Eve opens the group "Founders Circle"
         Then Eve should see message "Founders only message!" from Bob
 
         # --- POST-JOIN MESSAGING (everyone has current key) ---
@@ -225,17 +225,17 @@ Feature: Social Walkthrough
         And Eve opens the group "Open Forum"
         Then Eve should see message "Welcome to Open Forum everyone!" from Alice
 
-        # Inner Circle: Diana sends (post-join, all members have current key)
-        When Diana opens the group "Inner Circle"
-        And Diana sends message "Hello Inner Circle!" and waits for confirmation
+        # Founders Circle: Diana sends (post-join, all members have current key)
+        When Diana opens the group "Founders Circle"
+        And Diana sends message "Hello Founders Circle!" and waits for confirmation
 
         When Bob triggers sync
-        And Bob opens the group "Inner Circle"
-        Then Bob should see message "Hello Inner Circle!" from Diana
+        And Bob opens the group "Founders Circle"
+        Then Bob should see message "Hello Founders Circle!" from Diana
 
         When Eve triggers sync
-        And Eve opens the group "Inner Circle"
-        Then Eve should see message "Hello Inner Circle!" from Diana
+        And Eve opens the group "Founders Circle"
+        Then Eve should see message "Hello Founders Circle!" from Diana
 
         # =================================================================
         # PHASE 8: Feed Ordering + Opening Preserves Order

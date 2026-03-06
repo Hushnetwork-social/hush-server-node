@@ -45,12 +45,15 @@ internal sealed class NewChatSteps : BrowserStepsBase
         var result = await WaitForTestIdAsync(page, resultTestId, 15000);
         Console.WriteLine($"[E2E] Found search result for '{targetDisplayName}'");
 
-        // 6. Start listening for transaction BEFORE clicking the result
-        var waiter = StartListeningForTransactions(minTransactions: 1);
+        // 6. Start listening for transactions BEFORE clicking the result.
+        // Chat creation now submits:
+        // - NewChatFeed transaction
+        // - AddMembersToInnerCircle transaction for the new peer
+        var waiter = StartListeningForTransactions(minTransactions: 2);
 
         // 7. Click the result to create the chat feed
         await result.ClickAsync();
-        Console.WriteLine($"[E2E] Clicked result, waiting for chat creation TX...");
+        Console.WriteLine($"[E2E] Clicked result, waiting for chat + inner-circle TXs...");
 
         // 8. Wait for transaction and produce block
         try

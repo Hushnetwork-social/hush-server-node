@@ -373,10 +373,11 @@ namespace HushNode.IntegrationTests.Features.E2E
         testRunner.And("Alice sends message \"Early bird message!\" and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 153
-        testRunner.When("Bob creates a private group \"Inner Circle\" with members \"Diana, Eve\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+        testRunner.When("Bob creates a private group \"Founders Circle\" with members \"Diana, Eve\" via brows" +
+                        "er", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 154
-        testRunner.When("Bob opens the group \"Inner Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+        testRunner.When("Bob opens the group \"Founders Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 155
         testRunner.And("Bob sends message \"Founders only message!\" and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
@@ -445,7 +446,7 @@ namespace HushNode.IntegrationTests.Features.E2E
         testRunner.When("Diana triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 201
-        testRunner.And("Diana opens the group \"Inner Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.And("Diana opens the group \"Founders Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 202
         testRunner.Then("Diana should see message \"Founders only message!\" from Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
@@ -454,7 +455,7 @@ namespace HushNode.IntegrationTests.Features.E2E
         testRunner.When("Eve triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 205
-        testRunner.And("Eve opens the group \"Inner Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.And("Eve opens the group \"Founders Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 206
         testRunner.Then("Eve should see message \"Founders only message!\" from Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
@@ -502,28 +503,28 @@ namespace HushNode.IntegrationTests.Features.E2E
         testRunner.Then("Eve should see message \"Welcome to Open Forum everyone!\" from Alice", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 229
-        testRunner.When("Diana opens the group \"Inner Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+        testRunner.When("Diana opens the group \"Founders Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 230
-        testRunner.And("Diana sends message \"Hello Inner Circle!\" and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.And("Diana sends message \"Hello Founders Circle!\" and waits for confirmation", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 232
         testRunner.When("Bob triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 233
-        testRunner.And("Bob opens the group \"Inner Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.And("Bob opens the group \"Founders Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 234
-        testRunner.Then("Bob should see message \"Hello Inner Circle!\" from Diana", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+        testRunner.Then("Bob should see message \"Hello Founders Circle!\" from Diana", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 236
         testRunner.When("Eve triggers sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 237
-        testRunner.And("Eve opens the group \"Inner Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.And("Eve opens the group \"Founders Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 238
-        testRunner.Then("Eve should see message \"Hello Inner Circle!\" from Diana", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+        testRunner.Then("Eve should see message \"Hello Founders Circle!\" from Diana", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 244
         testRunner.When("Alice opens the chat with \"Eve\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");

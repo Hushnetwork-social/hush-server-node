@@ -1,159 +1,76 @@
-using System.Collections.Concurrent;
 using HushNetwork.proto;
-using HushNode.Caching;
 using HushNode.Feeds.Storage;
-using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
+using Olimpo;
 
 namespace HushNode.Feeds.gRPC;
 
 public sealed class SocialPostApplicationService(
     IFeedsStorageService feedsStorageService,
-    IBlockchainCache blockchainCache,
-    ISocialPostNotificationService socialPostNotificationService) : ISocialPostApplicationService
+    IAttachmentStorageService attachmentStorageService) : ISocialPostApplicationService
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
-    private readonly IBlockchainCache _blockchainCache = blockchainCache;
-    private readonly ISocialPostNotificationService _socialPostNotificationService = socialPostNotificationService;
+    private readonly IAttachmentStorageService _attachmentStorageService = attachmentStorageService;
 
-    private readonly ConcurrentDictionary<Guid, StoredSocialPost> _posts = new();
-
-    public async Task<CreateSocialPostResponse> CreateSocialPostAsync(CreateSocialPostRequest request)
+    public Task<CreateSocialPostResponse> CreateSocialPostAsync(CreateSocialPostRequest _)
     {
-        if (!Guid.TryParse(request.PostId, out var postId))
+        // FEAT-086 contract: social post creation must be submitted as a signed blockchain transaction.
+        return Task.FromResult(new CreateSocialPostResponse
         {
-            return FailCreate("Invalid PostId format.", "SOCIAL_POST_INVALID_ID");
-        }
-
-        if (string.IsNullOrWhiteSpace(request.AuthorPublicAddress))
-        {
-            return FailCreate("AuthorPublicAddress is required.", "SOCIAL_POST_INVALID_AUTHOR");
-        }
-
-        var audience = MapAudience(request.Audience);
-        var audienceValidation = SocialPostContractRules.ValidateAudience(audience);
-        if (!audienceValidation.IsValid)
-        {
-            return FailCreate(audienceValidation.Message, audienceValidation.ErrorCode.ToString());
-        }
-
-        var attachments = request.Attachments
-            .Select(MapAttachment)
-            .ToArray();
-        var attachmentValidation = SocialPostContractRules.ValidateAttachments(attachments);
-        if (!attachmentValidation.IsValid)
-        {
-            return FailCreate(attachmentValidation.Message, attachmentValidation.ErrorCode.ToString());
-        }
-
-        var normalizedCircles = audience.CircleFeedIds
-            .Select(x => x.Trim())
-            .Where(x => x.Length > 0)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var authorizedPrivateViewers = new HashSet<string>(StringComparer.Ordinal);
-        var authorAddress = request.AuthorPublicAddress.Trim();
-
-        if (audience.Visibility == SocialPostVisibility.Private)
-        {
-            foreach (var circleFeedIdRaw in normalizedCircles)
-            {
-                if (!Guid.TryParse(circleFeedIdRaw, out var circleGuid))
-                {
-                    return FailCreate("Selected circle contains an invalid id.", "SOCIAL_POST_CIRCLE_INVALID");
-                }
-
-                var circleFeed = await _feedsStorageService.GetGroupFeedAsync(new FeedId(circleGuid));
-                if (circleFeed == null || circleFeed.IsDeleted || circleFeed.OwnerPublicAddress != authorAddress)
-                {
-                    return FailCreate("One or more selected circles are missing or invalid.", "SOCIAL_POST_CIRCLE_INVALID");
-                }
-
-                var activeParticipants = await _feedsStorageService.GetActiveParticipantsAsync(circleFeed.FeedId);
-                foreach (var participant in activeParticipants)
-                {
-                    authorizedPrivateViewers.Add(participant.ParticipantPublicAddress);
-                }
-            }
-        }
-
-        authorizedPrivateViewers.Add(authorAddress);
-
-        var createdAtBlock = _blockchainCache.LastBlockIndex.Value;
-        var storedPost = new StoredSocialPost(
-            PostId: postId,
-            AuthorPublicAddress: authorAddress,
-            Content: request.Content ?? string.Empty,
-            AudienceVisibility: audience.Visibility,
-            CircleFeedIds: normalizedCircles,
-            CreatedAtBlock: createdAtBlock,
-            AuthorizedPrivateViewers: authorizedPrivateViewers);
-
-        if (!_posts.TryAdd(postId, storedPost))
-        {
-            return FailCreate("Post with this id already exists.", "SOCIAL_POST_DUPLICATE_ID");
-        }
-
-        await _socialPostNotificationService.NotifyPostCreatedAsync(
-            authorAddress,
-            request.Content ?? string.Empty,
-            audience.Visibility == SocialPostVisibility.Private,
-            postId.ToString("D"),
-            authorizedPrivateViewers.ToArray());
-
-        return new CreateSocialPostResponse
-        {
-            Success = true,
-            Message = "Social post accepted.",
-            Permalink = $"/social/post/{postId:D}"
-        };
+            Success = false,
+            Message = "Use signed blockchain transaction CreateSocialPostPayload.",
+            ErrorCode = "SOCIAL_POST_BLOCKCHAIN_REQUIRED"
+        });
     }
 
-    public Task<GetSocialPostPermalinkResponse> GetSocialPostPermalinkAsync(GetSocialPostPermalinkRequest request)
+    public async Task<GetSocialPostPermalinkResponse> GetSocialPostPermalinkAsync(GetSocialPostPermalinkRequest request)
     {
         if (!Guid.TryParse(request.PostId, out var postId))
         {
-            return Task.FromResult(new GetSocialPostPermalinkResponse
+            return new GetSocialPostPermalinkResponse
             {
                 Success = false,
                 Message = "Invalid PostId format.",
                 AccessState = SocialPermalinkAccessStateProto.SocialPermalinkAccessStateNotFound,
                 OpenGraph = GenericPrivateOg()
-            });
+            };
         }
 
-        if (!_posts.TryGetValue(postId, out var post))
+        var post = await this._feedsStorageService.GetSocialPostAsync(postId);
+        if (post == null)
         {
-            return Task.FromResult(new GetSocialPostPermalinkResponse
+            return new GetSocialPostPermalinkResponse
             {
                 Success = false,
                 Message = "Post not found.",
                 AccessState = SocialPermalinkAccessStateProto.SocialPermalinkAccessStateNotFound,
                 OpenGraph = GenericPrivateOg()
-            });
+            };
         }
 
         if (post.AudienceVisibility == SocialPostVisibility.Open)
         {
-            return Task.FromResult(new GetSocialPostPermalinkResponse
+            var attachments = await this.GetSocialPostAttachmentsAsync(post.PostId);
+            return new GetSocialPostPermalinkResponse
             {
                 Success = true,
                 Message = "Post resolved.",
                 AccessState = SocialPermalinkAccessStateProto.SocialPermalinkAccessStateAllowed,
-                PostId = post.PostId.ToString(),
+                PostId = post.PostId.ToString("D"),
                 AuthorPublicAddress = post.AuthorPublicAddress,
                 Content = post.Content,
-                CreatedAtBlock = post.CreatedAtBlock,
+                CreatedAtBlock = post.CreatedAtBlock.Value,
+                CreatedAtUnixMs = post.CreatedAtUnixMs,
                 CanInteract = request.IsAuthenticated,
                 DenialKind = SocialPermalinkDenialKindProto.SocialPermalinkDenialKindNone,
-                OpenGraph = PublicOg(post.Content)
-            });
+                OpenGraph = PublicOg(post.Content),
+                Attachments = { attachments }
+            };
         }
 
         if (!request.IsAuthenticated)
         {
-            return Task.FromResult(new GetSocialPostPermalinkResponse
+            return new GetSocialPostPermalinkResponse
             {
                 Success = true,
                 Message = "Authentication is required.",
@@ -166,16 +83,20 @@ public sealed class SocialPostApplicationService(
                 PrimaryCtaLabel = "Create account",
                 PrimaryCtaRoute = "/register",
                 OpenGraph = GenericPrivateOg()
-            });
+            };
         }
 
         var requester = request.RequesterPublicAddress?.Trim();
-        var isAllowed = !string.IsNullOrWhiteSpace(requester) &&
-                        post.AuthorizedPrivateViewers.Contains(requester);
+        var isRequesterAuthor = !string.IsNullOrWhiteSpace(requester) &&
+                                string.Equals(requester, post.AuthorPublicAddress, StringComparison.Ordinal);
 
-        if (!isAllowed)
+        var circleFeedIds = post.AudienceCircles.Select(x => x.CircleFeedId).ToArray();
+        var hasCircleAccess = !string.IsNullOrWhiteSpace(requester) &&
+            await this._feedsStorageService.IsUserInAnyActiveCircleAsync(requester, circleFeedIds);
+
+        if (!isRequesterAuthor && !hasCircleAccess)
         {
-            return Task.FromResult(new GetSocialPostPermalinkResponse
+            return new GetSocialPostPermalinkResponse
             {
                 Success = true,
                 Message = "You do not have permission to view this post.",
@@ -188,7 +109,7 @@ public sealed class SocialPostApplicationService(
                 PrimaryCtaLabel = "Request access",
                 PrimaryCtaRoute = "/social/following",
                 OpenGraph = GenericPrivateOg()
-            });
+            };
         }
 
         var response = new GetSocialPostPermalinkResponse
@@ -196,58 +117,74 @@ public sealed class SocialPostApplicationService(
             Success = true,
             Message = "Post resolved.",
             AccessState = SocialPermalinkAccessStateProto.SocialPermalinkAccessStateAllowed,
-            PostId = post.PostId.ToString(),
+            PostId = post.PostId.ToString("D"),
             AuthorPublicAddress = post.AuthorPublicAddress,
             Content = post.Content,
-            CreatedAtBlock = post.CreatedAtBlock,
+            CreatedAtBlock = post.CreatedAtBlock.Value,
+            CreatedAtUnixMs = post.CreatedAtUnixMs,
             CanInteract = true,
             DenialKind = SocialPermalinkDenialKindProto.SocialPermalinkDenialKindNone,
             OpenGraph = PublicOg(post.Content)
         };
 
-        response.CircleFeedIds.AddRange(post.CircleFeedIds);
-        return Task.FromResult(response);
+        response.CircleFeedIds.AddRange(post.AudienceCircles.Select(x => x.CircleFeedId.ToString()));
+        response.Attachments.AddRange(await this.GetSocialPostAttachmentsAsync(post.PostId));
+        return response;
     }
 
-    private static CreateSocialPostResponse FailCreate(string message, string code) =>
-        new()
-        {
-            Success = false,
-            Message = message,
-            ErrorCode = code
-        };
-
-    private static SocialPostAudience MapAudience(SocialPostAudienceProto? audience)
+    public async Task<GetSocialFeedWallResponse> GetSocialFeedWallAsync(GetSocialFeedWallRequest request)
     {
-        if (audience == null)
+        var limit = request.Limit <= 0 ? 50 : Math.Min(request.Limit, 200);
+        var posts = await this._feedsStorageService.GetLatestSocialPostsAsync(limit);
+        var requester = request.RequesterPublicAddress?.Trim();
+        var isAuthenticated = request.IsAuthenticated && !string.IsNullOrWhiteSpace(requester);
+
+        var visiblePosts = new List<SocialFeedWallPostProto>();
+        foreach (var post in posts)
         {
-            return new SocialPostAudience(SocialPostVisibility.Open, Array.Empty<string>());
+            var canView = post.AudienceVisibility == SocialPostVisibility.Open;
+
+            if (!canView && isAuthenticated && requester != null)
+            {
+                var isAuthor = string.Equals(post.AuthorPublicAddress, requester, StringComparison.Ordinal);
+                if (isAuthor)
+                {
+                    canView = true;
+                }
+                else
+                {
+                    var circleFeedIds = post.AudienceCircles.Select(x => x.CircleFeedId).ToArray();
+                    canView = await this._feedsStorageService.IsUserInAnyActiveCircleAsync(requester, circleFeedIds);
+                }
+            }
+
+            if (!canView)
+            {
+                continue;
+            }
+
+            var postProto = new SocialFeedWallPostProto
+            {
+                PostId = post.PostId.ToString("D"),
+                AuthorPublicAddress = post.AuthorPublicAddress,
+                Content = post.Content,
+                CreatedAtBlock = post.CreatedAtBlock.Value,
+                CreatedAtUnixMs = post.CreatedAtUnixMs,
+                Visibility = post.AudienceVisibility == SocialPostVisibility.Private
+                    ? SocialPostVisibilityProto.SocialPostVisibilityPrivate
+                    : SocialPostVisibilityProto.SocialPostVisibilityOpen
+            };
+            postProto.CircleFeedIds.AddRange(post.AudienceCircles.Select(x => x.CircleFeedId.ToString()));
+            postProto.Attachments.AddRange(await this.GetSocialPostAttachmentsAsync(post.PostId));
+            visiblePosts.Add(postProto);
         }
 
-        var visibility = audience.Visibility switch
+        return new GetSocialFeedWallResponse
         {
-            SocialPostVisibilityProto.SocialPostVisibilityPrivate => SocialPostVisibility.Private,
-            _ => SocialPostVisibility.Open
+            Success = true,
+            Message = "Feed wall resolved.",
+            Posts = { visiblePosts }
         };
-
-        return new SocialPostAudience(visibility, audience.CircleFeedIds.ToArray());
-    }
-
-    private static SocialPostAttachment MapAttachment(SocialPostAttachmentProto attachment)
-    {
-        var kind = attachment.Kind switch
-        {
-            SocialPostAttachmentKindProto.SocialPostAttachmentKindVideo => SocialPostAttachmentKind.Video,
-            _ => SocialPostAttachmentKind.Image
-        };
-
-        return new SocialPostAttachment(
-            attachment.AttachmentId,
-            attachment.MimeType,
-            attachment.Size,
-            attachment.FileName,
-            attachment.Hash,
-            kind);
     }
 
     private static SocialPostOpenGraphProto GenericPrivateOg() =>
@@ -271,12 +208,22 @@ public sealed class SocialPostApplicationService(
         };
     }
 
-    private sealed record StoredSocialPost(
-        Guid PostId,
-        string AuthorPublicAddress,
-        string Content,
-        SocialPostVisibility AudienceVisibility,
-        string[] CircleFeedIds,
-        long CreatedAtBlock,
-        HashSet<string> AuthorizedPrivateViewers);
+    private async Task<IReadOnlyList<SocialPostAttachmentProto>> GetSocialPostAttachmentsAsync(Guid postId)
+    {
+        var attachments = await this._attachmentStorageService.GetByMessageIdAsync(new FeedMessageId(postId));
+        return attachments
+            .OrderBy(x => x.CreatedAt)
+            .Select(attachment => new SocialPostAttachmentProto
+            {
+                AttachmentId = attachment.Id,
+                MimeType = attachment.MimeType,
+                Size = attachment.OriginalSize,
+                FileName = attachment.FileName,
+                Hash = attachment.Hash,
+                Kind = attachment.MimeType.StartsWith("video/", StringComparison.OrdinalIgnoreCase)
+                    ? SocialPostAttachmentKindProto.SocialPostAttachmentKindVideo
+                    : SocialPostAttachmentKindProto.SocialPostAttachmentKindImage
+            })
+            .ToArray();
+    }
 }

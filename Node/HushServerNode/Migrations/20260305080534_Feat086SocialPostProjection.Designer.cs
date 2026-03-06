@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -10,9 +11,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HushServerNode.Migrations
 {
     [DbContext(typeof(HushNodeDbContext))]
-    partial class HushNodeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260305080534_Feat086SocialPostProjection")]
+    partial class Feat086SocialPostProjection
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -484,9 +487,6 @@ namespace HushServerNode.Migrations
                     b.Property<long>("CreatedAtBlock")
                         .HasColumnType("bigint");
 
-                    b.Property<long>("CreatedAtUnixMs")
-                        .HasColumnType("bigint");
-
                     b.HasKey("PostId");
 
                     b.HasIndex("AuthorPublicAddress")
@@ -494,9 +494,6 @@ namespace HushServerNode.Migrations
 
                     b.HasIndex("CreatedAtBlock")
                         .HasDatabaseName("IX_SocialPost_CreatedAtBlock");
-
-                    b.HasIndex("CreatedAtUnixMs")
-                        .HasDatabaseName("IX_SocialPost_CreatedAtUnixMs");
 
                     b.ToTable("SocialPost", "Feeds");
                 });

@@ -291,4 +291,24 @@ public interface IFeedsStorageService
     /// Returns true if user is an active participant (not left, not banned).
     /// </summary>
     Task<bool> IsUserParticipantOfFeedAsync(FeedId feedId, string userAddress);
+
+    /// <summary>
+    /// Persists a social post projection and audience circle links.
+    /// </summary>
+    Task CreateSocialPostAsync(SocialPostEntity socialPost);
+
+    /// <summary>
+    /// Retrieves a social post projection by id.
+    /// </summary>
+    Task<SocialPostEntity?> GetSocialPostAsync(Guid postId);
+
+    /// <summary>
+    /// Retrieves latest social posts ordered by CreatedAtBlock desc.
+    /// </summary>
+    Task<IReadOnlyList<SocialPostEntity>> GetLatestSocialPostsAsync(int limit);
+
+    /// <summary>
+    /// Returns true when the user is an active member of at least one selected circle.
+    /// </summary>
+    Task<bool> IsUserInAnyActiveCircleAsync(string userAddress, IReadOnlyList<FeedId> circleFeedIds);
 }

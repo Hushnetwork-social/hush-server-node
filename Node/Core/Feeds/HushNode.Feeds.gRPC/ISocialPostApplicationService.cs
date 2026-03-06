@@ -7,4 +7,6 @@ public interface ISocialPostApplicationService
     Task<CreateSocialPostResponse> CreateSocialPostAsync(CreateSocialPostRequest request);
 
     Task<GetSocialPostPermalinkResponse> GetSocialPostPermalinkAsync(GetSocialPostPermalinkRequest request);
+
+    Task<GetSocialFeedWallResponse> GetSocialFeedWallAsync(GetSocialFeedWallRequest request);
 }

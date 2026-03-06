@@ -142,6 +142,12 @@ public static class FeedsHostBuild
             services.AddTransient<IIndexStrategy, AddMembersToCustomCircleIndexStrategy>();
             services.AddTransient<ITransactionContentHandler, AddMembersToCustomCircleContentHandler>();
             services.AddTransient<IAddMembersToCustomCircleTransactionHandler, AddMembersToCustomCircleTransactionHandler>();
+
+            // FEAT-086: Social post creation (blockchain-backed)
+            services.AddTransient<ITransactionDeserializerStrategy, CreateSocialPostDeserializerStrategy>();
+            services.AddTransient<IIndexStrategy, CreateSocialPostIndexStrategy>();
+            services.AddTransient<ITransactionContentHandler, CreateSocialPostContentHandler>();
+            services.AddTransient<ICreateSocialPostTransactionHandler, CreateSocialPostTransactionHandler>();
         });
 
         return builder;

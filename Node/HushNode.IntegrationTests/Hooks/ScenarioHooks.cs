@@ -408,11 +408,7 @@ internal sealed class ScenarioHooks
         try
         {
             // Get the current active page — try E2E_MainPage first (set by all browser steps)
-            IPage? page = null;
-            if (_scenarioContext.TryGetValue("E2E_MainPage", out var pageObj) && pageObj is IPage mainPage && !mainPage.IsClosed)
-            {
-                page = mainPage;
-            }
+            var page = ResolveScreenshotPage(stepText);
 
             if (page == null)
             {
@@ -432,9 +428,14 @@ internal sealed class ScenarioHooks
             var safeStepName = Regex.Replace(stepText, @"[^a-zA-Z0-9]+", "-").Trim('-').ToLowerInvariant();
             if (safeStepName.Length > 80) safeStepName = safeStepName.Substring(0, 80);
 
-            // Include current user name if in multi-user context
+            // Include inferred/current user name for multi-user scenarios
             var userPrefix = "";
-            if (_scenarioContext.TryGetValue("CurrentUser", out var userObj) && userObj is string userName)
+            var inferredUser = InferUserFromStepText(stepText);
+            if (!string.IsNullOrWhiteSpace(inferredUser))
+            {
+                userPrefix = $"{inferredUser.ToLowerInvariant()}-";
+            }
+            else if (_scenarioContext.TryGetValue("CurrentUser", out var userObj) && userObj is string userName)
             {
                 userPrefix = $"{userName.ToLowerInvariant()}-";
             }
@@ -452,6 +453,61 @@ internal sealed class ScenarioHooks
             // Never let screenshot failures break tests
             Console.WriteLine($"[E2E Screenshot] Auto-screenshot failed: {ex.Message}");
         }
+    }
+
+    private IPage? ResolveScreenshotPage(string stepText)
+    {
+        var inferredUser = InferUserFromStepText(stepText);
+        if (!string.IsNullOrWhiteSpace(inferredUser))
+        {
+            var inferredKey = $"E2E_Page_{inferredUser}";
+            if (_scenarioContext.TryGetValue(inferredKey, out var inferredPageObj)
+                && inferredPageObj is IPage inferredPage
+                && !inferredPage.IsClosed)
+            {
+                return inferredPage;
+            }
+        }
+
+        if (_scenarioContext.TryGetValue("CurrentUser", out var userObj) && userObj is string currentUser)
+        {
+            var currentUserKey = $"E2E_Page_{currentUser}";
+            if (_scenarioContext.TryGetValue(currentUserKey, out var currentUserPageObj)
+                && currentUserPageObj is IPage currentUserPage
+                && !currentUserPage.IsClosed)
+            {
+                return currentUserPage;
+            }
+        }
+
+        if (_scenarioContext.TryGetValue("E2E_MainPage", out var pageObj)
+            && pageObj is IPage mainPage
+            && !mainPage.IsClosed)
+        {
+            return mainPage;
+        }
+
+        return null;
+    }
+
+    private static string? InferUserFromStepText(string stepText)
+    {
+        if (stepText.StartsWith("Owner ", StringComparison.Ordinal) || stepText.StartsWith("\"Owner\"", StringComparison.Ordinal))
+        {
+            return "Owner";
+        }
+
+        if (stepText.StartsWith("FollowerA ", StringComparison.Ordinal) || stepText.StartsWith("\"FollowerA\"", StringComparison.Ordinal))
+        {
+            return "FollowerA";
+        }
+
+        if (stepText.StartsWith("FollowerB ", StringComparison.Ordinal) || stepText.StartsWith("\"FollowerB\"", StringComparison.Ordinal))
+        {
+            return "FollowerB";
+        }
+
+        return null;
     }
 
     /// <summary>

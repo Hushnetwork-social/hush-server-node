@@ -24,6 +24,8 @@ service HushFeed {
   rpc GetInnerCircle (GetInnerCircleRequest) returns (GetInnerCircleResponse);
   rpc GetSocialComposerContract (GetSocialComposerContractRequest) returns (GetSocialComposerContractResponse);
   rpc GetSocialPostPermalink (GetSocialPostPermalinkRequest) returns (GetSocialPostPermalinkResponse);
+  rpc GetSocialFeedWall (GetSocialFeedWallRequest) returns (GetSocialFeedWallResponse);
+  rpc DownloadSocialPostAttachment(DownloadSocialPostAttachmentRequest) returns (stream AttachmentChunk);
 
   // Group Feed Creation & Membership Operations
   rpc CreateGroupFeed (NewGroupFeedRequest) returns (NewGroupFeedResponse);
@@ -693,11 +695,44 @@ message GetSocialPostPermalinkResponse {
   optional string DenialBody = 14;
   optional string PrimaryCtaLabel = 15;
   optional string PrimaryCtaRoute = 16;
+  repeated SocialPostAttachmentProto Attachments = 17;
+  optional int64 CreatedAtUnixMs = 18;
+}
+
+message GetSocialFeedWallRequest {
+  optional string RequesterPublicAddress = 1;
+  bool IsAuthenticated = 2;
+  int32 Limit = 3;
+}
+
+message SocialFeedWallPostProto {
+  string PostId = 1;
+  string AuthorPublicAddress = 2;
+  string Content = 3;
+  int64 CreatedAtBlock = 4;
+  SocialPostVisibilityProto Visibility = 5;
+  repeated string CircleFeedIds = 6;
+  int64 CreatedAtUnixMs = 7;
+  repeated SocialPostAttachmentProto Attachments = 8;
+}
+
+message GetSocialFeedWallResponse {
+  bool Success = 1;
+  string Message = 2;
+  repeated SocialFeedWallPostProto Posts = 3;
+  optional string ErrorCode = 4;
 }
 
 // =============================================================================
 // FEAT-066: Attachment Download (server-streaming)
 // =============================================================================
+
+message DownloadSocialPostAttachmentRequest {
+  string AttachmentId = 1;         // UUID of the attachment to download
+  string PostId = 2;               // Social post ID that owns this attachment
+  optional string RequesterPublicAddress = 3; // Requester's public signing address
+  bool IsAuthenticated = 4;        // Whether requester is authenticated
+}
 
 message DownloadAttachmentRequest {
   string AttachmentId = 1;       // UUID of the attachment to download

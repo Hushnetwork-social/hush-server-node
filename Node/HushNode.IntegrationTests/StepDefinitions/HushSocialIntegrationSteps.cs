@@ -560,19 +560,10 @@ public sealed class HushSocialIntegrationSteps
     public async Task GivenOwnerHasCreatedAnOpenPost(string postTitle)
     {
         var owner = GetTestIdentity(OwnerName);
-        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
-
-        var response = await feedClient.CreateSocialPostAsync(new CreateSocialPostRequest
-        {
-            PostId = Guid.NewGuid().ToString(),
-            AuthorPublicAddress = owner.PublicSigningAddress,
-            Content = postTitle,
-            Audience = new SocialPostAudienceProto
-            {
-                Visibility = SocialPostVisibilityProto.SocialPostVisibilityOpen
-            },
-            CreatedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        });
+        var response = await SubmitSocialPostAsync(
+            owner,
+            postTitle,
+            SocialPostVisibility.Open);
 
         response.Success.Should().BeTrue($"Open post creation should succeed: {response.Message}");
         StoreSocialPost(postTitle, response);
@@ -584,20 +575,11 @@ public sealed class HushSocialIntegrationSteps
     {
         var owner = GetTestIdentity(OwnerName);
         var innerCircleFeedId = await EnsureOwnerInnerCircleExistsAsync();
-        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
-
-        var response = await feedClient.CreateSocialPostAsync(new CreateSocialPostRequest
-        {
-            PostId = Guid.NewGuid().ToString(),
-            AuthorPublicAddress = owner.PublicSigningAddress,
-            Content = postTitle,
-            Audience = new SocialPostAudienceProto
-            {
-                Visibility = SocialPostVisibilityProto.SocialPostVisibilityPrivate,
-                CircleFeedIds = { innerCircleFeedId }
-            },
-            CreatedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        });
+        var response = await SubmitSocialPostAsync(
+            owner,
+            postTitle,
+            SocialPostVisibility.Private,
+            [FeedIdHandler.CreateFromString(innerCircleFeedId)]);
 
         response.Success.Should().BeTrue($"Private post creation should succeed: {response.Message}");
         StoreSocialPost(postTitle, response);
@@ -734,35 +716,22 @@ public sealed class HushSocialIntegrationSteps
     public async Task WhenOwnerSubmitsAnOpenPostWithFiveValidMediaAttachments()
     {
         var owner = GetTestIdentity(OwnerName);
-        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
-        var request = new CreateSocialPostRequest
-        {
-            PostId = Guid.NewGuid().ToString(),
-            AuthorPublicAddress = owner.PublicSigningAddress,
-            Content = "Post with max valid attachments",
-            Audience = new SocialPostAudienceProto
-            {
-                Visibility = SocialPostVisibilityProto.SocialPostVisibilityOpen
-            },
-            CreatedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        };
+        var attachments = Enumerable.Range(0, 5)
+            .Select(i => new SocialPostAttachment(
+                AttachmentId: $"att-{i + 1}",
+                MimeType: i % 2 == 0 ? "image/png" : "video/mp4",
+                Size: 1024 * (i + 1),
+                FileName: $"file-{i + 1}.bin",
+                Hash: $"hash-{i + 1}",
+                Kind: i % 2 == 0 ? SocialPostAttachmentKind.Image : SocialPostAttachmentKind.Video))
+            .ToArray();
 
-        for (var i = 0; i < 5; i++)
-        {
-            request.Attachments.Add(new SocialPostAttachmentProto
-            {
-                AttachmentId = $"att-{i + 1}",
-                MimeType = i % 2 == 0 ? "image/png" : "video/mp4",
-                Size = 1024 * (i + 1),
-                FileName = $"file-{i + 1}.bin",
-                Hash = $"hash-{i + 1}",
-                Kind = i % 2 == 0
-                    ? SocialPostAttachmentKindProto.SocialPostAttachmentKindImage
-                    : SocialPostAttachmentKindProto.SocialPostAttachmentKindVideo
-            });
-        }
-
-        var response = await feedClient.CreateSocialPostAsync(request);
+        var response = await SubmitSocialPostAsync(
+            owner,
+            "Post with max valid attachments",
+            SocialPostVisibility.Open,
+            null,
+            attachments);
         _scenarioContext[LastSocialPostCreateResponseKey] = response;
     }
 
@@ -777,33 +746,22 @@ public sealed class HushSocialIntegrationSteps
     public async Task WhenOwnerSubmitsAnOpenPostWithSixMediaAttachments()
     {
         var owner = GetTestIdentity(OwnerName);
-        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
-        var request = new CreateSocialPostRequest
-        {
-            PostId = Guid.NewGuid().ToString(),
-            AuthorPublicAddress = owner.PublicSigningAddress,
-            Content = "Post exceeding attachment count",
-            Audience = new SocialPostAudienceProto
-            {
-                Visibility = SocialPostVisibilityProto.SocialPostVisibilityOpen
-            },
-            CreatedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        };
+        var attachments = Enumerable.Range(0, 6)
+            .Select(i => new SocialPostAttachment(
+                AttachmentId: $"att-over-{i + 1}",
+                MimeType: "image/png",
+                Size: 1024,
+                FileName: $"over-{i + 1}.png",
+                Hash: $"hash-over-{i + 1}",
+                Kind: SocialPostAttachmentKind.Image))
+            .ToArray();
 
-        for (var i = 0; i < 6; i++)
-        {
-            request.Attachments.Add(new SocialPostAttachmentProto
-            {
-                AttachmentId = $"att-over-{i + 1}",
-                MimeType = "image/png",
-                Size = 1024,
-                FileName = $"over-{i + 1}.png",
-                Hash = $"hash-over-{i + 1}",
-                Kind = SocialPostAttachmentKindProto.SocialPostAttachmentKindImage
-            });
-        }
-
-        var response = await feedClient.CreateSocialPostAsync(request);
+        var response = await SubmitSocialPostAsync(
+            owner,
+            "Post exceeding attachment count",
+            SocialPostVisibility.Open,
+            null,
+            attachments);
         _scenarioContext[LastSocialPostCreateResponseKey] = response;
     }
 
@@ -819,31 +777,20 @@ public sealed class HushSocialIntegrationSteps
     public async Task WhenOwnerSubmitsAnOpenPostWithAMediaAttachmentOverMaxSize()
     {
         var owner = GetTestIdentity(OwnerName);
-        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
-
-        var response = await feedClient.CreateSocialPostAsync(new CreateSocialPostRequest
-        {
-            PostId = Guid.NewGuid().ToString(),
-            AuthorPublicAddress = owner.PublicSigningAddress,
-            Content = "Post exceeding size",
-            Audience = new SocialPostAudienceProto
-            {
-                Visibility = SocialPostVisibilityProto.SocialPostVisibilityOpen
-            },
-            CreatedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            Attachments =
-            {
-                new SocialPostAttachmentProto
-                {
-                    AttachmentId = "oversize-1",
-                    MimeType = "video/mp4",
-                    Size = SocialPostContractRules.MaxAttachmentSizeBytes + 1,
-                    FileName = "oversize.mp4",
-                    Hash = "oversize-hash",
-                    Kind = SocialPostAttachmentKindProto.SocialPostAttachmentKindVideo
-                }
-            }
-        });
+        var response = await SubmitSocialPostAsync(
+            owner,
+            "Post exceeding size",
+            SocialPostVisibility.Open,
+            null,
+            [
+                new SocialPostAttachment(
+                    AttachmentId: "oversize-1",
+                    MimeType: "video/mp4",
+                    Size: SocialPostContractRules.MaxAttachmentSizeBytes + 1,
+                    FileName: "oversize.mp4",
+                    Hash: "oversize-hash",
+                    Kind: SocialPostAttachmentKind.Video)
+            ]);
 
         _scenarioContext[LastSocialPostCreateResponseKey] = response;
     }
@@ -1280,6 +1227,69 @@ public sealed class HushSocialIntegrationSteps
         var created = new Dictionary<string, string>(StringComparer.Ordinal);
         _scenarioContext[SocialPostsByTitleKey] = created;
         return created;
+    }
+
+    private async Task<CreateSocialPostResponse> SubmitSocialPostAsync(
+        TestIdentity author,
+        string content,
+        SocialPostVisibility visibility,
+        IReadOnlyCollection<FeedId>? circleFeedIds = null,
+        IReadOnlyCollection<SocialPostAttachment>? attachments = null)
+    {
+        var blockchainClient = GetGrpcFactory().CreateClient<HushBlockchain.HushBlockchainClient>();
+        var (signedTransaction, postId) = TestTransactionFactory.CreateSocialPost(
+            author,
+            content,
+            visibility,
+            circleFeedIds,
+            attachments);
+
+        var submitResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction
+        });
+
+        if (submitResponse.Successfull)
+        {
+            await GetBlockControl().ProduceBlockAsync();
+            return new CreateSocialPostResponse
+            {
+                Success = true,
+                Message = submitResponse.Message,
+                Permalink = $"/social/post/{postId:D}"
+            };
+        }
+
+        return new CreateSocialPostResponse
+        {
+            Success = false,
+            Message = submitResponse.Message,
+            ErrorCode = ResolveCreateSocialPostErrorCode(content, visibility, circleFeedIds, attachments)
+        };
+    }
+
+    private static string ResolveCreateSocialPostErrorCode(
+        string content,
+        SocialPostVisibility visibility,
+        IReadOnlyCollection<FeedId>? circleFeedIds,
+        IReadOnlyCollection<SocialPostAttachment>? attachments)
+    {
+        var audienceValidation = SocialPostContractRules.ValidateAudience(new SocialPostAudience(
+            visibility,
+            (circleFeedIds ?? Array.Empty<FeedId>()).Select(x => x.ToString()).ToArray()));
+        if (!audienceValidation.IsValid)
+        {
+            return audienceValidation.ErrorCode.ToString();
+        }
+
+        var attachmentValidation = SocialPostContractRules.ValidateAttachments(
+            (attachments ?? Array.Empty<SocialPostAttachment>()).ToArray());
+        if (!attachmentValidation.IsValid)
+        {
+            return attachmentValidation.ErrorCode.ToString();
+        }
+
+        return string.IsNullOrWhiteSpace(content) ? "SOCIAL_POST_EMPTY_CONTENT" : "SOCIAL_POST_REJECTED";
     }
 
     private async Task OpenPermalinkAsAuthenticatedUserAsync(string postTitle, string requesterPublicAddress)

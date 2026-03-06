@@ -649,4 +649,33 @@ public class FeedsStorageService(
             .CreateReadOnly()
             .GetRepository<IFeedsRepository>()
             .IsUserParticipantOfFeedAsync(feedId, userAddress);
+
+    public async Task CreateSocialPostAsync(SocialPostEntity socialPost)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+
+        await writableUnitOfWork
+            .GetRepository<IFeedsRepository>()
+            .CreateSocialPostAsync(socialPost);
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
+    public async Task<SocialPostEntity?> GetSocialPostAsync(Guid postId) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetSocialPostAsync(postId);
+
+    public async Task<IReadOnlyList<SocialPostEntity>> GetLatestSocialPostsAsync(int limit) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetLatestSocialPostsAsync(limit);
+
+    public async Task<bool> IsUserInAnyActiveCircleAsync(string userAddress, IReadOnlyList<FeedId> circleFeedIds) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .IsUserInAnyActiveCircleAsync(userAddress, circleFeedIds);
 }

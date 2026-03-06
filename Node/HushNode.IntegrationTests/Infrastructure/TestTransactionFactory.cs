@@ -355,6 +355,45 @@ internal static class TestTransactionFactory
     }
 
     /// <summary>
+    /// Creates a signed social post creation transaction (FEAT-086).
+    /// </summary>
+    public static (string Transaction, Guid PostId) CreateSocialPost(
+        TestIdentity author,
+        string content,
+        SocialPostVisibility visibility,
+        IReadOnlyCollection<FeedId>? circleFeedIds = null,
+        IReadOnlyCollection<SocialPostAttachment>? attachments = null)
+    {
+        var postId = Guid.NewGuid();
+        var audience = new SocialPostAudience(
+            visibility,
+            (circleFeedIds ?? Array.Empty<FeedId>()).Select(x => x.ToString()).ToArray());
+
+        var payload = new CreateSocialPostPayload(
+            postId,
+            author.PublicSigningAddress,
+            content,
+            audience,
+            (attachments ?? Array.Empty<SocialPostAttachment>()).ToArray(),
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+        var unsignedTransaction = UnsignedTransactionHandler.CreateNew(
+            CreateSocialPostPayloadHandler.CreateSocialPostPayloadKind,
+            Timestamp.Current,
+            payload);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            author.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<CreateSocialPostPayload>(
+            unsignedTransaction,
+            new SignatureInfo(author.PublicSigningAddress, signature));
+
+        return (signedTransaction.ToJson(), postId);
+    }
+
+    /// <summary>
     /// Creates a signed UpdateGroupFeedTitle transaction.
     /// </summary>
     /// <param name="admin">The admin identity issuing the title change.</param>

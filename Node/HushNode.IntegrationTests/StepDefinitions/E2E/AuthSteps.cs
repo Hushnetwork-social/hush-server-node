@@ -91,7 +91,7 @@ internal sealed class AuthSteps : BrowserStepsBase
     ///   And the user creates a new identity with display name "{displayName}"
     ///   And the identity transaction is processed
     ///   And the personal feed transaction is processed
-    ///   Then the user should be redirected to "/dashboard"
+    ///   Then the user should be redirected to app shell ("/feeds")
     ///   And the feed list should show the personal feed for "{displayName}"
     /// </summary>
     [Given(@"the user has created identity ""(.*)"" via browser")]
@@ -111,19 +111,21 @@ internal sealed class AuthSteps : BrowserStepsBase
         // Step 4: Wait for personal feed transaction to be mined
         await WhenThePersonalFeedTransactionIsProcessed();
 
-        // Step 5: Wait for redirect to dashboard
+        // Step 5: Wait for redirect to app shell
         // Use polling-based assertion instead of WaitForURLAsync because Next.js router.push()
         // is an SPA navigation (history.pushState) that doesn't fire a traditional page "load" event.
         // WaitForURLAsync with WaitUntil=Load is unreliable for SPA navigations.
         var page = await GetOrCreatePageAsync();
-        await Assertions.Expect(page).ToHaveURLAsync(new Regex(@"/dashboard"), new PageAssertionsToHaveURLOptions { Timeout = 15000 });
-        Console.WriteLine("[E2E Auth] Redirected to dashboard");
+        await Assertions.Expect(page).ToHaveURLAsync(
+            new Regex(@"/(feeds|dashboard|social)"),
+            new PageAssertionsToHaveURLOptions { Timeout = 15000 });
+        Console.WriteLine("[E2E Auth] Redirected to app shell");
 
         // Step 6: Explicitly trigger sync to ensure feeds are fetched
         // With NEXT_PUBLIC_SYNC_INTERVAL_MS=999999, auto-sync is disabled.
         // The SyncProvider's 500ms initial sync can race with component mounting,
-        // so we explicitly trigger a sync after the dashboard is loaded.
-        Console.WriteLine("[E2E Auth] Triggering explicit sync after dashboard load...");
+        // so we explicitly trigger a sync after app shell is loaded.
+        Console.WriteLine("[E2E Auth] Triggering explicit sync after app shell load...");
         await Task.Delay(1000); // Allow SyncProvider to mount and register syncables
         await TriggerSyncAsync(page);
 

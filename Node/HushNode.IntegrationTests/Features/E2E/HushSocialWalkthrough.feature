@@ -52,29 +52,78 @@ Feature: HushSocial end-to-end walkthrough
     When Owner triggers FEAT-085 bootstrap sync twice with unchanged followers
     Then Owner Inner Circle key generation should remain stable after repeated bootstrap
 
-  @ignore
-  Scenario: Open and close post creation with permalink behavior
+  @FEAT-086
+  Scenario: Open post creation with permalink behavior
     Given Owner opens HushSocial composer
     When Owner creates Open post "Hello public world" via browser
     Then Owner should be able to copy permalink for post "Hello public world"
-    When Owner creates Close post "Hello inner circle" for Inner Circle via browser
-    Then Owner should be able to copy permalink for post "Hello inner circle"
+    When FollowerA opens HushSocial FeedWall
+    Then FollowerA should see Open post "Hello public world" authored by "Owner"
+    When FollowerA opens post detail for "Hello public world" from FeedWall
+    Then FollowerA should see post detail overlay for "Hello public world" authored by "Owner"
+    When FollowerA opens permalink for post "Hello public world"
+    Then FollowerA should see permalink post "Hello public world"
     When FollowerB opens permalink for post "Hello public world"
-    Then FollowerB should see post "Hello public world"
-    When FollowerB opens permalink for post "Hello inner circle"
-    Then FollowerB should see a generic access denied message
-    When FollowerA opens permalink for post "Hello inner circle"
-    Then FollowerA should see post "Hello inner circle"
+    Then FollowerB should see permalink post "Hello public world"
+    And FollowerB should see full-page permalink layout
+    When FollowerB navigates from permalink to HushSocial FeedWall
+    Then FollowerB should see Open post "Hello public world" authored by "Owner"
+    When FollowerB opens post detail for "Hello public world" from FeedWall
+    Then FollowerB should see post detail overlay for "Hello public world" authored by "Owner"
 
-  @ignore
+  @FEAT-086
+  Scenario: Public post shows author identity in FeedWall for another user
+    Given Owner opens HushSocial composer
+    When Owner creates Open post "Public identity author check" via browser
+    And FollowerB opens HushSocial FeedWall
+    Then FollowerB should see Open post "Public identity author check" authored by "Owner"
+
+  @FEAT-086
+  Scenario: Circle audience visibility across followers
+    When Owner creates a new chat with "FollowerA" via browser
+    And Owner creates a new chat with "FollowerB" via browser
+    And Owner switches from HushSocial to HushFeeds
+    Then Owner should not see Inner Circle in HushFeeds feed list
+    When Owner has approved followers "FollowerA, FollowerB" via browser
+    Then Owner should not see Inner Circle in HushFeeds feed list
+    When Owner opens HushSocial Following page
+    Then Owner should see following members "FollowerA, FollowerB" tagged with "Inner Circle"
+    When Owner creates circle "SpecialCircle" via browser
+    And Owner adds "FollowerA" to circle "SpecialCircle" via browser
+    And Owner opens HushSocial composer
+    And Owner creates Open post "Public post" via backend
+    And Owner creates Close post "Special circle post" for circle "SpecialCircle" via backend
+    When Owner opens HushSocial FeedWall
+    Then Owner should see FeedWall post "Public post"
+    And Owner should see FeedWall post "Special circle post"
+    When FollowerA opens HushSocial FeedWall
+    Then FollowerA should see FeedWall post "Public post"
+    And FollowerA should see FeedWall post "Special circle post"
+    And FollowerA should see audience badge "Public" for FeedWall post "Public post"
+    And FollowerA should see audience badge "Private" for FeedWall post "Special circle post"
+    And FollowerA should not see audience badge "SpecialCircle" for FeedWall post "Special circle post"
+    And FollowerA should not see truncated audience badge for FeedWall post "Special circle post"
+    When FollowerB opens HushSocial FeedWall
+    Then FollowerB should see FeedWall post "Public post"
+    And FollowerB should see audience badge "Public" for FeedWall post "Public post"
+    And FollowerB should not see FeedWall post "Special circle post"
+
+  @FEAT-086
   Scenario: Media post upload constraints and success path
     Given Owner opens HushSocial composer
-    When Owner attaches valid media files and posts "Media update"
-    Then Owner should see post "Media update" in timeline
+    When Owner attaches image 1 and animated GIF 1 via file picker
+    Then Owner should see 2 media items in composer
+    When Owner drags and drops video into HushSocial composer
+    Then Owner should see 3 media items in composer
+    When Owner pastes image 2 into HushSocial composer
+    Then Owner should see 4 media items in composer
     When Owner attempts to attach too many media files in one post
     Then Owner should see a media count limit validation message
-    When Owner attempts to attach an oversized media file
+    When Owner removes one media item from composer
+    And Owner attempts to attach an oversized media file
     Then Owner should see a media size limit validation message
+    When Owner creates Open post "Media update" via browser
+    Then Owner should see FeedWall post "Media update"
 
   @FEAT-087 @FEAT-088 @ignore
   Scenario: Reactions comments and single-level replies on authorized post

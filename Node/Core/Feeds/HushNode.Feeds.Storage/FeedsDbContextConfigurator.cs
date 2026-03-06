@@ -21,6 +21,8 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
         ConfigureGroupFeedMemberCommitment(modelBuilder);
         ConfigureFeedReadPosition(modelBuilder);
         ConfigureAttachment(modelBuilder);
+        ConfigureSocialPost(modelBuilder);
+        ConfigureSocialPostAudienceCircle(modelBuilder);
     }
 
     private static void ConfigureFeedMessage(ModelBuilder modelBuilder)
@@ -497,6 +499,73 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                 // Index for looking up attachments by feed message
                 attachment.HasIndex(x => x.FeedMessageId)
                     .HasDatabaseName("IX_Attachment_FeedMessageId");
+            });
+    }
+
+    private static void ConfigureSocialPost(ModelBuilder modelBuilder)
+    {
+        modelBuilder
+            .Entity<SocialPostEntity>(socialPost =>
+            {
+                socialPost.ToTable("SocialPost", "Feeds");
+                socialPost.HasKey(x => x.PostId);
+
+                socialPost.Property(x => x.PostId)
+                    .HasColumnType("uuid");
+
+                socialPost.Property(x => x.AuthorPublicAddress)
+                    .HasColumnType("varchar(500)");
+
+                socialPost.Property(x => x.Content)
+                    .HasColumnType("text");
+
+                socialPost.Property(x => x.AudienceVisibility)
+                    .HasConversion<int>()
+                    .HasColumnType("int");
+
+                socialPost.Property(x => x.CreatedAtBlock)
+                    .HasConversion(
+                        x => x.Value,
+                        x => new BlockIndex(x))
+                    .HasColumnType("bigint");
+
+                socialPost.Property(x => x.CreatedAtUnixMs)
+                    .HasColumnType("bigint");
+
+                socialPost.HasMany(x => x.AudienceCircles)
+                    .WithOne(x => x.Post)
+                    .HasForeignKey(x => x.PostId);
+
+                socialPost.HasIndex(x => x.AuthorPublicAddress)
+                    .HasDatabaseName("IX_SocialPost_AuthorPublicAddress");
+
+                socialPost.HasIndex(x => x.CreatedAtBlock)
+                    .HasDatabaseName("IX_SocialPost_CreatedAtBlock");
+
+                socialPost.HasIndex(x => x.CreatedAtUnixMs)
+                    .HasDatabaseName("IX_SocialPost_CreatedAtUnixMs");
+            });
+    }
+
+    private static void ConfigureSocialPostAudienceCircle(ModelBuilder modelBuilder)
+    {
+        modelBuilder
+            .Entity<SocialPostAudienceCircleEntity>(audienceCircle =>
+            {
+                audienceCircle.ToTable("SocialPostAudienceCircle", "Feeds");
+                audienceCircle.HasKey(x => new { x.PostId, x.CircleFeedId });
+
+                audienceCircle.Property(x => x.PostId)
+                    .HasColumnType("uuid");
+
+                audienceCircle.Property(x => x.CircleFeedId)
+                    .HasConversion(
+                        x => x.ToString(),
+                        x => FeedIdHandler.CreateFromString(x))
+                    .HasColumnType("varchar(40)");
+
+                audienceCircle.HasIndex(x => x.CircleFeedId)
+                    .HasDatabaseName("IX_SocialPostAudienceCircle_CircleFeedId");
             });
     }
 }

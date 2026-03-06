@@ -61,10 +61,11 @@ internal sealed class CrossDeviceReadSyncSteps : BrowserStepsBase
 
         Console.WriteLine($"[E2E ReadSync] Injected credentials into '{deviceName}' localStorage");
 
-        // Navigate to dashboard (credentials are now in localStorage)
-        await page.GotoAsync($"{baseUrl}/dashboard");
+        // Navigate to app shell (credentials are now in localStorage)
+        // Newer clients land on /feeds; older flows may still use /dashboard or /social.
+        await page.GotoAsync($"{baseUrl}/feeds");
         await Assertions.Expect(page).ToHaveURLAsync(
-            new System.Text.RegularExpressions.Regex(@"/dashboard"),
+            new System.Text.RegularExpressions.Regex(@"/(feeds|dashboard|social)"),
             new PageAssertionsToHaveURLOptions { Timeout = 15000 });
 
         // Wait for SyncProvider to mount
@@ -74,7 +75,7 @@ internal sealed class CrossDeviceReadSyncSteps : BrowserStepsBase
         ScenarioContext[$"E2E_Page_{deviceName}"] = page;
         ScenarioContext[$"E2E_Context_{deviceName}"] = context;
 
-        Console.WriteLine($"[E2E ReadSync] Second browser context '{deviceName}' created and on dashboard");
+        Console.WriteLine($"[E2E ReadSync] Second browser context '{deviceName}' created and on app shell");
     }
 
     // =========================================================================

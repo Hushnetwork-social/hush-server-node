@@ -120,8 +120,8 @@ internal sealed class AccountSteps : BrowserStepsBase
     {
         var page = await GetOrCreatePageAsync();
 
-        Console.WriteLine("[E2E Account] Navigating back to dashboard...");
-        await NavigateToAsync(page, "/dashboard");
+        Console.WriteLine("[E2E Account] Navigating back to app shell...");
+        await NavigateToAsync(page, "/feeds");
 
         // Wait for the feed list to render instead of WaitForNetworkIdleAsync
         // (NetworkIdle never fires on the dashboard due to polling/WebSocket connections)
@@ -129,7 +129,7 @@ internal sealed class AccountSteps : BrowserStepsBase
         await Assertions.Expect(feedList.First).ToBeVisibleAsync(
             new LocatorAssertionsToBeVisibleOptions { Timeout = 30000 });
 
-        Console.WriteLine("[E2E Account] Back on dashboard, feed list visible");
+        Console.WriteLine("[E2E Account] Back on app shell, feed list visible");
     }
 
     [Then(@"the personal feed should show name ""(.*)""")]

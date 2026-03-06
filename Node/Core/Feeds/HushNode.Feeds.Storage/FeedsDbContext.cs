@@ -19,6 +19,8 @@ public class FeedsDbContext(
     public DbSet<GroupFeedMemberCommitment> GroupFeedMemberCommitments { get; set; }
     public DbSet<FeedReadPositionEntity> FeedReadPositions { get; set; }
     public DbSet<AttachmentEntity> Attachments { get; set; }
+    public DbSet<SocialPostEntity> SocialPosts { get; set; }
+    public DbSet<SocialPostAudienceCircleEntity> SocialPostAudienceCircles { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
