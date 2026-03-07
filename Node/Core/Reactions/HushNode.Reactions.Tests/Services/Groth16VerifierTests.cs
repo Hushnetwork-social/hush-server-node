@@ -16,13 +16,41 @@ public class Groth16VerifierTests
     {
         var verifier = CreateVerifier(new Dictionary<string, string?>
         {
-            ["Circuits:CurrentVersion"] = "omega-test",
-            ["Circuits:Supported:0"] = "omega-test",
+            ["Circuits:CurrentVersion"] = "omega-v1.0.0",
+            ["Circuits:Supported:0"] = "omega-v1.0.0",
             ["Circuits:AllowPlaceholderVerificationKeys"] = "false",
             ["Circuits:AllowIncompleteVerification"] = "false",
         });
 
-        verifier.IsVersionSupported("omega-test").Should().BeFalse();
+        verifier.IsVersionSupported("omega-v1.0.0").Should().BeFalse();
+    }
+
+    [Fact]
+    public void Constructor_WithUnapprovedConfiguredVersion_DoesNotTreatItAsSupportedEvenWithPlaceholderKeys()
+    {
+        var verifier = CreateVerifier(new Dictionary<string, string?>
+        {
+            ["Circuits:CurrentVersion"] = "omega-v1.0.0",
+            ["Circuits:Supported:0"] = "omega-v9.9.9",
+            ["Circuits:AllowPlaceholderVerificationKeys"] = "true",
+            ["Circuits:AllowIncompleteVerification"] = "false",
+        });
+
+        verifier.IsVersionSupported("omega-v9.9.9").Should().BeFalse();
+    }
+
+    [Fact]
+    public void Constructor_WithApprovedVersionAndPlaceholderKeys_CanLoadApprovedServerArtifactSet()
+    {
+        var verifier = CreateVerifier(new Dictionary<string, string?>
+        {
+            ["Circuits:CurrentVersion"] = "omega-v1.0.0",
+            ["Circuits:Supported:0"] = "omega-v1.0.0",
+            ["Circuits:AllowPlaceholderVerificationKeys"] = "true",
+            ["Circuits:AllowIncompleteVerification"] = "false",
+        });
+
+        verifier.IsVersionSupported("omega-v1.0.0").Should().BeTrue();
     }
 
     [Fact]
@@ -30,8 +58,8 @@ public class Groth16VerifierTests
     {
         var verifier = CreateVerifier(new Dictionary<string, string?>
         {
-            ["Circuits:CurrentVersion"] = "omega-test",
-            ["Circuits:Supported:0"] = "omega-test",
+            ["Circuits:CurrentVersion"] = "omega-v1.0.0",
+            ["Circuits:Supported:0"] = "omega-v1.0.0",
             ["Circuits:AllowPlaceholderVerificationKeys"] = "true",
             ["Circuits:AllowIncompleteVerification"] = "false",
         });
@@ -39,7 +67,7 @@ public class Groth16VerifierTests
         var result = await verifier.VerifyAsync(
             CreateStructurallyValidProof(),
             CreatePublicInputs(),
-            "omega-test");
+            "omega-v1.0.0");
 
         result.Valid.Should().BeFalse();
         result.Error.Should().Be("INVALID_PROOF");
@@ -50,8 +78,8 @@ public class Groth16VerifierTests
     {
         var verifier = CreateVerifier(new Dictionary<string, string?>
         {
-            ["Circuits:CurrentVersion"] = "omega-test",
-            ["Circuits:Supported:0"] = "omega-test",
+            ["Circuits:CurrentVersion"] = "omega-v1.0.0",
+            ["Circuits:Supported:0"] = "omega-v1.0.0",
             ["Circuits:AllowPlaceholderVerificationKeys"] = "true",
             ["Circuits:AllowIncompleteVerification"] = "true",
         });
@@ -59,7 +87,7 @@ public class Groth16VerifierTests
         var result = await verifier.VerifyAsync(
             CreateStructurallyValidProof(),
             CreatePublicInputs(),
-            "omega-test");
+            "omega-v1.0.0");
 
         result.Valid.Should().BeTrue();
     }

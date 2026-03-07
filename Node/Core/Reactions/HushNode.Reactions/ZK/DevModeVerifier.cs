@@ -25,6 +25,13 @@ public class DevModeVerifier : IZkVerifier
 
     public Task<VerifyResult> VerifyAsync(byte[] proof, PublicInputs inputs, string circuitVersion)
     {
+        if (!string.Equals(circuitVersion, DevVersion, StringComparison.Ordinal))
+        {
+            return Task.FromResult(VerifyResult.Failure(
+                "UNSUPPORTED_DEV_CIRCUIT_VERSION",
+                $"Dev mode only supports circuit version '{DevVersion}'."));
+        }
+
         _logger.LogDebug(
             "[DevModeVerifier] Accepting proof for message {MessageId} (circuit: {Version})",
             BitConverter.ToString(inputs.MessageId).Replace("-", "")[..16],
@@ -37,7 +44,7 @@ public class DevModeVerifier : IZkVerifier
 
     public string GetCurrentVersion() => DevVersion;
 
-    public bool IsVersionSupported(string version) => true;
+    public bool IsVersionSupported(string version) => string.Equals(version, DevVersion, StringComparison.Ordinal);
 
     public bool IsVulnerableVersion(string version) => false;
 }

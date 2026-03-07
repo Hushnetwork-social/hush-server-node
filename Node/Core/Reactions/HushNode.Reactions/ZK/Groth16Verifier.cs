@@ -35,6 +35,14 @@ public class Groth16Verifier : IZkVerifier
         var supported = config.GetSection("Circuits:Supported").Get<string[]>() ?? new[] { _currentVersion };
         foreach (var version in supported)
         {
+            if (!ReactionCircuitArtifactsManifest.IsApproved(version))
+            {
+                _logger.LogWarning(
+                    "Skipping unsupported circuit version {Version} because it is not part of the approved FEAT-087 server artifact set.",
+                    version);
+                continue;
+            }
+
             try
             {
                 var vk = LoadVerificationKey(version);
@@ -269,8 +277,18 @@ public class Groth16Verifier : IZkVerifier
 
     private VerificationKey? LoadVerificationKey(string version)
     {
+        if (!ReactionCircuitArtifactsManifest.IsApproved(version))
+        {
+            _logger.LogWarning(
+                "Refusing to load verification key for {Version} because it is not part of the approved FEAT-087 server artifact set.",
+                version);
+            return null;
+        }
+
+        var artifacts = ReactionCircuitArtifactsManifest.GetApproved(version);
+
         // Load verification key from circuits directory
-        var vkPath = Path.Combine(AppContext.BaseDirectory, "circuits", version, "verification_key.json");
+        var vkPath = Path.Combine(AppContext.BaseDirectory, artifacts.VerificationKeyRelativePath);
 
         if (!File.Exists(vkPath))
         {

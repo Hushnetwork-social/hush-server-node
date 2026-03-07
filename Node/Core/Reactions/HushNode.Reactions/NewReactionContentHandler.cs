@@ -1,11 +1,13 @@
 using System.Numerics;
 using Microsoft.Extensions.Logging;
 using HushNode.Credentials;
+using HushNode.MemPool;
 using HushNode.Reactions.Crypto;
 using HushNode.Reactions.ZK;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Reactions.Model;
+using System.Text.RegularExpressions;
 
 namespace HushNode.Reactions;
 
@@ -19,22 +21,29 @@ public class NewReactionContentHandler : ITransactionContentHandler
     private readonly IZkVerifier _zkVerifier;
     private readonly IMembershipService _membershipService;
     private readonly IFeedInfoProvider _feedInfoProvider;
+    private readonly IMemPoolService _memPoolService;
     private readonly ILogger<NewReactionContentHandler> _logger;
 
     // Grace period: accept proofs against recent N Merkle roots
     private const int MerkleRootGracePeriod = 3;
+    private const int CoordinateLengthBytes = 32;
+    private const int LegacyBackupLengthBytes = 1;
+    private const int VersionedBackupLengthBytes = 32;
+    private static readonly Regex SupportedCircuitVersionPattern = new(@"^omega-v\d+\.\d+\.\d+$|^dev-mode-v\d+$", RegexOptions.Compiled);
 
     public NewReactionContentHandler(
         ICredentialsProvider credentialProvider,
         IZkVerifier zkVerifier,
         IMembershipService membershipService,
         IFeedInfoProvider feedInfoProvider,
+        IMemPoolService memPoolService,
         ILogger<NewReactionContentHandler> logger)
     {
         _credentialProvider = credentialProvider;
         _zkVerifier = zkVerifier;
         _membershipService = membershipService;
         _feedInfoProvider = feedInfoProvider;
+        _memPoolService = memPoolService;
         _logger = logger;
     }
 
@@ -59,6 +68,7 @@ public class NewReactionContentHandler : ITransactionContentHandler
         }
 
         var payload = reactionTransaction.Payload;
+        var signatory = reactionTransaction.UserSignature?.Signatory;
         Console.WriteLine($"[E2E Reaction] NewReactionContentHandler.ValidateAndSign: MessageId={payload.MessageId}, FeedId={payload.FeedId}");
 
         // Validate input sizes
@@ -69,22 +79,40 @@ public class NewReactionContentHandler : ITransactionContentHandler
             return null;
         }
 
-        // DEV MODE: Skip ZK verification if circuit version indicates dev mode
-        var isDevMode = payload.CircuitVersion?.StartsWith("dev-mode") == true;
-
-        if (isDevMode)
+        if (!HasValidCoordinateLengths(payload))
         {
-            _logger.LogWarning("[NewReactionContentHandler] DEV MODE - skipping ZK verification for message {MessageId}", payload.MessageId);
+            _logger.LogWarning("[NewReactionContentHandler] Invalid ciphertext coordinate length for message {MessageId}", payload.MessageId);
+            return null;
         }
-        else
+
+        if (!HasValidBackupLength(payload.EncryptedEmojiBackup))
         {
-            // Verify ZK proof
-            var verificationResult = VerifyZkProofAsync(payload).GetAwaiter().GetResult();
-            if (!verificationResult)
-            {
-                _logger.LogWarning("[NewReactionContentHandler] ZK proof verification failed for message {MessageId}", payload.MessageId);
-                return null;
-            }
+            _logger.LogWarning("[NewReactionContentHandler] Invalid encrypted backup length for message {MessageId}", payload.MessageId);
+            return null;
+        }
+
+        if (!IsSupportedCircuitVersionFormat(payload.CircuitVersion))
+        {
+            _logger.LogWarning("[NewReactionContentHandler] Invalid circuit version format '{CircuitVersion}' for message {MessageId}", payload.CircuitVersion, payload.MessageId);
+            return null;
+        }
+
+        if (HasPendingReactionForSameTarget(signatory, payload))
+        {
+            _logger.LogWarning(
+                "[NewReactionContentHandler] Duplicate pending reaction rejected for message {MessageId} and signatory {Signatory}",
+                payload.MessageId,
+                signatory);
+            return null;
+        }
+
+        // Always delegate proof validation to the configured verifier. Dev-mode acceptance,
+        // if enabled at all, must come from explicit DI configuration instead of payload flags.
+        var verificationResult = VerifyZkProofAsync(payload).GetAwaiter().GetResult();
+        if (!verificationResult)
+        {
+            _logger.LogWarning("[NewReactionContentHandler] ZK proof verification failed for message {MessageId}", payload.MessageId);
+            return null;
         }
 
         // Sign with block producer credentials
@@ -167,4 +195,36 @@ public class NewReactionContentHandler : ITransactionContentHandler
             return false;
         }
     }
+
+    private bool HasPendingReactionForSameTarget(string? signatory, NewReactionPayload payload)
+    {
+        if (string.IsNullOrWhiteSpace(signatory))
+        {
+            return false;
+        }
+
+        var pendingTransactions = _memPoolService.PeekPendingValidatedTransactions() ?? Enumerable.Empty<AbstractTransaction>();
+        return pendingTransactions
+            .OfType<ValidatedTransaction<NewReactionPayload>>()
+            .Any(x =>
+                string.Equals(x.UserSignature?.Signatory, signatory, StringComparison.Ordinal) &&
+                Equals(x.Payload.FeedId, payload.FeedId) &&
+                Equals(x.Payload.MessageId, payload.MessageId));
+    }
+
+    private static bool HasValidCoordinateLengths(NewReactionPayload payload)
+    {
+        static bool HasExpectedLength(byte[] value) => value.Length == CoordinateLengthBytes;
+
+        return payload.CiphertextC1X.All(HasExpectedLength)
+            && payload.CiphertextC1Y.All(HasExpectedLength)
+            && payload.CiphertextC2X.All(HasExpectedLength)
+            && payload.CiphertextC2Y.All(HasExpectedLength);
+    }
+
+    private static bool HasValidBackupLength(byte[]? encryptedEmojiBackup) =>
+        encryptedEmojiBackup is { Length: LegacyBackupLengthBytes or VersionedBackupLengthBytes };
+
+    private static bool IsSupportedCircuitVersionFormat(string circuitVersion) =>
+        !string.IsNullOrWhiteSpace(circuitVersion) && SupportedCircuitVersionPattern.IsMatch(circuitVersion);
 }
