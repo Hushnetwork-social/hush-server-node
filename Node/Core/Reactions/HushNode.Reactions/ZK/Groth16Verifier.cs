@@ -15,6 +15,8 @@ public class Groth16Verifier : IZkVerifier
     private readonly HashSet<string> _deprecatedVersions = new();
     private readonly HashSet<string> _vulnerableVersions = new();
     private readonly string _currentVersion;
+    private readonly bool _allowPlaceholderVerificationKeys;
+    private readonly bool _allowIncompleteVerification;
     private readonly IBabyJubJub _curve;
     private readonly ILogger<Groth16Verifier> _logger;
 
@@ -26,6 +28,8 @@ public class Groth16Verifier : IZkVerifier
         _curve = curve;
         _logger = logger;
         _currentVersion = config["Circuits:CurrentVersion"] ?? "omega-v1.0.0";
+        _allowPlaceholderVerificationKeys = config.GetValue<bool>("Circuits:AllowPlaceholderVerificationKeys", false);
+        _allowIncompleteVerification = config.GetValue<bool>("Circuits:AllowIncompleteVerification", false);
 
         // Load supported verification keys
         var supported = config.GetSection("Circuits:Supported").Get<string[]>() ?? new[] { _currentVersion };
@@ -60,9 +64,11 @@ public class Groth16Verifier : IZkVerifier
         }
 
         _logger.LogInformation(
-            "Groth16Verifier initialized with {Count} circuit versions. Current: {Current}",
+            "Groth16Verifier initialized with {Count} circuit versions. Current: {Current}. PlaceholderKeys={PlaceholderKeys}, IncompleteVerification={IncompleteVerification}",
             _verificationKeys.Count,
-            _currentVersion);
+            _currentVersion,
+            _allowPlaceholderVerificationKeys,
+            _allowIncompleteVerification);
     }
 
     public async Task<VerifyResult> VerifyAsync(
@@ -204,6 +210,15 @@ public class Groth16Verifier : IZkVerifier
         BigInteger[] publicInputs,
         VerificationKey vk)
     {
+        if (!_allowIncompleteVerification)
+        {
+            _logger.LogError(
+                "Groth16 verification rejected because full pairing verification is not implemented. " +
+                "Set Circuits:AllowIncompleteVerification=true only for explicit non-production testing.");
+            await Task.CompletedTask;
+            return false;
+        }
+
         // Groth16 verification equation:
         // e(A, B) = e(α, β) · e(∑(pub_i · IC_i), γ) · e(C, δ)
         //
@@ -245,11 +260,10 @@ public class Groth16Verifier : IZkVerifier
         // In a full implementation, we would now verify:
         // e(proof.A, proof.B) == e(vk.Alpha, vk.Beta) * e(vkX, vk.Gamma) * e(proof.C, vk.Delta)
 
-        // For testing/development, return true if points are valid
-        // TODO: Implement full pairing check
+        // For explicit non-production testing, allow the legacy structural fallback.
         await Task.CompletedTask;
 
-        _logger.LogDebug("Proof structure validated, pairing check skipped (not implemented)");
+        _logger.LogWarning("Proof structure validated, but pairing check was skipped because incomplete verification was explicitly enabled.");
         return true;
     }
 
@@ -261,14 +275,18 @@ public class Groth16Verifier : IZkVerifier
         if (!File.Exists(vkPath))
         {
             _logger.LogDebug("Verification key not found at {Path}", vkPath);
-            return CreatePlaceholderKey(version);
+            return _allowPlaceholderVerificationKeys ? CreatePlaceholderKey(version) : null;
         }
 
         var json = File.ReadAllText(vkPath);
         // Parse the verification key JSON
         // The format depends on the snarkjs output format
 
-        return CreatePlaceholderKey(version);
+        _logger.LogError(
+            "Verification key file exists at {Path}, but parsing real snarkjs verification keys is not implemented. " +
+            "Set Circuits:AllowPlaceholderVerificationKeys=true only for explicit non-production testing.",
+            vkPath);
+        return _allowPlaceholderVerificationKeys ? CreatePlaceholderKey(version) : null;
     }
 
     private VerificationKey CreatePlaceholderKey(string version)
