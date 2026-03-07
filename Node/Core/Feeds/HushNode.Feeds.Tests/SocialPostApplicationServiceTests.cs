@@ -112,6 +112,42 @@ public class SocialPostApplicationServiceTests
         response.CanInteract.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task GetSocialPostPermalinkAsync_ShouldResolveAttachmentsByPostIdAsFeedMessageId()
+    {
+        var postId = Guid.NewGuid();
+        var feedsStorage = new Mock<IFeedsStorageService>(MockBehavior.Strict);
+        var attachmentStorage = new Mock<IAttachmentStorageService>(MockBehavior.Strict);
+
+        feedsStorage
+            .Setup(x => x.GetSocialPostAsync(postId))
+            .ReturnsAsync(new SocialPostEntity
+            {
+                PostId = postId,
+                AuthorPublicAddress = "owner-address",
+                Content = "public content",
+                AudienceVisibility = SocialPostVisibility.Open,
+                CreatedAtBlock = new BlockIndex(99)
+            });
+
+        attachmentStorage
+            .Setup(x => x.GetByMessageIdAsync(It.Is<FeedMessageId>(id => id == new FeedMessageId(postId))))
+            .ReturnsAsync(Array.Empty<AttachmentEntity>())
+            .Verifiable();
+
+        var service = new SocialPostApplicationService(feedsStorage.Object, attachmentStorage.Object);
+
+        var response = await service.GetSocialPostPermalinkAsync(new GetSocialPostPermalinkRequest
+        {
+            PostId = postId.ToString("D"),
+            IsAuthenticated = true,
+            RequesterPublicAddress = "someone"
+        });
+
+        response.Success.Should().BeTrue();
+        attachmentStorage.Verify();
+    }
+
     private static SocialPostEntity BuildPrivatePost(Guid postId, string ownerAddress, Guid circleId)
     {
         var post = new SocialPostEntity

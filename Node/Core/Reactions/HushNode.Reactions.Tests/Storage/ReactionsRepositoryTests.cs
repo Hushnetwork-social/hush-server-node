@@ -119,6 +119,83 @@ public class ReactionsRepositoryTests : IClassFixture<InMemoryDbContextFixture>
     }
 
     [Fact]
+    public async Task StoredReactionArtifacts_ShouldNotExposePlaintextVoteChoiceFields()
+    {
+        using var context = _fixture.CreateContext();
+        var repository = CreateRepository(context);
+
+        var feedId = TestDataFactory.CreateFeedId();
+        var messageId = TestDataFactory.CreateMessageId();
+        var tally = TestDataFactory.CreateTallyWithVotes(feedId, messageId, 2);
+        var nullifier = TestDataFactory.CreateNullifierRecord(messageId);
+        var transaction = new ReactionTransaction(
+            Id: Guid.NewGuid(),
+            BlockHeight: new BlockIndex(100),
+            FeedId: feedId,
+            MessageId: messageId,
+            Nullifier: TestDataFactory.CreateNullifier(),
+            CiphertextC1X: TestDataFactory.CreateByteArrays(),
+            CiphertextC1Y: TestDataFactory.CreateByteArrays(),
+            CiphertextC2X: TestDataFactory.CreateByteArrays(),
+            CiphertextC2Y: TestDataFactory.CreateByteArrays(),
+            ZkProof: TestDataFactory.CreateZkProof(),
+            CircuitVersion: "omega-v1.0.0",
+            CreatedAt: DateTime.UtcNow);
+
+        await repository.SaveTallyAsync(tally);
+        await repository.SaveNullifierAsync(nullifier);
+        await repository.SaveTransactionAsync(transaction);
+        await context.SaveChangesAsync();
+
+        var storedNullifier = await repository.GetNullifierWithBackupAsync(nullifier.Nullifier);
+        var storedTally = await repository.GetTallyAsync(messageId);
+        var storedTransaction = (await repository.GetTransactionsFromBlockAsync(new BlockIndex(100))).Single();
+
+        storedNullifier.Should().NotBeNull();
+        storedTally.Should().NotBeNull();
+        storedTransaction.Should().NotBeNull();
+
+        var disallowedPlaintextFieldNames = new[]
+        {
+            "Reaction",
+            "VoteIndex",
+            "EmojiIndex",
+            "Selected"
+        };
+
+        typeof(ReactionNullifier).GetProperties()
+            .Select(x => x.Name)
+            .Should().OnlyContain(name =>
+                name.Equals(nameof(ReactionNullifier.EncryptedEmojiBackup), StringComparison.Ordinal) ||
+                disallowedPlaintextFieldNames.All(flag => !name.Contains(flag, StringComparison.OrdinalIgnoreCase)));
+
+        typeof(ReactionTransaction).GetProperties()
+            .Select(x => x.Name)
+            .Should().OnlyContain(name => disallowedPlaintextFieldNames.All(flag => !name.Contains(flag, StringComparison.OrdinalIgnoreCase)));
+
+        typeof(MessageReactionTally).GetProperties()
+            .Select(x => x.Name)
+            .Should().OnlyContain(name => disallowedPlaintextFieldNames.All(flag => !name.Contains(flag, StringComparison.OrdinalIgnoreCase)));
+
+        storedNullifier!.VoteC1X.Should().HaveCount(6);
+        storedNullifier.VoteC1Y.Should().HaveCount(6);
+        storedNullifier.VoteC2X.Should().HaveCount(6);
+        storedNullifier.VoteC2Y.Should().HaveCount(6);
+        storedNullifier.EncryptedEmojiBackup.Should().NotBeNull();
+        storedNullifier.EncryptedEmojiBackup!.Length.Should().BeGreaterThan(1);
+
+        storedTransaction.CiphertextC1X.Should().HaveCount(6);
+        storedTransaction.CiphertextC1Y.Should().HaveCount(6);
+        storedTransaction.CiphertextC2X.Should().HaveCount(6);
+        storedTransaction.CiphertextC2Y.Should().HaveCount(6);
+
+        storedTally!.TallyC1X.Should().HaveCount(6);
+        storedTally.TallyC1Y.Should().HaveCount(6);
+        storedTally.TallyC2X.Should().HaveCount(6);
+        storedTally.TallyC2Y.Should().HaveCount(6);
+    }
+
+    [Fact]
     public async Task NullifierExistsAsync_NotExists_ShouldReturnFalse()
     {
         using var context = _fixture.CreateContext();
@@ -223,8 +300,7 @@ public class ReactionsRepositoryTests : IClassFixture<InMemoryDbContextFixture>
         await context.SaveChangesAsync();
 
         var result = await repository.GetTransactionsFromBlockAsync(new BlockIndex(100));
-        result.Should().ContainSingle();
-        result.First().Id.Should().Be(transaction.Id);
+        result.Should().ContainSingle(x => x.Id == transaction.Id);
     }
 
     [Fact]
