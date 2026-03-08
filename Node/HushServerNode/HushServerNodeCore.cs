@@ -144,13 +144,16 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
     /// </summary>
     public async Task StartAsync()
     {
-        // Start the application
-        _runTask = _app.RunAsync();
-
-        // In test mode, wait until the node is fully initialized
         if (_isTestMode)
         {
-            await WaitForNodeReadyAsync();
+            // Test mode should fail directly on startup errors instead of
+            // backgrounding the host and polling ApplicationStarted.
+            await _app.StartAsync();
+        }
+        else
+        {
+            // Start the application
+            _runTask = _app.RunAsync();
         }
 
         // Extract actual bound ports from Kestrel using IServerAddressesFeature
@@ -174,29 +177,6 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// Waits for the node to be fully initialized using ASP.NET Core's application lifetime.
-    /// This waits for all hosted services to start, which is sufficient for gRPC readiness.
-    /// </summary>
-    private async Task WaitForNodeReadyAsync()
-    {
-        var lifetime = _app.Services.GetRequiredService<IHostApplicationLifetime>();
-
-        var maxAttempts = 100; // 10 seconds max (100 * 100ms)
-        for (var i = 0; i < maxAttempts; i++)
-        {
-            // ApplicationStarted token is cancelled when all hosted services have started
-            if (lifetime.ApplicationStarted.IsCancellationRequested)
-            {
-                return;
-            }
-
-            await Task.Delay(100);
-        }
-
-        throw new TimeoutException("Node did not become ready within 10 seconds.");
     }
 
     /// <summary>
@@ -423,6 +403,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             {
                 ["ConnectionStrings:HushNetworkDb"] = testConfig.ConnectionString,
                 ["BlockchainSettings:MaxEmptyBlocksBeforePause"] = "100", // High value for tests
+                ["Reactions:DevMode"] = "true", // E2E/dev test host uses explicit dev-mode reaction proofs until real artifacts are wired
                 // Configure block producer (stacker) credentials
                 ["CredentialsProfile:ProfileName"] = blockProducer.DisplayName,
                 ["CredentialsProfile:PublicSigningAddress"] = blockProducer.PublicSigningAddress,

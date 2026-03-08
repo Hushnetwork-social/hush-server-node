@@ -112,6 +112,7 @@ internal sealed class MessageSteps : BrowserStepsBase
             try
             {
                 await AwaitTransactionsAndProduceBlockAsync(waiter);
+                await TriggerSyncAsync(page);
             }
             finally
             {

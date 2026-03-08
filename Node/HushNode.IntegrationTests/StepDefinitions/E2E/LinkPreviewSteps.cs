@@ -26,6 +26,8 @@ internal sealed class LinkPreviewSteps : BrowserStepsBase
 
         Console.WriteLine($"[E2E] Verifying link preview in message containing '{messageText}' for {userName}...");
 
+        await EnsureLatestMessagesVisibleAsync(page);
+
         // Find the message bubble containing the text
         var messageBubble = page.Locator("[data-testid='message']")
             .Filter(new LocatorFilterOptions { HasText = messageText });
@@ -59,6 +61,8 @@ internal sealed class LinkPreviewSteps : BrowserStepsBase
         var page = GetPageForUser(userName);
 
         Console.WriteLine($"[E2E] Verifying {count} link previews in message containing '{messageText}' for {userName}...");
+
+        await EnsureLatestMessagesVisibleAsync(page);
 
         // Find the message bubble containing the text
         var messageBubble = page.Locator("[data-testid='message']")
@@ -110,6 +114,8 @@ internal sealed class LinkPreviewSteps : BrowserStepsBase
 
         Console.WriteLine($"[E2E] {userName} clicking next link preview in message containing '{messageText}'...");
 
+        await EnsureLatestMessagesVisibleAsync(page);
+
         var messageBubble = page.Locator("[data-testid='message']")
             .Filter(new LocatorFilterOptions { HasText = messageText });
 
@@ -138,6 +144,8 @@ internal sealed class LinkPreviewSteps : BrowserStepsBase
 
         Console.WriteLine($"[E2E] Verifying link preview {current} of {total} in message containing '{messageText}' for {userName}...");
 
+        await EnsureLatestMessagesVisibleAsync(page);
+
         var messageBubble = page.Locator("[data-testid='message']")
             .Filter(new LocatorFilterOptions { HasText = messageText });
 
@@ -162,6 +170,8 @@ internal sealed class LinkPreviewSteps : BrowserStepsBase
         var ariaLabel = direction == "previous" ? "Previous item" : "Next item";
 
         Console.WriteLine($"[E2E] Verifying {direction} link preview button is {expectedState} in message containing '{messageText}' for {userName}...");
+
+        await EnsureLatestMessagesVisibleAsync(page);
 
         var messageBubble = page.Locator("[data-testid='message']")
             .Filter(new LocatorFilterOptions { HasText = messageText });
@@ -244,5 +254,25 @@ internal sealed class LinkPreviewSteps : BrowserStepsBase
     private static ILocatorAssertions Expect(ILocator locator)
     {
         return Assertions.Expect(locator);
+    }
+
+    /// <summary>
+    /// New incoming messages can legitimately land below the viewport while the chat is open.
+    /// Use the supported Jump-to-Bottom control before asserting on the newest content.
+    /// </summary>
+    private static async Task EnsureLatestMessagesVisibleAsync(IPage page)
+    {
+        var jumpButton = page.GetByTestId("jump-to-bottom-button");
+        if (await jumpButton.CountAsync() == 0)
+        {
+            return;
+        }
+
+        if (await jumpButton.First.IsVisibleAsync())
+        {
+            Console.WriteLine("[E2E] Jump-to-bottom button visible, clicking before link preview assertion...");
+            await jumpButton.First.ClickAsync();
+            await Task.Delay(400);
+        }
     }
 }

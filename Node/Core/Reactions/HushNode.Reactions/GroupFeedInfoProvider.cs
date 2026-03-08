@@ -6,7 +6,7 @@ using HushNode.Reactions.Crypto;
 namespace HushNode.Reactions;
 
 /// <summary>
-/// Implementation of IFeedInfoProvider for Group Feeds.
+/// Implementation of IFeedInfoProvider for reaction targets backed by feed messages.
 /// Provides feed public key and author commitment for Protocol Omega ZK verification.
 /// </summary>
 public class GroupFeedInfoProvider : IFeedInfoProvider
@@ -30,15 +30,17 @@ public class GroupFeedInfoProvider : IFeedInfoProvider
 
     /// <summary>
     /// Gets the feed public key for ZK proof verification.
-    /// For Group Feeds, this derives a deterministic EC point from the FeedId.
-    /// Note: Full implementation with HKDF key derivation from Group AES key
+    /// For the current Protocol Omega rollout, this derives a deterministic EC point
+    /// from the FeedId for any existing feed type that supports feed-message reactions.
+    /// Note: Full implementation with HKDF key derivation from the feed AES key
     /// will be added when client-side key derivation is integrated.
     /// </summary>
     public async Task<ECPoint?> GetFeedPublicKeyAsync(FeedId feedId)
     {
-        // Verify the feed exists and is a Group Feed
-        var groupFeed = await _feedsStorage.GetGroupFeedAsync(feedId);
-        if (groupFeed == null)
+        // Verify the feed exists. Reactions currently operate on feed-message backed targets,
+        // which includes direct chats as well as group-style feeds.
+        var feed = await _feedsStorage.GetFeedByIdAsync(feedId);
+        if (feed == null)
         {
             return null;
         }

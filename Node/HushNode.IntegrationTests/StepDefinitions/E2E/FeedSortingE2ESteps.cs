@@ -137,7 +137,19 @@ internal sealed class FeedSortingE2ESteps : BrowserStepsBase
         var sanitizedName = SanitizeName(otherUserName);
         var testId = $"feed-item:chat:{sanitizedName}";
 
-        var feedItem = await WaitForVisibleFeedItemAsync(page, testId, 30000);
+        ILocator feedItem;
+        try
+        {
+            feedItem = await WaitForVisibleFeedItemAsync(page, testId, 5000);
+        }
+        catch (TimeoutException)
+        {
+            Console.WriteLine($"[E2E FeedSort] ChatFeed with {otherUserName} not visible yet - triggering sync and retrying...");
+            await TriggerSyncAsync(page);
+            await WaitForReadyFeedsAsync(page, timeoutMs: 30000);
+            feedItem = await WaitForVisibleFeedItemAsync(page, testId, 30000);
+        }
+
         await feedItem.ClickAsync();
 
         // Wait for chat view to load

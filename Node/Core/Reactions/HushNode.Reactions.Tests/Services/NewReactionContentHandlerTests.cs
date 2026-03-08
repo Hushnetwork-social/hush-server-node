@@ -63,6 +63,58 @@ public class NewReactionContentHandlerTests
     }
 
     [Fact]
+    public void ValidateAndSign_WithDevModeAndMissingAuthorCommitment_AllowsConfiguredVerifierToRun()
+    {
+        var (sut, zkVerifierMock, feedInfoProviderMock, _, credentials) = CreateHandler();
+        var transaction = CreateTransaction("dev-mode-v1");
+
+        feedInfoProviderMock
+            .Setup(x => x.GetAuthorCommitmentAsync(It.IsAny<FeedMessageId>()))
+            .ReturnsAsync((byte[]?)null);
+
+        zkVerifierMock
+            .Setup(x => x.VerifyAsync(
+                It.IsAny<byte[]>(),
+                It.IsAny<PublicInputs>(),
+                "dev-mode-v1"))
+            .ReturnsAsync(VerifyResult.SuccessWithWarning("Accepted"));
+
+        var result = sut.ValidateAndSign(transaction);
+
+        result.Should().NotBeNull();
+        result.Should().BeOfType<ValidatedTransaction<NewReactionPayload>>();
+        var validated = (ValidatedTransaction<NewReactionPayload>)result!;
+        validated.ValidatorSignature.Signatory.Should().Be(credentials.PublicSigningAddress);
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithDevModeAndMissingMerkleRoots_AllowsConfiguredVerifierToRun()
+    {
+        var transaction = CreateTransaction("dev-mode-v1");
+
+        var membershipServiceMock = new Mock<IMembershipService>();
+        membershipServiceMock
+            .Setup(x => x.GetRecentRootsAsync(It.IsAny<FeedId>(), It.IsAny<int>()))
+            .ReturnsAsync(Array.Empty<MerkleRootHistory>());
+
+        var (sutWithNoRoots, zkVerifierMock, _, _, credentials) = CreateHandler(membershipServiceOverride: membershipServiceMock);
+
+        zkVerifierMock
+            .Setup(x => x.VerifyAsync(
+                It.IsAny<byte[]>(),
+                It.IsAny<PublicInputs>(),
+                "dev-mode-v1"))
+            .ReturnsAsync(VerifyResult.SuccessWithWarning("Accepted"));
+
+        var result = sutWithNoRoots.ValidateAndSign(transaction);
+
+        result.Should().NotBeNull();
+        result.Should().BeOfType<ValidatedTransaction<NewReactionPayload>>();
+        var validated = (ValidatedTransaction<NewReactionPayload>)result!;
+        validated.ValidatorSignature.Signatory.Should().Be(credentials.PublicSigningAddress);
+    }
+
+    [Fact]
     public void ValidateAndSign_WhenSameUserAlreadyHasPendingReactionForTarget_ShouldReturnNullWithoutVerifying()
     {
         var pendingTransaction = CreateValidatedTransaction("omega-v1.0.0");
@@ -141,7 +193,7 @@ public class NewReactionContentHandlerTests
         Mock<IFeedInfoProvider> feedInfoProviderMock,
         Mock<IMemPoolService> memPoolServiceMock,
         CredentialsProfile credentials)
-        CreateHandler()
+        CreateHandler(Mock<IMembershipService>? membershipServiceOverride = null)
     {
         var credentials = new CredentialsProfile
         {
@@ -153,7 +205,7 @@ public class NewReactionContentHandlerTests
         credentialProviderMock.Setup(x => x.GetCredentials()).Returns(credentials);
 
         var zkVerifierMock = new Mock<IZkVerifier>();
-        var membershipServiceMock = new Mock<IMembershipService>();
+        var membershipServiceMock = membershipServiceOverride ?? new Mock<IMembershipService>();
         var feedInfoProviderMock = new Mock<IFeedInfoProvider>();
         var memPoolServiceMock = new Mock<IMemPoolService>();
 

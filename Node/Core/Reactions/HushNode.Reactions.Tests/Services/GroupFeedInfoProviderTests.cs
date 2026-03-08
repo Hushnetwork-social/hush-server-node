@@ -29,8 +29,8 @@ public class GroupFeedInfoProviderTests
             CurrentKeyGeneration: 1);
 
         var feedsStorageMock = new Mock<IFeedsStorageService>();
-        feedsStorageMock.Setup(x => x.GetGroupFeedAsync(feedId))
-            .ReturnsAsync(groupFeed);
+        feedsStorageMock.Setup(x => x.GetFeedByIdAsync(feedId))
+            .ReturnsAsync(new Feed(feedId, groupFeed.Title, FeedType.Group, new BlockIndex(1)));
 
         var feedMessageStorageMock = new Mock<IFeedMessageStorageService>();
         var curve = new BabyJubJubCurve();
@@ -57,8 +57,8 @@ public class GroupFeedInfoProviderTests
         var feedId = TestDataFactory.CreateFeedId();
 
         var feedsStorageMock = new Mock<IFeedsStorageService>();
-        feedsStorageMock.Setup(x => x.GetGroupFeedAsync(feedId))
-            .ReturnsAsync((GroupFeed?)null);
+        feedsStorageMock.Setup(x => x.GetFeedByIdAsync(feedId))
+            .ReturnsAsync((Feed?)null);
 
         var feedMessageStorageMock = new Mock<IFeedMessageStorageService>();
         var curve = new BabyJubJubCurve();
@@ -91,8 +91,8 @@ public class GroupFeedInfoProviderTests
             CurrentKeyGeneration: 1);
 
         var feedsStorageMock = new Mock<IFeedsStorageService>();
-        feedsStorageMock.Setup(x => x.GetGroupFeedAsync(feedId))
-            .ReturnsAsync(groupFeed);
+        feedsStorageMock.Setup(x => x.GetFeedByIdAsync(feedId))
+            .ReturnsAsync(new Feed(feedId, groupFeed.Title, FeedType.Group, new BlockIndex(1)));
 
         var feedMessageStorageMock = new Mock<IFeedMessageStorageService>();
         var curve = new BabyJubJubCurve();
@@ -113,6 +113,35 @@ public class GroupFeedInfoProviderTests
         result2.Should().NotBeNull();
         result1!.X.Should().Be(result2!.X, "same feed should return same key");
         result1.Y.Should().Be(result2.Y, "same feed should return same key");
+    }
+
+    [Fact]
+    public async Task GetFeedPublicKeyAsync_ReturnsValidPoint_ForExistingChatFeed()
+    {
+        // Arrange
+        var feedId = TestDataFactory.CreateFeedId();
+        var chatFeed = new Feed(feedId, "Direct Chat", FeedType.Chat, new BlockIndex(7));
+
+        var feedsStorageMock = new Mock<IFeedsStorageService>();
+        feedsStorageMock.Setup(x => x.GetFeedByIdAsync(feedId))
+            .ReturnsAsync(chatFeed);
+
+        var feedMessageStorageMock = new Mock<IFeedMessageStorageService>();
+        var curve = new BabyJubJubCurve();
+        var poseidon = new PoseidonHash();
+
+        var provider = new GroupFeedInfoProvider(
+            feedMessageStorageMock.Object,
+            feedsStorageMock.Object,
+            curve,
+            poseidon);
+
+        // Act
+        var result = await provider.GetFeedPublicKeyAsync(feedId);
+
+        // Assert
+        result.Should().NotBeNull("existing chat feed should return a public key");
+        curve.IsOnCurve(result!).Should().BeTrue("returned point should be on the curve");
     }
 
     [Fact]

@@ -29,6 +29,7 @@ public class NewReactionContentHandler : ITransactionContentHandler
     private const int CoordinateLengthBytes = 32;
     private const int LegacyBackupLengthBytes = 1;
     private const int VersionedBackupLengthBytes = 32;
+    private static readonly byte[] ZeroBytes32 = new byte[32];
     private static readonly Regex SupportedCircuitVersionPattern = new(@"^omega-v\d+\.\d+\.\d+$|^dev-mode-v\d+$", RegexOptions.Compiled);
 
     public NewReactionContentHandler(
@@ -133,6 +134,8 @@ public class NewReactionContentHandler : ITransactionContentHandler
     {
         try
         {
+            var isExplicitDevMode = string.Equals(payload.CircuitVersion, "dev-mode-v1", StringComparison.Ordinal);
+
             // Get feed public key
             var feedPk = await _feedInfoProvider.GetFeedPublicKeyAsync(payload.FeedId);
             if (feedPk == null)
@@ -143,18 +146,32 @@ public class NewReactionContentHandler : ITransactionContentHandler
 
             // Get author commitment for the message
             var authorCommitment = await _feedInfoProvider.GetAuthorCommitmentAsync(payload.MessageId);
-            if (authorCommitment == null)
+            if (authorCommitment == null && !isExplicitDevMode)
             {
                 _logger.LogWarning("[NewReactionContentHandler] Message not found or no author commitment: {MessageId}", payload.MessageId);
                 return false;
             }
+            authorCommitment ??= ZeroBytes32;
 
             // Get recent Merkle roots for grace period verification
             var recentRoots = await _membershipService.GetRecentRootsAsync(payload.FeedId, MerkleRootGracePeriod);
-            if (!recentRoots.Any())
+            if (!recentRoots.Any() && !isExplicitDevMode)
             {
                 _logger.LogWarning("[NewReactionContentHandler] No Merkle roots found for feed {FeedId}", payload.FeedId);
                 return false;
+            }
+
+            if (!recentRoots.Any() && isExplicitDevMode)
+            {
+                recentRoots = new[]
+                {
+                    new MerkleRootHistory(
+                        Id: 0,
+                        FeedId: payload.FeedId,
+                        MerkleRoot: ZeroBytes32,
+                        BlockHeight: 0,
+                        CreatedAt: DateTime.UtcNow)
+                };
             }
 
             // Convert payload ciphertexts to ECPoints

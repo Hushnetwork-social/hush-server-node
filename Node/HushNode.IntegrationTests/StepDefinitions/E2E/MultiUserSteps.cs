@@ -299,8 +299,16 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         await WaitForPostAuthLandingAsync(page, userName, 20000);
         Console.WriteLine($"[E2E] {userName} reached landing URL: {page.Url}");
 
-        // Wait for page to load
-        await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // The app keeps background sync traffic alive, so NetworkIdle is not a
+        // reliable readiness signal here. We only need the authenticated app
+        // shell and the E2E sync hook to be ready before forcing a refresh.
+        await page.WaitForFunctionAsync(
+            "() => typeof window.__e2e_triggerSync === 'function'",
+            null,
+            new PageWaitForFunctionOptions
+            {
+                Timeout = 15000
+            });
 
         // 6. Trigger sync to pick up the new group membership
         Console.WriteLine($"[E2E] {userName} triggering sync...");
@@ -1430,8 +1438,54 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         Console.WriteLine($"[E2E] {userName} navigating to join page with code '{inviteCode}'...");
 
         var baseUrl = GetBaseUrl();
-        await page.GotoAsync($"{baseUrl}/join/{inviteCode}");
-        await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await page.GotoAsync(
+            $"{baseUrl}/join/{inviteCode}",
+            new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.DOMContentLoaded
+            });
+
+        var joinButton = page.Locator("[data-testid='join-group-button']");
+        var signInButton = page.Locator("[data-testid='sign-in-to-join-button']");
+        var groupName = page.Locator("[data-testid='group-info-name']");
+
+        await Expect(groupName.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
+        {
+            Timeout = 15000
+        });
+
+        // The page is considered ready once it resolves to a joinable or auth-gated state.
+        await page.WaitForFunctionAsync(
+            @"() => {
+                const isVisible = (el) => !!el
+                    && getComputedStyle(el).display !== 'none'
+                    && getComputedStyle(el).visibility !== 'hidden'
+                    && el.getBoundingClientRect().width > 0
+                    && el.getBoundingClientRect().height > 0;
+
+                const join = document.querySelector(""[data-testid='join-group-button']"");
+                const signIn = document.querySelector(""[data-testid='sign-in-to-join-button']"");
+                return isVisible(join) || isVisible(signIn);
+            }",
+            new PageWaitForFunctionOptions
+            {
+                Timeout = 15000
+            });
+
+        if (await joinButton.First.IsVisibleAsync())
+        {
+            await Expect(joinButton.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
+            {
+                Timeout = 15000
+            });
+        }
+        else
+        {
+            await Expect(signInButton.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
+            {
+                Timeout = 15000
+            });
+        }
 
         Console.WriteLine($"[E2E] {userName} on join page");
         await TakeScreenshotAsync("join-page");

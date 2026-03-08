@@ -2,6 +2,7 @@ using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
 using HushServerNode;
 using HushServerNode.Testing;
+using Microsoft.Playwright;
 using TechTalk.SpecFlow;
 
 namespace HushNode.IntegrationTests.StepDefinitions;
@@ -13,6 +14,7 @@ namespace HushNode.IntegrationTests.StepDefinitions;
 [Binding]
 public sealed class CommonSteps
 {
+    private const string PageKey = "E2E_MainPage";
     private readonly ScenarioContext _scenarioContext;
 
     public CommonSteps(ScenarioContext scenarioContext)
@@ -79,6 +81,7 @@ public sealed class CommonSteps
         // Produce block and wait for indexing to complete (BlockIndexCompletedEvent)
         Console.WriteLine("[E2E] Producing block and waiting for indexing...");
         await blockControl.ProduceBlockAsync();
+        await TriggerSyncIfBrowserPageExistsAsync();
         Console.WriteLine("[E2E] Block produced and indexed, continuing test");
     }
 
@@ -97,6 +100,33 @@ public sealed class CommonSteps
         // Produce block and wait for indexing to complete (BlockIndexCompletedEvent)
         var blockControl = GetBlockControl();
         await blockControl.ProduceBlockAsync();
+        await TriggerSyncIfBrowserPageExistsAsync();
+    }
+
+    private async Task TriggerSyncIfBrowserPageExistsAsync()
+    {
+        if (_scenarioContext.TryGetValue(PageKey, out var pageObj)
+            && pageObj is IPage page
+            && !page.IsClosed)
+        {
+            Console.WriteLine("[E2E] Triggering browser sync after block production...");
+            await page.EvaluateAsync(@"async () => {
+                const syncFn = window.__e2e_triggerSync;
+                if (typeof syncFn !== 'function') {
+                    return false;
+                }
+
+                await Promise.race([
+                    syncFn(),
+                    new Promise((_, reject) => {
+                        setTimeout(() => reject(new Error('__e2e_triggerSync timed out after 15000ms')), 15000);
+                    })
+                ]);
+
+                return true;
+            }");
+            Console.WriteLine("[E2E] Browser sync completed");
+        }
     }
 
     private BlockProductionControl GetBlockControl()
