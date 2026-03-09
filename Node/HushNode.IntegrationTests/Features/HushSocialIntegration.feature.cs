@@ -662,7 +662,7 @@ namespace HushNode.IntegrationTests.Features
         }
         
         [Xunit.SkippableFactAttribute(DisplayName="Reaction privacy preserves tally without exposing per-user emoji choice on privat" +
-            "e content", Skip="Ignored")]
+            "e content")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Reaction privacy preserves tally without exposing per-user emoji choice on privat" +
             "e content")]
@@ -670,8 +670,7 @@ namespace HushNode.IntegrationTests.Features
         public void ReactionPrivacyPreservesTallyWithoutExposingPer_UserEmojiChoiceOnPrivateContent()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-087",
-                    "ignore"};
+                    "FEAT-087"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Reaction privacy preserves tally without exposing per-user emoji choice on privat" +
                     "e content", null, tagsOfScenario, argumentsOfScenario, featureTags);

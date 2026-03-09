@@ -40,30 +40,25 @@ public class GroupFeedInfoProvider : IFeedInfoProvider
         // Verify the feed exists. Reactions currently operate on feed-message backed targets,
         // which includes direct chats as well as group-style feeds.
         var feed = await _feedsStorage.GetFeedByIdAsync(feedId);
-        if (feed == null)
+        if (feed != null)
+        {
+            return DeriveDeterministicPoint(feedId);
+        }
+
+        // FEAT-087: social-post reactions currently use PostId as the reaction scope id.
+        // Private posts inherit the privacy boundary from the single audience circle that
+        // backs the post, so resolve the effective feed from that circle when possible.
+        var socialPost = await _feedsStorage.GetSocialPostAsync(feedId.Value);
+        var circleFeedId = socialPost?.AudienceCircles
+            .Select(x => x.CircleFeedId)
+            .FirstOrDefault();
+
+        if (circleFeedId == null)
         {
             return null;
         }
 
-        // Derive a deterministic feed public key from FeedId using Poseidon hash
-        // This creates a consistent public key that all members will use
-        // The key is derived as: FeedPk = ScalarMul(Hash(FeedId), Generator)
-        //
-        // TODO: In a future enhancement, this will use HKDF with the Group AES key:
-        // ReactionKey = HKDF(GroupAesKey, FeedId, "protocol_omega/group_reaction/v1")
-        // FeedPk = ScalarMul(ReactionKey mod Order, Generator)
-        //
-        // For now, we use a simpler deterministic derivation from FeedId
-        // which is sufficient for the verification flow.
-        var feedIdBytes = feedId.Value.ToByteArray();
-        var feedIdScalar = new BigInteger(feedIdBytes, isUnsigned: true, isBigEndian: true);
-        var feedHash = _poseidon.Hash(feedIdScalar);
-
-        // Reduce modulo curve order to get valid scalar
-        var scalar = feedHash % _curve.Order;
-        if (scalar < 0) scalar += _curve.Order;
-
-        return _curve.ScalarMul(_curve.Generator, scalar);
+        return DeriveDeterministicPoint(circleFeedId.Value);
     }
 
     /// <summary>
@@ -74,6 +69,24 @@ public class GroupFeedInfoProvider : IFeedInfoProvider
     public async Task<byte[]?> GetAuthorCommitmentAsync(FeedMessageId messageId)
     {
         var message = await _feedMessageStorage.GetFeedMessageByIdAsync(messageId);
-        return message?.AuthorCommitment;
+        if (message?.AuthorCommitment != null)
+        {
+            return message.AuthorCommitment;
+        }
+
+        var socialPost = await _feedsStorage.GetSocialPostAsync(messageId.Value);
+        return socialPost?.AuthorCommitment;
+    }
+
+    private ECPoint DeriveDeterministicPoint(FeedId feedId)
+    {
+        var feedIdBytes = feedId.Value.ToByteArray();
+        var feedIdScalar = new BigInteger(feedIdBytes, isUnsigned: true, isBigEndian: true);
+        var feedHash = _poseidon.Hash(feedIdScalar);
+
+        var scalar = feedHash % _curve.Order;
+        if (scalar < 0) scalar += _curve.Order;
+
+        return _curve.ScalarMul(_curve.Generator, scalar);
     }
 }

@@ -129,7 +129,7 @@ Feature: HushSocial server integration rules
     When Owner submits an Open post with a media attachment over max size
     Then the submission should be rejected with a size limit error
 
-  @FEAT-087 @ignore
+  @FEAT-087
   Scenario: Reaction privacy preserves tally without exposing per-user emoji choice on private content
     Given Owner profile mode is Close
     And Owner has accepted follow requests from "FollowerA, FollowerB"

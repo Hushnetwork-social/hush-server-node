@@ -62,6 +62,11 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
     /// </summary>
     public int GrpcWebPort { get; private set; }
 
+    /// <summary>
+    /// Exposes the application service provider for integration-test diagnostics and direct service queries.
+    /// </summary>
+    public IServiceProvider Services => _app.Services;
+
     private HushServerNodeCore(WebApplication app, BlockProductionControl? blockProductionControl, bool isTestMode)
     {
         _app = app;

@@ -1,10 +1,17 @@
 using FluentAssertions;
 using Google.Protobuf;
+using System.Text;
 using HushNetwork.proto;
 using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
+using HushNode.Reactions.Crypto;
+using HushNode.Reactions.Storage;
+using HushShared.Blockchain.Model;
+using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Feeds.Model;
+using HushShared.Reactions.Model;
 using HushServerNode.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Olimpo;
 using TechTalk.SpecFlow;
 
@@ -30,6 +37,8 @@ public sealed class HushSocialIntegrationSteps
     private const string LastSocialPostCreateResponseKey = "Feat086LastSocialPostCreateResponse";
     private const string LastSocialPostPermalinkResponseKey = "Feat086LastSocialPostPermalinkResponse";
     private const string LastSocialComposerContractResponseKey = "Feat086LastSocialComposerContractResponse";
+    private const string LastSocialReactionTallyResponseKey = "Feat087LastSocialReactionTallyResponse";
+    private const string CurrentReactionPostTitleKey = "Feat087CurrentReactionPostTitle";
 
     private readonly ScenarioContext _scenarioContext;
 
@@ -585,6 +594,96 @@ public sealed class HushSocialIntegrationSteps
         response.Success.Should().BeTrue($"Private post creation should succeed: {response.Message}");
         StoreSocialPost(postTitle, response);
         _scenarioContext[LastSocialPostCreateResponseKey] = response;
+    }
+
+    [When(@"(.*) reacts to ""(.*)"" with ""(.*)""")]
+    public async Task WhenUserReactsToPostWith(string userName, string postTitle, string emojiName)
+    {
+        await SubmitSocialReactionAsync(userName, postTitle, emojiName);
+    }
+
+    [When(@"(.*) changes reaction on ""(.*)"" to ""(.*)""")]
+    public async Task WhenUserChangesReactionOnPostTo(string userName, string postTitle, string emojiName)
+    {
+        await SubmitSocialReactionAsync(userName, postTitle, emojiName);
+    }
+
+    [Then(@"authorized viewers should see reaction tally updates on ""(.*)""")]
+    public async Task ThenAuthorizedViewersShouldSeeReactionTallyUpdatesOn(string postTitle)
+    {
+        var follower = GetTestIdentity("FollowerA");
+        await OpenPermalinkAsAuthenticatedUserAsync(postTitle, follower.PublicSigningAddress);
+
+        var permalinkResponse = GetLastPermalinkResponse();
+        permalinkResponse.AccessState.Should().Be(SocialPermalinkAccessStateProto.SocialPermalinkAccessStateAllowed);
+        permalinkResponse.ReactionScopeId.Should().NotBeNullOrWhiteSpace();
+
+        var tallyResponse = await GetSocialReactionTalliesAsync(postTitle);
+        tallyResponse.Should().ContainSingle();
+
+        var tally = tallyResponse.Single();
+        tally.TotalCount.Should().Be(2);
+
+        var counts = DecodeToyCounts(tally);
+        counts[ResolveReactionIndex("thumbs_up")].Should().Be(1);
+        counts[ResolveReactionIndex("fire")].Should().Be(1);
+
+        _scenarioContext[LastSocialReactionTallyResponseKey] = tallyResponse;
+        _scenarioContext[CurrentReactionPostTitleKey] = postTitle;
+    }
+
+    [Then(@"the backend should not expose exact reaction choice per individual user to other viewers")]
+    public async Task ThenTheBackendShouldNotExposeExactReactionChoicePerIndividualUserToOtherViewers()
+    {
+        _scenarioContext.TryGetValue(CurrentReactionPostTitleKey, out var postTitleObj)
+            .Should().BeTrue("expected a previously asserted FEAT-087 post title");
+        postTitleObj.Should().BeOfType<string>();
+
+        var owner = GetTestIdentity(OwnerName);
+        await OpenPermalinkAsAuthenticatedUserAsync((string)postTitleObj!, owner.PublicSigningAddress);
+
+        var permalinkResponse = GetLastPermalinkResponse();
+        var permalinkJson = JsonFormatter.Default.Format(permalinkResponse);
+        var followerA = GetTestIdentity("FollowerA");
+        var followerB = GetTestIdentity("FollowerB");
+
+        permalinkJson.Should().NotContain(followerA.PublicSigningAddress);
+        permalinkJson.Should().NotContain(followerB.PublicSigningAddress);
+        permalinkJson.Should().NotContain("thumbs_up");
+        permalinkJson.Should().NotContain("heart");
+        permalinkJson.Should().NotContain("fire");
+
+        if (_scenarioContext.TryGetValue(LastSocialReactionTallyResponseKey, out var tallyObj)
+            && tallyObj is IReadOnlyList<MessageReactionTally> tallyResponse)
+        {
+            var tallyJson = string.Join(
+                "\n",
+                tallyResponse.Select(t => $"{Convert.ToHexString(t.MessageId.Value.ToByteArray())}:{t.TotalCount}"));
+            tallyJson.Should().NotContain(followerA.PublicSigningAddress);
+            tallyJson.Should().NotContain(followerB.PublicSigningAddress);
+            tallyJson.Should().NotContain("thumbs_up");
+            tallyJson.Should().NotContain("heart");
+            tallyJson.Should().NotContain("fire");
+        }
+    }
+
+    [Then(@"only one active reaction should exist for FollowerA on ""(.*)""")]
+    public async Task ThenOnlyOneActiveReactionShouldExistForFollowerAOn(string postTitle)
+    {
+        var tallyResponse = await GetSocialReactionTalliesAsync(postTitle);
+        var tally = tallyResponse.Single();
+
+        tally.TotalCount.Should().Be(2, "updating a reaction should replace the previous vote, not add a third one");
+
+        var counts = DecodeToyCounts(tally);
+        counts[ResolveReactionIndex("thumbs_up")].Should().Be(0);
+        counts[ResolveReactionIndex("heart")].Should().Be(1);
+        counts[ResolveReactionIndex("fire")].Should().Be(1);
+
+        var nullifierExists = await GetReactionService()
+            .NullifierExistsAsync(GetSocialReactionNullifier("FollowerA", postTitle));
+
+        nullifierExists.Should().BeTrue("FollowerA should still have exactly one tracked nullifier after updating the reaction");
     }
 
     [When(@"Owner requests social composer contract in private mode")]
@@ -1312,6 +1411,102 @@ public sealed class HushSocialIntegrationSteps
         });
 
         _scenarioContext[LastSocialPostPermalinkResponseKey] = response;
+    }
+
+    private async Task SubmitSocialReactionAsync(string userName, string postTitle, string emojiName)
+    {
+        var identity = GetTestIdentity(userName);
+        var postId = Guid.Parse(GetStoredPostId(postTitle));
+        var reactionScopeId = new FeedId(postId);
+        var messageId = new FeedMessageId(postId);
+        var nullifier = GetSocialReactionNullifier(userName, postTitle);
+        var signedTransaction = TestTransactionFactory.CreateDevModeReaction(
+            identity,
+            reactionScopeId,
+            messageId,
+            nullifier,
+            ResolveReactionIndex(emojiName));
+
+        var blockchainClient = GetGrpcFactory().CreateClient<HushBlockchain.HushBlockchainClient>();
+        var response = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction
+        });
+
+        response.Successfull.Should().BeTrue($"Reaction submission should succeed for {userName}: {response.Message}");
+        await GetBlockControl().ProduceBlockAsync();
+    }
+
+    private async Task<IReadOnlyList<MessageReactionTally>> GetSocialReactionTalliesAsync(string postTitle)
+    {
+        var postId = Guid.Parse(GetStoredPostId(postTitle));
+        var tallies = await GetReactionService().GetTalliesAsync(
+            new FeedId(postId),
+            [new FeedMessageId(postId)]);
+
+        return tallies.ToList();
+    }
+
+    private static byte[] GetSocialReactionNullifier(string userName, string postTitle)
+    {
+        var material = Encoding.UTF8.GetBytes($"feat087:{userName}:{postTitle}");
+        return System.Security.Cryptography.SHA256.HashData(material);
+    }
+
+    private static int ResolveReactionIndex(string emojiName) => emojiName switch
+    {
+        "thumbs_up" => 0,
+        "heart" => 1,
+        "fire" => 2,
+        _ => throw new InvalidOperationException($"Unsupported test emoji label '{emojiName}'.")
+    };
+
+    private static int[] DecodeToyCounts(MessageReactionTally tally)
+    {
+        var curve = new BabyJubJubCurve();
+        var counts = new int[tally.TallyC1X.Length];
+
+        for (var index = 0; index < tally.TallyC1X.Length; index++)
+        {
+            var point = HushShared.Reactions.Model.ECPoint.FromCoordinates(
+                tally.TallyC1X[index],
+                tally.TallyC1Y[index]);
+
+            counts[index] = DecodeGeneratorMultiple(curve, point);
+        }
+
+        return counts;
+    }
+
+    private static int DecodeGeneratorMultiple(IBabyJubJub curve, HushShared.Reactions.Model.ECPoint point)
+    {
+        for (var multiplier = 0; multiplier <= 8; multiplier++)
+        {
+            var expected = multiplier == 0
+                ? curve.Identity
+                : curve.ScalarMul(curve.Generator, multiplier);
+
+            if (expected.X == point.X && expected.Y == point.Y)
+            {
+                return multiplier;
+            }
+        }
+
+        throw new InvalidOperationException("Unable to decode reaction tally point in FEAT-087 test.");
+    }
+
+    private IReactionService GetReactionService() =>
+        GetNode().Services.GetRequiredService<IReactionService>();
+
+    private HushServerNode.HushServerNodeCore GetNode()
+    {
+        if (_scenarioContext.TryGetValue(ScenarioHooks.NodeKey, out var nodeObj)
+            && nodeObj is HushServerNode.HushServerNodeCore node)
+        {
+            return node;
+        }
+
+        throw new InvalidOperationException("HushServerNodeCore not found in ScenarioContext.");
     }
 
     private GetSocialPostPermalinkResponse GetLastPermalinkResponse()

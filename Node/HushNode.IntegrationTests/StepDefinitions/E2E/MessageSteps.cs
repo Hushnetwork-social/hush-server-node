@@ -2,6 +2,7 @@ using FluentAssertions;
 using HushServerNode;
 using Microsoft.Playwright;
 using TechTalk.SpecFlow;
+using System;
 
 namespace HushNode.IntegrationTests.StepDefinitions.E2E;
 
@@ -112,7 +113,14 @@ internal sealed class MessageSteps : BrowserStepsBase
             try
             {
                 await AwaitTransactionsAndProduceBlockAsync(waiter);
-                await TriggerSyncAsync(page);
+                try
+                {
+                    await TriggerSyncAsync(page);
+                }
+                catch (PlaywrightException ex) when (ex.Message.Contains("__e2e_triggerSync timed out after 15000ms", StringComparison.Ordinal))
+                {
+                    Console.WriteLine($"[E2E] WARNING: Message setup sync timed out. Falling back to message visibility assertion. {ex.Message}");
+                }
             }
             finally
             {
@@ -123,6 +131,8 @@ internal sealed class MessageSteps : BrowserStepsBase
         {
             throw new InvalidOperationException("No PendingTransactionWaiter found in ScenarioContext after sending message");
         }
+
+        await ThenMessageShouldBeVisible(message);
     }
 
     /// <summary>

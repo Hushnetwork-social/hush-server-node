@@ -39,7 +39,9 @@ public class CreateSocialPostTransactionHandler(
         var socialPost = new SocialPostEntity
         {
             PostId = payload.PostId,
+            ReactionScopeId = payload.ReactionScopeId == Guid.Empty ? payload.PostId : payload.ReactionScopeId,
             AuthorPublicAddress = authorAddress,
+            AuthorCommitment = payload.AuthorCommitment,
             Content = payload.Content ?? string.Empty,
             AudienceVisibility = payload.Audience.Visibility,
             CreatedAtBlock = currentBlock,

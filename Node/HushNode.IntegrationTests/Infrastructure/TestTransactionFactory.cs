@@ -1,7 +1,10 @@
 using HushShared.Blockchain.Model;
+using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
+using HushShared.Reactions.Model;
+using HushNode.Reactions.Crypto;
 using HushServerNode.Testing;
 using Olimpo;
 
@@ -371,7 +374,9 @@ internal static class TestTransactionFactory
 
         var payload = new CreateSocialPostPayload(
             postId,
+            postId,
             author.PublicSigningAddress,
+            null,
             content,
             audience,
             (attachments ?? Array.Empty<SocialPostAttachment>()).ToArray(),
@@ -391,6 +396,95 @@ internal static class TestTransactionFactory
             new SignatureInfo(author.PublicSigningAddress, signature));
 
         return (signedTransaction.ToJson(), postId);
+    }
+
+    /// <summary>
+    /// Creates a signed dev-mode reaction transaction for integration tests.
+    /// The payload uses a simple one-hot point encoding so tally deltas remain easy to assert.
+    /// </summary>
+    public static string CreateDevModeReaction(
+        TestIdentity reactor,
+        FeedId reactionScopeId,
+        FeedMessageId messageId,
+        byte[] nullifier,
+        int emojiIndex)
+    {
+        if (emojiIndex < 0 || emojiIndex > 5)
+        {
+            throw new ArgumentOutOfRangeException(nameof(emojiIndex), "emojiIndex must be between 0 and 5.");
+        }
+
+        if (nullifier.Length != 32)
+        {
+            throw new ArgumentException("Nullifier must be exactly 32 bytes.", nameof(nullifier));
+        }
+
+        var curve = new BabyJubJubCurve();
+        var generatorX = PadTo32Bytes(curve.Generator.X.ToByteArray(isUnsigned: true, isBigEndian: true));
+        var generatorY = PadTo32Bytes(curve.Generator.Y.ToByteArray(isUnsigned: true, isBigEndian: true));
+        var identityX = PadTo32Bytes(curve.Identity.X.ToByteArray(isUnsigned: true, isBigEndian: true));
+        var identityY = PadTo32Bytes(curve.Identity.Y.ToByteArray(isUnsigned: true, isBigEndian: true));
+
+        var ciphertextC1X = Enumerable.Range(0, 6)
+            .Select(i => i == emojiIndex ? generatorX : identityX)
+            .ToArray();
+        var ciphertextC1Y = Enumerable.Range(0, 6)
+            .Select(i => i == emojiIndex ? generatorY : identityY)
+            .ToArray();
+        var ciphertextC2X = Enumerable.Range(0, 6)
+            .Select(i => i == emojiIndex ? generatorX : identityX)
+            .ToArray();
+        var ciphertextC2Y = Enumerable.Range(0, 6)
+            .Select(i => i == emojiIndex ? generatorY : identityY)
+            .ToArray();
+
+        var payload = new NewReactionPayload(
+            reactionScopeId,
+            messageId,
+            nullifier,
+            ciphertextC1X,
+            ciphertextC1Y,
+            ciphertextC2X,
+            ciphertextC2Y,
+            new byte[256],
+            "dev-mode-v1",
+            BuildReactionBackup(emojiIndex));
+
+        var unsignedTransaction = new UnsignedTransaction<NewReactionPayload>(
+            new TransactionId(Guid.NewGuid()),
+            NewReactionPayloadHandler.NewReactionPayloadKind,
+            Timestamp.Current,
+            payload,
+            1000);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            reactor.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<NewReactionPayload>(
+            unsignedTransaction,
+            new SignatureInfo(reactor.PublicSigningAddress, signature));
+
+        return signedTransaction.ToJson();
+    }
+
+    private static byte[] BuildReactionBackup(int emojiIndex)
+    {
+        var backup = new byte[32];
+        backup[31] = checked((byte)emojiIndex);
+        return backup;
+    }
+
+    private static byte[] PadTo32Bytes(byte[] input)
+    {
+        if (input.Length >= 32)
+        {
+            return input[^32..];
+        }
+
+        var padded = new byte[32];
+        Array.Copy(input, 0, padded, 32 - input.Length, input.Length);
+        return padded;
     }
 
     /// <summary>

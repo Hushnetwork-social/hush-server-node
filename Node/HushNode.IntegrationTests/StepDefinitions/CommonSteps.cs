@@ -110,22 +110,32 @@ public sealed class CommonSteps
             && !page.IsClosed)
         {
             Console.WriteLine("[E2E] Triggering browser sync after block production...");
-            await page.EvaluateAsync(@"async () => {
-                const syncFn = window.__e2e_triggerSync;
-                if (typeof syncFn !== 'function') {
-                    return false;
-                }
+            try
+            {
+                await page.EvaluateAsync(@"async () => {
+                    const syncFn = window.__e2e_triggerSync;
+                    if (typeof syncFn !== 'function') {
+                        return false;
+                    }
 
-                await Promise.race([
-                    syncFn(),
-                    new Promise((_, reject) => {
-                        setTimeout(() => reject(new Error('__e2e_triggerSync timed out after 15000ms')), 15000);
-                    })
-                ]);
+                    await Promise.race([
+                        syncFn(),
+                        new Promise((_, reject) => {
+                            setTimeout(() => reject(new Error('__e2e_triggerSync timed out after 15000ms')), 15000);
+                        })
+                    ]);
 
-                return true;
-            }");
-            Console.WriteLine("[E2E] Browser sync completed");
+                    return true;
+                }");
+                Console.WriteLine("[E2E] Browser sync completed");
+            }
+            catch (PlaywrightException ex) when (ex.Message.Contains("__e2e_triggerSync timed out after 15000ms", StringComparison.Ordinal))
+            {
+                // The transaction is already committed and indexed on the server side.
+                // Some UI flows keep the client sync flag open longer than the E2E helper timeout,
+                // so treat this as a warning and let assertions verify the rendered state instead.
+                Console.WriteLine($"[E2E] WARNING: Browser sync timed out after block production. Continuing with assertions. {ex.Message}");
+            }
         }
     }
 

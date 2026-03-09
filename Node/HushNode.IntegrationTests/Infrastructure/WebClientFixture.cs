@@ -44,9 +44,7 @@ internal sealed class WebClientFixture : IAsyncDisposable
 
     /// <summary>
     /// Starts HushWebClient container.
-    /// If image doesn't exist, builds it first. Otherwise uses cached image for speed.
-    /// After web client code changes, rebuild manually with:
-    ///   cd Node/HushNode.IntegrationTests &amp;&amp; docker compose -f docker-compose.e2e.yml build
+    /// Always rebuilds and recreates the container so E2E runs execute the current web-client code.
     /// Uses fixed gRPC-Web port 14666 (HushServerNodeCore.E2EGrpcWebPort).
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -55,19 +53,14 @@ internal sealed class WebClientFixture : IAsyncDisposable
         if (_started)
             return;
 
-        // Check if image exists - if not, build it first
-        var needsBuild = !await ImageExistsAsync(cancellationToken);
-        if (needsBuild)
-        {
-            Console.WriteLine("[E2E] Image 'hush-web-client-e2e:latest' not found, building...");
-            await BuildImageAsync(cancellationToken);
-        }
+        Console.WriteLine("[E2E] Building hush-web-client E2E image...");
+        await BuildImageAsync(cancellationToken);
 
-        // Start container using cached image (fast)
+        // Recreate the container so the new image is guaranteed to be used.
         var startInfo = new ProcessStartInfo
         {
             FileName = "docker",
-            Arguments = $"compose -f \"{_composeFilePath}\" up -d --wait",
+            Arguments = $"compose -f \"{_composeFilePath}\" up -d --wait --force-recreate --remove-orphans",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -94,29 +87,6 @@ internal sealed class WebClientFixture : IAsyncDisposable
         await WaitForHealthyAsync(cancellationToken);
 
         _started = true;
-    }
-
-    /// <summary>
-    /// Checks if the E2E test image exists.
-    /// </summary>
-    private async Task<bool> ImageExistsAsync(CancellationToken cancellationToken)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "docker",
-            Arguments = "image inspect hush-web-client-e2e:latest",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        var process = Process.Start(startInfo);
-        if (process == null)
-            return false;
-
-        await process.WaitForExitAsync(cancellationToken);
-        return process.ExitCode == 0;
     }
 
     /// <summary>

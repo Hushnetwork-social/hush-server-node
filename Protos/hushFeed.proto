@@ -697,6 +697,8 @@ message GetSocialPostPermalinkResponse {
   optional string PrimaryCtaRoute = 16;
   repeated SocialPostAttachmentProto Attachments = 17;
   optional int64 CreatedAtUnixMs = 18;
+  optional string ReactionScopeId = 19;
+  optional bytes AuthorCommitment = 20;
 }
 
 message GetSocialFeedWallRequest {
@@ -714,6 +716,8 @@ message SocialFeedWallPostProto {
   repeated string CircleFeedIds = 6;
   int64 CreatedAtUnixMs = 7;
   repeated SocialPostAttachmentProto Attachments = 8;
+  optional string ReactionScopeId = 9;
+  optional bytes AuthorCommitment = 10;
 }
 
 message GetSocialFeedWallResponse {

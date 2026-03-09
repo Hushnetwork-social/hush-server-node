@@ -47,6 +47,11 @@ public class CreateSocialPostContentHandler(
             return null;
         }
 
+        if (payload.AuthorCommitment != null && payload.AuthorCommitment.Length != 32)
+        {
+            return null;
+        }
+
         // Ensure author identity exists.
         var authorIdentity = await this._identityStorageService.RetrieveIdentityAsync(authorAddress);
         if (authorIdentity is not Profile)

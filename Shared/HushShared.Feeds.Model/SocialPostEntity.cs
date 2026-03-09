@@ -6,7 +6,11 @@ public class SocialPostEntity
 {
     public Guid PostId { get; set; }
 
+    public Guid ReactionScopeId { get; set; }
+
     public string AuthorPublicAddress { get; set; } = string.Empty;
+
+    public byte[]? AuthorCommitment { get; set; }
 
     public string Content { get; set; } = string.Empty;
 

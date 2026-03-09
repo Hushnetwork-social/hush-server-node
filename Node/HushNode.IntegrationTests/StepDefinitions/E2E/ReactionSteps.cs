@@ -48,17 +48,26 @@ internal sealed class ReactionSteps : BrowserStepsBase
         var waiter = StartListeningForTransactions(minTransactions: 1);
         ScenarioContext["PendingTransactionWaiter"] = waiter;
 
-        // Click add reaction button
-        Console.WriteLine("[E2E Reaction] Clicking add-reaction-button...");
-        await ClickTestIdAsync(page, "add-reaction-button");
+        // Click the reaction button scoped to the target message.
+        // Page-global test id lookups can hit the wrong responsive duplicate.
+        var reactionButton = message.First.GetByTestId("add-reaction-button");
+        Console.WriteLine("[E2E Reaction] Clicking message-scoped add-reaction-button...");
+        await reactionButton.WaitForAsync(new LocatorWaitForOptions
+        {
+            Timeout = 5000,
+            State = WaitForSelectorState.Visible
+        });
+        await reactionButton.ClickAsync();
 
-        // Wait for the emoji picker to appear and click the specific emoji
-        var emojiTestId = $"emoji-{emoji}";
-        Console.WriteLine($"[E2E Reaction] Waiting for emoji picker, testid: {emojiTestId}");
-        await WaitForTestIdAsync(page, emojiTestId);
+        // Wait for the picker and select the requested emoji button by index.
+        var reactionPicker = page.GetByTestId("reaction-picker");
+        Console.WriteLine("[E2E Reaction] Waiting for reaction picker...");
+        await reactionPicker.WaitForAsync(new LocatorWaitForOptions { Timeout = 5000 });
 
-        Console.WriteLine($"[E2E Reaction] Clicking emoji: {emoji}");
-        await ClickTestIdAsync(page, emojiTestId);
+        var emojiButtons = reactionPicker.Locator("button");
+        var emojiButton = emojiButtons.Nth(emojiIndex);
+        Console.WriteLine($"[E2E Reaction] Clicking emoji index {emojiIndex}: {emoji}");
+        await emojiButton.ClickAsync();
         Console.WriteLine("[E2E Reaction] Emoji clicked, waiter is now listening for transaction");
 
         // Store for verification

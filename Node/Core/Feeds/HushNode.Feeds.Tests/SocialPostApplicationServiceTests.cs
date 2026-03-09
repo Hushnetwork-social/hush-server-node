@@ -94,7 +94,9 @@ public class SocialPostApplicationServiceTests
             .ReturnsAsync(new SocialPostEntity
             {
                 PostId = postId,
+                ReactionScopeId = postId,
                 AuthorPublicAddress = "owner-address",
+                AuthorCommitment = new byte[32],
                 Content = "public content",
                 AudienceVisibility = SocialPostVisibility.Open,
                 CreatedAtBlock = new BlockIndex(99)
@@ -109,6 +111,8 @@ public class SocialPostApplicationServiceTests
 
         response.AccessState.Should().Be(SocialPermalinkAccessStateProto.SocialPermalinkAccessStateAllowed);
         response.Content.Should().Be("public content");
+        response.ReactionScopeId.Should().Be(postId.ToString("D"));
+        response.AuthorCommitment.Length.Should().Be(32);
         response.CanInteract.Should().BeTrue();
     }
 
@@ -124,6 +128,7 @@ public class SocialPostApplicationServiceTests
             .ReturnsAsync(new SocialPostEntity
             {
                 PostId = postId,
+                ReactionScopeId = postId,
                 AuthorPublicAddress = "owner-address",
                 Content = "public content",
                 AudienceVisibility = SocialPostVisibility.Open,
@@ -153,7 +158,9 @@ public class SocialPostApplicationServiceTests
         var post = new SocialPostEntity
         {
             PostId = postId,
+            ReactionScopeId = postId,
             AuthorPublicAddress = ownerAddress,
+            AuthorCommitment = new byte[32],
             Content = "private content",
             AudienceVisibility = SocialPostVisibility.Private,
             CreatedAtBlock = new BlockIndex(77)
