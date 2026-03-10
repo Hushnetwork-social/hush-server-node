@@ -135,7 +135,7 @@ Feature: HushSocial end-to-end walkthrough
     And both users should see reply "Thanks for feedback"
     And the reply action should be limited to single-level depth
 
-  @FEAT-089 @ignore
+  @FEAT-089
   Scenario: Guest interaction opens account creation overlay on public post
     Given an unauthenticated browser session
     And Owner has created Open post "Guest visible content" via browser

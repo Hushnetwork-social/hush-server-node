@@ -658,15 +658,14 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Guest interaction opens account creation overlay on public post", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="Guest interaction opens account creation overlay on public post")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
         [Xunit.TraitAttribute("Description", "Guest interaction opens account creation overlay on public post")]
         [Xunit.TraitAttribute("Category", "FEAT-089")]
         public void GuestInteractionOpensAccountCreationOverlayOnPublicPost()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-089",
-                    "ignore"};
+                    "FEAT-089"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Guest interaction opens account creation overlay on public post", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 139

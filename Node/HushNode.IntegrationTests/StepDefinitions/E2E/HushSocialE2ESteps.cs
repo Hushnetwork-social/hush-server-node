@@ -297,10 +297,69 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         await EnsureComposerDraftVisibleAsync(ownerPage);
     }
 
+    [Given(@"Owner has created Open post ""(.*)"" via browser")]
     [When(@"Owner creates Open post ""(.*)"" via browser")]
     public async Task WhenOwnerCreatesOpenPostViaBrowser(string postTitle)
     {
         await CreatePostViaBrowserAsync(postTitle, isPrivate: false);
+    }
+
+    [Given(@"an unauthenticated browser session")]
+    public async Task GivenAnUnauthenticatedBrowserSession()
+    {
+        var playwright = GetPlaywright();
+        var context = await playwright.CreateContextAsync();
+        var page = await context.NewPageAsync();
+
+        SetupNetworkLogging(page, "Guest");
+
+        ScenarioContext["E2E_Context_Guest"] = context;
+        ScenarioContext["E2E_Page_Guest"] = page;
+
+        if (ScenarioContext.TryGetValue(ScenarioHooks.RegisteredUserNamesKey, out var usersObj)
+            && usersObj is List<string> registeredUsers
+            && !registeredUsers.Contains("Guest", StringComparer.Ordinal))
+        {
+            registeredUsers.Add("Guest");
+        }
+    }
+
+    [When(@"guest attempts to react to post ""(.*)"" via browser")]
+    public async Task WhenGuestAttemptsToReactToPostViaBrowser(string postTitle)
+    {
+        var guestPage = GetUserPage("Guest");
+        await NavigateToSocialExperienceAsync(guestPage);
+
+        await WaitForVisiblePostAsync(guestPage, postTitle);
+
+        var postId = GetStoredPostId(postTitle);
+        var addButton = await WaitForTestIdAsync(guestPage, $"post-reaction-strip-{postId}-add", 10000);
+        await addButton.ClickAsync();
+    }
+
+    [When(@"guest attempts to comment on post ""(.*)"" via browser")]
+    public async Task WhenGuestAttemptsToCommentOnPostViaBrowser(string postTitle)
+    {
+        var guestPage = GetUserPage("Guest");
+        await NavigateToSocialExperienceAsync(guestPage);
+
+        await WaitForVisiblePostAsync(guestPage, postTitle);
+
+        var postId = GetStoredPostId(postTitle);
+        var replyButton = await WaitForTestIdAsync(guestPage, $"post-action-reply-{postId}", 10000);
+        await replyButton.ClickAsync();
+    }
+
+    [Then(@"guest should see account creation overlay")]
+    public async Task ThenGuestShouldSeeAccountCreationOverlay()
+    {
+        var guestPage = GetUserPage("Guest");
+        var overlay = await WaitForTestIdAsync(guestPage, "social-auth-overlay", 10000);
+        (await overlay.IsVisibleAsync()).Should().BeTrue();
+
+        var cta = await WaitForTestIdAsync(guestPage, "social-auth-overlay-cta", 10000);
+        (await cta.IsVisibleAsync()).Should().BeTrue();
+        (await cta.InnerTextAsync()).Should().Contain("Create account");
     }
 
     [When(@"Owner attaches image (\d+) and animated GIF (\d+) via file picker")]
@@ -1473,6 +1532,23 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         }
 
         return false;
+    }
+
+    private static async Task WaitForVisiblePostAsync(IPage page, string postTitle)
+    {
+        var timeoutAt = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            var postPreview = page.GetByText(postTitle, new PageGetByTextOptions { Exact = true });
+            if (await postPreview.CountAsync() > 0 && await postPreview.First.IsVisibleAsync())
+            {
+                return;
+            }
+
+            await Task.Delay(150);
+        }
+
+        throw new TimeoutException($"Unable to find visible post '{postTitle}' for guest interaction.");
     }
 
     private async Task OpenPermalinkAsUserAsync(string userName, string postTitle)
