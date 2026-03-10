@@ -153,11 +153,18 @@ public class NewReactionContentHandler : ITransactionContentHandler
             }
             authorCommitment ??= ZeroBytes32;
 
+            var membershipScopeId = await _feedInfoProvider.GetMembershipScopeIdAsync(payload.FeedId);
+            if (membershipScopeId == null)
+            {
+                _logger.LogWarning("[NewReactionContentHandler] Membership scope not found for reaction scope {FeedId}", payload.FeedId);
+                return false;
+            }
+
             // Get recent Merkle roots for grace period verification
-            var recentRoots = await _membershipService.GetRecentRootsAsync(payload.FeedId, MerkleRootGracePeriod);
+            var recentRoots = await _membershipService.GetRecentRootsAsync(membershipScopeId.Value, MerkleRootGracePeriod);
             if (!recentRoots.Any() && !isExplicitDevMode)
             {
-                _logger.LogWarning("[NewReactionContentHandler] No Merkle roots found for feed {FeedId}", payload.FeedId);
+                _logger.LogWarning("[NewReactionContentHandler] No Merkle roots found for membership scope {FeedId}", membershipScopeId.Value);
                 return false;
             }
 
@@ -167,7 +174,7 @@ public class NewReactionContentHandler : ITransactionContentHandler
                 {
                     new MerkleRootHistory(
                         Id: 0,
-                        FeedId: payload.FeedId,
+                        FeedId: membershipScopeId.Value,
                         MerkleRoot: ZeroBytes32,
                         BlockHeight: 0,
                         CreatedAt: DateTime.UtcNow)

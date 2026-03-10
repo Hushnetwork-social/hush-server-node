@@ -1,8 +1,10 @@
 using FluentAssertions;
+using HushNode.Identity.Storage;
 using HushNode.Reactions.Crypto;
 using HushNode.Reactions.Storage;
 using HushNode.Reactions.Tests.Fixtures;
 using HushShared.Feeds.Model;
+using HushShared.Identity.Model;
 using HushShared.Reactions.Model;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -19,8 +21,12 @@ public class MembershipServiceTests
     private readonly Mock<IUnitOfWorkProvider<ReactionsDbContext>> _unitOfWorkProviderMock;
     private readonly Mock<IReadOnlyUnitOfWork<ReactionsDbContext>> _readOnlyUnitOfWorkMock;
     private readonly Mock<IWritableUnitOfWork<ReactionsDbContext>> _writableUnitOfWorkMock;
+    private readonly Mock<IUnitOfWorkProvider<IdentityDbContext>> _identityUnitOfWorkProviderMock;
+    private readonly Mock<IReadOnlyUnitOfWork<IdentityDbContext>> _identityReadOnlyUnitOfWorkMock;
     private readonly Mock<ICommitmentRepository> _commitmentRepoMock;
     private readonly Mock<IMerkleTreeRepository> _merkleRepoMock;
+    private readonly Mock<IIdentityRepository> _identityRepoMock;
+    private readonly Mock<IUserCommitmentService> _userCommitmentServiceMock;
     private readonly IPoseidonHash _poseidon;
     private readonly Mock<ILogger<MembershipService>> _loggerMock;
     private readonly MembershipService _service;
@@ -30,8 +36,12 @@ public class MembershipServiceTests
         _unitOfWorkProviderMock = new Mock<IUnitOfWorkProvider<ReactionsDbContext>>();
         _readOnlyUnitOfWorkMock = new Mock<IReadOnlyUnitOfWork<ReactionsDbContext>>();
         _writableUnitOfWorkMock = new Mock<IWritableUnitOfWork<ReactionsDbContext>>();
+        _identityUnitOfWorkProviderMock = new Mock<IUnitOfWorkProvider<IdentityDbContext>>();
+        _identityReadOnlyUnitOfWorkMock = new Mock<IReadOnlyUnitOfWork<IdentityDbContext>>();
         _commitmentRepoMock = MockRepositories.CreateCommitmentRepository();
         _merkleRepoMock = MockRepositories.CreateMerkleTreeRepository();
+        _identityRepoMock = new Mock<IIdentityRepository>();
+        _userCommitmentServiceMock = new Mock<IUserCommitmentService>();
         _poseidon = new PoseidonHash();
         _loggerMock = new Mock<ILogger<MembershipService>>();
 
@@ -44,6 +54,8 @@ public class MembershipServiceTests
             .Returns(_commitmentRepoMock.Object);
         _writableUnitOfWorkMock.Setup(x => x.GetRepository<IMerkleTreeRepository>())
             .Returns(_merkleRepoMock.Object);
+        _identityReadOnlyUnitOfWorkMock.Setup(x => x.GetRepository<IIdentityRepository>())
+            .Returns(_identityRepoMock.Object);
 
         _unitOfWorkProviderMock.Setup(x => x.CreateReadOnly())
             .Returns(_readOnlyUnitOfWorkMock.Object);
@@ -51,10 +63,18 @@ public class MembershipServiceTests
             .Returns(_writableUnitOfWorkMock.Object);
         _unitOfWorkProviderMock.Setup(x => x.CreateWritable())
             .Returns(_writableUnitOfWorkMock.Object);
+        _identityUnitOfWorkProviderMock.Setup(x => x.CreateReadOnly())
+            .Returns(_identityReadOnlyUnitOfWorkMock.Object);
+        _identityRepoMock.Setup(x => x.GetAllProfilesAsync())
+            .ReturnsAsync(Array.Empty<Profile>());
+        _userCommitmentServiceMock.Setup(x => x.DeriveCommitmentFromAddress(It.IsAny<string>()))
+            .Returns((string address) => System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(address)));
 
         _service = new MembershipService(
             _unitOfWorkProviderMock.Object,
+            _identityUnitOfWorkProviderMock.Object,
             _poseidon,
+            _userCommitmentServiceMock.Object,
             _loggerMock.Object);
     }
 
@@ -278,5 +298,58 @@ public class MembershipServiceTests
         var result2 = await _service.UpdateMerkleRootAsync(feedId, 101);
 
         result1.Should().BeEquivalentTo(result2);
+    }
+
+    [Fact]
+    public async Task IsCommitmentRegisteredAsync_GlobalScope_WhenProfileCommitmentExists_ShouldReturnTrue()
+    {
+        var profile = new Profile(
+            Alias: "alice",
+            ShortAlias: "ali",
+            PublicSigningAddress: "addr-1",
+            PublicEncryptAddress: "enc-1",
+            IsPublic: true,
+            BlockIndex: new HushShared.Blockchain.BlockModel.BlockIndex(1));
+        var expectedCommitment = TestDataFactory.CreateCommitment();
+
+        _identityRepoMock.Setup(x => x.GetAllProfilesAsync())
+            .ReturnsAsync(new[] { profile });
+        _userCommitmentServiceMock.Setup(x => x.DeriveCommitmentFromAddress("addr-1"))
+            .Returns(expectedCommitment);
+
+        var result = await _service.IsCommitmentRegisteredAsync(PublicReactionScopes.GlobalHushMembers, expectedCommitment);
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetRecentRootsAsync_GlobalScopeWithoutPersistedRoot_ShouldMaterializeRootFromProfiles()
+    {
+        var profile = new Profile(
+            Alias: "alice",
+            ShortAlias: "ali",
+            PublicSigningAddress: "addr-1",
+            PublicEncryptAddress: "enc-1",
+            IsPublic: true,
+            BlockIndex: new HushShared.Blockchain.BlockModel.BlockIndex(1));
+        var expectedCommitment = TestDataFactory.CreateCommitment();
+
+        _identityRepoMock.Setup(x => x.GetAllProfilesAsync())
+            .ReturnsAsync(new[] { profile });
+        _userCommitmentServiceMock.Setup(x => x.DeriveCommitmentFromAddress("addr-1"))
+            .Returns(expectedCommitment);
+
+        MerkleRootHistory? savedRoot = null;
+        _merkleRepoMock.Setup(x => x.SaveRootAsync(It.IsAny<MerkleRootHistory>()))
+            .Callback<MerkleRootHistory>(root => savedRoot = root)
+            .Returns(Task.CompletedTask);
+        _merkleRepoMock.Setup(x => x.GetRecentRootsAsync(PublicReactionScopes.GlobalHushMembers, It.IsAny<int>()))
+            .ReturnsAsync(() => savedRoot is null ? Array.Empty<MerkleRootHistory>() : new[] { savedRoot });
+
+        var roots = (await _service.GetRecentRootsAsync(PublicReactionScopes.GlobalHushMembers, 3)).ToList();
+
+        roots.Should().ContainSingle();
+        roots[0].FeedId.Should().Be(PublicReactionScopes.GlobalHushMembers);
+        roots[0].MerkleRoot.Should().HaveCount(32);
     }
 }

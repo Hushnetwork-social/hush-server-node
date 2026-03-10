@@ -59,6 +59,8 @@ public class GroupFeedInfoProviderTests
         var feedsStorageMock = new Mock<IFeedsStorageService>();
         feedsStorageMock.Setup(x => x.GetFeedByIdAsync(feedId))
             .ReturnsAsync((Feed?)null);
+        feedsStorageMock.Setup(x => x.GetSocialPostAsync(feedId.Value))
+            .ReturnsAsync((SocialPostEntity?)null);
 
         var feedMessageStorageMock = new Mock<IFeedMessageStorageService>();
         var curve = new BabyJubJubCurve();
@@ -118,6 +120,41 @@ public class GroupFeedInfoProviderTests
         var result = await provider.GetFeedPublicKeyAsync(reactionScopeId);
 
         result.Should().NotBeNull("private social post reaction scope should resolve to an effective feed key");
+        curve.IsOnCurve(result!).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetFeedPublicKeyAsync_ReturnsValidPoint_ForOpenSocialPostReactionScope()
+    {
+        var reactionScopeId = TestDataFactory.CreateFeedId();
+
+        var feedsStorageMock = new Mock<IFeedsStorageService>();
+        feedsStorageMock.Setup(x => x.GetFeedByIdAsync(reactionScopeId))
+            .ReturnsAsync((Feed?)null);
+        feedsStorageMock.Setup(x => x.GetSocialPostAsync(reactionScopeId.Value))
+            .ReturnsAsync(new SocialPostEntity
+            {
+                PostId = reactionScopeId.Value,
+                ReactionScopeId = reactionScopeId.Value,
+                AuthorPublicAddress = "author-address",
+                AuthorCommitment = TestDataFactory.CreateCommitment(),
+                Content = "Open post",
+                AudienceVisibility = SocialPostVisibility.Open
+            });
+
+        var feedMessageStorageMock = new Mock<IFeedMessageStorageService>();
+        var curve = new BabyJubJubCurve();
+        var poseidon = new PoseidonHash();
+
+        var provider = new GroupFeedInfoProvider(
+            feedMessageStorageMock.Object,
+            feedsStorageMock.Object,
+            curve,
+            poseidon);
+
+        var result = await provider.GetFeedPublicKeyAsync(reactionScopeId);
+
+        result.Should().NotBeNull("open social post reaction scope should resolve to a deterministic public key");
         curve.IsOnCurve(result!).Should().BeTrue();
     }
 

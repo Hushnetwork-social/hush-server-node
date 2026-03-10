@@ -24,6 +24,11 @@ public class StubFeedInfoProvider : IFeedInfoProvider
         return Task.FromResult<ECPoint?>(_curve.Generator);
     }
 
+    public Task<FeedId?> GetMembershipScopeIdAsync(FeedId reactionScopeId)
+    {
+        return Task.FromResult<FeedId?>(reactionScopeId);
+    }
+
     public Task<byte[]?> GetAuthorCommitmentAsync(FeedMessageId messageId)
     {
         // TODO: Integrate with Feeds module to get the actual author commitment

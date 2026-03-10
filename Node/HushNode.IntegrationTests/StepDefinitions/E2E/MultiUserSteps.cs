@@ -1188,13 +1188,14 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         var createButton = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Create Account" }).Last;
         await createButton.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 10000 });
 
-        // Create waiter before clicking
-        var waiter = StartListeningForTransactions(minTransactions: 1);
+        // The auth page submits identity + personal-feed transactions back-to-back.
+        // Use a single waiter so the second transaction is not missed between waiters.
+        var waiter = StartListeningForTransactions(minTransactions: 2);
 
         await createButton.ClickAsync();
         Console.WriteLine($"[E2E] Clicked Create Account for '{userName}'");
 
-        // Wait for identity transaction
+        // Wait for both identity and personal-feed transactions
         try
         {
             await waiter.WaitAsync();
@@ -1204,25 +1205,14 @@ internal sealed class MultiUserSteps : BrowserStepsBase
             waiter.Dispose();
         }
 
-        // Produce block for identity
+        // Confirm both transactions in one block.
         var blockControl = GetBlockControl();
         await blockControl.ProduceBlockAsync();
-        Console.WriteLine($"[E2E] Identity block produced for '{userName}'");
+        Console.WriteLine($"[E2E] Identity + personal feed block produced for '{userName}'");
 
-        // Wait for personal feed transaction
-        var personalFeedWaiter = StartListeningForTransactions(minTransactions: 1);
-        try
-        {
-            await personalFeedWaiter.WaitAsync();
-        }
-        finally
-        {
-            personalFeedWaiter.Dispose();
-        }
-
-        // Produce block for personal feed
+        // Produce an additional block so the client polling path sees the confirmation.
         await blockControl.ProduceBlockAsync();
-        Console.WriteLine($"[E2E] Personal feed block produced for '{userName}'");
+        Console.WriteLine($"[E2E] Confirmation block produced for '{userName}'");
 
         // Wait for redirect to main app shell (route can vary by feature branch)
         await WaitForPostAuthLandingAsync(page, userName, 20000);

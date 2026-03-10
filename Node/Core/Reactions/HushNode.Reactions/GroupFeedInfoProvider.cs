@@ -1,5 +1,6 @@
 using System.Numerics;
 using HushShared.Feeds.Model;
+using HushShared.Reactions.Model;
 using HushNode.Feeds.Storage;
 using HushNode.Reactions.Crypto;
 
@@ -49,16 +50,49 @@ public class GroupFeedInfoProvider : IFeedInfoProvider
         // Private posts inherit the privacy boundary from the single audience circle that
         // backs the post, so resolve the effective feed from that circle when possible.
         var socialPost = await _feedsStorage.GetSocialPostAsync(feedId.Value);
-        var circleFeedId = socialPost?.AudienceCircles
-            .Select(x => x.CircleFeedId)
-            .FirstOrDefault();
-
-        if (circleFeedId == null)
+        if (socialPost == null)
         {
             return null;
         }
 
-        return DeriveDeterministicPoint(circleFeedId.Value);
+        FeedId? circleFeedId = socialPost.AudienceCircles
+            .Select(x => (FeedId?)x.CircleFeedId)
+            .FirstOrDefault();
+
+        if (circleFeedId is { } resolvedCircleFeedId)
+        {
+            return DeriveDeterministicPoint(resolvedCircleFeedId);
+        }
+
+        // Open social posts expose aggregate counts publicly, so they use a
+        // deterministic reaction key bound to the reaction scope itself.
+        return DeriveDeterministicPoint(feedId);
+    }
+
+    public async Task<FeedId?> GetMembershipScopeIdAsync(FeedId reactionScopeId)
+    {
+        var feed = await _feedsStorage.GetFeedByIdAsync(reactionScopeId);
+        if (feed != null)
+        {
+            return reactionScopeId;
+        }
+
+        var socialPost = await _feedsStorage.GetSocialPostAsync(reactionScopeId.Value);
+        if (socialPost == null)
+        {
+            return null;
+        }
+
+        FeedId? circleFeedId = socialPost.AudienceCircles
+            .Select(x => (FeedId?)x.CircleFeedId)
+            .FirstOrDefault();
+
+        if (circleFeedId is { } resolvedCircleFeedId)
+        {
+            return resolvedCircleFeedId;
+        }
+
+        return PublicReactionScopes.GlobalHushMembers;
     }
 
     /// <summary>

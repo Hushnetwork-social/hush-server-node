@@ -218,6 +218,10 @@ public class NewReactionContentHandlerTests
             .ReturnsAsync(point);
 
         feedInfoProviderMock
+            .Setup(x => x.GetMembershipScopeIdAsync(It.IsAny<FeedId>()))
+            .ReturnsAsync((FeedId reactionScopeId) => reactionScopeId);
+
+        feedInfoProviderMock
             .Setup(x => x.GetAuthorCommitmentAsync(It.IsAny<FeedMessageId>()))
             .ReturnsAsync(TestDataFactory.CreateCommitment());
 

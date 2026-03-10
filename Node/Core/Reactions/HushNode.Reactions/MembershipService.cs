@@ -1,6 +1,7 @@
 using System.Numerics;
 using Microsoft.Extensions.Logging;
 using Olimpo.EntityFramework.Persistency;
+using HushNode.Identity.Storage;
 using HushShared.Feeds.Model;
 using HushShared.Reactions.Model;
 using HushNode.Reactions.Crypto;
@@ -15,7 +16,9 @@ namespace HushNode.Reactions;
 public class MembershipService : IMembershipService
 {
     private readonly IUnitOfWorkProvider<ReactionsDbContext> _unitOfWorkProvider;
+    private readonly IUnitOfWorkProvider<IdentityDbContext> _identityUnitOfWorkProvider;
     private readonly IPoseidonHash _poseidon;
+    private readonly IUserCommitmentService _userCommitmentService;
     private readonly ILogger<MembershipService> _logger;
 
     // Merkle tree depth (supports 2^20 = ~1M members per feed)
@@ -26,11 +29,15 @@ public class MembershipService : IMembershipService
 
     public MembershipService(
         IUnitOfWorkProvider<ReactionsDbContext> unitOfWorkProvider,
+        IUnitOfWorkProvider<IdentityDbContext> identityUnitOfWorkProvider,
         IPoseidonHash poseidon,
+        IUserCommitmentService userCommitmentService,
         ILogger<MembershipService> logger)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
+        _identityUnitOfWorkProvider = identityUnitOfWorkProvider;
         _poseidon = poseidon;
+        _userCommitmentService = userCommitmentService;
         _logger = logger;
 
         // Precompute zero values for each level
@@ -45,6 +52,11 @@ public class MembershipService : IMembershipService
 
     public async Task<MembershipProofResult> GetMembershipProofAsync(FeedId feedId, byte[] userCommitment)
     {
+        if (IsGlobalScope(feedId))
+        {
+            return await GetGlobalMembershipProofAsync(feedId, userCommitment);
+        }
+
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var commitmentRepo = unitOfWork.GetRepository<ICommitmentRepository>();
         var merkleRepo = unitOfWork.GetRepository<IMerkleTreeRepository>();
@@ -92,6 +104,17 @@ public class MembershipService : IMembershipService
 
     public async Task<RegisterCommitmentResult> RegisterCommitmentAsync(FeedId feedId, byte[] userCommitment)
     {
+        if (IsGlobalScope(feedId))
+        {
+            var isRegistered = await IsCommitmentRegisteredAsync(feedId, userCommitment);
+            if (isRegistered)
+            {
+                return RegisterCommitmentResult.AlreadyExists();
+            }
+
+            return RegisterCommitmentResult.Error("Global membership is derived from valid identities and cannot be registered directly.");
+        }
+
         _logger.LogDebug("[MembershipService] RegisterCommitmentAsync called for feed {FeedId}", feedId);
 
         const int maxRetries = 5;
@@ -173,6 +196,12 @@ public class MembershipService : IMembershipService
 
     public async Task<bool> IsCommitmentRegisteredAsync(FeedId feedId, byte[] userCommitment)
     {
+        if (IsGlobalScope(feedId))
+        {
+            var commitments = await GetGlobalCommitmentsAsync();
+            return commitments.Any(x => x.SequenceEqual(userCommitment));
+        }
+
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var repository = unitOfWork.GetRepository<ICommitmentRepository>();
         return await repository.IsCommitmentRegisteredAsync(feedId, userCommitment);
@@ -187,7 +216,10 @@ public class MembershipService : IMembershipService
         // If no roots exist but there are commitments, compute and save the root
         if (!roots.Any())
         {
-            var commitmentCount = await repository.GetCommitmentCountAsync(feedId);
+            var commitmentCount = IsGlobalScope(feedId)
+                ? (await GetGlobalCommitmentsAsync()).Count
+                : await repository.GetCommitmentCountAsync(feedId);
+
             if (commitmentCount > 0)
             {
                 _logger.LogInformation("[MembershipService] No Merkle roots found but {Count} commitments exist for feed {FeedId}. Computing root...",
@@ -209,11 +241,12 @@ public class MembershipService : IMembershipService
     public async Task<byte[]> UpdateMerkleRootAsync(FeedId feedId, long blockHeight)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateWritable();
-        var commitmentRepo = unitOfWork.GetRepository<ICommitmentRepository>();
         var merkleRepo = unitOfWork.GetRepository<IMerkleTreeRepository>();
 
         // Get all commitments
-        var commitments = (await merkleRepo.GetCommitmentsAsync(feedId)).ToList();
+        var commitments = IsGlobalScope(feedId)
+            ? (await GetGlobalCommitmentsAsync()).ToList()
+            : (await merkleRepo.GetCommitmentsAsync(feedId)).ToList();
 
         // Compute Merkle root
         var root = ComputeMerkleRoot(commitments);
@@ -230,6 +263,42 @@ public class MembershipService : IMembershipService
         await unitOfWork.CommitAsync();
 
         return ToBytes32(root);
+    }
+
+    private static bool IsGlobalScope(FeedId feedId) => feedId == PublicReactionScopes.GlobalHushMembers;
+
+    private async Task<MembershipProofResult> GetGlobalMembershipProofAsync(FeedId feedId, byte[] userCommitment)
+    {
+        var commitments = (await GetGlobalCommitmentsAsync()).ToList();
+        var leafIndex = commitments.FindIndex(x => x.SequenceEqual(userCommitment));
+        if (leafIndex < 0)
+        {
+            return MembershipProofResult.NotMember();
+        }
+
+        var (root, pathElements, pathIndices) = BuildMerkleProof(commitments, leafIndex);
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var merkleRepo = unitOfWork.GetRepository<IMerkleTreeRepository>();
+        var recentRoots = await merkleRepo.GetRecentRootsAsync(feedId, 1);
+        var blockHeight = recentRoots.FirstOrDefault()?.BlockHeight ?? 0;
+
+        return MembershipProofResult.Success(
+            ToBytes32(root),
+            pathElements.Select(ToBytes32).ToArray(),
+            pathIndices,
+            TreeDepth,
+            blockHeight);
+    }
+
+    private async Task<IReadOnlyList<byte[]>> GetGlobalCommitmentsAsync()
+    {
+        using var unitOfWork = _identityUnitOfWorkProvider.CreateReadOnly();
+        var identityRepo = unitOfWork.GetRepository<IIdentityRepository>();
+        var profiles = await identityRepo.GetAllProfilesAsync();
+
+        return profiles
+            .Select(profile => _userCommitmentService.DeriveCommitmentFromAddress(profile.PublicSigningAddress))
+            .ToList();
     }
 
     /// <summary>

@@ -352,20 +352,53 @@ internal sealed class HouseCleaningSteps : BrowserStepsBase
     {
         var page = await GetOrCreatePageAsync();
 
-        // Scroll the visible Virtuoso container to the bottom and wait for it to settle.
-        // followOutput="smooth" may not keep up during rapid message sends,
-        // so we explicitly scroll to bottom and verify the position.
-        await page.EvaluateAsync(@"() => {
-            const scrollers = document.querySelectorAll('[data-virtuoso-scroller=""true""]');
-            for (const sc of scrollers) {
-                if (sc.scrollHeight > 0 && sc.clientHeight > 0) {
-                    sc.scrollTop = sc.scrollHeight - sc.clientHeight;
-                }
-            }
-        }");
+        var startTime = DateTime.UtcNow;
+        var timeout = TimeSpan.FromSeconds(5);
+        var atBottom = false;
 
-        // Wait for scroll to settle and Virtuoso's atBottomStateChange to fire
-        await Task.Delay(500);
+        while (DateTime.UtcNow - startTime < timeout)
+        {
+            atBottom = await page.EvaluateAsync<bool>(@"() => {
+                const messages = document.querySelectorAll('[data-testid=""message""]');
+                let visibleMsg = null;
+                for (const msg of messages) {
+                    if (msg.offsetHeight > 0 && msg.offsetWidth > 0) {
+                        visibleMsg = msg;
+                        break;
+                    }
+                }
+
+                if (!visibleMsg) return false;
+
+                let el = visibleMsg.parentElement;
+                while (el) {
+                    const style = getComputedStyle(el);
+                    const supportsVerticalScroll = style.overflowY === 'auto' || style.overflowY === 'scroll';
+                    const hasOverflow = el.scrollHeight > el.clientHeight + 2;
+                    if (supportsVerticalScroll && !hasOverflow) {
+                        return true;
+                    }
+                    if (supportsVerticalScroll && hasOverflow) {
+                        el.scrollTop = el.scrollHeight - el.clientHeight;
+                        el.dispatchEvent(new Event('scroll', { bubbles: true }));
+                        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+                        return distanceFromBottom <= 2;
+                    }
+                    el = el.parentElement;
+                }
+
+                return false;
+            }");
+
+            if (atBottom)
+            {
+                break;
+            }
+
+            await Task.Delay(200);
+        }
+
+        atBottom.Should().BeTrue("The visible chat scroller should reach the bottom");
 
         // Verify the most recent message is visible in the viewport
         await ThenMostRecentMessageShouldBeVisible();

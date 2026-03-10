@@ -61,8 +61,6 @@ internal sealed class WebClientFixture : IAsyncDisposable
         {
             FileName = "docker",
             Arguments = $"compose -f \"{_composeFilePath}\" up -d --wait --force-recreate --remove-orphans",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
@@ -74,13 +72,8 @@ internal sealed class WebClientFixture : IAsyncDisposable
 
         if (process.ExitCode != 0)
         {
-            var stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
-
             throw new InvalidOperationException(
-                $"Docker compose failed with exit code {process.ExitCode}.\n" +
-                $"Stdout: {stdout}\n" +
-                $"Stderr: {stderr}");
+                $"Docker compose failed with exit code {process.ExitCode}.");
         }
 
         // Wait for health check (docker --wait should handle this, but verify)
@@ -98,8 +91,6 @@ internal sealed class WebClientFixture : IAsyncDisposable
         {
             FileName = "docker",
             Arguments = $"compose -f \"{_composeFilePath}\" build",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
@@ -111,8 +102,7 @@ internal sealed class WebClientFixture : IAsyncDisposable
 
         if (process.ExitCode != 0)
         {
-            var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
-            throw new InvalidOperationException($"Docker build failed: {stderr}");
+            throw new InvalidOperationException($"Docker build failed with exit code {process.ExitCode}.");
         }
 
         Console.WriteLine("[E2E] Image build completed.");
@@ -165,8 +155,6 @@ internal sealed class WebClientFixture : IAsyncDisposable
         {
             FileName = "docker",
             Arguments = $"compose -f \"{_composeFilePath}\" down --remove-orphans --timeout 10",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };

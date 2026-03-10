@@ -12,6 +12,8 @@ public interface IIdentityRepository : IRepository
 
     Task<ProfileBase> GetIdentityAsync(string publicSigningAddress);
 
+    Task<IEnumerable<Profile>> GetAllProfilesAsync();
+
     Task<IEnumerable<Profile>> SearchByDisplayNameAsync(string PartialDisplayName);
 
     Task UpdateAliasAsync(string publicSigningAddress, string newAlias, BlockIndex blockIndex);

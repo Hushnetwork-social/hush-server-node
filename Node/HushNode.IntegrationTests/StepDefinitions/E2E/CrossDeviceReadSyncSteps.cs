@@ -191,16 +191,78 @@ internal sealed class CrossDeviceReadSyncSteps : BrowserStepsBase
 
         if (shouldBeVisible)
         {
-            await Assertions.Expect(unreadBadge).ToBeVisibleAsync(
-                new LocatorAssertionsToBeVisibleOptions { Timeout = 10000 });
-            var badgeText = await unreadBadge.Locator("span").TextContentAsync();
-            Console.WriteLine($"[E2E ReadSync] Verified: Unread badge visible with count '{badgeText}' on {contextName}");
+            try
+            {
+                await Assertions.Expect(unreadBadge).ToBeVisibleAsync(
+                    new LocatorAssertionsToBeVisibleOptions { Timeout = 10000 });
+                var badgeText = await unreadBadge.Locator("span").TextContentAsync();
+                Console.WriteLine($"[E2E ReadSync] Verified: Unread badge visible with count '{badgeText}' on {contextName}");
+            }
+            catch
+            {
+                await DumpFeedStateAsync(page, feedTestId, contextName);
+                throw;
+            }
         }
         else
         {
-            await Assertions.Expect(unreadBadge).ToBeHiddenAsync(
-                new LocatorAssertionsToBeHiddenOptions { Timeout = 10000 });
-            Console.WriteLine($"[E2E ReadSync] Verified: Unread badge hidden on {contextName}");
+            try
+            {
+                await Assertions.Expect(unreadBadge).ToBeHiddenAsync(
+                    new LocatorAssertionsToBeHiddenOptions { Timeout = 10000 });
+                Console.WriteLine($"[E2E ReadSync] Verified: Unread badge hidden on {contextName}");
+            }
+            catch
+            {
+                await DumpFeedStateAsync(page, feedTestId, contextName);
+                throw;
+            }
+        }
+    }
+
+    private static async Task DumpFeedStateAsync(IPage page, string feedTestId, string contextName)
+    {
+        try
+        {
+            var snapshot = await page.EvaluateAsync<string>(
+                @"([feedTestId]) => {
+                    const raw = localStorage.getItem('hush-feeds-storage');
+                    let feeds = [];
+                    let feed = null;
+                    try {
+                        const parsed = raw ? JSON.parse(raw) : null;
+                        feeds = parsed?.state?.feeds ?? [];
+                        feed = feeds.find((f) => {
+                            const type = f.isPersonalFeed || f.type === 'personal'
+                                ? 'feed-item:personal'
+                                : `feed-item:${f.type}:${(f.name || '').toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')}`;
+                            return type === feedTestId;
+                        }) ?? null;
+                    } catch (error) {
+                        return JSON.stringify({ error: String(error), raw });
+                    }
+
+                    return JSON.stringify({
+                        targetFeedTestId: feedTestId,
+                        matchingFeed: feed,
+                        allFeeds: feeds.map((f) => ({
+                            id: f.id,
+                            name: f.name,
+                            type: f.type,
+                            unreadCount: f.unreadCount,
+                            lastReadBlockIndex: f.lastReadBlockIndex,
+                            blockIndex: f.blockIndex,
+                            needsSync: f.needsSync
+                        }))
+                    });
+                }",
+                new object[] { feedTestId });
+
+            Console.WriteLine($"[E2E ReadSync] Feed state dump for {contextName}: {snapshot}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[E2E ReadSync] Failed to dump feed state for {contextName}: {ex.Message}");
         }
     }
 

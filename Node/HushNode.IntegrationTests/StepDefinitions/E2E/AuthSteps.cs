@@ -137,9 +137,25 @@ internal sealed class AuthSteps : BrowserStepsBase
     {
         var startTime = DateTime.UtcNow;
         var timeout = TimeSpan.FromMilliseconds(timeoutMs);
+        var lastSyncAt = DateTime.MinValue;
 
         while (DateTime.UtcNow - startTime < timeout)
         {
+            if (DateTime.UtcNow - lastSyncAt >= TimeSpan.FromSeconds(2))
+            {
+                try
+                {
+                    Console.WriteLine("[E2E Auth] Triggering manual sync while waiting for ready feed...");
+                    await TriggerSyncAsync(page);
+                }
+                catch (PlaywrightException ex) when (ex.Message.Contains("__e2e_triggerSync timed out after 15000ms", StringComparison.Ordinal))
+                {
+                    Console.WriteLine("[E2E Auth] Manual sync timed out while waiting for ready feed; retrying...");
+                }
+
+                lastSyncAt = DateTime.UtcNow;
+            }
+
             // Look for any feed item with data-feed-ready="true"
             // Using attribute selector to find elements with data-feed-ready attribute set to "true"
             var readyFeeds = page.Locator("[data-testid^='feed-item'][data-feed-ready='true']");
