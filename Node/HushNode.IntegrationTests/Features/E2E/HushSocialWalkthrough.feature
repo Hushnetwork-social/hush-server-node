@@ -125,8 +125,15 @@ Feature: HushSocial end-to-end walkthrough
     When Owner creates Open post "Media update" via browser
     Then Owner should see FeedWall post "Media update"
 
-  @FEAT-087 @FEAT-088 @ignore
-  Scenario: Reactions comments and single-level replies on authorized post
+  @FEAT-087
+  Scenario: Authenticated user reacts to authorized public post
+    Given Owner has created Open post "Discuss architecture" via browser
+    When FollowerA reacts to post "Discuss architecture" with emoji "thumbs_up" via browser
+    Then FollowerA should see reaction count 1 on post "Discuss architecture"
+    And Owner should see reaction count 1 on post "Discuss architecture"
+
+  @FEAT-088 @ignore
+  Scenario: Comments and single-level replies on authorized post
     Given Owner has created Open post "Discuss architecture" via browser
     When FollowerA reacts to post "Discuss architecture" with emoji "thumbs_up" via browser
     And FollowerA comments "Looks good" on post "Discuss architecture" via browser

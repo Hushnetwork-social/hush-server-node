@@ -606,19 +606,16 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Reactions comments and single-level replies on authorized post", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="Authenticated user reacts to authorized public post")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
-        [Xunit.TraitAttribute("Description", "Reactions comments and single-level replies on authorized post")]
+        [Xunit.TraitAttribute("Description", "Authenticated user reacts to authorized public post")]
         [Xunit.TraitAttribute("Category", "FEAT-087")]
-        [Xunit.TraitAttribute("Category", "FEAT-088")]
-        public void ReactionsCommentsAndSingle_LevelRepliesOnAuthorizedPost()
+        public void AuthenticatedUserReactsToAuthorizedPublicPost()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-087",
-                    "FEAT-088",
-                    "ignore"};
+                    "FEAT-087"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Reactions comments and single-level replies on authorized post", null, tagsOfScenario, argumentsOfScenario, featureTags);
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Authenticated user reacts to authorized public post", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 129
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
@@ -640,18 +637,59 @@ namespace HushNode.IntegrationTests.Features.E2E
                         "r", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 132
-    testRunner.And("FollowerA comments \"Looks good\" on post \"Discuss architecture\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.Then("FollowerA should see reaction count 1 on post \"Discuss architecture\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 133
+    testRunner.And("Owner should see reaction count 1 on post \"Discuss architecture\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Comments and single-level replies on authorized post", Skip="Ignored")]
+        [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
+        [Xunit.TraitAttribute("Description", "Comments and single-level replies on authorized post")]
+        [Xunit.TraitAttribute("Category", "FEAT-088")]
+        public void CommentsAndSingle_LevelRepliesOnAuthorizedPost()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-088",
+                    "ignore"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Comments and single-level replies on authorized post", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 136
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 137
+    testRunner.Given("Owner has created Open post \"Discuss architecture\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 138
+    testRunner.When("FollowerA reacts to post \"Discuss architecture\" with emoji \"thumbs_up\" via browse" +
+                        "r", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 139
+    testRunner.And("FollowerA comments \"Looks good\" on post \"Discuss architecture\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 140
     testRunner.And("Owner replies \"Thanks for feedback\" to comment \"Looks good\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 134
+#line 141
     testRunner.Then("both users should see comment \"Looks good\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 135
+#line 142
     testRunner.And("both users should see reply \"Thanks for feedback\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 136
+#line 143
     testRunner.And("the reply action should be limited to single-level depth", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
@@ -668,7 +706,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "FEAT-089"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Guest interaction opens account creation overlay on public post", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 139
+#line 146
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -681,22 +719,22 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 140
+#line 147
     testRunner.Given("an unauthenticated browser session", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 141
+#line 148
     testRunner.And("Owner has created Open post \"Guest visible content\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 142
+#line 149
     testRunner.When("guest attempts to react to post \"Guest visible content\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 143
+#line 150
     testRunner.Then("guest should see account creation overlay", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 144
+#line 151
     testRunner.When("guest attempts to comment on post \"Guest visible content\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 145
+#line 152
     testRunner.Then("guest should see account creation overlay", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
@@ -714,7 +752,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Follow graph drives following-first timeline", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 148
+#line 155
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -727,19 +765,19 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 149
+#line 156
     testRunner.Given("FollowerA follows Owner via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 150
+#line 157
     testRunner.And("Owner creates Open post \"Update from owner\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 151
+#line 158
     testRunner.And("FollowerB creates Open post \"Update from other user\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 152
+#line 159
     testRunner.When("FollowerA opens home timeline", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 153
+#line 160
     testRunner.Then("post \"Update from owner\" should appear before post \"Update from other user\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
@@ -757,7 +795,7 @@ namespace HushNode.IntegrationTests.Features.E2E
                     "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Notification preferences and per-circle mute in real flow", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 156
+#line 163
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -770,31 +808,31 @@ namespace HushNode.IntegrationTests.Features.E2E
 #line 7
   this.FeatureBackground();
 #line hidden
-#line 157
+#line 164
     testRunner.Given("Owner profile mode is Close", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 158
+#line 165
     testRunner.And("Owner has accepted follow request from FollowerA via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 159
+#line 166
     testRunner.And("FollowerA enables Close post notifications via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 160
+#line 167
     testRunner.And("FollowerA mutes circle \"Inner Circle\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 161
+#line 168
     testRunner.When("Owner publishes Close post \"Muted circle notice\" to Inner Circle via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 162
+#line 169
     testRunner.Then("FollowerA should not see notification for post \"Muted circle notice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 163
+#line 170
     testRunner.When("FollowerA unmutes circle \"Inner Circle\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 164
+#line 171
     testRunner.And("Owner publishes Close post \"Active circle notice\" to Inner Circle via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 165
+#line 172
     testRunner.Then("FollowerA should see an in-app notification for post \"Active circle notice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }

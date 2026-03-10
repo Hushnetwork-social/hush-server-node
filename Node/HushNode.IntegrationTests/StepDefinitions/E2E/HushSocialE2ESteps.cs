@@ -350,6 +350,74 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         await replyButton.ClickAsync();
     }
 
+    [When(@"FollowerA reacts to post ""(.*)"" with emoji ""(.*)"" via browser")]
+    [When(@"Owner reacts to post ""(.*)"" with emoji ""(.*)"" via browser")]
+    public async Task WhenUserReactsToPostViaBrowser(string postTitle, string emojiName)
+    {
+        var userName = GetStepUserNameFromWhenStep("reacts to post");
+        var page = GetUserPage(userName);
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+
+        await WaitForVisiblePostAsync(page, postTitle);
+
+        var postId = GetStoredPostId(postTitle);
+        using var waiter = StartListeningForTransactions(1);
+
+        var addButton = await WaitForTestIdAsync(page, $"post-reaction-strip-{postId}-add", 10000);
+        await addButton.ClickAsync();
+
+        var picker = await WaitForTestIdAsync(page, $"post-reaction-strip-{postId}-picker", 5000);
+        var emojiButton = picker.Locator("button").Nth(MapReactionEmojiNameToIndex(emojiName));
+        await emojiButton.ClickAsync();
+
+        await AwaitTransactionsAndProduceBlockAsync(waiter);
+        await TriggerSyncAsync(page);
+    }
+
+    [Then(@"Owner should see reaction count (\d+) on post ""(.*)""")]
+    [Then(@"FollowerA should see reaction count (\d+) on post ""(.*)""")]
+    [Then(@"FollowerB should see reaction count (\d+) on post ""(.*)""")]
+    public async Task ThenUserShouldSeeReactionCountOnPost(int expectedCount, string postTitle)
+    {
+        var userName = GetStepUserNameFromThenStep("should see reaction count");
+        var page = GetUserPage(userName);
+        var postId = GetStoredPostId(postTitle);
+
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+
+        var postCard = page.GetByTestId($"social-post-{postId}").First;
+        await postCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 15000
+        });
+
+        var strip = postCard.GetByTestId($"post-reaction-strip-{postId}").First;
+        await strip.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var badges = strip.Locator("[data-testid^='reaction-badge-']");
+        await badges.First.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var badgeTexts = (await badges.AllInnerTextsAsync())
+            .Select(text => text.Trim())
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .ToArray();
+
+        badgeTexts.Should().Contain(
+            text => text.Contains(expectedCount.ToString(), StringComparison.Ordinal),
+            $"'{userName}' should see reaction count {expectedCount} on post '{postTitle}'");
+    }
+
     [Then(@"guest should see account creation overlay")]
     public async Task ThenGuestShouldSeeAccountCreationOverlay()
     {
@@ -361,6 +429,18 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         (await cta.IsVisibleAsync()).Should().BeTrue();
         (await cta.InnerTextAsync()).Should().Contain("Create account");
     }
+
+    private static int MapReactionEmojiNameToIndex(string emojiName) =>
+        emojiName.Trim().ToLowerInvariant() switch
+        {
+            "thumbs_up" => 0,
+            "heart" => 1,
+            "joy" => 2,
+            "surprised" => 3,
+            "sad" => 4,
+            "angry" => 5,
+            _ => throw new InvalidOperationException($"Unsupported reaction emoji '{emojiName}' for HushSocial E2E")
+        };
 
     [When(@"Owner attaches image (\d+) and animated GIF (\d+) via file picker")]
     public async Task WhenOwnerAttachesImageAndGifViaFilePicker(int imageIndex, int gifIndex)
@@ -1319,6 +1399,34 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
 
     private async Task<ILocator> EnsureComposerDraftVisibleAsync(IPage page)
     {
+        var newPostNavCandidates = new ILocator[]
+        {
+            page.GetByTestId("nav-social-new-post").First,
+            page.GetByRole(AriaRole.Link, new() { Name = "New Post" }).First,
+            page.GetByRole(AriaRole.Button, new() { Name = "New Post" }).First,
+            page.GetByText("New Post", new() { Exact = true }).First
+        };
+
+        foreach (var navCandidate in newPostNavCandidates)
+        {
+            if (await navCandidate.CountAsync() == 0 || !await navCandidate.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            await navCandidate.ClickAsync();
+            await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
+
+            try
+            {
+                return await WaitForTestIdAsync(page, "social-new-post-draft", 5000);
+            }
+            catch (TimeoutException)
+            {
+                // Fall back to the compact composer if the dedicated view is not ready.
+            }
+        }
+
         var feedWallNavCandidates = new ILocator[]
         {
             page.GetByRole(AriaRole.Link, new() { Name = "Feed Wall" }).First,
@@ -1356,33 +1464,6 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         }
         catch (TimeoutException)
         {
-            var newPostNavCandidates = new ILocator[]
-            {
-                page.GetByRole(AriaRole.Link, new() { Name = "New Post" }).First,
-                page.GetByRole(AriaRole.Button, new() { Name = "New Post" }).First,
-                page.GetByText("New Post", new() { Exact = true }).First
-            };
-
-            foreach (var navCandidate in newPostNavCandidates)
-            {
-                if (await navCandidate.CountAsync() == 0 || !await navCandidate.IsVisibleAsync())
-                {
-                    continue;
-                }
-
-                await navCandidate.ClickAsync();
-                await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
-
-                try
-                {
-                    return await WaitForTestIdAsync(page, "social-new-post-draft", 5000);
-                }
-                catch (TimeoutException)
-                {
-                    // Keep trying other fallbacks.
-                }
-            }
-
             var draftCandidates = new ILocator[]
             {
                 page.GetByPlaceholder("What do you want to show us?").First,

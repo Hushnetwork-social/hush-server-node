@@ -9,6 +9,8 @@ namespace HushNode.IntegrationTests.Infrastructure;
 internal sealed class WebClientFixture : IAsyncDisposable
 {
     private readonly string _composeFilePath;
+    private readonly string _webClientRootPath;
+    private readonly string _buildStampPath;
     private bool _started;
 
     /// <summary>
@@ -40,6 +42,9 @@ internal sealed class WebClientFixture : IAsyncDisposable
             .FirstOrDefault(File.Exists)
             ?? throw new FileNotFoundException(
                 $"docker-compose.e2e.yml not found. Searched: {string.Join(", ", possiblePaths.Select(Path.GetFullPath))}");
+
+        _webClientRootPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(_composeFilePath)!, "..", "..", "..", "hush-web-client"));
+        _buildStampPath = Path.Combine(Path.GetTempPath(), "hush-web-client-e2e-build.stamp");
     }
 
     /// <summary>
@@ -53,8 +58,16 @@ internal sealed class WebClientFixture : IAsyncDisposable
         if (_started)
             return;
 
-        Console.WriteLine("[E2E] Building hush-web-client E2E image...");
-        await BuildImageAsync(cancellationToken);
+        if (this.ShouldRebuildImage())
+        {
+            Console.WriteLine("[E2E] Building hush-web-client E2E image...");
+            await BuildImageAsync(cancellationToken);
+            File.WriteAllText(_buildStampPath, DateTime.UtcNow.ToString("O"));
+        }
+        else
+        {
+            Console.WriteLine("[E2E] Reusing existing hush-web-client E2E image.");
+        }
 
         // Recreate the container so the new image is guaranteed to be used.
         var startInfo = new ProcessStartInfo
@@ -106,6 +119,49 @@ internal sealed class WebClientFixture : IAsyncDisposable
         }
 
         Console.WriteLine("[E2E] Image build completed.");
+    }
+
+    private bool ShouldRebuildImage()
+    {
+        if (!File.Exists(_buildStampPath))
+        {
+            return true;
+        }
+
+        if (!Directory.Exists(_webClientRootPath))
+        {
+            return true;
+        }
+
+        var stampUtc = File.GetLastWriteTimeUtc(_buildStampPath);
+        var excludedSegments = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "node_modules",
+            ".next",
+            ".git"
+        };
+
+        foreach (var file in Directory.EnumerateFiles(_webClientRootPath, "*", SearchOption.AllDirectories))
+        {
+            if (this.ShouldIgnoreFile(file, excludedSegments))
+            {
+                continue;
+            }
+
+            if (File.GetLastWriteTimeUtc(file) > stampUtc)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool ShouldIgnoreFile(string filePath, HashSet<string> excludedSegments)
+    {
+        var relativePath = Path.GetRelativePath(_webClientRootPath, filePath);
+        var segments = relativePath.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        return segments.Any(segment => excludedSegments.Contains(segment));
     }
 
     /// <summary>
