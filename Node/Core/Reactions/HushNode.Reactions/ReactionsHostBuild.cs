@@ -34,9 +34,8 @@ public static class ReactionsHostBuild
         services.AddSingleton<IBabyJubJub, BabyJubJubCurve>();
         services.AddSingleton<IPoseidonHash, PoseidonHash>();
 
-        // Use DevModeVerifier if Reactions:DevMode is true
-        var devMode = configuration.GetValue<bool>("Reactions:DevMode", false);
-        if (devMode)
+        var verifierMode = ZkVerifierModeResolver.Resolve(configuration);
+        if (verifierMode == ZkVerifierMode.Dev)
         {
             services.AddSingleton<IZkVerifier, DevModeVerifier>();
         }

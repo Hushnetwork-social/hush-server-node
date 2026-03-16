@@ -1,8 +1,8 @@
 using System.Numerics;
-using System.Text.Json;
 using HushNode.Reactions.Crypto;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace HushNode.Reactions.ZK;
 
@@ -17,6 +17,9 @@ public class Groth16Verifier : IZkVerifier
     private readonly string _currentVersion;
     private readonly bool _allowPlaceholderVerificationKeys;
     private readonly bool _allowIncompleteVerification;
+    private readonly string _nodeExecutable;
+    private readonly string _verifierScriptPath;
+    private readonly int _processTimeoutMs;
     private readonly IBabyJubJub _curve;
     private readonly ILogger<Groth16Verifier> _logger;
 
@@ -30,6 +33,10 @@ public class Groth16Verifier : IZkVerifier
         _currentVersion = config["Circuits:CurrentVersion"] ?? "omega-v1.0.0";
         _allowPlaceholderVerificationKeys = config.GetValue<bool>("Circuits:AllowPlaceholderVerificationKeys", false);
         _allowIncompleteVerification = config.GetValue<bool>("Circuits:AllowIncompleteVerification", false);
+        _nodeExecutable = config["Circuits:NodeExecutable"] ?? "node";
+        _verifierScriptPath = config["Circuits:SnarkJsVerifierScriptPath"]
+            ?? Path.Combine(AppContext.BaseDirectory, "ZK", "verify-groth16.mjs");
+        _processTimeoutMs = config.GetValue<int?>("Circuits:SnarkJsVerifyTimeoutMs") ?? 15000;
 
         // Load supported verification keys
         var supported = config.GetSection("Circuits:Supported").Get<string[]>() ?? new[] { _currentVersion };
@@ -72,11 +79,12 @@ public class Groth16Verifier : IZkVerifier
         }
 
         _logger.LogInformation(
-            "Groth16Verifier initialized with {Count} circuit versions. Current: {Current}. PlaceholderKeys={PlaceholderKeys}, IncompleteVerification={IncompleteVerification}",
+            "Groth16Verifier initialized with {Count} circuit versions. Current: {Current}. PlaceholderKeys={PlaceholderKeys}, IncompleteVerification={IncompleteVerification}, VerifyTimeoutMs={VerifyTimeoutMs}",
             _verificationKeys.Count,
             _currentVersion,
             _allowPlaceholderVerificationKeys,
-            _allowIncompleteVerification);
+            _allowIncompleteVerification,
+            _processTimeoutMs);
     }
 
     public async Task<VerifyResult> VerifyAsync(
@@ -111,9 +119,10 @@ public class Groth16Verifier : IZkVerifier
 
             // Prepare public inputs as field elements
             var publicInputs = PreparePublicInputs(inputs);
+            var serializedSignals = SnarkJsPublicSignalsAdapter.Serialize(ToPublicInputs(publicInputs));
 
             // Perform Groth16 verification
-            var isValid = await VerifyGroth16Async(parsedProof, publicInputs, vk);
+            var isValid = await VerifyGroth16Async(parsedProof, publicInputs, serializedSignals, vk);
 
             if (!isValid)
             {
@@ -185,19 +194,6 @@ public class Groth16Verifier : IZkVerifier
         // Nullifier
         publicInputs.Add(new BigInteger(inputs.Nullifier, isUnsigned: true, isBigEndian: true));
 
-        // Message ID
-        publicInputs.Add(new BigInteger(inputs.MessageId, isUnsigned: true, isBigEndian: true));
-
-        // Merkle root
-        publicInputs.Add(new BigInteger(inputs.MembersRoot, isUnsigned: true, isBigEndian: true));
-
-        // Author commitment
-        publicInputs.Add(inputs.AuthorCommitment);
-
-        // Feed public key
-        publicInputs.Add(inputs.FeedPk.X);
-        publicInputs.Add(inputs.FeedPk.Y);
-
         // Ciphertexts (6 C1 points + 6 C2 points = 24 field elements)
         for (int i = 0; i < 6; i++)
         {
@@ -210,21 +206,64 @@ public class Groth16Verifier : IZkVerifier
             publicInputs.Add(inputs.CiphertextC2[i].Y);
         }
 
+        // Remaining public inputs match the circuit's output order.
+        publicInputs.Add(new BigInteger(inputs.MessageId, isUnsigned: true, isBigEndian: true));
+        publicInputs.Add(new BigInteger(inputs.FeedId, isUnsigned: true, isBigEndian: true));
+        publicInputs.Add(inputs.FeedPk.X);
+        publicInputs.Add(inputs.FeedPk.Y);
+        publicInputs.Add(new BigInteger(inputs.MembersRoot, isUnsigned: true, isBigEndian: true));
+        publicInputs.Add(inputs.AuthorCommitment);
+
         return publicInputs.ToArray();
     }
 
     private async Task<bool> VerifyGroth16Async(
         Groth16Proof proof,
         BigInteger[] publicInputs,
+        string[] serializedSignals,
         VerificationKey vk)
     {
         if (!_allowIncompleteVerification)
         {
-            _logger.LogError(
-                "Groth16 verification rejected because full pairing verification is not implemented. " +
-                "Set Circuits:AllowIncompleteVerification=true only for explicit non-production testing.");
-            await Task.CompletedTask;
-            return false;
+            if (string.IsNullOrWhiteSpace(vk.SourcePath))
+            {
+                _logger.LogError("Groth16 verification rejected because no verification key source path is available.");
+                await Task.CompletedTask;
+                return false;
+            }
+
+            try
+            {
+                var verificationStopwatch = Stopwatch.StartNew();
+                _logger.LogInformation(
+                    "Starting snarkjs Groth16 verification. CircuitVersion={CircuitVersion}, VerificationKeyPath={VerificationKeyPath}, NodeExecutable={NodeExecutable}, VerifierScriptPath={VerifierScriptPath}, PublicSignalCount={PublicSignalCount}, ProcessTimeoutMs={ProcessTimeoutMs}",
+                    vk.Version,
+                    vk.SourcePath,
+                    _nodeExecutable,
+                    _verifierScriptPath,
+                    serializedSignals.Length,
+                    _processTimeoutMs);
+
+                var isValid = await SnarkJsProcessGroth16Verifier.VerifyAsync(
+                    SerializePackedProof(proof),
+                    serializedSignals,
+                    vk.SourcePath,
+                    _nodeExecutable,
+                    _verifierScriptPath,
+                    _processTimeoutMs);
+                verificationStopwatch.Stop();
+                _logger.LogInformation(
+                    "Completed snarkjs Groth16 verification. CircuitVersion={CircuitVersion}, Valid={Valid}, ElapsedMs={ElapsedMs}",
+                    vk.Version,
+                    isValid,
+                    verificationStopwatch.ElapsedMilliseconds);
+                return isValid;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Groth16 verification failed via snarkjs process path.");
+                return false;
+            }
         }
 
         // Groth16 verification equation:
@@ -297,14 +336,19 @@ public class Groth16Verifier : IZkVerifier
         }
 
         var json = File.ReadAllText(vkPath);
-        // Parse the verification key JSON
-        // The format depends on the snarkjs output format
-
-        _logger.LogError(
-            "Verification key file exists at {Path}, but parsing real snarkjs verification keys is not implemented. " +
-            "Set Circuits:AllowPlaceholderVerificationKeys=true only for explicit non-production testing.",
-            vkPath);
-        return _allowPlaceholderVerificationKeys ? CreatePlaceholderKey(version) : null;
+        try
+        {
+            return SnarkJsVerificationKeyParser.Parse(json, version, vkPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Verification key file exists at {Path}, but parsing failed. " +
+                "Set Circuits:AllowPlaceholderVerificationKeys=true only for explicit non-production testing.",
+                vkPath);
+            return _allowPlaceholderVerificationKeys ? CreatePlaceholderKey(version) : null;
+        }
     }
 
     private VerificationKey CreatePlaceholderKey(string version)
@@ -318,12 +362,97 @@ public class Groth16Verifier : IZkVerifier
             Beta = new[] { _curve.Generator, _curve.Generator },
             Gamma = new[] { _curve.Generator, _curve.Generator },
             Delta = new[] { _curve.Generator, _curve.Generator },
-            // IC array size depends on number of public inputs
-            // For our circuit: nullifier, messageId, merkleRoot, authorCommitment,
-            // feedPk (2), ciphertextC1 (12), ciphertextC2 (12) = 30 elements + 1
-            IC = Enumerable.Range(0, 31)
+            // IC array size depends on number of public inputs.
+            // For omega-v1.0.0:
+            // nullifier (1), ciphertexts (24), messageId (1), feedId (1),
+            // feedPk (2), merkleRoot (1), authorCommitment (1) = 31 elements + 1
+            IC = Enumerable.Range(0, 32)
                 .Select(_ => _curve.Generator)
                 .ToArray()
+        };
+    }
+
+    private static byte[] SerializePackedProof(Groth16Proof proof)
+    {
+        var bytes = new byte[256];
+        var offset = 0;
+
+        void WriteField(BigInteger value)
+        {
+            var fieldBytes = value.ToByteArray(isUnsigned: true, isBigEndian: true);
+            if (fieldBytes.Length > 32)
+            {
+                throw new InvalidOperationException("Proof field does not fit in 32 bytes.");
+            }
+
+            var start = offset + (32 - fieldBytes.Length);
+            Buffer.BlockCopy(fieldBytes, 0, bytes, start, fieldBytes.Length);
+            offset += 32;
+        }
+
+        WriteField(proof.A.X);
+        WriteField(proof.A.Y);
+        WriteField(proof.B[0].X);
+        WriteField(proof.B[0].Y);
+        WriteField(proof.B[1].X);
+        WriteField(proof.B[1].Y);
+        WriteField(proof.C.X);
+        WriteField(proof.C.Y);
+
+        return bytes;
+    }
+
+    private static PublicInputs ToPublicInputs(BigInteger[] publicInputs)
+    {
+        if (publicInputs.Length != 31)
+        {
+            throw new InvalidOperationException($"Expected 31 public inputs, got {publicInputs.Length}.");
+        }
+
+        static byte[] ToBytes32(BigInteger value)
+        {
+            var bytes = value.ToByteArray(isUnsigned: true, isBigEndian: true);
+            if (bytes.Length > 32)
+            {
+                throw new InvalidOperationException("Public input does not fit in 32 bytes.");
+            }
+
+            var buffer = new byte[32];
+            Buffer.BlockCopy(bytes, 0, buffer, 32 - bytes.Length, bytes.Length);
+            return buffer;
+        }
+
+        var cursor = 0;
+        var nullifier = ToBytes32(publicInputs[cursor++]);
+
+        var c1 = new ECPoint[6];
+        for (var i = 0; i < 6; i++)
+        {
+            c1[i] = new ECPoint(publicInputs[cursor++], publicInputs[cursor++]);
+        }
+
+        var c2 = new ECPoint[6];
+        for (var i = 0; i < 6; i++)
+        {
+            c2[i] = new ECPoint(publicInputs[cursor++], publicInputs[cursor++]);
+        }
+
+        var messageId = ToBytes32(publicInputs[cursor++]);
+        var feedId = ToBytes32(publicInputs[cursor++]);
+        var feedPk = new ECPoint(publicInputs[cursor++], publicInputs[cursor++]);
+        var membersRoot = ToBytes32(publicInputs[cursor++]);
+        var authorCommitment = publicInputs[cursor++];
+
+        return new PublicInputs
+        {
+            Nullifier = nullifier,
+            MessageId = messageId,
+            FeedId = feedId,
+            MembersRoot = membersRoot,
+            AuthorCommitment = authorCommitment,
+            FeedPk = feedPk,
+            CiphertextC1 = c1,
+            CiphertextC2 = c2
         };
     }
 }

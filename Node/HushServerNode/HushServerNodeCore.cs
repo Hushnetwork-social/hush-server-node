@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -96,9 +97,15 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         BlockProductionControl blockProductionControl,
         string connectionString,
         string? redisConnectionString = null,
-        ILoggerProvider? diagnosticLoggerProvider = null)
+        ILoggerProvider? diagnosticLoggerProvider = null,
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
     {
-        var testConfig = new TestConfiguration(blockProductionControl, connectionString, redisConnectionString, diagnosticLoggerProvider);
+        var testConfig = new TestConfiguration(
+            blockProductionControl,
+            connectionString,
+            redisConnectionString,
+            diagnosticLoggerProvider,
+            ConfigurationOverrides: configurationOverrides);
         var app = BuildApplication(Array.Empty<string>(), testConfig);
         return new HushServerNodeCore(app, blockProductionControl, isTestMode: true);
     }
@@ -120,13 +127,15 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         BlockProductionControl blockProductionControl,
         string connectionString,
         string? redisConnectionString = null,
-        ILoggerProvider? diagnosticLoggerProvider = null)
+        ILoggerProvider? diagnosticLoggerProvider = null,
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
     {
         var testConfig = new TestConfiguration(
             blockProductionControl,
             connectionString,
             redisConnectionString,
             diagnosticLoggerProvider,
+            ConfigurationOverrides: configurationOverrides,
             FixedGrpcPort: 14665,
             FixedGrpcWebPort: E2EGrpcWebPort);
         var app = BuildApplication(Array.Empty<string>(), testConfig);
@@ -425,6 +434,14 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                 configValues["Redis:InstanceName"] = "HushTest:";
             }
 
+            if (testConfig.ConfigurationOverrides != null)
+            {
+                foreach (var pair in testConfig.ConfigurationOverrides)
+                {
+                    configValues[pair.Key] = pair.Value;
+                }
+            }
+
             builder.Configuration.AddInMemoryCollection(configValues);
 
             // Use fixed ports if specified (for E2E tests), otherwise dynamic ports (port 0)
@@ -503,7 +520,11 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             var connectionString = testConfig?.ConnectionString
                 ?? builder.Configuration.GetConnectionString("HushNetworkDb");
             options.UseNpgsql(connectionString);
-            options.EnableSensitiveDataLogging();
+            options.ConfigureWarnings(warnings =>
+            {
+                warnings.Ignore(RelationalEventId.CommandExecuting);
+                warnings.Ignore(RelationalEventId.CommandExecuted);
+            });
             options.EnableDetailedErrors();
         });
 
@@ -689,6 +710,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         string ConnectionString,
         string? RedisConnectionString,
         ILoggerProvider? DiagnosticLoggerProvider,
+        IReadOnlyDictionary<string, string?>? ConfigurationOverrides = null,
         int? FixedGrpcPort = null,
         int? FixedGrpcWebPort = null);
 }

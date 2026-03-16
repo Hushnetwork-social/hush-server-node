@@ -102,10 +102,12 @@ namespace HushNode.IntegrationTests.Features.E2E
         [Xunit.TraitAttribute("FeatureTitle", "FEAT-063 Cross-Device Read Sync E2E")]
         [Xunit.TraitAttribute("Description", "Reading on Device A clears unread badge on Device B")]
         [Xunit.TraitAttribute("Category", "F3-E2E-001")]
+        [Xunit.TraitAttribute("Category", "CDRS-E2E-READ-CLEARS")]
         public void ReadingOnDeviceAClearsUnreadBadgeOnDeviceB()
         {
             string[] tagsOfScenario = new string[] {
-                    "F3-E2E-001"};
+                    "F3-E2E-001",
+                    "CDRS-E2E-READ-CLEARS"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Reading on Device A clears unread badge on Device B", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 13
@@ -168,10 +170,12 @@ namespace HushNode.IntegrationTests.Features.E2E
         [Xunit.TraitAttribute("FeatureTitle", "FEAT-063 Cross-Device Read Sync E2E")]
         [Xunit.TraitAttribute("Description", "Correct unread count after post-read messages")]
         [Xunit.TraitAttribute("Category", "F3-E2E-002")]
+        [Xunit.TraitAttribute("Category", "CDRS-E2E-POST-READ-UNREAD")]
         public void CorrectUnreadCountAfterPost_ReadMessages()
         {
             string[] tagsOfScenario = new string[] {
-                    "F3-E2E-002"};
+                    "F3-E2E-002",
+                    "CDRS-E2E-POST-READ-UNREAD"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Correct unread count after post-read messages", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 35
@@ -231,10 +235,12 @@ namespace HushNode.IntegrationTests.Features.E2E
         [Xunit.TraitAttribute("FeatureTitle", "FEAT-063 Cross-Device Read Sync E2E")]
         [Xunit.TraitAttribute("Description", "Reading a feed does not change sort order")]
         [Xunit.TraitAttribute("Category", "F3-E2E-003")]
+        [Xunit.TraitAttribute("Category", "CDRS-E2E-SORT-STABLE")]
         public void ReadingAFeedDoesNotChangeSortOrder()
         {
             string[] tagsOfScenario = new string[] {
-                    "F3-E2E-003"};
+                    "F3-E2E-003",
+                    "CDRS-E2E-SORT-STABLE"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Reading a feed does not change sort order", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 57
@@ -291,10 +297,12 @@ namespace HushNode.IntegrationTests.Features.E2E
         [Xunit.TraitAttribute("FeatureTitle", "FEAT-063 Cross-Device Read Sync E2E")]
         [Xunit.TraitAttribute("Description", "Messages arriving between read and sync are counted as unread")]
         [Xunit.TraitAttribute("Category", "F3-E2E-004")]
+        [Xunit.TraitAttribute("Category", "CDRS-E2E-BETWEEN-READ-AND-SYNC")]
         public void MessagesArrivingBetweenReadAndSyncAreCountedAsUnread()
         {
             string[] tagsOfScenario = new string[] {
-                    "F3-E2E-004"};
+                    "F3-E2E-004",
+                    "CDRS-E2E-BETWEEN-READ-AND-SYNC"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Messages arriving between read and sync are counted as unread", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 76
@@ -357,10 +365,12 @@ namespace HushNode.IntegrationTests.Features.E2E
         [Xunit.TraitAttribute("FeatureTitle", "FEAT-063 Cross-Device Read Sync E2E")]
         [Xunit.TraitAttribute("Description", "Concurrent read positions converge to highest watermark")]
         [Xunit.TraitAttribute("Category", "F3-E2E-005")]
+        [Xunit.TraitAttribute("Category", "CDRS-E2E-CONVERGE-HIGHEST")]
         public void ConcurrentReadPositionsConvergeToHighestWatermark()
         {
             string[] tagsOfScenario = new string[] {
-                    "F3-E2E-005"};
+                    "F3-E2E-005",
+                    "CDRS-E2E-CONVERGE-HIGHEST"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Concurrent read positions converge to highest watermark", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 98

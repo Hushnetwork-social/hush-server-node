@@ -22,6 +22,7 @@ namespace HushNode.IntegrationTests.Features.E2E
     [Xunit.TraitAttribute("Category", "E2E")]
     [Xunit.TraitAttribute("Category", "EPIC-003")]
     [Xunit.TraitAttribute("Category", "FEAT-055")]
+    [Xunit.TraitAttribute("Category", "LONG_RUNNING")]
     public partial class House_CleaningOnFeedCloseFeature : object, Xunit.IClassFixture<House_CleaningOnFeedCloseFeature.FixtureData>, System.IDisposable
     {
         
@@ -30,7 +31,8 @@ namespace HushNode.IntegrationTests.Features.E2E
         private static string[] featureTags = new string[] {
                 "E2E",
                 "EPIC-003",
-                "FEAT-055"};
+                "FEAT-055",
+                "LONG_RUNNING"};
         
         private Xunit.Abstractions.ITestOutputHelper _testOutputHelper;
         

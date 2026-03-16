@@ -18,16 +18,25 @@ services:
         # Fixed gRPC-Web port - must match HushServerNodeCore.E2EGrpcWebPort (14666)
         - NEXT_PUBLIC_GRPC_URL=http://host.docker.internal:14666
         - NEXT_PUBLIC_DEBUG_LOGGING=true
-        - NEXT_PUBLIC_REACTIONS_ALLOW_DEV_MODE=true
+        - NEXT_PUBLIC_REACTIONS_ALLOW_DEV_MODE=${NEXT_PUBLIC_REACTIONS_ALLOW_DEV_MODE:-false}
+        # Keep FEAT-087 E2E on the browser/worker prover.
+        # The server/Node route can time out in Docker and masks the real regression:
+        # browser-generated proofs that reach HushServerNode are currently rejected by verification.
+        # Dockerfile already defaults this to browser; do not override to server here.
         # Disable auto-sync for E2E tests - sync is triggered manually via window.__e2e_triggerSync()
         - NEXT_PUBLIC_SYNC_INTERVAL_MS=999999
     ports:
       - "3000:3000"
+    volumes:
+      - ../../../hush-web-client/.tmp/prove-captures:/app/.tmp/prove-captures
+      - ../../../hush-web-client/.tmp/reaction-debug:/app/.tmp/reaction-debug
     environment:
       - NODE_ENV=production
       # Server-side gRPC URL for API routes (must match build-time NEXT_PUBLIC_GRPC_URL)
       - GRPC_SERVER_URL=http://host.docker.internal:14666
-      - NEXT_PUBLIC_REACTIONS_ALLOW_DEV_MODE=true
+      - NEXT_PUBLIC_REACTIONS_ALLOW_DEV_MODE=${NEXT_PUBLIC_REACTIONS_ALLOW_DEV_MODE:-false}
+      - NEXT_PUBLIC_REACTION_DEBUG_CAPTURE=true
+      - REACTION_PROVE_CAPTURE_INPUTS=true
     healthcheck:
       # Use node for health check since Next.js standalone may not have wget/curl
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]

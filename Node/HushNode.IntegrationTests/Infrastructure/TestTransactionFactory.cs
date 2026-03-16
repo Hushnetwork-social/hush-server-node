@@ -468,6 +468,52 @@ internal static class TestTransactionFactory
         return signedTransaction.ToJson();
     }
 
+    /// <summary>
+    /// Creates a signed reaction transaction with an externally generated proof payload.
+    /// </summary>
+    public static string CreateReaction(
+        TestIdentity reactor,
+        FeedId reactionScopeId,
+        FeedMessageId messageId,
+        byte[] nullifier,
+        byte[][] ciphertextC1X,
+        byte[][] ciphertextC1Y,
+        byte[][] ciphertextC2X,
+        byte[][] ciphertextC2Y,
+        byte[] zkProof,
+        string circuitVersion,
+        byte[]? encryptedEmojiBackup)
+    {
+        var payload = new NewReactionPayload(
+            reactionScopeId,
+            messageId,
+            nullifier,
+            ciphertextC1X,
+            ciphertextC1Y,
+            ciphertextC2X,
+            ciphertextC2Y,
+            zkProof,
+            circuitVersion,
+            encryptedEmojiBackup);
+
+        var unsignedTransaction = new UnsignedTransaction<NewReactionPayload>(
+            new TransactionId(Guid.NewGuid()),
+            NewReactionPayloadHandler.NewReactionPayloadKind,
+            Timestamp.Current,
+            payload,
+            1000);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            reactor.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<NewReactionPayload>(
+            unsignedTransaction,
+            new SignatureInfo(reactor.PublicSigningAddress, signature));
+
+        return signedTransaction.ToJson();
+    }
+
     private static byte[] BuildReactionBackup(int emojiIndex)
     {
         var backup = new byte[32];

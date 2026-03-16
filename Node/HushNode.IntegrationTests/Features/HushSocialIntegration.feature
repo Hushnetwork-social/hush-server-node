@@ -12,7 +12,7 @@ Feature: HushSocial server integration rules
     And user "FollowerC" is registered with a personal feed
     And user "GuestLikeUser" is not authenticated
 
-  @FEAT-084 @FEAT-085 @FEAT-090
+  @FEAT-084 @FEAT-085 @FEAT-090 @HS-INT-085-ONBOARDING
   Scenario: Close profile follow request acceptance auto-adds inner circle
     Given Owner has HushSocial enabled
     And Owner profile mode is Close
@@ -22,7 +22,7 @@ Feature: HushSocial server integration rules
     Then FollowerA should be in Owner Inner Circle
     And Owner should see FollowerA in approved followers
 
-  @FEAT-085
+  @FEAT-085 @HS-INT-085-CIRCLE-REMOVAL
   Scenario: Circle membership removal rotates keys immediately
     Given Owner profile mode is Close
     And Owner has accepted follow requests from "FollowerA, FollowerB"
@@ -34,7 +34,7 @@ Feature: HushSocial server integration rules
     And FollowerB should not be able to decrypt new posts in circle "Dev Circle"
     And FollowerA should be able to decrypt new posts in circle "Dev Circle"
 
-  @FEAT-085
+  @FEAT-085 @HS-INT-085-BOOTSTRAP-LINK
   Scenario: Startup bootstrap creates inner circle and links existing chat peers
     Given Owner profile mode is Close
     And Owner has existing chat feeds with "FollowerA, FollowerB"
@@ -43,7 +43,7 @@ Feature: HushSocial server integration rules
     Then Owner Inner Circle should be created
     And "FollowerA, FollowerB" should be members of Owner Inner Circle
 
-  @FEAT-085
+  @FEAT-085 @HS-INT-085-CHAT-ADD
   Scenario: New chat feed creation triggers add-members-to-inner-circle
     Given Owner profile mode is Close
     And Owner Inner Circle already exists
@@ -52,7 +52,7 @@ Feature: HushSocial server integration rules
     Then FollowerC should be added to Owner Inner Circle
     And key generation for Owner Inner Circle should be incremented
 
-  @FEAT-085
+  @FEAT-085 @HS-INT-085-DUPLICATE-ADD
   Scenario: Duplicate inner-circle add request returns explicit duplicate without key rotation
     Given Owner profile mode is Close
     And Owner Inner Circle already exists
@@ -61,7 +61,7 @@ Feature: HushSocial server integration rules
     Then FEAT-085 duplicate add response should include "FollowerA"
     And key generation for Owner Inner Circle should remain unchanged
 
-  @FEAT-085
+  @FEAT-085 @HS-INT-085-SAME-BLOCK-DUP
   Scenario: Same-block duplicate add-member requests remain deterministic
     Given Owner profile mode is Close
     And Owner Inner Circle already exists
@@ -70,7 +70,7 @@ Feature: HushSocial server integration rules
     Then "FollowerA" should be added to Owner Inner Circle
     And FEAT-085 same-block duplicate processing should rotate Owner Inner Circle only once
 
-  @FEAT-085
+  @FEAT-085 @HS-INT-085-SAME-BLOCK-CREATE
   Scenario Outline: Same-block create-inner-circle for multiple owners is isolated
     Given <ownerCount> FEAT-085 owners are registered with personal feeds
     When all FEAT-085 owners submit CreateInnerCircle before block indexing
@@ -84,7 +84,7 @@ Feature: HushSocial server integration rules
       | 5          |
       | 10         |
 
-  @FEAT-086
+  @FEAT-086 @HS-INT-086-VISIBILITY
   Scenario: Open and close post visibility is enforced by permalink access
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA
@@ -99,7 +99,7 @@ Feature: HushSocial server integration rules
     When FollowerA opens permalink for post "Inner circle roadmap"
     Then the post content should be visible
 
-  @FEAT-086
+  @FEAT-086 @HS-INT-086-COMPOSER
   Scenario: Composer contract defaults private mode to Inner Circle with last-circle lock
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA
@@ -110,7 +110,7 @@ Feature: HushSocial server integration rules
     And social composer should lock the last selected private circle
     And social composer submit should be allowed
 
-  @FEAT-086
+  @FEAT-086 @HS-INT-086-GUEST-DENIAL
   Scenario: Guest private permalink denial returns create-account CTA contract
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA
@@ -119,7 +119,7 @@ Feature: HushSocial server integration rules
     Then the permalink denial contract should target guest account creation
     And no private metadata should be returned
 
-  @FEAT-086
+  @FEAT-086 @HS-INT-086-MEDIA
   Scenario: Media constraints for social posts match HushFeeds limits
     Given Owner has HushSocial enabled
     When Owner submits an Open post with 5 valid media attachments
@@ -129,7 +129,7 @@ Feature: HushSocial server integration rules
     When Owner submits an Open post with a media attachment over max size
     Then the submission should be rejected with a size limit error
 
-  @FEAT-087
+  @FEAT-087 @HS-INT-087-REACTION-PRIVACY
   Scenario: Reaction privacy preserves tally without exposing per-user emoji choice on private content
     Given Owner profile mode is Close
     And Owner has accepted follow requests from "FollowerA, FollowerB"

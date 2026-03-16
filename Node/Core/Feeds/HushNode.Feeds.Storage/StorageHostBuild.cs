@@ -1,6 +1,7 @@
 using HushNode.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -15,7 +16,11 @@ public static class StorageHostBuild
         services.AddDbContext<FeedsDbContext>((provider, options) =>
         {
             options.UseNpgsql(hostContext.Configuration.GetConnectionString("HushNetworkDb"));
-            options.EnableSensitiveDataLogging();  // For debugging
+            options.ConfigureWarnings(warnings =>
+            {
+                warnings.Ignore(RelationalEventId.CommandExecuting);
+                warnings.Ignore(RelationalEventId.CommandExecuted);
+            });
             options.EnableDetailedErrors();  // For debugging
         });
 

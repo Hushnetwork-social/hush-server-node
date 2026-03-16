@@ -1,4 +1,4 @@
-@E2E @DirectChatWalkthrough
+@E2E @DirectChatWalkthrough @LONG_RUNNING
 Feature: Direct Chat Walkthrough
     As two users on HushNetwork
     I want to create a direct chat, exchange messages, reply to specific messages, and react

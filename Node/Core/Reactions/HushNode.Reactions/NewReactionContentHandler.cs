@@ -7,7 +7,9 @@ using HushNode.Reactions.ZK;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Reactions.Model;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using System.Diagnostics;
 
 namespace HushNode.Reactions;
 
@@ -69,7 +71,6 @@ public class NewReactionContentHandler : ITransactionContentHandler
         }
 
         var payload = reactionTransaction.Payload;
-        var signatory = reactionTransaction.UserSignature?.Signatory;
         Console.WriteLine($"[E2E Reaction] NewReactionContentHandler.ValidateAndSign: MessageId={payload.MessageId}, FeedId={payload.FeedId}");
 
         // Validate input sizes
@@ -98,8 +99,9 @@ public class NewReactionContentHandler : ITransactionContentHandler
             return null;
         }
 
-        if (HasPendingReactionForSameTarget(signatory, payload))
+        if (HasPendingReactionForSameTarget(reactionTransaction.UserSignature?.Signatory, payload))
         {
+            var signatory = reactionTransaction.UserSignature?.Signatory;
             _logger.LogWarning(
                 "[NewReactionContentHandler] Duplicate pending reaction rejected for message {MessageId} and signatory {Signatory}",
                 payload.MessageId,
@@ -159,7 +161,6 @@ public class NewReactionContentHandler : ITransactionContentHandler
                 _logger.LogWarning("[NewReactionContentHandler] Membership scope not found for reaction scope {FeedId}", payload.FeedId);
                 return false;
             }
-
             // Get recent Merkle roots for grace period verification
             var recentRoots = await _membershipService.GetRecentRootsAsync(membershipScopeId.Value, MerkleRootGracePeriod);
             if (!recentRoots.Any() && !isExplicitDevMode)
@@ -199,14 +200,21 @@ public class NewReactionContentHandler : ITransactionContentHandler
                     CiphertextC1 = c1Points,
                     CiphertextC2 = c2Points,
                     MessageId = payload.MessageId.Value.ToByteArray(),
+                    FeedId = payload.FeedId.Value.ToByteArray(),
                     FeedPk = feedPk,
                     MembersRoot = rootInfo.MerkleRoot,
                     AuthorCommitment = new BigInteger(authorCommitment, isUnsigned: true, isBigEndian: true)
                 };
 
+                var verificationStopwatch = Stopwatch.StartNew();
                 var verifyResult = await _zkVerifier.VerifyAsync(payload.ZkProof, publicInputs, payload.CircuitVersion);
+                verificationStopwatch.Stop();
                 if (verifyResult.Valid)
                 {
+                    _logger.LogInformation(
+                        "[NewReactionContentHandler] ZK proof verified for message {MessageId} in {ElapsedMs}ms",
+                        payload.MessageId,
+                        verificationStopwatch.ElapsedMilliseconds);
                     return true;
                 }
             }

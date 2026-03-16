@@ -1,6 +1,7 @@
 using HushNode.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Olimpo.EntityFramework.Persistency;
@@ -14,7 +15,11 @@ public static class StorageHostBuild
         services.AddDbContext<ReactionsDbContext>((provider, options) =>
         {
             options.UseNpgsql(hostContext.Configuration.GetConnectionString("HushNetworkDb"));
-            options.EnableSensitiveDataLogging();
+            options.ConfigureWarnings(warnings =>
+            {
+                warnings.Ignore(RelationalEventId.CommandExecuting);
+                warnings.Ignore(RelationalEventId.CommandExecuted);
+            });
             options.EnableDetailedErrors();
         });
 

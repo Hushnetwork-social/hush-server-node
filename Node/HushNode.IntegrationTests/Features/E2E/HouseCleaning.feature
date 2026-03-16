@@ -1,4 +1,4 @@
-@E2E @EPIC-003 @FEAT-055
+@E2E @EPIC-003 @FEAT-055 @LONG_RUNNING
 Feature: House-cleaning on Feed Close
     As a user navigating between feeds
     I want the previous feed's data to be cleaned up automatically

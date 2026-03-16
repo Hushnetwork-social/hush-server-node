@@ -262,11 +262,16 @@ internal abstract class BrowserStepsBase
     ///   await AwaitTransactionsAndProduceBlockAsync(waiter);
     /// </summary>
     /// <param name="minTransactions">Minimum number of transactions to wait for (default: 1).</param>
+    /// <param name="timeout">Optional transaction wait timeout. Defaults to 10 seconds.</param>
     /// <returns>A waiter that should be passed to AwaitTransactionsAndProduceBlockAsync after the action.</returns>
-    protected HushServerNodeCore.TransactionWaiter StartListeningForTransactions(int minTransactions = 1)
+    protected HushServerNodeCore.TransactionWaiter StartListeningForTransactions(
+        int minTransactions = 1,
+        TimeSpan? timeout = null)
     {
         var node = GetNode();
-        return node.StartListeningForTransactions(minTransactions, timeout: TimeSpan.FromSeconds(10));
+        return node.StartListeningForTransactions(
+            minTransactions,
+            timeout: timeout ?? TimeSpan.FromSeconds(10));
     }
 
     /// <summary>

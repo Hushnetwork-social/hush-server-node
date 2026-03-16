@@ -1,4 +1,4 @@
-@E2E @ImageAttachmentWalkthrough @FEAT-067
+@E2E @ImageAttachmentWalkthrough @FEAT-067 @LONG_RUNNING
 Feature: Image Attachment Walkthrough
     As two users on HushNetwork
     I want to send and receive image attachments in a direct chat

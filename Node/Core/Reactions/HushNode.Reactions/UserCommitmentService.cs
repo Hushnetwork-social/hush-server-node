@@ -17,9 +17,9 @@ public class UserCommitmentService : IUserCommitmentService
     private readonly BigInteger _localUserSecret;
     private readonly byte[] _localUserCommitment;
 
-    // Baby JubJub curve order (same as BN254 scalar field)
+    // Baby JubJub subgroup order for scalar operations.
     private static readonly BigInteger CurveOrder = BigInteger.Parse(
-        "21888242871839275222246405745257275088548364400416034343698204186575808495617");
+        "21888242871839275222246405745257275088614511777268538073601725287587578984328");
 
     public UserCommitmentService(
         IOptions<CredentialsProfile> credentials,
@@ -62,12 +62,7 @@ public class UserCommitmentService : IUserCommitmentService
         var salt = Encoding.UTF8.GetBytes("hush-network-reactions");
         var info = Encoding.UTF8.GetBytes("user-secret-v1");
 
-        var derivedBytes = HKDF.DeriveKey(
-            HashAlgorithmName.SHA256,
-            privateKeyBytes,
-            32,  // 256 bits
-            salt,
-            info);
+        var derivedBytes = DeriveHkdfSha256(privateKeyBytes, 32, salt, info);
 
         // Convert to BigInteger and reduce modulo curve order
         var secret = new BigInteger(derivedBytes, isUnsigned: true, isBigEndian: true);
@@ -89,12 +84,7 @@ public class UserCommitmentService : IUserCommitmentService
         var salt = Encoding.UTF8.GetBytes("hush-network-address-commitment");
         var info = Encoding.UTF8.GetBytes("address-secret-v1");
 
-        var derivedBytes = HKDF.DeriveKey(
-            HashAlgorithmName.SHA256,
-            addressBytes,
-            32,
-            salt,
-            info);
+        var derivedBytes = DeriveHkdfSha256(addressBytes, 32, salt, info);
 
         // Convert to BigInteger and reduce modulo curve order
         var secret = new BigInteger(derivedBytes, isUnsigned: true, isBigEndian: true);
@@ -122,5 +112,33 @@ public class UserCommitmentService : IUserCommitmentService
 
         // Truncate if too long (shouldn't happen for field elements)
         return bytes[^32..];
+    }
+
+    private static byte[] DeriveHkdfSha256(byte[] inputKeyMaterial, int outputLength, byte[] salt, byte[] info)
+    {
+        using var extract = new HMACSHA256(salt);
+        var prk = extract.ComputeHash(inputKeyMaterial);
+
+        var okm = new byte[outputLength];
+        var previousBlock = Array.Empty<byte>();
+        byte counter = 1;
+        var offset = 0;
+
+        while (offset < outputLength)
+        {
+            using var expand = new HMACSHA256(prk);
+            var input = new byte[previousBlock.Length + info.Length + 1];
+            Buffer.BlockCopy(previousBlock, 0, input, 0, previousBlock.Length);
+            Buffer.BlockCopy(info, 0, input, previousBlock.Length, info.Length);
+            input[^1] = counter;
+
+            previousBlock = expand.ComputeHash(input);
+            var bytesToCopy = Math.Min(previousBlock.Length, outputLength - offset);
+            Buffer.BlockCopy(previousBlock, 0, okm, offset, bytesToCopy);
+            offset += bytesToCopy;
+            counter++;
+        }
+
+        return okm;
     }
 }

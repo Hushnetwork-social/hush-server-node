@@ -22,6 +22,7 @@ namespace HushNode.IntegrationTests.Features.E2E
     [Xunit.TraitAttribute("Category", "E2E")]
     [Xunit.TraitAttribute("Category", "MultiUser")]
     [Xunit.TraitAttribute("Category", "PR")]
+    [Xunit.TraitAttribute("Category", "LONG_RUNNING")]
     public partial class Multi_UserBasicWalkthroughFeature : object, Xunit.IClassFixture<Multi_UserBasicWalkthroughFeature.FixtureData>, System.IDisposable
     {
         
@@ -30,7 +31,8 @@ namespace HushNode.IntegrationTests.Features.E2E
         private static string[] featureTags = new string[] {
                 "E2E",
                 "MultiUser",
-                "PR"};
+                "PR",
+                "LONG_RUNNING"};
         
         private Xunit.Abstractions.ITestOutputHelper _testOutputHelper;
         

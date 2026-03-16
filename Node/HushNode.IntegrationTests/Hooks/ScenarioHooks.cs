@@ -177,14 +177,15 @@ internal sealed class ScenarioHooks
         var scenarioTags = _scenarioContext.ScenarioInfo.Tags ?? Array.Empty<string>();
         var allTags = featureTags.Concat(scenarioTags).ToArray();
         var isE2E = allTags.Any(t => t.Equals("E2E", StringComparison.OrdinalIgnoreCase));
+        var configurationOverrides = BuildScenarioConfigurationOverrides(isE2E);
 
         _outputHelper.WriteLine($"[ScenarioHooks] FeatureTags: [{string.Join(", ", featureTags)}], ScenarioTags: [{string.Join(", ", scenarioTags)}], IsE2E: {isE2E}");
 
         // Start a fresh node for this scenario with diagnostic capture
         // E2E tests use fixed ports so pre-built Docker images can connect
         var (node, blockControl, grpcFactory) = isE2E
-            ? await _fixture.StartNodeForE2EAsync(diagnostics)
-            : await _fixture.StartNodeAsync(diagnostics);
+            ? await _fixture.StartNodeForE2EAsync(diagnostics, configurationOverrides)
+            : await _fixture.StartNodeAsync(diagnostics, configurationOverrides);
 
         _outputHelper.WriteLine($"[ScenarioHooks] Node started on ports gRPC:{node.GrpcPort}, gRPC-Web:{node.GrpcWebPort}");
 
@@ -194,6 +195,27 @@ internal sealed class ScenarioHooks
         _scenarioContext[GrpcFactoryKey] = grpcFactory;
         _scenarioContext[DiagnosticsKey] = diagnostics;
         _scenarioContext[FixtureKey] = _fixture;
+    }
+
+    private IReadOnlyDictionary<string, string?> BuildScenarioConfigurationOverrides(bool isE2E)
+    {
+        var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+        if (!isE2E)
+        {
+            return overrides;
+        }
+
+        var verifierCaptureDirectory = Path.Combine(
+            GetOrCreateTestRunFolder(),
+            "reaction-debug",
+            "server-verifier");
+
+        Directory.CreateDirectory(verifierCaptureDirectory);
+        overrides["Reactions:DebugCaptureDirectory"] = verifierCaptureDirectory;
+        overrides["Reactions:VerifierMode"] = Environment.GetEnvironmentVariable("HUSH_REACTIONS_VERIFIER_MODE") ?? "real";
+
+        return overrides;
     }
 
     /// <summary>
@@ -311,6 +333,7 @@ internal sealed class ScenarioHooks
             {
                 SaveTestResult(scenarioFolder);
                 SaveServerLogs(scenarioFolder);
+                await SaveWebClientLogsAsync(scenarioFolder);
                 SaveBrowserLogs(scenarioFolder);
                 SaveLocalStorageTimeline(scenarioFolder);
                 SaveNetworkLogs(scenarioFolder);
@@ -740,6 +763,36 @@ internal sealed class ScenarioHooks
         var logPath = Path.Combine(scenarioFolder, "server.log");
         File.WriteAllText(logPath, logs);
         Console.WriteLine($"[E2E] Server logs saved: server.log ({diagnostics.EntryCount} entries)");
+    }
+
+    /// <summary>
+    /// Saves hush-web-client container logs to the scenario folder.
+    /// </summary>
+    private async Task SaveWebClientLogsAsync(string scenarioFolder)
+    {
+        if (_webClientFixture == null || !_webClientFixture.IsStarted)
+        {
+            return;
+        }
+
+        var sinceUtc = _scenarioContext.TryGetValue(ScenarioStartTimeKey, out var startObj)
+            && startObj is DateTime scenarioStart
+                ? new DateTimeOffset(scenarioStart.ToUniversalTime(), TimeSpan.Zero)
+                : (DateTimeOffset?)null;
+
+        string logs;
+        try
+        {
+            logs = await _webClientFixture.GetServiceLogsAsync(sinceUtc);
+        }
+        catch (Exception ex)
+        {
+            logs = $"(Failed to capture hush-web-client logs: {ex.Message})";
+        }
+
+        var logPath = Path.Combine(scenarioFolder, "hush-web-client.log");
+        File.WriteAllText(logPath, logs);
+        Console.WriteLine("[E2E] Web client logs saved: hush-web-client.log");
     }
 
     /// <summary>

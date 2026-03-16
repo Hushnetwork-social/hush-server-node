@@ -129,14 +129,16 @@ internal sealed class HushTestFixture : IAsyncLifetime
     /// <param name="diagnosticCapture">Optional diagnostic capture for collecting logs.</param>
     /// <returns>A running HushServerNodeCore instance</returns>
     public async Task<(HushServerNodeCore Node, BlockProductionControl BlockControl, GrpcClientFactory GrpcFactory)> StartNodeAsync(
-        DiagnosticCapture? diagnosticCapture = null)
+        DiagnosticCapture? diagnosticCapture = null,
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
     {
         var blockControl = new BlockProductionControl();
         var node = HushServerNodeCore.CreateForTesting(
             blockControl,
             PostgresConnectionString,
             RedisConnectionString,  // FEAT-046: Pass Redis connection for cache testing
-            diagnosticCapture);
+            diagnosticCapture,
+            configurationOverrides);
 
         await node.StartAsync();
 
@@ -152,14 +154,16 @@ internal sealed class HushTestFixture : IAsyncLifetime
     /// <param name="diagnosticCapture">Optional diagnostic capture for collecting logs.</param>
     /// <returns>A running HushServerNodeCore instance</returns>
     public async Task<(HushServerNodeCore Node, BlockProductionControl BlockControl, GrpcClientFactory GrpcFactory)> StartNodeForE2EAsync(
-        DiagnosticCapture? diagnosticCapture = null)
+        DiagnosticCapture? diagnosticCapture = null,
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
     {
         var blockControl = new BlockProductionControl();
         var node = HushServerNodeCore.CreateForE2ETesting(
             blockControl,
             PostgresConnectionString,
             RedisConnectionString,
-            diagnosticCapture);
+            diagnosticCapture,
+            configurationOverrides);
 
         await node.StartAsync();
 

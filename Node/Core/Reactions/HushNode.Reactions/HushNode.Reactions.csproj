@@ -17,4 +17,10 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.2" />
     <PackageReference Include="Microsoft.Extensions.logging.Abstractions" Version="9.0.2" />
   </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Crypto\\poseidon_constants.circomlibjs.json" />
+    <None Update="ZK\\verify-groth16.mjs" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="ZK\\replay-groth16-from-capture.mjs" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

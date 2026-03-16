@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Olimpo.EntityFramework.Persistency;
 using HushNode.Identity.Storage;
 using HushShared.Feeds.Model;
+using HushShared.Identity.Model;
 using HushShared.Reactions.Model;
 using HushNode.Reactions.Crypto;
 using HushNode.Reactions.Storage;
@@ -198,8 +199,24 @@ public class MembershipService : IMembershipService
     {
         if (IsGlobalScope(feedId))
         {
-            var commitments = await GetGlobalCommitmentsAsync();
-            return commitments.Any(x => x.SequenceEqual(userCommitment));
+            var profiles = (await GetGlobalProfilesAsync()).ToList();
+            var commitments = profiles
+                .Select(profile => new
+                {
+                    profile.PublicSigningAddress,
+                    Commitment = _userCommitmentService.DeriveCommitmentFromAddress(profile.PublicSigningAddress)
+                })
+                .ToList();
+            var isRegistered = commitments.Any(x => x.Commitment.SequenceEqual(userCommitment));
+
+            _logger.LogInformation(
+                "[MembershipService] Global scope membership lookup: profiles={ProfileCount}, requestedCommitment={RequestedCommitment}, match={Match}, sampleAddresses={SampleAddresses}",
+                profiles.Count,
+                Convert.ToHexString(userCommitment),
+                isRegistered,
+                string.Join(", ", profiles.Select(x => x.PublicSigningAddress).Take(5)));
+
+            return isRegistered;
         }
 
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -292,13 +309,18 @@ public class MembershipService : IMembershipService
 
     private async Task<IReadOnlyList<byte[]>> GetGlobalCommitmentsAsync()
     {
-        using var unitOfWork = _identityUnitOfWorkProvider.CreateReadOnly();
-        var identityRepo = unitOfWork.GetRepository<IIdentityRepository>();
-        var profiles = await identityRepo.GetAllProfilesAsync();
+        var profiles = await GetGlobalProfilesAsync();
 
         return profiles
             .Select(profile => _userCommitmentService.DeriveCommitmentFromAddress(profile.PublicSigningAddress))
             .ToList();
+    }
+
+    private async Task<IReadOnlyList<Profile>> GetGlobalProfilesAsync()
+    {
+        using var unitOfWork = _identityUnitOfWorkProvider.CreateReadOnly();
+        var identityRepo = unitOfWork.GetRepository<IIdentityRepository>();
+        return (await identityRepo.GetAllProfilesAsync()).ToList();
     }
 
     /// <summary>

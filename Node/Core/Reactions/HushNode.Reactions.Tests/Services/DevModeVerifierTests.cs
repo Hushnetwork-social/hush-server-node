@@ -42,6 +42,7 @@ public class DevModeVerifierTests
             CiphertextC1 = Enumerable.Range(0, 6).Select(_ => point).ToArray(),
             CiphertextC2 = Enumerable.Range(0, 6).Select(_ => point).ToArray(),
             MessageId = Bytes32(2),
+            FeedId = Bytes32(5),
             FeedPk = point,
             MembersRoot = Bytes32(3),
             AuthorCommitment = new BigInteger(4),

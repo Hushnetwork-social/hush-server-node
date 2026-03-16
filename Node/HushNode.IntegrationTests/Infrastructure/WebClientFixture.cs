@@ -8,6 +8,7 @@ namespace HushNode.IntegrationTests.Infrastructure;
 /// </summary>
 internal sealed class WebClientFixture : IAsyncDisposable
 {
+    private const string WebClientServiceName = "hush-web-client";
     private readonly string _composeFilePath;
     private readonly string _webClientRootPath;
     private readonly string _buildStampPath;
@@ -75,24 +76,66 @@ internal sealed class WebClientFixture : IAsyncDisposable
             FileName = "docker",
             Arguments = $"compose -f \"{_composeFilePath}\" up -d --wait --force-recreate --remove-orphans",
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
         };
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start docker compose process");
 
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync(cancellationToken);
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
 
         if (process.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                $"Docker compose failed with exit code {process.ExitCode}.");
+                $"Docker compose failed with exit code {process.ExitCode}. stdout: {stdout} stderr: {stderr}");
         }
 
         // Wait for health check (docker --wait should handle this, but verify)
         await WaitForHealthyAsync(cancellationToken);
 
         _started = true;
+    }
+
+    public async Task<string> GetServiceLogsAsync(DateTimeOffset? sinceUtc = null, CancellationToken cancellationToken = default)
+    {
+        var sinceArgument = sinceUtc.HasValue
+            ? $" --since \"{sinceUtc.Value.UtcDateTime:O}\""
+            : string.Empty;
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "docker",
+            Arguments = $"compose -f \"{_composeFilePath}\" logs --no-color{sinceArgument} {WebClientServiceName}",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+
+        var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start docker compose logs process");
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync(cancellationToken);
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"Docker compose logs failed with exit code {process.ExitCode}. stdout: {stdout} stderr: {stderr}");
+        }
+
+        return string.IsNullOrWhiteSpace(stderr)
+            ? stdout
+            : $"{stdout}{Environment.NewLine}[stderr]{Environment.NewLine}{stderr}";
     }
 
     /// <summary>
@@ -105,17 +148,24 @@ internal sealed class WebClientFixture : IAsyncDisposable
             FileName = "docker",
             Arguments = $"compose -f \"{_composeFilePath}\" build",
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
         };
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start docker build process");
 
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync(cancellationToken);
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
 
         if (process.ExitCode != 0)
         {
-            throw new InvalidOperationException($"Docker build failed with exit code {process.ExitCode}.");
+            throw new InvalidOperationException(
+                $"Docker build failed with exit code {process.ExitCode}. stdout: {stdout} stderr: {stderr}");
         }
 
         Console.WriteLine("[E2E] Image build completed.");
@@ -138,7 +188,8 @@ internal sealed class WebClientFixture : IAsyncDisposable
         {
             "node_modules",
             ".next",
-            ".git"
+            ".git",
+            ".tmp"
         };
 
         foreach (var file in Directory.EnumerateFiles(_webClientRootPath, "*", SearchOption.AllDirectories))

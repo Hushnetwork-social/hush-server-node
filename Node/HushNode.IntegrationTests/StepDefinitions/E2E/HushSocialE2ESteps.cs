@@ -6,6 +6,8 @@ using HushShared.Feeds.Model;
 using HushServerNode.Testing;
 using Microsoft.Playwright;
 using Olimpo;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using TechTalk.SpecFlow;
 
@@ -21,6 +23,7 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
     private const string RepeatedBootstrapKeyGenerationAfterKey = "E2E_RepeatedBootstrapKeyGenerationAfter";
     private const string SocialPostsByTitleKey = "E2E_HushSocialPostsByTitle";
     private const string LastPermalinkResponseKey = "E2E_HushSocialLastPermalinkResponse";
+    private const string ForcedReactionErrorMessageKey = "E2E_ForcedReactionErrorMessage";
 
     public HushSocialE2ESteps(ScenarioContext scenarioContext) : base(scenarioContext)
     {
@@ -360,9 +363,10 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         await TriggerSyncAsync(page);
 
         await WaitForVisiblePostAsync(page, postTitle);
+        await WaitForReactionProverReadyAsync(page, userName);
 
         var postId = GetStoredPostId(postTitle);
-        using var waiter = StartListeningForTransactions(1);
+        using var waiter = StartListeningForTransactions(1, TimeSpan.FromSeconds(60));
 
         var addButton = await WaitForTestIdAsync(page, $"post-reaction-strip-{postId}-add", 10000);
         await addButton.ClickAsync();
@@ -371,8 +375,299 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         var emojiButton = picker.Locator("button").Nth(MapReactionEmojiNameToIndex(emojiName));
         await emojiButton.ClickAsync();
 
-        await AwaitTransactionsAndProduceBlockAsync(waiter);
+        try
+        {
+            await AwaitTransactionsAndProduceBlockAsync(waiter);
+        }
+        catch (TimeoutException ex)
+        {
+            var diagnosticSummary = await BuildReactionSubmissionFailureSummaryAsync(
+                page,
+                userName,
+                postId,
+                emojiName);
+
+            throw new TimeoutException(
+                $"{ex.Message}{Environment.NewLine}{diagnosticSummary}",
+                ex);
+        }
+
         await TriggerSyncAsync(page);
+    }
+
+    private static async Task WaitForReactionProverReadyAsync(IPage page, string userName)
+    {
+        var timeoutAt = DateTime.UtcNow.AddSeconds(15);
+        ReactionRuntimeStatusPayload? runtimeStatus = null;
+
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            var runtimeJson = await page.EvaluateAsync<string>(@"() => {
+                const store = window.__zustand_stores?.reactionsStore;
+                const state = store?.getState?.();
+
+                return JSON.stringify({
+                    storeExposed: !!store,
+                    isProverReady: !!state?.isProverReady,
+                    isGeneratingProof: !!state?.isGeneratingProof,
+                    lastError: state?.lastError ?? null,
+                });
+            }");
+
+            runtimeStatus = JsonSerializer.Deserialize<ReactionRuntimeStatusPayload>(
+                runtimeJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (runtimeStatus?.StoreExposed == true && runtimeStatus.IsProverReady)
+            {
+                return;
+            }
+
+            await Task.Delay(250);
+        }
+
+        throw new InvalidOperationException(
+            $"Reaction prover was not ready on the active page for {userName}. " +
+            $"storeExposed={runtimeStatus?.StoreExposed}, isProverReady={runtimeStatus?.IsProverReady}, " +
+            $"lastError={runtimeStatus?.LastError ?? "<none>"}");
+    }
+
+    private async Task<string> BuildReactionSubmissionFailureSummaryAsync(
+        IPage page,
+        string userName,
+        string postId,
+        string emojiName)
+    {
+        var runtimeStatus = await ReadReactionRuntimeStatusAsync(page);
+        var browserSummary = GetRecentBrowserLogSummary(userName);
+        var nodeSummary = GetReactionRelevantNodeLogSummary();
+
+        var sb = new StringBuilder();
+        sb.AppendLine(
+            $"Reaction submission diagnostics for {userName} on post {postId} emoji={emojiName}:");
+
+        if (runtimeStatus is not null)
+        {
+            sb.AppendLine(
+                $"Browser runtime: storeExposed={runtimeStatus.StoreExposed}, " +
+                $"isProverReady={runtimeStatus.IsProverReady}, " +
+                $"isGeneratingProof={runtimeStatus.IsGeneratingProof}, " +
+                $"lastError={runtimeStatus.LastError ?? "<none>"}");
+        }
+        else
+        {
+            sb.AppendLine("Browser runtime: unavailable");
+        }
+
+        if (!string.IsNullOrWhiteSpace(nodeSummary))
+        {
+            sb.AppendLine("Server observation:");
+            sb.AppendLine(nodeSummary);
+        }
+        else
+        {
+            sb.AppendLine("Server observation: no reaction-specific submission/verification logs were captured.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(browserSummary))
+        {
+            sb.AppendLine("Recent browser logs:");
+            sb.AppendLine(browserSummary);
+        }
+        else
+        {
+            sb.AppendLine("Recent browser logs: none captured for the reaction flow.");
+        }
+
+        return sb.ToString().TrimEnd();
+    }
+
+    private async Task<ReactionRuntimeStatusPayload?> ReadReactionRuntimeStatusAsync(IPage page)
+    {
+        try
+        {
+            var runtimeJson = await page.EvaluateAsync<string>(@"() => {
+                const store = window.__zustand_stores?.reactionsStore;
+                const state = store?.getState?.();
+
+                return JSON.stringify({
+                    storeExposed: !!store,
+                    isProverReady: !!state?.isProverReady,
+                    isGeneratingProof: !!state?.isGeneratingProof,
+                    lastError: state?.lastError ?? null,
+                });
+            }");
+
+            return JsonSerializer.Deserialize<ReactionRuntimeStatusPayload>(
+                runtimeJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[E2E] Failed to read reaction runtime status: {ex.Message}");
+            return null;
+        }
+    }
+
+    private string GetRecentBrowserLogSummary(string userName, int maxLines = 12)
+    {
+        if (!ScenarioContext.TryGetValue(ScenarioHooks.BrowserLogsKey, out var logsObj)
+            || logsObj is not Dictionary<string, List<string>> browserLogs
+            || !browserLogs.TryGetValue(userName, out var userLogs)
+            || userLogs.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var relevantLogs = userLogs
+            .Where(log =>
+                log.Contains("submitReaction", StringComparison.OrdinalIgnoreCase) ||
+                log.Contains("generateProof", StringComparison.OrdinalIgnoreCase) ||
+                log.Contains("Reaction failed", StringComparison.OrdinalIgnoreCase) ||
+                log.Contains("proof", StringComparison.OrdinalIgnoreCase) ||
+                log.Contains("[error]", StringComparison.OrdinalIgnoreCase) ||
+                log.Contains("[warning]", StringComparison.OrdinalIgnoreCase))
+            .TakeLast(maxLines)
+            .ToArray();
+
+        if (relevantLogs.Length == 0)
+        {
+            relevantLogs = userLogs.TakeLast(Math.Min(maxLines, userLogs.Count)).ToArray();
+        }
+
+        return string.Join(Environment.NewLine, relevantLogs);
+    }
+
+    private string GetReactionRelevantNodeLogSummary(int maxLines = 10)
+    {
+        if (!ScenarioContext.TryGetValue(ScenarioHooks.DiagnosticsKey, out var diagnosticsObj)
+            || diagnosticsObj is not DiagnosticCapture diagnostics)
+        {
+            return string.Empty;
+        }
+
+        var relevantLines = diagnostics
+            .GetCapturedLogs()
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Where(line =>
+                line.Contains("SubmitSignedTransaction", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("Groth16 verification failed", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("Starting snarkjs Groth16 verification", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("ZK proof verification failed", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("GetMembershipProof", StringComparison.OrdinalIgnoreCase))
+            .TakeLast(maxLines)
+            .ToArray();
+
+        return string.Join(Environment.NewLine, relevantLines);
+    }
+
+    [Given(@"FollowerA browser has approved FEAT-087 reaction circuit artifacts available")]
+    public async Task GivenFollowerABrowserHasApprovedFeat087ReactionCircuitArtifactsAvailable()
+    {
+        var page = GetUserPage("FollowerA");
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+
+        var payloadJson = await page.EvaluateAsync<string>(@"async () => {
+            const response = await fetch('/api/reactions/circuit-status', {
+                method: 'GET',
+                cache: 'no-store',
+            });
+
+            const body = await response.json();
+            return JSON.stringify({
+                ok: response.ok,
+                status: response.status,
+                currentVersion: body?.currentVersion ?? null,
+                approvedVersions: Array.isArray(body?.approvedVersions) ? body.approvedVersions : [],
+            });
+        }");
+
+        var payload = JsonSerializer.Deserialize<ReactionCircuitStatusPayload>(
+            payloadJson,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidOperationException("Failed to read FEAT-087 reaction circuit status payload.");
+
+        payload.Ok.Should().BeTrue($"/api/reactions/circuit-status should respond successfully for FEAT-087 browser validation (status={payload.Status})");
+        payload.CurrentVersion.Should().Be("omega-v1.0.0");
+
+        var current = payload.ApprovedVersions.FirstOrDefault(x => x.Version == payload.CurrentVersion);
+        current.Should().NotBeNull("FEAT-087 browser validation requires the current approved circuit version to be advertised by the running web client");
+        current!.ProverArtifactsAvailable.Should().BeTrue(
+            $"FEAT-087 browser reaction scenarios must not run on dev-mode fallback. Missing browser artifacts for {payload.CurrentVersion} keep proverArtifactsAvailable=false.");
+        current.WasmSha256.Should().Be("71D1EE45D944313BB2C86A1851F3B09A481481675FA80DDFD3205D99D7613F8B");
+        current.ZkeySha256.Should().Be("65620ABC5030404403C19B22B623E115807EB2603CB5953F195959A76BA91B5C");
+
+        var timeoutAt = DateTime.UtcNow.AddSeconds(20);
+        ReactionRuntimeStatusPayload? runtimeStatus = null;
+
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            var runtimeJson = await page.EvaluateAsync<string>(@"() => {
+                const store = window.__zustand_stores?.reactionsStore;
+                const state = store?.getState?.();
+
+                return JSON.stringify({
+                    storeExposed: !!store,
+                    isProverReady: !!state?.isProverReady,
+                    isGeneratingProof: !!state?.isGeneratingProof,
+                    lastError: state?.lastError ?? null,
+                });
+            }");
+
+            runtimeStatus = JsonSerializer.Deserialize<ReactionRuntimeStatusPayload>(
+                runtimeJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (runtimeStatus?.StoreExposed == true && runtimeStatus.IsProverReady)
+            {
+                break;
+            }
+
+            await Task.Delay(250);
+        }
+
+        runtimeStatus.Should().NotBeNull("FEAT-087 browser validation must read live reactions runtime state");
+        runtimeStatus!.StoreExposed.Should().BeTrue(
+            "FEAT-087 browser validation requires window.__zustand_stores.reactionsStore so E2E can verify prover readiness before the first click.");
+        runtimeStatus.IsProverReady.Should().BeTrue(
+            $"FEAT-087 browser validation requires the live prover to be ready before the first reaction. lastError={runtimeStatus.LastError ?? "<none>"}");
+    }
+
+    [Given(@"FollowerA will receive a rejected reaction submission response")]
+    public async Task GivenFollowerAWillReceiveARejectedReactionSubmissionResponse()
+    {
+        var page = GetUserPage("FollowerA");
+        const string errorMessage = "Rejected by FEAT-087 rollback test";
+        ScenarioContext[ForcedReactionErrorMessageKey] = errorMessage;
+
+        await page.RouteAsync("**/api/blockchain/submit", async route =>
+        {
+            await route.FulfillAsync(new RouteFulfillOptions
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = $$"""{"successful":false,"message":"{{errorMessage}}"}"""
+            });
+        });
+    }
+
+    [When(@"FollowerA attempts reaction ""(.*)"" on post ""(.*)"" via browser")]
+    public async Task WhenFollowerAAttemptsReactionOnPostViaBrowser(string emojiName, string postTitle)
+    {
+        var page = GetUserPage("FollowerA");
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+
+        await WaitForVisiblePostAsync(page, postTitle);
+
+        var postId = GetStoredPostId(postTitle);
+        var addButton = await WaitForTestIdAsync(page, $"post-reaction-strip-{postId}-add", 10000);
+        await addButton.ClickAsync();
+
+        var picker = await WaitForTestIdAsync(page, $"post-reaction-strip-{postId}-picker", 5000);
+        var emojiButton = picker.Locator("button").Nth(MapReactionEmojiNameToIndex(emojiName));
+        await emojiButton.ClickAsync();
     }
 
     [Then(@"Owner should see reaction count (\d+) on post ""(.*)""")]
@@ -418,6 +713,47 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
             $"'{userName}' should see reaction count {expectedCount} on post '{postTitle}'");
     }
 
+    [Then(@"Owner should not see reaction count (\d+) on post ""(.*)""")]
+    [Then(@"FollowerA should not see reaction count (\d+) on post ""(.*)""")]
+    [Then(@"FollowerB should not see reaction count (\d+) on post ""(.*)""")]
+    public async Task ThenUserShouldNotSeeReactionCountOnPost(int unexpectedCount, string postTitle)
+    {
+        var userName = GetStepUserNameFromThenStep("should not see reaction count");
+        var badgeTexts = await GetReactionBadgeTextsAsync(userName, postTitle, requireVisibleBadge: false);
+
+        badgeTexts.Should().NotContain(
+            text => text.Contains(unexpectedCount.ToString(), StringComparison.Ordinal),
+            $"'{userName}' should not see reaction count {unexpectedCount} on post '{postTitle}'");
+    }
+
+    [Then(@"Owner should see reaction emoji ""(.*)"" on post ""(.*)""")]
+    [Then(@"FollowerA should see reaction emoji ""(.*)"" on post ""(.*)""")]
+    [Then(@"FollowerB should see reaction emoji ""(.*)"" on post ""(.*)""")]
+    public async Task ThenUserShouldSeeReactionEmojiOnPost(string emojiName, string postTitle)
+    {
+        var userName = GetStepUserNameFromThenStep("should see reaction emoji");
+        var badgeTexts = await GetReactionBadgeTextsAsync(userName, postTitle);
+        var emoji = MapReactionEmojiNameToGlyph(emojiName);
+
+        badgeTexts.Should().Contain(
+            text => text.Contains(emoji, StringComparison.Ordinal),
+            $"'{userName}' should see reaction emoji '{emojiName}' on post '{postTitle}'");
+    }
+
+    [Then(@"Owner should not see reaction emoji ""(.*)"" on post ""(.*)""")]
+    [Then(@"FollowerA should not see reaction emoji ""(.*)"" on post ""(.*)""")]
+    [Then(@"FollowerB should not see reaction emoji ""(.*)"" on post ""(.*)""")]
+    public async Task ThenUserShouldNotSeeReactionEmojiOnPost(string emojiName, string postTitle)
+    {
+        var userName = GetStepUserNameFromThenStep("should not see reaction emoji");
+        var badgeTexts = await GetReactionBadgeTextsAsync(userName, postTitle, requireVisibleBadge: false);
+        var emoji = MapReactionEmojiNameToGlyph(emojiName);
+
+        badgeTexts.Should().NotContain(
+            text => text.Contains(emoji, StringComparison.Ordinal),
+            $"'{userName}' should not see reaction emoji '{emojiName}' on post '{postTitle}'");
+    }
+
     [Then(@"guest should see account creation overlay")]
     public async Task ThenGuestShouldSeeAccountCreationOverlay()
     {
@@ -428,6 +764,23 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         var cta = await WaitForTestIdAsync(guestPage, "social-auth-overlay-cta", 10000);
         (await cta.IsVisibleAsync()).Should().BeTrue();
         (await cta.InnerTextAsync()).Should().Contain("Create account");
+    }
+
+    [Then(@"FollowerA should see reaction error ""(.*)"" on post ""(.*)""")]
+    public async Task ThenFollowerAShouldSeeReactionErrorOnPost(string expectedError, string postTitle)
+    {
+        var page = GetUserPage("FollowerA");
+        var postId = GetStoredPostId(postTitle);
+
+        var postCard = page.GetByTestId($"social-post-{postId}").First;
+        await postCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var error = await WaitForTestIdAsync(page, $"post-reaction-strip-{postId}-error", 10000);
+        (await error.InnerTextAsync()).Trim().Should().Contain(expectedError);
     }
 
     private static int MapReactionEmojiNameToIndex(string emojiName) =>
@@ -441,6 +794,37 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
             "angry" => 5,
             _ => throw new InvalidOperationException($"Unsupported reaction emoji '{emojiName}' for HushSocial E2E")
         };
+
+    private static string MapReactionEmojiNameToGlyph(string emojiName) =>
+        emojiName.Trim().ToLowerInvariant() switch
+        {
+            "thumbs_up" => "👍",
+            "heart" => "❤️",
+            "joy" => "😂",
+            "surprised" => "😮",
+            "sad" => "😢",
+            "angry" => "😡",
+            _ => throw new InvalidOperationException($"Unsupported reaction emoji '{emojiName}' for HushSocial E2E")
+        };
+
+    private sealed record ReactionCircuitStatusPayload(
+        bool Ok,
+        int Status,
+        string? CurrentVersion,
+        ReactionCircuitVersionPayload[] ApprovedVersions);
+
+    private sealed record ReactionCircuitVersionPayload(
+        string Version,
+        bool ProverArtifactsAvailable,
+        string Provenance,
+        string? WasmSha256,
+        string? ZkeySha256);
+
+    private sealed record ReactionRuntimeStatusPayload(
+        bool StoreExposed,
+        bool IsProverReady,
+        bool IsGeneratingProof,
+        string? LastError);
 
     [When(@"Owner attaches image (\d+) and animated GIF (\d+) via file picker")]
     public async Task WhenOwnerAttachesImageAndGifViaFilePicker(int imageIndex, int gifIndex)
@@ -612,12 +996,14 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         post.Visibility.Should().Be(SocialPostVisibilityProto.SocialPostVisibilityOpen);
     }
 
+    [Given(@"Owner creates Close post ""(.*)"" for Inner Circle via browser")]
     [When(@"Owner creates Close post ""(.*)"" for Inner Circle via browser")]
     public async Task WhenOwnerCreatesClosePostForInnerCircleViaBrowser(string postTitle)
     {
         await WhenOwnerCreatesClosePostForCircleViaBrowser(postTitle, "Inner Circle");
     }
 
+    [Given(@"Owner creates Close post ""(.*)"" for Inner Circle via backend")]
     [When(@"Owner creates Close post ""(.*)"" for Inner Circle via backend")]
     public async Task WhenOwnerCreatesClosePostForInnerCircleViaBackend(string postTitle)
     {
@@ -750,6 +1136,43 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
             State = WaitForSelectorState.Visible,
             Timeout = 5000
         });
+    }
+
+    [Then(@"FollowerB should not see private reaction metadata on denied permalink")]
+    public async Task ThenFollowerBShouldNotSeePrivateReactionMetadataOnDeniedPermalink()
+    {
+        var page = GetCurrentPermalinkUserPage();
+
+        (await page.GetByTestId("social-permalink-reactions").CountAsync())
+            .Should()
+            .Be(0, "unauthorized private viewers must not receive reaction metadata or controls");
+
+        (await page.GetByTestId("social-permalink-public").CountAsync())
+            .Should()
+            .Be(0, "the full permalink content surface must not render for denied private access");
+    }
+
+    [Then(@"FollowerA should see reaction count (\d+) on permalink for post ""(.*)""")]
+    [Then(@"FollowerB should see reaction count (\d+) on permalink for post ""(.*)""")]
+    public async Task ThenUserShouldSeeReactionCountOnPermalinkForPost(int expectedCount, string postTitle)
+    {
+        var badgeTexts = await GetPermalinkReactionBadgeTextsAsync(postTitle, requireVisibleBadge: true);
+
+        badgeTexts.Should().Contain(
+            text => text.Contains(expectedCount.ToString(), StringComparison.Ordinal),
+            $"permalink for '{postTitle}' should show reaction count {expectedCount}");
+    }
+
+    [Then(@"FollowerA should see reaction emoji ""(.*)"" on permalink for post ""(.*)""")]
+    [Then(@"FollowerB should see reaction emoji ""(.*)"" on permalink for post ""(.*)""")]
+    public async Task ThenUserShouldSeeReactionEmojiOnPermalinkForPost(string emojiName, string postTitle)
+    {
+        var badgeTexts = await GetPermalinkReactionBadgeTextsAsync(postTitle, requireVisibleBadge: true);
+        var emoji = MapReactionEmojiNameToGlyph(emojiName);
+
+        badgeTexts.Should().Contain(
+            text => text.Contains(emoji, StringComparison.Ordinal),
+            $"permalink for '{postTitle}' should show reaction emoji '{emojiName}'");
     }
 
     [Then(@"FollowerA should see Open post ""(.*)"" authored by ""(.*)""")]
@@ -912,6 +1335,7 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         });
     }
 
+    [Given(@"Owner creates Close post ""(.*)"" for circle ""(.*)"" via browser")]
     [When(@"Owner creates Close post ""(.*)"" for circle ""(.*)"" via browser")]
     public async Task WhenOwnerCreatesClosePostForCircleViaBrowser(string postTitle, string circleName)
     {
@@ -975,6 +1399,7 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         post.CircleFeedIds.Should().NotBeEmpty();
     }
 
+    [Given(@"Owner creates Close post ""(.*)"" for circle ""(.*)"" via backend")]
     [When(@"Owner creates Close post ""(.*)"" for circle ""(.*)"" via backend")]
     public async Task WhenOwnerCreatesClosePostForCircleViaBackend(string postTitle, string circleName)
     {
@@ -1675,6 +2100,109 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         }
 
         throw new TimeoutException($"Permalink UI did not render expected state. URL: {page.Url}");
+    }
+
+    private async Task<string[]> GetReactionBadgeTextsAsync(string userName, string postTitle, bool requireVisibleBadge = true)
+    {
+        var page = GetUserPage(userName);
+        var postId = GetStoredPostId(postTitle);
+
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+
+        var postCard = page.GetByTestId($"social-post-{postId}").First;
+        await postCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 15000
+        });
+
+        var strip = postCard.GetByTestId($"post-reaction-strip-{postId}").First;
+        await strip.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var badges = strip.Locator("[data-testid^='reaction-badge-']");
+
+        if (requireVisibleBadge)
+        {
+            await badges.First.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = 10000
+            });
+        }
+        else
+        {
+            var timeoutAt = DateTime.UtcNow.AddSeconds(10);
+            while (DateTime.UtcNow < timeoutAt)
+            {
+                var count = await badges.CountAsync();
+                if (count == 0)
+                {
+                    return [];
+                }
+
+                var texts = (await badges.AllInnerTextsAsync())
+                    .Select(text => text.Trim())
+                    .Where(text => !string.IsNullOrWhiteSpace(text))
+                    .ToArray();
+
+                if (texts.Length == 0)
+                {
+                    return [];
+                }
+
+                return texts;
+            }
+
+            return [];
+        }
+
+        return (await badges.AllInnerTextsAsync())
+            .Select(text => text.Trim())
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .ToArray();
+    }
+
+    private async Task<string[]> GetPermalinkReactionBadgeTextsAsync(string postTitle, bool requireVisibleBadge)
+    {
+        var page = GetCurrentPermalinkUserPage();
+        var postId = GetStoredPostId(postTitle);
+        postId.Should().NotBeNullOrWhiteSpace();
+
+        var reactions = page.GetByTestId("social-permalink-reactions").First;
+        await reactions.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var badges = reactions.Locator("[data-testid^='reaction-badge-']");
+
+        if (requireVisibleBadge)
+        {
+            await badges.First.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = 10000
+            });
+        }
+        else
+        {
+            var count = await badges.CountAsync();
+            if (count == 0)
+            {
+                return [];
+            }
+        }
+
+        return (await badges.AllInnerTextsAsync())
+            .Select(text => text.Trim())
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .ToArray();
     }
 
     private GetSocialPostPermalinkResponse GetLastPermalinkResponse()
