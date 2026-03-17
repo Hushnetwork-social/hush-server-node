@@ -320,7 +320,9 @@ public class MembershipService : IMembershipService
     {
         using var unitOfWork = _identityUnitOfWorkProvider.CreateReadOnly();
         var identityRepo = unitOfWork.GetRepository<IIdentityRepository>();
-        return (await identityRepo.GetAllProfilesAsync()).ToList();
+        return (await identityRepo.GetAllProfilesAsync())
+            .OrderBy(profile => profile.PublicSigningAddress, StringComparer.Ordinal)
+            .ToList();
     }
 
     /// <summary>

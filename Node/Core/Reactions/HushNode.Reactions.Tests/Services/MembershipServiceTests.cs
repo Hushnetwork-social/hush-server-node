@@ -352,4 +352,56 @@ public class MembershipServiceTests
         roots[0].FeedId.Should().Be(PublicReactionScopes.GlobalHushMembers);
         roots[0].MerkleRoot.Should().HaveCount(32);
     }
+
+    [Fact]
+    public async Task GlobalScope_ProofAndRecentRoots_ShouldRemainStable_WhenProfileEnumerationOrderChanges()
+    {
+        var alice = new Profile(
+            Alias: "alice",
+            ShortAlias: "ali",
+            PublicSigningAddress: "addr-b",
+            PublicEncryptAddress: "enc-b",
+            IsPublic: true,
+            BlockIndex: new HushShared.Blockchain.BlockModel.BlockIndex(1));
+        var bob = new Profile(
+            Alias: "bob",
+            ShortAlias: "bob",
+            PublicSigningAddress: "addr-a",
+            PublicEncryptAddress: "enc-a",
+            IsPublic: true,
+            BlockIndex: new HushShared.Blockchain.BlockModel.BlockIndex(2));
+
+        var aliceCommitment = TestDataFactory.CreateCommitment();
+        var bobCommitment = TestDataFactory.CreateCommitment();
+
+        var callCount = 0;
+        _identityRepoMock.Setup(x => x.GetAllProfilesAsync())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                return callCount % 2 == 1
+                    ? new[] { alice, bob }
+                    : new[] { bob, alice };
+            });
+
+        _userCommitmentServiceMock.Setup(x => x.DeriveCommitmentFromAddress("addr-b"))
+            .Returns(aliceCommitment);
+        _userCommitmentServiceMock.Setup(x => x.DeriveCommitmentFromAddress("addr-a"))
+            .Returns(bobCommitment);
+
+        MerkleRootHistory? savedRoot = null;
+        _merkleRepoMock.Setup(x => x.SaveRootAsync(It.IsAny<MerkleRootHistory>()))
+            .Callback<MerkleRootHistory>(root => savedRoot = root)
+            .Returns(Task.CompletedTask);
+        _merkleRepoMock.Setup(x => x.GetRecentRootsAsync(PublicReactionScopes.GlobalHushMembers, It.IsAny<int>()))
+            .ReturnsAsync(() => savedRoot is null ? Array.Empty<MerkleRootHistory>() : new[] { savedRoot });
+
+        var proof = await _service.GetMembershipProofAsync(PublicReactionScopes.GlobalHushMembers, bobCommitment);
+        var recentRoots = (await _service.GetRecentRootsAsync(PublicReactionScopes.GlobalHushMembers, 1)).ToList();
+
+        proof.IsMember.Should().BeTrue();
+        proof.MerkleRoot.Should().NotBeNull();
+        recentRoots.Should().ContainSingle();
+        recentRoots[0].MerkleRoot.Should().BeEquivalentTo(proof.MerkleRoot!);
+    }
 }
