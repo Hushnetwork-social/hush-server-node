@@ -1,4 +1,4 @@
-@E2E @DocumentVideoAttachmentWalkthrough @FEAT-068
+@E2E @DocumentVideoAttachmentWalkthrough @FEAT-068 @LONG_RUNNING
 Feature: Document & Video Attachment Walkthrough
     As two users on HushNetwork
     I want to send and receive document and video attachments in a direct chat

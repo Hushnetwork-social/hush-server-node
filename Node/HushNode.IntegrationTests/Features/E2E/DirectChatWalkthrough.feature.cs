@@ -21,6 +21,7 @@ namespace HushNode.IntegrationTests.Features.E2E
     [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     [Xunit.TraitAttribute("Category", "E2E")]
     [Xunit.TraitAttribute("Category", "DirectChatWalkthrough")]
+    [Xunit.TraitAttribute("Category", "LONG_RUNNING")]
     public partial class DirectChatWalkthroughFeature : object, Xunit.IClassFixture<DirectChatWalkthroughFeature.FixtureData>, System.IDisposable
     {
         
@@ -28,7 +29,8 @@ namespace HushNode.IntegrationTests.Features.E2E
         
         private static string[] featureTags = new string[] {
                 "E2E",
-                "DirectChatWalkthrough"};
+                "DirectChatWalkthrough",
+                "LONG_RUNNING"};
         
         private Xunit.Abstractions.ITestOutputHelper _testOutputHelper;
         

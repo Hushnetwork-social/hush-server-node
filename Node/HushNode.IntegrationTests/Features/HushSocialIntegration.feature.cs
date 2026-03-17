@@ -118,12 +118,14 @@ namespace HushNode.IntegrationTests.Features
         [Xunit.TraitAttribute("Category", "FEAT-084")]
         [Xunit.TraitAttribute("Category", "FEAT-085")]
         [Xunit.TraitAttribute("Category", "FEAT-090")]
+        [Xunit.TraitAttribute("Category", "HS-INT-085-ONBOARDING")]
         public void CloseProfileFollowRequestAcceptanceAuto_AddsInnerCircle()
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-084",
                     "FEAT-085",
-                    "FEAT-090"};
+                    "FEAT-090",
+                    "HS-INT-085-ONBOARDING"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Close profile follow request acceptance auto-adds inner circle", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 16
@@ -168,10 +170,12 @@ namespace HushNode.IntegrationTests.Features
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Circle membership removal rotates keys immediately")]
         [Xunit.TraitAttribute("Category", "FEAT-085")]
+        [Xunit.TraitAttribute("Category", "HS-INT-085-CIRCLE-REMOVAL")]
         public void CircleMembershipRemovalRotatesKeysImmediately()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-085"};
+                    "FEAT-085",
+                    "HS-INT-085-CIRCLE-REMOVAL"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Circle membership removal rotates keys immediately", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 26
@@ -222,10 +226,12 @@ namespace HushNode.IntegrationTests.Features
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Startup bootstrap creates inner circle and links existing chat peers")]
         [Xunit.TraitAttribute("Category", "FEAT-085")]
+        [Xunit.TraitAttribute("Category", "HS-INT-085-BOOTSTRAP-LINK")]
         public void StartupBootstrapCreatesInnerCircleAndLinksExistingChatPeers()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-085"};
+                    "FEAT-085",
+                    "HS-INT-085-BOOTSTRAP-LINK"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Startup bootstrap creates inner circle and links existing chat peers", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 38
@@ -267,10 +273,12 @@ namespace HushNode.IntegrationTests.Features
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "New chat feed creation triggers add-members-to-inner-circle")]
         [Xunit.TraitAttribute("Category", "FEAT-085")]
+        [Xunit.TraitAttribute("Category", "HS-INT-085-CHAT-ADD")]
         public void NewChatFeedCreationTriggersAdd_Members_To_Inner_Circle()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-085"};
+                    "FEAT-085",
+                    "HS-INT-085-CHAT-ADD"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("New chat feed creation triggers add-members-to-inner-circle", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 47
@@ -314,10 +322,12 @@ namespace HushNode.IntegrationTests.Features
         [Xunit.TraitAttribute("Description", "Duplicate inner-circle add request returns explicit duplicate without key rotatio" +
             "n")]
         [Xunit.TraitAttribute("Category", "FEAT-085")]
+        [Xunit.TraitAttribute("Category", "HS-INT-085-DUPLICATE-ADD")]
         public void DuplicateInner_CircleAddRequestReturnsExplicitDuplicateWithoutKeyRotation()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-085"};
+                    "FEAT-085",
+                    "HS-INT-085-DUPLICATE-ADD"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Duplicate inner-circle add request returns explicit duplicate without key rotatio" +
                     "n", null, tagsOfScenario, argumentsOfScenario, featureTags);
@@ -360,10 +370,12 @@ namespace HushNode.IntegrationTests.Features
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Same-block duplicate add-member requests remain deterministic")]
         [Xunit.TraitAttribute("Category", "FEAT-085")]
+        [Xunit.TraitAttribute("Category", "HS-INT-085-SAME-BLOCK-DUP")]
         public void Same_BlockDuplicateAdd_MemberRequestsRemainDeterministic()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-085"};
+                    "FEAT-085",
+                    "HS-INT-085-SAME-BLOCK-DUP"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Same-block duplicate add-member requests remain deterministic", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 65
@@ -407,13 +419,15 @@ namespace HushNode.IntegrationTests.Features
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Same-block create-inner-circle for multiple owners is isolated")]
         [Xunit.TraitAttribute("Category", "FEAT-085")]
+        [Xunit.TraitAttribute("Category", "HS-INT-085-SAME-BLOCK-CREATE")]
         [Xunit.InlineDataAttribute("2", new string[0])]
         [Xunit.InlineDataAttribute("5", new string[0])]
         [Xunit.InlineDataAttribute("10", new string[0])]
         public void Same_BlockCreate_Inner_CircleForMultipleOwnersIsIsolated(string ownerCount, string[] exampleTags)
         {
             string[] @__tags = new string[] {
-                    "FEAT-085"};
+                    "FEAT-085",
+                    "HS-INT-085-SAME-BLOCK-CREATE"};
             if ((exampleTags != null))
             {
                 @__tags = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Concat(@__tags, exampleTags));
@@ -458,10 +472,12 @@ namespace HushNode.IntegrationTests.Features
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Open and close post visibility is enforced by permalink access")]
         [Xunit.TraitAttribute("Category", "FEAT-086")]
+        [Xunit.TraitAttribute("Category", "HS-INT-086-VISIBILITY")]
         public void OpenAndClosePostVisibilityIsEnforcedByPermalinkAccess()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-086"};
+                    "FEAT-086",
+                    "HS-INT-086-VISIBILITY"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Open and close post visibility is enforced by permalink access", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 88
@@ -521,10 +537,12 @@ namespace HushNode.IntegrationTests.Features
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Composer contract defaults private mode to Inner Circle with last-circle lock")]
         [Xunit.TraitAttribute("Category", "FEAT-086")]
+        [Xunit.TraitAttribute("Category", "HS-INT-086-COMPOSER")]
         public void ComposerContractDefaultsPrivateModeToInnerCircleWithLast_CircleLock()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-086"};
+                    "FEAT-086",
+                    "HS-INT-086-COMPOSER"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Composer contract defaults private mode to Inner Circle with last-circle lock", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 103
@@ -572,10 +590,12 @@ namespace HushNode.IntegrationTests.Features
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Guest private permalink denial returns create-account CTA contract")]
         [Xunit.TraitAttribute("Category", "FEAT-086")]
+        [Xunit.TraitAttribute("Category", "HS-INT-086-GUEST-DENIAL")]
         public void GuestPrivatePermalinkDenialReturnsCreate_AccountCTAContract()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-086"};
+                    "FEAT-086",
+                    "HS-INT-086-GUEST-DENIAL"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Guest private permalink denial returns create-account CTA contract", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 114
@@ -617,10 +637,12 @@ namespace HushNode.IntegrationTests.Features
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Media constraints for social posts match HushFeeds limits")]
         [Xunit.TraitAttribute("Category", "FEAT-086")]
+        [Xunit.TraitAttribute("Category", "HS-INT-086-MEDIA")]
         public void MediaConstraintsForSocialPostsMatchHushFeedsLimits()
         {
             string[] tagsOfScenario = new string[] {
-                    "FEAT-086"};
+                    "FEAT-086",
+                    "HS-INT-086-MEDIA"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Media constraints for social posts match HushFeeds limits", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 123
@@ -662,16 +684,17 @@ namespace HushNode.IntegrationTests.Features
         }
         
         [Xunit.SkippableFactAttribute(DisplayName="Reaction privacy preserves tally without exposing per-user emoji choice on privat" +
-            "e content", Skip="Ignored")]
+            "e content")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Reaction privacy preserves tally without exposing per-user emoji choice on privat" +
             "e content")]
         [Xunit.TraitAttribute("Category", "FEAT-087")]
+        [Xunit.TraitAttribute("Category", "HS-INT-087-REACTION-PRIVACY")]
         public void ReactionPrivacyPreservesTallyWithoutExposingPer_UserEmojiChoiceOnPrivateContent()
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-087",
-                    "ignore"};
+                    "HS-INT-087-REACTION-PRIVACY"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Reaction privacy preserves tally without exposing per-user emoji choice on privat" +
                     "e content", null, tagsOfScenario, argumentsOfScenario, featureTags);

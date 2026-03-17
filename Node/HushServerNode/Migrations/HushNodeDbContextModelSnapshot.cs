@@ -473,6 +473,10 @@ namespace HushServerNode.Migrations
                     b.Property<int>("AudienceVisibility")
                         .HasColumnType("int");
 
+                    b.Property<byte[]>("AuthorCommitment")
+                        .HasMaxLength(32)
+                        .HasColumnType("bytea");
+
                     b.Property<string>("AuthorPublicAddress")
                         .IsRequired()
                         .HasColumnType("varchar(500)");
@@ -487,6 +491,9 @@ namespace HushServerNode.Migrations
                     b.Property<long>("CreatedAtUnixMs")
                         .HasColumnType("bigint");
 
+                    b.Property<Guid>("ReactionScopeId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("PostId");
 
                     b.HasIndex("AuthorPublicAddress")
@@ -497,6 +504,9 @@ namespace HushServerNode.Migrations
 
                     b.HasIndex("CreatedAtUnixMs")
                         .HasDatabaseName("IX_SocialPost_CreatedAtUnixMs");
+
+                    b.HasIndex("ReactionScopeId")
+                        .HasDatabaseName("IX_SocialPost_ReactionScopeId");
 
                     b.ToTable("SocialPost", "Feeds");
                 });

@@ -9,7 +9,7 @@ Feature: FEAT-063 Cross-Device Read Sync E2E
         And HushWebClient is running in Docker
 
     # Verify cross-device read sync: Alice reads on Device A, unread clears on Device B
-    @F3-E2E-001
+    @F3-E2E-001 @CDRS-E2E-READ-CLEARS
     Scenario: Reading on Device A clears unread badge on Device B
         # Setup: Alice creates identity on DeviceA
         Given a browser context for "Alice"
@@ -31,7 +31,7 @@ Feature: FEAT-063 Cross-Device Read Sync E2E
         Then "DeviceB" feed list should NOT show unread badge on ChatFeed with "Bob"
 
     # Verify correct unread count when messages arrive after read
-    @F3-E2E-002
+    @F3-E2E-002 @CDRS-E2E-POST-READ-UNREAD
     Scenario: Correct unread count after post-read messages
         # Setup: Alice creates identity on DeviceA
         Given a browser context for "Alice"
@@ -53,7 +53,7 @@ Feature: FEAT-063 Cross-Device Read Sync E2E
         Then the feed list should show unread badge on ChatFeed with "Bob"
 
     # CF-002: Reading a feed should NOT change sort order
-    @F3-E2E-003
+    @F3-E2E-003 @CDRS-E2E-SORT-STABLE
     Scenario: Reading a feed does not change sort order
         # Setup: Alice creates identity on DeviceA
         Given a browser context for "Alice"
@@ -72,7 +72,7 @@ Feature: FEAT-063 Cross-Device Read Sync E2E
         Then the feed list should show ChatFeed with "Bob" above ChatFeed with "Charlie"
 
     # EC-003: Messages arrive between read event and next sync on Device B
-    @F3-E2E-004
+    @F3-E2E-004 @CDRS-E2E-BETWEEN-READ-AND-SYNC
     Scenario: Messages arriving between read and sync are counted as unread
         # Setup: Alice creates identity on DeviceA
         Given a browser context for "Alice"
@@ -94,7 +94,7 @@ Feature: FEAT-063 Cross-Device Read Sync E2E
         Then the feed list should show unread badge on ChatFeed with "Bob"
 
     # EC-006: Concurrent read position updates converge to max watermark
-    @F3-E2E-005
+    @F3-E2E-005 @CDRS-E2E-CONVERGE-HIGHEST
     Scenario: Concurrent read positions converge to highest watermark
         # Setup: Alice creates identity on DeviceA
         Given a browser context for "Alice"

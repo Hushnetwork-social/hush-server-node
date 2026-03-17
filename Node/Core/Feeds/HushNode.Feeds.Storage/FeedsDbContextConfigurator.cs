@@ -513,8 +513,16 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
                 socialPost.Property(x => x.PostId)
                     .HasColumnType("uuid");
 
+                socialPost.Property(x => x.ReactionScopeId)
+                    .HasColumnType("uuid");
+
                 socialPost.Property(x => x.AuthorPublicAddress)
                     .HasColumnType("varchar(500)");
+
+                socialPost.Property(x => x.AuthorCommitment)
+                    .HasColumnType("bytea")
+                    .HasMaxLength(32)
+                    .IsRequired(false);
 
                 socialPost.Property(x => x.Content)
                     .HasColumnType("text");
@@ -538,6 +546,9 @@ public class FeedsDbContextConfigurator : IDbContextConfigurator
 
                 socialPost.HasIndex(x => x.AuthorPublicAddress)
                     .HasDatabaseName("IX_SocialPost_AuthorPublicAddress");
+
+                socialPost.HasIndex(x => x.ReactionScopeId)
+                    .HasDatabaseName("IX_SocialPost_ReactionScopeId");
 
                 socialPost.HasIndex(x => x.CreatedAtBlock)
                     .HasDatabaseName("IX_SocialPost_CreatedAtBlock");

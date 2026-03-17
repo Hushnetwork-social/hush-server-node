@@ -1,4 +1,4 @@
-@E2E @MultiUser @PR
+@E2E @MultiUser @PR @LONG_RUNNING
 Feature: Multi-User Basic Walkthrough
     As a group member
     I want to see messages from other members

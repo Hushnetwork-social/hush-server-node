@@ -94,7 +94,9 @@ public class SocialPostApplicationServiceTests
             .ReturnsAsync(new SocialPostEntity
             {
                 PostId = postId,
+                ReactionScopeId = postId,
                 AuthorPublicAddress = "owner-address",
+                AuthorCommitment = new byte[32],
                 Content = "public content",
                 AudienceVisibility = SocialPostVisibility.Open,
                 CreatedAtBlock = new BlockIndex(99)
@@ -109,7 +111,46 @@ public class SocialPostApplicationServiceTests
 
         response.AccessState.Should().Be(SocialPermalinkAccessStateProto.SocialPermalinkAccessStateAllowed);
         response.Content.Should().Be("public content");
+        response.ReactionScopeId.Should().Be(postId.ToString("D"));
+        response.AuthorCommitment.Length.Should().Be(32);
         response.CanInteract.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetSocialPostPermalinkAsync_ShouldResolveAttachmentsByPostIdAsFeedMessageId()
+    {
+        var postId = Guid.NewGuid();
+        var feedsStorage = new Mock<IFeedsStorageService>(MockBehavior.Strict);
+        var attachmentStorage = new Mock<IAttachmentStorageService>(MockBehavior.Strict);
+
+        feedsStorage
+            .Setup(x => x.GetSocialPostAsync(postId))
+            .ReturnsAsync(new SocialPostEntity
+            {
+                PostId = postId,
+                ReactionScopeId = postId,
+                AuthorPublicAddress = "owner-address",
+                Content = "public content",
+                AudienceVisibility = SocialPostVisibility.Open,
+                CreatedAtBlock = new BlockIndex(99)
+            });
+
+        attachmentStorage
+            .Setup(x => x.GetByMessageIdAsync(It.Is<FeedMessageId>(id => id == new FeedMessageId(postId))))
+            .ReturnsAsync(Array.Empty<AttachmentEntity>())
+            .Verifiable();
+
+        var service = new SocialPostApplicationService(feedsStorage.Object, attachmentStorage.Object);
+
+        var response = await service.GetSocialPostPermalinkAsync(new GetSocialPostPermalinkRequest
+        {
+            PostId = postId.ToString("D"),
+            IsAuthenticated = true,
+            RequesterPublicAddress = "someone"
+        });
+
+        response.Success.Should().BeTrue();
+        attachmentStorage.Verify();
     }
 
     private static SocialPostEntity BuildPrivatePost(Guid postId, string ownerAddress, Guid circleId)
@@ -117,7 +158,9 @@ public class SocialPostApplicationServiceTests
         var post = new SocialPostEntity
         {
             PostId = postId,
+            ReactionScopeId = postId,
             AuthorPublicAddress = ownerAddress,
+            AuthorCommitment = new byte[32],
             Content = "private content",
             AudienceVisibility = SocialPostVisibility.Private,
             CreatedAtBlock = new BlockIndex(77)

@@ -176,21 +176,29 @@ internal sealed class AutoPaginationSteps : BrowserStepsBase
     {
         var page = await GetOrCreatePageAsync();
 
-        // Find the visible jump button (responsive layout has two ChatViews)
-        var jumpButtons = page.GetByTestId("jump-to-bottom-button");
-        var count = await jumpButtons.CountAsync();
-        ILocator? visibleButton = null;
-        for (int i = 0; i < count; i++)
-        {
-            if (await jumpButtons.Nth(i).IsVisibleAsync())
-            {
-                visibleButton = jumpButtons.Nth(i);
-                break;
-            }
-        }
+        var buttonIndex = await page.EvaluateAsync<int>(@"() => {
+            const buttons = Array.from(document.querySelectorAll('[data-testid=""jump-to-bottom-button""]'));
+            const messages = Array.from(document.querySelectorAll('[data-testid=""message""]'));
+            const visibleMsg = messages.find((msg) => msg.offsetHeight > 0 && msg.offsetWidth > 0);
+            if (!visibleMsg) return -1;
 
-        visibleButton.Should().NotBeNull("A visible jump-to-bottom button should exist");
-        await visibleButton!.ClickAsync();
+            let container = visibleMsg.parentElement;
+            while (container) {
+                const localButton = container.querySelector('[data-testid=""jump-to-bottom-button""]');
+                if (localButton) {
+                    return buttons.indexOf(localButton);
+                }
+                container = container.parentElement;
+            }
+
+            return -1;
+        }");
+
+        buttonIndex.Should().BeGreaterOrEqualTo(0, "A jump-to-bottom button should exist for the active chat pane");
+
+        var button = page.GetByTestId("jump-to-bottom-button").Nth(buttonIndex);
+        await button.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5000 });
+        await button.ClickAsync();
 
         // Wait for scroll animation
         await Task.Delay(500);
@@ -200,18 +208,30 @@ internal sealed class AutoPaginationSteps : BrowserStepsBase
 
     /// <summary>
     /// Checks if any jump-to-bottom button is CSS-visible on the page.
-    /// Handles the responsive layout which renders two ChatView instances (mobile + desktop).
+    /// Scopes the lookup to the active chat pane that contains the visible messages.
     /// </summary>
     private async Task<bool> IsAnyJumpButtonVisibleAsync(IPage page)
     {
-        var jumpButtons = page.GetByTestId("jump-to-bottom-button");
-        var count = await jumpButtons.CountAsync();
-        for (int i = 0; i < count; i++)
-        {
-            if (await jumpButtons.Nth(i).IsVisibleAsync())
-                return true;
-        }
-        return false;
+        return await page.EvaluateAsync<bool>(@"() => {
+            const messages = Array.from(document.querySelectorAll('[data-testid=""message""]'));
+            const visibleMsg = messages.find((msg) => msg.offsetHeight > 0 && msg.offsetWidth > 0);
+            if (!visibleMsg) return false;
+
+            let container = visibleMsg.parentElement;
+            while (container) {
+                const button = container.querySelector('[data-testid=""jump-to-bottom-button""]');
+                if (button instanceof HTMLElement) {
+                    const style = getComputedStyle(button);
+                    return style.display !== 'none'
+                        && style.visibility !== 'hidden'
+                        && button.offsetHeight > 0
+                        && button.offsetWidth > 0;
+                }
+                container = container.parentElement;
+            }
+
+            return false;
+        }");
     }
 
     #region Manual Test Scenario Steps

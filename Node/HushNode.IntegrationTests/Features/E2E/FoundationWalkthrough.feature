@@ -46,11 +46,12 @@ Feature: Foundation User Walkthrough
         And the message should show "TestUser" as the sender
         And the message "Hello World!" should show confirmed status icon
 
-    @Reactions
+    @Reactions @ReactionVerifierDev
     Scenario: User adds reaction to a message
         # Setup: Create identity and send message
         Given the user has created identity "TestUser" via browser
         And the user has sent message "Test message" to their personal feed
+        And the browser forces dev-mode reactions
 
         # Action: Add reaction (using thumbs-up emoji index 0)
         When the user adds reaction 0 to the message "Test message"

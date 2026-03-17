@@ -36,4 +36,9 @@ public class VerificationKey
     /// Circuit version identifier.
     /// </summary>
     public required string Version { get; set; }
+
+    /// <summary>
+    /// Source path of the verification key JSON file when loaded from disk.
+    /// </summary>
+    public string? SourcePath { get; set; }
 }

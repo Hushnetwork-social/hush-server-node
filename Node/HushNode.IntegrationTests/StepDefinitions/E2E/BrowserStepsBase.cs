@@ -262,11 +262,16 @@ internal abstract class BrowserStepsBase
     ///   await AwaitTransactionsAndProduceBlockAsync(waiter);
     /// </summary>
     /// <param name="minTransactions">Minimum number of transactions to wait for (default: 1).</param>
+    /// <param name="timeout">Optional transaction wait timeout. Defaults to 10 seconds.</param>
     /// <returns>A waiter that should be passed to AwaitTransactionsAndProduceBlockAsync after the action.</returns>
-    protected HushServerNodeCore.TransactionWaiter StartListeningForTransactions(int minTransactions = 1)
+    protected HushServerNodeCore.TransactionWaiter StartListeningForTransactions(
+        int minTransactions = 1,
+        TimeSpan? timeout = null)
     {
         var node = GetNode();
-        return node.StartListeningForTransactions(minTransactions, timeout: TimeSpan.FromSeconds(10));
+        return node.StartListeningForTransactions(
+            minTransactions,
+            timeout: timeout ?? TimeSpan.FromSeconds(10));
     }
 
     /// <summary>
@@ -297,14 +302,25 @@ internal abstract class BrowserStepsBase
         Console.WriteLine("[E2E] Triggering manual sync...");
         try
         {
-            await page.EvaluateAsync("() => window.__e2e_triggerSync()");
+            await page.EvaluateAsync(@"async () => {
+                const syncFn = window.__e2e_triggerSync;
+                if (typeof syncFn !== 'function') {
+                    throw new Error('__e2e_triggerSync is not available');
+                }
+
+                return await Promise.race([
+                    syncFn(),
+                    new Promise((_, reject) => {
+                        setTimeout(() => reject(new Error('__e2e_triggerSync timed out after 15000ms')), 15000);
+                    })
+                ]);
+            }");
             Console.WriteLine("[E2E] Manual sync completed");
         }
         catch (PlaywrightException ex)
         {
             Console.WriteLine($"[E2E] Warning: Sync trigger failed - {ex.Message}");
-            // This may happen if the page hasn't loaded the SyncProvider yet
-            // or if __e2e_triggerSync isn't available
+            throw;
         }
     }
 
@@ -500,6 +516,18 @@ internal abstract class BrowserStepsBase
                 networkLog.Add(entry);
 
                 Console.WriteLine($"[E2E Network] {userName} ✗ FAILED {request.Method} {url}: {request.Failure}");
+            }
+        };
+
+        page.Console += (_, message) =>
+        {
+            try
+            {
+                Console.WriteLine($"[E2E Console] {userName} {message.Type}: {message.Text}");
+            }
+            catch
+            {
+                // Best-effort diagnostics only.
             }
         };
     }

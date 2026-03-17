@@ -18,6 +18,11 @@ public class IdentityRepository : RepositoryBase<IdentityDbContext>, IIdentityRe
         await this.Context.Profiles
             .SingleOrDefaultAsync(x => x.PublicSigningAddress == publicSigningAddress) ?? (ProfileBase)new NonExistingProfile();
 
+    public async Task<IEnumerable<Profile>> GetAllProfilesAsync() =>
+        await this.Context.Profiles
+            .OrderBy(x => x.PublicSigningAddress)
+            .ToListAsync();
+
     public async Task<IEnumerable<Profile>> SearchByDisplayNameAsync(string partialDisplayName) =>
         await this.Context.Profiles
             .Where(x => x.Alias.ToLower().Contains(partialDisplayName.ToLower()))

@@ -2,6 +2,7 @@ using HushNetwork.proto;
 using HushNode.Feeds.Storage;
 using HushShared.Feeds.Model;
 using Olimpo;
+using Google.Protobuf;
 
 namespace HushNode.Feeds.gRPC;
 
@@ -51,12 +52,13 @@ public sealed class SocialPostApplicationService(
         if (post.AudienceVisibility == SocialPostVisibility.Open)
         {
             var attachments = await this.GetSocialPostAttachmentsAsync(post.PostId);
-            return new GetSocialPostPermalinkResponse
+            var openResponse = new GetSocialPostPermalinkResponse
             {
                 Success = true,
                 Message = "Post resolved.",
                 AccessState = SocialPermalinkAccessStateProto.SocialPermalinkAccessStateAllowed,
                 PostId = post.PostId.ToString("D"),
+                ReactionScopeId = post.ReactionScopeId.ToString("D"),
                 AuthorPublicAddress = post.AuthorPublicAddress,
                 Content = post.Content,
                 CreatedAtBlock = post.CreatedAtBlock.Value,
@@ -66,6 +68,11 @@ public sealed class SocialPostApplicationService(
                 OpenGraph = PublicOg(post.Content),
                 Attachments = { attachments }
             };
+            if (post.AuthorCommitment != null)
+            {
+                openResponse.AuthorCommitment = ByteString.CopyFrom(post.AuthorCommitment);
+            }
+            return openResponse;
         }
 
         if (!request.IsAuthenticated)
@@ -118,6 +125,7 @@ public sealed class SocialPostApplicationService(
             Message = "Post resolved.",
             AccessState = SocialPermalinkAccessStateProto.SocialPermalinkAccessStateAllowed,
             PostId = post.PostId.ToString("D"),
+            ReactionScopeId = post.ReactionScopeId.ToString("D"),
             AuthorPublicAddress = post.AuthorPublicAddress,
             Content = post.Content,
             CreatedAtBlock = post.CreatedAtBlock.Value,
@@ -129,6 +137,10 @@ public sealed class SocialPostApplicationService(
 
         response.CircleFeedIds.AddRange(post.AudienceCircles.Select(x => x.CircleFeedId.ToString()));
         response.Attachments.AddRange(await this.GetSocialPostAttachmentsAsync(post.PostId));
+        if (post.AuthorCommitment != null)
+        {
+            response.AuthorCommitment = ByteString.CopyFrom(post.AuthorCommitment);
+        }
         return response;
     }
 
@@ -166,6 +178,7 @@ public sealed class SocialPostApplicationService(
             var postProto = new SocialFeedWallPostProto
             {
                 PostId = post.PostId.ToString("D"),
+                ReactionScopeId = post.ReactionScopeId.ToString("D"),
                 AuthorPublicAddress = post.AuthorPublicAddress,
                 Content = post.Content,
                 CreatedAtBlock = post.CreatedAtBlock.Value,
@@ -174,6 +187,10 @@ public sealed class SocialPostApplicationService(
                     ? SocialPostVisibilityProto.SocialPostVisibilityPrivate
                     : SocialPostVisibilityProto.SocialPostVisibilityOpen
             };
+            if (post.AuthorCommitment != null)
+            {
+                postProto.AuthorCommitment = ByteString.CopyFrom(post.AuthorCommitment);
+            }
             postProto.CircleFeedIds.AddRange(post.AudienceCircles.Select(x => x.CircleFeedId.ToString()));
             postProto.Attachments.AddRange(await this.GetSocialPostAttachmentsAsync(post.PostId));
             visiblePosts.Add(postProto);

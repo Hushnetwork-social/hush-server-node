@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Olimpo.EntityFramework.Persistency;
@@ -15,7 +16,11 @@ public static class StorageHostBuild
         services.AddDbContext<BlockchainDbContext>((provider, options) => 
         {
             options.UseNpgsql(hostContext.Configuration.GetConnectionString("HushNetworkDb"));
-            options.EnableSensitiveDataLogging();  // For debugging
+            options.ConfigureWarnings(warnings =>
+            {
+                warnings.Ignore(RelationalEventId.CommandExecuting);
+                warnings.Ignore(RelationalEventId.CommandExecuted);
+            });
             options.EnableDetailedErrors();  // For debugging
         });
 

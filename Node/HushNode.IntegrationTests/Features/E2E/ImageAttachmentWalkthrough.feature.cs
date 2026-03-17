@@ -22,6 +22,7 @@ namespace HushNode.IntegrationTests.Features.E2E
     [Xunit.TraitAttribute("Category", "E2E")]
     [Xunit.TraitAttribute("Category", "ImageAttachmentWalkthrough")]
     [Xunit.TraitAttribute("Category", "FEAT-067")]
+    [Xunit.TraitAttribute("Category", "LONG_RUNNING")]
     public partial class ImageAttachmentWalkthroughFeature : object, Xunit.IClassFixture<ImageAttachmentWalkthroughFeature.FixtureData>, System.IDisposable
     {
         
@@ -30,7 +31,8 @@ namespace HushNode.IntegrationTests.Features.E2E
         private static string[] featureTags = new string[] {
                 "E2E",
                 "ImageAttachmentWalkthrough",
-                "FEAT-067"};
+                "FEAT-067",
+                "LONG_RUNNING"};
         
         private Xunit.Abstractions.ITestOutputHelper _testOutputHelper;
         

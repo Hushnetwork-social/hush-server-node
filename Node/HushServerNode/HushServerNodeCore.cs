@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -62,6 +63,11 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
     /// </summary>
     public int GrpcWebPort { get; private set; }
 
+    /// <summary>
+    /// Exposes the application service provider for integration-test diagnostics and direct service queries.
+    /// </summary>
+    public IServiceProvider Services => _app.Services;
+
     private HushServerNodeCore(WebApplication app, BlockProductionControl? blockProductionControl, bool isTestMode)
     {
         _app = app;
@@ -91,9 +97,15 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         BlockProductionControl blockProductionControl,
         string connectionString,
         string? redisConnectionString = null,
-        ILoggerProvider? diagnosticLoggerProvider = null)
+        ILoggerProvider? diagnosticLoggerProvider = null,
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
     {
-        var testConfig = new TestConfiguration(blockProductionControl, connectionString, redisConnectionString, diagnosticLoggerProvider);
+        var testConfig = new TestConfiguration(
+            blockProductionControl,
+            connectionString,
+            redisConnectionString,
+            diagnosticLoggerProvider,
+            ConfigurationOverrides: configurationOverrides);
         var app = BuildApplication(Array.Empty<string>(), testConfig);
         return new HushServerNodeCore(app, blockProductionControl, isTestMode: true);
     }
@@ -115,13 +127,15 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         BlockProductionControl blockProductionControl,
         string connectionString,
         string? redisConnectionString = null,
-        ILoggerProvider? diagnosticLoggerProvider = null)
+        ILoggerProvider? diagnosticLoggerProvider = null,
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
     {
         var testConfig = new TestConfiguration(
             blockProductionControl,
             connectionString,
             redisConnectionString,
             diagnosticLoggerProvider,
+            ConfigurationOverrides: configurationOverrides,
             FixedGrpcPort: 14665,
             FixedGrpcWebPort: E2EGrpcWebPort);
         var app = BuildApplication(Array.Empty<string>(), testConfig);
@@ -144,13 +158,16 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
     /// </summary>
     public async Task StartAsync()
     {
-        // Start the application
-        _runTask = _app.RunAsync();
-
-        // In test mode, wait until the node is fully initialized
         if (_isTestMode)
         {
-            await WaitForNodeReadyAsync();
+            // Test mode should fail directly on startup errors instead of
+            // backgrounding the host and polling ApplicationStarted.
+            await _app.StartAsync();
+        }
+        else
+        {
+            // Start the application
+            _runTask = _app.RunAsync();
         }
 
         // Extract actual bound ports from Kestrel using IServerAddressesFeature
@@ -174,29 +191,6 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// Waits for the node to be fully initialized using ASP.NET Core's application lifetime.
-    /// This waits for all hosted services to start, which is sufficient for gRPC readiness.
-    /// </summary>
-    private async Task WaitForNodeReadyAsync()
-    {
-        var lifetime = _app.Services.GetRequiredService<IHostApplicationLifetime>();
-
-        var maxAttempts = 100; // 10 seconds max (100 * 100ms)
-        for (var i = 0; i < maxAttempts; i++)
-        {
-            // ApplicationStarted token is cancelled when all hosted services have started
-            if (lifetime.ApplicationStarted.IsCancellationRequested)
-            {
-                return;
-            }
-
-            await Task.Delay(100);
-        }
-
-        throw new TimeoutException("Node did not become ready within 10 seconds.");
     }
 
     /// <summary>
@@ -423,6 +417,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             {
                 ["ConnectionStrings:HushNetworkDb"] = testConfig.ConnectionString,
                 ["BlockchainSettings:MaxEmptyBlocksBeforePause"] = "100", // High value for tests
+                ["Reactions:DevMode"] = "true", // E2E/dev test host uses explicit dev-mode reaction proofs until real artifacts are wired
                 // Configure block producer (stacker) credentials
                 ["CredentialsProfile:ProfileName"] = blockProducer.DisplayName,
                 ["CredentialsProfile:PublicSigningAddress"] = blockProducer.PublicSigningAddress,
@@ -437,6 +432,14 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             {
                 configValues["Redis:ConnectionString"] = testConfig.RedisConnectionString;
                 configValues["Redis:InstanceName"] = "HushTest:";
+            }
+
+            if (testConfig.ConfigurationOverrides != null)
+            {
+                foreach (var pair in testConfig.ConfigurationOverrides)
+                {
+                    configValues[pair.Key] = pair.Value;
+                }
             }
 
             builder.Configuration.AddInMemoryCollection(configValues);
@@ -517,7 +520,11 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             var connectionString = testConfig?.ConnectionString
                 ?? builder.Configuration.GetConnectionString("HushNetworkDb");
             options.UseNpgsql(connectionString);
-            options.EnableSensitiveDataLogging();
+            options.ConfigureWarnings(warnings =>
+            {
+                warnings.Ignore(RelationalEventId.CommandExecuting);
+                warnings.Ignore(RelationalEventId.CommandExecuted);
+            });
             options.EnableDetailedErrors();
         });
 
@@ -703,6 +710,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         string ConnectionString,
         string? RedisConnectionString,
         ILoggerProvider? DiagnosticLoggerProvider,
+        IReadOnlyDictionary<string, string?>? ConfigurationOverrides = null,
         int? FixedGrpcPort = null,
         int? FixedGrpcWebPort = null);
 }

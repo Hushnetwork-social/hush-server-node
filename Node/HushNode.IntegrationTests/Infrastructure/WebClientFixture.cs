@@ -8,7 +8,10 @@ namespace HushNode.IntegrationTests.Infrastructure;
 /// </summary>
 internal sealed class WebClientFixture : IAsyncDisposable
 {
+    private const string WebClientServiceName = "hush-web-client";
     private readonly string _composeFilePath;
+    private readonly string _webClientRootPath;
+    private readonly string _buildStampPath;
     private bool _started;
 
     /// <summary>
@@ -40,13 +43,14 @@ internal sealed class WebClientFixture : IAsyncDisposable
             .FirstOrDefault(File.Exists)
             ?? throw new FileNotFoundException(
                 $"docker-compose.e2e.yml not found. Searched: {string.Join(", ", possiblePaths.Select(Path.GetFullPath))}");
+
+        _webClientRootPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(_composeFilePath)!, "..", "..", "..", "hush-web-client"));
+        _buildStampPath = Path.Combine(Path.GetTempPath(), "hush-web-client-e2e-build.stamp");
     }
 
     /// <summary>
     /// Starts HushWebClient container.
-    /// If image doesn't exist, builds it first. Otherwise uses cached image for speed.
-    /// After web client code changes, rebuild manually with:
-    ///   cd Node/HushNode.IntegrationTests &amp;&amp; docker compose -f docker-compose.e2e.yml build
+    /// Always rebuilds and recreates the container so E2E runs execute the current web-client code.
     /// Uses fixed gRPC-Web port 14666 (HushServerNodeCore.E2EGrpcWebPort).
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -55,39 +59,41 @@ internal sealed class WebClientFixture : IAsyncDisposable
         if (_started)
             return;
 
-        // Check if image exists - if not, build it first
-        var needsBuild = !await ImageExistsAsync(cancellationToken);
-        if (needsBuild)
+        if (this.ShouldRebuildImage())
         {
-            Console.WriteLine("[E2E] Image 'hush-web-client-e2e:latest' not found, building...");
+            Console.WriteLine("[E2E] Building hush-web-client E2E image...");
             await BuildImageAsync(cancellationToken);
+            File.WriteAllText(_buildStampPath, DateTime.UtcNow.ToString("O"));
+        }
+        else
+        {
+            Console.WriteLine("[E2E] Reusing existing hush-web-client E2E image.");
         }
 
-        // Start container using cached image (fast)
+        // Recreate the container so the new image is guaranteed to be used.
         var startInfo = new ProcessStartInfo
         {
             FileName = "docker",
-            Arguments = $"compose -f \"{_composeFilePath}\" up -d --wait",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            Arguments = $"compose -f \"{_composeFilePath}\" up -d --wait --force-recreate --remove-orphans",
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
         };
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start docker compose process");
 
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync(cancellationToken);
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
 
         if (process.ExitCode != 0)
         {
-            var stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
-
             throw new InvalidOperationException(
-                $"Docker compose failed with exit code {process.ExitCode}.\n" +
-                $"Stdout: {stdout}\n" +
-                $"Stderr: {stderr}");
+                $"Docker compose failed with exit code {process.ExitCode}. stdout: {stdout} stderr: {stderr}");
         }
 
         // Wait for health check (docker --wait should handle this, but verify)
@@ -96,27 +102,40 @@ internal sealed class WebClientFixture : IAsyncDisposable
         _started = true;
     }
 
-    /// <summary>
-    /// Checks if the E2E test image exists.
-    /// </summary>
-    private async Task<bool> ImageExistsAsync(CancellationToken cancellationToken)
+    public async Task<string> GetServiceLogsAsync(DateTimeOffset? sinceUtc = null, CancellationToken cancellationToken = default)
     {
+        var sinceArgument = sinceUtc.HasValue
+            ? $" --since \"{sinceUtc.Value.UtcDateTime:O}\""
+            : string.Empty;
+
         var startInfo = new ProcessStartInfo
         {
             FileName = "docker",
-            Arguments = "image inspect hush-web-client-e2e:latest",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            Arguments = $"compose -f \"{_composeFilePath}\" logs --no-color{sinceArgument} {WebClientServiceName}",
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
         };
 
-        var process = Process.Start(startInfo);
-        if (process == null)
-            return false;
+        var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start docker compose logs process");
 
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync(cancellationToken);
-        return process.ExitCode == 0;
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"Docker compose logs failed with exit code {process.ExitCode}. stdout: {stdout} stderr: {stderr}");
+        }
+
+        return string.IsNullOrWhiteSpace(stderr)
+            ? stdout
+            : $"{stdout}{Environment.NewLine}[stderr]{Environment.NewLine}{stderr}";
     }
 
     /// <summary>
@@ -128,24 +147,72 @@ internal sealed class WebClientFixture : IAsyncDisposable
         {
             FileName = "docker",
             Arguments = $"compose -f \"{_composeFilePath}\" build",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
         };
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start docker build process");
 
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync(cancellationToken);
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
 
         if (process.ExitCode != 0)
         {
-            var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
-            throw new InvalidOperationException($"Docker build failed: {stderr}");
+            throw new InvalidOperationException(
+                $"Docker build failed with exit code {process.ExitCode}. stdout: {stdout} stderr: {stderr}");
         }
 
         Console.WriteLine("[E2E] Image build completed.");
+    }
+
+    private bool ShouldRebuildImage()
+    {
+        if (!File.Exists(_buildStampPath))
+        {
+            return true;
+        }
+
+        if (!Directory.Exists(_webClientRootPath))
+        {
+            return true;
+        }
+
+        var stampUtc = File.GetLastWriteTimeUtc(_buildStampPath);
+        var excludedSegments = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "node_modules",
+            ".next",
+            ".git",
+            ".tmp"
+        };
+
+        foreach (var file in Directory.EnumerateFiles(_webClientRootPath, "*", SearchOption.AllDirectories))
+        {
+            if (this.ShouldIgnoreFile(file, excludedSegments))
+            {
+                continue;
+            }
+
+            if (File.GetLastWriteTimeUtc(file) > stampUtc)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool ShouldIgnoreFile(string filePath, HashSet<string> excludedSegments)
+    {
+        var relativePath = Path.GetRelativePath(_webClientRootPath, filePath);
+        var segments = relativePath.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        return segments.Any(segment => excludedSegments.Contains(segment));
     }
 
     /// <summary>
@@ -195,8 +262,6 @@ internal sealed class WebClientFixture : IAsyncDisposable
         {
             FileName = "docker",
             Arguments = $"compose -f \"{_composeFilePath}\" down --remove-orphans --timeout 10",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };

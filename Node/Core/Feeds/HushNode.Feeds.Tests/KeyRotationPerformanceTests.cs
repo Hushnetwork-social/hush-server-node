@@ -19,9 +19,9 @@ namespace HushNode.Feeds.Tests;
 /// Performance tests for KeyRotationService.
 /// Verifies key rotation completes within acceptable time limits for various group sizes.
 /// These tests are excluded from CI as timing varies significantly between environments.
-/// Run locally with: dotnet test --filter "Category=Performance"
+/// Run locally with: dotnet test --filter "Category=PerformanceTest"
 /// </summary>
-[Trait("Category", "Performance")]
+[Trait("Category", "PerformanceTest")]
 public class KeyRotationPerformanceTests
 {
     private readonly ITestOutputHelper _output;

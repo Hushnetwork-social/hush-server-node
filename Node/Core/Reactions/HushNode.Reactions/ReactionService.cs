@@ -58,5 +58,6 @@ public class ReactionService : IReactionService
 public interface IFeedInfoProvider
 {
     Task<ECPoint?> GetFeedPublicKeyAsync(FeedId feedId);
+    Task<FeedId?> GetMembershipScopeIdAsync(FeedId reactionScopeId);
     Task<byte[]?> GetAuthorCommitmentAsync(FeedMessageId messageId);
 }

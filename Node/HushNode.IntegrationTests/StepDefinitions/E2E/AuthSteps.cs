@@ -121,17 +121,10 @@ internal sealed class AuthSteps : BrowserStepsBase
             new PageAssertionsToHaveURLOptions { Timeout = 15000 });
         Console.WriteLine("[E2E Auth] Redirected to app shell");
 
-        // Step 6: Explicitly trigger sync to ensure feeds are fetched
-        // With NEXT_PUBLIC_SYNC_INTERVAL_MS=999999, auto-sync is disabled.
-        // The SyncProvider's 500ms initial sync can race with component mounting,
-        // so we explicitly trigger a sync after app shell is loaded.
-        Console.WriteLine("[E2E Auth] Triggering explicit sync after app shell load...");
-        await Task.Delay(1000); // Allow SyncProvider to mount and register syncables
-        await TriggerSyncAsync(page);
-
-        // Step 7: Wait for feeds to be synced, rendered, and encryption keys decrypted
-        Console.WriteLine("[E2E Auth] Waiting for feeds to be synced, rendered, and encryption keys decrypted...");
-        await WaitForReadyFeedAsync(page, timeoutMs: 30000);
+        // Step 6: Match the explicit step flow used by the passing identity scenario.
+        // The shared helper should not impose an extra manual sync that the explicit
+        // feature path does not require.
+        await ThenTheFeedListShouldShowPersonalFeed(displayName);
 
         Console.WriteLine($"[E2E Auth] === COMPOUND STEP COMPLETE: Identity '{displayName}' created ===");
     }
@@ -144,9 +137,25 @@ internal sealed class AuthSteps : BrowserStepsBase
     {
         var startTime = DateTime.UtcNow;
         var timeout = TimeSpan.FromMilliseconds(timeoutMs);
+        var lastSyncAt = DateTime.MinValue;
 
         while (DateTime.UtcNow - startTime < timeout)
         {
+            if (DateTime.UtcNow - lastSyncAt >= TimeSpan.FromSeconds(2))
+            {
+                try
+                {
+                    Console.WriteLine("[E2E Auth] Triggering manual sync while waiting for ready feed...");
+                    await TriggerSyncAsync(page);
+                }
+                catch (PlaywrightException ex) when (ex.Message.Contains("__e2e_triggerSync timed out after 15000ms", StringComparison.Ordinal))
+                {
+                    Console.WriteLine("[E2E Auth] Manual sync timed out while waiting for ready feed; retrying...");
+                }
+
+                lastSyncAt = DateTime.UtcNow;
+            }
+
             // Look for any feed item with data-feed-ready="true"
             // Using attribute selector to find elements with data-feed-ready attribute set to "true"
             var readyFeeds = page.Locator("[data-testid^='feed-item'][data-feed-ready='true']");

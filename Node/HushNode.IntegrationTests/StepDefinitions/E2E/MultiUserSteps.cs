@@ -299,8 +299,16 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         await WaitForPostAuthLandingAsync(page, userName, 20000);
         Console.WriteLine($"[E2E] {userName} reached landing URL: {page.Url}");
 
-        // Wait for page to load
-        await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // The app keeps background sync traffic alive, so NetworkIdle is not a
+        // reliable readiness signal here. We only need the authenticated app
+        // shell and the E2E sync hook to be ready before forcing a refresh.
+        await page.WaitForFunctionAsync(
+            "() => typeof window.__e2e_triggerSync === 'function'",
+            null,
+            new PageWaitForFunctionOptions
+            {
+                Timeout = 15000
+            });
 
         // 6. Trigger sync to pick up the new group membership
         Console.WriteLine($"[E2E] {userName} triggering sync...");
@@ -1180,13 +1188,14 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         var createButton = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Create Account" }).Last;
         await createButton.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 10000 });
 
-        // Create waiter before clicking
-        var waiter = StartListeningForTransactions(minTransactions: 1);
+        // The auth page submits identity + personal-feed transactions back-to-back.
+        // Use a single waiter so the second transaction is not missed between waiters.
+        var waiter = StartListeningForTransactions(minTransactions: 2);
 
         await createButton.ClickAsync();
         Console.WriteLine($"[E2E] Clicked Create Account for '{userName}'");
 
-        // Wait for identity transaction
+        // Wait for both identity and personal-feed transactions
         try
         {
             await waiter.WaitAsync();
@@ -1196,25 +1205,14 @@ internal sealed class MultiUserSteps : BrowserStepsBase
             waiter.Dispose();
         }
 
-        // Produce block for identity
+        // Confirm both transactions in one block.
         var blockControl = GetBlockControl();
         await blockControl.ProduceBlockAsync();
-        Console.WriteLine($"[E2E] Identity block produced for '{userName}'");
+        Console.WriteLine($"[E2E] Identity + personal feed block produced for '{userName}'");
 
-        // Wait for personal feed transaction
-        var personalFeedWaiter = StartListeningForTransactions(minTransactions: 1);
-        try
-        {
-            await personalFeedWaiter.WaitAsync();
-        }
-        finally
-        {
-            personalFeedWaiter.Dispose();
-        }
-
-        // Produce block for personal feed
+        // Produce an additional block so the client polling path sees the confirmation.
         await blockControl.ProduceBlockAsync();
-        Console.WriteLine($"[E2E] Personal feed block produced for '{userName}'");
+        Console.WriteLine($"[E2E] Confirmation block produced for '{userName}'");
 
         // Wait for redirect to main app shell (route can vary by feature branch)
         await WaitForPostAuthLandingAsync(page, userName, 20000);
@@ -1430,8 +1428,54 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         Console.WriteLine($"[E2E] {userName} navigating to join page with code '{inviteCode}'...");
 
         var baseUrl = GetBaseUrl();
-        await page.GotoAsync($"{baseUrl}/join/{inviteCode}");
-        await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await page.GotoAsync(
+            $"{baseUrl}/join/{inviteCode}",
+            new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.DOMContentLoaded
+            });
+
+        var joinButton = page.Locator("[data-testid='join-group-button']");
+        var signInButton = page.Locator("[data-testid='sign-in-to-join-button']");
+        var groupName = page.Locator("[data-testid='group-info-name']");
+
+        await Expect(groupName.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
+        {
+            Timeout = 15000
+        });
+
+        // The page is considered ready once it resolves to a joinable or auth-gated state.
+        await page.WaitForFunctionAsync(
+            @"() => {
+                const isVisible = (el) => !!el
+                    && getComputedStyle(el).display !== 'none'
+                    && getComputedStyle(el).visibility !== 'hidden'
+                    && el.getBoundingClientRect().width > 0
+                    && el.getBoundingClientRect().height > 0;
+
+                const join = document.querySelector(""[data-testid='join-group-button']"");
+                const signIn = document.querySelector(""[data-testid='sign-in-to-join-button']"");
+                return isVisible(join) || isVisible(signIn);
+            }",
+            new PageWaitForFunctionOptions
+            {
+                Timeout = 15000
+            });
+
+        if (await joinButton.First.IsVisibleAsync())
+        {
+            await Expect(joinButton.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
+            {
+                Timeout = 15000
+            });
+        }
+        else
+        {
+            await Expect(signInButton.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions
+            {
+                Timeout = 15000
+            });
+        }
 
         Console.WriteLine($"[E2E] {userName} on join page");
         await TakeScreenshotAsync("join-page");

@@ -58,6 +58,11 @@ public class PublicInputs
     public required byte[] MessageId { get; set; }
 
     /// <summary>
+    /// Feed ID / reaction scope ID used by the nullifier domain.
+    /// </summary>
+    public required byte[] FeedId { get; set; }
+
+    /// <summary>
     /// Feed public key for ElGamal encryption.
     /// </summary>
     public required ECPoint FeedPk { get; set; }

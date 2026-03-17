@@ -8,6 +8,7 @@ Feature: Social Walkthrough
         Given a HushServerNode at block 1
         And HushWebClient is running in Docker
 
+    @LONG_RUNNING
     Scenario: Five users interact across chats, groups, and feed ordering
         # =================================================================
         # PHASE 1: Identity Creation (5 users)

@@ -52,7 +52,7 @@
     <PackageReference Include="SkiaSharp" Version="3.119.0" />
 
     <!-- ImageSharp for animated GIF encoding (SkiaSharp can't encode multi-frame GIFs) -->
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
 
     <!-- gRPC client for black-box testing -->
     <PackageReference Include="Grpc.Net.Client" Version="2.67.0" />
@@ -70,7 +70,7 @@
     <Protobuf Include="..\..\Protos\hushFeed.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
     <Protobuf Include="..\..\Protos\hushIdentity.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
     <Protobuf Include="..\..\Protos\hushNotification.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
-    <Protobuf Include="..\..\Protos\hushReactions.proto" GrpcServices="None" ProtoRoot="..\..\Protos\" />
+    <Protobuf Include="..\..\Protos\hushReactions.proto" GrpcServices="Client" ProtoRoot="..\..\Protos\" />
   </ItemGroup>
 
   <ItemGroup>

@@ -11,6 +11,7 @@ namespace HushNode.Reactions.Tests.Crypto;
 /// </summary>
 public class PoseidonHashTests
 {
+    private static readonly BigInteger FieldPrime = BigInteger.Parse("21888242871839275222246405745257275088548364400416034343698204186575808495617");
     private readonly PoseidonHash _poseidon;
 
     public PoseidonHashTests()
@@ -18,14 +19,24 @@ public class PoseidonHashTests
         _poseidon = new PoseidonHash();
     }
 
-    [Fact]
-    public void Hash_SingleInput_ShouldReturnNonZero()
+    public static IEnumerable<object[]> CircomlibReferenceVectors()
     {
-        var input = BigInteger.Parse("12345");
+        yield return new object[] { new[] { BigInteger.Parse("1") }, BigInteger.Parse("18586133768512220936620570745912940619677854269274689475585506675881198879027") };
+        yield return new object[] { new[] { BigInteger.Parse("12345") }, BigInteger.Parse("4267533774488295900887461483015112262021273608761099826938271132511348470966") };
+        yield return new object[] { new[] { BigInteger.Parse("111"), BigInteger.Parse("222") }, BigInteger.Parse("20595346326572914964186581639484694308224330290454662633399973481953444150659") };
+        yield return new object[] { new[] { BigInteger.Parse("1"), BigInteger.Parse("2"), BigInteger.Parse("3") }, BigInteger.Parse("6542985608222806190361240322586112750744169038454362455181422643027100751666") };
+        yield return new object[] { new[] { BigInteger.Parse("1"), BigInteger.Parse("2"), BigInteger.Parse("3"), BigInteger.Parse("4") }, BigInteger.Parse("18821383157269793795438455681495246036402687001665670618754263018637548127333") };
+        yield return new object[] { new[] { BigInteger.Parse("12345678901234567890") }, BigInteger.Parse("17610922722311195426938483481431943255028223790571250909270476711880232282197") };
+        yield return new object[] { new[] { BigInteger.Parse("123456789"), BigInteger.Parse("987654321"), BigInteger.Parse("111222333"), BigInteger.Parse("1") }, BigInteger.Parse("16419043242658278959100040358500438653935004702737700860485085604266638975646") };
+    }
 
-        var result = _poseidon.Hash(input);
+    [Theory]
+    [MemberData(nameof(CircomlibReferenceVectors))]
+    public void Hash_ShouldMatchCircomlibjsReferenceVectors(BigInteger[] inputs, BigInteger expected)
+    {
+        var result = _poseidon.Hash(inputs);
 
-        result.Should().NotBe(BigInteger.Zero);
+        result.Should().Be(expected);
     }
 
     [Fact]
@@ -96,27 +107,25 @@ public class PoseidonHashTests
     public void Hash_ShouldBeInFieldRange()
     {
         // Result should be less than the BN254 scalar field prime
-        var fieldPrime = BigInteger.Parse("21888242871839275222246405745257275088548364400416034343698204186575808495617");
         var input = BigInteger.Parse("999999999999999");
 
         var result = _poseidon.Hash(input);
 
         result.Should().BeGreaterOrEqualTo(BigInteger.Zero);
-        result.Should().BeLessThan(fieldPrime);
+        result.Should().BeLessThan(FieldPrime);
     }
 
     [Fact]
     public void Hash2_LargeInputs_ShouldWork()
     {
         // Use field-sized inputs
-        var fieldPrime = BigInteger.Parse("21888242871839275222246405745257275088548364400416034343698204186575808495617");
-        var a = fieldPrime - 1;
-        var b = fieldPrime - 2;
+        var a = FieldPrime - 1;
+        var b = FieldPrime - 2;
 
         var result = _poseidon.Hash2(a, b);
 
         result.Should().BeGreaterOrEqualTo(BigInteger.Zero);
-        result.Should().BeLessThan(fieldPrime);
+        result.Should().BeLessThan(FieldPrime);
     }
 
     [Fact]

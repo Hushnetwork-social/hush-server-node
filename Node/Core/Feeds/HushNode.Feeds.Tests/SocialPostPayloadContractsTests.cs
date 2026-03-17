@@ -25,14 +25,18 @@ public class SocialPostPayloadContractsTests
 
         var payload = new CreateSocialPostPayload(
             postId,
+            postId,
             author,
+            new byte[32],
             "hello world",
             audience,
             attachments,
             CreatedAtUnixMs: 1234567890);
 
         payload.PostId.Should().Be(postId);
+        payload.ReactionScopeId.Should().Be(postId);
         payload.AuthorPublicAddress.Should().Be(author);
+        payload.AuthorCommitment.Should().HaveCount(32);
         payload.Audience.Visibility.Should().Be(SocialPostVisibility.Private);
         payload.Audience.CircleFeedIds.Should().ContainSingle().Which.Should().Be("circle-1");
         payload.Attachments.Should().HaveCount(1);

@@ -64,7 +64,9 @@ public record SocialPostPermalinkContract(
 
 public record CreateSocialPostPayload(
     Guid PostId,
+    Guid ReactionScopeId,
     string AuthorPublicAddress,
+    byte[]? AuthorCommitment,
     string Content,
     SocialPostAudience Audience,
     SocialPostAttachment[] Attachments,
