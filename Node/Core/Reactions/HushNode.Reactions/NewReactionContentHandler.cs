@@ -10,6 +10,7 @@ using HushShared.Reactions.Model;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Diagnostics;
+using System.Globalization;
 
 namespace HushNode.Reactions;
 
@@ -194,6 +195,18 @@ public class NewReactionContentHandler : ITransactionContentHandler
             // Verify against each recent root (grace period)
             foreach (var rootInfo in recentRoots)
             {
+                _logger.LogInformation(
+                    "[NewReactionContentHandler] Verifying reaction proof inputs: message={MessageId}, feed={FeedId}, membershipScope={MembershipScopeId}, rootBlock={RootBlockHeight}, nullifier={NullifierHex}, authorCommitment={AuthorCommitmentHex}, membersRoot={MembersRootHex}, feedPkX={FeedPkX}, feedPkY={FeedPkY}",
+                    payload.MessageId,
+                    payload.FeedId,
+                    membershipScopeId.Value,
+                    rootInfo.BlockHeight,
+                    Convert.ToHexString(payload.Nullifier),
+                    Convert.ToHexString(authorCommitment),
+                    Convert.ToHexString(rootInfo.MerkleRoot),
+                    feedPk.X.ToString(CultureInfo.InvariantCulture),
+                    feedPk.Y.ToString(CultureInfo.InvariantCulture));
+
                 var publicInputs = new PublicInputs
                 {
                     Nullifier = payload.Nullifier,
@@ -217,6 +230,12 @@ public class NewReactionContentHandler : ITransactionContentHandler
                         verificationStopwatch.ElapsedMilliseconds);
                     return true;
                 }
+
+                _logger.LogWarning(
+                    "[NewReactionContentHandler] Proof candidate rejected for message {MessageId}. CircuitVersion={CircuitVersion}, RootBlockHeight={RootBlockHeight}",
+                    payload.MessageId,
+                    payload.CircuitVersion,
+                    rootInfo.BlockHeight);
             }
 
             return false;

@@ -18,7 +18,8 @@
     },
 
     "Reactions": {
-        "DevMode": true
+        "VerifierMode": "real",
+        "DevMode": false
     },
 
     "Redis": {

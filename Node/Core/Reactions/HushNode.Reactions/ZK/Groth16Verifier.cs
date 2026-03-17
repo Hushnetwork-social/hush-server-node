@@ -3,6 +3,7 @@ using HushNode.Reactions.Crypto;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace HushNode.Reactions.ZK;
 
@@ -236,6 +237,10 @@ public class Groth16Verifier : IZkVerifier
             {
                 var verificationStopwatch = Stopwatch.StartNew();
                 _logger.LogInformation(
+                    "[Groth16Verifier] Prepared public signals for circuit {CircuitVersion}: {PublicSignals}",
+                    vk.Version,
+                    JsonSerializer.Serialize(serializedSignals));
+                _logger.LogInformation(
                     "Starting snarkjs Groth16 verification. CircuitVersion={CircuitVersion}, VerificationKeyPath={VerificationKeyPath}, NodeExecutable={NodeExecutable}, VerifierScriptPath={VerifierScriptPath}, PublicSignalCount={PublicSignalCount}, ProcessTimeoutMs={ProcessTimeoutMs}",
                     vk.Version,
                     vk.SourcePath,
@@ -250,7 +255,8 @@ public class Groth16Verifier : IZkVerifier
                     vk.SourcePath,
                     _nodeExecutable,
                     _verifierScriptPath,
-                    _processTimeoutMs);
+                    _processTimeoutMs,
+                    onLog: message => _logger.LogInformation("[Groth16Verifier] snarkjs: {Message}", message));
                 verificationStopwatch.Stop();
                 _logger.LogInformation(
                     "Completed snarkjs Groth16 verification. CircuitVersion={CircuitVersion}, Valid={Valid}, ElapsedMs={ElapsedMs}",
