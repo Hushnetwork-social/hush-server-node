@@ -26,6 +26,7 @@ public partial class FeedsGrpcService(
     IIdentityDisplayNameCacheService identityDisplayNameCacheService,
     IInnerCircleApplicationService innerCircleApplicationService,
     ISocialComposerApplicationService socialComposerApplicationService,
+    ISocialThreadApplicationService socialThreadApplicationService,
     ISocialPostApplicationService socialPostApplicationService,
     IGroupMembershipApplicationService groupMembershipApplicationService,
     IGroupAdministrationApplicationService groupAdministrationApplicationService,
@@ -46,6 +47,7 @@ public partial class FeedsGrpcService(
     private readonly IIdentityDisplayNameCacheService _identityDisplayNameCacheService = identityDisplayNameCacheService;
     private readonly IInnerCircleApplicationService _innerCircleApplicationService = innerCircleApplicationService;
     private readonly ISocialComposerApplicationService _socialComposerApplicationService = socialComposerApplicationService;
+    private readonly ISocialThreadApplicationService _socialThreadApplicationService = socialThreadApplicationService;
     private readonly ISocialPostApplicationService _socialPostApplicationService = socialPostApplicationService;
     private readonly IGroupMembershipApplicationService _groupMembershipApplicationService = groupMembershipApplicationService;
     private readonly IGroupAdministrationApplicationService _groupAdministrationApplicationService = groupAdministrationApplicationService;

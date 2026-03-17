@@ -25,6 +25,8 @@ service HushFeed {
   rpc GetSocialComposerContract (GetSocialComposerContractRequest) returns (GetSocialComposerContractResponse);
   rpc GetSocialPostPermalink (GetSocialPostPermalinkRequest) returns (GetSocialPostPermalinkResponse);
   rpc GetSocialFeedWall (GetSocialFeedWallRequest) returns (GetSocialFeedWallResponse);
+  rpc GetSocialCommentsPage (GetSocialCommentsPageRequest) returns (GetSocialCommentsPageResponse);
+  rpc GetSocialThreadReplies (GetSocialThreadRepliesRequest) returns (GetSocialThreadRepliesResponse);
   rpc DownloadSocialPostAttachment(DownloadSocialPostAttachmentRequest) returns (stream AttachmentChunk);
 
   // Group Feed Creation & Membership Operations
@@ -742,6 +744,10 @@ message SocialThreadEntryProto {
   optional string ReactionScopeId = 6;
   optional int64 CreatedAtUnixMs = 7;
   optional int64 ReactionCount = 8;
+  optional string AuthorPublicAddress = 9;
+  optional string Content = 10;
+  optional bytes AuthorCommitment = 11;
+  optional int32 ChildReplyCount = 12;
 }
 
 message SocialThreadPageContractProto {
@@ -753,6 +759,8 @@ message GetSocialCommentsPageRequest {
   string PostId = 1;
   optional int32 Limit = 2;
   optional string BeforeEntryId = 3;
+  optional string RequesterPublicAddress = 4;
+  bool IsAuthenticated = 5;
 }
 
 message GetSocialCommentsPageResponse {
@@ -768,6 +776,8 @@ message GetSocialThreadRepliesRequest {
   string ThreadRootId = 2;
   optional int32 Limit = 3;
   optional string BeforeEntryId = 4;
+  optional string RequesterPublicAddress = 5;
+  bool IsAuthenticated = 6;
 }
 
 message GetSocialThreadRepliesResponse {

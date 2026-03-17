@@ -78,7 +78,8 @@ public record SocialThreadAccessResult(
 public record RankedSocialThreadEntry(
     SocialThreadEntryContract ThreadEntry,
     FeedMessage Message,
-    long ReactionCount);
+    long ReactionCount,
+    int ChildReplyCount = 0);
 
 public record SocialThreadPageResult(
     bool Success,

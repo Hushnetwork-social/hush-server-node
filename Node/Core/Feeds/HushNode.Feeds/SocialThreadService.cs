@@ -114,7 +114,10 @@ public sealed class SocialThreadService(
         }
 
         var feedId = new FeedId(postId);
-        var messages = (await _feedMessageStorageService.RetrieveLastFeedMessagesForFeedAsync(feedId, new BlockIndex(0)))
+        var allMessages = (await _feedMessageStorageService.RetrieveLastFeedMessagesForFeedAsync(feedId, new BlockIndex(0)))
+            .ToList();
+
+        var messages = allMessages
             .Where(filter)
             .ToList();
 
@@ -126,11 +129,19 @@ public sealed class SocialThreadService(
         var tallies = (await _reactionService.GetTalliesAsync(feedId, messages.Select(x => x.FeedMessageId)))
             .ToDictionary(x => x.MessageId, x => (long)x.TotalCount);
 
+        var childReplyCounts = pageKind == SocialThreadPageKind.TopLevelComments
+            ? allMessages
+                .Where(message => message.ReplyToMessageId != null)
+                .GroupBy(message => message.ReplyToMessageId!.Value)
+                .ToDictionary(group => group.Key, group => group.Count())
+            : new Dictionary<FeedMessageId, int>();
+
         var ranked = messages
             .Select(message => new RankedSocialThreadEntry(
                 contractFactory(message),
                 message,
-                tallies.GetValueOrDefault(message.FeedMessageId, 0)))
+                tallies.GetValueOrDefault(message.FeedMessageId, 0),
+                childReplyCounts.GetValueOrDefault(message.FeedMessageId, 0)))
             .OrderByDescending(x => x.ReactionCount)
             .ThenByDescending(x => x.Message.Timestamp.Value)
             .ToList();

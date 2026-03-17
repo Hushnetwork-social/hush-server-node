@@ -312,6 +312,56 @@ public partial class FeedsGrpcService
         }
     }
 
+    public override async Task<GetSocialCommentsPageResponse> GetSocialCommentsPage(
+        GetSocialCommentsPageRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            return await this._socialThreadApplicationService.GetSocialCommentsPageAsync(request);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[GetSocialCommentsPage] ERROR");
+            return new GetSocialCommentsPageResponse
+            {
+                Success = false,
+                Message = $"Internal error: {ex.Message}",
+                Paging = new SocialThreadPageContractProto
+                {
+                    InitialPageSize = 10,
+                    LoadMorePageSize = 10
+                },
+                HasMore = false
+            };
+        }
+    }
+
+    public override async Task<GetSocialThreadRepliesResponse> GetSocialThreadReplies(
+        GetSocialThreadRepliesRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            return await this._socialThreadApplicationService.GetSocialThreadRepliesAsync(request);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[GetSocialThreadReplies] ERROR");
+            return new GetSocialThreadRepliesResponse
+            {
+                Success = false,
+                Message = $"Internal error: {ex.Message}",
+                Paging = new SocialThreadPageContractProto
+                {
+                    InitialPageSize = 5,
+                    LoadMorePageSize = 5
+                },
+                HasMore = false
+            };
+        }
+    }
+
     // ===== Group Feed Admin Operations (FEAT-017) =====
 
     public override async Task<AddMemberToGroupFeedResponse> AddMemberToGroupFeed(
