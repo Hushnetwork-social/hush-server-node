@@ -17,6 +17,13 @@ internal sealed class ReactionSteps : BrowserStepsBase
     {
     }
 
+    [Given(@"the browser forces dev-mode reactions")]
+    public async Task GivenTheBrowserForcesDevModeReactions()
+    {
+        var page = await GetOrCreatePageAsync();
+        await page.EvaluateAsync("() => { window.__e2e_forceReactionMode = 'dev'; }");
+    }
+
     [When(@"the user adds reaction (\d+) to the message ""(.*)""")]
     public async Task WhenTheUserAddsReaction(int emojiIndex, string messageText)
     {

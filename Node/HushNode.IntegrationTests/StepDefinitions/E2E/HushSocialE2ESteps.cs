@@ -566,6 +566,7 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
     {
         var page = GetUserPage("FollowerA");
         await NavigateToSocialExperienceAsync(page);
+        await page.EvaluateAsync("() => { window.__e2e_forceReactionMode = 'non-dev'; }");
         await TriggerSyncAsync(page);
 
         var payloadJson = await page.EvaluateAsync<string>(@"async () => {

@@ -177,7 +177,7 @@ internal sealed class ScenarioHooks
         var scenarioTags = _scenarioContext.ScenarioInfo.Tags ?? Array.Empty<string>();
         var allTags = featureTags.Concat(scenarioTags).ToArray();
         var isE2E = allTags.Any(t => t.Equals("E2E", StringComparison.OrdinalIgnoreCase));
-        var configurationOverrides = BuildScenarioConfigurationOverrides(isE2E);
+        var configurationOverrides = BuildScenarioConfigurationOverrides(isE2E, allTags);
 
         _outputHelper.WriteLine($"[ScenarioHooks] FeatureTags: [{string.Join(", ", featureTags)}], ScenarioTags: [{string.Join(", ", scenarioTags)}], IsE2E: {isE2E}");
 
@@ -197,7 +197,7 @@ internal sealed class ScenarioHooks
         _scenarioContext[FixtureKey] = _fixture;
     }
 
-    private IReadOnlyDictionary<string, string?> BuildScenarioConfigurationOverrides(bool isE2E)
+    private IReadOnlyDictionary<string, string?> BuildScenarioConfigurationOverrides(bool isE2E, string[] allTags)
     {
         var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
@@ -213,7 +213,10 @@ internal sealed class ScenarioHooks
 
         Directory.CreateDirectory(verifierCaptureDirectory);
         overrides["Reactions:DebugCaptureDirectory"] = verifierCaptureDirectory;
-        overrides["Reactions:VerifierMode"] = Environment.GetEnvironmentVariable("HUSH_REACTIONS_VERIFIER_MODE") ?? "real";
+        var forcedVerifierMode = allTags.Any(t => t.Equals("ReactionVerifierDev", StringComparison.OrdinalIgnoreCase))
+            ? "dev"
+            : Environment.GetEnvironmentVariable("HUSH_REACTIONS_VERIFIER_MODE") ?? "real";
+        overrides["Reactions:VerifierMode"] = forcedVerifierMode;
 
         return overrides;
     }
