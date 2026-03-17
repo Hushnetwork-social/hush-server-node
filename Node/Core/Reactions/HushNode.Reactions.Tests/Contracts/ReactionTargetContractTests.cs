@@ -22,9 +22,22 @@ public class ReactionTargetContractTests
     [Theory]
     [InlineData(ReactionTargetType.Comment)]
     [InlineData(ReactionTargetType.Reply)]
-    public void TryMapToMessageId_TargetsNotEnabledInFeat087_ShouldReturnUnsupported(ReactionTargetType targetType)
+    public void TryMapToMessageId_CommentAndReplyTargets_ShouldMapUsingTargetId(ReactionTargetType targetType)
     {
-        var target = new ReactionTarget(targetType, Guid.NewGuid());
+        var targetId = Guid.NewGuid();
+        var target = new ReactionTarget(targetType, targetId);
+
+        var supported = Feat087ReactionTargetContract.TryMapToMessageId(target, out var messageId);
+
+        supported.Should().BeTrue();
+        messageId.Should().Be(new FeedMessageId(targetId));
+    }
+
+    [Fact]
+    public void TryMapToMessageId_UnsupportedTarget_ShouldReturnUnsupported()
+    {
+        const ReactionTargetType unsupportedTargetType = (ReactionTargetType)999;
+        var target = new ReactionTarget(unsupportedTargetType, Guid.NewGuid());
 
         var supported = Feat087ReactionTargetContract.TryMapToMessageId(target, out var messageId);
 
