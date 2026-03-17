@@ -12,6 +12,21 @@ public enum SocialThreadPageKind
     ThreadReplies = 1
 }
 
+public enum SocialThreadAccessMode
+{
+    Read = 0,
+    Write = 1
+}
+
+public enum SocialThreadAccessErrorCode
+{
+    None = 0,
+    PostNotFound = 1,
+    AuthenticationRequired = 2,
+    AccessDenied = 3,
+    InvalidReplyTarget = 4
+}
+
 public record SocialThreadEntryContract(
     Guid PostId,
     FeedMessageId EntryId,
@@ -48,6 +63,30 @@ public record SocialThreadPageContract(
     SocialThreadPageKind PageKind,
     int InitialPageSize,
     int LoadMorePageSize);
+
+public record SocialThreadAccessResult(
+    bool IsAllowed,
+    SocialThreadAccessErrorCode ErrorCode,
+    string Message)
+{
+    public static SocialThreadAccessResult Allowed() => new(true, SocialThreadAccessErrorCode.None, string.Empty);
+
+    public static SocialThreadAccessResult Denied(SocialThreadAccessErrorCode errorCode, string message) =>
+        new(false, errorCode, message);
+}
+
+public record RankedSocialThreadEntry(
+    SocialThreadEntryContract ThreadEntry,
+    FeedMessage Message,
+    long ReactionCount);
+
+public record SocialThreadPageResult(
+    bool Success,
+    SocialThreadAccessErrorCode ErrorCode,
+    string Message,
+    SocialThreadPageContract Paging,
+    IReadOnlyList<RankedSocialThreadEntry> Entries,
+    bool HasMore);
 
 public static class SocialThreadPagingContractRules
 {

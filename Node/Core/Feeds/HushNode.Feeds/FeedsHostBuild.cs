@@ -34,6 +34,7 @@ public static class FeedsHostBuild
             services.AddTransient<ITransactionContentHandler, NewFeedMessageContentHandler>();
             services.AddTransient<IIndexStrategy, NewFeedMessageIndexStrategy>();
             services.AddTransient<IFeedMessageTransactionHandler, FeedMessageTransactionHandler>();
+            services.AddTransient<ISocialThreadService, SocialThreadService>();
             
             services.AddTransient<ITransactionDeserializerStrategy, NewChatFeedDeserializerStrategy>();
             services.AddTransient<IIndexStrategy, NewChatFeedIndexStrategy>();
