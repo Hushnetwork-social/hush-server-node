@@ -857,7 +857,7 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Comments and single-level replies on authorized post", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="Comments and single-level replies on authorized post")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial end-to-end walkthrough")]
         [Xunit.TraitAttribute("Description", "Comments and single-level replies on authorized post")]
         [Xunit.TraitAttribute("Category", "FEAT-088")]
@@ -866,7 +866,6 @@ namespace HushNode.IntegrationTests.Features.E2E
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-088",
-                    "ignore",
                     "HS-E2E-088-COMMENTS"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Comments and single-level replies on authorized post", null, tagsOfScenario, argumentsOfScenario, featureTags);

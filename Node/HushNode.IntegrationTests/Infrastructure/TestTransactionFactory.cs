@@ -399,6 +399,39 @@ internal static class TestTransactionFactory
     }
 
     /// <summary>
+    /// Creates a signed social thread entry transaction (comment or reply) for FEAT-088.
+    /// Social thread content is stored plaintext against the social post feed id.
+    /// </summary>
+    public static (string Transaction, FeedMessageId MessageId) CreateSocialThreadEntry(
+        TestIdentity author,
+        Guid postId,
+        string content,
+        FeedMessageId? replyToMessageId = null)
+    {
+        var messageId = FeedMessageId.NewFeedMessageId;
+        var payload = new NewFeedMessagePayload(
+            messageId,
+            new FeedId(postId),
+            content,
+            ReplyToMessageId: replyToMessageId);
+
+        var unsignedTransaction = UnsignedTransactionHandler.CreateNew(
+            NewFeedMessagePayloadHandler.NewFeedMessagePayloadKind,
+            Timestamp.Current,
+            payload);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            author.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<NewFeedMessagePayload>(
+            unsignedTransaction,
+            new SignatureInfo(author.PublicSigningAddress, signature));
+
+        return (signedTransaction.ToJson(), messageId);
+    }
+
+    /// <summary>
     /// Creates a signed dev-mode reaction transaction for integration tests.
     /// The payload uses a simple one-hot point encoding so tally deltas remain easy to assert.
     /// </summary>

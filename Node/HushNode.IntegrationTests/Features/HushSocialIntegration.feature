@@ -141,7 +141,7 @@ Feature: HushSocial server integration rules
     When FollowerA changes reaction on "Private sentiment test" to "heart"
     Then only one active reaction should exist for FollowerA on "Private sentiment test"
 
-  @FEAT-088 @ignore
+  @FEAT-088 @HS-INT-088-COMMENTS
   Scenario: Comments and single-level replies inherit post audience
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA

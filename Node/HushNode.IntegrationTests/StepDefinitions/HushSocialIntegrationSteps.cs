@@ -39,6 +39,10 @@ public sealed class HushSocialIntegrationSteps
     private const string LastSocialComposerContractResponseKey = "Feat086LastSocialComposerContractResponse";
     private const string LastSocialReactionTallyResponseKey = "Feat087LastSocialReactionTallyResponse";
     private const string CurrentReactionPostTitleKey = "Feat087CurrentReactionPostTitle";
+    private const string SocialThreadEntriesByContentKey = "Feat088SocialThreadEntriesByContent";
+    private const string SocialThreadPostTitlesByContentKey = "Feat088SocialThreadPostTitlesByContent";
+    private const string LastSocialCommentsPageResponseKey = "Feat088LastSocialCommentsPageResponse";
+    private const string LastSocialThreadRepliesResponseKey = "Feat088LastSocialThreadRepliesResponse";
 
     private readonly ScenarioContext _scenarioContext;
 
@@ -686,6 +690,63 @@ public sealed class HushSocialIntegrationSteps
         nullifierExists.Should().BeTrue("FollowerA should still have exactly one tracked nullifier after updating the reaction");
     }
 
+    [When(@"(.*) comments ""(.*)"" on post ""(.*)""")]
+    public async Task WhenUserCommentsOnPost(string userName, string commentText, string postTitle)
+    {
+        await SubmitSocialThreadEntryAsync(userName, postTitle, commentText);
+    }
+
+    [When(@"(.*) replies ""(.*)"" to comment ""(.*)""")]
+    public async Task WhenUserRepliesToComment(string userName, string replyText, string commentText)
+    {
+        var threadEntries = GetOrCreateSocialThreadEntriesByContent();
+        threadEntries.TryGetValue(commentText, out var commentId)
+            .Should()
+            .BeTrue($"comment '{commentText}' should exist before replying");
+
+        await SubmitSocialThreadEntryAsync(
+            userName,
+            FindPostTitleForThreadEntry(new FeedMessageId(commentId!.Value)),
+            replyText,
+            commentId);
+    }
+
+    [Then(@"FollowerA should see comment ""(.*)"" and reply ""(.*)""")]
+    public async Task ThenFollowerAShouldSeeCommentAndReply(string commentText, string replyText)
+    {
+        var follower = GetTestIdentity("FollowerA");
+        await AssertAuthorizedThreadViewAsync(follower.PublicSigningAddress, "Architecture thread", commentText, replyText);
+    }
+
+    [When(@"FollowerC opens post ""(.*)""")]
+    public async Task WhenFollowerCOpensPost(string postTitle)
+    {
+        var follower = GetTestIdentity("FollowerC");
+        await LoadCommentsPageAsync(postTitle, follower.PublicSigningAddress, true);
+
+        var threadEntries = GetOrCreateSocialThreadEntriesByContent();
+        if (threadEntries.TryGetValue("Looks good", out var commentId))
+        {
+            await LoadRepliesPageAsync(postTitle, commentId, follower.PublicSigningAddress, true);
+        }
+    }
+
+    [Then(@"FollowerC should receive access denied for post comments")]
+    public void ThenFollowerCShouldReceiveAccessDeniedForPostComments()
+    {
+        var response = GetLastSocialCommentsPageResponse();
+        response.Success.Should().BeFalse();
+        response.Message.Should().Be("You do not have permission to access this private thread.");
+    }
+
+    [Then(@"FollowerC should receive access denied for post replies")]
+    public void ThenFollowerCShouldReceiveAccessDeniedForPostReplies()
+    {
+        var response = GetLastSocialThreadRepliesResponse();
+        response.Success.Should().BeFalse();
+        response.Message.Should().Be("You do not have permission to access this private thread.");
+    }
+
     [When(@"Owner requests social composer contract in private mode")]
     public async Task WhenOwnerRequestsSocialComposerContractInPrivateMode()
     {
@@ -1316,6 +1377,145 @@ public sealed class HushSocialIntegrationSteps
         return postId!;
     }
 
+    private async Task SubmitSocialThreadEntryAsync(
+        string userName,
+        string postTitle,
+        string content,
+        FeedMessageId? replyToMessageId = null)
+    {
+        var identity = GetTestIdentity(userName);
+        var postId = Guid.Parse(GetStoredPostId(postTitle));
+        var blockchainClient = GetGrpcFactory().CreateClient<HushBlockchain.HushBlockchainClient>();
+        var (signedTransaction, messageId) = TestTransactionFactory.CreateSocialThreadEntry(
+            identity,
+            postId,
+            content,
+            replyToMessageId);
+
+        var response = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction
+        });
+
+        response.Successfull.Should().BeTrue($"Social thread entry should succeed: {response.Message}");
+        await GetBlockControl().ProduceBlockAsync();
+
+        GetOrCreateSocialThreadEntriesByContent()[content] = messageId;
+        GetOrCreateSocialThreadPostTitlesByContent()[content] = postTitle;
+    }
+
+    private async Task AssertAuthorizedThreadViewAsync(
+        string requesterPublicAddress,
+        string postTitle,
+        string commentText,
+        string replyText)
+    {
+        var commentsResponse = await LoadCommentsPageAsync(postTitle, requesterPublicAddress, true);
+        commentsResponse.Success.Should().BeTrue($"Authorized comment retrieval should succeed: {commentsResponse.Message}");
+        commentsResponse.Comments.Should().ContainSingle(comment => comment.Content == commentText);
+
+        var comment = commentsResponse.Comments.Single(comment => comment.Content == commentText);
+        comment.Kind.Should().Be(SocialThreadEntryKindProto.SocialThreadEntryKindComment);
+
+        var repliesResponse = await LoadRepliesPageAsync(postTitle, Guid.Parse(comment.EntryId), requesterPublicAddress, true);
+        repliesResponse.Success.Should().BeTrue($"Authorized reply retrieval should succeed: {repliesResponse.Message}");
+        repliesResponse.Replies.Should().ContainSingle(reply => reply.Content == replyText);
+
+        var reply = repliesResponse.Replies.Single(entry => entry.Content == replyText);
+        reply.Kind.Should().Be(SocialThreadEntryKindProto.SocialThreadEntryKindReply);
+        reply.ThreadRootId.Should().Be(comment.EntryId);
+    }
+
+    private async Task<GetSocialCommentsPageResponse> LoadCommentsPageAsync(
+        string postTitle,
+        string? requesterPublicAddress,
+        bool isAuthenticated)
+    {
+        var postId = GetStoredPostId(postTitle);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var response = await feedClient.GetSocialCommentsPageAsync(new GetSocialCommentsPageRequest
+        {
+            PostId = postId,
+            RequesterPublicAddress = requesterPublicAddress ?? string.Empty,
+            IsAuthenticated = isAuthenticated,
+            Limit = 10
+        });
+
+        _scenarioContext[LastSocialCommentsPageResponseKey] = response;
+        return response;
+    }
+
+    private async Task<GetSocialThreadRepliesResponse> LoadRepliesPageAsync(
+        string postTitle,
+        FeedMessageId threadRootId,
+        string? requesterPublicAddress,
+        bool isAuthenticated)
+    {
+        return await LoadRepliesPageAsync(postTitle, threadRootId.Value, requesterPublicAddress, isAuthenticated);
+    }
+
+    private async Task<GetSocialThreadRepliesResponse> LoadRepliesPageAsync(
+        string postTitle,
+        Guid threadRootId,
+        string? requesterPublicAddress,
+        bool isAuthenticated)
+    {
+        var postId = GetStoredPostId(postTitle);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var response = await feedClient.GetSocialThreadRepliesAsync(new GetSocialThreadRepliesRequest
+        {
+            PostId = postId,
+            ThreadRootId = threadRootId.ToString("D"),
+            RequesterPublicAddress = requesterPublicAddress ?? string.Empty,
+            IsAuthenticated = isAuthenticated,
+            Limit = 5
+        });
+
+        _scenarioContext[LastSocialThreadRepliesResponseKey] = response;
+        return response;
+    }
+
+    private string FindPostTitleForThreadEntry(FeedMessageId threadEntryId)
+    {
+        var threadEntries = GetOrCreateSocialThreadEntriesByContent();
+        var postTitles = GetOrCreateSocialThreadPostTitlesByContent();
+        foreach (var (content, entryId) in threadEntries)
+        {
+            if (entryId == threadEntryId && postTitles.TryGetValue(content, out var postTitle))
+            {
+                return postTitle;
+            }
+        }
+
+        throw new InvalidOperationException($"Unable to resolve post title for thread entry {threadEntryId}.");
+    }
+
+    private Dictionary<string, FeedMessageId> GetOrCreateSocialThreadEntriesByContent()
+    {
+        if (_scenarioContext.TryGetValue(SocialThreadEntriesByContentKey, out var existing)
+            && existing is Dictionary<string, FeedMessageId> map)
+        {
+            return map;
+        }
+
+        var created = new Dictionary<string, FeedMessageId>(StringComparer.Ordinal);
+        _scenarioContext[SocialThreadEntriesByContentKey] = created;
+        return created;
+    }
+
+    private Dictionary<string, string> GetOrCreateSocialThreadPostTitlesByContent()
+    {
+        if (_scenarioContext.TryGetValue(SocialThreadPostTitlesByContentKey, out var existing)
+            && existing is Dictionary<string, string> map)
+        {
+            return map;
+        }
+
+        var created = new Dictionary<string, string>(StringComparer.Ordinal);
+        _scenarioContext[SocialThreadPostTitlesByContentKey] = created;
+        return created;
+    }
+
     private Dictionary<string, string> GetOrCreateSocialPostsByTitle()
     {
         if (_scenarioContext.TryGetValue(SocialPostsByTitleKey, out var existing)
@@ -1516,6 +1716,24 @@ public sealed class HushSocialIntegrationSteps
             .BeTrue("expected a previously fetched permalink response");
         responseObj.Should().BeOfType<GetSocialPostPermalinkResponse>();
         return (GetSocialPostPermalinkResponse)responseObj!;
+    }
+
+    private GetSocialCommentsPageResponse GetLastSocialCommentsPageResponse()
+    {
+        _scenarioContext.TryGetValue(LastSocialCommentsPageResponseKey, out var responseObj)
+            .Should()
+            .BeTrue("expected a previously fetched social comments page response");
+        responseObj.Should().BeOfType<GetSocialCommentsPageResponse>();
+        return (GetSocialCommentsPageResponse)responseObj!;
+    }
+
+    private GetSocialThreadRepliesResponse GetLastSocialThreadRepliesResponse()
+    {
+        _scenarioContext.TryGetValue(LastSocialThreadRepliesResponseKey, out var responseObj)
+            .Should()
+            .BeTrue("expected a previously fetched social thread replies response");
+        responseObj.Should().BeOfType<GetSocialThreadRepliesResponse>();
+        return (GetSocialThreadRepliesResponse)responseObj!;
     }
 
     private GetSocialComposerContractResponse GetLastSocialComposerContractResponse()

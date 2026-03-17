@@ -175,7 +175,7 @@ Feature: HushSocial end-to-end walkthrough
     And FollowerB should see reaction count 1 on permalink for post "Permalink reaction signal"
     And FollowerB should see reaction emoji "thumbs_up" on permalink for post "Permalink reaction signal"
 
-  @FEAT-088 @ignore @HS-E2E-088-COMMENTS
+  @FEAT-088 @HS-E2E-088-COMMENTS
   Scenario: Comments and single-level replies on authorized post
     Given Owner has created Open post "Discuss architecture" via browser
     When FollowerA reacts to post "Discuss architecture" with emoji "thumbs_up" via browser

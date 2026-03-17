@@ -743,15 +743,16 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Comments and single-level replies inherit post audience", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="Comments and single-level replies inherit post audience")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Comments and single-level replies inherit post audience")]
         [Xunit.TraitAttribute("Category", "FEAT-088")]
+        [Xunit.TraitAttribute("Category", "HS-INT-088-COMMENTS")]
         public void CommentsAndSingle_LevelRepliesInheritPostAudience()
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-088",
-                    "ignore"};
+                    "HS-INT-088-COMMENTS"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Comments and single-level replies inherit post audience", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 145

@@ -353,6 +353,89 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         await replyButton.ClickAsync();
     }
 
+    [When(@"FollowerA comments ""(.*)"" on post ""(.*)"" via browser")]
+    public async Task WhenFollowerACommentsOnPostViaBrowser(string commentText, string postTitle)
+    {
+        await SubmitCommentViaBrowserAsync("FollowerA", postTitle, commentText);
+    }
+
+    [When(@"Owner replies ""(.*)"" to comment ""(.*)"" via browser")]
+    public async Task WhenOwnerRepliesToCommentViaBrowser(string replyText, string commentText)
+    {
+        var ownerPage = GetUserPage("Owner");
+        await OpenPostDetailForUserAsync("Owner", "Discuss architecture");
+
+        var commentCard = ownerPage.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = commentText })
+            .First;
+        await commentCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var replyButton = commentCard.GetByTestId(new Regex("^post-detail-reply-reply-"));
+        await replyButton.First.ClickAsync();
+
+        var inlineComposer = await WaitForTestIdAsync(ownerPage, "inline-composer-input", 5000);
+        await inlineComposer.FillAsync(replyText);
+
+        using var waiter = StartListeningForTransactions(1);
+        await ClickTestIdAsync(ownerPage, "inline-composer-send");
+        await AwaitTransactionsAndProduceBlockAsync(waiter);
+        await TriggerSyncAsync(ownerPage);
+
+        await OpenPostDetailForUserAsync("Owner", "Discuss architecture", forceReopen: true);
+        await ExpandThreadForTextAsync(ownerPage, commentText);
+
+        var replyCard = ownerPage.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = replyText })
+            .First;
+        await replyCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+    }
+
+    [Then(@"both users should see comment ""(.*)""")]
+    public async Task ThenBothUsersShouldSeeComment(string commentText)
+    {
+        await AssertThreadTextVisibleForUserAsync("Owner", "Discuss architecture", commentText);
+        await AssertThreadTextVisibleForUserAsync("FollowerA", "Discuss architecture", commentText);
+    }
+
+    [Then(@"both users should see reply ""(.*)""")]
+    public async Task ThenBothUsersShouldSeeReply(string replyText)
+    {
+        await AssertThreadTextVisibleForUserAsync("Owner", "Discuss architecture", replyText);
+        await AssertThreadTextVisibleForUserAsync("FollowerA", "Discuss architecture", replyText);
+    }
+
+    [Then(@"the reply action should be limited to single-level depth")]
+    public async Task ThenTheReplyActionShouldBeLimitedToSingleLevelDepth()
+    {
+        var ownerPage = GetUserPage("Owner");
+        await OpenPostDetailForUserAsync("Owner", "Discuss architecture", forceReopen: true);
+        await ExpandThreadForTextAsync(ownerPage, "Looks good");
+
+        var childReplyCard = ownerPage.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = "Thanks for feedback" })
+            .Last;
+        await childReplyCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var testId = await childReplyCard.GetAttributeAsync("data-testid");
+        testId.Should().NotBeNullOrWhiteSpace();
+
+        var childReplyId = testId!["post-detail-reply-".Length..];
+        var nestedToggleCount = await ownerPage.GetByTestId($"post-detail-thread-toggle-{childReplyId}").CountAsync();
+        nestedToggleCount.Should().Be(0, "child replies must not spawn a second nested reply-thread level");
+    }
+
     [When(@"FollowerA reacts to post ""(.*)"" with emoji ""(.*)"" via browser")]
     [When(@"Owner reacts to post ""(.*)"" with emoji ""(.*)"" via browser")]
     public async Task WhenUserReactsToPostViaBrowser(string postTitle, string emojiName)
@@ -1735,6 +1818,147 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         {
             post.Visibility.Should().Be(SocialPostVisibilityProto.SocialPostVisibilityOpen);
             post.CircleFeedIds.Should().BeEmpty();
+        }
+    }
+
+    private async Task SubmitCommentViaBrowserAsync(string userName, string postTitle, string commentText)
+    {
+        var page = GetUserPage(userName);
+        await OpenPostDetailForUserAsync(userName, postTitle);
+
+        var replyButton = await WaitForTestIdAsync(page, $"post-detail-action-reply-{GetStoredPostId(postTitle)}", 10000);
+        await replyButton.ClickAsync();
+
+        var composer = await WaitForTestIdAsync(page, "post-detail-composer-input", 5000);
+        await composer.FillAsync(commentText);
+
+        using var waiter = StartListeningForTransactions(1);
+        await ClickTestIdAsync(page, "post-detail-composer-send");
+        await AwaitTransactionsAndProduceBlockAsync(waiter);
+        await TriggerSyncAsync(page);
+
+        await page.GetByText(commentText, new PageGetByTextOptions { Exact = true }).First.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+    }
+
+    private async Task AssertThreadTextVisibleForUserAsync(string userName, string postTitle, string expectedText)
+    {
+        var page = GetUserPage(userName);
+        await OpenPostDetailForUserAsync(userName, postTitle, forceReopen: true);
+
+        var initialTarget = page.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = expectedText })
+            .First;
+        try
+        {
+            await initialTarget.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = 1000
+            });
+        }
+        catch (TimeoutException)
+        {
+            await ExpandAllCollapsedReplyThreadsAsync(page);
+        }
+
+        await initialTarget.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+    }
+
+    private async Task OpenPostDetailForUserAsync(string userName, string postTitle, bool forceReopen = false)
+    {
+        var page = GetUserPage(userName);
+        var postId = GetStoredPostId(postTitle);
+
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+        await WaitForVisiblePostAsync(page, postTitle);
+
+        var overlay = page.GetByTestId("post-detail-overlay");
+        if (await overlay.CountAsync() > 0 && await overlay.First.IsVisibleAsync())
+        {
+            if (!forceReopen)
+            {
+                return;
+            }
+
+            await ClickTestIdAsync(page, "close-post-detail");
+            await overlay.First.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Hidden,
+                Timeout = 10000
+            });
+        }
+
+        var postCard = page.GetByTestId($"social-post-{postId}").First;
+        await postCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 15000
+        });
+        await postCard.ClickAsync();
+
+        await overlay.First.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+    }
+
+    private async Task ExpandThreadForTextAsync(IPage page, string commentText)
+    {
+        var commentCard = page.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = commentText })
+            .First;
+
+        try
+        {
+            await commentCard.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = 10000
+            });
+        }
+        catch (TimeoutException)
+        {
+            return;
+        }
+
+        var toggleButton = commentCard.GetByTestId(new Regex("^post-detail-thread-toggle-")).First;
+        if (await toggleButton.CountAsync() == 0)
+        {
+            return;
+        }
+
+        var toggleLabel = await toggleButton.InnerTextAsync();
+        if (toggleLabel.Contains("View replies", StringComparison.OrdinalIgnoreCase))
+        {
+            await toggleButton.ClickAsync();
+        }
+    }
+
+    private async Task ExpandAllCollapsedReplyThreadsAsync(IPage page)
+    {
+        var toggleButtons = page.Locator("[data-testid^='post-detail-thread-toggle-']");
+        var toggleCount = await toggleButtons.CountAsync();
+
+        for (var index = 0; index < toggleCount; index += 1)
+        {
+            var toggleButton = toggleButtons.Nth(index);
+            var toggleLabel = await toggleButton.InnerTextAsync();
+            if (!toggleLabel.Contains("View replies", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            await toggleButton.ClickAsync();
         }
     }
 
