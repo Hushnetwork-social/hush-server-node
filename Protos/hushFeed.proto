@@ -726,6 +726,7 @@ message SocialFeedWallPostProto {
   repeated SocialPostAttachmentProto Attachments = 8;
   optional string ReactionScopeId = 9;
   optional bytes AuthorCommitment = 10;
+  optional int32 ReplyCount = 11;
 }
 
 message GetSocialFeedWallResponse {

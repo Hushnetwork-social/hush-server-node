@@ -3,6 +3,7 @@ using HushNetwork.proto;
 using HushNode.Feeds.gRPC;
 using HushNode.Feeds.Storage;
 using HushShared.Blockchain.BlockModel;
+using HushShared.Blockchain.Model;
 using HushShared.Feeds.Model;
 using Moq;
 using Olimpo;
@@ -122,6 +123,7 @@ public class SocialPostApplicationServiceTests
         var postId = Guid.NewGuid();
         var feedsStorage = new Mock<IFeedsStorageService>(MockBehavior.Strict);
         var attachmentStorage = new Mock<IAttachmentStorageService>(MockBehavior.Strict);
+        var feedMessageStorage = new Mock<IFeedMessageStorageService>(MockBehavior.Strict);
 
         feedsStorage
             .Setup(x => x.GetSocialPostAsync(postId))
@@ -140,7 +142,7 @@ public class SocialPostApplicationServiceTests
             .ReturnsAsync(Array.Empty<AttachmentEntity>())
             .Verifiable();
 
-        var service = new SocialPostApplicationService(feedsStorage.Object, attachmentStorage.Object);
+        var service = new SocialPostApplicationService(feedsStorage.Object, attachmentStorage.Object, feedMessageStorage.Object);
 
         var response = await service.GetSocialPostPermalinkAsync(new GetSocialPostPermalinkRequest
         {
@@ -151,6 +153,47 @@ public class SocialPostApplicationServiceTests
 
         response.Success.Should().BeTrue();
         attachmentStorage.Verify();
+    }
+
+    [Fact]
+    public async Task GetSocialFeedWallAsync_ShouldIncludeReplyCountForVisiblePosts()
+    {
+        var postId = Guid.NewGuid();
+        var feedId = new FeedId(postId);
+        var service = CreateService(out var feedsStorage, out _, out var feedMessageStorage);
+
+        feedsStorage
+            .Setup(x => x.GetLatestSocialPostsAsync(50))
+            .ReturnsAsync(new[]
+            {
+                new SocialPostEntity
+                {
+                    PostId = postId,
+                    ReactionScopeId = postId,
+                    AuthorPublicAddress = "owner-address",
+                    Content = "public content",
+                    AudienceVisibility = SocialPostVisibility.Open,
+                    CreatedAtBlock = new BlockIndex(99)
+                }
+            });
+
+        feedMessageStorage
+            .Setup(x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.Is<BlockIndex>(blockIndex => blockIndex.Value == 0)))
+            .ReturnsAsync(new[]
+            {
+                BuildFeedMessage(postId, postId, null, 100),
+                BuildFeedMessage(postId, Guid.NewGuid(), new FeedMessageId(postId), 101)
+            });
+
+        var response = await service.GetSocialFeedWallAsync(new GetSocialFeedWallRequest
+        {
+            IsAuthenticated = true,
+            RequesterPublicAddress = "viewer-address"
+        });
+
+        response.Success.Should().BeTrue();
+        response.Posts.Should().ContainSingle();
+        response.Posts[0].ReplyCount.Should().Be(2);
     }
 
     private static SocialPostEntity BuildPrivatePost(Guid postId, string ownerAddress, Guid circleId)
@@ -176,14 +219,36 @@ public class SocialPostApplicationServiceTests
         return post;
     }
 
+    private static FeedMessage BuildFeedMessage(Guid postId, Guid messageId, FeedMessageId? replyToMessageId, long timestamp) =>
+        new(
+            new FeedMessageId(messageId),
+            new FeedId(postId),
+            $"message-{messageId}",
+            "author-address",
+            new Timestamp(DateTime.UnixEpoch.AddSeconds(timestamp)),
+            new BlockIndex(timestamp),
+            ReplyToMessageId: replyToMessageId);
+
     private static SocialPostApplicationService CreateService(out Mock<IFeedsStorageService> feedsStorage)
     {
+        return CreateService(out feedsStorage, out _, out _);
+    }
+
+    private static SocialPostApplicationService CreateService(
+        out Mock<IFeedsStorageService> feedsStorage,
+        out Mock<IAttachmentStorageService> attachmentStorage,
+        out Mock<IFeedMessageStorageService> feedMessageStorage)
+    {
         feedsStorage = new Mock<IFeedsStorageService>(MockBehavior.Strict);
-        var attachmentStorage = new Mock<IAttachmentStorageService>(MockBehavior.Strict);
+        attachmentStorage = new Mock<IAttachmentStorageService>(MockBehavior.Strict);
+        feedMessageStorage = new Mock<IFeedMessageStorageService>(MockBehavior.Strict);
         attachmentStorage
             .Setup(x => x.GetByMessageIdAsync(It.IsAny<FeedMessageId>()))
             .ReturnsAsync(Array.Empty<AttachmentEntity>());
+        feedMessageStorage
+            .Setup(x => x.RetrieveLastFeedMessagesForFeedAsync(It.IsAny<FeedId>(), It.IsAny<BlockIndex>()))
+            .ReturnsAsync(Array.Empty<FeedMessage>());
 
-        return new SocialPostApplicationService(feedsStorage.Object, attachmentStorage.Object);
+        return new SocialPostApplicationService(feedsStorage.Object, attachmentStorage.Object, feedMessageStorage.Object);
     }
 }

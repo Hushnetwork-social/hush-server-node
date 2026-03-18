@@ -6,11 +6,18 @@ namespace HushNode.Caching;
 public static class FeedParticipantsCacheConstants
 {
     /// <summary>
-    /// Time-to-live for feed participants and key generations cache entries.
-    /// 1 hour is appropriate as membership changes are infrequent.
+    /// Time-to-live for feed participants cache entries.
+    /// Membership lists can change more frequently, so keep this shorter.
+    /// </summary>
+    public static readonly TimeSpan ParticipantsCacheTtl = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Time-to-live for key generations cache entries.
+    /// Key generations are append-only and explicitly invalidated on membership changes,
+    /// so a long TTL is safe and keeps PostgreSQL out of the hot read path.
     /// TTL is refreshed on cache hit.
     /// </summary>
-    public static readonly TimeSpan CacheTtl = TimeSpan.FromHours(1);
+    public static readonly TimeSpan KeyGenerationsCacheTtl = TimeSpan.FromDays(30);
 
     /// <summary>
     /// Key prefix for participants cache entries.

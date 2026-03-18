@@ -1,5 +1,6 @@
 using HushNetwork.proto;
 using HushNode.Feeds.Storage;
+using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
 using Olimpo;
 using Google.Protobuf;
@@ -8,10 +9,12 @@ namespace HushNode.Feeds.gRPC;
 
 public sealed class SocialPostApplicationService(
     IFeedsStorageService feedsStorageService,
-    IAttachmentStorageService attachmentStorageService) : ISocialPostApplicationService
+    IAttachmentStorageService attachmentStorageService,
+    IFeedMessageStorageService feedMessageStorageService) : ISocialPostApplicationService
 {
     private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
     private readonly IAttachmentStorageService _attachmentStorageService = attachmentStorageService;
+    private readonly IFeedMessageStorageService _feedMessageStorageService = feedMessageStorageService;
 
     public Task<CreateSocialPostResponse> CreateSocialPostAsync(CreateSocialPostRequest _)
     {
@@ -183,6 +186,7 @@ public sealed class SocialPostApplicationService(
                 Content = post.Content,
                 CreatedAtBlock = post.CreatedAtBlock.Value,
                 CreatedAtUnixMs = post.CreatedAtUnixMs,
+                ReplyCount = await this.GetThreadEntryCountAsync(post.PostId),
                 Visibility = post.AudienceVisibility == SocialPostVisibility.Private
                     ? SocialPostVisibilityProto.SocialPostVisibilityPrivate
                     : SocialPostVisibilityProto.SocialPostVisibilityOpen
@@ -242,5 +246,13 @@ public sealed class SocialPostApplicationService(
                     : SocialPostAttachmentKindProto.SocialPostAttachmentKindImage
             })
             .ToArray();
+    }
+
+    private async Task<int> GetThreadEntryCountAsync(Guid postId)
+    {
+        var messages = await this._feedMessageStorageService.RetrieveLastFeedMessagesForFeedAsync(
+            new FeedId(postId),
+            new BlockIndex(0));
+        return messages.Count();
     }
 }

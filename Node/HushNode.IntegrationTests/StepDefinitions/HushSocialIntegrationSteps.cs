@@ -711,6 +711,18 @@ public sealed class HushSocialIntegrationSteps
             commentId);
     }
 
+    [When(@"(.*) reacts to comment ""(.*)"" with ""(.*)""")]
+    public async Task WhenUserReactsToComment(string userName, string commentText, string emojiName)
+    {
+        await SubmitSocialThreadReactionAsync(userName, commentText, emojiName);
+    }
+
+    [When(@"(.*) reacts to reply ""(.*)"" with ""(.*)""")]
+    public async Task WhenUserReactsToReply(string userName, string replyText, string emojiName)
+    {
+        await SubmitSocialThreadReactionAsync(userName, replyText, emojiName);
+    }
+
     [Then(@"FollowerA should see comment ""(.*)"" and reply ""(.*)""")]
     public async Task ThenFollowerAShouldSeeCommentAndReply(string commentText, string replyText)
     {
@@ -729,6 +741,20 @@ public sealed class HushSocialIntegrationSteps
         {
             await LoadRepliesPageAsync(postTitle, commentId, follower.PublicSigningAddress, true);
         }
+    }
+
+    [Then(@"authorized viewers should see reaction tally updates on comment ""(.*)""")]
+    public async Task ThenAuthorizedViewersShouldSeeReactionTallyUpdatesOnComment(string commentText)
+    {
+        await AssertAuthorizedThreadReactionVisibleAsync("Architecture thread", commentText, "FollowerA");
+        await AssertAuthorizedThreadReactionVisibleAsync("Architecture thread", commentText, "Owner");
+    }
+
+    [Then(@"authorized viewers should see reaction tally updates on reply ""(.*)""")]
+    public async Task ThenAuthorizedViewersShouldSeeReactionTallyUpdatesOnReply(string replyText)
+    {
+        await AssertAuthorizedThreadReactionVisibleAsync("Architecture thread", replyText, "FollowerA");
+        await AssertAuthorizedThreadReactionVisibleAsync("Architecture thread", replyText, "Owner");
     }
 
     [Then(@"FollowerC should receive access denied for post comments")]
@@ -1637,6 +1663,35 @@ public sealed class HushSocialIntegrationSteps
         await GetBlockControl().ProduceBlockAsync();
     }
 
+    private async Task SubmitSocialThreadReactionAsync(string userName, string threadEntryContent, string emojiName)
+    {
+        var threadEntries = GetOrCreateSocialThreadEntriesByContent();
+        threadEntries.TryGetValue(threadEntryContent, out var threadEntryId)
+            .Should()
+            .BeTrue($"thread entry '{threadEntryContent}' should exist before reacting");
+
+        var postTitle = FindPostTitleForThreadEntry(new FeedMessageId(threadEntryId!.Value));
+        var identity = GetTestIdentity(userName);
+        var postId = Guid.Parse(GetStoredPostId(postTitle));
+        var reactionScopeId = new FeedId(postId);
+        var nullifier = GetSocialThreadReactionNullifier(userName, threadEntryContent);
+        var signedTransaction = TestTransactionFactory.CreateDevModeReaction(
+            identity,
+            reactionScopeId,
+            new FeedMessageId(threadEntryId.Value),
+            nullifier,
+            ResolveReactionIndex(emojiName));
+
+        var blockchainClient = GetGrpcFactory().CreateClient<HushBlockchain.HushBlockchainClient>();
+        var response = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction
+        });
+
+        response.Successfull.Should().BeTrue($"Thread reaction submission should succeed for {userName}: {response.Message}");
+        await GetBlockControl().ProduceBlockAsync();
+    }
+
     private async Task<IReadOnlyList<MessageReactionTally>> GetSocialReactionTalliesAsync(string postTitle)
     {
         var postId = Guid.Parse(GetStoredPostId(postTitle));
@@ -1647,9 +1702,25 @@ public sealed class HushSocialIntegrationSteps
         return tallies.ToList();
     }
 
+    private async Task<IReadOnlyList<MessageReactionTally>> GetSocialReactionTalliesAsync(string postTitle, FeedMessageId messageId)
+    {
+        var postId = Guid.Parse(GetStoredPostId(postTitle));
+        var tallies = await GetReactionService().GetTalliesAsync(
+            new FeedId(postId),
+            [messageId]);
+
+        return tallies.ToList();
+    }
+
     private static byte[] GetSocialReactionNullifier(string userName, string postTitle)
     {
         var material = Encoding.UTF8.GetBytes($"feat087:{userName}:{postTitle}");
+        return System.Security.Cryptography.SHA256.HashData(material);
+    }
+
+    private static byte[] GetSocialThreadReactionNullifier(string userName, string threadEntryContent)
+    {
+        var material = Encoding.UTF8.GetBytes($"feat088-thread:{userName}:{threadEntryContent}");
         return System.Security.Cryptography.SHA256.HashData(material);
     }
 
@@ -1697,6 +1768,44 @@ public sealed class HushSocialIntegrationSteps
 
     private IReactionService GetReactionService() =>
         GetNode().Services.GetRequiredService<IReactionService>();
+
+    private async Task AssertAuthorizedThreadReactionVisibleAsync(
+        string postTitle,
+        string threadEntryContent,
+        string requesterUserName)
+    {
+        var threadEntries = GetOrCreateSocialThreadEntriesByContent();
+        threadEntries.TryGetValue(threadEntryContent, out var threadEntryId)
+            .Should()
+            .BeTrue($"thread entry '{threadEntryContent}' should exist before asserting reactions");
+
+        var tallies = await GetSocialReactionTalliesAsync(postTitle, new FeedMessageId(threadEntryId.Value));
+        tallies.Should().ContainSingle($"thread entry '{threadEntryContent}' should have exactly one tally row");
+        tallies[0].TotalCount.Should().BeGreaterThan(0, $"thread entry '{threadEntryContent}' should accumulate at least one reaction");
+
+        var requester = GetTestIdentity(requesterUserName);
+        var commentsResponse = await LoadCommentsPageAsync(postTitle, requester.PublicSigningAddress, true);
+        var commentMatch = commentsResponse.Comments.FirstOrDefault(comment => comment.Content == threadEntryContent);
+        if (commentMatch != null)
+        {
+            commentMatch.ReactionCount.Should().BeGreaterThan(0, $"authorized viewer '{requesterUserName}' should receive aggregate reaction count for comment '{threadEntryContent}'");
+            return;
+        }
+
+        var postId = GetStoredPostId(postTitle);
+        foreach (var comment in commentsResponse.Comments)
+        {
+            var repliesResponse = await LoadRepliesPageAsync(postTitle, Guid.Parse(comment.EntryId), requester.PublicSigningAddress, true);
+            var replyMatch = repliesResponse.Replies.FirstOrDefault(reply => reply.Content == threadEntryContent);
+            if (replyMatch != null)
+            {
+                replyMatch.ReactionCount.Should().BeGreaterThan(0, $"authorized viewer '{requesterUserName}' should receive aggregate reaction count for reply '{threadEntryContent}'");
+                return;
+            }
+        }
+
+        throw new InvalidOperationException($"Unable to locate thread entry '{threadEntryContent}' in authorized thread responses for post '{postId}'.");
+    }
 
     private HushServerNode.HushServerNodeCore GetNode()
     {
