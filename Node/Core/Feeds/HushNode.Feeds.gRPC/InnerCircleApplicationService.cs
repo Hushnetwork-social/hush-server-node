@@ -206,6 +206,50 @@ public class InnerCircleApplicationService(
         };
     }
 
+    public async Task<FollowSocialAuthorResponse> FollowSocialAuthorAsync(FollowSocialAuthorRequest request)
+    {
+        var viewer = request.ViewerPublicAddress?.Trim() ?? string.Empty;
+        var author = request.AuthorPublicAddress?.Trim() ?? string.Empty;
+        var requester = request.RequesterPublicAddress?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(viewer) || string.IsNullOrWhiteSpace(author))
+        {
+            return new FollowSocialAuthorResponse
+            {
+                Success = false,
+                Message = "ViewerPublicAddress and AuthorPublicAddress are required",
+                ErrorCode = "SOCIAL_FOLLOW_INVALID_REQUEST",
+                RequiresSyncRefresh = false
+            };
+        }
+
+        if (!string.Equals(viewer, requester, StringComparison.Ordinal))
+        {
+            return new FollowSocialAuthorResponse
+            {
+                Success = false,
+                Message = "Only the viewer can request the follow operation",
+                ErrorCode = "SOCIAL_FOLLOW_UNAUTHORIZED",
+                RequiresSyncRefresh = false
+            };
+        }
+
+        var bootstrapState = await this._feedsStorageService.GetSocialFollowBootstrapStateAsync(viewer, author);
+        return new FollowSocialAuthorResponse
+        {
+            Success = false,
+            Message = bootstrapState.AlreadyFollowing
+                ? "Author is already followed"
+                : "FollowSocialAuthor contract is defined, but atomic follow execution is implemented in the next phase.",
+            ErrorCode = bootstrapState.AlreadyFollowing
+                ? "SOCIAL_FOLLOW_ALREADY_FOLLOWING"
+                : "SOCIAL_FOLLOW_NOT_IMPLEMENTED",
+            AlreadyFollowing = bootstrapState.AlreadyFollowing,
+            RequiresSyncRefresh = bootstrapState.AlreadyFollowing,
+            InnerCircleFeedId = bootstrapState.InnerCircleFeedId?.ToString()
+        };
+    }
+
     public async Task<AddMembersToInnerCircleResponse> AddMembersToInnerCircleAsync(
         string ownerPublicAddress,
         string requesterPublicAddress,

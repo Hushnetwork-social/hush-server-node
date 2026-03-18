@@ -96,6 +96,17 @@ public interface IFeedsStorageService
     Task<bool> OwnerHasChatFeedWithMemberAsync(string ownerPublicAddress, string memberPublicAddress);
 
     /// <summary>
+    /// Resolves the current follow state for a viewer-author pair from persisted Inner Circle
+    /// and direct-chat relationships.
+    /// </summary>
+    Task<SocialFollowStateResolution> GetSocialFollowStateAsync(string viewerPublicAddress, string authorPublicAddress);
+
+    /// <summary>
+    /// Resolves the current bootstrap prerequisites for an atomic follow operation.
+    /// </summary>
+    Task<SocialFollowBootstrapState> GetSocialFollowBootstrapStateAsync(string viewerPublicAddress, string authorPublicAddress);
+
+    /// <summary>
     /// Get a specific participant from a group feed.
     /// </summary>
     Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress);

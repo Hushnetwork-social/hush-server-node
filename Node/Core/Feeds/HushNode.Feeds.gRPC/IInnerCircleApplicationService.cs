@@ -6,6 +6,7 @@ public interface IInnerCircleApplicationService
 {
     Task<GetInnerCircleResponse> GetInnerCircleAsync(string ownerPublicAddress);
     Task<CreateInnerCircleResponse> CreateInnerCircleAsync(string ownerPublicAddress, string requesterPublicAddress);
+    Task<FollowSocialAuthorResponse> FollowSocialAuthorAsync(FollowSocialAuthorRequest request);
     Task<AddMembersToInnerCircleResponse> AddMembersToInnerCircleAsync(
         string ownerPublicAddress,
         string requesterPublicAddress,

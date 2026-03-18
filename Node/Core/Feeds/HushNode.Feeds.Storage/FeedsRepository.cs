@@ -260,6 +260,61 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .AnyAsync(f => f.Participants.Any(p => p.ParticipantPublicAddress == memberPublicAddress));
     }
 
+    public async Task<SocialFollowStateResolution> GetSocialFollowStateAsync(string viewerPublicAddress, string authorPublicAddress)
+    {
+        var bootstrapState = await GetSocialFollowBootstrapStateAsync(viewerPublicAddress, authorPublicAddress);
+        var canFollow =
+            !string.IsNullOrWhiteSpace(viewerPublicAddress) &&
+            !string.IsNullOrWhiteSpace(authorPublicAddress) &&
+            !string.Equals(viewerPublicAddress, authorPublicAddress, StringComparison.Ordinal);
+
+        return new SocialFollowStateResolution(
+            IsFollowing: bootstrapState.AlreadyFollowing,
+            CanFollow: canFollow && !bootstrapState.AlreadyFollowing);
+    }
+
+    public async Task<SocialFollowBootstrapState> GetSocialFollowBootstrapStateAsync(string viewerPublicAddress, string authorPublicAddress)
+    {
+        if (string.IsNullOrWhiteSpace(viewerPublicAddress) || string.IsNullOrWhiteSpace(authorPublicAddress))
+        {
+            return new SocialFollowBootstrapState(false, false, false, null);
+        }
+
+        if (string.Equals(viewerPublicAddress, authorPublicAddress, StringComparison.Ordinal))
+        {
+            return new SocialFollowBootstrapState(false, false, false, null);
+        }
+
+        var innerCircle = await this.Context.GroupFeeds
+            .AsNoTracking()
+            .Where(g =>
+                g.OwnerPublicAddress == viewerPublicAddress &&
+                g.IsInnerCircle &&
+                !g.IsDeleted)
+            .Select(g => new { g.FeedId })
+            .FirstOrDefaultAsync();
+
+        var hasDirectChat = await OwnerHasChatFeedWithMemberAsync(viewerPublicAddress, authorPublicAddress);
+        if (innerCircle == null)
+        {
+            return new SocialFollowBootstrapState(false, false, hasDirectChat, null);
+        }
+
+        var isInnerCircleMember = await this.Context.GroupFeedParticipants
+            .AnyAsync(p =>
+                p.FeedId == innerCircle.FeedId &&
+                p.ParticipantPublicAddress == authorPublicAddress &&
+                p.LeftAtBlock == null &&
+                p.ParticipantType != ParticipantType.Banned &&
+                p.ParticipantType != ParticipantType.Blocked);
+
+        return new SocialFollowBootstrapState(
+            AlreadyFollowing: hasDirectChat && isInnerCircleMember,
+            HasInnerCircle: true,
+            HasDirectChat: hasDirectChat,
+            InnerCircleFeedId: innerCircle.FeedId);
+    }
+
     public async Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress) =>
         await this.Context.GroupFeedParticipants
             .FirstOrDefaultAsync(p =>

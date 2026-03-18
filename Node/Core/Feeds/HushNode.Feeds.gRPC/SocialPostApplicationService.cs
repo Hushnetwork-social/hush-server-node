@@ -29,6 +29,8 @@ public sealed class SocialPostApplicationService(
 
     public async Task<GetSocialPostPermalinkResponse> GetSocialPostPermalinkAsync(GetSocialPostPermalinkRequest request)
     {
+        var requester = request.RequesterPublicAddress?.Trim();
+
         if (!Guid.TryParse(request.PostId, out var postId))
         {
             return new GetSocialPostPermalinkResponse
@@ -71,6 +73,10 @@ public sealed class SocialPostApplicationService(
                 OpenGraph = PublicOg(post.Content),
                 Attachments = { attachments }
             };
+            openResponse.FollowState = await this.BuildFollowStateAsync(
+                requester,
+                request.IsAuthenticated,
+                post.AuthorPublicAddress);
             if (post.AuthorCommitment != null)
             {
                 openResponse.AuthorCommitment = ByteString.CopyFrom(post.AuthorCommitment);
@@ -97,7 +103,6 @@ public sealed class SocialPostApplicationService(
             };
         }
 
-        var requester = request.RequesterPublicAddress?.Trim();
         var isRequesterAuthor = !string.IsNullOrWhiteSpace(requester) &&
                                 string.Equals(requester, post.AuthorPublicAddress, StringComparison.Ordinal);
 
@@ -138,6 +143,10 @@ public sealed class SocialPostApplicationService(
             DenialKind = SocialPermalinkDenialKindProto.SocialPermalinkDenialKindNone,
             OpenGraph = PublicOg(post.Content)
         };
+        response.FollowState = await this.BuildFollowStateAsync(
+            requester,
+            request.IsAuthenticated,
+            post.AuthorPublicAddress);
 
         response.CircleFeedIds.AddRange(post.AudienceCircles.Select(x => x.CircleFeedId.ToString()));
         response.Attachments.AddRange(await this.GetSocialPostAttachmentsAsync(post.PostId));
@@ -196,6 +205,10 @@ public sealed class SocialPostApplicationService(
             {
                 postProto.AuthorCommitment = ByteString.CopyFrom(post.AuthorCommitment);
             }
+            postProto.FollowState = await this.BuildFollowStateAsync(
+                requester,
+                isAuthenticated,
+                post.AuthorPublicAddress);
             postProto.CircleFeedIds.AddRange(post.AudienceCircles.Select(x => x.CircleFeedId.ToString()));
             postProto.Attachments.AddRange(await this.GetSocialPostAttachmentsAsync(post.PostId));
             visiblePosts.Add(postProto);
@@ -255,5 +268,30 @@ public sealed class SocialPostApplicationService(
             new FeedId(postId),
             new BlockIndex(0));
         return messages.Count();
+    }
+
+    private async Task<SocialAuthorFollowStateProto> BuildFollowStateAsync(
+        string? requesterPublicAddress,
+        bool isAuthenticated,
+        string authorPublicAddress)
+    {
+        if (!isAuthenticated || string.IsNullOrWhiteSpace(requesterPublicAddress))
+        {
+            return new SocialAuthorFollowStateProto
+            {
+                IsFollowing = false,
+                CanFollow = false
+            };
+        }
+
+        var state = await this._feedsStorageService.GetSocialFollowStateAsync(
+            requesterPublicAddress,
+            authorPublicAddress);
+
+        return new SocialAuthorFollowStateProto
+        {
+            IsFollowing = state.IsFollowing,
+            CanFollow = state.CanFollow
+        };
     }
 }

@@ -103,6 +103,9 @@ public class SocialPostApplicationServiceTests
                 AudienceVisibility = SocialPostVisibility.Open,
                 CreatedAtBlock = new BlockIndex(99)
             });
+        feedsStorage
+            .Setup(x => x.GetSocialFollowStateAsync("someone", "owner-address"))
+            .ReturnsAsync(new SocialFollowStateResolution(false, true));
 
         var response = await service.GetSocialPostPermalinkAsync(new GetSocialPostPermalinkRequest
         {
@@ -116,6 +119,9 @@ public class SocialPostApplicationServiceTests
         response.ReactionScopeId.Should().Be(postId.ToString("D"));
         response.AuthorCommitment.Length.Should().Be(32);
         response.CanInteract.Should().BeTrue();
+        response.FollowState.Should().NotBeNull();
+        response.FollowState.IsFollowing.Should().BeFalse();
+        response.FollowState.CanFollow.Should().BeTrue();
     }
 
     [Fact]
@@ -137,6 +143,9 @@ public class SocialPostApplicationServiceTests
                 AudienceVisibility = SocialPostVisibility.Open,
                 CreatedAtBlock = new BlockIndex(99)
             });
+        feedsStorage
+            .Setup(x => x.GetSocialFollowStateAsync("someone", "owner-address"))
+            .ReturnsAsync(new SocialFollowStateResolution(false, true));
 
         attachmentStorage
             .Setup(x => x.GetByMessageIdAsync(It.Is<FeedMessageId>(id => id == new FeedMessageId(postId))))
@@ -177,6 +186,9 @@ public class SocialPostApplicationServiceTests
                     CreatedAtBlock = new BlockIndex(99)
                 }
             });
+        feedsStorage
+            .Setup(x => x.GetSocialFollowStateAsync("viewer-address", "owner-address"))
+            .ReturnsAsync(new SocialFollowStateResolution(false, true));
 
         feedMessageStorage
             .Setup(x => x.RetrieveLastFeedMessagesForFeedAsync(feedId, It.Is<BlockIndex>(blockIndex => blockIndex.Value == 0)))
@@ -195,6 +207,9 @@ public class SocialPostApplicationServiceTests
         response.Success.Should().BeTrue();
         response.Posts.Should().ContainSingle();
         response.Posts[0].ReplyCount.Should().Be(2);
+        response.Posts[0].FollowState.Should().NotBeNull();
+        response.Posts[0].FollowState.IsFollowing.Should().BeFalse();
+        response.Posts[0].FollowState.CanFollow.Should().BeTrue();
     }
 
     private static SocialPostEntity BuildPrivatePost(Guid postId, string ownerAddress, Guid circleId)
@@ -249,6 +264,9 @@ public class SocialPostApplicationServiceTests
         feedMessageStorage
             .Setup(x => x.RetrieveLastFeedMessagesForFeedAsync(It.IsAny<FeedId>(), It.IsAny<BlockIndex>()))
             .ReturnsAsync(Array.Empty<FeedMessage>());
+        feedsStorage
+            .Setup(x => x.GetSocialFollowStateAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(new SocialFollowStateResolution(false, true));
 
         return new SocialPostApplicationService(feedsStorage.Object, attachmentStorage.Object, feedMessageStorage.Object);
     }

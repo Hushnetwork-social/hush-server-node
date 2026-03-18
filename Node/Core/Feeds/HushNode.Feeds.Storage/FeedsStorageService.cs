@@ -350,6 +350,18 @@ public class FeedsStorageService(
             .GetRepository<IFeedsRepository>()
             .OwnerHasChatFeedWithMemberAsync(ownerPublicAddress, memberPublicAddress);
 
+    public async Task<SocialFollowStateResolution> GetSocialFollowStateAsync(string viewerPublicAddress, string authorPublicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetSocialFollowStateAsync(viewerPublicAddress, authorPublicAddress);
+
+    public async Task<SocialFollowBootstrapState> GetSocialFollowBootstrapStateAsync(string viewerPublicAddress, string authorPublicAddress) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetSocialFollowBootstrapStateAsync(viewerPublicAddress, authorPublicAddress);
+
     public async Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress) =>
         await this._unitOfWorkProvider
             .CreateReadOnly()

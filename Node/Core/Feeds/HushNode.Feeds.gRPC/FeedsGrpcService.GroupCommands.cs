@@ -74,6 +74,27 @@ public partial class FeedsGrpcService
         }
     }
 
+    public override async Task<FollowSocialAuthorResponse> FollowSocialAuthor(
+        FollowSocialAuthorRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            return await this._innerCircleApplicationService.FollowSocialAuthorAsync(request);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "social_follow.follow_author.failed.unhandled");
+            return new FollowSocialAuthorResponse
+            {
+                Success = false,
+                Message = "Internal server error",
+                ErrorCode = "SOCIAL_FOLLOW_INTERNAL_ERROR",
+                RequiresSyncRefresh = false
+            };
+        }
+    }
+
     public override async Task<NewGroupFeedResponse> CreateGroupFeed(
         NewGroupFeedRequest request,
         ServerCallContext context)

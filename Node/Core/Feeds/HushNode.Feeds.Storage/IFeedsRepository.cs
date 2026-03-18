@@ -105,6 +105,17 @@ public interface IFeedsRepository : IRepository
     Task<bool> OwnerHasChatFeedWithMemberAsync(string ownerPublicAddress, string memberPublicAddress);
 
     /// <summary>
+    /// Resolves the social follow state for a viewer-author pair using existing Inner Circle
+    /// and direct-chat relationships only.
+    /// </summary>
+    Task<SocialFollowStateResolution> GetSocialFollowStateAsync(string viewerPublicAddress, string authorPublicAddress);
+
+    /// <summary>
+    /// Resolves the persisted bootstrap state needed to prepare an atomic follow operation.
+    /// </summary>
+    Task<SocialFollowBootstrapState> GetSocialFollowBootstrapStateAsync(string viewerPublicAddress, string authorPublicAddress);
+
+    /// <summary>
     /// Get a specific participant from a group feed.
     /// </summary>
     Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress);

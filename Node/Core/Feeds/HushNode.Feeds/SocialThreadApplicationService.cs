@@ -1,14 +1,17 @@
 using Google.Protobuf;
 using HushNetwork.proto;
 using HushNode.Feeds.gRPC;
+using HushNode.Feeds.Storage;
 using HushShared.Feeds.Model;
 
 namespace HushNode.Feeds;
 
 public sealed class SocialThreadApplicationService(
-    ISocialThreadService socialThreadService) : ISocialThreadApplicationService
+    ISocialThreadService socialThreadService,
+    IFeedsStorageService feedsStorageService) : ISocialThreadApplicationService
 {
     private readonly ISocialThreadService _socialThreadService = socialThreadService;
+    private readonly IFeedsStorageService _feedsStorageService = feedsStorageService;
 
     public async Task<GetSocialCommentsPageResponse> GetSocialCommentsPageAsync(GetSocialCommentsPageRequest request)
     {
@@ -54,7 +57,13 @@ public sealed class SocialThreadApplicationService(
             Paging = MapPaging(result.Paging),
             HasMore = result.HasMore
         };
-        response.Comments.AddRange(result.Entries.Select(MapEntry));
+        foreach (var entry in result.Entries)
+        {
+            response.Comments.Add(await MapEntryAsync(
+                entry,
+                request.RequesterPublicAddress,
+                request.IsAuthenticated));
+        }
         return response;
     }
 
@@ -114,11 +123,20 @@ public sealed class SocialThreadApplicationService(
             Paging = MapPaging(result.Paging),
             HasMore = result.HasMore
         };
-        response.Replies.AddRange(result.Entries.Select(MapEntry));
+        foreach (var entry in result.Entries)
+        {
+            response.Replies.Add(await MapEntryAsync(
+                entry,
+                request.RequesterPublicAddress,
+                request.IsAuthenticated));
+        }
         return response;
     }
 
-    private static SocialThreadEntryProto MapEntry(RankedSocialThreadEntry entry)
+    private async Task<SocialThreadEntryProto> MapEntryAsync(
+        RankedSocialThreadEntry entry,
+        string? requesterPublicAddress,
+        bool isAuthenticated)
     {
         var proto = new SocialThreadEntryProto
         {
@@ -144,6 +162,26 @@ public sealed class SocialThreadApplicationService(
         if (entry.Message.AuthorCommitment is { Length: > 0 })
         {
             proto.AuthorCommitment = ByteString.CopyFrom(entry.Message.AuthorCommitment);
+        }
+
+        if (isAuthenticated && !string.IsNullOrWhiteSpace(requesterPublicAddress))
+        {
+            var followState = await _feedsStorageService.GetSocialFollowStateAsync(
+                requesterPublicAddress,
+                entry.Message.IssuerPublicAddress);
+            proto.FollowState = new SocialAuthorFollowStateProto
+            {
+                IsFollowing = followState.IsFollowing,
+                CanFollow = followState.CanFollow
+            };
+        }
+        else
+        {
+            proto.FollowState = new SocialAuthorFollowStateProto
+            {
+                IsFollowing = false,
+                CanFollow = false
+            };
         }
 
         return proto;

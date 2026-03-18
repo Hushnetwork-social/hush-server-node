@@ -27,6 +27,7 @@ service HushFeed {
   rpc GetSocialFeedWall (GetSocialFeedWallRequest) returns (GetSocialFeedWallResponse);
   rpc GetSocialCommentsPage (GetSocialCommentsPageRequest) returns (GetSocialCommentsPageResponse);
   rpc GetSocialThreadReplies (GetSocialThreadRepliesRequest) returns (GetSocialThreadRepliesResponse);
+  rpc FollowSocialAuthor (FollowSocialAuthorRequest) returns (FollowSocialAuthorResponse);
   rpc DownloadSocialPostAttachment(DownloadSocialPostAttachmentRequest) returns (stream AttachmentChunk);
 
   // Group Feed Creation & Membership Operations
@@ -620,6 +621,11 @@ message SocialPostAttachmentProto {
   SocialPostAttachmentKindProto Kind = 6;
 }
 
+message SocialAuthorFollowStateProto {
+  bool IsFollowing = 1;
+  bool CanFollow = 2;
+}
+
 message SocialPostAudienceProto {
   SocialPostVisibilityProto Visibility = 1;
   repeated string CircleFeedIds = 2;
@@ -707,6 +713,7 @@ message GetSocialPostPermalinkResponse {
   optional int64 CreatedAtUnixMs = 18;
   optional string ReactionScopeId = 19;
   optional bytes AuthorCommitment = 20;
+  optional SocialAuthorFollowStateProto FollowState = 21;
 }
 
 message GetSocialFeedWallRequest {
@@ -727,6 +734,7 @@ message SocialFeedWallPostProto {
   optional string ReactionScopeId = 9;
   optional bytes AuthorCommitment = 10;
   optional int32 ReplyCount = 11;
+  optional SocialAuthorFollowStateProto FollowState = 12;
 }
 
 message GetSocialFeedWallResponse {
@@ -749,6 +757,23 @@ message SocialThreadEntryProto {
   optional string Content = 10;
   optional bytes AuthorCommitment = 11;
   optional int32 ChildReplyCount = 12;
+  optional SocialAuthorFollowStateProto FollowState = 13;
+}
+
+message FollowSocialAuthorRequest {
+  string ViewerPublicAddress = 1;
+  string AuthorPublicAddress = 2;
+  optional string AuthorPublicEncryptAddress = 3;
+  string RequesterPublicAddress = 4;
+}
+
+message FollowSocialAuthorResponse {
+  bool Success = 1;
+  string Message = 2;
+  optional string ErrorCode = 3;
+  optional string InnerCircleFeedId = 4;
+  bool AlreadyFollowing = 5;
+  bool RequiresSyncRefresh = 6;
 }
 
 message SocialThreadPageContractProto {
