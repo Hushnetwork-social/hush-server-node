@@ -55,6 +55,7 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
         // EF Core translates BlockIndex comparisons via the value converter,
         // so we use the BlockIndex object directly (not .Value).
         return await this.Context.GroupFeeds
+            .AsSplitQuery()
             .Include(g => g.Participants)
             .Include(g => g.KeyGenerations)
                 .ThenInclude(kg => kg.EncryptedKeys)
@@ -80,6 +81,7 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
         // This allows users to still see their message history after leaving a group.
         // We don't filter by blockIndex since these are historical feeds.
         return await this.Context.GroupFeeds
+            .AsSplitQuery()
             .Include(g => g.Participants)
             .Include(g => g.KeyGenerations)
                 .ThenInclude(kg => kg.EncryptedKeys)
@@ -197,6 +199,7 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
 
     public async Task<GroupFeed?> GetInnerCircleByOwnerAsync(string ownerPublicAddress) =>
         await this.Context.GroupFeeds
+            .AsSplitQuery()
             .Include(g => g.Participants)
             .Include(g => g.KeyGenerations)
                 .ThenInclude(kg => kg.EncryptedKeys)

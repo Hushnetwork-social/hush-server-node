@@ -186,10 +186,17 @@ public class KeyGenerationCacheDtoTests
     }
 
     [Fact]
-    public void CacheTtl_IsOneHour()
+    public void ParticipantsCacheTtl_IsOneHour()
     {
         // Assert
-        FeedParticipantsCacheConstants.CacheTtl.Should().Be(TimeSpan.FromHours(1));
+        FeedParticipantsCacheConstants.ParticipantsCacheTtl.Should().Be(TimeSpan.FromHours(1));
+    }
+
+    [Fact]
+    public void KeyGenerationsCacheTtl_IsThirtyDays()
+    {
+        // Assert
+        FeedParticipantsCacheConstants.KeyGenerationsCacheTtl.Should().Be(TimeSpan.FromDays(30));
     }
 
     #endregion

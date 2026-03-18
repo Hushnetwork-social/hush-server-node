@@ -56,7 +56,7 @@ public class FeedParticipantsCacheServiceTests
             .ReturnsAsync(new RedisValue[] { participant1, participant2 });
 
         databaseMock
-            .Setup(x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.CacheTtl, CommandFlags.None))
+            .Setup(x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.ParticipantsCacheTtl, CommandFlags.None))
             .ReturnsAsync(true);
 
         // Act
@@ -85,7 +85,7 @@ public class FeedParticipantsCacheServiceTests
             .ReturnsAsync(Array.Empty<RedisValue>());
 
         databaseMock
-            .Setup(x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.CacheTtl, CommandFlags.None))
+            .Setup(x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.ParticipantsCacheTtl, CommandFlags.None))
             .ReturnsAsync(true);
 
         // Act
@@ -130,7 +130,7 @@ public class FeedParticipantsCacheServiceTests
             .ReturnsAsync(new RedisValue[] { "address-1" });
 
         databaseMock
-            .Setup(x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.CacheTtl, ExpireWhen.Always, CommandFlags.None))
+            .Setup(x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.ParticipantsCacheTtl, ExpireWhen.Always, CommandFlags.None))
             .ReturnsAsync(true);
 
         // Act
@@ -138,7 +138,7 @@ public class FeedParticipantsCacheServiceTests
 
         // Assert
         databaseMock.Verify(
-            x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.CacheTtl, ExpireWhen.Always, CommandFlags.None),
+            x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.ParticipantsCacheTtl, ExpireWhen.Always, CommandFlags.None),
             Times.Once);
     }
 
@@ -182,7 +182,7 @@ public class FeedParticipantsCacheServiceTests
 
         // Assert
         transactionMock.Verify(
-            x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.CacheTtl, ExpireWhen.Always, CommandFlags.None),
+            x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.ParticipantsCacheTtl, ExpireWhen.Always, CommandFlags.None),
             Times.Once);
     }
 
@@ -204,7 +204,7 @@ public class FeedParticipantsCacheServiceTests
             .ReturnsAsync(true);
 
         databaseMock
-            .Setup(x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.CacheTtl, CommandFlags.None))
+            .Setup(x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.ParticipantsCacheTtl, CommandFlags.None))
             .ReturnsAsync(true);
 
         // Act
@@ -278,7 +278,7 @@ public class FeedParticipantsCacheServiceTests
 
         // Assert
         transactionMock.Verify(
-            x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.CacheTtl, ExpireWhen.Always, CommandFlags.None),
+            x => x.KeyExpireAsync(ParticipantsKey, FeedParticipantsCacheConstants.ParticipantsCacheTtl, ExpireWhen.Always, CommandFlags.None),
             Times.Once);
     }
 
@@ -414,7 +414,7 @@ public class FeedParticipantsCacheServiceTests
             .ReturnsAsync(json);
 
         databaseMock
-            .Setup(x => x.KeyExpireAsync(KeyGenerationsKey, FeedParticipantsCacheConstants.CacheTtl, CommandFlags.None))
+            .Setup(x => x.KeyExpireAsync(KeyGenerationsKey, FeedParticipantsCacheConstants.KeyGenerationsCacheTtl, CommandFlags.None))
             .ReturnsAsync(true);
 
         // Act
@@ -477,7 +477,7 @@ public class FeedParticipantsCacheServiceTests
             .ReturnsAsync(json);
 
         databaseMock
-            .Setup(x => x.KeyExpireAsync(KeyGenerationsKey, FeedParticipantsCacheConstants.CacheTtl, ExpireWhen.Always, CommandFlags.None))
+            .Setup(x => x.KeyExpireAsync(KeyGenerationsKey, FeedParticipantsCacheConstants.KeyGenerationsCacheTtl, ExpireWhen.Always, CommandFlags.None))
             .ReturnsAsync(true);
 
         // Act
@@ -485,7 +485,7 @@ public class FeedParticipantsCacheServiceTests
 
         // Assert
         databaseMock.Verify(
-            x => x.KeyExpireAsync(KeyGenerationsKey, FeedParticipantsCacheConstants.CacheTtl, ExpireWhen.Always, CommandFlags.None),
+            x => x.KeyExpireAsync(KeyGenerationsKey, FeedParticipantsCacheConstants.KeyGenerationsCacheTtl, ExpireWhen.Always, CommandFlags.None),
             Times.Once);
     }
 
@@ -516,7 +516,7 @@ public class FeedParticipantsCacheServiceTests
             .Setup(x => x.StringSetAsync(
                 KeyGenerationsKey,
                 It.IsAny<RedisValue>(),
-                FeedParticipantsCacheConstants.CacheTtl,
+                FeedParticipantsCacheConstants.KeyGenerationsCacheTtl,
                 false,
                 When.Always,
                 CommandFlags.None))
@@ -530,7 +530,7 @@ public class FeedParticipantsCacheServiceTests
             x => x.StringSetAsync(
                 KeyGenerationsKey,
                 It.Is<RedisValue>(v => v.ToString().Contains("\"version\":1")),
-                FeedParticipantsCacheConstants.CacheTtl,
+                FeedParticipantsCacheConstants.KeyGenerationsCacheTtl,
                 false,
                 When.Always,
                 CommandFlags.None),
@@ -549,7 +549,7 @@ public class FeedParticipantsCacheServiceTests
             .Setup(x => x.StringSetAsync(
                 KeyGenerationsKey,
                 It.IsAny<RedisValue>(),
-                FeedParticipantsCacheConstants.CacheTtl,
+                FeedParticipantsCacheConstants.KeyGenerationsCacheTtl,
                 false,
                 When.Always,
                 CommandFlags.None))

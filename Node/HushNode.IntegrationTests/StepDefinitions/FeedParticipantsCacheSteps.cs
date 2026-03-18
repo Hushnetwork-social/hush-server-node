@@ -188,6 +188,12 @@ public sealed class FeedParticipantsCacheSteps
         await redisDb.KeyDeleteAsync(cacheKey);
     }
 
+    [Given(@"the node diagnostic logs are cleared")]
+    public void GivenTheNodeDiagnosticLogsAreCleared()
+    {
+        GetDiagnostics().Clear();
+    }
+
     [Then(@"the participants should be in the Redis SET cache for ""(.*)""")]
     public async Task ThenTheParticipantsShouldBeInTheRedisSETCacheForGroup(string groupName)
     {
@@ -277,6 +283,24 @@ public sealed class FeedParticipantsCacheSteps
         var groupName = (string)_scenarioContext["LastGroupFeedName"];
         var response = (GetKeyGenerationsResponse)_scenarioContext[$"LastKeyGenerationsResponse_{groupName}"];
         response.KeyGenerations.Should().NotBeEmpty("Response should contain key generations");
+    }
+
+    [Then(@"the node diagnostic logs should show a key generations cache hit for ""(.*)""")]
+    public void ThenTheNodeDiagnosticLogsShouldShowAKeyGenerationsCacheHitForGroup(string groupName)
+    {
+        var logs = GetDiagnostics().GetCapturedLogs();
+
+        logs.Should().Contain("[GetKeyGenerations] Cache hit",
+            $"the second GetKeyGenerations lookup for '{groupName}' should be served from Redis");
+    }
+
+    [Then(@"the node diagnostic logs should not show a key generations database query for ""(.*)""")]
+    public void ThenTheNodeDiagnosticLogsShouldNotShowAKeyGenerationsDatabaseQueryForGroup(string groupName)
+    {
+        var logs = GetDiagnostics().GetCapturedLogs();
+
+        logs.Should().NotContain("[GetKeyGenerations] Cache miss, querying database",
+            $"the second GetKeyGenerations lookup for '{groupName}' should not fall back to PostgreSQL");
     }
 
     [Given(@"the key generations for ""(.*)"" have been cached")]
@@ -798,6 +822,17 @@ public sealed class FeedParticipantsCacheSteps
             return fixture;
         }
         throw new InvalidOperationException("HushTestFixture not found in ScenarioContext.");
+    }
+
+    private DiagnosticCapture GetDiagnostics()
+    {
+        if (_scenarioContext.TryGetValue(ScenarioHooks.DiagnosticsKey, out var diagnosticsObj)
+            && diagnosticsObj is DiagnosticCapture diagnostics)
+        {
+            return diagnostics;
+        }
+
+        throw new InvalidOperationException("DiagnosticCapture not found in ScenarioContext.");
     }
 
     #endregion

@@ -25,6 +25,8 @@ service HushFeed {
   rpc GetSocialComposerContract (GetSocialComposerContractRequest) returns (GetSocialComposerContractResponse);
   rpc GetSocialPostPermalink (GetSocialPostPermalinkRequest) returns (GetSocialPostPermalinkResponse);
   rpc GetSocialFeedWall (GetSocialFeedWallRequest) returns (GetSocialFeedWallResponse);
+  rpc GetSocialCommentsPage (GetSocialCommentsPageRequest) returns (GetSocialCommentsPageResponse);
+  rpc GetSocialThreadReplies (GetSocialThreadRepliesRequest) returns (GetSocialThreadRepliesResponse);
   rpc DownloadSocialPostAttachment(DownloadSocialPostAttachmentRequest) returns (stream AttachmentChunk);
 
   // Group Feed Creation & Membership Operations
@@ -595,6 +597,12 @@ enum SocialPostAttachmentKindProto {
   SOCIAL_POST_ATTACHMENT_KIND_VIDEO = 2;
 }
 
+enum SocialThreadEntryKindProto {
+  SOCIAL_THREAD_ENTRY_KIND_UNSPECIFIED = 0;
+  SOCIAL_THREAD_ENTRY_KIND_COMMENT = 1;
+  SOCIAL_THREAD_ENTRY_KIND_REPLY = 2;
+}
+
 enum SocialPermalinkAccessStateProto {
   SOCIAL_PERMALINK_ACCESS_STATE_UNSPECIFIED = 0;
   SOCIAL_PERMALINK_ACCESS_STATE_ALLOWED = 1;
@@ -718,6 +726,7 @@ message SocialFeedWallPostProto {
   repeated SocialPostAttachmentProto Attachments = 8;
   optional string ReactionScopeId = 9;
   optional bytes AuthorCommitment = 10;
+  optional int32 ReplyCount = 11;
 }
 
 message GetSocialFeedWallResponse {
@@ -725,6 +734,59 @@ message GetSocialFeedWallResponse {
   string Message = 2;
   repeated SocialFeedWallPostProto Posts = 3;
   optional string ErrorCode = 4;
+}
+
+message SocialThreadEntryProto {
+  string PostId = 1;
+  string EntryId = 2;
+  SocialThreadEntryKindProto Kind = 3;
+  optional string ParentCommentId = 4;
+  string ThreadRootId = 5;
+  optional string ReactionScopeId = 6;
+  optional int64 CreatedAtUnixMs = 7;
+  optional int64 ReactionCount = 8;
+  optional string AuthorPublicAddress = 9;
+  optional string Content = 10;
+  optional bytes AuthorCommitment = 11;
+  optional int32 ChildReplyCount = 12;
+}
+
+message SocialThreadPageContractProto {
+  int32 InitialPageSize = 1;
+  int32 LoadMorePageSize = 2;
+}
+
+message GetSocialCommentsPageRequest {
+  string PostId = 1;
+  optional int32 Limit = 2;
+  optional string BeforeEntryId = 3;
+  optional string RequesterPublicAddress = 4;
+  bool IsAuthenticated = 5;
+}
+
+message GetSocialCommentsPageResponse {
+  bool Success = 1;
+  string Message = 2;
+  repeated SocialThreadEntryProto Comments = 3;
+  SocialThreadPageContractProto Paging = 4;
+  bool HasMore = 5;
+}
+
+message GetSocialThreadRepliesRequest {
+  string PostId = 1;
+  string ThreadRootId = 2;
+  optional int32 Limit = 3;
+  optional string BeforeEntryId = 4;
+  optional string RequesterPublicAddress = 5;
+  bool IsAuthenticated = 6;
+}
+
+message GetSocialThreadRepliesResponse {
+  bool Success = 1;
+  string Message = 2;
+  repeated SocialThreadEntryProto Replies = 3;
+  SocialThreadPageContractProto Paging = 4;
+  bool HasMore = 5;
 }
 
 // =============================================================================

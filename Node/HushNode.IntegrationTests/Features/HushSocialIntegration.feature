@@ -141,14 +141,18 @@ Feature: HushSocial server integration rules
     When FollowerA changes reaction on "Private sentiment test" to "heart"
     Then only one active reaction should exist for FollowerA on "Private sentiment test"
 
-  @FEAT-088 @ignore
+  @FEAT-088 @HS-INT-088-COMMENTS
   Scenario: Comments and single-level replies inherit post audience
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA
     And Owner has created a Close post "Architecture thread" for Inner Circle
     When FollowerA comments "Looks good" on post "Architecture thread"
     And Owner replies "Thanks" to comment "Looks good"
+    And FollowerA reacts to comment "Looks good" with "thumbs_up"
+    And Owner reacts to reply "Thanks" with "heart"
     Then FollowerA should see comment "Looks good" and reply "Thanks"
+    And authorized viewers should see reaction tally updates on comment "Looks good"
+    And authorized viewers should see reaction tally updates on reply "Thanks"
     When FollowerC opens post "Architecture thread"
     Then FollowerC should receive access denied for post comments
     And FollowerC should receive access denied for post replies

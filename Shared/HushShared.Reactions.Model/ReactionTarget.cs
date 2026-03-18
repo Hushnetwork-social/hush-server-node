@@ -24,7 +24,7 @@ public static class Feat087ReactionTargetContract
 {
     public static bool TryMapToMessageId(ReactionTarget target, out FeedMessageId messageId)
     {
-        if (target.Type == ReactionTargetType.Post)
+        if (target.Type is ReactionTargetType.Post or ReactionTargetType.Comment or ReactionTargetType.Reply)
         {
             messageId = new FeedMessageId(target.TargetId);
             return true;

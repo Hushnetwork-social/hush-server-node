@@ -353,6 +353,285 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         await replyButton.ClickAsync();
     }
 
+    [When(@"FollowerA comments ""([^""]*)"" on post ""([^""]*)"" via browser")]
+    [When(@"Owner comments ""([^""]*)"" on post ""([^""]*)"" via browser")]
+    public async Task WhenFollowerACommentsOnPostViaBrowser(string commentText, string postTitle)
+    {
+        var userName = GetStepUserNameFromWhenStep("comments");
+        await SubmitCommentViaBrowserAsync(userName, postTitle, commentText);
+    }
+
+    [When(@"FollowerA reacts to comment ""([^""]*)"" with emoji ""([^""]*)"" via browser")]
+    [When(@"Owner reacts to comment ""([^""]*)"" with emoji ""([^""]*)"" via browser")]
+    public async Task WhenUserReactsToCommentViaBrowser(string commentText, string emojiName)
+    {
+        var userName = GetStepUserNameFromWhenStep("reacts to comment");
+        await OpenPostDetailForUserAsync(userName, "Discuss architecture", forceReopen: true);
+        await ReactToThreadEntryViaBrowserAsync(userName, commentText, emojiName);
+    }
+
+    [When(@"FollowerA reacts to comment ""([^""]*)"" on post ""([^""]*)"" with emoji ""([^""]*)"" via browser")]
+    [When(@"Owner reacts to comment ""([^""]*)"" on post ""([^""]*)"" with emoji ""([^""]*)"" via browser")]
+    public async Task WhenUserReactsToCommentOnPostViaBrowser(string commentText, string postTitle, string emojiName)
+    {
+        var userName = GetStepUserNameFromWhenStep("reacts to comment");
+        await OpenPostDetailForUserAsync(userName, postTitle, forceReopen: true);
+        await ReactToThreadEntryViaBrowserAsync(userName, commentText, emojiName);
+    }
+
+    [When(@"Owner replies ""([^""]*)"" to comment ""([^""]*)"" via browser")]
+    public async Task WhenOwnerRepliesToCommentViaBrowser(string replyText, string commentText)
+    {
+        var ownerPage = GetUserPage("Owner");
+        await OpenPostDetailForUserAsync("Owner", "Discuss architecture");
+
+        var commentCard = ownerPage.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = commentText })
+            .First;
+        await commentCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var replyButton = commentCard.GetByTestId(new Regex("^post-detail-reply-reply-"));
+        await replyButton.First.ClickAsync();
+
+        var inlineComposer = await WaitForTestIdAsync(ownerPage, "inline-composer-input", 5000);
+        await inlineComposer.FillAsync(replyText);
+
+        using var waiter = StartListeningForTransactions(1);
+        await ClickTestIdAsync(ownerPage, "inline-composer-send");
+        await AwaitTransactionsAndProduceBlockAsync(waiter);
+        await TriggerSyncAsync(ownerPage);
+
+        await OpenPostDetailForUserAsync("Owner", "Discuss architecture", forceReopen: true);
+        await ExpandThreadForTextAsync(ownerPage, commentText);
+
+        var replyCard = ownerPage.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = replyText })
+            .First;
+        await replyCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+    }
+
+    [When(@"Owner replies ""([^""]*)"" to comment ""([^""]*)"" on post ""([^""]*)"" via browser")]
+    public async Task WhenOwnerRepliesToCommentOnPostViaBrowser(string replyText, string commentText, string postTitle)
+    {
+        var ownerPage = GetUserPage("Owner");
+        await OpenPostDetailForUserAsync("Owner", postTitle);
+
+        var commentCard = ownerPage.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = commentText })
+            .First;
+        await commentCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var replyButton = commentCard.GetByTestId(new Regex("^post-detail-reply-reply-"));
+        await replyButton.First.ClickAsync();
+
+        var inlineComposer = await WaitForTestIdAsync(ownerPage, "inline-composer-input", 5000);
+        await inlineComposer.FillAsync(replyText);
+
+        using var waiter = StartListeningForTransactions(1);
+        await ClickTestIdAsync(ownerPage, "inline-composer-send");
+        await AwaitTransactionsAndProduceBlockAsync(waiter);
+        await TriggerSyncAsync(ownerPage);
+
+        await OpenPostDetailForUserAsync("Owner", postTitle, forceReopen: true);
+        await ExpandThreadForTextAsync(ownerPage, commentText);
+
+        var replyCard = ownerPage.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = replyText })
+            .First;
+        await replyCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+    }
+
+    [When(@"FollowerA reacts to reply ""([^""]*)"" with emoji ""([^""]*)"" via browser")]
+    [When(@"Owner reacts to reply ""([^""]*)"" with emoji ""([^""]*)"" via browser")]
+    public async Task WhenUserReactsToReplyViaBrowser(string replyText, string emojiName)
+    {
+        var userName = GetStepUserNameFromWhenStep("reacts to reply");
+        await AssertThreadTextVisibleForUserAsync(userName, "Discuss architecture", replyText);
+        await ReactToThreadEntryViaBrowserAsync(userName, replyText, emojiName);
+    }
+
+    [When(@"FollowerA reacts to reply ""([^""]*)"" on post ""([^""]*)"" with emoji ""([^""]*)"" via browser")]
+    [When(@"Owner reacts to reply ""([^""]*)"" on post ""([^""]*)"" with emoji ""([^""]*)"" via browser")]
+    public async Task WhenUserReactsToReplyOnPostViaBrowser(string replyText, string postTitle, string emojiName)
+    {
+        var userName = GetStepUserNameFromWhenStep("reacts to reply");
+        await AssertThreadTextVisibleForUserAsync(userName, postTitle, replyText);
+        await ReactToThreadEntryViaBrowserAsync(userName, replyText, emojiName);
+    }
+
+    [Then(@"Owner should see own-message reaction note on post ""(.*)""")]
+    public async Task ThenOwnerShouldSeeOwnMessageReactionNoteOnPost(string postTitle)
+    {
+        var page = GetUserPage("Owner");
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+        await WaitForVisiblePostAsync(page, postTitle);
+
+        var postId = GetStoredPostId(postTitle);
+        var postCard = page.GetByTestId($"social-post-{postId}").First;
+        await postCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var note = postCard.GetByTestId($"post-reaction-strip-{postId}-own-message-note").First;
+        (await note.InnerTextAsync()).Should().Contain("cannot react to own message");
+    }
+
+    [Then(@"Owner should see disabled reaction chips on own post ""(.*)""")]
+    public async Task ThenOwnerShouldSeeDisabledReactionChipsOnOwnPost(string postTitle)
+    {
+        var page = GetUserPage("Owner");
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+        await WaitForVisiblePostAsync(page, postTitle);
+
+        var postId = GetStoredPostId(postTitle);
+        var postCard = page.GetByTestId($"social-post-{postId}").First;
+        var badges = postCard.Locator("[data-testid^='reaction-badge-']");
+        await badges.First.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var count = await badges.CountAsync();
+        count.Should().BeGreaterThan(0, "own post should show existing reaction badges");
+        for (var index = 0; index < count; index += 1)
+        {
+            (await badges.Nth(index).IsDisabledAsync()).Should().BeTrue("own post reaction chips must be disabled");
+        }
+
+        (await postCard.Locator($"[data-testid='post-reaction-strip-{postId}-add']").CountAsync())
+            .Should().Be(0, "own post must not expose an Add reaction affordance");
+    }
+
+    [Then(@"Owner should see own-message reaction note on comment ""(.*)"" for post ""(.*)""")]
+    public async Task ThenOwnerShouldSeeOwnMessageReactionNoteOnCommentForPost(string commentText, string postTitle)
+    {
+        await AssertOwnMessageReactionNoteVisibleForThreadEntryAsync("Owner", postTitle, commentText);
+    }
+
+    [Then(@"Owner should see reaction count (\d+) on comment ""([^""]*)"" for post ""([^""]*)""")]
+    public async Task ThenOwnerShouldSeeReactionCountOnCommentForPost(int expectedCount, string commentText, string postTitle)
+    {
+        await AssertThreadReactionVisibleForUserAsync("Owner", postTitle, commentText, expectedCount, requireExpandedThread: false);
+    }
+
+    [Then(@"Owner should see disabled reaction chips on own comment ""(.*)"" for post ""(.*)""")]
+    public async Task ThenOwnerShouldSeeDisabledReactionChipsOnOwnCommentForPost(string commentText, string postTitle)
+    {
+        await AssertOwnMessageReactionChipsDisabledForThreadEntryAsync("Owner", postTitle, commentText);
+    }
+
+    [Then(@"Owner should see own-message reaction note on reply ""(.*)"" for post ""(.*)""")]
+    public async Task ThenOwnerShouldSeeOwnMessageReactionNoteOnReplyForPost(string replyText, string postTitle)
+    {
+        await AssertOwnMessageReactionNoteVisibleForThreadEntryAsync("Owner", postTitle, replyText);
+    }
+
+    [Then(@"Owner should see reaction count (\d+) on reply ""([^""]*)"" for post ""([^""]*)""")]
+    public async Task ThenOwnerShouldSeeReactionCountOnReplyForPost(int expectedCount, string replyText, string postTitle)
+    {
+        await AssertThreadReactionVisibleForUserAsync("Owner", postTitle, replyText, expectedCount, requireExpandedThread: true);
+    }
+
+    [Then(@"Owner should see disabled reaction chips on own reply ""(.*)"" for post ""(.*)""")]
+    public async Task ThenOwnerShouldSeeDisabledReactionChipsOnOwnReplyForPost(string replyText, string postTitle)
+    {
+        await AssertOwnMessageReactionChipsDisabledForThreadEntryAsync("Owner", postTitle, replyText);
+    }
+
+    [Then(@"both users should see comment ""(.*)""")]
+    public async Task ThenBothUsersShouldSeeComment(string commentText)
+    {
+        await AssertThreadTextVisibleForUserAsync("Owner", "Discuss architecture", commentText);
+        await AssertThreadTextVisibleForUserAsync("FollowerA", "Discuss architecture", commentText);
+    }
+
+    [Then(@"both users should see reply count (\d+) on post card ""(.*)""")]
+    public async Task ThenBothUsersShouldSeeReplyCountOnPostCard(int expectedCount, string postTitle)
+    {
+        await AssertReplyCountVisibleOnPostCardAsync("Owner", postTitle, expectedCount);
+        await AssertReplyCountVisibleOnPostCardAsync("FollowerA", postTitle, expectedCount);
+    }
+
+    [Then(@"both users should see reply ""(.*)""")]
+    public async Task ThenBothUsersShouldSeeReply(string replyText)
+    {
+        await AssertThreadTextVisibleForUserAsync("Owner", "Discuss architecture", replyText);
+        await AssertThreadTextVisibleForUserAsync("FollowerA", "Discuss architecture", replyText);
+    }
+
+    [Then(@"both users should see reaction count (\d+) on comment ""(.*)""")]
+    public async Task ThenBothUsersShouldSeeReactionCountOnComment(int expectedCount, string commentText)
+    {
+        await AssertThreadReactionVisibleForUserAsync("Owner", "Discuss architecture", commentText, expectedCount, requireExpandedThread: false);
+        await AssertThreadReactionVisibleForUserAsync("FollowerA", "Discuss architecture", commentText, expectedCount, requireExpandedThread: false);
+    }
+
+    [Then(@"both users should see reaction emoji ""(.*)"" on comment ""(.*)""")]
+    public async Task ThenBothUsersShouldSeeReactionEmojiOnComment(string emojiName, string commentText)
+    {
+        await AssertThreadReactionEmojiVisibleForUserAsync("Owner", "Discuss architecture", commentText, emojiName, requireExpandedThread: false);
+        await AssertThreadReactionEmojiVisibleForUserAsync("FollowerA", "Discuss architecture", commentText, emojiName, requireExpandedThread: false);
+    }
+
+    [Then(@"both users should see reaction count (\d+) on reply ""(.*)""")]
+    public async Task ThenBothUsersShouldSeeReactionCountOnReply(int expectedCount, string replyText)
+    {
+        await AssertThreadReactionVisibleForUserAsync("Owner", "Discuss architecture", replyText, expectedCount, requireExpandedThread: true);
+        await AssertThreadReactionVisibleForUserAsync("FollowerA", "Discuss architecture", replyText, expectedCount, requireExpandedThread: true);
+    }
+
+    [Then(@"both users should see reaction emoji ""(.*)"" on reply ""(.*)""")]
+    public async Task ThenBothUsersShouldSeeReactionEmojiOnReply(string emojiName, string replyText)
+    {
+        await AssertThreadReactionEmojiVisibleForUserAsync("Owner", "Discuss architecture", replyText, emojiName, requireExpandedThread: true);
+        await AssertThreadReactionEmojiVisibleForUserAsync("FollowerA", "Discuss architecture", replyText, emojiName, requireExpandedThread: true);
+    }
+
+    [Then(@"the reply action should be limited to single-level depth")]
+    public async Task ThenTheReplyActionShouldBeLimitedToSingleLevelDepth()
+    {
+        var ownerPage = GetUserPage("Owner");
+        await OpenPostDetailForUserAsync("Owner", "Discuss architecture", forceReopen: true);
+        await ExpandThreadForTextAsync(ownerPage, "Looks good");
+
+        var childReplyCard = ownerPage.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = "Thanks for feedback" })
+            .Last;
+        await childReplyCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var testId = await childReplyCard.GetAttributeAsync("data-testid");
+        testId.Should().NotBeNullOrWhiteSpace();
+
+        var childReplyId = testId!["post-detail-reply-".Length..];
+        var nestedToggleCount = await ownerPage.GetByTestId($"post-detail-thread-toggle-{childReplyId}").CountAsync();
+        nestedToggleCount.Should().Be(0, "child replies must not spawn a second nested reply-thread level");
+    }
+
     [When(@"FollowerA reacts to post ""(.*)"" with emoji ""(.*)"" via browser")]
     [When(@"Owner reacts to post ""(.*)"" with emoji ""(.*)"" via browser")]
     public async Task WhenUserReactsToPostViaBrowser(string postTitle, string emojiName)
@@ -562,9 +841,11 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
     }
 
     [Given(@"FollowerA browser has approved FEAT-087 reaction circuit artifacts available")]
-    public async Task GivenFollowerABrowserHasApprovedFeat087ReactionCircuitArtifactsAvailable()
+    [Given(@"Owner browser has approved FEAT-087 reaction circuit artifacts available")]
+    public async Task GivenUserBrowserHasApprovedFeat087ReactionCircuitArtifactsAvailable()
     {
-        var page = GetUserPage("FollowerA");
+        var userName = GetStepUserNameFromGivenStep("browser has approved FEAT-087 reaction circuit artifacts available");
+        var page = GetUserPage(userName);
         await NavigateToSocialExperienceAsync(page);
         await page.EvaluateAsync("() => { window.__e2e_forceReactionMode = 'non-dev'; }");
         await TriggerSyncAsync(page);
@@ -1738,6 +2019,345 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         }
     }
 
+    private async Task SubmitCommentViaBrowserAsync(string userName, string postTitle, string commentText)
+    {
+        var page = GetUserPage(userName);
+        await OpenPostDetailForUserAsync(userName, postTitle);
+
+        var replyButton = await WaitForTestIdAsync(page, $"post-detail-action-reply-{GetStoredPostId(postTitle)}", 10000);
+        await replyButton.ClickAsync();
+
+        var composer = await WaitForTestIdAsync(page, "post-detail-composer-input", 5000);
+        await composer.FillAsync(commentText);
+
+        using var waiter = StartListeningForTransactions(1);
+        await ClickTestIdAsync(page, "post-detail-composer-send");
+        await AwaitTransactionsAndProduceBlockAsync(waiter);
+        await TriggerSyncAsync(page);
+
+        await page.GetByText(commentText, new PageGetByTextOptions { Exact = true }).First.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+    }
+
+    private async Task AssertThreadTextVisibleForUserAsync(string userName, string postTitle, string expectedText)
+    {
+        var page = GetUserPage(userName);
+        await OpenPostDetailForUserAsync(userName, postTitle, forceReopen: true);
+
+        var initialTarget = page.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = expectedText })
+            .First;
+        try
+        {
+            await initialTarget.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = 1000
+            });
+        }
+        catch (TimeoutException)
+        {
+            await ExpandAllCollapsedReplyThreadsAsync(page);
+        }
+
+        await initialTarget.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+    }
+
+    private async Task AssertReplyCountVisibleOnPostCardAsync(string userName, string postTitle, int expectedCount)
+    {
+        var page = GetUserPage(userName);
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+        await WaitForVisiblePostAsync(page, postTitle);
+
+        var postId = GetStoredPostId(postTitle);
+        var replyButton = await WaitForTestIdAsync(page, $"post-action-reply-{postId}", 10000);
+        (await replyButton.InnerTextAsync()).Should().Contain($"Reply ({expectedCount})");
+    }
+
+    private async Task OpenPostDetailForUserAsync(string userName, string postTitle, bool forceReopen = false)
+    {
+        var page = GetUserPage(userName);
+        var postId = GetStoredPostId(postTitle);
+
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+        await WaitForVisiblePostAsync(page, postTitle);
+
+        var overlay = page.GetByTestId("post-detail-overlay");
+        if (await overlay.CountAsync() > 0 && await overlay.First.IsVisibleAsync())
+        {
+            if (!forceReopen)
+            {
+                return;
+            }
+
+            await ClickTestIdAsync(page, "close-post-detail");
+            await overlay.First.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Hidden,
+                Timeout = 10000
+            });
+        }
+
+        var openDetailButton = page.GetByTestId($"open-post-detail-{postId}");
+        if (await openDetailButton.CountAsync() > 0 && await openDetailButton.First.IsVisibleAsync())
+        {
+            await openDetailButton.First.ClickAsync();
+        }
+        else
+        {
+            var replyActionButton = page.GetByTestId($"post-action-reply-{postId}");
+            if (await replyActionButton.CountAsync() > 0 && await replyActionButton.First.IsVisibleAsync())
+            {
+                await replyActionButton.First.ClickAsync();
+            }
+            else
+            {
+                var postCard = page.GetByTestId($"social-post-{postId}").First;
+                await postCard.WaitForAsync(new LocatorWaitForOptions
+                {
+                    State = WaitForSelectorState.Visible,
+                    Timeout = 15000
+                });
+                await postCard.ClickAsync();
+            }
+        }
+
+        await overlay.First.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+    }
+
+    private async Task ExpandThreadForTextAsync(IPage page, string commentText)
+    {
+        var commentCard = page.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = commentText })
+            .First;
+
+        try
+        {
+            await commentCard.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = 10000
+            });
+        }
+        catch (TimeoutException)
+        {
+            return;
+        }
+
+        var toggleButton = commentCard.GetByTestId(new Regex("^post-detail-thread-toggle-")).First;
+        if (await toggleButton.CountAsync() == 0)
+        {
+            return;
+        }
+
+        var toggleLabel = await toggleButton.InnerTextAsync();
+        if (toggleLabel.Contains("View replies", StringComparison.OrdinalIgnoreCase))
+        {
+            await toggleButton.ClickAsync();
+        }
+    }
+
+    private async Task ExpandAllCollapsedReplyThreadsAsync(IPage page)
+    {
+        var toggleButtons = page.Locator("[data-testid^='post-detail-thread-toggle-']");
+        var toggleCount = await toggleButtons.CountAsync();
+
+        for (var index = 0; index < toggleCount; index += 1)
+        {
+            var toggleButton = toggleButtons.Nth(index);
+            var toggleLabel = await toggleButton.InnerTextAsync();
+            if (!toggleLabel.Contains("View replies", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            await toggleButton.ClickAsync();
+        }
+    }
+
+    private async Task ReactToThreadEntryViaBrowserAsync(string userName, string entryText, string emojiName)
+    {
+        var page = GetUserPage(userName);
+        var entryCard = page.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = entryText })
+            .First;
+        await entryCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var reactionAddButton = entryCard.Locator("[data-testid$='-add']").First;
+        await reactionAddButton.ClickAsync();
+
+        var reactionPicker = entryCard.Locator("[data-testid$='-picker']").First;
+        await reactionPicker.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 5000
+        });
+
+        var emojiButton = reactionPicker.Locator("button").Nth(MapReactionEmojiNameToIndex(emojiName));
+        using var waiter = StartListeningForTransactions(1);
+        await emojiButton.ClickAsync();
+        await AwaitTransactionsAndProduceBlockAsync(waiter);
+        await TriggerSyncAsync(page);
+    }
+
+    private async Task AssertThreadReactionVisibleForUserAsync(
+        string userName,
+        string postTitle,
+        string entryText,
+        int expectedCount,
+        bool requireExpandedThread)
+    {
+        var page = GetUserPage(userName);
+        if (requireExpandedThread)
+        {
+            await AssertThreadTextVisibleForUserAsync(userName, postTitle, entryText);
+        }
+        else
+        {
+            await OpenPostDetailForUserAsync(userName, postTitle, forceReopen: true);
+        }
+        var entryCard = page.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = entryText })
+            .First;
+        await entryCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var badges = entryCard.Locator("[data-testid^='reaction-badge-']");
+        await badges.First.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var badgeTexts = (await badges.AllInnerTextsAsync())
+            .Select(text => text.Trim())
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .ToArray();
+
+        badgeTexts.Should().Contain(
+            text => text.Contains(expectedCount.ToString(), StringComparison.Ordinal),
+            $"'{userName}' should see reaction count {expectedCount} on thread entry '{entryText}'");
+    }
+
+    private async Task AssertThreadReactionEmojiVisibleForUserAsync(
+        string userName,
+        string postTitle,
+        string entryText,
+        string emojiName,
+        bool requireExpandedThread)
+    {
+        var page = GetUserPage(userName);
+        if (requireExpandedThread)
+        {
+            await AssertThreadTextVisibleForUserAsync(userName, postTitle, entryText);
+        }
+        else
+        {
+            await OpenPostDetailForUserAsync(userName, postTitle, forceReopen: true);
+        }
+        var entryCard = page.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = entryText })
+            .First;
+        await entryCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var badges = entryCard.Locator("[data-testid^='reaction-badge-']");
+        await badges.First.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var badgeTexts = (await badges.AllInnerTextsAsync())
+            .Select(text => text.Trim())
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .ToArray();
+        var emoji = MapReactionEmojiNameToGlyph(emojiName);
+
+        badgeTexts.Should().Contain(
+            text => text.Contains(emoji, StringComparison.Ordinal),
+            $"'{userName}' should see reaction emoji '{emojiName}' on thread entry '{entryText}'");
+    }
+
+    private async Task AssertOwnMessageReactionNoteVisibleForThreadEntryAsync(
+        string userName,
+        string postTitle,
+        string entryText)
+    {
+        var page = GetUserPage(userName);
+        await AssertThreadTextVisibleForUserAsync(userName, postTitle, entryText);
+
+        var entryCard = page.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = entryText })
+            .First;
+        await entryCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var note = entryCard.Locator("[data-testid$='-own-message-note']").First;
+        (await note.InnerTextAsync()).Should().Contain("cannot react to own message");
+    }
+
+    private async Task AssertOwnMessageReactionChipsDisabledForThreadEntryAsync(
+        string userName,
+        string postTitle,
+        string entryText)
+    {
+        var page = GetUserPage(userName);
+        await AssertThreadTextVisibleForUserAsync(userName, postTitle, entryText);
+
+        var entryCard = page.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasText = entryText })
+            .First;
+        await entryCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var badges = entryCard.Locator("[data-testid^='reaction-badge-']");
+        await badges.First.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var count = await badges.CountAsync();
+        count.Should().BeGreaterThan(0, "own thread entry should show existing reaction badges");
+        for (var index = 0; index < count; index += 1)
+        {
+            (await badges.Nth(index).IsDisabledAsync()).Should().BeTrue("own thread-entry reaction chips must be disabled");
+        }
+
+        (await entryCard.Locator("[data-testid$='-add']").CountAsync())
+            .Should().Be(0, "own thread entry must not expose an Add reaction affordance");
+    }
+
     [When(@"Owner switches from HushSocial to HushFeeds")]
     public async Task WhenOwnerSwitchesFromHushSocialToHushFeeds()
     {
@@ -2224,6 +2844,27 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
     }
 
     private string GetStepUserNameFromWhenStep(string expectedFragment)
+    {
+        var text = ScenarioContext.StepContext.StepInfo.Text;
+        text.Should().Contain(expectedFragment);
+
+        if (text.StartsWith("FollowerA ", StringComparison.Ordinal))
+        {
+            return "FollowerA";
+        }
+        if (text.StartsWith("FollowerB ", StringComparison.Ordinal))
+        {
+            return "FollowerB";
+        }
+        if (text.StartsWith("Owner ", StringComparison.Ordinal))
+        {
+            return "Owner";
+        }
+
+        throw new InvalidOperationException($"Unable to infer user from step text: '{text}'");
+    }
+
+    private string GetStepUserNameFromGivenStep(string expectedFragment)
     {
         var text = ScenarioContext.StepContext.StepInfo.Text;
         text.Should().Contain(expectedFragment);

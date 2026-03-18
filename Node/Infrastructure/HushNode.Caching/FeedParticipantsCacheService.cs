@@ -86,7 +86,7 @@ public class FeedParticipantsCacheService : IFeedParticipantsCacheService
             var members = await _database.SetMembersAsync(key);
 
             // Refresh TTL on cache hit (sliding expiration)
-            await _database.KeyExpireAsync(key, FeedParticipantsCacheConstants.CacheTtl);
+            await _database.KeyExpireAsync(key, FeedParticipantsCacheConstants.ParticipantsCacheTtl);
 
             if (members.Length == 0)
             {
@@ -140,14 +140,14 @@ public class FeedParticipantsCacheService : IFeedParticipantsCacheService
                 // This distinguishes "no participants" from "cache miss"
                 var transaction = _database.CreateTransaction();
                 _ = transaction.KeyDeleteAsync(key);
-                _ = transaction.KeyExpireAsync(key, FeedParticipantsCacheConstants.CacheTtl);
+                _ = transaction.KeyExpireAsync(key, FeedParticipantsCacheConstants.ParticipantsCacheTtl);
                 await transaction.ExecuteAsync();
 
                 // Create empty set by adding and removing a placeholder
                 // This ensures the key exists as an empty set
                 await _database.SetAddAsync(key, "__placeholder__");
                 await _database.SetRemoveAsync(key, "__placeholder__");
-                await _database.KeyExpireAsync(key, FeedParticipantsCacheConstants.CacheTtl);
+                await _database.KeyExpireAsync(key, FeedParticipantsCacheConstants.ParticipantsCacheTtl);
 
                 Interlocked.Increment(ref _writeOperations);
                 _logger.LogDebug("Set empty participants cache for feed {FeedId}", feedId.Value);
@@ -164,7 +164,7 @@ public class FeedParticipantsCacheService : IFeedParticipantsCacheService
 
             _ = txn.KeyDeleteAsync(key);
             _ = txn.SetAddAsync(key, values);
-            _ = txn.KeyExpireAsync(key, FeedParticipantsCacheConstants.CacheTtl);
+            _ = txn.KeyExpireAsync(key, FeedParticipantsCacheConstants.ParticipantsCacheTtl);
 
             await txn.ExecuteAsync();
 
@@ -207,7 +207,7 @@ public class FeedParticipantsCacheService : IFeedParticipantsCacheService
             var transaction = _database.CreateTransaction();
 
             _ = transaction.SetAddAsync(key, participantAddress);
-            _ = transaction.KeyExpireAsync(key, FeedParticipantsCacheConstants.CacheTtl);
+            _ = transaction.KeyExpireAsync(key, FeedParticipantsCacheConstants.ParticipantsCacheTtl);
 
             await transaction.ExecuteAsync();
 
@@ -277,7 +277,7 @@ public class FeedParticipantsCacheService : IFeedParticipantsCacheService
             }
 
             // Refresh TTL on cache hit (sliding expiration)
-            await _database.KeyExpireAsync(key, FeedParticipantsCacheConstants.CacheTtl);
+            await _database.KeyExpireAsync(key, FeedParticipantsCacheConstants.KeyGenerationsCacheTtl);
 
             // Deserialize JSON
             var result = JsonSerializer.Deserialize<CachedKeyGenerations>(json.ToString());
@@ -330,7 +330,7 @@ public class FeedParticipantsCacheService : IFeedParticipantsCacheService
             var json = JsonSerializer.Serialize(keyGenerations);
 
             // SET with expiry
-            await _database.StringSetAsync(key, json, FeedParticipantsCacheConstants.CacheTtl);
+            await _database.StringSetAsync(key, json, FeedParticipantsCacheConstants.KeyGenerationsCacheTtl);
 
             Interlocked.Increment(ref _writeOperations);
             _logger.LogDebug(

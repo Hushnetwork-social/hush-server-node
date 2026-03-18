@@ -175,15 +175,43 @@ Feature: HushSocial end-to-end walkthrough
     And FollowerB should see reaction count 1 on permalink for post "Permalink reaction signal"
     And FollowerB should see reaction emoji "thumbs_up" on permalink for post "Permalink reaction signal"
 
-  @FEAT-088 @ignore @HS-E2E-088-COMMENTS
+  @FEAT-088 @HS-E2E-088-COMMENTS
   Scenario: Comments and single-level replies on authorized post
     Given Owner has created Open post "Discuss architecture" via browser
+    And FollowerA browser has approved FEAT-087 reaction circuit artifacts available
+    And Owner browser has approved FEAT-087 reaction circuit artifacts available
     When FollowerA reacts to post "Discuss architecture" with emoji "thumbs_up" via browser
     And FollowerA comments "Looks good" on post "Discuss architecture" via browser
+    And FollowerA reacts to comment "Looks good" with emoji "heart" via browser
     And Owner replies "Thanks for feedback" to comment "Looks good" via browser
+    And Owner reacts to reply "Thanks for feedback" with emoji "thumbs_up" via browser
+    Then both users should see reply count 2 on post card "Discuss architecture"
     Then both users should see comment "Looks good"
+    And both users should see reaction count 1 on comment "Looks good"
+    And both users should see reaction emoji "heart" on comment "Looks good"
     And both users should see reply "Thanks for feedback"
+    And both users should see reaction count 1 on reply "Thanks for feedback"
+    And both users should see reaction emoji "thumbs_up" on reply "Thanks for feedback"
     And the reply action should be limited to single-level depth
+
+  @FEAT-088 @HS-E2E-088-OWN-REACTIONS
+  Scenario: Users cannot react to their own post comment or reply
+    Given Owner has created Open post "Own reaction guard" via browser
+    And FollowerA browser has approved FEAT-087 reaction circuit artifacts available
+    When FollowerA reacts to post "Own reaction guard" with emoji "thumbs_up" via browser
+    And Owner comments "Owner self comment" on post "Own reaction guard" via browser
+    And FollowerA reacts to comment "Owner self comment" on post "Own reaction guard" with emoji "heart" via browser
+    And Owner replies "Owner self reply" to comment "Owner self comment" on post "Own reaction guard" via browser
+    And FollowerA reacts to reply "Owner self reply" on post "Own reaction guard" with emoji "thumbs_up" via browser
+    Then Owner should see own-message reaction note on post "Own reaction guard"
+    And Owner should see reaction count 1 on post "Own reaction guard"
+    And Owner should see disabled reaction chips on own post "Own reaction guard"
+    And Owner should see own-message reaction note on comment "Owner self comment" for post "Own reaction guard"
+    And Owner should see reaction count 1 on comment "Owner self comment" for post "Own reaction guard"
+    And Owner should see disabled reaction chips on own comment "Owner self comment" for post "Own reaction guard"
+    And Owner should see own-message reaction note on reply "Owner self reply" for post "Own reaction guard"
+    And Owner should see reaction count 1 on reply "Owner self reply" for post "Own reaction guard"
+    And Owner should see disabled reaction chips on own reply "Owner self reply" for post "Own reaction guard"
 
   @FEAT-087 @FEAT-089 @HS-E2E-089-GUEST-CTA
   Scenario: Guest interaction opens account creation overlay on public post

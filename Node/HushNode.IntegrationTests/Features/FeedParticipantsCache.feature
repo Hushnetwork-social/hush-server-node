@@ -24,8 +24,11 @@ Feature: FEAT-050 Feed Participants & Group Keys Cache
   Scenario: Key generations cache hit returns data without database query
     Given Alice has created a group feed "CacheHitGroup"
     And the key generations for "CacheHitGroup" have been cached
+    And the node diagnostic logs are cleared
     When the key generations for "CacheHitGroup" are looked up via gRPC again
     Then the response should contain the key generations
+    And the node diagnostic logs should show a key generations cache hit for "CacheHitGroup"
+    And the node diagnostic logs should not show a key generations database query for "CacheHitGroup"
 
   # Fallback Behavior - Key Generations
   @FEAT-050 @Fallback
