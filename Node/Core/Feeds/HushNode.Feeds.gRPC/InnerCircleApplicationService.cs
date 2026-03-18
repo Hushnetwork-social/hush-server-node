@@ -2,6 +2,7 @@ using HushNetwork.proto;
 using HushNode.Caching;
 using HushNode.Feeds.Storage;
 using HushNode.Identity.Storage;
+using HushShared.Blockchain.BlockModel;
 using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
 using Microsoft.Extensions.Logging;
@@ -211,9 +212,16 @@ public class InnerCircleApplicationService(
         var viewer = request.ViewerPublicAddress?.Trim() ?? string.Empty;
         var author = request.AuthorPublicAddress?.Trim() ?? string.Empty;
         var requester = request.RequesterPublicAddress?.Trim() ?? string.Empty;
+        var requestStopwatch = Stopwatch.StartNew();
+        _logger.LogInformation(
+            "social_follow.follow_author.requested viewer={Viewer} author={Author} requester={Requester}",
+            ToLogSafeAddress(viewer),
+            ToLogSafeAddress(author),
+            ToLogSafeAddress(requester));
 
         if (string.IsNullOrWhiteSpace(viewer) || string.IsNullOrWhiteSpace(author))
         {
+            _logger.LogWarning("social_follow.follow_author.failed reason=invalid_request");
             return new FollowSocialAuthorResponse
             {
                 Success = false,
@@ -225,6 +233,10 @@ public class InnerCircleApplicationService(
 
         if (!string.Equals(viewer, requester, StringComparison.Ordinal))
         {
+            _logger.LogWarning(
+                "social_follow.follow_author.failed reason=unauthorized viewer={Viewer} requester={Requester}",
+                ToLogSafeAddress(viewer),
+                ToLogSafeAddress(requester));
             return new FollowSocialAuthorResponse
             {
                 Success = false,
@@ -234,19 +246,230 @@ public class InnerCircleApplicationService(
             };
         }
 
+        if (string.Equals(viewer, author, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "social_follow.follow_author.failed reason=self_follow viewer={Viewer}",
+                ToLogSafeAddress(viewer));
+            return new FollowSocialAuthorResponse
+            {
+                Success = false,
+                Message = "Viewer cannot follow their own author profile",
+                ErrorCode = "SOCIAL_FOLLOW_SELF_FOLLOW",
+                RequiresSyncRefresh = false
+            };
+        }
+
         var bootstrapState = await this._feedsStorageService.GetSocialFollowBootstrapStateAsync(viewer, author);
+        if (bootstrapState.AlreadyFollowing)
+        {
+            _logger.LogInformation(
+                "social_follow.follow_author.rejected reason=already_following viewer={Viewer} author={Author} innerCircleFeedId={FeedId}",
+                ToLogSafeAddress(viewer),
+                ToLogSafeAddress(author),
+                bootstrapState.InnerCircleFeedId);
+            return new FollowSocialAuthorResponse
+            {
+                Success = false,
+                Message = "Author is already followed",
+                ErrorCode = "SOCIAL_FOLLOW_ALREADY_FOLLOWING",
+                AlreadyFollowing = true,
+                RequiresSyncRefresh = true,
+                InnerCircleFeedId = bootstrapState.InnerCircleFeedId?.ToString()
+            };
+        }
+
+        var viewerProfile = await this.GetProfileWithEncryptKeyAsync(viewer);
+        if (viewerProfile == null)
+        {
+            _logger.LogWarning(
+                "social_follow.follow_author.failed reason=viewer_encrypt_key_missing viewer={Viewer}",
+                ToLogSafeAddress(viewer));
+            return new FollowSocialAuthorResponse
+            {
+                Success = false,
+                Message = "Viewer identity does not have a valid public encryption key",
+                ErrorCode = "SOCIAL_FOLLOW_INVALID_VIEWER",
+                RequiresSyncRefresh = false
+            };
+        }
+
+        var authorProfile = await this.GetProfileWithEncryptKeyAsync(author);
+        if (authorProfile == null)
+        {
+            _logger.LogWarning(
+                "social_follow.follow_author.failed reason=author_encrypt_key_missing author={Author}",
+                ToLogSafeAddress(author));
+            return new FollowSocialAuthorResponse
+            {
+                Success = false,
+                Message = "Author identity does not have a valid public encryption key",
+                ErrorCode = "SOCIAL_FOLLOW_INVALID_AUTHOR",
+                RequiresSyncRefresh = false
+            };
+        }
+
+        var currentBlock = this._blockchainCache.LastBlockIndex;
+        var innerCircle = bootstrapState.HasInnerCircle
+            ? await this._feedsStorageService.GetInnerCircleByOwnerAsync(viewer)
+            : null;
+        var innerCircleFeedId = innerCircle?.FeedId ?? bootstrapState.InnerCircleFeedId ?? FeedId.NewFeedId;
+
+        var participantsToAdd = new List<GroupFeedParticipantEntity>();
+        var participantsToRejoin = new List<string>();
+        var innerCircleToCreate = innerCircle == null
+            ? this.BuildInnerCircleForFollow(viewerProfile, authorProfile, innerCircleFeedId, currentBlock)
+            : null;
+
+        GroupFeedKeyGenerationEntity? keyGenerationEntity = null;
+
+        if (innerCircle != null)
+        {
+            var existingParticipant = await this._feedsStorageService
+                .GetParticipantWithHistoryAsync(innerCircleFeedId, author);
+
+            if (existingParticipant != null && existingParticipant.LeftAtBlock == null)
+            {
+                _logger.LogInformation(
+                    "social_follow.follow_author.rejected reason=already_in_inner_circle viewer={Viewer} author={Author} innerCircleFeedId={FeedId}",
+                    ToLogSafeAddress(viewer),
+                    ToLogSafeAddress(author),
+                    innerCircleFeedId);
+                return new FollowSocialAuthorResponse
+                {
+                    Success = false,
+                    Message = "Author is already followed",
+                    ErrorCode = "SOCIAL_FOLLOW_ALREADY_FOLLOWING",
+                    AlreadyFollowing = true,
+                    RequiresSyncRefresh = true,
+                    InnerCircleFeedId = innerCircleFeedId.ToString()
+                };
+            }
+
+            if (existingParticipant != null && existingParticipant.LeftAtBlock != null)
+            {
+                participantsToRejoin.Add(author);
+            }
+            else
+            {
+                participantsToAdd.Add(new GroupFeedParticipantEntity(
+                    innerCircleFeedId,
+                    author,
+                    ParticipantType.Member,
+                    currentBlock,
+                    LeftAtBlock: null,
+                    LastLeaveBlock: null));
+            }
+
+            var (rotationSuccess, builtKeyGeneration, rotationError) = await BuildInnerCircleKeyRotationEntityAsync(
+                innerCircleFeedId,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [author] = authorProfile.PublicEncryptAddress
+                });
+
+            if (!rotationSuccess || builtKeyGeneration == null)
+            {
+                _logger.LogWarning(
+                    "social_follow.follow_author.failed reason=key_rotation viewer={Viewer} author={Author} error={Error}",
+                    ToLogSafeAddress(viewer),
+                    ToLogSafeAddress(author),
+                    rotationError);
+                return new FollowSocialAuthorResponse
+                {
+                    Success = false,
+                    Message = $"Failed to rotate Inner Circle keys: {rotationError}",
+                    ErrorCode = "SOCIAL_FOLLOW_ROTATION_FAILED",
+                    RequiresSyncRefresh = false,
+                    InnerCircleFeedId = innerCircleFeedId.ToString()
+                };
+            }
+
+            keyGenerationEntity = builtKeyGeneration;
+        }
+
+        var directChatToCreate = bootstrapState.HasDirectChat
+            ? null
+            : this.BuildDirectChatFeed(viewerProfile, authorProfile, currentBlock);
+
+        await this._feedsStorageService.ApplySocialFollowBootstrapAsync(new SocialFollowBootstrapMutation(
+            InnerCircleToCreate: innerCircleToCreate,
+            DirectChatToCreate: directChatToCreate,
+            InnerCircleParticipantsToAdd: participantsToAdd,
+            InnerCircleParticipantsToRejoin: participantsToRejoin,
+            InnerCircleRejoinBlockIndex: participantsToRejoin.Count > 0 ? currentBlock : null,
+            InnerCircleKeyGeneration: keyGenerationEntity,
+            InnerCircleLastUpdatedAtBlock: keyGenerationEntity != null ? currentBlock : null));
+
+        await this._feedParticipantsCacheService.InvalidateKeyGenerationsAsync(innerCircleFeedId);
+        await this._groupMembersCacheService.InvalidateGroupMembersAsync(innerCircleFeedId);
+        await this._feedParticipantsCacheService.AddParticipantAsync(innerCircleFeedId, author);
+        await this._userFeedsCacheService.AddFeedToUserCacheAsync(viewer, innerCircleFeedId);
+        await this._userFeedsCacheService.AddFeedToUserCacheAsync(author, innerCircleFeedId);
+
+        _ = this._feedMetadataCacheService.SetFeedMetadataAsync(
+            viewer,
+            innerCircleFeedId,
+            new FeedMetadataEntry
+            {
+                Title = "Inner Circle",
+                Type = (int)FeedType.Group,
+                LastBlockIndex = currentBlock.Value,
+                Participants = new List<string> { viewer, author },
+                CreatedAtBlock = currentBlock.Value,
+                CurrentKeyGeneration = innerCircleToCreate?.CurrentKeyGeneration ?? keyGenerationEntity?.KeyGeneration ?? innerCircle?.CurrentKeyGeneration
+            });
+
+        if (directChatToCreate != null)
+        {
+            await this._userFeedsCacheService.AddFeedToUserCacheAsync(viewer, directChatToCreate.FeedId);
+            await this._userFeedsCacheService.AddFeedToUserCacheAsync(author, directChatToCreate.FeedId);
+
+            _ = this._feedMetadataCacheService.SetFeedMetadataAsync(
+                viewer,
+                directChatToCreate.FeedId,
+                new FeedMetadataEntry
+                {
+                    Title = authorProfile.Alias,
+                    Type = (int)FeedType.Chat,
+                    LastBlockIndex = currentBlock.Value,
+                    Participants = new List<string> { viewer, author },
+                    CreatedAtBlock = currentBlock.Value,
+                    CurrentKeyGeneration = null
+                });
+
+            _ = this._feedMetadataCacheService.SetFeedMetadataAsync(
+                author,
+                directChatToCreate.FeedId,
+                new FeedMetadataEntry
+                {
+                    Title = viewerProfile.Alias,
+                    Type = (int)FeedType.Chat,
+                    LastBlockIndex = currentBlock.Value,
+                    Participants = new List<string> { viewer, author },
+                    CreatedAtBlock = currentBlock.Value,
+                    CurrentKeyGeneration = null
+                });
+        }
+
+        requestStopwatch.Stop();
+        _logger.LogInformation(
+            "social_follow.follow_author.succeeded viewer={Viewer} author={Author} innerCircleFeedId={FeedId} createdInnerCircle={CreatedInnerCircle} createdDirectChat={CreatedDirectChat} elapsedMs={ElapsedMs}",
+            ToLogSafeAddress(viewer),
+            ToLogSafeAddress(author),
+            innerCircleFeedId,
+            innerCircleToCreate != null,
+            directChatToCreate != null,
+            requestStopwatch.ElapsedMilliseconds);
+
         return new FollowSocialAuthorResponse
         {
-            Success = false,
-            Message = bootstrapState.AlreadyFollowing
-                ? "Author is already followed"
-                : "FollowSocialAuthor contract is defined, but atomic follow execution is implemented in the next phase.",
-            ErrorCode = bootstrapState.AlreadyFollowing
-                ? "SOCIAL_FOLLOW_ALREADY_FOLLOWING"
-                : "SOCIAL_FOLLOW_NOT_IMPLEMENTED",
-            AlreadyFollowing = bootstrapState.AlreadyFollowing,
-            RequiresSyncRefresh = bootstrapState.AlreadyFollowing,
-            InnerCircleFeedId = bootstrapState.InnerCircleFeedId?.ToString()
+            Success = true,
+            Message = "Author followed successfully",
+            ErrorCode = "SOCIAL_FOLLOW_ACCEPTED",
+            InnerCircleFeedId = innerCircleFeedId.ToString(),
+            AlreadyFollowing = false,
+            RequiresSyncRefresh = true
         };
     }
 
@@ -545,6 +768,109 @@ public class InnerCircleApplicationService(
         };
 
         return (true, keyGeneration, null);
+    }
+
+    private GroupFeed BuildInnerCircleForFollow(
+        Profile viewerProfile,
+        Profile authorProfile,
+        FeedId feedId,
+        BlockIndex currentBlock)
+    {
+        var groupFeed = new GroupFeed(
+            FeedId: feedId,
+            Title: "Inner Circle",
+            Description: "Auto-managed inner circle",
+            IsPublic: false,
+            CreatedAtBlock: currentBlock,
+            CurrentKeyGeneration: 0,
+            IsInnerCircle: true,
+            OwnerPublicAddress: viewerProfile.PublicSigningAddress);
+
+        var keyGeneration = new GroupFeedKeyGenerationEntity(
+            feedId,
+            KeyGeneration: 0,
+            currentBlock,
+            RotationTrigger.Join)
+        {
+            GroupFeed = groupFeed
+        };
+
+        var plaintextAesKey = EncryptKeys.GenerateAesKey();
+        keyGeneration.EncryptedKeys.Add(new GroupFeedEncryptedKeyEntity(
+            feedId,
+            KeyGeneration: 0,
+            MemberPublicAddress: viewerProfile.PublicSigningAddress,
+            EncryptedAesKey: EncryptKeys.Encrypt(plaintextAesKey, viewerProfile.PublicEncryptAddress))
+        {
+            KeyGenerationEntity = keyGeneration
+        });
+        keyGeneration.EncryptedKeys.Add(new GroupFeedEncryptedKeyEntity(
+            feedId,
+            KeyGeneration: 0,
+            MemberPublicAddress: authorProfile.PublicSigningAddress,
+            EncryptedAesKey: EncryptKeys.Encrypt(plaintextAesKey, authorProfile.PublicEncryptAddress))
+        {
+            KeyGenerationEntity = keyGeneration
+        });
+
+        groupFeed.KeyGenerations.Add(keyGeneration);
+
+        groupFeed.Participants.Add(new GroupFeedParticipantEntity(
+            feedId,
+            viewerProfile.PublicSigningAddress,
+            ParticipantType.Owner,
+            currentBlock,
+            LeftAtBlock: null,
+            LastLeaveBlock: null)
+        {
+            GroupFeed = groupFeed
+        });
+        groupFeed.Participants.Add(new GroupFeedParticipantEntity(
+            feedId,
+            authorProfile.PublicSigningAddress,
+            ParticipantType.Member,
+            currentBlock,
+            LeftAtBlock: null,
+            LastLeaveBlock: null)
+        {
+            GroupFeed = groupFeed
+        });
+
+        return groupFeed;
+    }
+
+    private Feed BuildDirectChatFeed(Profile viewerProfile, Profile authorProfile, BlockIndex currentBlock)
+    {
+        var feedId = FeedId.NewFeedId;
+        var plaintextAesKey = EncryptKeys.GenerateAesKey();
+        var feed = new Feed(feedId, string.Empty, FeedType.Chat, currentBlock);
+
+        feed.Participants.Add(new FeedParticipant(
+            feedId,
+            viewerProfile.PublicSigningAddress,
+            ParticipantType.Owner,
+            EncryptKeys.Encrypt(plaintextAesKey, viewerProfile.PublicEncryptAddress))
+        {
+            Feed = feed
+        });
+        feed.Participants.Add(new FeedParticipant(
+            feedId,
+            authorProfile.PublicSigningAddress,
+            ParticipantType.Owner,
+            EncryptKeys.Encrypt(plaintextAesKey, authorProfile.PublicEncryptAddress))
+        {
+            Feed = feed
+        });
+
+        return feed;
+    }
+
+    private async Task<Profile?> GetProfileWithEncryptKeyAsync(string publicAddress)
+    {
+        var identity = await this._identityStorageService.RetrieveIdentityAsync(publicAddress);
+        return identity is Profile profile && !string.IsNullOrWhiteSpace(profile.PublicEncryptAddress)
+            ? profile
+            : null;
     }
 
     private static string ToLogSafeAddress(string address)

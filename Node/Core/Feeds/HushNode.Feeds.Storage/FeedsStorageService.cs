@@ -362,6 +362,56 @@ public class FeedsStorageService(
             .GetRepository<IFeedsRepository>()
             .GetSocialFollowBootstrapStateAsync(viewerPublicAddress, authorPublicAddress);
 
+    public async Task ApplySocialFollowBootstrapAsync(SocialFollowBootstrapMutation mutation)
+    {
+        using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
+        var repository = writableUnitOfWork.GetRepository<IFeedsRepository>();
+
+        if (mutation.InnerCircleToCreate != null)
+        {
+            await repository.CreateGroupFeed(mutation.InnerCircleToCreate);
+        }
+
+        if (mutation.InnerCircleKeyGeneration != null)
+        {
+            foreach (var participant in mutation.InnerCircleParticipantsToAdd)
+            {
+                await repository.AddParticipantAsync(mutation.InnerCircleKeyGeneration.FeedId, participant);
+            }
+
+            if (mutation.InnerCircleRejoinBlockIndex != null)
+            {
+                foreach (var participantAddress in mutation.InnerCircleParticipantsToRejoin)
+                {
+                    await repository.UpdateParticipantRejoinAsync(
+                        mutation.InnerCircleKeyGeneration.FeedId,
+                        participantAddress,
+                        mutation.InnerCircleRejoinBlockIndex,
+                        ParticipantType.Member);
+                }
+            }
+
+            await repository.CreateKeyRotationAsync(mutation.InnerCircleKeyGeneration);
+            await repository.UpdateCurrentKeyGenerationAsync(
+                mutation.InnerCircleKeyGeneration.FeedId,
+                mutation.InnerCircleKeyGeneration.KeyGeneration);
+
+            if (mutation.InnerCircleLastUpdatedAtBlock != null)
+            {
+                await repository.UpdateGroupFeedLastUpdatedAtBlockAsync(
+                    mutation.InnerCircleKeyGeneration.FeedId,
+                    mutation.InnerCircleLastUpdatedAtBlock);
+            }
+        }
+
+        if (mutation.DirectChatToCreate != null)
+        {
+            await repository.CreateFeed(mutation.DirectChatToCreate);
+        }
+
+        await writableUnitOfWork.CommitAsync();
+    }
+
     public async Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress) =>
         await this._unitOfWorkProvider
             .CreateReadOnly()

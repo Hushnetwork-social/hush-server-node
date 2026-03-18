@@ -447,6 +447,190 @@ public class FeedsGrpcServiceInnerCircleTests
         response.Message.Should().NotContain("sensitive internals");
     }
 
+    [Fact]
+    public async Task FollowSocialAuthor_WhenRequesterDiffersFromViewer_ShouldReturnUnauthorized()
+    {
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+
+        var viewer = TestDataFactory.CreateAddress();
+        var author = TestDataFactory.CreateAddress();
+        var requester = TestDataFactory.CreateAddress();
+        var service = CreateService(mocker);
+
+        var response = await service.FollowSocialAuthor(
+            new FollowSocialAuthorRequest
+            {
+                ViewerPublicAddress = viewer,
+                AuthorPublicAddress = author,
+                RequesterPublicAddress = requester
+            },
+            CreateMockServerCallContext());
+
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be("SOCIAL_FOLLOW_UNAUTHORIZED");
+    }
+
+    [Fact]
+    public async Task FollowSocialAuthor_WhenViewerMatchesAuthor_ShouldRejectSelfFollow()
+    {
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+
+        var viewer = TestDataFactory.CreateAddress();
+        var service = CreateService(mocker);
+
+        var response = await service.FollowSocialAuthor(
+            new FollowSocialAuthorRequest
+            {
+                ViewerPublicAddress = viewer,
+                AuthorPublicAddress = viewer,
+                RequesterPublicAddress = viewer
+            },
+            CreateMockServerCallContext());
+
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be("SOCIAL_FOLLOW_SELF_FOLLOW");
+        response.RequiresSyncRefresh.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task FollowSocialAuthor_WhenAlreadyFollowing_ShouldRejectAndRequireRefresh()
+    {
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+
+        var viewer = TestDataFactory.CreateAddress();
+        var author = TestDataFactory.CreateAddress();
+        var innerCircleFeedId = TestDataFactory.CreateFeedId();
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetSocialFollowBootstrapStateAsync(viewer, author))
+            .ReturnsAsync(new SocialFollowBootstrapState(true, true, true, innerCircleFeedId));
+
+        var service = CreateService(mocker);
+        var response = await service.FollowSocialAuthor(
+            new FollowSocialAuthorRequest
+            {
+                ViewerPublicAddress = viewer,
+                AuthorPublicAddress = author,
+                RequesterPublicAddress = viewer
+            },
+            CreateMockServerCallContext());
+
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be("SOCIAL_FOLLOW_ALREADY_FOLLOWING");
+        response.AlreadyFollowing.Should().BeTrue();
+        response.RequiresSyncRefresh.Should().BeTrue();
+        response.InnerCircleFeedId.Should().Be(innerCircleFeedId.ToString());
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Verify(x => x.ApplySocialFollowBootstrapAsync(It.IsAny<SocialFollowBootstrapMutation>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task FollowSocialAuthor_WhenBootstrapIsValid_ShouldPersistAtomicallyAndRefreshCaches()
+    {
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+
+        var viewer = TestDataFactory.CreateAddress();
+        var author = TestDataFactory.CreateAddress();
+        var viewerEncrypt = new EncryptKeys().PublicKey;
+        var authorEncrypt = new EncryptKeys().PublicKey;
+
+        mocker.GetMock<IBlockchainCache>()
+            .Setup(x => x.LastBlockIndex)
+            .Returns(new BlockIndex(25));
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetSocialFollowBootstrapStateAsync(viewer, author))
+            .ReturnsAsync(new SocialFollowBootstrapState(false, false, false, null));
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.ApplySocialFollowBootstrapAsync(It.IsAny<SocialFollowBootstrapMutation>()))
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<IIdentityStorageService>()
+            .Setup(x => x.RetrieveIdentityAsync(viewer))
+            .ReturnsAsync(new Profile("viewer-alias", "vw", viewer, viewerEncrypt, true, new BlockIndex(1)));
+
+        mocker.GetMock<IIdentityStorageService>()
+            .Setup(x => x.RetrieveIdentityAsync(author))
+            .ReturnsAsync(new Profile("author-alias", "au", author, authorEncrypt, true, new BlockIndex(1)));
+
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.InvalidateKeyGenerationsAsync(It.IsAny<FeedId>()))
+            .Returns(Task.CompletedTask);
+        mocker.GetMock<IFeedParticipantsCacheService>()
+            .Setup(x => x.AddParticipantAsync(It.IsAny<FeedId>(), author))
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<IGroupMembersCacheService>()
+            .Setup(x => x.InvalidateGroupMembersAsync(It.IsAny<FeedId>()))
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<IUserFeedsCacheService>()
+            .Setup(x => x.AddFeedToUserCacheAsync(It.IsAny<string>(), It.IsAny<FeedId>()))
+            .Returns(Task.CompletedTask);
+
+        mocker.GetMock<IFeedMetadataCacheService>()
+            .Setup(x => x.SetFeedMetadataAsync(It.IsAny<string>(), It.IsAny<FeedId>(), It.IsAny<FeedMetadataEntry>()))
+            .Returns(Task.FromResult(true));
+
+        var service = CreateService(mocker);
+        var response = await service.FollowSocialAuthor(
+            new FollowSocialAuthorRequest
+            {
+                ViewerPublicAddress = viewer,
+                AuthorPublicAddress = author,
+                RequesterPublicAddress = viewer
+            },
+            CreateMockServerCallContext());
+
+        response.Success.Should().BeTrue($"{response.ErrorCode}:{response.Message}");
+        response.ErrorCode.Should().Be("SOCIAL_FOLLOW_ACCEPTED");
+        response.RequiresSyncRefresh.Should().BeTrue();
+        response.InnerCircleFeedId.Should().NotBeNullOrWhiteSpace();
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Verify(x => x.ApplySocialFollowBootstrapAsync(
+                It.Is<SocialFollowBootstrapMutation>(m =>
+                    m.InnerCircleToCreate != null &&
+                    m.DirectChatToCreate != null &&
+                    m.InnerCircleParticipantsToAdd.Count == 0 &&
+                    m.InnerCircleParticipantsToRejoin.Count == 0 &&
+                    m.InnerCircleKeyGeneration == null)),
+                Times.Once);
+    }
+
+    [Fact]
+    public async Task FollowSocialAuthor_WhenUnhandledException_ShouldReturnSanitizedInternalError()
+    {
+        var mocker = new AutoMocker();
+        SetupConfigurationMock(mocker);
+
+        mocker.GetMock<IInnerCircleApplicationService>()
+            .Setup(x => x.FollowSocialAuthorAsync(It.IsAny<FollowSocialAuthorRequest>()))
+            .ThrowsAsync(new InvalidOperationException("sensitive follow internals"));
+
+        var service = mocker.CreateInstance<FeedsGrpcService>();
+
+        var response = await service.FollowSocialAuthor(
+            new FollowSocialAuthorRequest
+            {
+                ViewerPublicAddress = TestDataFactory.CreateAddress(),
+                AuthorPublicAddress = TestDataFactory.CreateAddress(),
+                RequesterPublicAddress = TestDataFactory.CreateAddress()
+            },
+            CreateMockServerCallContext());
+
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be("SOCIAL_FOLLOW_INTERNAL_ERROR");
+        response.Message.Should().Be("Internal server error");
+        response.Message.Should().NotContain("sensitive follow internals");
+    }
+
     private static void SetupConfigurationMock(AutoMocker mocker, int maxMessagesPerResponse = 100)
     {
         var mockConfigSection = new Mock<IConfigurationSection>();

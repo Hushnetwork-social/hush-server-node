@@ -107,6 +107,11 @@ public interface IFeedsStorageService
     Task<SocialFollowBootstrapState> GetSocialFollowBootstrapStateAsync(string viewerPublicAddress, string authorPublicAddress);
 
     /// <summary>
+    /// Persists the follow bootstrap atomically across Inner Circle and direct-chat state.
+    /// </summary>
+    Task ApplySocialFollowBootstrapAsync(SocialFollowBootstrapMutation mutation);
+
+    /// <summary>
     /// Get a specific participant from a group feed.
     /// </summary>
     Task<GroupFeedParticipantEntity?> GetGroupFeedParticipantAsync(FeedId feedId, string publicAddress);

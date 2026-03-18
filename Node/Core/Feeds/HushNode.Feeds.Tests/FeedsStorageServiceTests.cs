@@ -157,6 +157,81 @@ public class FeedsStorageServiceTests
         result.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task ApplySocialFollowBootstrapAsync_WhenAllChangesAreValid_ShouldCommitOnce()
+    {
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+        var chatFeedId = TestDataFactory.CreateFeedId();
+        var viewer = TestDataFactory.CreateAddress();
+        var author = TestDataFactory.CreateAddress();
+
+        var repository = new Mock<IFeedsRepository>();
+        var writableUnitOfWork = new Mock<IWritableUnitOfWork<FeedsDbContext>>();
+        writableUnitOfWork.Setup(x => x.GetRepository<IFeedsRepository>()).Returns(repository.Object);
+        writableUnitOfWork.Setup(x => x.CommitAsync()).Returns(Task.CompletedTask);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateWritable())
+            .Returns(writableUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        var mutation = new SocialFollowBootstrapMutation(
+            InnerCircleToCreate: null,
+            DirectChatToCreate: new Feed(chatFeedId, string.Empty, FeedType.Chat, new BlockIndex(10)),
+            InnerCircleParticipantsToAdd: new[]
+            {
+                new GroupFeedParticipantEntity(feedId, author, ParticipantType.Member, new BlockIndex(10), null, null)
+            },
+            InnerCircleParticipantsToRejoin: new[] { viewer },
+            InnerCircleRejoinBlockIndex: new BlockIndex(10),
+            InnerCircleKeyGeneration: new GroupFeedKeyGenerationEntity(feedId, 1, new BlockIndex(10), RotationTrigger.Join),
+            InnerCircleLastUpdatedAtBlock: new BlockIndex(10));
+
+        await service.ApplySocialFollowBootstrapAsync(mutation);
+
+        repository.Verify(x => x.AddParticipantAsync(feedId, It.IsAny<GroupFeedParticipantEntity>()), Times.Once);
+        repository.Verify(x => x.UpdateParticipantRejoinAsync(feedId, viewer, It.IsAny<BlockIndex>(), ParticipantType.Member), Times.Once);
+        repository.Verify(x => x.CreateKeyRotationAsync(It.IsAny<GroupFeedKeyGenerationEntity>()), Times.Once);
+        repository.Verify(x => x.CreateFeed(It.Is<Feed>(f => f.FeedId == chatFeedId)), Times.Once);
+        writableUnitOfWork.Verify(x => x.CommitAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task ApplySocialFollowBootstrapAsync_WhenPersistenceFails_ShouldNotCommit()
+    {
+        var mocker = new AutoMocker();
+        var feedId = TestDataFactory.CreateFeedId();
+
+        var repository = new Mock<IFeedsRepository>();
+        repository
+            .Setup(x => x.CreateFeed(It.IsAny<Feed>()))
+            .ThrowsAsync(new InvalidOperationException("db write failed"));
+
+        var writableUnitOfWork = new Mock<IWritableUnitOfWork<FeedsDbContext>>();
+        writableUnitOfWork.Setup(x => x.GetRepository<IFeedsRepository>()).Returns(repository.Object);
+
+        mocker.GetMock<IUnitOfWorkProvider<FeedsDbContext>>()
+            .Setup(x => x.CreateWritable())
+            .Returns(writableUnitOfWork.Object);
+
+        var service = mocker.CreateInstance<FeedsStorageService>();
+
+        var act = () => service.ApplySocialFollowBootstrapAsync(new SocialFollowBootstrapMutation(
+            InnerCircleToCreate: null,
+            DirectChatToCreate: new Feed(TestDataFactory.CreateFeedId(), string.Empty, FeedType.Chat, new BlockIndex(10)),
+            InnerCircleParticipantsToAdd: Array.Empty<GroupFeedParticipantEntity>(),
+            InnerCircleParticipantsToRejoin: Array.Empty<string>(),
+            InnerCircleRejoinBlockIndex: null,
+            InnerCircleKeyGeneration: new GroupFeedKeyGenerationEntity(feedId, 1, new BlockIndex(10), RotationTrigger.Join),
+            InnerCircleLastUpdatedAtBlock: new BlockIndex(10)));
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        writableUnitOfWork.Verify(x => x.CommitAsync(), Times.Never);
+    }
+
     #endregion
 
     #region RetrieveGroupFeedsForAddress Query Logic Tests
