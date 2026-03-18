@@ -182,9 +182,9 @@ Feature: HushSocial end-to-end walkthrough
     And Owner browser has approved FEAT-087 reaction circuit artifacts available
     When FollowerA reacts to post "Discuss architecture" with emoji "thumbs_up" via browser
     And FollowerA comments "Looks good" on post "Discuss architecture" via browser
-    And FollowerA reacts to comment "Looks good" with emoji "heart" via browser
+    And Owner reacts to comment "Looks good" with emoji "heart" via browser
     And Owner replies "Thanks for feedback" to comment "Looks good" via browser
-    And Owner reacts to reply "Thanks for feedback" with emoji "thumbs_up" via browser
+    And FollowerA reacts to reply "Thanks for feedback" with emoji "thumbs_up" via browser
     Then both users should see reply count 2 on post card "Discuss architecture"
     Then both users should see comment "Looks good"
     And both users should see reaction count 1 on comment "Looks good"
