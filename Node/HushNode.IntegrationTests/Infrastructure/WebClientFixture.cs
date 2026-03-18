@@ -59,6 +59,14 @@ internal sealed class WebClientFixture : IAsyncDisposable
         if (_started)
             return;
 
+        if (await this.TryReuseHealthyServiceAsync(cancellationToken))
+        {
+            Console.WriteLine("[E2E] Reusing already-running hush-web-client container.");
+            File.WriteAllText(_buildStampPath, DateTime.UtcNow.ToString("O"));
+            _started = true;
+            return;
+        }
+
         if (this.ShouldRebuildImage())
         {
             Console.WriteLine("[E2E] Building hush-web-client E2E image...");
@@ -100,6 +108,57 @@ internal sealed class WebClientFixture : IAsyncDisposable
         await WaitForHealthyAsync(cancellationToken);
 
         _started = true;
+    }
+
+    private async Task<bool> TryReuseHealthyServiceAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!await this.IsComposeServiceRunningAsync(cancellationToken))
+            {
+                return false;
+            }
+
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            var response = await client.GetAsync($"{BaseUrl}/api/health", cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task<bool> IsComposeServiceRunningAsync(CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "docker",
+            Arguments = $"compose -f \"{_composeFilePath}\" ps --status running --services",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+
+        var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to inspect docker compose services");
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync(cancellationToken);
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
+
+        if (process.ExitCode != 0)
+        {
+            Console.WriteLine($"[E2E] docker compose ps failed while checking running service. stderr: {stderr}");
+            return false;
+        }
+
+        return stdout
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Any(line => string.Equals(line.Trim(), WebClientServiceName, StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task<string> GetServiceLogsAsync(DateTimeOffset? sinceUtc = null, CancellationToken cancellationToken = default)

@@ -2,6 +2,7 @@ param(
     [string]$BlockList,
     [int]$PollSeconds = 15,
     [int]$StaleMinutes = 5,
+    [int]$MaxMinutes = 5,
     [bool]$NoBuild = $true,
     [int]$RetryOnEarlyStallCount = 1,
     [switch]$StopOnFailure = $true
@@ -140,7 +141,8 @@ function Start-BlockProcess {
         [string]$ProjectPath,
         [string]$Filter,
         [string]$WorkingDirectory,
-        [bool]$NoBuild
+        [bool]$NoBuild,
+        [int]$MaxMinutes
     )
 
     $arguments = @(
@@ -150,6 +152,9 @@ function Start-BlockProcess {
         $Filter
         "--verbosity"
         "minimal"
+        "--blame-hang"
+        "--blame-hang-timeout"
+        ("{0}m" -f $MaxMinutes)
     )
 
     if ($NoBuild) {
@@ -168,6 +173,7 @@ Write-Host "Blocks: $($selectedBlocks.Count)"
 Write-Host "BlockNames: $($selectedBlocks.Name -join ', ')"
 Write-Host "PollSeconds: $PollSeconds"
 Write-Host "StaleMinutes: $StaleMinutes"
+Write-Host "MaxMinutes: $MaxMinutes"
 Write-Host "NoBuild: $NoBuild"
 Write-Host "RetryOnEarlyStallCount: $RetryOnEarlyStallCount"
 
@@ -187,7 +193,7 @@ foreach ($block in $selectedBlocks) {
 
         $beforeRun = Get-LatestRunInfo -RootPath $testResultsRoot
         $startTime = Get-Date
-        $process = Start-BlockProcess -ProjectPath $projectPath -Filter $block.Filter -WorkingDirectory $workspaceRoot -NoBuild $NoBuild
+        $process = Start-BlockProcess -ProjectPath $projectPath -Filter $block.Filter -WorkingDirectory $workspaceRoot -NoBuild $NoBuild -MaxMinutes $MaxMinutes
         $lastReportedRunName = $null
         $staleTriggered = $false
         $firstObservedRun = $null
@@ -222,6 +228,13 @@ foreach ($block in $selectedBlocks) {
 
                 Write-Host "[$($block.Name)] elapsed=${elapsed}s run=$($latestRun.RunName) latest=$($latestRun.LatestFile) lastWrite=$($latestRun.LatestFileWrite.ToString('HH:mm:ss')) idle=${inactiveMinutes}m"
 
+                if ($elapsed -ge ($MaxMinutes * 60)) {
+                    Write-Warning "[$($block.Name)] Maximum runtime of $MaxMinutes minute(s) reached. Aborting active dotnet test process."
+                    Stop-ProcessTree -ProcessId $process.Id
+                    $staleTriggered = $true
+                    break
+                }
+
                 if ($inactiveMinutes -ge $StaleMinutes) {
                     Write-Warning "[$($block.Name)] No TestResults activity for $inactiveMinutes minute(s). Aborting active dotnet test process."
                     Stop-ProcessTree -ProcessId $process.Id
@@ -231,6 +244,13 @@ foreach ($block in $selectedBlocks) {
             }
             else {
                 Write-Host "[$($block.Name)] elapsed=${elapsed}s waiting for TestRun creation..."
+
+                if ($elapsed -ge ($MaxMinutes * 60)) {
+                    Write-Warning "[$($block.Name)] Maximum runtime of $MaxMinutes minute(s) reached before TestRun creation. Aborting active dotnet test process."
+                    Stop-ProcessTree -ProcessId $process.Id
+                    $staleTriggered = $true
+                    break
+                }
 
                 if ($elapsed -ge ($StaleMinutes * 60)) {
                     Write-Warning "[$($block.Name)] No TestRun folder created within $StaleMinutes minute(s). Aborting active dotnet test process."
