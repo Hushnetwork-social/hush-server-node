@@ -860,6 +860,15 @@ public sealed class HushSocialIntegrationSteps
         response.Content.Should().NotBeNullOrWhiteSpace();
     }
 
+    [Then(@"the public permalink should remain read-only for guests")]
+    public void ThenThePublicPermalinkShouldRemainReadOnlyForGuests()
+    {
+        var response = GetLastPermalinkResponse();
+        response.AccessState.Should().Be(SocialPermalinkAccessStateProto.SocialPermalinkAccessStateAllowed);
+        response.CanInteract.Should().BeFalse();
+        response.DenialKind.Should().Be(SocialPermalinkDenialKindProto.SocialPermalinkDenialKindNone);
+    }
+
     [Then(@"a generic denial message should be returned")]
     public void ThenAGenericDenialMessageShouldBeReturned()
     {
@@ -886,7 +895,7 @@ public sealed class HushSocialIntegrationSteps
         response.AccessState.Should().Be(SocialPermalinkAccessStateProto.SocialPermalinkAccessStateGuestDenied);
         response.DenialKind.Should().Be(SocialPermalinkDenialKindProto.SocialPermalinkDenialKindGuestCreateAccount);
         response.PrimaryCtaLabel.Should().Be("Create account");
-        response.PrimaryCtaRoute.Should().Be("/register");
+        response.PrimaryCtaRoute.Should().Be($"/auth?returnTo=%2Fsocial%2Fpost%2F{response.PostId}");
     }
 
     [Then(@"the permalink denial contract should request access from owner")]

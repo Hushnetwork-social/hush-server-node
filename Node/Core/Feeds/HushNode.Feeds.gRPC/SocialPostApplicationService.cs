@@ -85,13 +85,14 @@ public sealed class SocialPostApplicationService(
                 Success = true,
                 Message = "Authentication is required.",
                 AccessState = SocialPermalinkAccessStateProto.SocialPermalinkAccessStateGuestDenied,
+                PostId = post.PostId.ToString("D"),
                 CanInteract = false,
                 ErrorCode = "SOCIAL_POST_AUTH_REQUIRED",
                 DenialKind = SocialPermalinkDenialKindProto.SocialPermalinkDenialKindGuestCreateAccount,
                 DenialTitle = "Create your HushNetwork account",
                 DenialBody = "This private post is only visible to authorized members.",
                 PrimaryCtaLabel = "Create account",
-                PrimaryCtaRoute = "/register",
+                PrimaryCtaRoute = $"/auth?returnTo=%2Fsocial%2Fpost%2F{post.PostId:D}",
                 OpenGraph = GenericPrivateOg()
             };
         }

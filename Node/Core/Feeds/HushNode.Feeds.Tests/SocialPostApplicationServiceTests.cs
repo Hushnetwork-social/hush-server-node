@@ -47,9 +47,10 @@ public class SocialPostApplicationServiceTests
         });
 
         response.AccessState.Should().Be(SocialPermalinkAccessStateProto.SocialPermalinkAccessStateGuestDenied);
+        response.PostId.Should().Be(postId.ToString("D"));
         response.DenialKind.Should().Be(SocialPermalinkDenialKindProto.SocialPermalinkDenialKindGuestCreateAccount);
         response.PrimaryCtaLabel.Should().Be("Create account");
-        response.PrimaryCtaRoute.Should().Be("/register");
+        response.PrimaryCtaRoute.Should().Be($"/auth?returnTo=%2Fsocial%2Fpost%2F{postId:D}");
         response.OpenGraph.IsGenericPrivate.Should().BeTrue();
         response.AuthorPublicAddress.Should().BeNullOrEmpty();
         response.Content.Should().BeNullOrEmpty();

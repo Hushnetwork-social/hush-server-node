@@ -332,6 +332,7 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
     {
         var guestPage = GetUserPage("Guest");
         await NavigateToSocialExperienceAsync(guestPage);
+        await DismissGuestAuthOverlayIfVisibleAsync(guestPage);
 
         await WaitForVisiblePostAsync(guestPage, postTitle);
 
@@ -345,6 +346,7 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
     {
         var guestPage = GetUserPage("Guest");
         await NavigateToSocialExperienceAsync(guestPage);
+        await DismissGuestAuthOverlayIfVisibleAsync(guestPage);
 
         await WaitForVisiblePostAsync(guestPage, postTitle);
 
@@ -1046,6 +1048,26 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         var cta = await WaitForTestIdAsync(guestPage, "social-auth-overlay-cta", 10000);
         (await cta.IsVisibleAsync()).Should().BeTrue();
         (await cta.InnerTextAsync()).Should().Contain("Create account");
+    }
+
+    private static async Task DismissGuestAuthOverlayIfVisibleAsync(IPage page)
+    {
+        var overlay = page.GetByTestId("social-auth-overlay");
+        if (await overlay.CountAsync() == 0 || !await overlay.First.IsVisibleAsync())
+        {
+            return;
+        }
+
+        var closeButton = page.GetByTestId("social-auth-overlay-close");
+        if (await closeButton.CountAsync() > 0 && await closeButton.First.IsVisibleAsync())
+        {
+            await closeButton.First.ClickAsync();
+            await overlay.First.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Hidden,
+                Timeout = 10000
+            });
+        }
     }
 
     [Then(@"FollowerA should see reaction error ""(.*)"" on post ""(.*)""")]

@@ -157,13 +157,16 @@ Feature: HushSocial server integration rules
     Then FollowerC should receive access denied for post comments
     And FollowerC should receive access denied for post replies
 
-  @FEAT-089 @ignore
-  Scenario: Guest users cannot interact with public content
+  @FEAT-089 @HS-INT-089-GUEST-CTA
+  Scenario: Guest interaction contracts require auth while preserving public readability
     Given Owner has created an Open post "Public onboarding post"
-    When GuestLikeUser attempts to react to post "Public onboarding post"
-    Then the action should be rejected as unauthenticated
-    When GuestLikeUser attempts to comment on post "Public onboarding post"
-    Then the action should be rejected as unauthenticated
+    When an unauthenticated user opens permalink for post "Public onboarding post"
+    Then the post content should be visible
+    And the public permalink should remain read-only for guests
+    Given Owner profile mode is Close
+    And Owner has created a Close post "Guest gated post" for Inner Circle
+    When an unauthenticated user opens permalink for post "Guest gated post"
+    Then the permalink denial contract should target guest account creation
 
   @FEAT-090 @ignore
   Scenario: Following-first timeline prioritization for authenticated users
