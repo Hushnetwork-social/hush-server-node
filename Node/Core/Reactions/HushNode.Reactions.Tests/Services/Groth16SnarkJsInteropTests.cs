@@ -26,6 +26,7 @@ public sealed class Groth16SnarkJsInteropTests
     }
 
     [Fact]
+    [Trait("Category", "HS-INT-087-CROSS-RUNTIME-PROOF")]
     public async Task RealCircuitProof_GeneratedFromApprovedArtifacts_VerifiesThroughServerSnarkJsPath()
     {
         LogProgress("[interop] Starting real circuit proof interop test.");
@@ -217,7 +218,10 @@ public sealed class Groth16SnarkJsInteropTests
             current = current.Parent;
         }
 
-        throw new InvalidOperationException("Unable to resolve workspace root from test runtime.");
+        throw new InvalidOperationException(
+            "Unable to resolve workspace root from test runtime. " +
+            "This cross-runtime proof test requires a full workspace checkout containing sibling " +
+            "'hush-server-node' and 'hush-web-client' repositories.");
     }
 
     private static byte[] PackProof(SnarkJsProof proof)
