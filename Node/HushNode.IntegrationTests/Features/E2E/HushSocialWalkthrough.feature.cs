@@ -899,13 +899,14 @@ namespace HushNode.IntegrationTests.Features.E2E
     testRunner.And("FollowerA comments \"Looks good\" on post \"Discuss architecture\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 185
-    testRunner.And("FollowerA reacts to comment \"Looks good\" with emoji \"heart\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("Owner reacts to comment \"Looks good\" with emoji \"heart\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 186
     testRunner.And("Owner replies \"Thanks for feedback\" to comment \"Looks good\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 187
-    testRunner.And("Owner reacts to reply \"Thanks for feedback\" with emoji \"thumbs_up\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("FollowerA reacts to reply \"Thanks for feedback\" with emoji \"thumbs_up\" via browse" +
+                        "r", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 188
     testRunner.Then("both users should see reply count 2 on post card \"Discuss architecture\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
