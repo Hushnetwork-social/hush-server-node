@@ -34,6 +34,7 @@ public class NewReactionContentHandler : ITransactionContentHandler
     private const int VersionedBackupLengthBytes = 32;
     private static readonly byte[] ZeroBytes32 = new byte[32];
     private static readonly Regex SupportedCircuitVersionPattern = new(@"^omega-v\d+\.\d+\.\d+$|^dev-mode-v\d+$", RegexOptions.Compiled);
+    private sealed record RootDebugSnapshot(long BlockHeight, string MembersRootHex);
 
     public NewReactionContentHandler(
         ICredentialsProvider credentialProvider,
@@ -192,20 +193,47 @@ public class NewReactionContentHandler : ITransactionContentHandler
                 c2Points[i] = ECPoint.FromCoordinates(payload.CiphertextC2X[i], payload.CiphertextC2Y[i]);
             }
 
+            var rootSnapshots = recentRoots
+                .Select(root => new RootDebugSnapshot(root.BlockHeight, ToHex(root.MerkleRoot)))
+                .ToArray();
+
+            _logger.LogInformation(
+                "[NewReactionContentHandler] Reaction payload snapshot: MessageId={MessageId}, FeedId={FeedId}, MembershipScopeId={MembershipScopeId}, CircuitVersion={CircuitVersion}, NullifierHex={NullifierHex}, AuthorCommitmentHex={AuthorCommitmentHex}, FeedPkX={FeedPkX}, FeedPkY={FeedPkY}, CiphertextC1X={CiphertextC1X}, CiphertextC1Y={CiphertextC1Y}, CiphertextC2X={CiphertextC2X}, CiphertextC2Y={CiphertextC2Y}, RecentRoots={RecentRoots}",
+                payload.MessageId,
+                payload.FeedId,
+                membershipScopeId.Value,
+                payload.CircuitVersion,
+                ToHex(payload.Nullifier),
+                ToHex(authorCommitment),
+                feedPk.X.ToString(CultureInfo.InvariantCulture),
+                feedPk.Y.ToString(CultureInfo.InvariantCulture),
+                string.Join(",", payload.CiphertextC1X.Select(ToHex)),
+                string.Join(",", payload.CiphertextC1Y.Select(ToHex)),
+                string.Join(",", payload.CiphertextC2X.Select(ToHex)),
+                string.Join(",", payload.CiphertextC2Y.Select(ToHex)),
+                SerializeForLog(rootSnapshots));
+
             // Verify against each recent root (grace period)
             foreach (var rootInfo in recentRoots)
             {
                 _logger.LogInformation(
-                    "[NewReactionContentHandler] Verifying reaction proof inputs: message={MessageId}, feed={FeedId}, membershipScope={MembershipScopeId}, rootBlock={RootBlockHeight}, nullifier={NullifierHex}, authorCommitment={AuthorCommitmentHex}, membersRoot={MembersRootHex}, feedPkX={FeedPkX}, feedPkY={FeedPkY}",
-                    payload.MessageId,
-                    payload.FeedId,
-                    membershipScopeId.Value,
-                    rootInfo.BlockHeight,
-                    Convert.ToHexString(payload.Nullifier),
-                    Convert.ToHexString(authorCommitment),
-                    Convert.ToHexString(rootInfo.MerkleRoot),
-                    feedPk.X.ToString(CultureInfo.InvariantCulture),
-                    feedPk.Y.ToString(CultureInfo.InvariantCulture));
+                    "[NewReactionContentHandler] Verifying reaction proof inputs: {ProofInputs}",
+                    SerializeForLog(new
+                    {
+                        payload.MessageId,
+                        payload.FeedId,
+                        MembershipScopeId = membershipScopeId.Value,
+                        RootBlockHeight = rootInfo.BlockHeight,
+                        NullifierHex = ToHex(payload.Nullifier),
+                        AuthorCommitmentHex = ToHex(authorCommitment),
+                        MembersRootHex = ToHex(rootInfo.MerkleRoot),
+                        FeedPkX = feedPk.X.ToString(CultureInfo.InvariantCulture),
+                        FeedPkY = feedPk.Y.ToString(CultureInfo.InvariantCulture),
+                        CiphertextC1X = payload.CiphertextC1X.Select(ToHex).ToArray(),
+                        CiphertextC1Y = payload.CiphertextC1Y.Select(ToHex).ToArray(),
+                        CiphertextC2X = payload.CiphertextC2X.Select(ToHex).ToArray(),
+                        CiphertextC2Y = payload.CiphertextC2Y.Select(ToHex).ToArray(),
+                    }));
 
                 var publicInputs = new PublicInputs
                 {
@@ -278,4 +306,8 @@ public class NewReactionContentHandler : ITransactionContentHandler
 
     private static bool IsSupportedCircuitVersionFormat(string circuitVersion) =>
         !string.IsNullOrWhiteSpace(circuitVersion) && SupportedCircuitVersionPattern.IsMatch(circuitVersion);
+
+    private static string ToHex(byte[] value) => Convert.ToHexString(value);
+
+    private static string SerializeForLog<T>(T value) => System.Text.Json.JsonSerializer.Serialize(value);
 }

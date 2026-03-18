@@ -404,4 +404,48 @@ public class MembershipServiceTests
         recentRoots.Should().ContainSingle();
         recentRoots[0].MerkleRoot.Should().BeEquivalentTo(proof.MerkleRoot!);
     }
+
+    [Fact]
+    public async Task GetRecentRootsAsync_GlobalScopeWithStalePersistedRoot_ShouldRefreshToCurrentProfilesRoot()
+    {
+        var profile = new Profile(
+            Alias: "alice",
+            ShortAlias: "ali",
+            PublicSigningAddress: "addr-1",
+            PublicEncryptAddress: "enc-1",
+            IsPublic: true,
+            BlockIndex: new HushShared.Blockchain.BlockModel.BlockIndex(1));
+        var expectedCommitment = TestDataFactory.CreateCommitment();
+        var staleRoot = TestDataFactory.CreateMerkleRootHistory(PublicReactionScopes.GlobalHushMembers, 123);
+
+        _identityRepoMock.Setup(x => x.GetAllProfilesAsync())
+            .ReturnsAsync(new[] { profile });
+        _userCommitmentServiceMock.Setup(x => x.DeriveCommitmentFromAddress("addr-1"))
+            .Returns(expectedCommitment);
+
+        MerkleRootHistory? savedRoot = null;
+        _merkleRepoMock.Setup(x => x.SaveRootAsync(It.IsAny<MerkleRootHistory>()))
+            .Callback<MerkleRootHistory>(root => savedRoot = root)
+            .Returns(Task.CompletedTask);
+        _merkleRepoMock.Setup(x => x.GetRecentRootsAsync(PublicReactionScopes.GlobalHushMembers, It.IsAny<int>()))
+            .ReturnsAsync(() =>
+            {
+                var roots = new List<MerkleRootHistory> { staleRoot };
+                if (savedRoot is not null)
+                {
+                    roots.Insert(0, savedRoot);
+                }
+
+                return roots;
+            });
+
+        var proof = await _service.GetMembershipProofAsync(PublicReactionScopes.GlobalHushMembers, expectedCommitment);
+        var recentRoots = (await _service.GetRecentRootsAsync(PublicReactionScopes.GlobalHushMembers, 3)).ToList();
+
+        proof.IsMember.Should().BeTrue();
+        savedRoot.Should().NotBeNull();
+        recentRoots.Should().NotBeEmpty();
+        recentRoots[0].MerkleRoot.Should().BeEquivalentTo(proof.MerkleRoot!);
+        recentRoots[0].MerkleRoot.Should().NotBeEquivalentTo(staleRoot.MerkleRoot);
+    }
 }

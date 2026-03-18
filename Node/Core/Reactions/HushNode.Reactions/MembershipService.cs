@@ -230,6 +230,11 @@ public class MembershipService : IMembershipService
         var repository = unitOfWork.GetRepository<IMerkleTreeRepository>();
         var roots = await repository.GetRecentRootsAsync(feedId, count);
 
+        if (IsGlobalScope(feedId))
+        {
+            return await GetGlobalRecentRootsAsync(feedId, count, roots);
+        }
+
         // If no roots exist but there are commitments, compute and save the root
         if (!roots.Any())
         {
@@ -253,6 +258,49 @@ public class MembershipService : IMembershipService
         }
 
         return roots;
+    }
+
+    private async Task<IEnumerable<MerkleRootHistory>> GetGlobalRecentRootsAsync(
+        FeedId feedId,
+        int count,
+        IEnumerable<MerkleRootHistory> persistedRoots)
+    {
+        var persistedList = persistedRoots.ToList();
+        var commitments = (await GetGlobalCommitmentsAsync()).ToList();
+        if (commitments.Count == 0)
+        {
+            return persistedList;
+        }
+
+        var currentRootBytes = ToBytes32(ComputeMerkleRoot(commitments));
+        var latestPersistedRoot = persistedList.FirstOrDefault();
+
+        if (latestPersistedRoot is null || !latestPersistedRoot.MerkleRoot.SequenceEqual(currentRootBytes))
+        {
+            _logger.LogInformation(
+                "[MembershipService] Global scope Merkle root refreshed from live identities. HadPersistedRoot={HadPersistedRoot}",
+                latestPersistedRoot is not null);
+
+            var currentRoot = new MerkleRootHistory(
+                Id: 0,
+                FeedId: feedId,
+                MerkleRoot: currentRootBytes,
+                BlockHeight: latestPersistedRoot?.BlockHeight ?? 0,
+                CreatedAt: DateTime.UtcNow);
+
+            using var writeUnitOfWork = _unitOfWorkProvider.CreateWritable();
+            var writeRepository = writeUnitOfWork.GetRepository<IMerkleTreeRepository>();
+            await writeRepository.SaveRootAsync(currentRoot);
+            await writeUnitOfWork.CommitAsync();
+
+            persistedList.Insert(0, currentRoot);
+        }
+
+        return persistedList
+            .GroupBy(root => Convert.ToHexString(root.MerkleRoot))
+            .Select(group => group.First())
+            .Take(count)
+            .ToList();
     }
 
     public async Task<byte[]> UpdateMerkleRootAsync(FeedId feedId, long blockHeight)
