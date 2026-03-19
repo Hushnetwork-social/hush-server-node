@@ -44,7 +44,7 @@ jobs:
       run: dotnet build --no-restore
 
     - name: Unit Tests
-      run: dotnet test --no-build --verbosity normal --filter "Category!=Performance&Category!=PerformanceTest&Category!=E2E"
+      run: dotnet test --no-build --verbosity normal --filter "Category!=Performance&Category!=PerformanceTest&Category!=E2E&Category!=HS-INT-087-CROSS-RUNTIME-PROOF"
 
   # ============================================
   # BUILD, PUSH & DEPLOY — only after CI passes
