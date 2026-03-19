@@ -117,14 +117,12 @@ namespace HushNode.IntegrationTests.Features
         [Xunit.TraitAttribute("Description", "Close profile follow request acceptance auto-adds inner circle")]
         [Xunit.TraitAttribute("Category", "FEAT-084")]
         [Xunit.TraitAttribute("Category", "FEAT-085")]
-        [Xunit.TraitAttribute("Category", "FEAT-090")]
         [Xunit.TraitAttribute("Category", "HS-INT-085-ONBOARDING")]
         public void CloseProfileFollowRequestAcceptanceAuto_AddsInnerCircle()
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-084",
                     "FEAT-085",
-                    "FEAT-090",
                     "HS-INT-085-ONBOARDING"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Close profile follow request acceptance auto-adds inner circle", null, tagsOfScenario, argumentsOfScenario, featureTags);
@@ -864,17 +862,21 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Following-first timeline prioritization for authenticated users", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="FollowSocialAuthor creates inner circle membership and direct chat for visible au" +
+            "thor")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
-        [Xunit.TraitAttribute("Description", "Following-first timeline prioritization for authenticated users")]
+        [Xunit.TraitAttribute("Description", "FollowSocialAuthor creates inner circle membership and direct chat for visible au" +
+            "thor")]
         [Xunit.TraitAttribute("Category", "FEAT-090")]
-        public void Following_FirstTimelinePrioritizationForAuthenticatedUsers()
+        [Xunit.TraitAttribute("Category", "HS-INT-090-FOLLOW")]
+        public void FollowSocialAuthorCreatesInnerCircleMembershipAndDirectChatForVisibleAuthor()
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-090",
-                    "ignore"};
+                    "HS-INT-090-FOLLOW"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Following-first timeline prioritization for authenticated users", null, tagsOfScenario, argumentsOfScenario, featureTags);
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("FollowSocialAuthor creates inner circle membership and direct chat for visible au" +
+                    "thor", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 172
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
@@ -889,25 +891,101 @@ namespace HushNode.IntegrationTests.Features
   this.FeatureBackground();
 #line hidden
 #line 173
-    testRunner.Given("Owner has accepted follow request from FollowerA", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+    testRunner.Given("Owner has HushSocial enabled", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
 #line 174
-    testRunner.And("FollowerA follows Owner", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("FollowerA has HushSocial enabled", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 175
-    testRunner.And("FollowerB does not follow Owner", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("FollowerA does not have an Inner Circle yet", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 176
-    testRunner.And("Owner has created Open post \"From followed account\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.When("FollowerA follows Owner via social follow contract", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 177
-    testRunner.And("FollowerB has created Open post \"From non-followed account\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.Then("the social follow response should be accepted", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 178
-    testRunner.When("FollowerA requests home timeline", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+    testRunner.And("Owner should be in FollowerA Inner Circle", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 179
-    testRunner.Then("posts from followed accounts should be prioritized before non-followed posts", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+    testRunner.And("FollowerA and Owner should have a direct chat feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Duplicate social follow rejection requires refresh without mutating follow state")]
+        [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
+        [Xunit.TraitAttribute("Description", "Duplicate social follow rejection requires refresh without mutating follow state")]
+        [Xunit.TraitAttribute("Category", "FEAT-090")]
+        [Xunit.TraitAttribute("Category", "HS-INT-090-FOLLOW")]
+        public void DuplicateSocialFollowRejectionRequiresRefreshWithoutMutatingFollowState()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-090",
+                    "HS-INT-090-FOLLOW"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Duplicate social follow rejection requires refresh without mutating follow state", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 182
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 183
+    testRunner.Given("FollowerA already follows Owner via social follow contract", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 184
+    testRunner.When("FollowerA follows Owner via social follow contract", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 185
+    testRunner.Then("the social follow response should reject duplicate follow and require refresh", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 186
+    testRunner.And("Owner should be in FollowerA Inner Circle", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Social follow contract rejects self follow")]
+        [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
+        [Xunit.TraitAttribute("Description", "Social follow contract rejects self follow")]
+        [Xunit.TraitAttribute("Category", "FEAT-090")]
+        [Xunit.TraitAttribute("Category", "HS-INT-090-FOLLOW")]
+        public void SocialFollowContractRejectsSelfFollow()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-090",
+                    "HS-INT-090-FOLLOW"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Social follow contract rejects self follow", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 189
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 190
+    testRunner.When("Owner follows Owner via social follow contract", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 191
+    testRunner.Then("the social follow response should reject self follow", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
             this.ScenarioCleanup();
@@ -924,61 +1002,6 @@ namespace HushNode.IntegrationTests.Features
                     "ignore"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Notification delivery honors eligibility and privacy-safe payloads", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 182
-  this.ScenarioInitialize(scenarioInfo);
-#line hidden
-            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
-            {
-                testRunner.SkipScenario();
-            }
-            else
-            {
-                this.ScenarioStart();
-#line 7
-  this.FeatureBackground();
-#line hidden
-#line 183
-    testRunner.Given("Owner profile mode is Close", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
-#line hidden
-#line 184
-    testRunner.And("Owner has accepted follow request from FollowerA", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 185
-    testRunner.And("Owner has not accepted follow request from FollowerC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 186
-    testRunner.And("FollowerA has enabled Close post notifications", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 187
-    testRunner.And("FollowerA has not muted circle \"Inner Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 188
-    testRunner.When("Owner publishes Close post \"Security update\" to Inner Circle", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
-#line hidden
-#line 189
-    testRunner.Then("FollowerA should receive in-app notification for \"Security update\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
-#line hidden
-#line 190
-    testRunner.And("FollowerA should receive push notification with no content preview", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 191
-    testRunner.And("FollowerC should not receive any notification for \"Security update\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-            }
-            this.ScenarioCleanup();
-        }
-        
-        [Xunit.SkippableFactAttribute(DisplayName="Per-circle mute suppresses notifications for muted circle", Skip="Ignored")]
-        [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
-        [Xunit.TraitAttribute("Description", "Per-circle mute suppresses notifications for muted circle")]
-        [Xunit.TraitAttribute("Category", "FEAT-091")]
-        public void Per_CircleMuteSuppressesNotificationsForMutedCircle()
-        {
-            string[] tagsOfScenario = new string[] {
-                    "FEAT-091",
-                    "ignore"};
-            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Per-circle mute suppresses notifications for muted circle", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 194
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
@@ -999,21 +1022,76 @@ namespace HushNode.IntegrationTests.Features
     testRunner.And("Owner has accepted follow request from FollowerA", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 197
-    testRunner.And("Owner has created circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("Owner has not accepted follow request from FollowerC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 198
-    testRunner.And("Owner has added FollowerA to circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("FollowerA has enabled Close post notifications", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 199
-    testRunner.And("FollowerA has muted circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("FollowerA has not muted circle \"Inner Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 200
-    testRunner.When("Owner publishes Close post \"Trade signal\" to circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+    testRunner.When("Owner publishes Close post \"Security update\" to Inner Circle", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 201
-    testRunner.Then("FollowerA should not receive in-app notification for \"Trade signal\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+    testRunner.Then("FollowerA should receive in-app notification for \"Security update\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 202
+    testRunner.And("FollowerA should receive push notification with no content preview", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 203
+    testRunner.And("FollowerC should not receive any notification for \"Security update\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Per-circle mute suppresses notifications for muted circle", Skip="Ignored")]
+        [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
+        [Xunit.TraitAttribute("Description", "Per-circle mute suppresses notifications for muted circle")]
+        [Xunit.TraitAttribute("Category", "FEAT-091")]
+        public void Per_CircleMuteSuppressesNotificationsForMutedCircle()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-091",
+                    "ignore"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Per-circle mute suppresses notifications for muted circle", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 206
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+  this.FeatureBackground();
+#line hidden
+#line 207
+    testRunner.Given("Owner profile mode is Close", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 208
+    testRunner.And("Owner has accepted follow request from FollowerA", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 209
+    testRunner.And("Owner has created circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 210
+    testRunner.And("Owner has added FollowerA to circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 211
+    testRunner.And("FollowerA has muted circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 212
+    testRunner.When("Owner publishes Close post \"Trade signal\" to circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 213
+    testRunner.Then("FollowerA should not receive in-app notification for \"Trade signal\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 214
     testRunner.And("FollowerA should not receive push notification for \"Trade signal\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
