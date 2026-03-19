@@ -33,6 +33,9 @@ public sealed class HushSocialIntegrationSteps
     private const string BootstrapPeerNamesKey = "HushSocialBootstrapPeerNames";
     private const string PendingFollowersKey = "HushSocialPendingFollowers";
     private const string ApprovedFollowersKey = "HushSocialApprovedFollowers";
+    private const string LastSocialFollowResponseKey = "Feat090LastSocialFollowResponse";
+    private const string LastSocialFollowViewerKey = "Feat090LastSocialFollowViewer";
+    private const string LastSocialFollowAuthorKey = "Feat090LastSocialFollowAuthor";
     private const string SocialPostsByTitleKey = "Feat086SocialPostsByTitle";
     private const string LastSocialPostCreateResponseKey = "Feat086LastSocialPostCreateResponse";
     private const string LastSocialPostPermalinkResponseKey = "Feat086LastSocialPostPermalinkResponse";
@@ -61,6 +64,13 @@ public sealed class HushSocialIntegrationSteps
     public void GivenOwnerHasHushSocialEnabled()
     {
         _scenarioContext["OwnerHushSocialEnabled"] = true;
+    }
+
+    [Given(@"""((?!Owner\b).*)"" has HushSocial enabled")]
+    [Given(@"((?!Owner\b).*) has HushSocial enabled")]
+    public void GivenUserHasHushSocialEnabled(string userName)
+    {
+        _scenarioContext[$"{userName}HushSocialEnabled"] = true;
     }
 
     [Given(@"Owner profile mode is Close")]
@@ -143,6 +153,92 @@ public sealed class HushSocialIntegrationSteps
 
         response.Success.Should().BeTrue($"GetInnerCircle should succeed: {response.Message}");
         response.Exists.Should().BeFalse("Owner should not have an Inner Circle before bootstrap");
+    }
+
+    [Given(@"""((?!Owner\b).*)"" does not have an Inner Circle yet")]
+    [Given(@"((?!Owner\b).*) does not have an Inner Circle yet")]
+    public async Task GivenUserDoesNotHaveAnInnerCircleYet(string userName)
+    {
+        var user = GetTestIdentity(userName);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+
+        var response = await feedClient.GetInnerCircleAsync(new GetInnerCircleRequest
+        {
+            OwnerPublicAddress = user.PublicSigningAddress
+        });
+
+        response.Success.Should().BeTrue($"GetInnerCircle should succeed for {userName}: {response.Message}");
+        response.Exists.Should().BeFalse($"{userName} should not have an Inner Circle before FEAT-090 follow bootstrap");
+    }
+
+    [Given(@"(.*) already follows (.*) via social follow contract")]
+    public async Task GivenViewerAlreadyFollowsAuthorViaSocialFollowContract(string viewerName, string authorName)
+    {
+        await FollowAuthorAsync(viewerName, authorName);
+        GetLastSocialFollowResponse().Success.Should().BeTrue($"{viewerName} should already follow {authorName} for duplicate follow setup");
+    }
+
+    [When(@"(.*) follows (.*) via social follow contract")]
+    public async Task WhenViewerFollowsAuthorViaSocialFollowContract(string viewerName, string authorName)
+    {
+        await FollowAuthorAsync(viewerName, authorName);
+    }
+
+    [Then(@"the social follow response should be accepted")]
+    public void ThenTheSocialFollowResponseShouldBeAccepted()
+    {
+        var response = GetLastSocialFollowResponse();
+        response.Success.Should().BeTrue($"{response.ErrorCode}:{response.Message}");
+        response.ErrorCode.Should().Be("SOCIAL_FOLLOW_ACCEPTED");
+        response.RequiresSyncRefresh.Should().BeTrue();
+        response.AlreadyFollowing.Should().BeFalse();
+        response.InnerCircleFeedId.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Then(@"the social follow response should reject duplicate follow and require refresh")]
+    public void ThenTheSocialFollowResponseShouldRejectDuplicateFollowAndRequireRefresh()
+    {
+        var response = GetLastSocialFollowResponse();
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be("SOCIAL_FOLLOW_ALREADY_FOLLOWING");
+        response.AlreadyFollowing.Should().BeTrue();
+        response.RequiresSyncRefresh.Should().BeTrue();
+        response.InnerCircleFeedId.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Then(@"the social follow response should reject self follow")]
+    public void ThenTheSocialFollowResponseShouldRejectSelfFollow()
+    {
+        var response = GetLastSocialFollowResponse();
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be("SOCIAL_FOLLOW_SELF_FOLLOW");
+        response.RequiresSyncRefresh.Should().BeFalse();
+        response.AlreadyFollowing.Should().BeFalse();
+    }
+
+    [Then(@"(.*) should be in (.*) Inner Circle")]
+    public async Task ThenAuthorShouldBeInViewerInnerCircle(string authorName, string viewerName)
+    {
+        await AssertUserInInnerCircleAsync(viewerName, authorName);
+    }
+
+    [Then(@"(.*) and (.*) should have a direct chat feed")]
+    public async Task ThenUsersShouldHaveADirectChatFeed(string userNameA, string userNameB)
+    {
+        var userA = GetTestIdentity(userNameA);
+        var userB = GetTestIdentity(userNameB);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+
+        var feedsResponse = await feedClient.GetFeedsForAddressAsync(new GetFeedForAddressRequest
+        {
+            ProfilePublicKey = userA.PublicSigningAddress,
+            BlockIndex = 0
+        });
+
+        feedsResponse.Feeds.Should().Contain(feed =>
+            feed.FeedType == (int)FeedType.Chat &&
+            feed.FeedParticipants.Any(participant => participant.ParticipantPublicAddress == userA.PublicSigningAddress) &&
+            feed.FeedParticipants.Any(participant => participant.ParticipantPublicAddress == userB.PublicSigningAddress));
     }
 
     [When(@"Owner opens HushFeeds and personal feed bootstrap runs")]
@@ -1075,18 +1171,63 @@ public sealed class HushSocialIntegrationSteps
 
     private async Task AssertFollowerInInnerCircleAsync(string followerName)
     {
-        var follower = GetTestIdentity(followerName);
-        var innerCircleFeedId = await EnsureOwnerInnerCircleExistsAsync();
+        await AssertUserInInnerCircleAsync(OwnerName, followerName);
+    }
+
+    private async Task AssertUserInInnerCircleAsync(string ownerName, string memberName)
+    {
+        var owner = GetTestIdentity(ownerName);
+        var expectedMember = GetTestIdentity(memberName);
         var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+        var getInnerCircleResponse = await feedClient.GetInnerCircleAsync(new GetInnerCircleRequest
+        {
+            OwnerPublicAddress = owner.PublicSigningAddress
+        });
+
+        getInnerCircleResponse.Success.Should().BeTrue($"GetInnerCircle should succeed for {ownerName}: {getInnerCircleResponse.Message}");
+        getInnerCircleResponse.Exists.Should().BeTrue($"{ownerName} should have an Inner Circle");
+
         var members = await feedClient.GetGroupMembersAsync(new GetGroupMembersRequest
         {
-            FeedId = innerCircleFeedId
+            FeedId = getInnerCircleResponse.FeedId
         });
 
         members.Members
-            .Select(member => member.PublicAddress)
+            .Select(groupMember => groupMember.PublicAddress)
             .Should()
-            .Contain(follower.PublicSigningAddress);
+            .Contain(expectedMember.PublicSigningAddress);
+    }
+
+    private async Task FollowAuthorAsync(string viewerName, string authorName)
+    {
+        var viewer = GetTestIdentity(viewerName);
+        var author = GetTestIdentity(authorName);
+        var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
+
+        var response = await feedClient.FollowSocialAuthorAsync(new FollowSocialAuthorRequest
+        {
+            ViewerPublicAddress = viewer.PublicSigningAddress,
+            AuthorPublicAddress = author.PublicSigningAddress,
+            RequesterPublicAddress = viewer.PublicSigningAddress
+        });
+
+        if (response.Success)
+        {
+            await GetBlockControl().ProduceBlockAsync();
+        }
+
+        _scenarioContext[LastSocialFollowResponseKey] = response;
+        _scenarioContext[LastSocialFollowViewerKey] = viewerName;
+        _scenarioContext[LastSocialFollowAuthorKey] = authorName;
+    }
+
+    private FollowSocialAuthorResponse GetLastSocialFollowResponse()
+    {
+        _scenarioContext.TryGetValue(LastSocialFollowResponseKey, out var responseObj)
+            .Should()
+            .BeTrue("expected a previously submitted FEAT-090 follow response");
+        responseObj.Should().BeOfType<FollowSocialAuthorResponse>();
+        return (FollowSocialAuthorResponse)responseObj!;
     }
 
     private HashSet<string> GetOrCreateFollowerSet(string key)

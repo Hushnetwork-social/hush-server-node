@@ -13,6 +13,8 @@ Feature: HushSocial end-to-end walkthrough
     And "FollowerA" has created identity via browser
     And a browser context for "FollowerB"
     And "FollowerB" has created identity via browser
+    And a browser context for "FollowerC"
+    And "FollowerC" has created identity via browser
 
   @FEAT-084 @HS-E2E-084-NAV
   Scenario: Community navigation is replaced by HushSocial shell
@@ -21,7 +23,7 @@ Feature: HushSocial end-to-end walkthrough
     And Owner should not see Community in main navigation
     And Owner should see the HushSocial feed shell layout
 
-  @FEAT-085 @FEAT-090 @ignore @HS-E2E-085-ONBOARDING
+  @FEAT-085 @ignore @HS-E2E-085-ONBOARDING
   Scenario: Close profile onboarding and follower approval flow
     Given Owner opens HushSocial privacy settings
     When Owner sets profile mode to Close
@@ -222,13 +224,21 @@ Feature: HushSocial end-to-end walkthrough
     When guest attempts to comment on post "Guest visible content" via browser
     Then guest should see account creation overlay
 
-  @FEAT-090 @ignore @HS-E2E-090-TIMELINE
-  Scenario: Follow graph drives following-first timeline
-    Given FollowerA follows Owner via browser
-    And Owner creates Open post "Update from owner" via browser
-    And FollowerB creates Open post "Update from other user" via browser
-    When FollowerA opens home timeline
-    Then post "Update from owner" should appear before post "Update from other user"
+  @FEAT-090 @HS-E2E-090-FOLLOW
+  Scenario: Authenticated user follows a visible author and sees following state across social surfaces
+    Given Owner has created Open post "Follow root post" via browser
+    And Owner comments "Owner thread comment" on post "Follow root post" via browser
+    And Owner replies "Owner thread reply" to comment "Owner thread comment" on post "Follow root post" via browser
+    When FollowerA opens HushSocial FeedWall
+    Then FollowerA should see follow action for post "Follow root post" on FeedWall
+    When FollowerA follows author for post "Follow root post" from FeedWall
+    Then FollowerA should see following state for post "Follow root post" on FeedWall
+    When FollowerA opens post detail for "Follow root post" from FeedWall
+    Then FollowerA should see following state for post detail author on "Follow root post"
+    And FollowerA should see following state for comment author "Owner thread comment" on post "Follow root post"
+    When FollowerA opens permalink for post "Follow root post"
+    Then FollowerA should see permalink post "Follow root post"
+    And FollowerA should see following state on permalink author for post "Follow root post"
 
   @FEAT-091 @ignore @HS-E2E-091-NOTIFICATIONS
   Scenario: Notification preferences and per-circle mute in real flow

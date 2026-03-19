@@ -137,6 +137,130 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         members.Members.Select(x => x.PublicAddress).Should().Contain(followerAddress);
     }
 
+    [Then(@"FollowerA should see follow action for post ""(.*)"" on FeedWall")]
+    public async Task ThenFollowerAShouldSeeFollowActionForPostOnFeedWall(string postTitle)
+    {
+        var page = GetUserPage("FollowerA");
+        var postId = GetStoredPostId(postTitle);
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+
+        var button = page.GetByTestId($"follow-author-post-{postId}").First;
+        await button.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 15000
+        });
+        (await button.InnerTextAsync()).Trim().Should().Be("Follow");
+    }
+
+    [When(@"FollowerA follows author for post ""(.*)"" from FeedWall")]
+    public async Task WhenFollowerAFollowsAuthorForPostFromFeedWall(string postTitle)
+    {
+        var page = GetUserPage("FollowerA");
+        var postId = GetStoredPostId(postTitle);
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+
+        var button = page.GetByTestId($"follow-author-post-{postId}").First;
+        await button.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 15000
+        });
+        await button.ClickAsync();
+        await ExpectButtonTextAsync(button, "Following", 15000);
+    }
+
+    [Then(@"FollowerA should see following state for post ""(.*)"" on FeedWall")]
+    public async Task ThenFollowerAShouldSeeFollowingStateForPostOnFeedWall(string postTitle)
+    {
+        var page = GetUserPage("FollowerA");
+        var postId = GetStoredPostId(postTitle);
+        var button = page.GetByTestId($"follow-author-post-{postId}").First;
+        await ExpectButtonTextAsync(button, "Following", 15000);
+    }
+
+    [Then(@"FollowerA should see following state for post detail author on ""(.*)""")]
+    public async Task ThenFollowerAShouldSeeFollowingStateForPostDetailAuthor(string postTitle)
+    {
+        var page = GetUserPage("FollowerA");
+        var postId = GetStoredPostId(postTitle);
+        var button = page.GetByTestId($"follow-author-post-detail-{postId}").First;
+        await ExpectButtonTextAsync(button, "Following", 15000);
+    }
+
+    [Then(@"FollowerA should see following state for comment author ""(.*)"" on post ""(.*)""")]
+    public async Task ThenFollowerAShouldSeeFollowingStateForCommentAuthorOnPost(string commentText, string _)
+    {
+        var page = GetUserPage("FollowerA");
+        var commentCard = page.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasTextString = commentText })
+            .First;
+        await commentCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 15000
+        });
+
+        var button = commentCard.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Following" }).First;
+        await button.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 15000
+        });
+    }
+
+    [Then(@"FollowerA should see following state for reply author ""(.*)"" on post ""(.*)""")]
+    public async Task ThenFollowerAShouldSeeFollowingStateForReplyAuthorOnPost(string replyText, string _)
+    {
+        var page = GetUserPage("FollowerA");
+        var replyCard = page.Locator("[data-testid^='post-detail-reply-']")
+            .Filter(new LocatorFilterOptions { HasTextString = replyText })
+            .First;
+        await replyCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 15000
+        });
+
+        var button = replyCard.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Following" }).First;
+        await button.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 15000
+        });
+    }
+
+    [Then(@"FollowerA should see following state on permalink author for post ""(.*)""")]
+    public async Task ThenFollowerAShouldSeeFollowingStateOnPermalinkAuthorForPost(string _)
+    {
+        var page = GetUserPage("FollowerA");
+        var button = page.GetByTestId("social-permalink-follow-author").First;
+        await ExpectButtonTextAsync(button, "Following", 15000);
+    }
+
+    [Then(@"FollowerA should see following state on permalink reply author ""(.*)""")]
+    public async Task ThenFollowerAShouldSeeFollowingStateOnPermalinkReplyAuthor(string replyText)
+    {
+        var page = GetUserPage("FollowerA");
+        var replyCard = page.Locator("[data-testid^='social-permalink-reply-']")
+            .Filter(new LocatorFilterOptions { HasTextString = replyText })
+            .First;
+        await replyCard.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 15000
+        });
+
+        var button = replyCard.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Following" }).First;
+        await button.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 15000
+        });
+    }
+
     [Given(@"Owner has approved followers ""(.*)"" via browser")]
     [When(@"Owner has approved followers ""(.*)"" via browser")]
     public async Task GivenOwnerHasApprovedFollowersViaBrowser(string csvFollowers)
@@ -355,6 +479,8 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         await replyButton.ClickAsync();
     }
 
+    [Given(@"FollowerA comments ""([^""]*)"" on post ""([^""]*)"" via browser")]
+    [Given(@"Owner comments ""([^""]*)"" on post ""([^""]*)"" via browser")]
     [When(@"FollowerA comments ""([^""]*)"" on post ""([^""]*)"" via browser")]
     [When(@"Owner comments ""([^""]*)"" on post ""([^""]*)"" via browser")]
     public async Task WhenFollowerACommentsOnPostViaBrowser(string commentText, string postTitle)
@@ -381,6 +507,7 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         await ReactToThreadEntryViaBrowserAsync(userName, commentText, emojiName);
     }
 
+    [Given(@"Owner replies ""([^""]*)"" to comment ""([^""]*)"" via browser")]
     [When(@"Owner replies ""([^""]*)"" to comment ""([^""]*)"" via browser")]
     public async Task WhenOwnerRepliesToCommentViaBrowser(string replyText, string commentText)
     {
@@ -420,6 +547,7 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         });
     }
 
+    [Given(@"Owner replies ""([^""]*)"" to comment ""([^""]*)"" on post ""([^""]*)"" via browser")]
     [When(@"Owner replies ""([^""]*)"" to comment ""([^""]*)"" on post ""([^""]*)"" via browser")]
     public async Task WhenOwnerRepliesToCommentOnPostViaBrowser(string replyText, string commentText, string postTitle)
     {
@@ -1842,26 +1970,7 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
     public async Task WhenFollowerOpensPostDetailFromFeedWall(string postTitle)
     {
         var followerName = GetStepUserNameFromWhenStep("opens post detail for");
-        var postId = GetStoredPostId(postTitle);
-        var page = GetUserPage(followerName);
-
-        await NavigateToSocialExperienceAsync(page);
-        await TriggerSyncAsync(page);
-
-        var postCard = page.GetByTestId($"social-post-{postId}").First;
-        await postCard.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Visible,
-            Timeout = 15000
-        });
-        await postCard.ClickAsync();
-
-        var overlay = page.GetByTestId("post-detail-overlay").First;
-        await overlay.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Visible,
-            Timeout = 10000
-        });
+        await OpenPostDetailForUserAsync(followerName, postTitle, forceReopen: true);
     }
 
     [Then(@"FollowerA should see post detail overlay for ""(.*)"" authored by ""(.*)""")]
@@ -2855,6 +2964,27 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
             .BeTrue("expected permalink response in scenario context");
         responseObj.Should().BeOfType<GetSocialPostPermalinkResponse>();
         return (GetSocialPostPermalinkResponse)responseObj!;
+    }
+
+    private static async Task ExpectButtonTextAsync(ILocator button, string expectedText, float timeoutMs)
+    {
+        var timeoutAt = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            if (await button.CountAsync() > 0 && await button.IsVisibleAsync())
+            {
+                var actual = (await button.InnerTextAsync()).Trim();
+                if (string.Equals(actual, expectedText, StringComparison.Ordinal))
+                {
+                    return;
+                }
+            }
+
+            await Task.Delay(250);
+        }
+
+        var finalText = await button.InnerTextAsync();
+        finalText.Trim().Should().Be(expectedText);
     }
 
     private IPage GetCurrentPermalinkUserPage()
