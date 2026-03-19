@@ -12,15 +12,18 @@ Feature: HushSocial server integration rules
     And user "FollowerC" is registered with a personal feed
     And user "GuestLikeUser" is not authenticated
 
-  @FEAT-084 @FEAT-085 @HS-INT-085-ONBOARDING
-  Scenario: Close profile follow request acceptance auto-adds inner circle
+  @FEAT-084 @FEAT-085 @FEAT-090 @HS-INT-090-FOLLOW
+  Scenario: Visible close profile author follows immediately without approval queue
     Given Owner has HushSocial enabled
+    And FollowerA has HushSocial enabled
     And Owner profile mode is Close
-    When FollowerA requests to follow Owner
-    Then the follow request should be pending approval
-    When Owner accepts follow request from FollowerA
-    Then FollowerA should be in Owner Inner Circle
-    And Owner should see FollowerA in approved followers
+    And Owner has created an Open post "Visible close profile post"
+    When FollowerA opens permalink for post "Visible close profile post"
+    Then the post content should be visible
+    When FollowerA follows Owner via social follow contract
+    Then the social follow response should be accepted
+    And Owner should be in FollowerA Inner Circle
+    And FollowerA and Owner should have a direct chat feed
 
   @FEAT-085 @HS-INT-085-CIRCLE-REMOVAL
   Scenario: Circle membership removal rotates keys immediately
