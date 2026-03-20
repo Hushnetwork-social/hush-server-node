@@ -290,15 +290,29 @@ public sealed class SocialNotificationRoutingService(
         {
             if (!preferences.CloseActivityEnabled)
             {
+                _logger.LogInformation(
+                    "Skipping FEAT-091 close notification for {Recipient}: close activity disabled",
+                    SafeRecipientPreview(recipientPublicAddress));
                 return;
             }
 
             if (!await HasCurrentPrivateAccessAsync(post, recipientPublicAddress))
             {
+                _logger.LogInformation(
+                    "Skipping FEAT-091 close notification for {Recipient}: private access no longer valid",
+                    SafeRecipientPreview(recipientPublicAddress));
                 return;
             }
 
-            if (matchedCircleIds.Count > 0 && AreAllMatchedCirclesMuted(preferences, matchedCircleIds))
+            var allMatchedCirclesMuted = matchedCircleIds.Count > 0 && AreAllMatchedCirclesMuted(preferences, matchedCircleIds);
+            _logger.LogInformation(
+                "Evaluating FEAT-091 close notification for {Recipient}: matchedCircleIds=[{MatchedCircleIds}], mutedCircleIds=[{MutedCircleIds}], allMatchedCirclesMuted={AllMatchedCirclesMuted}",
+                SafeRecipientPreview(recipientPublicAddress),
+                string.Join(", ", matchedCircleIds),
+                string.Join(", ", preferences.CircleMutes.Where(x => x.IsMuted).Select(x => x.CircleId)),
+                allMatchedCirclesMuted);
+
+            if (allMatchedCirclesMuted)
             {
                 return;
             }

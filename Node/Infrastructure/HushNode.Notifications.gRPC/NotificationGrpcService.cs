@@ -312,6 +312,13 @@ public class NotificationGrpcService(
             update,
             context.CancellationToken);
 
+        _logger.LogInformation(
+            "Updated FEAT-091 notification preferences for {UserId}: Open={OpenEnabled}, Close={CloseEnabled}, CircleMutes=[{CircleMutes}]",
+            request.UserId,
+            preferences.OpenActivityEnabled,
+            preferences.CloseActivityEnabled,
+            string.Join(", ", preferences.CircleMutes.Select(x => $"{x.CircleId}:{x.IsMuted}")));
+
         return new ProtoTypes.UpdateSocialNotificationPreferencesResponse
         {
             Success = true,

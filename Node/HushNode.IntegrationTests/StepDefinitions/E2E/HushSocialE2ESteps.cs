@@ -3292,10 +3292,33 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
             await Task.Delay(100);
         }
 
-        ILocator circleToggle = panel.Locator("label")
-            .Filter(new LocatorFilterOptions { HasTextString = circleName })
-            .Locator("input[type='checkbox']")
-            .First;
+        ILocator circleToggle;
+        if (IsInnerCircleName(circleName))
+        {
+            var privatePostsFromToggle = panel.Locator("label")
+                .Filter(new LocatorFilterOptions { HasTextString = "Private posts from" })
+                .Locator("input[type='checkbox']")
+                .First;
+
+            if (await privatePostsFromToggle.CountAsync() > 0)
+            {
+                circleToggle = privatePostsFromToggle;
+            }
+            else
+            {
+                circleToggle = panel.Locator("label")
+                    .Filter(new LocatorFilterOptions { HasTextString = "Private posts" })
+                    .Locator("input[type='checkbox']")
+                    .First;
+            }
+        }
+        else
+        {
+            circleToggle = panel.Locator("label")
+                .Filter(new LocatorFilterOptions { HasTextString = circleName })
+                .Locator("input[type='checkbox']")
+                .First;
+        }
 
         await SetCheckboxCheckedAsync(circleToggle, isMuted);
     }
