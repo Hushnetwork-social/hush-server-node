@@ -55,7 +55,7 @@ public sealed class NotificationGrpcServiceSocialContractsTests
                 Limit = 10,
                 IncludeRead = true
             },
-            TestServerCallContext.Create());
+            TestServerCallContext.Create("user-a"));
 
         response.HasMore.Should().BeTrue();
         response.Items.Should().ContainSingle();
@@ -120,7 +120,7 @@ public sealed class NotificationGrpcServiceSocialContractsTests
                     }
                 }
             },
-            TestServerCallContext.Create());
+            TestServerCallContext.Create("user-a"));
 
         response.Success.Should().BeTrue();
         response.Preferences.OpenActivityEnabled.Should().BeFalse();
@@ -138,23 +138,67 @@ public sealed class NotificationGrpcServiceSocialContractsTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task GetSocialNotificationInbox_RejectsCrossUserAccess_WhenMetadataUserDiffers()
+    {
+        var mocker = new AutoMocker();
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+
+        var action = async () => await service.GetSocialNotificationInbox(
+            new ProtoTypes.GetSocialNotificationInboxRequest
+            {
+                UserId = "user-a",
+                Limit = 10,
+                IncludeRead = true
+            },
+            TestServerCallContext.Create("user-b"));
+
+        var exception = await Assert.ThrowsAsync<RpcException>(action);
+        exception.StatusCode.Should().Be(StatusCode.PermissionDenied);
+    }
+
+    [Fact]
+    public async Task GetSocialNotificationPreferences_RejectsWhenAuthenticatedMetadataMissing()
+    {
+        var mocker = new AutoMocker();
+        var service = mocker.CreateInstance<NotificationGrpcService>();
+
+        var action = async () => await service.GetSocialNotificationPreferences(
+            new ProtoTypes.GetSocialNotificationPreferencesRequest
+            {
+                UserId = "user-a"
+            },
+            TestServerCallContext.Create());
+
+        var exception = await Assert.ThrowsAsync<RpcException>(action);
+        exception.StatusCode.Should().Be(StatusCode.Unauthenticated);
+    }
+
     private sealed class TestServerCallContext : ServerCallContext
     {
-        public static TestServerCallContext Create(CancellationToken cancellationToken = default)
+        public static TestServerCallContext Create(
+            string? authenticatedUserId = null,
+            CancellationToken cancellationToken = default)
         {
-            return new TestServerCallContext(cancellationToken);
+            return new TestServerCallContext(authenticatedUserId, cancellationToken);
         }
 
-        private TestServerCallContext(CancellationToken cancellationToken)
+        private readonly Metadata _requestHeaders = new();
+
+        private TestServerCallContext(string? authenticatedUserId, CancellationToken cancellationToken)
         {
             CancellationTokenCore = cancellationToken;
+            if (!string.IsNullOrWhiteSpace(authenticatedUserId))
+            {
+                _requestHeaders.Add("x-hush-userid", authenticatedUserId);
+            }
         }
 
         protected override string MethodCore => "test";
         protected override string HostCore => "localhost";
         protected override string PeerCore => "peer";
         protected override DateTime DeadlineCore => DateTime.UtcNow.AddMinutes(1);
-        protected override Metadata RequestHeadersCore => new();
+        protected override Metadata RequestHeadersCore => _requestHeaders;
         protected override CancellationToken CancellationTokenCore { get; }
         protected override Metadata ResponseTrailersCore { get; } = new();
         protected override Status StatusCore { get; set; }

@@ -23,6 +23,8 @@ public class NotificationGrpcService(
     IFeedReadPositionStorageService readPositionStorageService,
     ILogger<NotificationGrpcService> logger) : ProtoTypes.HushNotification.HushNotificationBase
 {
+    private const string AuthenticatedUserIdHeader = "x-hush-userid";
+
     private readonly INotificationService _notificationService = notificationService;
     private readonly ISocialNotificationStateService _socialNotificationStateService = socialNotificationStateService;
     private readonly IUnreadTrackingService _unreadTrackingService = unreadTrackingService;
@@ -200,6 +202,8 @@ public class NotificationGrpcService(
             return new ProtoTypes.GetSocialNotificationInboxResponse();
         }
 
+        EnsureSocialNotificationOwnership(request.UserId, context);
+
         var result = await _socialNotificationStateService.GetInboxAsync(
             request.UserId,
             request.Limit,
@@ -229,6 +233,8 @@ public class NotificationGrpcService(
             };
         }
 
+        EnsureSocialNotificationOwnership(request.UserId, context);
+
         if (!request.MarkAll && string.IsNullOrWhiteSpace(request.NotificationId))
         {
             return new ProtoTypes.MarkSocialNotificationReadResponse
@@ -257,6 +263,13 @@ public class NotificationGrpcService(
         ProtoTypes.GetSocialNotificationPreferencesRequest request,
         ServerCallContext context)
     {
+        if (string.IsNullOrWhiteSpace(request.UserId))
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "UserId is required"));
+        }
+
+        EnsureSocialNotificationOwnership(request.UserId, context);
+
         var preferences = await _socialNotificationStateService.GetPreferencesAsync(
             request.UserId,
             context.CancellationToken);
@@ -280,6 +293,8 @@ public class NotificationGrpcService(
                 Preferences = MapToProtoSocialNotificationPreferences(new InternalModels.SocialNotificationPreferences())
             };
         }
+
+        EnsureSocialNotificationOwnership(request.UserId, context);
 
         var update = new InternalModels.SocialNotificationPreferenceUpdate
         {
@@ -632,6 +647,23 @@ public class NotificationGrpcService(
             InternalModels.SocialNotificationTargetType.Reply => ProtoTypes.SocialNotificationTargetType.Reply,
             _ => ProtoTypes.SocialNotificationTargetType.Unspecified
         };
+    }
+
+    private static void EnsureSocialNotificationOwnership(string requestUserId, ServerCallContext context)
+    {
+        var authenticatedUserId = context.RequestHeaders
+            .FirstOrDefault(header => string.Equals(header.Key, AuthenticatedUserIdHeader, StringComparison.OrdinalIgnoreCase))
+            ?.Value;
+
+        if (string.IsNullOrWhiteSpace(authenticatedUserId))
+        {
+            throw new RpcException(new Status(StatusCode.Unauthenticated, "Authenticated user metadata is required"));
+        }
+
+        if (!string.Equals(authenticatedUserId, requestUserId, StringComparison.Ordinal))
+        {
+            throw new RpcException(new Status(StatusCode.PermissionDenied, "Cannot access another user's social notifications"));
+        }
     }
 
     #endregion
