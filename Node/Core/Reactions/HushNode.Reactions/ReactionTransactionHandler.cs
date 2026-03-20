@@ -1,11 +1,13 @@
 using Microsoft.Extensions.Logging;
 using Olimpo.EntityFramework.Persistency;
 using HushNode.Caching;
+using HushNode.Events;
 using HushNode.Reactions.Crypto;
 using HushNode.Reactions.Storage;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Feeds.Model;
 using HushShared.Reactions.Model;
+using Olimpo;
 
 namespace HushNode.Reactions;
 
@@ -21,17 +23,20 @@ public class ReactionTransactionHandler : IReactionTransactionHandler
     private readonly IUnitOfWorkProvider<ReactionsDbContext> _unitOfWorkProvider;
     private readonly IBabyJubJub _curve;
     private readonly IBlockchainCache _blockchainCache;
+    private readonly IEventAggregator _eventAggregator;
     private readonly ILogger<ReactionTransactionHandler> _logger;
 
     public ReactionTransactionHandler(
         IUnitOfWorkProvider<ReactionsDbContext> unitOfWorkProvider,
         IBabyJubJub curve,
         IBlockchainCache blockchainCache,
+        IEventAggregator eventAggregator,
         ILogger<ReactionTransactionHandler> logger)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _curve = curve;
         _blockchainCache = blockchainCache;
+        _eventAggregator = eventAggregator;
         _logger = logger;
     }
 
@@ -161,6 +166,14 @@ public class ReactionTransactionHandler : IReactionTransactionHandler
                 _logger.LogInformation(
                     "[ReactionTransactionHandler] Reaction processed successfully: message={MessageId}, isUpdate={IsUpdate}, block={BlockIndex}",
                     payload.MessageId, isUpdate, _blockchainCache.LastBlockIndex);
+
+                if (!string.IsNullOrWhiteSpace(issuerPublicAddress))
+                {
+                    _ = _eventAggregator.PublishAsync(new SocialReactionCreatedEvent(
+                        issuerPublicAddress,
+                        payload.FeedId,
+                        payload.MessageId));
+                }
 
                 return; // Success - exit the retry loop
             }

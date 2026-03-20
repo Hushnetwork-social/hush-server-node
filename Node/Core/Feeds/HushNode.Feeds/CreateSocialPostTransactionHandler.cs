@@ -106,25 +106,7 @@ public class CreateSocialPostTransactionHandler(
             }
         }
 
-        var authorizedPrivateViewers = new HashSet<string>(StringComparer.Ordinal) { authorAddress };
-        if (payload.Audience.Visibility == SocialPostVisibility.Private)
-        {
-            foreach (var audienceCircle in socialPost.AudienceCircles)
-            {
-                var participants = await this._feedsStorageService.GetActiveParticipantsAsync(audienceCircle.CircleFeedId);
-                foreach (var participant in participants)
-                {
-                    authorizedPrivateViewers.Add(participant.ParticipantPublicAddress);
-                }
-            }
-        }
-
-        await this._socialPostNotificationService.NotifyPostCreatedAsync(
-            authorAddress,
-            socialPost.Content,
-            payload.Audience.Visibility == SocialPostVisibility.Private,
-            socialPost.PostId.ToString("D"),
-            authorizedPrivateViewers.ToArray());
+        await this._socialPostNotificationService.NotifyPostCreatedAsync(socialPost.PostId);
 
         this._logger.LogInformation(
             "social_post.create.indexed postId={PostId} author={Author} visibility={Visibility} circles={CircleCount}",

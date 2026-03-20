@@ -29,6 +29,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
     private readonly IPushDeliveryService _pushDeliveryService;
     private readonly IFeedParticipantsCacheService _feedParticipantsCacheService;
     private readonly IFeedReadPositionStorageService _feedReadPositionStorageService;
+    private readonly ISocialNotificationRoutingService _socialNotificationRoutingService;
     private readonly ILogger<NotificationEventHandler> _logger;
 
     public NotificationEventHandler(
@@ -40,6 +41,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
         IPushDeliveryService pushDeliveryService,
         IFeedParticipantsCacheService feedParticipantsCacheService,
         IFeedReadPositionStorageService feedReadPositionStorageService,
+        ISocialNotificationRoutingService socialNotificationRoutingService,
         IEventAggregator eventAggregator,
         ILogger<NotificationEventHandler> logger)
     {
@@ -51,6 +53,7 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
         _pushDeliveryService = pushDeliveryService;
         _feedParticipantsCacheService = feedParticipantsCacheService;
         _feedReadPositionStorageService = feedReadPositionStorageService;
+        _socialNotificationRoutingService = socialNotificationRoutingService;
         _logger = logger;
 
         // Subscribe to events via EventAggregator
@@ -160,6 +163,13 @@ public class NotificationEventHandler : IHandleAsync<NewFeedMessageCreatedEvent>
                     senderName,
                     messagePreview,
                     feedName: groupFeedFromDb.Title);
+                return;
+            }
+
+            var socialPost = await _feedsStorageService.GetSocialPostAsync(feedMessage.FeedId.Value);
+            if (socialPost != null)
+            {
+                await _socialNotificationRoutingService.RouteThreadMessageCreatedAsync(feedMessage);
                 return;
             }
 

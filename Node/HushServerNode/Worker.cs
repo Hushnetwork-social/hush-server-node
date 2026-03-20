@@ -9,12 +9,15 @@ namespace HushServerNode;
 public class Worker(
     IBootstrapperManager bootstrapperManager,
     NotificationEventHandler notificationEventHandler,
+    SocialReactionNotificationEventHandler socialReactionNotificationEventHandler,
     FeedParticipantsCacheEventHandler feedParticipantsCacheEventHandler,
     ILogger<Worker> logger) : IHostedService
 {
     private readonly IBootstrapperManager _bootstrapperManager = bootstrapperManager;
     // NotificationEventHandler is injected to ensure it's instantiated and subscribed to EventAggregator
     private readonly NotificationEventHandler _notificationEventHandler = notificationEventHandler;
+    // SocialReactionNotificationEventHandler is injected to ensure it's instantiated and subscribed to EventAggregator
+    private readonly SocialReactionNotificationEventHandler _socialReactionNotificationEventHandler = socialReactionNotificationEventHandler;
     // FeedParticipantsCacheEventHandler is injected to ensure it's instantiated and subscribed to EventAggregator (FEAT-050)
     private readonly FeedParticipantsCacheEventHandler _feedParticipantsCacheEventHandler = feedParticipantsCacheEventHandler;
     private readonly ILogger<Worker> _logger = logger;

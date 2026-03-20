@@ -319,6 +319,11 @@ public interface IFeedsStorageService
     Task<SocialPostEntity?> GetSocialPostAsync(Guid postId);
 
     /// <summary>
+    /// Retrieves a social post projection by reaction scope id.
+    /// </summary>
+    Task<SocialPostEntity?> GetSocialPostByReactionScopeIdAsync(Guid reactionScopeId);
+
+    /// <summary>
     /// Retrieves latest social posts ordered by CreatedAtBlock desc.
     /// </summary>
     Task<IReadOnlyList<SocialPostEntity>> GetLatestSocialPostsAsync(int limit);

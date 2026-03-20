@@ -729,6 +729,12 @@ public class FeedsStorageService(
             .GetRepository<IFeedsRepository>()
             .GetSocialPostAsync(postId);
 
+    public async Task<SocialPostEntity?> GetSocialPostByReactionScopeIdAsync(Guid reactionScopeId) =>
+        await this._unitOfWorkProvider
+            .CreateReadOnly()
+            .GetRepository<IFeedsRepository>()
+            .GetSocialPostByReactionScopeIdAsync(reactionScopeId);
+
     public async Task<IReadOnlyList<SocialPostEntity>> GetLatestSocialPostsAsync(int limit) =>
         await this._unitOfWorkProvider
             .CreateReadOnly()

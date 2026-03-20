@@ -661,6 +661,11 @@ public class FeedsRepository : RepositoryBase<FeedsDbContext>, IFeedsRepository
             .Include(x => x.AudienceCircles)
             .FirstOrDefaultAsync(x => x.PostId == postId);
 
+    public async Task<SocialPostEntity?> GetSocialPostByReactionScopeIdAsync(Guid reactionScopeId) =>
+        await this.Context.SocialPosts
+            .Include(x => x.AudienceCircles)
+            .FirstOrDefaultAsync(x => x.ReactionScopeId == reactionScopeId);
+
     public async Task<IReadOnlyList<SocialPostEntity>> GetLatestSocialPostsAsync(int limit) =>
         await this.Context.SocialPosts
             .Include(x => x.AudienceCircles)

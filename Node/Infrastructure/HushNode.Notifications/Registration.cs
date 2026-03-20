@@ -35,10 +35,12 @@ public static class Registration
         services.AddSingleton<IUnreadTrackingService, UnreadTrackingService>();
         services.AddSingleton<INotificationService, NotificationService>();
         services.AddSingleton<ISocialNotificationStateService, SocialNotificationStateService>();
+        services.AddSingleton<ISocialNotificationRoutingService, SocialNotificationRoutingService>();
         services.AddSingleton<IConnectionTracker, ConnectionTracker>();
 
         // Register the event handler as singleton (subscribes via EventAggregator)
         services.AddSingleton<NotificationEventHandler>();
+        services.AddSingleton<SocialReactionNotificationEventHandler>();
 
         return services;
     }

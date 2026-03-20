@@ -317,6 +317,11 @@ public interface IFeedsRepository : IRepository
     Task<SocialPostEntity?> GetSocialPostAsync(Guid postId);
 
     /// <summary>
+    /// Retrieves a social post with audience circles by reaction scope id.
+    /// </summary>
+    Task<SocialPostEntity?> GetSocialPostByReactionScopeIdAsync(Guid reactionScopeId);
+
+    /// <summary>
     /// Retrieves latest social posts ordered by CreatedAtBlock desc.
     /// </summary>
     Task<IReadOnlyList<SocialPostEntity>> GetLatestSocialPostsAsync(int limit);
