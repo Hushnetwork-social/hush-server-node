@@ -16,6 +16,7 @@ namespace HushNode.Notifications.gRPC;
 /// </summary>
 public class NotificationGrpcService(
     INotificationService notificationService,
+    ISocialNotificationStateService socialNotificationStateService,
     IUnreadTrackingService unreadTrackingService,
     IConnectionTracker connectionTracker,
     IDeviceTokenStorageService deviceTokenStorageService,
@@ -23,6 +24,7 @@ public class NotificationGrpcService(
     ILogger<NotificationGrpcService> logger) : ProtoTypes.HushNotification.HushNotificationBase
 {
     private readonly INotificationService _notificationService = notificationService;
+    private readonly ISocialNotificationStateService _socialNotificationStateService = socialNotificationStateService;
     private readonly IUnreadTrackingService _unreadTrackingService = unreadTrackingService;
     private readonly IConnectionTracker _connectionTracker = connectionTracker;
     private readonly IDeviceTokenStorageService _deviceTokenStorageService = deviceTokenStorageService;
@@ -187,6 +189,120 @@ public class NotificationGrpcService(
             _logger.LogError(ex, "Error getting unread counts: UserId={UserId}", request.UserId);
             return new ProtoTypes.GetUnreadCountsReply();
         }
+    }
+
+    public override async Task<ProtoTypes.GetSocialNotificationInboxResponse> GetSocialNotificationInbox(
+        ProtoTypes.GetSocialNotificationInboxRequest request,
+        ServerCallContext context)
+    {
+        if (string.IsNullOrWhiteSpace(request.UserId))
+        {
+            return new ProtoTypes.GetSocialNotificationInboxResponse();
+        }
+
+        var result = await _socialNotificationStateService.GetInboxAsync(
+            request.UserId,
+            request.Limit,
+            request.IncludeRead,
+            context.CancellationToken);
+
+        var response = new ProtoTypes.GetSocialNotificationInboxResponse
+        {
+            HasMore = result.HasMore
+        };
+
+        response.Items.AddRange(result.Items.Select(MapToProtoSocialNotificationItem));
+        return response;
+    }
+
+    public override async Task<ProtoTypes.MarkSocialNotificationReadResponse> MarkSocialNotificationRead(
+        ProtoTypes.MarkSocialNotificationReadRequest request,
+        ServerCallContext context)
+    {
+        if (string.IsNullOrWhiteSpace(request.UserId))
+        {
+            return new ProtoTypes.MarkSocialNotificationReadResponse
+            {
+                Success = false,
+                UpdatedCount = 0,
+                Message = "UserId is required"
+            };
+        }
+
+        if (!request.MarkAll && string.IsNullOrWhiteSpace(request.NotificationId))
+        {
+            return new ProtoTypes.MarkSocialNotificationReadResponse
+            {
+                Success = false,
+                UpdatedCount = 0,
+                Message = "NotificationId is required when MarkAll is false"
+            };
+        }
+
+        var updatedCount = await _socialNotificationStateService.MarkAsReadAsync(
+            request.UserId,
+            request.NotificationId,
+            request.MarkAll,
+            context.CancellationToken);
+
+        return new ProtoTypes.MarkSocialNotificationReadResponse
+        {
+            Success = true,
+            UpdatedCount = updatedCount,
+            Message = string.Empty
+        };
+    }
+
+    public override async Task<ProtoTypes.GetSocialNotificationPreferencesResponse> GetSocialNotificationPreferences(
+        ProtoTypes.GetSocialNotificationPreferencesRequest request,
+        ServerCallContext context)
+    {
+        var preferences = await _socialNotificationStateService.GetPreferencesAsync(
+            request.UserId,
+            context.CancellationToken);
+
+        return new ProtoTypes.GetSocialNotificationPreferencesResponse
+        {
+            Preferences = MapToProtoSocialNotificationPreferences(preferences)
+        };
+    }
+
+    public override async Task<ProtoTypes.UpdateSocialNotificationPreferencesResponse> UpdateSocialNotificationPreferences(
+        ProtoTypes.UpdateSocialNotificationPreferencesRequest request,
+        ServerCallContext context)
+    {
+        if (string.IsNullOrWhiteSpace(request.UserId))
+        {
+            return new ProtoTypes.UpdateSocialNotificationPreferencesResponse
+            {
+                Success = false,
+                Message = "UserId is required",
+                Preferences = MapToProtoSocialNotificationPreferences(new InternalModels.SocialNotificationPreferences())
+            };
+        }
+
+        var update = new InternalModels.SocialNotificationPreferenceUpdate
+        {
+            OpenActivityEnabled = request.HasOpenActivityEnabled ? request.OpenActivityEnabled : null,
+            CloseActivityEnabled = request.HasCloseActivityEnabled ? request.CloseActivityEnabled : null,
+            CircleMutes = request.CircleMutes.Select(x => new InternalModels.SocialCircleMuteState
+            {
+                CircleId = x.CircleId,
+                IsMuted = x.IsMuted
+            }).ToList()
+        };
+
+        var preferences = await _socialNotificationStateService.UpdatePreferencesAsync(
+            request.UserId,
+            update,
+            context.CancellationToken);
+
+        return new ProtoTypes.UpdateSocialNotificationPreferencesResponse
+        {
+            Success = true,
+            Message = string.Empty,
+            Preferences = MapToProtoSocialNotificationPreferences(preferences)
+        };
     }
 
     #region Device Token Management
@@ -434,6 +550,87 @@ public class NotificationGrpcService(
             InternalModels.EventType.MessagesRead => ProtoTypes.EventType.MessagesRead,
             InternalModels.EventType.UnreadCountSync => ProtoTypes.EventType.UnreadCountSync,
             _ => ProtoTypes.EventType.Unspecified
+        };
+    }
+
+    private static ProtoTypes.SocialNotificationItem MapToProtoSocialNotificationItem(
+        InternalModels.SocialNotificationItem item)
+    {
+        var proto = new ProtoTypes.SocialNotificationItem
+        {
+            NotificationId = item.NotificationId,
+            Kind = MapSocialNotificationKind(item.Kind),
+            VisibilityClass = MapVisibilityClass(item.VisibilityClass),
+            TargetType = MapTargetType(item.TargetType),
+            TargetId = item.TargetId,
+            PostId = item.PostId,
+            ParentCommentId = item.ParentCommentId,
+            ActorUserId = item.ActorUserId,
+            ActorDisplayName = item.ActorDisplayName,
+            Title = item.Title,
+            Body = item.Body,
+            IsRead = item.IsRead,
+            IsPrivatePreviewSuppressed = item.IsPrivatePreviewSuppressed,
+            CreatedAtUnixMs = new DateTimeOffset(item.CreatedAtUtc).ToUnixTimeMilliseconds(),
+            DeepLinkPath = item.DeepLinkPath
+        };
+
+        proto.MatchedCircleIds.AddRange(item.MatchedCircleIds);
+        return proto;
+    }
+
+    private static ProtoTypes.SocialNotificationPreferences MapToProtoSocialNotificationPreferences(
+        InternalModels.SocialNotificationPreferences preferences)
+    {
+        var proto = new ProtoTypes.SocialNotificationPreferences
+        {
+            OpenActivityEnabled = preferences.OpenActivityEnabled,
+            CloseActivityEnabled = preferences.CloseActivityEnabled,
+            UpdatedAtUnixMs = new DateTimeOffset(preferences.UpdatedAtUtc).ToUnixTimeMilliseconds()
+        };
+
+        proto.CircleMutes.AddRange(preferences.CircleMutes.Select(x => new ProtoTypes.SocialCircleMuteState
+        {
+            CircleId = x.CircleId,
+            IsMuted = x.IsMuted
+        }));
+
+        return proto;
+    }
+
+    private static ProtoTypes.SocialNotificationKind MapSocialNotificationKind(
+        InternalModels.SocialNotificationKind kind)
+    {
+        return kind switch
+        {
+            InternalModels.SocialNotificationKind.NewPost => ProtoTypes.SocialNotificationKind.NewPost,
+            InternalModels.SocialNotificationKind.Reaction => ProtoTypes.SocialNotificationKind.Reaction,
+            InternalModels.SocialNotificationKind.Comment => ProtoTypes.SocialNotificationKind.Comment,
+            InternalModels.SocialNotificationKind.Reply => ProtoTypes.SocialNotificationKind.Reply,
+            _ => ProtoTypes.SocialNotificationKind.Unspecified
+        };
+    }
+
+    private static ProtoTypes.SocialNotificationVisibilityClass MapVisibilityClass(
+        InternalModels.SocialNotificationVisibilityClass visibilityClass)
+    {
+        return visibilityClass switch
+        {
+            InternalModels.SocialNotificationVisibilityClass.Open => ProtoTypes.SocialNotificationVisibilityClass.Open,
+            InternalModels.SocialNotificationVisibilityClass.Close => ProtoTypes.SocialNotificationVisibilityClass.Close,
+            _ => ProtoTypes.SocialNotificationVisibilityClass.Unspecified
+        };
+    }
+
+    private static ProtoTypes.SocialNotificationTargetType MapTargetType(
+        InternalModels.SocialNotificationTargetType targetType)
+    {
+        return targetType switch
+        {
+            InternalModels.SocialNotificationTargetType.Post => ProtoTypes.SocialNotificationTargetType.Post,
+            InternalModels.SocialNotificationTargetType.Comment => ProtoTypes.SocialNotificationTargetType.Comment,
+            InternalModels.SocialNotificationTargetType.Reply => ProtoTypes.SocialNotificationTargetType.Reply,
+            _ => ProtoTypes.SocialNotificationTargetType.Unspecified
         };
     }
 

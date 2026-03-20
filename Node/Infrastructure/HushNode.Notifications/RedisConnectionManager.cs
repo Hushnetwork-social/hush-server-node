@@ -90,6 +90,18 @@ public class RedisConnectionManager : IDisposable
     public virtual string GetConnectionsPattern()
         => $"{_settings.InstanceName}connections:*";
 
+    /// <summary>
+    /// Gets the Redis key for a user's durable FEAT-091 social notification inbox document.
+    /// </summary>
+    public virtual string GetSocialNotificationInboxKey(string userId)
+        => $"{_settings.InstanceName}social-notifications:{userId}:inbox";
+
+    /// <summary>
+    /// Gets the Redis key for a user's FEAT-091 social notification preference document.
+    /// </summary>
+    public virtual string GetSocialNotificationPreferencesKey(string userId)
+        => $"{_settings.InstanceName}social-notifications:{userId}:preferences";
+
     private ConnectionMultiplexer CreateConnection()
     {
         _logger.LogInformation("Connecting to Redis at {ConnectionString}", _settings.ConnectionString);

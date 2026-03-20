@@ -19,6 +19,12 @@ service HushNotification {
   rpc RegisterDeviceToken(RegisterDeviceTokenRequest) returns (RegisterDeviceTokenResponse);
   rpc UnregisterDeviceToken(UnregisterDeviceTokenRequest) returns (UnregisterDeviceTokenResponse);
   rpc GetActiveDeviceTokens(GetActiveDeviceTokensRequest) returns (GetActiveDeviceTokensResponse);
+
+  // Social notification inbox and preference management (FEAT-091)
+  rpc GetSocialNotificationInbox(GetSocialNotificationInboxRequest) returns (GetSocialNotificationInboxResponse);
+  rpc MarkSocialNotificationRead(MarkSocialNotificationReadRequest) returns (MarkSocialNotificationReadResponse);
+  rpc GetSocialNotificationPreferences(GetSocialNotificationPreferencesRequest) returns (GetSocialNotificationPreferencesResponse);
+  rpc UpdateSocialNotificationPreferences(UpdateSocialNotificationPreferencesRequest) returns (UpdateSocialNotificationPreferencesResponse);
 }
 
 // Subscribe request
@@ -132,4 +138,106 @@ message DeviceTokenInfo {
   string Token = 1;
   PushPlatform Platform = 2;
   string DeviceName = 3;
+}
+
+// =====================================================
+// FEAT-091 Social Notification Inbox and Preferences
+// =====================================================
+
+enum SocialNotificationVisibilityClass {
+  SOCIAL_NOTIFICATION_VISIBILITY_CLASS_UNSPECIFIED = 0;
+  SOCIAL_NOTIFICATION_VISIBILITY_CLASS_OPEN = 1;
+  SOCIAL_NOTIFICATION_VISIBILITY_CLASS_CLOSE = 2;
+}
+
+enum SocialNotificationKind {
+  SOCIAL_NOTIFICATION_KIND_UNSPECIFIED = 0;
+  SOCIAL_NOTIFICATION_KIND_NEW_POST = 1;
+  SOCIAL_NOTIFICATION_KIND_REACTION = 2;
+  SOCIAL_NOTIFICATION_KIND_COMMENT = 3;
+  SOCIAL_NOTIFICATION_KIND_REPLY = 4;
+}
+
+enum SocialNotificationTargetType {
+  SOCIAL_NOTIFICATION_TARGET_TYPE_UNSPECIFIED = 0;
+  SOCIAL_NOTIFICATION_TARGET_TYPE_POST = 1;
+  SOCIAL_NOTIFICATION_TARGET_TYPE_COMMENT = 2;
+  SOCIAL_NOTIFICATION_TARGET_TYPE_REPLY = 3;
+}
+
+message SocialNotificationItem {
+  string NotificationId = 1;
+  SocialNotificationKind Kind = 2;
+  SocialNotificationVisibilityClass VisibilityClass = 3;
+  SocialNotificationTargetType TargetType = 4;
+  string TargetId = 5;
+  string PostId = 6;
+  string ParentCommentId = 7;
+  string ActorUserId = 8;
+  string ActorDisplayName = 9;
+  string Title = 10;
+  string Body = 11;
+  bool IsRead = 12;
+  bool IsPrivatePreviewSuppressed = 13;
+  int64 CreatedAtUnixMs = 14;
+  string DeepLinkPath = 15;
+  repeated string MatchedCircleIds = 16;
+}
+
+message SocialCircleMuteState {
+  string CircleId = 1;
+  bool IsMuted = 2;
+}
+
+message SocialNotificationPreferences {
+  bool OpenActivityEnabled = 1;
+  bool CloseActivityEnabled = 2;
+  repeated SocialCircleMuteState CircleMutes = 3;
+  int64 UpdatedAtUnixMs = 4;
+}
+
+message GetSocialNotificationInboxRequest {
+  string UserId = 1;
+  int32 Limit = 2;
+  bool IncludeRead = 3;
+}
+
+message GetSocialNotificationInboxResponse {
+  repeated SocialNotificationItem Items = 1;
+  bool HasMore = 2;
+}
+
+message MarkSocialNotificationReadRequest {
+  string UserId = 1;
+  string NotificationId = 2;
+  bool MarkAll = 3;
+}
+
+message MarkSocialNotificationReadResponse {
+  bool Success = 1;
+  int32 UpdatedCount = 2;
+  string Message = 3;
+}
+
+message GetSocialNotificationPreferencesRequest {
+  string UserId = 1;
+}
+
+message GetSocialNotificationPreferencesResponse {
+  SocialNotificationPreferences Preferences = 1;
+}
+
+message UpdateSocialNotificationPreferencesRequest {
+  string UserId = 1;
+  bool HasOpenActivityEnabled = 2;
+  bool OpenActivityEnabled = 3;
+  bool HasCloseActivityEnabled = 4;
+  bool CloseActivityEnabled = 5;
+  repeated SocialCircleMuteState CircleMutes = 6;
+}
+
+message UpdateSocialNotificationPreferencesResponse {
+  bool Success = 1;
+  string Message = 2;
+  SocialNotificationPreferences Preferences = 3;
 }
