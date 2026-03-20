@@ -193,8 +193,8 @@ Feature: HushSocial server integration rules
     When Owner follows Owner via social follow contract
     Then the social follow response should reject self follow
 
-  @FEAT-091 @ignore
-  Scenario: Notification delivery honors eligibility and privacy-safe payloads
+  @FEAT-091 @HS-INT-091-NOTIFICATIONS
+  Scenario: Notification delivery honors eligibility and privacy-safe inbox payloads
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA
     And Owner has not accepted follow request from FollowerC
@@ -202,16 +202,14 @@ Feature: HushSocial server integration rules
     And FollowerA has not muted circle "Inner Circle"
     When Owner publishes Close post "Security update" to Inner Circle
     Then FollowerA should receive in-app notification for "Security update"
-    And FollowerA should receive push notification with no content preview
+    And FollowerA notification for "Security update" should use a privacy-safe preview
     And FollowerC should not receive any notification for "Security update"
 
-  @FEAT-091 @ignore
+  @FEAT-091 @HS-INT-091-NOTIFICATIONS
   Scenario: Per-circle mute suppresses notifications for muted circle
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA
-    And Owner has created circle "Trading Circle"
-    And Owner has added FollowerA to circle "Trading Circle"
-    And FollowerA has muted circle "Trading Circle"
-    When Owner publishes Close post "Trade signal" to circle "Trading Circle"
+    And FollowerA has muted circle "Inner Circle"
+    When Owner publishes Close post "Trade signal" to Inner Circle
     Then FollowerA should not receive in-app notification for "Trade signal"
     And FollowerA should not receive push notification for "Trade signal"

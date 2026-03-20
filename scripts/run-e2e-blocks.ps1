@@ -38,7 +38,8 @@ $allBlocks = @(
     @{ Name = "HS-E2E-087-PUBLIC-PERMALINK"; Filter = 'Category=HS-E2E-087-PUBLIC-PERMALINK' },
     @{ Name = "HS-E2E-087-REACTION-FLOW"; Filter = 'Category=HS-E2E-087-REACTION-FLOW' },
     @{ Name = "HS-E2E-089-GUEST-CTA"; Filter = 'Category=HS-E2E-089-GUEST-CTA' },
-    @{ Name = "HS-E2E-090-FOLLOW"; Filter = 'Category=HS-E2E-090-FOLLOW&Category!=LONG_RUNNING' }
+    @{ Name = "HS-E2E-090-FOLLOW"; Filter = 'Category=HS-E2E-090-FOLLOW&Category!=LONG_RUNNING' },
+    @{ Name = "HS-E2E-091-NOTIFICATIONS"; Filter = 'Category=HS-E2E-091-NOTIFICATIONS&Category!=LONG_RUNNING' }
 )
 
 if ($BlockList) {

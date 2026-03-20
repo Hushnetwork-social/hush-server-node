@@ -240,14 +240,17 @@ Feature: HushSocial end-to-end walkthrough
     Then FollowerA should see permalink post "Follow root post"
     And FollowerA should see following state on permalink author for post "Follow root post"
 
-  @FEAT-091 @ignore @HS-E2E-091-NOTIFICATIONS
+  @FEAT-091 @HS-E2E-091-NOTIFICATIONS
   Scenario: Notification preferences and per-circle mute in real flow
     Given Owner profile mode is Close
     And Owner has accepted follow request from FollowerA via browser
     And FollowerA enables Close post notifications via browser
+    And FollowerA clears existing social notifications via browser
     And FollowerA mutes circle "Inner Circle" via browser
     When Owner publishes Close post "Muted circle notice" to Inner Circle via browser
-    Then FollowerA should not see notification for post "Muted circle notice"
+    Then FollowerA should not see a social notification for post "Muted circle notice"
     When FollowerA unmutes circle "Inner Circle" via browser
     And Owner publishes Close post "Active circle notice" to Inner Circle via browser
-    Then FollowerA should see an in-app notification for post "Active circle notice"
+    Then FollowerA should see a private social notification for post "Active circle notice"
+    When FollowerA opens the latest social notification
+    Then FollowerA should land on social permalink for post "Active circle notice"

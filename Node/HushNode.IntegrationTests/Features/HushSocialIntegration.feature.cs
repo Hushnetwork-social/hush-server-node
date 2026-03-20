@@ -1002,17 +1002,18 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Notification delivery honors eligibility and privacy-safe payloads", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="Notification delivery honors eligibility and privacy-safe inbox payloads")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
-        [Xunit.TraitAttribute("Description", "Notification delivery honors eligibility and privacy-safe payloads")]
+        [Xunit.TraitAttribute("Description", "Notification delivery honors eligibility and privacy-safe inbox payloads")]
         [Xunit.TraitAttribute("Category", "FEAT-091")]
-        public void NotificationDeliveryHonorsEligibilityAndPrivacy_SafePayloads()
+        [Xunit.TraitAttribute("Category", "HS-INT-091-NOTIFICATIONS")]
+        public void NotificationDeliveryHonorsEligibilityAndPrivacy_SafeInboxPayloads()
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-091",
-                    "ignore"};
+                    "HS-INT-091-NOTIFICATIONS"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Notification delivery honors eligibility and privacy-safe payloads", null, tagsOfScenario, argumentsOfScenario, featureTags);
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Notification delivery honors eligibility and privacy-safe inbox payloads", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 197
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
@@ -1048,7 +1049,7 @@ namespace HushNode.IntegrationTests.Features
     testRunner.Then("FollowerA should receive in-app notification for \"Security update\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 205
-    testRunner.And("FollowerA should receive push notification with no content preview", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("FollowerA notification for \"Security update\" should use a privacy-safe preview", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 206
     testRunner.And("FollowerC should not receive any notification for \"Security update\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
@@ -1057,15 +1058,16 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Per-circle mute suppresses notifications for muted circle", Skip="Ignored")]
+        [Xunit.SkippableFactAttribute(DisplayName="Per-circle mute suppresses notifications for muted circle")]
         [Xunit.TraitAttribute("FeatureTitle", "HushSocial server integration rules")]
         [Xunit.TraitAttribute("Description", "Per-circle mute suppresses notifications for muted circle")]
         [Xunit.TraitAttribute("Category", "FEAT-091")]
+        [Xunit.TraitAttribute("Category", "HS-INT-091-NOTIFICATIONS")]
         public void Per_CircleMuteSuppressesNotificationsForMutedCircle()
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-091",
-                    "ignore"};
+                    "HS-INT-091-NOTIFICATIONS"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Per-circle mute suppresses notifications for muted circle", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 209
@@ -1088,21 +1090,15 @@ namespace HushNode.IntegrationTests.Features
     testRunner.And("Owner has accepted follow request from FollowerA", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 212
-    testRunner.And("Owner has created circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("FollowerA has muted circle \"Inner Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 213
-    testRunner.And("Owner has added FollowerA to circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.When("Owner publishes Close post \"Trade signal\" to Inner Circle", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
 #line 214
-    testRunner.And("FollowerA has muted circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 215
-    testRunner.When("Owner publishes Close post \"Trade signal\" to circle \"Trading Circle\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
-#line hidden
-#line 216
     testRunner.Then("FollowerA should not receive in-app notification for \"Trade signal\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 217
+#line 215
     testRunner.And("FollowerA should not receive push notification for \"Trade signal\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }

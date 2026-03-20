@@ -90,6 +90,12 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         await EnsureInnerCircleExistsForOwnerAsync();
     }
 
+    [Given(@"Owner profile mode is Close")]
+    public async Task GivenOwnerProfileModeIsClose()
+    {
+        await WhenOwnerSetsProfileModeToClose();
+    }
+
     [Then(@"Owner should see Inner Circle created automatically")]
     public async Task ThenOwnerShouldSeeInnerCircleCreatedAutomatically()
     {
@@ -113,6 +119,12 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
 
     [When(@"Owner accepts follow request from FollowerA via browser")]
     public async Task WhenOwnerAcceptsFollowRequestFromFollowerAViaBrowser()
+    {
+        await ApproveFollowerAsync("FollowerA");
+    }
+
+    [Given(@"Owner has accepted follow request from FollowerA via browser")]
+    public async Task GivenOwnerHasAcceptedFollowRequestFromFollowerAViaBrowser()
     {
         await ApproveFollowerAsync("FollowerA");
     }
@@ -422,6 +434,151 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         await NavigateToSocialExperienceAsync(ownerPage);
 
         await EnsureComposerDraftVisibleAsync(ownerPage);
+    }
+
+    [Given(@"FollowerA enables Close post notifications via browser")]
+    public async Task GivenFollowerAEnablesClosePostNotificationsViaBrowser()
+    {
+        var page = GetUserPage("FollowerA");
+        await OpenNotificationsTabAsync(page);
+        await SetCheckboxCheckedAsync(page.GetByTestId("social-notifications-close-toggle").Locator("input[type='checkbox']").First, true);
+    }
+
+    [Given(@"FollowerA clears existing social notifications via browser")]
+    public async Task GivenFollowerAClearsExistingSocialNotificationsViaBrowser()
+    {
+        var page = GetUserPage("FollowerA");
+        await OpenNotificationsTabAsync(page);
+        await TriggerSyncAsync(page);
+
+        var markAllButton = await WaitForTestIdAsync(page, "social-notifications-mark-all-read", 10000);
+        if (await markAllButton.IsDisabledAsync())
+        {
+            return;
+        }
+
+        await markAllButton.ClickAsync();
+
+        var unread = await WaitForTestIdAsync(page, "social-notifications-unread-count", 10000);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            if ((await unread.InnerTextAsync()).Contains("0 unread", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+
+        (await unread.InnerTextAsync()).Should().Contain("0 unread");
+    }
+
+    [Given(@"FollowerA mutes circle ""(.*)"" via browser")]
+    [When(@"FollowerA mutes circle ""(.*)"" via browser")]
+    public async Task WhenFollowerAMutesCircleViaBrowser(string circleName)
+    {
+        var page = GetUserPage("FollowerA");
+        await OpenNotificationsTabAsync(page);
+        await SetCircleMuteStateViaBrowserAsync(page, circleName, true);
+    }
+
+    [When(@"FollowerA unmutes circle ""(.*)"" via browser")]
+    public async Task WhenFollowerAUnmutesCircleViaBrowser(string circleName)
+    {
+        var page = GetUserPage("FollowerA");
+        await OpenNotificationsTabAsync(page);
+        await SetCircleMuteStateViaBrowserAsync(page, circleName, false);
+    }
+
+    [Then(@"FollowerA should not see a social notification for post ""(.*)""")]
+    public async Task ThenFollowerAShouldNotSeeASocialNotificationForPost(string postTitle)
+    {
+        var page = GetUserPage("FollowerA");
+        await OpenNotificationsTabAsync(page);
+        await TriggerSyncAsync(page);
+
+        var unread = await WaitForTestIdAsync(page, "social-notifications-unread-count", 10000);
+        (await unread.InnerTextAsync()).Should().Contain("0 unread");
+
+        var bodyText = await page.InnerTextAsync("body");
+        bodyText.Should().NotContain(postTitle);
+    }
+
+    [Then(@"FollowerA should see a private social notification for post ""(.*)""")]
+    public async Task ThenFollowerAShouldSeeAPrivateSocialNotificationForPost(string postTitle)
+    {
+        var page = GetUserPage("FollowerA");
+        await OpenNotificationsTabAsync(page);
+        await TriggerSyncAsync(page);
+
+        var unread = await WaitForTestIdAsync(page, "social-notifications-unread-count", 10000);
+        var timeoutAt = DateTime.UtcNow.AddSeconds(15);
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            var unreadText = (await unread.InnerTextAsync()).Trim();
+            if (!unreadText.StartsWith("0 ", StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            await Task.Delay(250);
+            await ClickTestIdAsync(page, "social-notifications-refresh");
+        }
+
+        (await unread.InnerTextAsync()).Should().NotContain("0 unread");
+
+        var list = await WaitForTestIdAsync(page, "social-notifications-list", 10000);
+        var firstItem = list.Locator("article").First;
+        await firstItem.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var itemText = await firstItem.InnerTextAsync();
+        itemText.Should().Contain("Owner");
+        itemText.Should().Contain("Private preview suppressed");
+        itemText.Should().NotContain(postTitle);
+    }
+
+    [When(@"FollowerA opens the latest social notification")]
+    public async Task WhenFollowerAOpensTheLatestSocialNotification()
+    {
+        var page = GetUserPage("FollowerA");
+        await OpenNotificationsTabAsync(page);
+        await TriggerSyncAsync(page);
+
+        var list = await WaitForTestIdAsync(page, "social-notifications-list", 10000);
+        var firstItem = list.Locator("article").First;
+        await firstItem.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        var openButton = firstItem.GetByRole(AriaRole.Button, new() { Name = "Open" }).First;
+        await openButton.ClickAsync();
+    }
+
+    [Then(@"FollowerA should land on social permalink for post ""(.*)""")]
+    public async Task ThenFollowerAShouldLandOnSocialPermalinkForPost(string postTitle)
+    {
+        var page = GetUserPage("FollowerA");
+        await page.WaitForURLAsync(new Regex(".*/social/post/.*"), new PageWaitForURLOptions
+        {
+            Timeout = 15000
+        });
+
+        var layout = page.GetByTestId("social-permalink-layout").First;
+        await layout.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 15000
+        });
+
+        var bodyText = await page.InnerTextAsync("body");
+        bodyText.Should().Contain(postTitle);
     }
 
     [Given(@"Owner has created Open post ""(.*)"" via browser")]
@@ -1433,6 +1590,12 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
     public async Task WhenOwnerCreatesClosePostForInnerCircleViaBrowser(string postTitle)
     {
         await WhenOwnerCreatesClosePostForCircleViaBrowser(postTitle, "Inner Circle");
+    }
+
+    [When(@"Owner publishes Close post ""(.*)"" to Inner Circle via browser")]
+    public async Task WhenOwnerPublishesClosePostToInnerCircleViaBrowser(string postTitle)
+    {
+        await WhenOwnerCreatesClosePostForInnerCircleViaBrowser(postTitle);
     }
 
     [Given(@"Owner creates Close post ""(.*)"" for Inner Circle via backend")]
@@ -2726,6 +2889,17 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         throw new TimeoutException($"Unable to reach social experience. Current URL: {page.Url}");
     }
 
+    private async Task OpenNotificationsTabAsync(IPage page)
+    {
+        await NavigateToSocialExperienceAsync(page);
+        await TriggerSyncAsync(page);
+
+        var menuButton = await WaitForTestIdAsync(page, "social-menu-notifications", 10000);
+        await menuButton.ClickAsync();
+
+        await WaitForTestIdAsync(page, "social-notifications-panel", 10000);
+    }
+
     private async Task OpenFollowingTabAsync(IPage page)
     {
         var followingNavCandidates = new[]
@@ -3091,6 +3265,73 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
             .Should()
             .BeTrue($"Post '{title}' should have a stored id.");
         return postId!;
+    }
+
+    private async Task SetCircleMuteStateViaBrowserAsync(IPage page, string circleName, bool isMuted)
+    {
+        await TriggerSyncAsync(page);
+        var circleFeedId = IsInnerCircleName(circleName)
+            ? await EnsureInnerCircleExistsForOwnerAsync()
+            : await EnsureCircleExistsAsync(circleName);
+
+        var panel = page.GetByTestId("social-notifications-panel").First;
+        var circleTestId = $"social-notifications-circle-{circleFeedId}";
+        var timeoutAt = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            var exactToggle = panel.GetByTestId(circleTestId)
+                .Locator("input[type='checkbox']")
+                .First;
+
+            if (await exactToggle.CountAsync() > 0)
+            {
+                await SetCheckboxCheckedAsync(exactToggle, isMuted);
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+
+        ILocator circleToggle = panel.Locator("label")
+            .Filter(new LocatorFilterOptions { HasTextString = circleName })
+            .Locator("input[type='checkbox']")
+            .First;
+
+        await SetCheckboxCheckedAsync(circleToggle, isMuted);
+    }
+
+    private static bool IsInnerCircleName(string circleName)
+    {
+        var normalized = circleName.Replace(" ", string.Empty).Trim();
+        return string.Equals(circleName.Trim(), "Inner Circle", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "InnerCircle", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task SetCheckboxCheckedAsync(ILocator checkbox, bool expectedState)
+    {
+        await checkbox.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = 10000
+        });
+
+        if (await checkbox.IsCheckedAsync() != expectedState)
+        {
+            await checkbox.ClickAsync();
+        }
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (await checkbox.IsCheckedAsync() == expectedState)
+            {
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+
+        (await checkbox.IsCheckedAsync()).Should().Be(expectedState);
     }
 
     private Dictionary<string, string> GetOrCreateSocialPostsByTitle()

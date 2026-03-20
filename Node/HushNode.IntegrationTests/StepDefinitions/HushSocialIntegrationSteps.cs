@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Google.Protobuf;
+using Grpc.Core;
 using System.Text;
 using HushNetwork.proto;
 using HushNode.IntegrationTests.Hooks;
@@ -46,6 +47,7 @@ public sealed class HushSocialIntegrationSteps
     private const string SocialThreadPostTitlesByContentKey = "Feat088SocialThreadPostTitlesByContent";
     private const string LastSocialCommentsPageResponseKey = "Feat088LastSocialCommentsPageResponse";
     private const string LastSocialThreadRepliesResponseKey = "Feat088LastSocialThreadRepliesResponse";
+    private const string LastSocialNotificationInboxResponseKey = "Feat091LastSocialNotificationInboxResponse";
 
     private readonly ScenarioContext _scenarioContext;
 
@@ -103,6 +105,13 @@ public sealed class HushSocialIntegrationSteps
     public async Task GivenOwnerHasAcceptedFollowRequestFrom(string followerName)
     {
         await AcceptFollowRequestAsync(followerName);
+    }
+
+    [Given(@"Owner has not accepted follow request from (.*)")]
+    public void GivenOwnerHasNotAcceptedFollowRequestFrom(string followerName)
+    {
+        var approved = GetOrCreateFollowerSet(ApprovedFollowersKey);
+        approved.Should().NotContain(followerName);
     }
 
     [Given(@"Owner has accepted follow requests from ""(.*)""")]
@@ -323,6 +332,12 @@ public sealed class HushSocialIntegrationSteps
                 $"AddMemberToGroupFeed should succeed for {followerName}: {addResponse.Message}");
             await GetBlockControl().ProduceBlockAsync();
         }
+    }
+
+    [Given(@"Owner has added (.*) to circle ""(.*)""")]
+    public async Task GivenOwnerHasAddedUserToCircle(string followerName, string circleName)
+    {
+        await GivenOwnerHasAddedUsersToCircle(followerName, circleName);
     }
 
     [Given(@"Owner posts ""(.*)"" to circle ""(.*)""")]
@@ -694,6 +709,98 @@ public sealed class HushSocialIntegrationSteps
         response.Success.Should().BeTrue($"Private post creation should succeed: {response.Message}");
         StoreSocialPost(postTitle, response);
         _scenarioContext[LastSocialPostCreateResponseKey] = response;
+    }
+
+    [Given(@"(.*) has enabled Close post notifications")]
+    public async Task GivenUserHasEnabledClosePostNotifications(string userName)
+    {
+        var preferences = await GetSocialNotificationPreferencesAsync(userName);
+        var response = await UpdateSocialNotificationPreferencesAsync(
+            userName,
+            request =>
+            {
+                request.HasOpenActivityEnabled = true;
+                request.OpenActivityEnabled = preferences.Preferences.OpenActivityEnabled;
+                request.HasCloseActivityEnabled = true;
+                request.CloseActivityEnabled = true;
+            });
+
+        response.Success.Should().BeTrue($"Updating FEAT-091 preferences should succeed for {userName}: {response.Message}");
+        response.Preferences.CloseActivityEnabled.Should().BeTrue();
+    }
+
+    [Given(@"(.*) has not muted circle ""(.*)""")]
+    public async Task GivenUserHasNotMutedCircle(string userName, string circleName)
+    {
+        var response = await UpdateCircleMuteStateAsync(userName, circleName, isMuted: false);
+        response.Success.Should().BeTrue($"Unmuting circle '{circleName}' should succeed for {userName}: {response.Message}");
+        var circleFeedId = await ResolveCircleFeedIdAsync(circleName);
+        response.Preferences.CircleMutes.Should().Contain(x => x.CircleId == circleFeedId && x.IsMuted == false);
+    }
+
+    [Given(@"(.*) has muted circle ""(.*)""")]
+    public async Task GivenUserHasMutedCircle(string userName, string circleName)
+    {
+        var response = await UpdateCircleMuteStateAsync(userName, circleName, isMuted: true);
+        response.Success.Should().BeTrue($"Muting circle '{circleName}' should succeed for {userName}: {response.Message}");
+        var circleFeedId = await ResolveCircleFeedIdAsync(circleName);
+        response.Preferences.CircleMutes.Should().Contain(x => x.CircleId == circleFeedId && x.IsMuted);
+    }
+
+    [When(@"Owner publishes Close post ""(.*)"" to Inner Circle")]
+    public async Task WhenOwnerPublishesClosePostToInnerCircle(string postTitle)
+    {
+        await GivenOwnerHasCreatedAClosePostForInnerCircle(postTitle);
+    }
+
+    [When(@"Owner publishes Close post ""(.*)"" to circle ""(.*)""")]
+    public async Task WhenOwnerPublishesClosePostToCircle(string postTitle, string circleName)
+    {
+        var owner = GetTestIdentity(OwnerName);
+        var circleFeedId = await ResolveCircleFeedIdAsync(circleName);
+        var response = await SubmitSocialPostAsync(
+            owner,
+            postTitle,
+            SocialPostVisibility.Private,
+            [FeedIdHandler.CreateFromString(circleFeedId)]);
+
+        response.Success.Should().BeTrue($"Private post creation for circle '{circleName}' should succeed: {response.Message}");
+        StoreSocialPost(postTitle, response);
+        _scenarioContext[LastSocialPostCreateResponseKey] = response;
+    }
+
+    [Then(@"(.*) should receive in-app notification for ""(.*)""")]
+    public async Task ThenUserShouldReceiveInAppNotificationFor(string userName, string postTitle)
+    {
+        var notification = await GetNotificationForPostAsync(userName, postTitle);
+        notification.Should().NotBeNull($"Expected FEAT-091 inbox item for '{postTitle}' and {userName}");
+        notification!.IsRead.Should().BeFalse();
+    }
+
+    [Then(@"(.*) notification for ""(.*)"" should use a privacy-safe preview")]
+    public async Task ThenUserNotificationForShouldUseAPrivacySafePreview(string userName, string postTitle)
+    {
+        var notification = await GetNotificationForPostAsync(userName, postTitle);
+        notification.Should().NotBeNull($"Expected FEAT-091 inbox item for '{postTitle}' and {userName}");
+        notification!.VisibilityClass.Should().Be(SocialNotificationVisibilityClass.Close);
+        notification.IsPrivatePreviewSuppressed.Should().BeTrue();
+        notification.Body.Should().NotContain(postTitle);
+    }
+
+    [Then(@"(.*) should not receive any notification for ""(.*)""")]
+    [Then(@"(.*) should not receive in-app notification for ""(.*)""")]
+    public async Task ThenUserShouldNotReceiveNotificationFor(string userName, string postTitle)
+    {
+        var notification = await GetNotificationForPostAsync(userName, postTitle);
+        notification.Should().BeNull($"Did not expect FEAT-091 inbox item for '{postTitle}' and {userName}");
+    }
+
+
+    [Then(@"(.*) should not receive push notification for ""(.*)""")]
+    public async Task ThenUserShouldNotReceivePushNotificationFor(string userName, string postTitle)
+    {
+        var notification = await GetNotificationForPostAsync(userName, postTitle);
+        notification.Should().BeNull($"Did not expect any FEAT-091 delivery artifact for '{postTitle}' and {userName}");
     }
 
     [When(@"(.*) reacts to ""(.*)"" with ""(.*)""")]
@@ -2040,5 +2147,104 @@ public sealed class HushSocialIntegrationSteps
             AttachmentId = attachment.AttachmentId,
             EncryptedOriginal = ByteString.CopyFrom(buffer)
         };
+    }
+
+    private async Task<GetSocialNotificationPreferencesResponse> GetSocialNotificationPreferencesAsync(string userName)
+    {
+        var identity = GetTestIdentity(userName);
+        var notificationClient = GetGrpcFactory().CreateClient<HushNotification.HushNotificationClient>();
+        return await notificationClient.GetSocialNotificationPreferencesAsync(
+            new GetSocialNotificationPreferencesRequest
+            {
+                UserId = identity.PublicSigningAddress
+            },
+            headers: CreateUserMetadata(identity.PublicSigningAddress));
+    }
+
+    private async Task<UpdateSocialNotificationPreferencesResponse> UpdateCircleMuteStateAsync(
+        string userName,
+        string circleName,
+        bool isMuted)
+    {
+        var circleFeedId = await ResolveCircleFeedIdAsync(circleName);
+        var preferences = await GetSocialNotificationPreferencesAsync(userName);
+        return await UpdateSocialNotificationPreferencesAsync(
+            userName,
+            request =>
+            {
+                request.HasOpenActivityEnabled = true;
+                request.OpenActivityEnabled = preferences.Preferences.OpenActivityEnabled;
+                request.HasCloseActivityEnabled = true;
+                request.CloseActivityEnabled = preferences.Preferences.CloseActivityEnabled;
+
+                var muteMap = preferences.Preferences.CircleMutes.ToDictionary(x => x.CircleId, x => x.IsMuted, StringComparer.Ordinal);
+                muteMap[circleFeedId] = isMuted;
+                foreach (var entry in muteMap.OrderBy(x => x.Key, StringComparer.Ordinal))
+                {
+                    request.CircleMutes.Add(new SocialCircleMuteState
+                    {
+                        CircleId = entry.Key,
+                        IsMuted = entry.Value
+                    });
+                }
+            });
+    }
+
+    private async Task<UpdateSocialNotificationPreferencesResponse> UpdateSocialNotificationPreferencesAsync(
+        string userName,
+        Action<UpdateSocialNotificationPreferencesRequest> configure)
+    {
+        var identity = GetTestIdentity(userName);
+        var notificationClient = GetGrpcFactory().CreateClient<HushNotification.HushNotificationClient>();
+        var request = new UpdateSocialNotificationPreferencesRequest
+        {
+            UserId = identity.PublicSigningAddress
+        };
+        configure(request);
+
+        return await notificationClient.UpdateSocialNotificationPreferencesAsync(
+            request,
+            headers: CreateUserMetadata(identity.PublicSigningAddress));
+    }
+
+    private async Task<SocialNotificationItem?> GetNotificationForPostAsync(string userName, string postTitle)
+    {
+        var identity = GetTestIdentity(userName);
+        var postId = GetStoredPostId(postTitle);
+        var notificationClient = GetGrpcFactory().CreateClient<HushNotification.HushNotificationClient>();
+        var response = await notificationClient.GetSocialNotificationInboxAsync(
+            new GetSocialNotificationInboxRequest
+            {
+                UserId = identity.PublicSigningAddress,
+                Limit = 50,
+                IncludeRead = true
+            },
+            headers: CreateUserMetadata(identity.PublicSigningAddress));
+
+        _scenarioContext[LastSocialNotificationInboxResponseKey] = response;
+        return response.Items.FirstOrDefault(x => string.Equals(x.PostId, postId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task<string> ResolveCircleFeedIdAsync(string circleName)
+    {
+        if (IsInnerCircleCircleName(circleName))
+        {
+            return await EnsureOwnerInnerCircleExistsAsync();
+        }
+
+        return (await EnsureCircleExistsAsync(circleName)).ToString();
+    }
+
+    private static bool IsInnerCircleCircleName(string circleName) =>
+        string.Equals(circleName.Trim(), "Inner Circle", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(circleName.Replace(" ", string.Empty).Trim(), "InnerCircle", StringComparison.OrdinalIgnoreCase);
+
+    private static Metadata CreateUserMetadata(string userId)
+    {
+        var metadata = new Metadata
+        {
+            { "x-hush-userid", userId }
+        };
+        return metadata;
     }
 }
