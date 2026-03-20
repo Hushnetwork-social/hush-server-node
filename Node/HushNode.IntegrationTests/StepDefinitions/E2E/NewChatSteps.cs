@@ -18,6 +18,7 @@ internal sealed class NewChatSteps : BrowserStepsBase
     /// Creates a new chat with another user via the New Chat UI.
     /// Clicks nav-new-chat, searches for the target user, clicks result, waits for feed creation.
     /// </summary>
+    [Given(@"(\w+) creates a new chat with ""(.*)"" via browser")]
     [When(@"(\w+) creates a new chat with ""(.*)"" via browser")]
     public async Task WhenUserCreatesNewChatViaBrowser(string userName, string targetDisplayName)
     {

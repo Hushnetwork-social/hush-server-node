@@ -243,7 +243,7 @@ Feature: HushSocial end-to-end walkthrough
   @FEAT-091 @HS-E2E-091-NOTIFICATIONS
   Scenario: Notification preferences and per-circle mute in real flow
     Given Owner profile mode is Close
-    And Owner has accepted follow request from FollowerA via browser
+    And Owner creates a new chat with "FollowerA" via browser
     And FollowerA enables Close post notifications via browser
     And FollowerA clears existing social notifications via browser
     And FollowerA mutes circle "Inner Circle" via browser
