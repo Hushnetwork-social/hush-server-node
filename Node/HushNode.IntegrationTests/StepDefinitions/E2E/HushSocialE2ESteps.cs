@@ -385,8 +385,18 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         var ownerAddress = await GetUserAddressAsync("Owner");
         var innerCircleFeedId = await EnsureInnerCircleExistsForOwnerAsync();
         var feedClient = GetGrpcFactory().CreateClient<HushFeed.HushFeedClient>();
-        var approvedFollowers = GetOrCreateFollowerSet(ApprovedFollowersKey).ToArray();
-        approvedFollowers.Should().NotBeEmpty("this step requires at least one approved follower");
+        var currentMembers = await feedClient.GetGroupMembersAsync(new GetGroupMembersRequest
+        {
+            FeedId = innerCircleFeedId
+        });
+
+        var approvedFollowerAddresses = currentMembers.Members
+            .Select(x => x.PublicAddress)
+            .Where(x => !string.Equals(x, ownerAddress, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        approvedFollowerAddresses.Should().NotBeEmpty("this step requires at least one active Inner Circle follower");
 
         var before = await GetLatestKeyGenerationForUserAsync(innerCircleFeedId, ownerAddress);
         ScenarioContext[RepeatedBootstrapKeyGenerationBeforeKey] = before;
@@ -399,9 +409,8 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
                 RequesterPublicAddress = ownerAddress
             };
 
-            foreach (var follower in approvedFollowers)
+            foreach (var followerAddress in approvedFollowerAddresses)
             {
-                var followerAddress = await GetUserAddressAsync(follower);
                 var followerEncrypt = await GetPublicEncryptAddressAsync(followerAddress);
                 request.Members.Add(new InnerCircleMemberProto
                 {

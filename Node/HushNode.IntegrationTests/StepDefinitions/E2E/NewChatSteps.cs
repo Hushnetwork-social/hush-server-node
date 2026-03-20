@@ -27,6 +27,13 @@ internal sealed class NewChatSteps : BrowserStepsBase
 
         Console.WriteLine($"[E2E] {userName} creating new chat with '{targetDisplayName}'...");
 
+        // Scenarios may currently be parked on social/privacy/detail surfaces.
+        // Return to the main authenticated shell before using the shared "new chat" entry point.
+        await page.GotoAsync(GetBaseUrl(), new PageGotoOptions
+        {
+            WaitUntil = WaitUntilState.DOMContentLoaded
+        });
+
         // 1. Click "New Chat" nav button in sidebar
         await ClickTestIdAsync(page, "nav-new-chat");
         Console.WriteLine($"[E2E] Clicked nav-new-chat");

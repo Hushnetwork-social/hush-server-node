@@ -37,7 +37,8 @@ Feature: HushSocial end-to-end walkthrough
   Scenario: Circle removal rotates keys and revoked follower loses latest key access
     Given Owner opens HushSocial privacy settings
     And Owner sets profile mode to Close
-    And Owner has approved followers "FollowerA, FollowerB" via browser
+    And Owner creates a new chat with "FollowerA" via browser
+    And Owner creates a new chat with "FollowerB" via browser
     And Owner has created FEAT-085 circle "Dev Circle" via backend
     And Owner has added "FollowerA, FollowerB" to FEAT-085 circle "Dev Circle" via backend
     And FollowerB is actively viewing FEAT-085 circle "Dev Circle"
@@ -50,7 +51,7 @@ Feature: HushSocial end-to-end walkthrough
   Scenario: Repeated bootstrap sync with unchanged followers does not rotate keys
     Given Owner opens HushSocial privacy settings
     And Owner sets profile mode to Close
-    And Owner has approved followers "FollowerA" via browser
+    And Owner creates a new chat with "FollowerA" via browser
     When Owner triggers FEAT-085 bootstrap sync twice with unchanged followers
     Then Owner Inner Circle key generation should remain stable after repeated bootstrap
 
@@ -87,8 +88,6 @@ Feature: HushSocial end-to-end walkthrough
     When Owner creates a new chat with "FollowerA" via browser
     And Owner creates a new chat with "FollowerB" via browser
     And Owner switches from HushSocial to HushFeeds
-    Then Owner should not see Inner Circle in HushFeeds feed list
-    When Owner has approved followers "FollowerA, FollowerB" via browser
     Then Owner should not see Inner Circle in HushFeeds feed list
     When Owner opens HushSocial Following page
     Then Owner should see following members "FollowerA, FollowerB" tagged with "Inner Circle"
@@ -161,7 +160,7 @@ Feature: HushSocial end-to-end walkthrough
 
   @FEAT-087 @HS-E2E-087-DENIED-PERMALINK
   Scenario: Unauthorized private permalink hides reaction metadata
-    Given Owner has approved followers "FollowerA" via browser
+    Given Owner creates a new chat with "FollowerA" via browser
     And Owner creates Close post "Private architecture note" for Inner Circle via backend
     When FollowerB opens permalink for post "Private architecture note"
     Then FollowerB should see a generic access denied message

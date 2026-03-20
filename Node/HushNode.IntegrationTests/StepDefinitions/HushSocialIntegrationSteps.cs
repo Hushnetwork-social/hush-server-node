@@ -334,12 +334,6 @@ public sealed class HushSocialIntegrationSteps
         }
     }
 
-    [Given(@"Owner has added (.*) to circle ""(.*)""")]
-    public async Task GivenOwnerHasAddedUserToCircle(string followerName, string circleName)
-    {
-        await GivenOwnerHasAddedUsersToCircle(followerName, circleName);
-    }
-
     [Given(@"Owner posts ""(.*)"" to circle ""(.*)""")]
     public async Task GivenOwnerPostsToCircle(string message, string circleName)
     {
