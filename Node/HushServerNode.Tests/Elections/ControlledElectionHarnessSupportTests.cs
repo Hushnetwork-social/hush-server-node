@@ -48,6 +48,29 @@ public sealed class ControlledElectionHarnessSupportTests
     }
 
     [Fact]
+    public void TryDecryptBallotForHarness_WithWrongPrivateKey_ShouldNotRecoverOriginalMeaning()
+    {
+        // Arrange
+        var correctKeyPair = ControlledElectionHarness.CreateDeterministicKeyPair(111);
+        var wrongKeyPair = ControlledElectionHarness.CreateDeterministicKeyPair(222);
+        var ballot = ControlledElectionHarness.EncryptOneHotBallot(
+            ballotId: "ballot-wrong-key",
+            choiceIndex: 2,
+            publicKey: correctKeyPair.PublicKey,
+            nonces: ControlledElectionHarness.CreateDeterministicNonceSequence(210, ControlledElectionHarness.DefaultSelectionCount));
+
+        // Act
+        var result = ControlledElectionHarness.TryDecryptBallotForHarness(
+            ballot,
+            wrongKeyPair.PrivateKey,
+            maxSupportedCount: 1);
+
+        // Assert
+        result.IsSuccessful.Should().BeFalse();
+        result.FailureCode.Should().Be("DECODE_BOUND_EXCEEDED");
+    }
+
+    [Fact]
     public void CreateSupportRecords_ShouldExpressTallyShareAndReleaseConceptsDirectly()
     {
         // Arrange
