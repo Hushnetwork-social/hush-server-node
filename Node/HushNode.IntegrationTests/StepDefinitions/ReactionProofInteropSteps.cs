@@ -33,22 +33,21 @@ public sealed class ReactionProofInteropSteps
     [Given(@"FEAT-087 approved cross-runtime reaction proof artifacts are available")]
     public void GivenFeat087ApprovedCrossRuntimeReactionProofArtifactsAreAvailable()
     {
-        var workspaceRoot = ResolveWorkspaceRoot();
+        var serverRepositoryRoot = ResolveServerRepositoryRoot();
+        var webClientRoot = ResolveWebClientRoot(serverRepositoryRoot);
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"feat087-cross-runtime-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDirectory);
 
         var proofOutputPath = Path.Combine(tempDirectory, "generated-proof.json");
         var verificationKeyPath = Path.Combine(
-            workspaceRoot,
-            "hush-server-node",
+            serverRepositoryRoot,
             "Node",
             "HushServerNode",
             "circuits",
             "omega-v1.0.0",
             "verification_key.json");
         var verifierScriptPath = Path.Combine(
-            workspaceRoot,
-            "hush-server-node",
+            serverRepositoryRoot,
             "Node",
             "Core",
             "Reactions",
@@ -59,13 +58,14 @@ public sealed class ReactionProofInteropSteps
         File.Exists(verificationKeyPath).Should().BeTrue("server verification key must exist");
         File.Exists(verifierScriptPath).Should().BeTrue("server verifier script must exist");
 
-        _scenarioContext[WorkspaceRootKey] = workspaceRoot;
+        _scenarioContext[WorkspaceRootKey] = webClientRoot;
         _scenarioContext[TempDirectoryKey] = tempDirectory;
         _scenarioContext[ProofOutputPathKey] = proofOutputPath;
         _scenarioContext[VerificationKeyPathKey] = verificationKeyPath;
         _scenarioContext[VerifierScriptPathKey] = verifierScriptPath;
 
-        Console.WriteLine($"[interop.feature] workspaceRoot={workspaceRoot}");
+        Console.WriteLine($"[interop.feature] serverRepositoryRoot={serverRepositoryRoot}");
+        Console.WriteLine($"[interop.feature] webClientRoot={webClientRoot}");
         Console.WriteLine($"[interop.feature] tempDirectory={tempDirectory}");
         Console.WriteLine($"[interop.feature] verificationKeyPath={verificationKeyPath}");
         Console.WriteLine($"[interop.feature] verifierScriptPath={verifierScriptPath}");
@@ -74,23 +74,22 @@ public sealed class ReactionProofInteropSteps
     [When(@"TypeScript generates reaction proof fixture ""(.*)"" for cross-runtime interop")]
     public async Task WhenTypeScriptGeneratesReactionProofFixtureForCrossRuntimeInterop(string fixtureName)
     {
-        var workspaceRoot = _scenarioContext.Get<string>(WorkspaceRootKey);
+        var webClientRoot = _scenarioContext.Get<string>(WorkspaceRootKey);
         var proofOutputPath = _scenarioContext.Get<string>(ProofOutputPathKey);
         var generatorScriptPath = Path.Combine(
-            workspaceRoot,
-            "hush-web-client",
+            webClientRoot,
             "scripts",
             "benchmark-reaction-proof.mjs");
 
         File.Exists(generatorScriptPath).Should().BeTrue("proof generator script must exist");
 
         await RunNodeCommandAsync(
-            workingDirectory: Path.Combine(workspaceRoot, "hush-web-client"),
+            workingDirectory: webClientRoot,
             arguments:
             [
                 generatorScriptPath,
                 "--fixture", fixtureName,
-                "--workspace-root", Path.Combine(workspaceRoot, "hush-web-client"),
+                "--workspace-root", webClientRoot,
                 "--output", proofOutputPath
             ],
             timeoutMs: 300000);
@@ -250,27 +249,21 @@ public sealed class ReactionProofInteropSteps
             $"node command should succeed.{Environment.NewLine}stdout:{Environment.NewLine}{stdout}{Environment.NewLine}stderr:{Environment.NewLine}{stderr}");
     }
 
-    private static string ResolveWorkspaceRoot()
+    private static string ResolveServerRepositoryRoot()
     {
+        var attemptedPaths = new List<string>();
         var explicitServerRoot = Environment.GetEnvironmentVariable("HUSH_SERVER_NODE_ROOT");
-        if (!string.IsNullOrWhiteSpace(explicitServerRoot)
-            && File.Exists(Path.Combine(explicitServerRoot, "Node", "HushServerNode.sln")))
+        if (TryResolveServerRepositoryRoot(explicitServerRoot, attemptedPaths, out var resolvedServerRoot))
         {
-            return Path.GetFullPath(explicitServerRoot);
+            return resolvedServerRoot;
         }
 
         var current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
         {
-            if (File.Exists(Path.Combine(current.FullName, "Node", "HushServerNode.sln")))
+            if (TryResolveServerRepositoryRoot(current.FullName, attemptedPaths, out resolvedServerRoot))
             {
-                return current.FullName;
-            }
-
-            if (Directory.Exists(Path.Combine(current.FullName, "hush-web-client"))
-                && Directory.Exists(Path.Combine(current.FullName, "hush-server-node")))
-            {
-                return current.FullName;
+                return resolvedServerRoot;
             }
 
             current = current.Parent;
@@ -278,7 +271,99 @@ public sealed class ReactionProofInteropSteps
 
         throw new InvalidOperationException(
             "Unable to resolve hush-server-node root from test runtime. " +
-            "Set HUSH_SERVER_NODE_ROOT in CI or provide a checkout layout containing Node/HushServerNode.sln.");
+            "Set HUSH_SERVER_NODE_ROOT in CI or provide a checkout layout containing Node/HushServerNode.sln. " +
+            $"Attempted: {string.Join(", ", attemptedPaths.Distinct())}");
+    }
+
+    private static string ResolveWebClientRoot(string serverRepositoryRoot)
+    {
+        var attemptedPaths = new List<string>();
+
+        var explicitWebClientRoot = Environment.GetEnvironmentVariable("HUSH_WEB_CLIENT_ROOT");
+        if (TryResolveWebClientRoot(explicitWebClientRoot, attemptedPaths, out var resolvedWebClientRoot))
+        {
+            return resolvedWebClientRoot;
+        }
+
+        var nestedWebClientRoot = Path.Combine(serverRepositoryRoot, "hush-web-client");
+        if (TryResolveWebClientRoot(nestedWebClientRoot, attemptedPaths, out resolvedWebClientRoot))
+        {
+            return resolvedWebClientRoot;
+        }
+
+        var siblingWebClientRoot = Path.Combine(
+            Directory.GetParent(serverRepositoryRoot)?.FullName ?? serverRepositoryRoot,
+            "hush-web-client");
+        if (TryResolveWebClientRoot(siblingWebClientRoot, attemptedPaths, out resolvedWebClientRoot))
+        {
+            return resolvedWebClientRoot;
+        }
+
+        throw new InvalidOperationException(
+            "Unable to resolve hush-web-client root from test runtime. " +
+            "Set HUSH_WEB_CLIENT_ROOT in CI or provide a checkout layout containing the client repository. " +
+            $"Attempted: {string.Join(", ", attemptedPaths.Distinct())}");
+    }
+
+    private static bool TryResolveServerRepositoryRoot(
+        string? candidate,
+        List<string> attemptedPaths,
+        out string resolvedRoot)
+    {
+        resolvedRoot = string.Empty;
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return false;
+        }
+
+        var fullPath = Path.GetFullPath(candidate);
+        attemptedPaths.Add(fullPath);
+
+        if (!Directory.Exists(fullPath))
+        {
+            return false;
+        }
+
+        if (!File.Exists(Path.Combine(fullPath, "Node", "HushServerNode.sln")))
+        {
+            return false;
+        }
+
+        resolvedRoot = fullPath;
+        return true;
+    }
+
+    private static bool TryResolveWebClientRoot(
+        string? candidate,
+        List<string> attemptedPaths,
+        out string resolvedRoot)
+    {
+        resolvedRoot = string.Empty;
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return false;
+        }
+
+        var fullPath = Path.GetFullPath(candidate);
+        attemptedPaths.Add(fullPath);
+
+        if (!Directory.Exists(fullPath))
+        {
+            return false;
+        }
+
+        if (!File.Exists(Path.Combine(fullPath, "package.json")))
+        {
+            return false;
+        }
+
+        if (!File.Exists(Path.Combine(fullPath, "scripts", "benchmark-reaction-proof.mjs")))
+        {
+            return false;
+        }
+
+        resolvedRoot = fullPath;
+        return true;
     }
 
     private static byte[] PackProof(SnarkJsProof proof)
