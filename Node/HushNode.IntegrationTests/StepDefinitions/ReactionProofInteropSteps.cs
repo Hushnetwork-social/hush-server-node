@@ -252,9 +252,21 @@ public sealed class ReactionProofInteropSteps
 
     private static string ResolveWorkspaceRoot()
     {
+        var explicitServerRoot = Environment.GetEnvironmentVariable("HUSH_SERVER_NODE_ROOT");
+        if (!string.IsNullOrWhiteSpace(explicitServerRoot)
+            && File.Exists(Path.Combine(explicitServerRoot, "Node", "HushServerNode.sln")))
+        {
+            return Path.GetFullPath(explicitServerRoot);
+        }
+
         var current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
         {
+            if (File.Exists(Path.Combine(current.FullName, "Node", "HushServerNode.sln")))
+            {
+                return current.FullName;
+            }
+
             if (Directory.Exists(Path.Combine(current.FullName, "hush-web-client"))
                 && Directory.Exists(Path.Combine(current.FullName, "hush-server-node")))
             {
@@ -264,7 +276,9 @@ public sealed class ReactionProofInteropSteps
             current = current.Parent;
         }
 
-        throw new InvalidOperationException("Unable to resolve workspace root from test runtime.");
+        throw new InvalidOperationException(
+            "Unable to resolve hush-server-node root from test runtime. " +
+            "Set HUSH_SERVER_NODE_ROOT in CI or provide a checkout layout containing Node/HushServerNode.sln.");
     }
 
     private static byte[] PackProof(SnarkJsProof proof)

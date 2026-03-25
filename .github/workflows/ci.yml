@@ -22,10 +22,28 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
+    - name: Checkout hush-web-client
+      uses: actions/checkout@v5
+      with:
+        repository: Hushnetwork-social/hush-web-client
+        ref: master
+        path: hush-web-client
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
         dotnet-version: 9.0.x
+
+    - name: Setup Node
+      uses: actions/setup-node@v5
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: hush-web-client/package-lock.json
+
+    - name: Install hush-web-client dependencies
+      working-directory: hush-web-client
+      run: npm ci
 
     - name: Restore dependencies
       run: dotnet restore
@@ -34,4 +52,7 @@ jobs:
       run: dotnet build --no-restore
 
     - name: Unit Tests
+      env:
+        HUSH_SERVER_NODE_ROOT: ${{ github.workspace }}
+        HUSH_WEB_CLIENT_ROOT: ${{ github.workspace }}/hush-web-client
       run: dotnet test --no-build --verbosity normal --filter "Category!=Performance&Category!=PerformanceTest&Category!=E2E&Category!=HS-INT-087-CROSS-RUNTIME-PROOF"

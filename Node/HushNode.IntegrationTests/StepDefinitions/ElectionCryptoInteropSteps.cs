@@ -12,7 +12,7 @@ namespace HushNode.IntegrationTests.StepDefinitions;
 [Scope(Feature = "Election crypto cross-repo interop")]
 public sealed class ElectionCryptoInteropSteps
 {
-    private const string WorkspaceRootKey = "ElectionCryptoInterop.WorkspaceRoot";
+    private const string WebClientRootKey = "ElectionCryptoInterop.WebClientRoot";
     private const string TempDirectoryKey = "ElectionCryptoInterop.TempDirectory";
     private const string FixtureOutputPathKey = "ElectionCryptoInterop.FixtureOutputPath";
     private const string LoadedFixtureKey = "ElectionCryptoInterop.LoadedFixture";
@@ -29,14 +29,14 @@ public sealed class ElectionCryptoInteropSteps
     [Given(@"FEAT-107 controlled election fixture infrastructure is available")]
     public void GivenFeatControlledElectionFixtureInfrastructureIsAvailable()
     {
-        var workspaceRoot = ResolveWorkspaceRoot();
+        var webClientRoot = ResolveWebClientRoot();
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"feat107-cross-repo-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDirectory);
 
-        _scenarioContext[WorkspaceRootKey] = workspaceRoot;
+        _scenarioContext[WebClientRootKey] = webClientRoot;
         _scenarioContext[TempDirectoryKey] = tempDirectory;
 
-        Console.WriteLine($"[feat107.interop] workspaceRoot={workspaceRoot}");
+        Console.WriteLine($"[feat107.interop] webClientRoot={webClientRoot}");
         Console.WriteLine($"[feat107.interop] tempDirectory={tempDirectory}");
     }
 
@@ -49,19 +49,15 @@ public sealed class ElectionCryptoInteropSteps
         string decodeTier,
         string fixtureVersion)
     {
-        var workspaceRoot = _scenarioContext.Get<string>(WorkspaceRootKey);
+        var webClientRoot = _scenarioContext.Get<string>(WebClientRootKey);
         var tempDirectory = _scenarioContext.Get<string>(TempDirectoryKey);
-        var generatorScriptPath = Path.Combine(
-            workspaceRoot,
-            "hush-web-client",
-            "scripts",
-            "generate-election-crypto-fixture.mts");
+        var generatorScriptPath = Path.Combine(webClientRoot, "scripts", "generate-election-crypto-fixture.mts");
         var outputPath = Path.Combine(tempDirectory, $"{fixtureName}.json");
 
         File.Exists(generatorScriptPath).Should().BeTrue("the FEAT-107 fixture generator must exist");
 
         await RunNodeCommandAsync(
-            workingDirectory: Path.Combine(workspaceRoot, "hush-web-client"),
+            workingDirectory: webClientRoot,
             arguments:
             [
                 "--disable-warning=MODULE_TYPELESS_PACKAGE_JSON",
@@ -322,19 +318,138 @@ public sealed class ElectionCryptoInteropSteps
 
     private static string ResolveWorkspaceRoot()
     {
+        throw new NotSupportedException("Use ResolveWebClientRoot for FEAT-107 interop paths.");
+    }
+
+    private static string ResolveWebClientRoot()
+    {
+        var attemptedPaths = new List<string>();
+
+        var explicitWebClientRoot = Environment.GetEnvironmentVariable("HUSH_WEB_CLIENT_ROOT");
+        if (TryResolveWebClientRoot(explicitWebClientRoot, attemptedPaths, out var resolvedWebClientRoot))
+        {
+            return resolvedWebClientRoot;
+        }
+
+        var serverRoot = ResolveServerRepositoryRoot();
+        var nestedWebClientRoot = Path.Combine(serverRoot, "hush-web-client");
+        if (TryResolveWebClientRoot(nestedWebClientRoot, attemptedPaths, out resolvedWebClientRoot))
+        {
+            return resolvedWebClientRoot;
+        }
+
+        var siblingWebClientRoot = Path.Combine(
+            Directory.GetParent(serverRoot)?.FullName ?? serverRoot,
+            "hush-web-client");
+        if (TryResolveWebClientRoot(siblingWebClientRoot, attemptedPaths, out resolvedWebClientRoot))
+        {
+            return resolvedWebClientRoot;
+        }
+
         var current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
         {
-            if (Directory.Exists(Path.Combine(current.FullName, "hush-web-client"))
-                && Directory.Exists(Path.Combine(current.FullName, "hush-server-node")))
+            var monorepoCandidate = Path.Combine(current.FullName, "hush-web-client");
+            if (TryResolveWebClientRoot(monorepoCandidate, attemptedPaths, out resolvedWebClientRoot))
             {
-                return current.FullName;
+                return resolvedWebClientRoot;
             }
 
             current = current.Parent;
         }
 
-        throw new InvalidOperationException("Unable to resolve workspace root from test runtime.");
+        throw new InvalidOperationException(
+            "Unable to resolve hush-web-client root from test runtime. " +
+            "Set HUSH_WEB_CLIENT_ROOT in CI or provide a checkout layout containing the client repository. " +
+            $"Attempted: {string.Join(", ", attemptedPaths.Distinct())}");
+    }
+
+    private static string ResolveServerRepositoryRoot()
+    {
+        var attemptedPaths = new List<string>();
+
+        var explicitServerRoot = Environment.GetEnvironmentVariable("HUSH_SERVER_NODE_ROOT");
+        if (TryResolveServerRepositoryRoot(explicitServerRoot, attemptedPaths, out var resolvedServerRoot))
+        {
+            return resolvedServerRoot;
+        }
+
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (TryResolveServerRepositoryRoot(current.FullName, attemptedPaths, out resolvedServerRoot))
+            {
+                return resolvedServerRoot;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new InvalidOperationException(
+            "Unable to resolve hush-server-node root from test runtime. " +
+            "Set HUSH_SERVER_NODE_ROOT in CI or run from a repository checkout containing Node/HushServerNode.sln. " +
+            $"Attempted: {string.Join(", ", attemptedPaths.Distinct())}");
+    }
+
+    private static bool TryResolveWebClientRoot(
+        string? candidate,
+        List<string> attemptedPaths,
+        out string resolvedRoot)
+    {
+        resolvedRoot = string.Empty;
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return false;
+        }
+
+        var fullPath = Path.GetFullPath(candidate);
+        attemptedPaths.Add(fullPath);
+
+        if (!Directory.Exists(fullPath))
+        {
+            return false;
+        }
+
+        if (!File.Exists(Path.Combine(fullPath, "package.json")))
+        {
+            return false;
+        }
+
+        if (!File.Exists(Path.Combine(fullPath, "scripts", "generate-election-crypto-fixture.mts")))
+        {
+            return false;
+        }
+
+        resolvedRoot = fullPath;
+        return true;
+    }
+
+    private static bool TryResolveServerRepositoryRoot(
+        string? candidate,
+        List<string> attemptedPaths,
+        out string resolvedRoot)
+    {
+        resolvedRoot = string.Empty;
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return false;
+        }
+
+        var fullPath = Path.GetFullPath(candidate);
+        attemptedPaths.Add(fullPath);
+
+        if (!Directory.Exists(fullPath))
+        {
+            return false;
+        }
+
+        if (!File.Exists(Path.Combine(fullPath, "Node", "HushServerNode.sln")))
+        {
+            return false;
+        }
+
+        resolvedRoot = fullPath;
+        return true;
     }
 
     private sealed record ElectionCryptoInteropEvaluation(
