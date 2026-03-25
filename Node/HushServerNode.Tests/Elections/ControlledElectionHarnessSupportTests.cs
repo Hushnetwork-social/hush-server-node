@@ -56,8 +56,8 @@ public sealed class ControlledElectionHarnessSupportTests
             TrusteeIds: ImmutableArray.Create("trustee-a", "trustee-b", "trustee-c"),
             Threshold: 2);
         var shares = ImmutableArray.Create(
-            new ControlledElectionTrusteeShare("election-001", "session-001", "tally-001", "trustee-a", "share-a"),
-            new ControlledElectionTrusteeShare("election-001", "session-001", "tally-001", "trustee-b", "share-b"));
+            new ControlledElectionTrusteeShare("election-001", "session-001", "tally-001", "trustee-a", 1, "101"),
+            new ControlledElectionTrusteeShare("election-001", "session-001", "tally-001", "trustee-b", 2, "202"));
 
         // Act
         var releaseAttempt = new ControlledElectionReleaseAttempt(
@@ -70,6 +70,8 @@ public sealed class ControlledElectionHarnessSupportTests
         releaseAttempt.ThresholdDefinition.Threshold.Should().Be(2);
         releaseAttempt.SubmittedShares.Should().HaveCount(2);
         releaseAttempt.TargetTallyId.Should().Be("tally-001");
+        releaseAttempt.SubmittedShares.Select(share => share.ShareIndex)
+            .Should().Contain(new[] { 1, 2 });
         releaseAttempt.SubmittedShares.Select(share => share.TrusteeId)
             .Should().Contain(new[] { "trustee-a", "trustee-b" });
     }

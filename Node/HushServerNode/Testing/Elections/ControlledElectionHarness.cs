@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Numerics;
 using HushNode.Reactions.Crypto;
 using HushShared.Reactions.Model;
@@ -34,6 +35,125 @@ internal static class ControlledElectionHarness
         return Enumerable.Range(0, count)
             .Select(index => NormalizeScalar(start + index + 1, activeCurve))
             .ToImmutableArray();
+    }
+
+    public static ControlledElectionThresholdSetup CreateControlledThresholdSetup(
+        ControlledElectionThresholdDefinition thresholdDefinition,
+        string sessionId,
+        string targetTallyId,
+        BigInteger seed,
+        IBabyJubJub? curve = null)
+    {
+        ArgumentNullException.ThrowIfNull(thresholdDefinition);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetTallyId);
+
+        var activeCurve = curve ?? new BabyJubJubCurve();
+        var thresholdValidation = ValidateThresholdDefinition(thresholdDefinition);
+        if (!thresholdValidation.IsValid)
+        {
+            throw new InvalidOperationException(thresholdValidation.Notes);
+        }
+
+        var coefficients = CreateDeterministicCoefficients(seed, thresholdDefinition.Threshold, activeCurve);
+        var publicKey = activeCurve.ScalarMul(activeCurve.Generator, coefficients[0]);
+        var shares = thresholdDefinition.TrusteeIds
+            .Select((trusteeId, index) => new ControlledElectionTrusteeShare(
+                thresholdDefinition.ElectionId,
+                sessionId,
+                targetTallyId,
+                trusteeId,
+                index + 1,
+                SerializeScalar(EvaluatePolynomial(coefficients, index + 1, activeCurve.Order))))
+            .ToImmutableArray();
+
+        return new ControlledElectionThresholdSetup(
+            thresholdDefinition,
+            sessionId,
+            targetTallyId,
+            publicKey,
+            shares);
+    }
+
+    public static ControlledDkgCeremonyResult SimulateLocalDkgViability(
+        ControlledElectionThresholdDefinition thresholdDefinition,
+        string sessionId,
+        string targetTallyId,
+        BigInteger seed,
+        IBabyJubJub? curve = null)
+    {
+        ArgumentNullException.ThrowIfNull(thresholdDefinition);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetTallyId);
+
+        var activeCurve = curve ?? new BabyJubJubCurve();
+        var thresholdValidation = ValidateThresholdDefinition(thresholdDefinition);
+        if (!thresholdValidation.IsValid)
+        {
+            throw new InvalidOperationException(thresholdValidation.Notes);
+        }
+
+        var inboundShares = thresholdDefinition.TrusteeIds.ToDictionary(
+            trusteeId => trusteeId,
+            _ => ImmutableArray.CreateBuilder<BigInteger>(),
+            StringComparer.Ordinal);
+        var participantArtifacts = ImmutableArray.CreateBuilder<ControlledDkgParticipantArtifact>();
+        var aggregatePublicKey = activeCurve.Identity;
+
+        for (var participantIndex = 0; participantIndex < thresholdDefinition.TrusteeIds.Length; participantIndex++)
+        {
+            var trusteeId = thresholdDefinition.TrusteeIds[participantIndex];
+            var participantSeed = seed + ((participantIndex + 1) * 1000);
+            var coefficients = CreateDeterministicCoefficients(
+                participantSeed,
+                thresholdDefinition.Threshold,
+                activeCurve);
+            var publicCommitments = coefficients
+                .Select(coefficient => activeCurve.ScalarMul(activeCurve.Generator, coefficient))
+                .ToImmutableArray();
+            var outboundSharePackages = thresholdDefinition.TrusteeIds
+                .Select((recipientId, recipientIndex) =>
+                {
+                    var shareValue = EvaluatePolynomial(coefficients, recipientIndex + 1, activeCurve.Order);
+                    inboundShares[recipientId].Add(shareValue);
+
+                    return new ControlledDkgPeerSharePackage(
+                        trusteeId,
+                        recipientId,
+                        recipientIndex + 1,
+                        SerializeScalar(shareValue));
+                })
+                .ToImmutableArray();
+
+            aggregatePublicKey = activeCurve.Add(aggregatePublicKey, publicCommitments[0]);
+            participantArtifacts.Add(new ControlledDkgParticipantArtifact(
+                trusteeId,
+                publicCommitments,
+                outboundSharePackages));
+        }
+
+        var finalShares = thresholdDefinition.TrusteeIds
+            .Select((trusteeId, index) => new ControlledElectionTrusteeShare(
+                thresholdDefinition.ElectionId,
+                sessionId,
+                targetTallyId,
+                trusteeId,
+                index + 1,
+                SerializeScalar(inboundShares[trusteeId]
+                    .Aggregate(BigInteger.Zero, (sum, current) => Mod(sum + current, activeCurve.Order)))))
+            .ToImmutableArray();
+
+        var thresholdSetup = new ControlledElectionThresholdSetup(
+            thresholdDefinition,
+            sessionId,
+            targetTallyId,
+            aggregatePublicKey,
+            finalShares);
+
+        return new ControlledDkgCeremonyResult(
+            thresholdSetup,
+            participantArtifacts.ToImmutable(),
+            "Exploratory local multi-party DKG-style viability only. This does not prove a production ceremony.");
     }
 
     public static ControlledElectionBallot EncryptOneHotBallot(
@@ -138,6 +258,139 @@ internal static class ControlledElectionHarness
         var tally = CreateEmptyTallyState(electionId, ballots[0].Slots.Length, activeCurve);
 
         return ballots.Aggregate(tally, (current, ballot) => AccumulateBallot(current, ballot, activeCurve));
+    }
+
+    public static ControlledElectionReleaseResult TryReleaseProtectedTally(
+        ControlledElectionThresholdSetup thresholdSetup,
+        ControlledElectionReleaseAttempt releaseAttempt,
+        ControlledElectionTallyState tallyState,
+        IBabyJubJub? curve = null)
+    {
+        ArgumentNullException.ThrowIfNull(thresholdSetup);
+        ArgumentNullException.ThrowIfNull(releaseAttempt);
+        ArgumentNullException.ThrowIfNull(tallyState);
+
+        var activeCurve = curve ?? new BabyJubJubCurve();
+        var thresholdValidation = ValidateThresholdDefinition(thresholdSetup.ThresholdDefinition);
+        if (!thresholdValidation.IsValid)
+        {
+            return ControlledElectionReleaseResult.Failure(
+                "INVALID_THRESHOLD_CONFIGURATION",
+                thresholdValidation.Notes);
+        }
+
+        if (tallyState.ElectionId != thresholdSetup.ThresholdDefinition.ElectionId)
+        {
+            return ControlledElectionReleaseResult.Failure(
+                "WRONG_TARGET_SHARE",
+                "Controlled tally election identifier does not match the threshold setup.");
+        }
+
+        if (!ThresholdDefinitionsMatch(thresholdSetup.ThresholdDefinition, releaseAttempt.ThresholdDefinition) ||
+            !string.Equals(thresholdSetup.SessionId, releaseAttempt.SessionId, StringComparison.Ordinal) ||
+            !string.Equals(thresholdSetup.TargetTallyId, releaseAttempt.TargetTallyId, StringComparison.Ordinal))
+        {
+            return ControlledElectionReleaseResult.Failure(
+                "WRONG_TARGET_SHARE",
+                "Controlled release attempt does not match the configured threshold session or tally target.");
+        }
+
+        if (releaseAttempt.SubmittedShares.IsDefaultOrEmpty)
+        {
+            return ControlledElectionReleaseResult.Failure(
+                "INSUFFICIENT_SHARES",
+                "Controlled release attempt must include at least one trustee share.");
+        }
+
+        var duplicateTrustees = releaseAttempt.SubmittedShares
+            .GroupBy(share => share.TrusteeId, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+        if (duplicateTrustees.Length > 0)
+        {
+            return ControlledElectionReleaseResult.Failure(
+                "DUPLICATE_SHARE",
+                $"Controlled release attempt contains duplicate trustee shares: {string.Join(", ", duplicateTrustees)}.");
+        }
+
+        var duplicateIndices = releaseAttempt.SubmittedShares
+            .GroupBy(share => share.ShareIndex)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+        if (duplicateIndices.Length > 0)
+        {
+            return ControlledElectionReleaseResult.Failure(
+                "DUPLICATE_SHARE",
+                $"Controlled release attempt contains duplicate share indexes: {string.Join(", ", duplicateIndices)}.");
+        }
+
+        if (releaseAttempt.SubmittedShares.Length < thresholdSetup.ThresholdDefinition.Threshold)
+        {
+            return ControlledElectionReleaseResult.Failure(
+                "INSUFFICIENT_SHARES",
+                $"Controlled release attempt provided {releaseAttempt.SubmittedShares.Length} shares but requires {thresholdSetup.ThresholdDefinition.Threshold}.");
+        }
+
+        var canonicalShares = thresholdSetup.Shares.ToDictionary(
+            share => share.TrusteeId,
+            StringComparer.Ordinal);
+
+        foreach (var share in releaseAttempt.SubmittedShares)
+        {
+            if (!string.Equals(share.ElectionId, thresholdSetup.ThresholdDefinition.ElectionId, StringComparison.Ordinal) ||
+                !string.Equals(share.SessionId, thresholdSetup.SessionId, StringComparison.Ordinal) ||
+                !string.Equals(share.TargetTallyId, thresholdSetup.TargetTallyId, StringComparison.Ordinal))
+            {
+                return ControlledElectionReleaseResult.Failure(
+                    "WRONG_TARGET_SHARE",
+                    $"Controlled share '{share.TrusteeId}' is bound to a different election/session/target.");
+            }
+
+            if (!canonicalShares.TryGetValue(share.TrusteeId, out var expectedShare))
+            {
+                return ControlledElectionReleaseResult.Failure(
+                    "MALFORMED_SHARE",
+                    $"Controlled share '{share.TrusteeId}' is not part of the configured threshold setup.");
+            }
+
+            if (share.ShareIndex != expectedShare.ShareIndex ||
+                !string.Equals(share.ShareMaterial, expectedShare.ShareMaterial, StringComparison.Ordinal))
+            {
+                return ControlledElectionReleaseResult.Failure(
+                    "MALFORMED_SHARE",
+                    $"Controlled share '{share.TrusteeId}' does not match the configured share material.");
+            }
+        }
+
+        BigInteger reconstructedSecret;
+        try
+        {
+            reconstructedSecret = ReconstructSecretScalarFromShares(releaseAttempt.SubmittedShares, activeCurve);
+        }
+        catch (Exception ex)
+        {
+            return ControlledElectionReleaseResult.Failure(
+                "MALFORMED_SHARE",
+                $"Controlled release failed during share reconstruction: {ex.Message}");
+        }
+
+        var derivedPublicKey = activeCurve.ScalarMul(activeCurve.Generator, reconstructedSecret);
+        if (derivedPublicKey != thresholdSetup.PublicKey)
+        {
+            return ControlledElectionReleaseResult.Failure(
+                "MALFORMED_SHARE",
+                "Controlled release shares reconstruct a different public key than the configured threshold setup.");
+        }
+
+        var releasedSelections = tallyState.Slots
+            .Select(slot => activeCurve.Subtract(slot.C2, activeCurve.ScalarMul(slot.C1, reconstructedSecret)))
+            .ToImmutableArray();
+
+        return ControlledElectionReleaseResult.Success(
+            releasedSelections,
+            $"Controlled tally release succeeded with {releaseAttempt.SubmittedShares.Length} share(s).");
     }
 
     public static ControlledElectionValidationResult ValidatePublicKey(ECPoint publicKey, IBabyJubJub? curve = null)
@@ -303,6 +556,67 @@ internal static class ControlledElectionHarness
         return ControlledElectionValidationResult.Success("Controlled nonce sequence is structurally safe.");
     }
 
+    public static BigInteger ReconstructSecretScalarFromShares(
+        ImmutableArray<ControlledElectionTrusteeShare> shares,
+        IBabyJubJub? curve = null)
+    {
+        var activeCurve = curve ?? new BabyJubJubCurve();
+        if (shares.IsDefaultOrEmpty)
+        {
+            throw new InvalidOperationException("At least one share is required to reconstruct the controlled secret scalar.");
+        }
+
+        var duplicateTrustees = shares
+            .GroupBy(share => share.TrusteeId, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+        if (duplicateTrustees.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Duplicate trustee shares cannot reconstruct the controlled secret scalar: {string.Join(", ", duplicateTrustees)}.");
+        }
+
+        var duplicateIndices = shares
+            .GroupBy(share => share.ShareIndex)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+        if (duplicateIndices.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Duplicate share indexes cannot reconstruct the controlled secret scalar: {string.Join(", ", duplicateIndices)}.");
+        }
+
+        var secret = BigInteger.Zero;
+        foreach (var share in shares)
+        {
+            var xCoordinate = new BigInteger(share.ShareIndex);
+            var yCoordinate = ParseScalar(share.ShareMaterial);
+            var numerator = BigInteger.One;
+            var denominator = BigInteger.One;
+
+            foreach (var otherShare in shares)
+            {
+                if (ReferenceEquals(share, otherShare))
+                {
+                    continue;
+                }
+
+                var otherX = new BigInteger(otherShare.ShareIndex);
+                numerator = Mod(numerator * (-otherX), activeCurve.Order);
+                denominator = Mod(denominator * (xCoordinate - otherX), activeCurve.Order);
+            }
+
+            var lagrangeCoefficient = Mod(
+                numerator * ModInverse(denominator, activeCurve.Order),
+                activeCurve.Order);
+            secret = Mod(secret + (yCoordinate * lagrangeCoefficient), activeCurve.Order);
+        }
+
+        return secret;
+    }
+
     public static string CreateTallyFingerprint(ControlledElectionTallyState tallyState)
     {
         ArgumentNullException.ThrowIfNull(tallyState);
@@ -311,6 +625,38 @@ internal static class ControlledElectionHarness
             "|",
             tallyState.Slots.Select(slot =>
                 $"{slot.C1.X}:{slot.C1.Y}:{slot.C2.X}:{slot.C2.Y}"));
+    }
+
+    private static bool ThresholdDefinitionsMatch(
+        ControlledElectionThresholdDefinition left,
+        ControlledElectionThresholdDefinition right) =>
+        string.Equals(left.ElectionId, right.ElectionId, StringComparison.Ordinal) &&
+        left.Threshold == right.Threshold &&
+        left.TrusteeIds.SequenceEqual(right.TrusteeIds, StringComparer.Ordinal);
+
+    private static ImmutableArray<BigInteger> CreateDeterministicCoefficients(
+        BigInteger seed,
+        int count,
+        IBabyJubJub curve) =>
+        Enumerable.Range(0, count)
+            .Select(index => NormalizeScalar(seed + ((index + 1) * 7919), curve))
+            .ToImmutableArray();
+
+    private static BigInteger EvaluatePolynomial(
+        ImmutableArray<BigInteger> coefficients,
+        int x,
+        BigInteger modulus)
+    {
+        var result = BigInteger.Zero;
+        var power = BigInteger.One;
+
+        foreach (var coefficient in coefficients)
+        {
+            result = Mod(result + (coefficient * power), modulus);
+            power = Mod(power * x, modulus);
+        }
+
+        return result;
     }
 
     private static BigInteger NormalizeScalar(BigInteger seed, IBabyJubJub curve)
@@ -322,6 +668,46 @@ internal static class ControlledElectionHarness
         }
 
         return normalized + 1;
+    }
+
+    private static string SerializeScalar(BigInteger scalar) =>
+        scalar.ToString(CultureInfo.InvariantCulture);
+
+    private static BigInteger ParseScalar(string scalar) =>
+        BigInteger.Parse(scalar, CultureInfo.InvariantCulture);
+
+    private static BigInteger Mod(BigInteger value, BigInteger modulus)
+    {
+        var normalized = value % modulus;
+        return normalized < 0 ? normalized + modulus : normalized;
+    }
+
+    private static BigInteger ModInverse(BigInteger value, BigInteger modulus)
+    {
+        var normalizedValue = Mod(value, modulus);
+        if (normalizedValue == BigInteger.Zero)
+        {
+            throw new InvalidOperationException("Cannot invert zero in the controlled threshold harness.");
+        }
+
+        var t = BigInteger.Zero;
+        var newT = BigInteger.One;
+        var r = modulus;
+        var newR = normalizedValue;
+
+        while (newR != BigInteger.Zero)
+        {
+            var quotient = r / newR;
+            (t, newT) = (newT, t - (quotient * newT));
+            (r, newR) = (newR, r - (quotient * newR));
+        }
+
+        if (r > BigInteger.One)
+        {
+            throw new InvalidOperationException("Controlled threshold share denominator is not invertible.");
+        }
+
+        return t < 0 ? t + modulus : t;
     }
 
     private static ControlledEncryptedSelection EncryptSelection(

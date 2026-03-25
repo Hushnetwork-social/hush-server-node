@@ -25,11 +25,19 @@ internal sealed record ControlledElectionThresholdDefinition(
     ImmutableArray<string> TrusteeIds,
     int Threshold);
 
+internal sealed record ControlledElectionThresholdSetup(
+    ControlledElectionThresholdDefinition ThresholdDefinition,
+    string SessionId,
+    string TargetTallyId,
+    ECPoint PublicKey,
+    ImmutableArray<ControlledElectionTrusteeShare> Shares);
+
 internal sealed record ControlledElectionTrusteeShare(
     string ElectionId,
     string SessionId,
     string TargetTallyId,
     string TrusteeId,
+    int ShareIndex,
     string ShareMaterial);
 
 internal sealed record ControlledElectionReleaseAttempt(
@@ -37,3 +45,50 @@ internal sealed record ControlledElectionReleaseAttempt(
     string SessionId,
     string TargetTallyId,
     ImmutableArray<ControlledElectionTrusteeShare> SubmittedShares);
+
+internal sealed record ControlledElectionReleaseResult(
+    bool IsSuccessful,
+    string? FailureCode,
+    string Notes,
+    ImmutableArray<ECPoint> ReleasedSelections)
+{
+    public static ControlledElectionReleaseResult Success(
+        ImmutableArray<ECPoint> releasedSelections,
+        string notes) =>
+        new(true, null, notes, releasedSelections);
+
+    public static ControlledElectionReleaseResult Failure(
+        string failureCode,
+        string notes) =>
+        new(false, failureCode, notes, ImmutableArray<ECPoint>.Empty);
+}
+
+internal sealed record ControlledDkgPeerSharePackage(
+    string FromTrusteeId,
+    string ToTrusteeId,
+    int ShareIndex,
+    string ShareMaterial);
+
+internal sealed record ControlledDkgParticipantArtifact(
+    string TrusteeId,
+    ImmutableArray<ECPoint> PublicCommitments,
+    ImmutableArray<ControlledDkgPeerSharePackage> OutboundSharePackages);
+
+internal sealed record ControlledDkgCeremonyResult(
+    ControlledElectionThresholdSetup ThresholdSetup,
+    ImmutableArray<ControlledDkgParticipantArtifact> ParticipantArtifacts,
+    string Notes);
+
+internal sealed record ControlledElectionArtifactInspectionResult(
+    bool IsClean,
+    string Notes,
+    ImmutableArray<string> Findings)
+{
+    public static ControlledElectionArtifactInspectionResult Clean(string notes) =>
+        new(true, notes, ImmutableArray<string>.Empty);
+
+    public static ControlledElectionArtifactInspectionResult Dirty(
+        string notes,
+        ImmutableArray<string> findings) =>
+        new(false, notes, findings);
+}
