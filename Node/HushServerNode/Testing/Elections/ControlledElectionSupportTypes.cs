@@ -63,6 +63,26 @@ internal sealed record ControlledElectionReleaseResult(
         new(false, failureCode, notes, ImmutableArray<ECPoint>.Empty);
 }
 
+internal sealed record ControlledElectionDecodeResult(
+    bool IsSuccessful,
+    string? FailureCode,
+    string Notes,
+    BigInteger SupportedUpperBound,
+    ImmutableArray<BigInteger> DecodedCounts)
+{
+    public static ControlledElectionDecodeResult Success(
+        BigInteger supportedUpperBound,
+        ImmutableArray<BigInteger> decodedCounts,
+        string notes) =>
+        new(true, null, notes, supportedUpperBound, decodedCounts);
+
+    public static ControlledElectionDecodeResult Failure(
+        string failureCode,
+        BigInteger supportedUpperBound,
+        string notes) =>
+        new(false, failureCode, notes, supportedUpperBound, ImmutableArray<BigInteger>.Empty);
+}
+
 internal sealed record ControlledDkgPeerSharePackage(
     string FromTrusteeId,
     string ToTrusteeId,
@@ -91,4 +111,11 @@ internal sealed record ControlledElectionArtifactInspectionResult(
         string notes,
         ImmutableArray<string> findings) =>
         new(false, notes, findings);
+}
+
+internal static class ControlledElectionDecodeTiers
+{
+    public static readonly BigInteger DevSmoke = new(64);
+    public static readonly BigInteger ClubRollout = new(5000);
+    public static readonly BigInteger UpperSupported = new(20000);
 }

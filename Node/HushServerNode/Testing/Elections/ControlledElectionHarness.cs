@@ -198,6 +198,46 @@ internal static class ControlledElectionHarness
         return new ControlledElectionBallot(ballotId, slots);
     }
 
+    public static ControlledElectionBallot RerandomizeBallot(
+        ControlledElectionBallot ballot,
+        ECPoint publicKey,
+        ImmutableArray<BigInteger> nonces,
+        IBabyJubJub? curve = null)
+    {
+        ArgumentNullException.ThrowIfNull(ballot);
+
+        var activeCurve = curve ?? new BabyJubJubCurve();
+        var publicKeyValidation = ValidatePublicKey(publicKey, activeCurve);
+        if (!publicKeyValidation.IsValid)
+        {
+            throw new InvalidOperationException(publicKeyValidation.Notes);
+        }
+
+        var ballotValidation = ValidateBallot(ballot, ballot.Slots.Length, activeCurve);
+        if (!ballotValidation.IsValid)
+        {
+            throw new InvalidOperationException(ballotValidation.Notes);
+        }
+
+        var nonceValidation = ValidateNonceSequence(nonces, ballot.Slots.Length, activeCurve);
+        if (!nonceValidation.IsValid)
+        {
+            throw new InvalidOperationException(nonceValidation.Notes);
+        }
+
+        var rerandomizedSlots = ballot.Slots
+            .Select((slot, index) =>
+            {
+                var zeroEncryption = EncryptSelection(BigInteger.Zero, publicKey, nonces[index], activeCurve);
+                return new ControlledEncryptedSelection(
+                    activeCurve.Add(slot.C1, zeroEncryption.C1),
+                    activeCurve.Add(slot.C2, zeroEncryption.C2));
+            })
+            .ToImmutableArray();
+
+        return ballot with { Slots = rerandomizedSlots };
+    }
+
     public static ControlledElectionTallyState CreateEmptyTallyState(
         string electionId,
         int selectionCount = DefaultSelectionCount,
@@ -216,6 +256,45 @@ internal static class ControlledElectionHarness
 
         var slots = Enumerable.Range(0, selectionCount)
             .Select(_ => new ControlledEncryptedSelection(activeCurve.Identity, activeCurve.Identity))
+            .ToImmutableArray();
+
+        return new ControlledElectionTallyState(electionId, slots);
+    }
+
+    public static ControlledElectionTallyState CreateProtectedTallyFromCounts(
+        string electionId,
+        ImmutableArray<BigInteger> counts,
+        ECPoint publicKey,
+        ImmutableArray<BigInteger> nonces,
+        IBabyJubJub? curve = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(electionId);
+
+        var activeCurve = curve ?? new BabyJubJubCurve();
+        var publicKeyValidation = ValidatePublicKey(publicKey, activeCurve);
+        if (!publicKeyValidation.IsValid)
+        {
+            throw new InvalidOperationException(publicKeyValidation.Notes);
+        }
+
+        if (counts.IsDefaultOrEmpty)
+        {
+            throw new InvalidOperationException("Controlled tally counts must contain at least one slot.");
+        }
+
+        if (counts.Any(count => count < BigInteger.Zero))
+        {
+            throw new InvalidOperationException("Controlled tally counts cannot contain negative values.");
+        }
+
+        var nonceValidation = ValidateNonceSequence(nonces, counts.Length, activeCurve);
+        if (!nonceValidation.IsValid)
+        {
+            throw new InvalidOperationException(nonceValidation.Notes);
+        }
+
+        var slots = counts
+            .Select((count, index) => EncryptSelection(count, publicKey, nonces[index], activeCurve))
             .ToImmutableArray();
 
         return new ControlledElectionTallyState(electionId, slots);
@@ -391,6 +470,126 @@ internal static class ControlledElectionHarness
         return ControlledElectionReleaseResult.Success(
             releasedSelections,
             $"Controlled tally release succeeded with {releaseAttempt.SubmittedShares.Length} share(s).");
+    }
+
+    public static ControlledElectionReleaseResult TryReleaseProtectedBallot(
+        ControlledElectionThresholdSetup thresholdSetup,
+        ControlledElectionReleaseAttempt releaseAttempt,
+        ControlledElectionBallot ballot,
+        IBabyJubJub? curve = null)
+    {
+        ArgumentNullException.ThrowIfNull(thresholdSetup);
+        ArgumentNullException.ThrowIfNull(releaseAttempt);
+        ArgumentNullException.ThrowIfNull(ballot);
+        _ = curve;
+
+        return ControlledElectionReleaseResult.Failure(
+            "SINGLE_BALLOT_RELEASE_FORBIDDEN",
+            "Controlled release harness permits only aggregate tally release. Single-ballot decrypt paths are intentionally refused.");
+    }
+
+    public static ControlledElectionValidationResult ValidateAggregateOnlyCountingPath(
+        bool requiresIndividualBallotDecryption)
+    {
+        return requiresIndividualBallotDecryption
+            ? ControlledElectionValidationResult.Failure(
+                "SINGLE_BALLOT_DECRYPTION_FORBIDDEN",
+                "Controlled tallying paths that require individual ballot decryption are rejected.")
+            : ControlledElectionValidationResult.Success(
+                "Controlled tallying path stays aggregate-only.");
+    }
+
+    public static ControlledElectionDecodeResult TryDecryptBallotForHarness(
+        ControlledElectionBallot ballot,
+        BigInteger privateKey,
+        BigInteger maxSupportedCount,
+        IBabyJubJub? curve = null)
+    {
+        ArgumentNullException.ThrowIfNull(ballot);
+
+        var activeCurve = curve ?? new BabyJubJubCurve();
+        var ballotValidation = ValidateBallot(ballot, ballot.Slots.Length, activeCurve);
+        if (!ballotValidation.IsValid)
+        {
+            return ControlledElectionDecodeResult.Failure(
+                ballotValidation.FailureCode ?? "INVALID_CIPHERTEXT_STRUCTURE",
+                maxSupportedCount,
+                ballotValidation.Notes);
+        }
+
+        var releasedSelections = ballot.Slots
+            .Select(slot => activeCurve.Subtract(slot.C2, activeCurve.ScalarMul(slot.C1, privateKey)))
+            .ToImmutableArray();
+
+        return TryDecodeReleasedSelections(releasedSelections, maxSupportedCount, activeCurve);
+    }
+
+    public static ControlledElectionDecodeResult TryDecryptTallyForHarness(
+        ControlledElectionTallyState tallyState,
+        BigInteger privateKey,
+        BigInteger maxSupportedCount,
+        IBabyJubJub? curve = null)
+    {
+        ArgumentNullException.ThrowIfNull(tallyState);
+
+        var activeCurve = curve ?? new BabyJubJubCurve();
+        var releasedSelections = tallyState.Slots
+            .Select(slot => activeCurve.Subtract(slot.C2, activeCurve.ScalarMul(slot.C1, privateKey)))
+            .ToImmutableArray();
+
+        return TryDecodeReleasedSelections(releasedSelections, maxSupportedCount, activeCurve);
+    }
+
+    public static ControlledElectionDecodeResult TryDecodeReleasedSelections(
+        ImmutableArray<ECPoint> releasedSelections,
+        BigInteger maxSupportedCount,
+        IBabyJubJub? curve = null)
+    {
+        var activeCurve = curve ?? new BabyJubJubCurve();
+        if (releasedSelections.IsDefaultOrEmpty)
+        {
+            return ControlledElectionDecodeResult.Failure(
+                "EMPTY_RELEASED_SELECTIONS",
+                maxSupportedCount,
+                "Controlled decode requires at least one released selection.");
+        }
+
+        if (maxSupportedCount < BigInteger.Zero)
+        {
+            return ControlledElectionDecodeResult.Failure(
+                "INVALID_DECODE_BOUND",
+                maxSupportedCount,
+                "Controlled decode bound must be zero or greater.");
+        }
+
+        var decodedCounts = ImmutableArray.CreateBuilder<BigInteger>(releasedSelections.Length);
+
+        foreach (var releasedSelection in releasedSelections)
+        {
+            if (!activeCurve.IsOnCurve(releasedSelection))
+            {
+                return ControlledElectionDecodeResult.Failure(
+                    "INVALID_RELEASED_SELECTION",
+                    maxSupportedCount,
+                    "Controlled decode received a released selection that is not on the Baby JubJub curve.");
+            }
+
+            var decodedCount = TryDecodePointToCount(releasedSelection, maxSupportedCount, activeCurve);
+            if (decodedCount is null)
+            {
+                return ControlledElectionDecodeResult.Failure(
+                    "DECODE_BOUND_EXCEEDED",
+                    maxSupportedCount,
+                    $"Controlled decode could not resolve a released selection within bound '{maxSupportedCount}'.");
+            }
+
+            decodedCounts.Add(decodedCount.Value);
+        }
+
+        return ControlledElectionDecodeResult.Success(
+            maxSupportedCount,
+            decodedCounts.ToImmutable(),
+            $"Controlled decode succeeded within bound '{maxSupportedCount}'.");
     }
 
     public static ControlledElectionValidationResult ValidatePublicKey(ECPoint publicKey, IBabyJubJub? curve = null)
@@ -724,5 +923,28 @@ internal static class ControlledElectionHarness
         var c2 = curve.Add(messagePoint, sharedSecret);
 
         return new ControlledEncryptedSelection(c1, c2);
+    }
+
+    private static BigInteger? TryDecodePointToCount(
+        ECPoint releasedSelection,
+        BigInteger maxSupportedCount,
+        IBabyJubJub curve)
+    {
+        var current = curve.Identity;
+        if (releasedSelection == current)
+        {
+            return BigInteger.Zero;
+        }
+
+        for (var count = BigInteger.One; count <= maxSupportedCount; count++)
+        {
+            current = curve.Add(current, curve.Generator);
+            if (releasedSelection == current)
+            {
+                return count;
+            }
+        }
+
+        return null;
     }
 }
