@@ -1,0 +1,393 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "HushNetwork.proto";
+
+package rpcHush;
+
+service HushElections {
+  rpc CreateElectionDraft(CreateElectionDraftRequest) returns (ElectionCommandResponse);
+  rpc UpdateElectionDraft(UpdateElectionDraftRequest) returns (ElectionCommandResponse);
+  rpc InviteElectionTrustee(InviteElectionTrusteeRequest) returns (ElectionCommandResponse);
+  rpc AcceptElectionTrusteeInvitation(ResolveElectionTrusteeInvitationRequest) returns (ElectionCommandResponse);
+  rpc RejectElectionTrusteeInvitation(ResolveElectionTrusteeInvitationRequest) returns (ElectionCommandResponse);
+  rpc RevokeElectionTrusteeInvitation(ResolveElectionTrusteeInvitationRequest) returns (ElectionCommandResponse);
+  rpc GetElectionOpenReadiness(GetElectionOpenReadinessRequest) returns (GetElectionOpenReadinessResponse);
+  rpc OpenElection(OpenElectionRequest) returns (ElectionCommandResponse);
+  rpc CloseElection(CloseElectionRequest) returns (ElectionCommandResponse);
+  rpc FinalizeElection(FinalizeElectionRequest) returns (ElectionCommandResponse);
+  rpc GetElection(GetElectionRequest) returns (GetElectionResponse);
+  rpc GetElectionsByOwner(GetElectionsByOwnerRequest) returns (GetElectionsByOwnerResponse);
+}
+
+enum ElectionLifecycleStateProto {
+  Draft = 0;
+  Open = 1;
+  Closed = 2;
+  Finalized = 3;
+}
+
+enum ElectionClassProto {
+  OrganizationalRemoteVoting = 0;
+  PrivatePoll = 1;
+  SeriousSecretBallotVoting = 2;
+}
+
+enum ElectionBindingStatusProto {
+  Binding = 0;
+  NonBinding = 1;
+}
+
+enum ElectionGovernanceModeProto {
+  AdminOnly = 0;
+  TrusteeThreshold = 1;
+}
+
+enum ElectionDisclosureModeProto {
+  FinalResultsOnly = 0;
+  SeparatedParticipationAndResultReports = 1;
+  SeparatedParticipationAndPlaintextBallotReports = 2;
+}
+
+enum ParticipationPrivacyModeProto {
+  PublicCheckoffAnonymousBallotPrivateChoice = 0;
+}
+
+enum VoteUpdatePolicyProto {
+  SingleSubmissionOnly = 0;
+  LatestValidVoteWins = 1;
+}
+
+enum EligibilitySourceTypeProto {
+  OrganizationImportedRoster = 0;
+}
+
+enum EligibilityMutationPolicyProto {
+  FrozenAtOpen = 0;
+  LateActivationForRosteredVotersOnly = 1;
+}
+
+enum OutcomeRuleKindProto {
+  SingleWinner = 0;
+  PassFail = 1;
+  TopN = 2;
+}
+
+enum ReportingPolicyProto {
+  DefaultPhaseOnePackage = 0;
+}
+
+enum ReviewWindowPolicyProto {
+  NoReviewWindow = 0;
+  GovernedReviewWindowReserved = 1;
+}
+
+enum ElectionBoundaryArtifactTypeProto {
+  OpenArtifact = 0;
+  CloseArtifact = 1;
+  FinalizeArtifact = 2;
+}
+
+enum ElectionWarningCodeProto {
+  LowAnonymitySet = 0;
+  AllTrusteesRequiredFragility = 1;
+}
+
+enum ElectionTrusteeInvitationStatusProto {
+  Pending = 0;
+  Accepted = 1;
+  Rejected = 2;
+  Revoked = 3;
+}
+
+enum ElectionCommandErrorCodeProto {
+  None = 0;
+  NotFound = 1;
+  Forbidden = 2;
+  InvalidState = 3;
+  ValidationFailed = 4;
+  DependencyBlocked = 5;
+  Conflict = 6;
+  NotSupported = 7;
+}
+
+message ApprovedClientApplication {
+  string ApplicationId = 1;
+  string Version = 2;
+}
+
+message OutcomeRule {
+  OutcomeRuleKindProto Kind = 1;
+  string TemplateKey = 2;
+  int32 SeatCount = 3;
+  bool BlankVoteCountsForTurnout = 4;
+  bool BlankVoteExcludedFromWinnerSelection = 5;
+  bool BlankVoteExcludedFromThresholdDenominator = 6;
+  string TieResolutionRule = 7;
+  string CalculationBasis = 8;
+}
+
+message ElectionOption {
+  string OptionId = 1;
+  string DisplayLabel = 2;
+  string ShortDescription = 3;
+  int32 BallotOrder = 4;
+  bool IsBlankOption = 5;
+}
+
+message ElectionMetadata {
+  string Title = 1;
+  string ShortDescription = 2;
+  string OwnerPublicAddress = 3;
+  string ExternalReferenceCode = 4;
+}
+
+message ElectionFrozenPolicy {
+  ElectionClassProto ElectionClass = 1;
+  ElectionBindingStatusProto BindingStatus = 2;
+  ElectionGovernanceModeProto GovernanceMode = 3;
+  ElectionDisclosureModeProto DisclosureMode = 4;
+  ParticipationPrivacyModeProto ParticipationPrivacyMode = 5;
+  VoteUpdatePolicyProto VoteUpdatePolicy = 6;
+  EligibilitySourceTypeProto EligibilitySourceType = 7;
+  EligibilityMutationPolicyProto EligibilityMutationPolicy = 8;
+  OutcomeRule OutcomeRule = 9;
+  repeated ApprovedClientApplication ApprovedClientApplications = 10;
+  string ProtocolOmegaVersion = 11;
+  ReportingPolicyProto ReportingPolicy = 12;
+  ReviewWindowPolicyProto ReviewWindowPolicy = 13;
+  optional int32 RequiredApprovalCount = 14;
+}
+
+message ElectionTrusteeReference {
+  string TrusteeUserAddress = 1;
+  string TrusteeDisplayName = 2;
+}
+
+message ElectionTrusteeBoundarySnapshot {
+  int32 RequiredApprovalCount = 1;
+  repeated ElectionTrusteeReference AcceptedTrustees = 2;
+  bool EveryAcceptedTrusteeMustApprove = 3;
+}
+
+message ElectionRecordView {
+  string ElectionId = 1;
+  string Title = 2;
+  string ShortDescription = 3;
+  string OwnerPublicAddress = 4;
+  string ExternalReferenceCode = 5;
+  ElectionLifecycleStateProto LifecycleState = 6;
+  ElectionClassProto ElectionClass = 7;
+  ElectionBindingStatusProto BindingStatus = 8;
+  ElectionGovernanceModeProto GovernanceMode = 9;
+  ElectionDisclosureModeProto DisclosureMode = 10;
+  ParticipationPrivacyModeProto ParticipationPrivacyMode = 11;
+  VoteUpdatePolicyProto VoteUpdatePolicy = 12;
+  EligibilitySourceTypeProto EligibilitySourceType = 13;
+  EligibilityMutationPolicyProto EligibilityMutationPolicy = 14;
+  OutcomeRule OutcomeRule = 15;
+  repeated ApprovedClientApplication ApprovedClientApplications = 16;
+  string ProtocolOmegaVersion = 17;
+  ReportingPolicyProto ReportingPolicy = 18;
+  ReviewWindowPolicyProto ReviewWindowPolicy = 19;
+  int32 CurrentDraftRevision = 20;
+  repeated ElectionOption Options = 21;
+  repeated ElectionWarningCodeProto AcknowledgedWarningCodes = 22;
+  optional int32 RequiredApprovalCount = 23;
+  google.protobuf.Timestamp CreatedAt = 24;
+  google.protobuf.Timestamp LastUpdatedAt = 25;
+  google.protobuf.Timestamp OpenedAt = 26;
+  google.protobuf.Timestamp ClosedAt = 27;
+  google.protobuf.Timestamp FinalizedAt = 28;
+  string OpenArtifactId = 29;
+  string CloseArtifactId = 30;
+  string FinalizeArtifactId = 31;
+}
+
+message ElectionSummary {
+  string ElectionId = 1;
+  string Title = 2;
+  string OwnerPublicAddress = 3;
+  ElectionLifecycleStateProto LifecycleState = 4;
+  ElectionBindingStatusProto BindingStatus = 5;
+  ElectionGovernanceModeProto GovernanceMode = 6;
+  int32 CurrentDraftRevision = 7;
+  google.protobuf.Timestamp LastUpdatedAt = 8;
+}
+
+message ElectionDraftSnapshot {
+  string Id = 1;
+  string ElectionId = 2;
+  int32 DraftRevision = 3;
+  ElectionMetadata Metadata = 4;
+  ElectionFrozenPolicy Policy = 5;
+  repeated ElectionOption Options = 6;
+  repeated ElectionWarningCodeProto AcknowledgedWarningCodes = 7;
+  string SnapshotReason = 8;
+  google.protobuf.Timestamp RecordedAt = 9;
+  string RecordedByPublicAddress = 10;
+}
+
+message ElectionBoundaryArtifact {
+  string Id = 1;
+  string ElectionId = 2;
+  ElectionBoundaryArtifactTypeProto ArtifactType = 3;
+  ElectionLifecycleStateProto LifecycleState = 4;
+  int32 SourceDraftRevision = 5;
+  ElectionMetadata Metadata = 6;
+  ElectionFrozenPolicy Policy = 7;
+  repeated ElectionOption Options = 8;
+  repeated ElectionWarningCodeProto AcknowledgedWarningCodes = 9;
+  ElectionTrusteeBoundarySnapshot TrusteeSnapshot = 10;
+  bytes FrozenEligibleVoterSetHash = 11;
+  string TrusteePolicyExecutionReference = 12;
+  string ReportingPolicyExecutionReference = 13;
+  string ReviewWindowExecutionReference = 14;
+  bytes AcceptedBallotSetHash = 15;
+  bytes FinalEncryptedTallyHash = 16;
+  google.protobuf.Timestamp RecordedAt = 17;
+  string RecordedByPublicAddress = 18;
+}
+
+message ElectionWarningAcknowledgement {
+  string Id = 1;
+  string ElectionId = 2;
+  ElectionWarningCodeProto WarningCode = 3;
+  int32 DraftRevision = 4;
+  string AcknowledgedByPublicAddress = 5;
+  google.protobuf.Timestamp AcknowledgedAt = 6;
+}
+
+message ElectionTrusteeInvitation {
+  string Id = 1;
+  string ElectionId = 2;
+  string TrusteeUserAddress = 3;
+  string TrusteeDisplayName = 4;
+  string InvitedByPublicAddress = 5;
+  string LinkedMessageId = 6;
+  ElectionTrusteeInvitationStatusProto Status = 7;
+  int32 SentAtDraftRevision = 8;
+  google.protobuf.Timestamp SentAt = 9;
+  optional int32 ResolvedAtDraftRevision = 10;
+  google.protobuf.Timestamp RespondedAt = 11;
+  google.protobuf.Timestamp RevokedAt = 12;
+}
+
+message ElectionDraftInput {
+  string Title = 1;
+  string ShortDescription = 2;
+  string ExternalReferenceCode = 3;
+  ElectionClassProto ElectionClass = 4;
+  ElectionBindingStatusProto BindingStatus = 5;
+  ElectionGovernanceModeProto GovernanceMode = 6;
+  ElectionDisclosureModeProto DisclosureMode = 7;
+  ParticipationPrivacyModeProto ParticipationPrivacyMode = 8;
+  VoteUpdatePolicyProto VoteUpdatePolicy = 9;
+  EligibilitySourceTypeProto EligibilitySourceType = 10;
+  EligibilityMutationPolicyProto EligibilityMutationPolicy = 11;
+  OutcomeRule OutcomeRule = 12;
+  repeated ApprovedClientApplication ApprovedClientApplications = 13;
+  string ProtocolOmegaVersion = 14;
+  ReportingPolicyProto ReportingPolicy = 15;
+  ReviewWindowPolicyProto ReviewWindowPolicy = 16;
+  repeated ElectionOption OwnerOptions = 17;
+  repeated ElectionWarningCodeProto AcknowledgedWarningCodes = 18;
+  optional int32 RequiredApprovalCount = 19;
+}
+
+message CreateElectionDraftRequest {
+  string OwnerPublicAddress = 1;
+  string ActorPublicAddress = 2;
+  string SnapshotReason = 3;
+  ElectionDraftInput Draft = 4;
+}
+
+message UpdateElectionDraftRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string SnapshotReason = 3;
+  ElectionDraftInput Draft = 4;
+}
+
+message InviteElectionTrusteeRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string TrusteeUserAddress = 3;
+  string TrusteeDisplayName = 4;
+}
+
+message ResolveElectionTrusteeInvitationRequest {
+  string ElectionId = 1;
+  string InvitationId = 2;
+  string ActorPublicAddress = 3;
+}
+
+message GetElectionOpenReadinessRequest {
+  string ElectionId = 1;
+  repeated ElectionWarningCodeProto RequiredWarningCodes = 2;
+}
+
+message OpenElectionRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  repeated ElectionWarningCodeProto RequiredWarningCodes = 3;
+  bytes FrozenEligibleVoterSetHash = 4;
+  string TrusteePolicyExecutionReference = 5;
+  string ReportingPolicyExecutionReference = 6;
+  string ReviewWindowExecutionReference = 7;
+}
+
+message CloseElectionRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  bytes AcceptedBallotSetHash = 3;
+  bytes FinalEncryptedTallyHash = 4;
+}
+
+message FinalizeElectionRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  bytes AcceptedBallotSetHash = 3;
+  bytes FinalEncryptedTallyHash = 4;
+}
+
+message GetElectionRequest {
+  string ElectionId = 1;
+}
+
+message GetElectionsByOwnerRequest {
+  string OwnerPublicAddress = 1;
+}
+
+message ElectionCommandResponse {
+  bool Success = 1;
+  ElectionCommandErrorCodeProto ErrorCode = 2;
+  string ErrorMessage = 3;
+  repeated string ValidationErrors = 4;
+  ElectionRecordView Election = 5;
+  ElectionDraftSnapshot DraftSnapshot = 6;
+  ElectionBoundaryArtifact BoundaryArtifact = 7;
+  ElectionTrusteeInvitation TrusteeInvitation = 8;
+}
+
+message GetElectionOpenReadinessResponse {
+  bool IsReadyToOpen = 1;
+  repeated string ValidationErrors = 2;
+  repeated ElectionWarningCodeProto RequiredWarningCodes = 3;
+  repeated ElectionWarningCodeProto MissingWarningAcknowledgements = 4;
+}
+
+message GetElectionResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  ElectionRecordView Election = 3;
+  ElectionDraftSnapshot LatestDraftSnapshot = 4;
+  repeated ElectionWarningAcknowledgement WarningAcknowledgements = 5;
+  repeated ElectionTrusteeInvitation TrusteeInvitations = 6;
+  repeated ElectionBoundaryArtifact BoundaryArtifacts = 7;
+}
+
+message GetElectionsByOwnerResponse {
+  repeated ElectionSummary Elections = 1;
+}

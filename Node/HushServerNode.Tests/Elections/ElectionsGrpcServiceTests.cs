@@ -1,0 +1,246 @@
+using FluentAssertions;
+using Grpc.Core;
+using HushNetwork.proto;
+using HushNode.Elections.gRPC;
+using HushShared.Elections.Model;
+using Microsoft.Extensions.Logging;
+using Moq;
+using Moq.AutoMock;
+using Xunit;
+using Domain = HushNode.Elections;
+using Proto = HushNetwork.proto;
+
+namespace HushServerNode.Tests.Elections;
+
+public class ElectionsGrpcServiceTests
+{
+    [Fact]
+    public async Task CreateElectionDraft_WithValidRequest_MapsLifecycleResultToProtoResponse()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection();
+        var snapshot = ElectionModelFactory.CreateDraftSnapshot(
+            election,
+            snapshotReason: "initial draft",
+            recordedByPublicAddress: "owner-address");
+
+        mocker.GetMock<Domain.IElectionLifecycleService>()
+            .Setup(x => x.CreateDraftAsync(It.Is<Domain.CreateElectionDraftRequest>(request =>
+                request.OwnerPublicAddress == "owner-address" &&
+                request.ActorPublicAddress == "owner-address" &&
+                request.SnapshotReason == "initial draft" &&
+                request.Draft.Title == "Board Election" &&
+                request.Draft.OwnerOptions.Count == 2)))
+            .ReturnsAsync(Domain.ElectionCommandResult.Success(election, draftSnapshot: snapshot));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = CreateDraftRequest();
+
+        // Act
+        var response = await sut.CreateElectionDraft(request, CreateMockServerCallContext());
+
+        // Assert
+        response.Success.Should().BeTrue();
+        response.ErrorCode.Should().Be(ElectionCommandErrorCodeProto.None);
+        response.Election.Should().NotBeNull();
+        response.Election.Title.Should().Be("Board Election");
+        response.DraftSnapshot.Should().NotBeNull();
+        response.DraftSnapshot.SnapshotReason.Should().Be("initial draft");
+    }
+
+    [Fact]
+    public async Task OpenElection_WithDependencyBlockedFailure_MapsValidationErrors()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<Domain.IElectionLifecycleService>()
+            .Setup(x => x.OpenElectionAsync(It.IsAny<Domain.OpenElectionRequest>()))
+            .ReturnsAsync(Domain.ElectionCommandResult.Failure(
+                Domain.ElectionCommandErrorCode.DependencyBlocked,
+                "Election cannot be opened.",
+                ["Trustee-threshold elections cannot open until FEAT-096 provides the governed approval workflow."]));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new OpenElectionRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = "owner-address",
+        };
+
+        // Act
+        var response = await sut.OpenElection(request, CreateMockServerCallContext());
+
+        // Assert
+        response.Success.Should().BeFalse();
+        response.ErrorCode.Should().Be(ElectionCommandErrorCodeProto.DependencyBlocked);
+        response.ValidationErrors.Should().ContainSingle();
+        response.ValidationErrors[0].Should().Contain("FEAT-096");
+    }
+
+    [Fact]
+    public async Task GetElectionOpenReadiness_WithWarningGap_MapsReadinessResponse()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<Domain.IElectionLifecycleService>()
+            .Setup(x => x.EvaluateOpenReadinessAsync(It.IsAny<Domain.EvaluateElectionOpenReadinessRequest>()))
+            .ReturnsAsync(Domain.ElectionOpenValidationResult.NotReady(
+                ["Required warning acknowledgement is missing for LowAnonymitySet."],
+                [ElectionWarningCode.LowAnonymitySet],
+                [ElectionWarningCode.LowAnonymitySet]));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new GetElectionOpenReadinessRequest
+        {
+            ElectionId = electionId.ToString(),
+        };
+        request.RequiredWarningCodes.Add(ElectionWarningCodeProto.LowAnonymitySet);
+
+        // Act
+        var response = await sut.GetElectionOpenReadiness(request, CreateMockServerCallContext());
+
+        // Assert
+        response.IsReadyToOpen.Should().BeFalse();
+        response.RequiredWarningCodes.Should().Contain(ElectionWarningCodeProto.LowAnonymitySet);
+        response.MissingWarningAcknowledgements.Should().Contain(ElectionWarningCodeProto.LowAnonymitySet);
+    }
+
+    [Fact]
+    public async Task GetElection_WithInvalidElectionId_ThrowsInvalidArgumentRpcException()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        // Act
+        var act = async () => await sut.GetElection(new GetElectionRequest { ElectionId = "not-a-guid" }, CreateMockServerCallContext());
+
+        // Assert
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.InvalidArgument);
+    }
+
+    private static Proto.CreateElectionDraftRequest CreateDraftRequest()
+    {
+        var request = new Proto.CreateElectionDraftRequest
+        {
+            OwnerPublicAddress = "owner-address",
+            ActorPublicAddress = "owner-address",
+            SnapshotReason = "initial draft",
+            Draft = new ElectionDraftInput
+            {
+                Title = "Board Election",
+                ShortDescription = "Annual board vote",
+                ExternalReferenceCode = "ORG-2026-01",
+                ElectionClass = ElectionClassProto.OrganizationalRemoteVoting,
+                BindingStatus = ElectionBindingStatusProto.Binding,
+                GovernanceMode = ElectionGovernanceModeProto.AdminOnly,
+                DisclosureMode = ElectionDisclosureModeProto.FinalResultsOnly,
+                ParticipationPrivacyMode = ParticipationPrivacyModeProto.PublicCheckoffAnonymousBallotPrivateChoice,
+                VoteUpdatePolicy = VoteUpdatePolicyProto.SingleSubmissionOnly,
+                EligibilitySourceType = EligibilitySourceTypeProto.OrganizationImportedRoster,
+                EligibilityMutationPolicy = EligibilityMutationPolicyProto.FrozenAtOpen,
+                OutcomeRule = new OutcomeRule
+                {
+                    Kind = OutcomeRuleKindProto.SingleWinner,
+                    TemplateKey = "single_winner",
+                    SeatCount = 1,
+                    BlankVoteCountsForTurnout = true,
+                    BlankVoteExcludedFromWinnerSelection = true,
+                    BlankVoteExcludedFromThresholdDenominator = false,
+                    TieResolutionRule = "tie_unresolved",
+                    CalculationBasis = "highest_non_blank_votes",
+                },
+                ProtocolOmegaVersion = "omega-v1.0.0",
+                ReportingPolicy = ReportingPolicyProto.DefaultPhaseOnePackage,
+                ReviewWindowPolicy = ReviewWindowPolicyProto.NoReviewWindow,
+            },
+        };
+
+        request.Draft.ApprovedClientApplications.Add(new ApprovedClientApplication
+        {
+            ApplicationId = "hushsocial",
+            Version = "1.0.0",
+        });
+        request.Draft.OwnerOptions.Add(new ElectionOption
+        {
+            OptionId = "alice",
+            DisplayLabel = "Alice",
+            BallotOrder = 1,
+            IsBlankOption = false,
+        });
+        request.Draft.OwnerOptions.Add(new ElectionOption
+        {
+            OptionId = "bob",
+            DisplayLabel = "Bob",
+            BallotOrder = 2,
+            IsBlankOption = false,
+        });
+
+        return request;
+    }
+
+    private static ElectionRecord CreateAdminElection() =>
+        ElectionModelFactory.CreateDraftRecord(
+            electionId: ElectionId.NewElectionId,
+            title: "Board Election",
+            shortDescription: "Annual board vote",
+            ownerPublicAddress: "owner-address",
+            externalReferenceCode: "ORG-2026-01",
+            electionClass: ElectionClass.OrganizationalRemoteVoting,
+            bindingStatus: ElectionBindingStatus.Binding,
+            governanceMode: ElectionGovernanceMode.AdminOnly,
+            disclosureMode: ElectionDisclosureMode.FinalResultsOnly,
+            participationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
+            voteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
+            eligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            outcomeRule: new OutcomeRuleDefinition(
+                OutcomeRuleKind.SingleWinner,
+                "single_winner",
+                SeatCount: 1,
+                BlankVoteCountsForTurnout: true,
+                BlankVoteExcludedFromWinnerSelection: true,
+                BlankVoteExcludedFromThresholdDenominator: false,
+                TieResolutionRule: "tie_unresolved",
+                CalculationBasis: "highest_non_blank_votes"),
+            approvedClientApplications:
+            [
+                new ApprovedClientApplicationRecord("hushsocial", "1.0.0"),
+            ],
+            protocolOmegaVersion: "omega-v1.0.0",
+            reportingPolicy: ReportingPolicy.DefaultPhaseOnePackage,
+            reviewWindowPolicy: ReviewWindowPolicy.NoReviewWindow,
+            ownerOptions:
+            [
+                new ElectionOptionDefinition("alice", "Alice", null, 1, IsBlankOption: false),
+                new ElectionOptionDefinition("bob", "Bob", null, 2, IsBlankOption: false),
+            ]);
+
+    private static ServerCallContext CreateMockServerCallContext() => new TestServerCallContext();
+}
+
+public class TestServerCallContext : ServerCallContext
+{
+    protected override string MethodCore => "TestMethod";
+    protected override string HostCore => "TestHost";
+    protected override string PeerCore => "TestPeer";
+    protected override DateTime DeadlineCore => DateTime.MaxValue;
+    protected override Metadata RequestHeadersCore => new();
+    protected override CancellationToken CancellationTokenCore => CancellationToken.None;
+    protected override Metadata ResponseTrailersCore => new();
+    protected override Status StatusCore { get; set; }
+    protected override WriteOptions? WriteOptionsCore { get; set; }
+    protected override AuthContext AuthContextCore => new(null, new Dictionary<string, List<AuthProperty>>());
+
+    protected override ContextPropagationToken CreatePropagationTokenCore(ContextPropagationOptions? options) =>
+        throw new NotImplementedException();
+
+    protected override Task WriteResponseHeadersAsyncCore(Metadata responseHeaders) =>
+        Task.CompletedTask;
+}

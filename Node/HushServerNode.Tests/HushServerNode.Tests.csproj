@@ -35,6 +35,7 @@
     <ProjectReference Include="..\Core\Blockchain\HushNode.Blockchain.gRPC\HushNode.Blockchain.gRPC.csproj" />
     <ProjectReference Include="..\Core\Idempotency\HushNode.Idempotency\HushNode.Idempotency.csproj" />
     <ProjectReference Include="..\Core\Elections\HushNode.Elections\HushNode.Elections.csproj" />
+    <ProjectReference Include="..\Core\Elections\HushNode.Elections.gRPC\HushNode.Elections.gRPC.csproj" />
     <ProjectReference Include="..\Core\Elections\HushNode.Elections.Storage\HushNode.Elections.Storage.csproj" />
     <ProjectReference Include="..\..\Shared\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
   </ItemGroup>
