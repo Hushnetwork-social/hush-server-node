@@ -28,6 +28,8 @@ using HushNode.Bank;
 using HushNode.Bank.gRPC;
 using HushNode.Feeds;
 using HushNode.Feeds.gRPC;
+using HushNode.Elections;
+using HushNode.Elections.gRPC;
 using HushNode.Reactions;
 using HushNode.Reactions.gRPC;
 using HushNode.Caching;
@@ -501,6 +503,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             options.MaxSendMessageSize = 30 * 1024 * 1024; // 30MB for streaming downloads
         });
         builder.Services.AddGrpcReflection();
+        builder.Services.RegisterElectionsRPCServices();
 
         builder.Services.AddCors(options =>
         {
@@ -539,6 +542,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             .RegisterCoreModuleBlockchain()
             .RegisterCoreModuleBank()
             .RegisterCoreModuleFeeds()
+            .RegisterCoreModuleElections()
             .RegisterCoreModuleReactions()
             .RegisterHushNodeIndexing()
             .RegisterIdempotencyModule()
@@ -684,6 +688,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         app.MapGrpcService<BankGrpService>();
         app.MapGrpcService<IdentityGrpcService>();
         app.MapGrpcService<FeedsGrpcService>();
+        app.MapGrpcService<ElectionsGrpcService>();
         app.MapGrpcService<ReactionsGrpcService>();
         app.MapGrpcService<MembershipGrpcService>();
         app.MapGrpcService<NotificationGrpcService>();
