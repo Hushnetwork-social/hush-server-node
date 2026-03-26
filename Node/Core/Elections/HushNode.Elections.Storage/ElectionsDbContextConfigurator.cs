@@ -1,0 +1,217 @@
+using System.Text.Json;
+using HushNode.Interfaces;
+using HushShared.Elections.Model;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+
+namespace HushNode.Elections.Storage;
+
+public class ElectionsDbContextConfigurator : IDbContextConfigurator
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public void Configure(ModelBuilder modelBuilder)
+    {
+        ConfigureElectionRecord(modelBuilder);
+        ConfigureElectionDraftSnapshot(modelBuilder);
+        ConfigureElectionBoundaryArtifact(modelBuilder);
+        ConfigureElectionWarningAcknowledgement(modelBuilder);
+        ConfigureElectionTrusteeInvitation(modelBuilder);
+    }
+
+    private static void ConfigureElectionRecord(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionRecord>(entity =>
+        {
+            entity.ToTable("ElectionRecord", "Elections");
+            entity.HasKey(x => x.ElectionId);
+
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+
+            entity.Property(x => x.Title).HasColumnType("text");
+            entity.Property(x => x.ShortDescription).HasColumnType("text");
+            entity.Property(x => x.OwnerPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.ExternalReferenceCode).HasColumnType("varchar(256)");
+            entity.Property(x => x.LifecycleState).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.ElectionClass).HasConversion<string>().HasColumnType("varchar(64)");
+            entity.Property(x => x.BindingStatus).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.GovernanceMode).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.DisclosureMode).HasConversion<string>().HasColumnType("varchar(64)");
+            entity.Property(x => x.ParticipationPrivacyMode).HasConversion<string>().HasColumnType("varchar(96)");
+            entity.Property(x => x.VoteUpdatePolicy).HasConversion<string>().HasColumnType("varchar(64)");
+            entity.Property(x => x.EligibilitySourceType).HasConversion<string>().HasColumnType("varchar(64)");
+            entity.Property(x => x.EligibilityMutationPolicy).HasConversion<string>().HasColumnType("varchar(96)");
+            entity.Property(x => x.ProtocolOmegaVersion).HasColumnType("varchar(64)");
+            entity.Property(x => x.ReportingPolicy).HasConversion<string>().HasColumnType("varchar(64)");
+            entity.Property(x => x.ReviewWindowPolicy).HasConversion<string>().HasColumnType("varchar(64)");
+            entity.Property(x => x.CurrentDraftRevision).HasColumnType("integer");
+            entity.Property(x => x.RequiredApprovalCount).HasColumnType("integer");
+            entity.Property(x => x.CreatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.OpenedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ClosedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.FinalizedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.OpenArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.CloseArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.FinalizeArtifactId).HasColumnType("uuid");
+
+            ConfigureJsonProperty(entity.Property(x => x.OutcomeRule));
+            ConfigureJsonProperty(entity.Property(x => x.ApprovedClientApplications));
+            ConfigureJsonProperty(entity.Property(x => x.Options));
+            ConfigureJsonProperty(entity.Property(x => x.AcknowledgedWarningCodes));
+
+            entity.HasIndex(x => x.OwnerPublicAddress);
+            entity.HasIndex(x => x.LifecycleState);
+            entity.HasIndex(x => x.GovernanceMode);
+            entity.HasIndex(x => x.LastUpdatedAt);
+        });
+    }
+
+    private static void ConfigureElectionDraftSnapshot(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionDraftSnapshotRecord>(entity =>
+        {
+            entity.ToTable("ElectionDraftSnapshotRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.DraftRevision).HasColumnType("integer");
+            entity.Property(x => x.SnapshotReason).HasColumnType("text");
+            entity.Property(x => x.RecordedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.RecordedByPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            ConfigureJsonProperty(entity.Property(x => x.Metadata));
+            ConfigureJsonProperty(entity.Property(x => x.Policy));
+            ConfigureJsonProperty(entity.Property(x => x.Options));
+            ConfigureJsonProperty(entity.Property(x => x.AcknowledgedWarningCodes));
+
+            entity.HasIndex(x => new { x.ElectionId, x.DraftRevision }).IsUnique();
+        });
+    }
+
+    private static void ConfigureElectionBoundaryArtifact(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionBoundaryArtifactRecord>(entity =>
+        {
+            entity.ToTable("ElectionBoundaryArtifactRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.ArtifactType).HasConversion<string>().HasColumnType("varchar(24)");
+            entity.Property(x => x.LifecycleState).HasConversion<string>().HasColumnType("varchar(24)");
+            entity.Property(x => x.SourceDraftRevision).HasColumnType("integer");
+            entity.Property(x => x.FrozenEligibleVoterSetHash).HasColumnType("bytea");
+            entity.Property(x => x.TrusteePolicyExecutionReference).HasColumnType("text");
+            entity.Property(x => x.ReportingPolicyExecutionReference).HasColumnType("text");
+            entity.Property(x => x.ReviewWindowExecutionReference).HasColumnType("text");
+            entity.Property(x => x.AcceptedBallotSetHash).HasColumnType("bytea");
+            entity.Property(x => x.FinalEncryptedTallyHash).HasColumnType("bytea");
+            entity.Property(x => x.RecordedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.RecordedByPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            ConfigureJsonProperty(entity.Property(x => x.Metadata));
+            ConfigureJsonProperty(entity.Property(x => x.Policy));
+            ConfigureJsonProperty(entity.Property(x => x.Options));
+            ConfigureJsonProperty(entity.Property(x => x.AcknowledgedWarningCodes));
+            ConfigureJsonProperty(entity.Property(x => x.TrusteeSnapshot));
+
+            entity.HasIndex(x => new { x.ElectionId, x.ArtifactType }).IsUnique();
+        });
+    }
+
+    private static void ConfigureElectionWarningAcknowledgement(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionWarningAcknowledgementRecord>(entity =>
+        {
+            entity.ToTable("ElectionWarningAcknowledgementRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.WarningCode).HasConversion<string>().HasColumnType("varchar(64)");
+            entity.Property(x => x.DraftRevision).HasColumnType("integer");
+            entity.Property(x => x.AcknowledgedByPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.AcknowledgedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            entity.HasIndex(x => new { x.ElectionId, x.WarningCode, x.DraftRevision }).IsUnique();
+        });
+    }
+
+    private static void ConfigureElectionTrusteeInvitation(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionTrusteeInvitationRecord>(entity =>
+        {
+            entity.ToTable("ElectionTrusteeInvitationRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.TrusteeUserAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.TrusteeDisplayName).HasColumnType("varchar(200)");
+            entity.Property(x => x.InvitedByPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.LinkedMessageId).HasColumnType("uuid");
+            entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(24)");
+            entity.Property(x => x.SentAtDraftRevision).HasColumnType("integer");
+            entity.Property(x => x.SentAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ResolvedAtDraftRevision).HasColumnType("integer");
+            entity.Property(x => x.RespondedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.RevokedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LatestTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.LatestBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.LatestBlockId).HasColumnType("uuid");
+
+            entity.HasIndex(x => x.ElectionId);
+            entity.HasIndex(x => new { x.ElectionId, x.Status });
+            entity.HasIndex(x => new { x.ElectionId, x.TrusteeUserAddress });
+        });
+    }
+
+    private static void ConfigureJsonProperty<T>(PropertyBuilder<T> propertyBuilder)
+    {
+        var converter = new ValueConverter<T, string>(
+            value => JsonSerializer.Serialize(value, JsonOptions),
+            value => JsonSerializer.Deserialize<T>(value, JsonOptions)!);
+
+        var comparer = new ValueComparer<T>(
+            (left, right) => JsonSerializer.Serialize(left, JsonOptions) == JsonSerializer.Serialize(right, JsonOptions),
+            value => JsonSerializer.Serialize(value, JsonOptions).GetHashCode(StringComparison.Ordinal),
+            value => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value, JsonOptions), JsonOptions)!);
+
+        propertyBuilder.HasConversion(converter);
+        propertyBuilder.Metadata.SetValueComparer(comparer);
+        propertyBuilder.HasColumnType("jsonb");
+    }
+}

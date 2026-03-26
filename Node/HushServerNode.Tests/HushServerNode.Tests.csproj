@@ -26,6 +26,7 @@
 
     <!-- Explicit EF Core version to resolve version conflicts with HushServerNode -->
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.2" />
   </ItemGroup>
 
@@ -33,6 +34,8 @@
     <ProjectReference Include="..\HushServerNode\HushServerNode.csproj" />
     <ProjectReference Include="..\Core\Blockchain\HushNode.Blockchain.gRPC\HushNode.Blockchain.gRPC.csproj" />
     <ProjectReference Include="..\Core\Idempotency\HushNode.Idempotency\HushNode.Idempotency.csproj" />
+    <ProjectReference Include="..\Core\Elections\HushNode.Elections.Storage\HushNode.Elections.Storage.csproj" />
+    <ProjectReference Include="..\..\Shared\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
   </ItemGroup>
 
 </Project>
