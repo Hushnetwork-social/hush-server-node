@@ -59,6 +59,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.OpenedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.ClosedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.FinalizedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.TallyReadyAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.OpenArtifactId).HasColumnType("uuid");
             entity.Property(x => x.CloseArtifactId).HasColumnType("uuid");
             entity.Property(x => x.FinalizeArtifactId).HasColumnType("uuid");

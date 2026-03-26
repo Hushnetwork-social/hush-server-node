@@ -29,6 +29,7 @@ public record ElectionRecord(
     DateTime? OpenedAt,
     DateTime? ClosedAt,
     DateTime? FinalizedAt,
+    DateTime? TallyReadyAt,
     Guid? OpenArtifactId,
     Guid? CloseArtifactId,
     Guid? FinalizeArtifactId);

@@ -82,6 +82,7 @@ public static class ElectionModelFactory
             OpenedAt: null,
             ClosedAt: null,
             FinalizedAt: null,
+            TallyReadyAt: null,
             OpenArtifactId: null,
             CloseArtifactId: null,
             FinalizeArtifactId: null);

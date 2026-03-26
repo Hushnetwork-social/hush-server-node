@@ -314,6 +314,75 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task StartGovernedProposalAsync_WithValidOpenRequest_PersistsPendingProposal()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection() with
+        {
+            RequiredApprovalCount = 1,
+        };
+        var acceptedTrusteeA = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
+                DateTime.UtcNow,
+                election.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+        var acceptedTrusteeB = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-b",
+            trusteeDisplayName: "Bob",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
+                DateTime.UtcNow,
+                election.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedTrusteeA.Id] = acceptedTrusteeA;
+        store.TrusteeInvitations[acceptedTrusteeB.Id] = acceptedTrusteeB;
+
+        var result = await service.StartGovernedProposalAsync(new StartElectionGovernedProposalRequest(
+            election.ElectionId,
+            ElectionGovernedActionType.Open,
+            "owner-address"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.GovernedProposal.Should().NotBeNull();
+        result.GovernedProposal!.ActionType.Should().Be(ElectionGovernedActionType.Open);
+        result.GovernedProposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.WaitingForApprovals);
+        store.GovernedProposals.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task UpdateDraftAsync_WithPendingGovernedOpenProposal_ReturnsInvalidState()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection();
+        var proposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Open,
+            proposedByPublicAddress: "owner-address");
+
+        store.Elections[election.ElectionId] = election;
+        store.GovernedProposals[proposal.Id] = proposal;
+
+        var result = await service.UpdateDraftAsync(new UpdateElectionDraftRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            SnapshotReason: "attempted update while governed open pending",
+            Draft: CreateTrusteeDraftSpecification()));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.InvalidState);
+        result.ErrorMessage.Should().Contain("governed open proposal");
+    }
+
+    [Fact]
     public async Task OpenElectionAsync_WithValidAdminOnlyDraft_PersistsOpenBoundary()
     {
         var store = new ElectionStore();
@@ -390,9 +459,178 @@ public class ElectionLifecycleServiceTests
             RequiredWarningCodes: [ElectionWarningCode.AllTrusteesRequiredFragility]));
 
         result.IsSuccess.Should().BeFalse();
-        result.ErrorCode.Should().Be(ElectionCommandErrorCode.DependencyBlocked);
-        result.ValidationErrors.Should().Contain(x => x.Contains("FEAT-096", StringComparison.Ordinal));
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.NotSupported);
+        result.ErrorMessage.Should().Contain("governed proposal workflow");
         store.BoundaryArtifacts.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ApproveGovernedProposalAsync_AtThreshold_AutoExecutesProposal()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection() with
+        {
+            RequiredApprovalCount = 1,
+        };
+        var acceptedTrusteeA = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
+                DateTime.UtcNow,
+                election.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+        var acceptedTrusteeB = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-b",
+            trusteeDisplayName: "Bob",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
+                DateTime.UtcNow,
+                election.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+        var proposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Open,
+            proposedByPublicAddress: "owner-address");
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedTrusteeA.Id] = acceptedTrusteeA;
+        store.TrusteeInvitations[acceptedTrusteeB.Id] = acceptedTrusteeB;
+        store.GovernedProposals[proposal.Id] = proposal;
+
+        var result = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            election.ElectionId,
+            proposal.Id,
+            "trustee-a",
+            "Ready."));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Election.Should().NotBeNull();
+        result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Open);
+        result.GovernedProposal.Should().NotBeNull();
+        result.GovernedProposal!.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionSucceeded);
+        result.GovernedProposalApproval.Should().NotBeNull();
+        store.GovernedProposalApprovals.Should().ContainSingle();
+        store.BoundaryArtifacts.Should().ContainSingle();
+        store.Elections[election.ElectionId].OpenArtifactId.Should().Be(result.BoundaryArtifact!.Id);
+    }
+
+    [Fact]
+    public async Task ApproveGovernedProposalAsync_WithExistingApproval_ReturnsConflict()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection() with
+        {
+            RequiredApprovalCount = 2,
+        };
+        var acceptedTrustee = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
+                DateTime.UtcNow,
+                election.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+        var proposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Open,
+            proposedByPublicAddress: "owner-address");
+        var existingApproval = ElectionModelFactory.CreateGovernedProposalApproval(
+            proposal,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            approvalNote: null);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedTrustee.Id] = acceptedTrustee;
+        store.GovernedProposals[proposal.Id] = proposal;
+        store.GovernedProposalApprovals.Add(existingApproval);
+
+        var result = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            election.ElectionId,
+            proposal.Id,
+            "trustee-a"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+    }
+
+    [Fact]
+    public async Task RetryGovernedProposalExecutionAsync_AfterRecordedFailure_ReusesExistingApproval()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var openElection = CreateTrusteeElection() with
+        {
+            RequiredApprovalCount = 1,
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = DateTime.UtcNow,
+            OpenArtifactId = Guid.NewGuid(),
+            LastUpdatedAt = DateTime.UtcNow,
+        };
+        var draftElection = openElection with
+        {
+            LifecycleState = ElectionLifecycleState.Draft,
+            OpenedAt = null,
+            OpenArtifactId = null,
+        };
+        var acceptedTrusteeA = ElectionModelFactory.CreateTrusteeInvitation(
+            openElection.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: openElection.CurrentDraftRevision).Accept(
+                DateTime.UtcNow,
+                openElection.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+        var acceptedTrusteeB = ElectionModelFactory.CreateTrusteeInvitation(
+            openElection.ElectionId,
+            trusteeUserAddress: "trustee-b",
+            trusteeDisplayName: "Bob",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: openElection.CurrentDraftRevision).Accept(
+                DateTime.UtcNow,
+                openElection.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+        var proposal = ElectionModelFactory.CreateGovernedProposal(
+            openElection,
+            ElectionGovernedActionType.Close,
+            proposedByPublicAddress: "owner-address");
+
+        store.Elections[openElection.ElectionId] = draftElection;
+        store.TrusteeInvitations[acceptedTrusteeA.Id] = acceptedTrusteeA;
+        store.TrusteeInvitations[acceptedTrusteeB.Id] = acceptedTrusteeB;
+        store.GovernedProposals[proposal.Id] = proposal;
+
+        var approvalResult = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            openElection.ElectionId,
+            proposal.Id,
+            "trustee-a"));
+
+        approvalResult.IsSuccess.Should().BeTrue();
+        approvalResult.GovernedProposal.Should().NotBeNull();
+        approvalResult.GovernedProposal!.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionFailed);
+        approvalResult.GovernedProposal.ExecutionFailureReason.Should().Contain("close is only allowed from the open state");
+
+        store.Elections[openElection.ElectionId] = openElection;
+
+        var retryResult = await service.RetryGovernedProposalExecutionAsync(new RetryElectionGovernedProposalExecutionRequest(
+            openElection.ElectionId,
+            proposal.Id,
+            "owner-address"));
+
+        retryResult.IsSuccess.Should().BeTrue();
+        retryResult.Election.Should().NotBeNull();
+        retryResult.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+        retryResult.GovernedProposal.Should().NotBeNull();
+        retryResult.GovernedProposal!.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionSucceeded);
+        store.GovernedProposalApprovals.Should().ContainSingle();
+        store.BoundaryArtifacts.Should().ContainSingle();
     }
 
     [Fact]
@@ -554,6 +792,38 @@ public class ElectionLifecycleServiceTests
                 new ElectionOptionDefinition("bob", "Bob", null, 2, IsBlankOption: false),
             ],
             AcknowledgedWarningCodes: acknowledgedWarningCodes);
+
+    private static ElectionDraftSpecification CreateTrusteeDraftSpecification(
+        string title = "Governed Referendum",
+        IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null,
+        int requiredApprovalCount = 2) =>
+        new(
+            Title: title,
+            ShortDescription: "Policy vote",
+            ExternalReferenceCode: "REF-2026-01",
+            ElectionClass: ElectionClass.OrganizationalRemoteVoting,
+            BindingStatus: ElectionBindingStatus.Binding,
+            GovernanceMode: ElectionGovernanceMode.TrusteeThreshold,
+            DisclosureMode: ElectionDisclosureMode.FinalResultsOnly,
+            ParticipationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
+            VoteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
+            EligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
+            EligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            OutcomeRule: CreatePassFailRule(),
+            ApprovedClientApplications:
+            [
+                new ApprovedClientApplicationRecord("hushsocial", "1.0.0"),
+            ],
+            ProtocolOmegaVersion: "omega-v1.0.0",
+            ReportingPolicy: ReportingPolicy.DefaultPhaseOnePackage,
+            ReviewWindowPolicy: ReviewWindowPolicy.GovernedReviewWindowReserved,
+            OwnerOptions:
+            [
+                new ElectionOptionDefinition("yes", "Yes", null, 1, IsBlankOption: false),
+                new ElectionOptionDefinition("no", "No", null, 2, IsBlankOption: false),
+            ],
+            AcknowledgedWarningCodes: acknowledgedWarningCodes,
+            RequiredApprovalCount: requiredApprovalCount);
 
     private static OutcomeRuleDefinition CreateSingleWinnerRule() =>
         new(

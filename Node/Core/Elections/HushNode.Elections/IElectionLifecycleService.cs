@@ -18,6 +18,12 @@ public interface IElectionLifecycleService
 
     Task<ElectionOpenValidationResult> EvaluateOpenReadinessAsync(EvaluateElectionOpenReadinessRequest request);
 
+    Task<ElectionCommandResult> StartGovernedProposalAsync(StartElectionGovernedProposalRequest request);
+
+    Task<ElectionCommandResult> ApproveGovernedProposalAsync(ApproveElectionGovernedProposalRequest request);
+
+    Task<ElectionCommandResult> RetryGovernedProposalExecutionAsync(RetryElectionGovernedProposalExecutionRequest request);
+
     Task<ElectionCommandResult> OpenElectionAsync(OpenElectionRequest request);
 
     Task<ElectionCommandResult> CloseElectionAsync(CloseElectionRequest request);
@@ -73,6 +79,22 @@ public record EvaluateElectionOpenReadinessRequest(
     ElectionId ElectionId,
     IReadOnlyList<ElectionWarningCode>? RequiredWarningCodes = null);
 
+public record StartElectionGovernedProposalRequest(
+    ElectionId ElectionId,
+    ElectionGovernedActionType ActionType,
+    string ActorPublicAddress);
+
+public record ApproveElectionGovernedProposalRequest(
+    ElectionId ElectionId,
+    Guid ProposalId,
+    string ActorPublicAddress,
+    string? ApprovalNote = null);
+
+public record RetryElectionGovernedProposalExecutionRequest(
+    ElectionId ElectionId,
+    Guid ProposalId,
+    string ActorPublicAddress);
+
 public record OpenElectionRequest(
     ElectionId ElectionId,
     string ActorPublicAddress,
@@ -116,12 +138,16 @@ public record ElectionCommandResult
     public ElectionDraftSnapshotRecord? DraftSnapshot { get; init; }
     public ElectionBoundaryArtifactRecord? BoundaryArtifact { get; init; }
     public ElectionTrusteeInvitationRecord? TrusteeInvitation { get; init; }
+    public ElectionGovernedProposalRecord? GovernedProposal { get; init; }
+    public ElectionGovernedProposalApprovalRecord? GovernedProposalApproval { get; init; }
 
     public static ElectionCommandResult Success(
         ElectionRecord election,
         ElectionDraftSnapshotRecord? draftSnapshot = null,
         ElectionBoundaryArtifactRecord? boundaryArtifact = null,
-        ElectionTrusteeInvitationRecord? trusteeInvitation = null) =>
+        ElectionTrusteeInvitationRecord? trusteeInvitation = null,
+        ElectionGovernedProposalRecord? governedProposal = null,
+        ElectionGovernedProposalApprovalRecord? governedProposalApproval = null) =>
         new()
         {
             IsSuccess = true,
@@ -130,6 +156,8 @@ public record ElectionCommandResult
             DraftSnapshot = draftSnapshot,
             BoundaryArtifact = boundaryArtifact,
             TrusteeInvitation = trusteeInvitation,
+            GovernedProposal = governedProposal,
+            GovernedProposalApproval = governedProposalApproval,
         };
 
     public static ElectionCommandResult Failure(

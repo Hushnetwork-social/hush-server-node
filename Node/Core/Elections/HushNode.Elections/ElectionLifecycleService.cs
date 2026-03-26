@@ -114,6 +114,13 @@ public class ElectionLifecycleService(
                 "Immutable FEAT-094 policy cannot be edited after the election opens.");
         }
 
+        var pendingProposal = await repository.GetPendingGovernedProposalAsync(request.ElectionId);
+        var governedDraftLock = ValidateDraftNotBlockedByGovernedOpenProposal(pendingProposal);
+        if (governedDraftLock is not null)
+        {
+            return governedDraftLock;
+        }
+
         if (!string.Equals(existing.OwnerPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
         {
             return ElectionCommandResult.Failure(
@@ -195,6 +202,13 @@ public class ElectionLifecycleService(
             return phaseResult;
         }
 
+        var pendingProposal = await repository.GetPendingGovernedProposalAsync(request.ElectionId);
+        var governedDraftLock = ValidateDraftNotBlockedByGovernedOpenProposal(pendingProposal);
+        if (governedDraftLock is not null)
+        {
+            return governedDraftLock;
+        }
+
         var invitations = await repository.GetTrusteeInvitationsAsync(request.ElectionId);
         var existing = invitations.FirstOrDefault(x =>
             string.Equals(x.TrusteeUserAddress, request.TrusteeUserAddress, StringComparison.OrdinalIgnoreCase) &&
@@ -262,10 +276,11 @@ public class ElectionLifecycleService(
             election,
             invitations,
             warningAcknowledgements,
-            request.RequiredWarningCodes);
+            request.RequiredWarningCodes,
+            blockGovernedWorkflowMissing: true);
     }
 
-    public async Task<ElectionCommandResult> OpenElectionAsync(OpenElectionRequest request)
+    public async Task<ElectionCommandResult> StartGovernedProposalAsync(StartElectionGovernedProposalRequest request)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
@@ -282,52 +297,221 @@ public class ElectionLifecycleService(
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.Forbidden,
-                "Only the owner can open the election.");
+                "Only the owner can start a governed election proposal.");
+        }
+
+        if (election.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotSupported,
+                "Governed proposals are only supported for trustee-threshold elections.");
+        }
+
+        var pendingProposal = await repository.GetPendingGovernedProposalAsync(request.ElectionId);
+        if (pendingProposal is not null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "Only one pending governed proposal may exist per election.");
+        }
+
+        var validationResult = await ValidateGovernedProposalStartAsync(repository, election, request.ActionType);
+        if (validationResult is not null)
+        {
+            return validationResult;
+        }
+
+        var proposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            request.ActionType,
+            request.ActorPublicAddress);
+
+        await repository.SaveGovernedProposalAsync(proposal);
+        await unitOfWork.CommitAsync();
+
+        return ElectionCommandResult.Success(election, governedProposal: proposal);
+    }
+
+    public async Task<ElectionCommandResult> ApproveGovernedProposalAsync(ApproveElectionGovernedProposalRequest request)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+        if (election is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Election {request.ElectionId} was not found.");
+        }
+
+        if (election.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotSupported,
+                "Governed approvals are only supported for trustee-threshold elections.");
+        }
+
+        var proposal = await repository.GetGovernedProposalAsync(request.ProposalId);
+        if (proposal is null || proposal.ElectionId != request.ElectionId)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Governed proposal {request.ProposalId} was not found for election {request.ElectionId}.");
+        }
+
+        if (proposal.ExecutionStatus != ElectionGovernedProposalExecutionStatus.WaitingForApprovals)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "This governed proposal is no longer accepting approvals.");
         }
 
         var invitations = await repository.GetTrusteeInvitationsAsync(request.ElectionId);
-        var warningAcknowledgements = await repository.GetWarningAcknowledgementsAsync(request.ElectionId);
-        var readiness = EvaluateOpenReadiness(
-            election,
-            invitations,
-            warningAcknowledgements,
-            request.RequiredWarningCodes);
-
-        if (!readiness.IsReadyToOpen)
+        var acceptedTrustees = invitations
+            .Where(x => x.Status == ElectionTrusteeInvitationStatus.Accepted)
+            .ToArray();
+        if (!acceptedTrustees.Any(x =>
+                string.Equals(x.TrusteeUserAddress, request.ActorPublicAddress, StringComparison.Ordinal)))
         {
             return ElectionCommandResult.Failure(
-                readiness.ValidationErrors.Any(x => x.Contains("FEAT-096", StringComparison.Ordinal))
-                    ? ElectionCommandErrorCode.DependencyBlocked
-                    : ElectionCommandErrorCode.ValidationFailed,
-                "Election cannot be opened.",
-                readiness.ValidationErrors);
+                ElectionCommandErrorCode.Forbidden,
+                "Only accepted trustees can approve this governed proposal.");
         }
 
-        var openedAt = DateTime.UtcNow;
-        var artifact = ElectionModelFactory.CreateBoundaryArtifact(
-            artifactType: ElectionBoundaryArtifactType.Open,
-            election: election,
-            recordedByPublicAddress: request.ActorPublicAddress,
-            recordedAt: openedAt,
-            trusteeSnapshot: null,
-            frozenEligibleVoterSetHash: request.FrozenEligibleVoterSetHash,
-            trusteePolicyExecutionReference: request.TrusteePolicyExecutionReference,
-            reportingPolicyExecutionReference: request.ReportingPolicyExecutionReference,
-            reviewWindowExecutionReference: request.ReviewWindowExecutionReference);
-
-        var openedElection = election with
+        var existingApproval = await repository.GetGovernedProposalApprovalAsync(
+            proposal.Id,
+            request.ActorPublicAddress);
+        if (existingApproval is not null)
         {
-            LifecycleState = ElectionLifecycleState.Open,
-            LastUpdatedAt = openedAt,
-            OpenedAt = openedAt,
-            OpenArtifactId = artifact.Id,
-        };
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "Trustee approval is already recorded and immutable.");
+        }
 
-        await repository.SaveBoundaryArtifactAsync(artifact);
-        await repository.SaveElectionAsync(openedElection);
+        var approval = ElectionModelFactory.CreateGovernedProposalApproval(
+            proposal,
+            request.ActorPublicAddress,
+            acceptedTrustees
+                .First(x => string.Equals(x.TrusteeUserAddress, request.ActorPublicAddress, StringComparison.Ordinal))
+                .TrusteeDisplayName,
+            request.ApprovalNote);
+        var currentApprovals = await repository.GetGovernedProposalApprovalsAsync(proposal.Id);
+        var nextApprovalCount = currentApprovals.Count + 1;
+
+        await repository.SaveGovernedProposalApprovalAsync(approval);
+
+        if (election.RequiredApprovalCount.HasValue && nextApprovalCount >= election.RequiredApprovalCount.Value)
+        {
+            var executionOutcome = await ExecuteGovernedProposalAndPersistOutcomeAsync(
+                repository,
+                election,
+                proposal,
+                request.ActorPublicAddress);
+
+            await unitOfWork.CommitAsync();
+
+            return ElectionCommandResult.Success(
+                executionOutcome.Election,
+                boundaryArtifact: executionOutcome.BoundaryArtifact,
+                governedProposal: executionOutcome.Proposal,
+                governedProposalApproval: approval);
+        }
+
         await unitOfWork.CommitAsync();
 
-        return ElectionCommandResult.Success(openedElection, boundaryArtifact: artifact);
+        return ElectionCommandResult.Success(
+            election,
+            governedProposal: proposal,
+            governedProposalApproval: approval);
+    }
+
+    public async Task<ElectionCommandResult> RetryGovernedProposalExecutionAsync(RetryElectionGovernedProposalExecutionRequest request)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+        if (election is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Election {request.ElectionId} was not found.");
+        }
+
+        if (!string.Equals(election.OwnerPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Forbidden,
+                "Only the owner can retry a governed proposal execution.");
+        }
+
+        var proposal = await repository.GetGovernedProposalAsync(request.ProposalId);
+        if (proposal is null || proposal.ElectionId != request.ElectionId)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Governed proposal {request.ProposalId} was not found for election {request.ElectionId}.");
+        }
+
+        if (!proposal.CanRetry)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "Only failed governed proposals can be retried.");
+        }
+
+        var approvals = await repository.GetGovernedProposalApprovalsAsync(proposal.Id);
+        if (!election.RequiredApprovalCount.HasValue || approvals.Count < election.RequiredApprovalCount.Value)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "The governed proposal cannot be retried until the required approval threshold has been met.");
+        }
+
+        var executionOutcome = await ExecuteGovernedProposalAndPersistOutcomeAsync(
+            repository,
+            election,
+            proposal,
+            request.ActorPublicAddress);
+
+        await unitOfWork.CommitAsync();
+
+        return ElectionCommandResult.Success(
+            executionOutcome.Election,
+            boundaryArtifact: executionOutcome.BoundaryArtifact,
+            governedProposal: executionOutcome.Proposal);
+    }
+
+    public async Task<ElectionCommandResult> OpenElectionAsync(OpenElectionRequest request)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+        if (election is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Election {request.ElectionId} was not found.");
+        }
+        var result = await OpenElectionInternalAsync(
+            repository,
+            election,
+            request.ActorPublicAddress,
+            request.RequiredWarningCodes,
+            request.FrozenEligibleVoterSetHash,
+            request.TrusteePolicyExecutionReference,
+            request.ReportingPolicyExecutionReference,
+            request.ReviewWindowExecutionReference,
+            allowTrusteeThresholdExecution: false);
+
+        if (result.IsSuccess)
+        {
+            await unitOfWork.CommitAsync();
+        }
+
+        return result;
     }
 
     public Task<ElectionCommandResult> CloseElectionAsync(CloseElectionRequest request) =>
@@ -337,7 +521,8 @@ public class ElectionLifecycleService(
             ElectionLifecycleState.Open,
             ElectionBoundaryArtifactType.Close,
             request.AcceptedBallotSetHash,
-            request.FinalEncryptedTallyHash);
+            request.FinalEncryptedTallyHash,
+            allowTrusteeThresholdExecution: false);
 
     public Task<ElectionCommandResult> FinalizeElectionAsync(FinalizeElectionRequest request) =>
         TransitionElectionAsync(
@@ -346,7 +531,8 @@ public class ElectionLifecycleService(
             ElectionLifecycleState.Closed,
             ElectionBoundaryArtifactType.Finalize,
             request.AcceptedBallotSetHash,
-            request.FinalEncryptedTallyHash);
+            request.FinalEncryptedTallyHash,
+            allowTrusteeThresholdExecution: false);
 
     private Task<ElectionCommandResult> ResolveTrusteeInvitationAsync(
         ResolveElectionTrusteeInvitationRequest request,
@@ -362,7 +548,8 @@ public class ElectionLifecycleService(
         ElectionLifecycleState expectedState,
         ElectionBoundaryArtifactType artifactType,
         byte[]? acceptedBallotSetHash,
-        byte[]? finalEncryptedTallyHash)
+        byte[]? finalEncryptedTallyHash,
+        bool allowTrusteeThresholdExecution)
     {
         return TransitionElectionInternalAsync(
             electionId,
@@ -370,7 +557,8 @@ public class ElectionLifecycleService(
             expectedState,
             artifactType,
             acceptedBallotSetHash,
-            finalEncryptedTallyHash);
+            finalEncryptedTallyHash,
+            allowTrusteeThresholdExecution);
     }
 
     private static ElectionRecord ApplyLifecycleTransition(
@@ -384,6 +572,7 @@ public class ElectionLifecycleService(
                 LifecycleState = ElectionLifecycleState.Closed,
                 LastUpdatedAt = transitionTime,
                 ClosedAt = transitionTime,
+                TallyReadyAt = artifact.FinalEncryptedTallyHash is { Length: > 0 } ? transitionTime : null,
                 CloseArtifactId = artifact.Id,
             },
             ElectionBoundaryArtifactType.Finalize => election with
@@ -395,6 +584,249 @@ public class ElectionLifecycleService(
             },
             _ => throw new ArgumentOutOfRangeException(nameof(artifact), artifact.ArtifactType, "Unsupported lifecycle transition artifact."),
         };
+
+    private async Task<ElectionCommandResult?> ValidateGovernedProposalStartAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionGovernedActionType actionType)
+    {
+        switch (actionType)
+        {
+            case ElectionGovernedActionType.Open:
+            {
+                var invitations = await repository.GetTrusteeInvitationsAsync(election.ElectionId);
+                var warningAcknowledgements = await repository.GetWarningAcknowledgementsAsync(election.ElectionId);
+                var readiness = EvaluateOpenReadiness(
+                    election,
+                    invitations,
+                    warningAcknowledgements,
+                    election.AcknowledgedWarningCodes,
+                    blockGovernedWorkflowMissing: false);
+
+                return readiness.IsReadyToOpen
+                    ? null
+                    : ElectionCommandResult.Failure(
+                        ElectionCommandErrorCode.ValidationFailed,
+                        "Governed open proposal cannot be started.",
+                        readiness.ValidationErrors);
+            }
+
+            case ElectionGovernedActionType.Close:
+                return election.LifecycleState == ElectionLifecycleState.Open
+                    ? null
+                    : ElectionCommandResult.Failure(
+                        ElectionCommandErrorCode.InvalidState,
+                        "Governed close proposals are only allowed from the open state.");
+
+            case ElectionGovernedActionType.Finalize:
+                if (election.LifecycleState != ElectionLifecycleState.Closed)
+                {
+                    return ElectionCommandResult.Failure(
+                        ElectionCommandErrorCode.InvalidState,
+                        "Governed finalize proposals are only allowed from the closed state.");
+                }
+
+                return election.TallyReadyAt.HasValue
+                    ? null
+                    : ElectionCommandResult.Failure(
+                        ElectionCommandErrorCode.InvalidState,
+                        "Governed finalize proposals are only allowed when the election is tally ready.");
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(actionType), actionType, "Unsupported governed action type.");
+        }
+    }
+
+    private async Task<(ElectionRecord Election, ElectionGovernedProposalRecord Proposal, ElectionBoundaryArtifactRecord? BoundaryArtifact)> ExecuteGovernedProposalAndPersistOutcomeAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionGovernedProposalRecord proposal,
+        string executionTriggeredByPublicAddress)
+    {
+        try
+        {
+            var executionResult = await ExecuteGovernedProposalCoreAsync(repository, election, proposal);
+            if (!executionResult.IsSuccess || executionResult.Election is null)
+            {
+                var failedProposal = proposal.RecordExecutionFailure(
+                    BuildFailureReason(executionResult, "Governed proposal execution failed."),
+                    DateTime.UtcNow,
+                    executionTriggeredByPublicAddress);
+                await repository.UpdateGovernedProposalAsync(failedProposal);
+                return (election, failedProposal, null);
+            }
+
+            var succeededProposal = proposal.RecordExecutionSuccess(
+                DateTime.UtcNow,
+                executionTriggeredByPublicAddress);
+            await repository.UpdateGovernedProposalAsync(succeededProposal);
+            return (executionResult.Election, succeededProposal, executionResult.BoundaryArtifact);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "[ElectionLifecycleService] Governed proposal {ProposalId} execution failed unexpectedly.",
+                proposal.Id);
+
+            var failedProposal = proposal.RecordExecutionFailure(
+                ex.Message,
+                DateTime.UtcNow,
+                executionTriggeredByPublicAddress);
+            await repository.UpdateGovernedProposalAsync(failedProposal);
+            return (election, failedProposal, null);
+        }
+    }
+
+    private Task<ElectionCommandResult> ExecuteGovernedProposalCoreAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionGovernedProposalRecord proposal) =>
+        proposal.ActionType switch
+        {
+            ElectionGovernedActionType.Open => OpenElectionInternalAsync(
+                repository,
+                election,
+                proposal.ProposedByPublicAddress,
+                election.AcknowledgedWarningCodes,
+                frozenEligibleVoterSetHash: null,
+                trusteePolicyExecutionReference: "feat-096-governed-proposal",
+                reportingPolicyExecutionReference: null,
+                reviewWindowExecutionReference: null,
+                allowTrusteeThresholdExecution: true),
+            ElectionGovernedActionType.Close => ExecuteTransitionInternalAsync(
+                repository,
+                election,
+                proposal.ProposedByPublicAddress,
+                ElectionLifecycleState.Open,
+                ElectionBoundaryArtifactType.Close,
+                acceptedBallotSetHash: null,
+                finalEncryptedTallyHash: null,
+                allowTrusteeThresholdExecution: true),
+            ElectionGovernedActionType.Finalize => ExecuteTransitionInternalAsync(
+                repository,
+                election,
+                proposal.ProposedByPublicAddress,
+                ElectionLifecycleState.Closed,
+                ElectionBoundaryArtifactType.Finalize,
+                acceptedBallotSetHash: null,
+                finalEncryptedTallyHash: null,
+                allowTrusteeThresholdExecution: true),
+            _ => throw new ArgumentOutOfRangeException(nameof(proposal), proposal.ActionType, "Unsupported governed action type."),
+        };
+
+    private async Task<ElectionCommandResult> OpenElectionInternalAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        string actorPublicAddress,
+        IReadOnlyList<ElectionWarningCode>? requiredWarningCodes,
+        byte[]? frozenEligibleVoterSetHash,
+        string? trusteePolicyExecutionReference,
+        string? reportingPolicyExecutionReference,
+        string? reviewWindowExecutionReference,
+        bool allowTrusteeThresholdExecution)
+    {
+        if (!string.Equals(election.OwnerPublicAddress, actorPublicAddress, StringComparison.Ordinal))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Forbidden,
+                "Only the owner can open the election.");
+        }
+
+        if (election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold && !allowTrusteeThresholdExecution)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotSupported,
+                "Trustee-threshold elections must use the governed proposal workflow to open.");
+        }
+
+        var invitations = await repository.GetTrusteeInvitationsAsync(election.ElectionId);
+        var warningAcknowledgements = await repository.GetWarningAcknowledgementsAsync(election.ElectionId);
+        var readiness = EvaluateOpenReadiness(
+            election,
+            invitations,
+            warningAcknowledgements,
+            requiredWarningCodes,
+            blockGovernedWorkflowMissing: !allowTrusteeThresholdExecution);
+
+        if (!readiness.IsReadyToOpen)
+        {
+            return ElectionCommandResult.Failure(
+                readiness.ValidationErrors.Any(x => x.Contains("FEAT-096", StringComparison.Ordinal))
+                    ? ElectionCommandErrorCode.DependencyBlocked
+                    : ElectionCommandErrorCode.ValidationFailed,
+                "Election cannot be opened.",
+                readiness.ValidationErrors);
+        }
+
+        var openedAt = DateTime.UtcNow;
+        var artifact = ElectionModelFactory.CreateBoundaryArtifact(
+            artifactType: ElectionBoundaryArtifactType.Open,
+            election: election,
+            recordedByPublicAddress: actorPublicAddress,
+            recordedAt: openedAt,
+            trusteeSnapshot: CreateTrusteeSnapshot(election, invitations),
+            frozenEligibleVoterSetHash: frozenEligibleVoterSetHash,
+            trusteePolicyExecutionReference: trusteePolicyExecutionReference,
+            reportingPolicyExecutionReference: reportingPolicyExecutionReference,
+            reviewWindowExecutionReference: reviewWindowExecutionReference);
+
+        var openedElection = election with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            LastUpdatedAt = openedAt,
+            OpenedAt = openedAt,
+            OpenArtifactId = artifact.Id,
+        };
+
+        await repository.SaveBoundaryArtifactAsync(artifact);
+        await repository.SaveElectionAsync(openedElection);
+
+        return ElectionCommandResult.Success(openedElection, boundaryArtifact: artifact);
+    }
+
+    private static ElectionCommandResult? ValidateDraftNotBlockedByGovernedOpenProposal(ElectionGovernedProposalRecord? pendingProposal) =>
+        pendingProposal?.ActionType == ElectionGovernedActionType.Open
+            ? ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.InvalidState,
+                "Draft election changes are blocked while a governed open proposal is pending.")
+            : null;
+
+    private static ElectionTrusteeBoundarySnapshot? CreateTrusteeSnapshot(
+        ElectionRecord election,
+        IReadOnlyList<ElectionTrusteeInvitationRecord> invitations)
+    {
+        if (election.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold || !election.RequiredApprovalCount.HasValue)
+        {
+            return null;
+        }
+
+        var acceptedTrustees = invitations
+            .Where(x => x.Status == ElectionTrusteeInvitationStatus.Accepted)
+            .Select(x => new ElectionTrusteeReference(x.TrusteeUserAddress, x.TrusteeDisplayName))
+            .ToArray();
+
+        return acceptedTrustees.Length == 0
+            ? null
+            : ElectionModelFactory.CreateTrusteeBoundarySnapshot(
+                election.RequiredApprovalCount.Value,
+                acceptedTrustees);
+    }
+
+    private static string BuildFailureReason(ElectionCommandResult result, string fallbackMessage)
+    {
+        if (!string.IsNullOrWhiteSpace(result.ErrorMessage))
+        {
+            return result.ErrorMessage;
+        }
+
+        if (result.ValidationErrors.Count > 0)
+        {
+            return string.Join(" | ", result.ValidationErrors);
+        }
+
+        return fallbackMessage;
+    }
 
     private static ElectionCommandResult? ValidateDraftOwnershipAndTrusteeMode(ElectionRecord election, string actorPublicAddress)
     {
@@ -426,7 +858,8 @@ public class ElectionLifecycleService(
         ElectionRecord election,
         IReadOnlyList<ElectionTrusteeInvitationRecord> invitations,
         IReadOnlyList<ElectionWarningAcknowledgementRecord> warningAcknowledgements,
-        IReadOnlyList<ElectionWarningCode>? requestedWarnings)
+        IReadOnlyList<ElectionWarningCode>? requestedWarnings,
+        bool blockGovernedWorkflowMissing)
     {
         var errors = new List<string>();
         var requiredWarnings = NormalizeWarningCodes(requestedWarnings).ToList();
@@ -476,7 +909,10 @@ public class ElectionLifecycleService(
                 requiredWarnings.Add(ElectionWarningCode.AllTrusteesRequiredFragility);
             }
 
-            errors.Add("Trustee-threshold elections cannot open until FEAT-096 provides the governed approval workflow.");
+            if (blockGovernedWorkflowMissing)
+            {
+                errors.Add("Trustee-threshold elections cannot open until FEAT-096 provides the governed approval workflow.");
+            }
         }
 
         requiredWarnings = NormalizeWarningCodes(requiredWarnings).ToList();
@@ -765,6 +1201,13 @@ public class ElectionLifecycleService(
                 "Trustee invitations can only be resolved while the election remains in draft.");
         }
 
+        var pendingProposal = await repository.GetPendingGovernedProposalAsync(request.ElectionId);
+        var governedDraftLock = ValidateDraftNotBlockedByGovernedOpenProposal(pendingProposal);
+        if (governedDraftLock is not null)
+        {
+            return governedDraftLock;
+        }
+
         if (invitation.Status != ElectionTrusteeInvitationStatus.Pending)
         {
             return ElectionCommandResult.Failure(
@@ -785,7 +1228,8 @@ public class ElectionLifecycleService(
         ElectionLifecycleState expectedState,
         ElectionBoundaryArtifactType artifactType,
         byte[]? acceptedBallotSetHash,
-        byte[]? finalEncryptedTallyHash)
+        byte[]? finalEncryptedTallyHash,
+        bool allowTrusteeThresholdExecution)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
@@ -798,11 +1242,46 @@ public class ElectionLifecycleService(
                 $"Election {electionId} was not found.");
         }
 
+        var result = await ExecuteTransitionInternalAsync(
+            repository,
+            election,
+            actorPublicAddress,
+            expectedState,
+            artifactType,
+            acceptedBallotSetHash,
+            finalEncryptedTallyHash,
+            allowTrusteeThresholdExecution);
+
+        if (result.IsSuccess)
+        {
+            await unitOfWork.CommitAsync();
+        }
+
+        return result;
+    }
+
+    private async Task<ElectionCommandResult> ExecuteTransitionInternalAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        string actorPublicAddress,
+        ElectionLifecycleState expectedState,
+        ElectionBoundaryArtifactType artifactType,
+        byte[]? acceptedBallotSetHash,
+        byte[]? finalEncryptedTallyHash,
+        bool allowTrusteeThresholdExecution)
+    {
         if (!string.Equals(election.OwnerPublicAddress, actorPublicAddress, StringComparison.Ordinal))
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.Forbidden,
                 $"Only the owner can {artifactType.ToString().ToLowerInvariant()} the election.");
+        }
+
+        if (election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold && !allowTrusteeThresholdExecution)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotSupported,
+                $"Trustee-threshold elections must use the governed proposal workflow to {artifactType.ToString().ToLowerInvariant()}.");
         }
 
         if (election.LifecycleState != expectedState)
@@ -815,6 +1294,13 @@ public class ElectionLifecycleService(
                     ElectionBoundaryArtifactType.Finalize => "Election finalize is only allowed from the closed state.",
                     _ => "Unsupported election transition.",
                 });
+        }
+
+        if (artifactType == ElectionBoundaryArtifactType.Finalize && !election.TallyReadyAt.HasValue)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.InvalidState,
+                "Election finalize is only allowed when the election is tally ready.");
         }
 
         var transitionTime = DateTime.UtcNow;
@@ -830,7 +1316,6 @@ public class ElectionLifecycleService(
 
         await repository.SaveBoundaryArtifactAsync(artifact);
         await repository.SaveElectionAsync(updatedElection);
-        await unitOfWork.CommitAsync();
 
         return ElectionCommandResult.Success(updatedElection, boundaryArtifact: artifact);
     }
