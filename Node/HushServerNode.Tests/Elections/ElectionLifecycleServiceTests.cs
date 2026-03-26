@@ -189,6 +189,34 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task AcceptTrusteeInvitation_WithResolvedInvitation_ReturnsConflict()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection();
+        var invitation = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
+                DateTime.UtcNow,
+                election.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[invitation.Id] = invitation;
+
+        var result = await service.AcceptTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest(
+            ElectionId: election.ElectionId,
+            InvitationId: invitation.Id,
+            ActorPublicAddress: "trustee-a"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+    }
+
+    [Fact]
     public async Task EvaluateOpenReadinessAsync_WithMissingCurrentRevisionWarningAcknowledgement_ReturnsNotReady()
     {
         var store = new ElectionStore();

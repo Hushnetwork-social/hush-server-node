@@ -765,6 +765,13 @@ public class ElectionLifecycleService(
                 "Trustee invitations can only be resolved while the election remains in draft.");
         }
 
+        if (invitation.Status != ElectionTrusteeInvitationStatus.Pending)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "Only pending trustee invitations can be resolved.");
+        }
+
         var updated = transition(invitation, election.CurrentDraftRevision, election.LifecycleState);
         await repository.UpdateTrusteeInvitationAsync(updated);
         await unitOfWork.CommitAsync();
