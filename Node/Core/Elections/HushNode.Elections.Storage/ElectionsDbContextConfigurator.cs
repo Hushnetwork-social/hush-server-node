@@ -19,6 +19,8 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionBoundaryArtifact(modelBuilder);
         ConfigureElectionWarningAcknowledgement(modelBuilder);
         ConfigureElectionTrusteeInvitation(modelBuilder);
+        ConfigureElectionGovernedProposal(modelBuilder);
+        ConfigureElectionGovernedProposalApproval(modelBuilder);
     }
 
     private static void ConfigureElectionRecord(ModelBuilder modelBuilder)
@@ -196,6 +198,68 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.HasIndex(x => x.ElectionId);
             entity.HasIndex(x => new { x.ElectionId, x.Status });
             entity.HasIndex(x => new { x.ElectionId, x.TrusteeUserAddress });
+        });
+    }
+
+    private static void ConfigureElectionGovernedProposal(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionGovernedProposalRecord>(entity =>
+        {
+            entity.ToTable("ElectionGovernedProposalRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.ActionType).HasConversion<string>().HasColumnType("varchar(24)");
+            entity.Property(x => x.LifecycleStateAtCreation).HasConversion<string>().HasColumnType("varchar(24)");
+            entity.Property(x => x.ProposedByPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.CreatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ExecutionStatus).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.LastExecutionAttemptedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ExecutedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ExecutionFailureReason).HasColumnType("text");
+            entity.Property(x => x.LastExecutionTriggeredByPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.LatestTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.LatestBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.LatestBlockId).HasColumnType("uuid");
+
+            entity.HasIndex(x => x.ElectionId);
+            entity.HasIndex(x => new { x.ElectionId, x.ExecutionStatus });
+            entity.HasIndex(x => new { x.ElectionId, x.CreatedAt });
+        });
+    }
+
+    private static void ConfigureElectionGovernedProposalApproval(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionGovernedProposalApprovalRecord>(entity =>
+        {
+            entity.ToTable("ElectionGovernedProposalApprovalRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ProposalId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.ActionType).HasConversion<string>().HasColumnType("varchar(24)");
+            entity.Property(x => x.LifecycleStateAtProposalCreation).HasConversion<string>().HasColumnType("varchar(24)");
+            entity.Property(x => x.TrusteeUserAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.TrusteeDisplayName).HasColumnType("varchar(200)");
+            entity.Property(x => x.ApprovalNote).HasColumnType("text");
+            entity.Property(x => x.ApprovedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            entity.HasIndex(x => x.ProposalId);
+            entity.HasIndex(x => new { x.ProposalId, x.TrusteeUserAddress }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.ActionType });
         });
     }
 

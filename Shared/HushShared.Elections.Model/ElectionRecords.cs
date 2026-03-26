@@ -195,3 +195,99 @@ public record ElectionTrusteeInvitationRecord(
         }
     }
 }
+
+public record ElectionGovernedProposalRecord(
+    Guid Id,
+    ElectionId ElectionId,
+    ElectionGovernedActionType ActionType,
+    ElectionLifecycleState LifecycleStateAtCreation,
+    string ProposedByPublicAddress,
+    DateTime CreatedAt,
+    ElectionGovernedProposalExecutionStatus ExecutionStatus,
+    DateTime? LastExecutionAttemptedAt,
+    DateTime? ExecutedAt,
+    string? ExecutionFailureReason,
+    string? LastExecutionTriggeredByPublicAddress,
+    Guid? LatestTransactionId,
+    long? LatestBlockHeight,
+    Guid? LatestBlockId)
+{
+    public bool IsPending => ExecutionStatus != ElectionGovernedProposalExecutionStatus.ExecutionSucceeded;
+
+    public bool CanRetry => ExecutionStatus == ElectionGovernedProposalExecutionStatus.ExecutionFailed;
+
+    public ElectionGovernedProposalRecord RecordExecutionSuccess(
+        DateTime executedAt,
+        string? executionTriggeredByPublicAddress = null,
+        Guid? latestTransactionId = null,
+        long? latestBlockHeight = null,
+        Guid? latestBlockId = null)
+    {
+        EnsureNotSucceeded();
+
+        return this with
+        {
+            ExecutionStatus = ElectionGovernedProposalExecutionStatus.ExecutionSucceeded,
+            LastExecutionAttemptedAt = executedAt,
+            ExecutedAt = executedAt,
+            ExecutionFailureReason = null,
+            LastExecutionTriggeredByPublicAddress = NormalizeOptionalText(executionTriggeredByPublicAddress),
+            LatestTransactionId = latestTransactionId,
+            LatestBlockHeight = latestBlockHeight,
+            LatestBlockId = latestBlockId,
+        };
+    }
+
+    public ElectionGovernedProposalRecord RecordExecutionFailure(
+        string failureReason,
+        DateTime attemptedAt,
+        string? executionTriggeredByPublicAddress = null,
+        Guid? latestTransactionId = null,
+        long? latestBlockHeight = null,
+        Guid? latestBlockId = null)
+    {
+        EnsureNotSucceeded();
+
+        if (string.IsNullOrWhiteSpace(failureReason))
+        {
+            throw new ArgumentException("Execution failure reason is required.", nameof(failureReason));
+        }
+
+        return this with
+        {
+            ExecutionStatus = ElectionGovernedProposalExecutionStatus.ExecutionFailed,
+            LastExecutionAttemptedAt = attemptedAt,
+            ExecutedAt = null,
+            ExecutionFailureReason = failureReason.Trim(),
+            LastExecutionTriggeredByPublicAddress = NormalizeOptionalText(executionTriggeredByPublicAddress),
+            LatestTransactionId = latestTransactionId,
+            LatestBlockHeight = latestBlockHeight,
+            LatestBlockId = latestBlockId,
+        };
+    }
+
+    private void EnsureNotSucceeded()
+    {
+        if (ExecutionStatus == ElectionGovernedProposalExecutionStatus.ExecutionSucceeded)
+        {
+            throw new InvalidOperationException("Completed governed proposals cannot be executed again.");
+        }
+    }
+
+    private static string? NormalizeOptionalText(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}
+
+public record ElectionGovernedProposalApprovalRecord(
+    Guid Id,
+    Guid ProposalId,
+    ElectionId ElectionId,
+    ElectionGovernedActionType ActionType,
+    ElectionLifecycleState LifecycleStateAtProposalCreation,
+    string TrusteeUserAddress,
+    string? TrusteeDisplayName,
+    string? ApprovalNote,
+    DateTime ApprovedAt,
+    Guid? SourceTransactionId,
+    long? SourceBlockHeight,
+    Guid? SourceBlockId);

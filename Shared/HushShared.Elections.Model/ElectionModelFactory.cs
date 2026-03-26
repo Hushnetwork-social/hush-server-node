@@ -319,6 +319,67 @@ public static class ElectionModelFactory
             EveryAcceptedTrusteeMustApprove: normalizedTrustees.Length == requiredApprovalCount);
     }
 
+    public static ElectionGovernedProposalRecord CreateGovernedProposal(
+        ElectionRecord election,
+        ElectionGovernedActionType actionType,
+        string proposedByPublicAddress,
+        DateTime? createdAt = null,
+        Guid? latestTransactionId = null,
+        long? latestBlockHeight = null,
+        Guid? latestBlockId = null)
+    {
+        if (string.IsNullOrWhiteSpace(proposedByPublicAddress))
+        {
+            throw new ArgumentException("Proposed-by public address is required.", nameof(proposedByPublicAddress));
+        }
+
+        return new ElectionGovernedProposalRecord(
+            Guid.NewGuid(),
+            election.ElectionId,
+            actionType,
+            election.LifecycleState,
+            proposedByPublicAddress.Trim(),
+            createdAt ?? DateTime.UtcNow,
+            ElectionGovernedProposalExecutionStatus.WaitingForApprovals,
+            LastExecutionAttemptedAt: null,
+            ExecutedAt: null,
+            ExecutionFailureReason: null,
+            LastExecutionTriggeredByPublicAddress: null,
+            latestTransactionId,
+            latestBlockHeight,
+            latestBlockId);
+    }
+
+    public static ElectionGovernedProposalApprovalRecord CreateGovernedProposalApproval(
+        ElectionGovernedProposalRecord proposal,
+        string trusteeUserAddress,
+        string? trusteeDisplayName,
+        string? approvalNote,
+        DateTime? approvedAt = null,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
+    {
+        if (string.IsNullOrWhiteSpace(trusteeUserAddress))
+        {
+            throw new ArgumentException("Trustee user address is required.", nameof(trusteeUserAddress));
+        }
+
+        return new ElectionGovernedProposalApprovalRecord(
+            Guid.NewGuid(),
+            proposal.Id,
+            proposal.ElectionId,
+            proposal.ActionType,
+            proposal.LifecycleStateAtCreation,
+            trusteeUserAddress.Trim(),
+            NormalizeOptionalText(trusteeDisplayName),
+            NormalizeOptionalText(approvalNote),
+            approvedAt ?? DateTime.UtcNow,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
+    }
+
     private static int? NormalizeRequiredApprovalCount(
         ElectionGovernanceMode governanceMode,
         int? requiredApprovalCount)

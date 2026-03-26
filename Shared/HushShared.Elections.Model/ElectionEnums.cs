@@ -81,6 +81,20 @@ public enum ElectionBoundaryArtifactType
     Finalize = 2,
 }
 
+public enum ElectionGovernedActionType
+{
+    Open = 0,
+    Close = 1,
+    Finalize = 2,
+}
+
+public enum ElectionGovernedProposalExecutionStatus
+{
+    WaitingForApprovals = 0,
+    ExecutionSucceeded = 1,
+    ExecutionFailed = 2,
+}
+
 public enum ElectionWarningCode
 {
     LowAnonymitySet = 0,

@@ -14,6 +14,8 @@ public class ElectionsDbContext(
     public DbSet<ElectionBoundaryArtifactRecord> ElectionBoundaryArtifacts { get; set; }
     public DbSet<ElectionWarningAcknowledgementRecord> ElectionWarningAcknowledgements { get; set; }
     public DbSet<ElectionTrusteeInvitationRecord> ElectionTrusteeInvitations { get; set; }
+    public DbSet<ElectionGovernedProposalRecord> ElectionGovernedProposals { get; set; }
+    public DbSet<ElectionGovernedProposalApprovalRecord> ElectionGovernedProposalApprovals { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

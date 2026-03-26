@@ -34,4 +34,20 @@ public interface IElectionsRepository : IRepository
     Task SaveTrusteeInvitationAsync(ElectionTrusteeInvitationRecord invitation);
 
     Task UpdateTrusteeInvitationAsync(ElectionTrusteeInvitationRecord invitation);
+
+    Task<IReadOnlyList<ElectionGovernedProposalRecord>> GetGovernedProposalsAsync(ElectionId electionId);
+
+    Task<ElectionGovernedProposalRecord?> GetGovernedProposalAsync(Guid proposalId);
+
+    Task<ElectionGovernedProposalRecord?> GetPendingGovernedProposalAsync(ElectionId electionId);
+
+    Task SaveGovernedProposalAsync(ElectionGovernedProposalRecord proposal);
+
+    Task UpdateGovernedProposalAsync(ElectionGovernedProposalRecord proposal);
+
+    Task<IReadOnlyList<ElectionGovernedProposalApprovalRecord>> GetGovernedProposalApprovalsAsync(Guid proposalId);
+
+    Task<ElectionGovernedProposalApprovalRecord?> GetGovernedProposalApprovalAsync(Guid proposalId, string trusteeUserAddress);
+
+    Task SaveGovernedProposalApprovalAsync(ElectionGovernedProposalApprovalRecord approval);
 }

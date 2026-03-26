@@ -179,6 +179,89 @@ public class ElectionModelFactoryTests
             ElectionWarningCode.AllTrusteesRequiredFragility);
     }
 
+    [Fact]
+    public void CreateGovernedProposalApproval_BindsApprovalToExactProposalTarget()
+    {
+        var election = CreateTrusteeElection();
+        var proposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Open,
+            proposedByPublicAddress: "owner-address");
+
+        var approval = ElectionModelFactory.CreateGovernedProposalApproval(
+            proposal,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            approvalNote: "Looks correct.");
+
+        approval.ProposalId.Should().Be(proposal.Id);
+        approval.ElectionId.Should().Be(election.ElectionId);
+        approval.ActionType.Should().Be(ElectionGovernedActionType.Open);
+        approval.LifecycleStateAtProposalCreation.Should().Be(ElectionLifecycleState.Draft);
+        approval.TrusteeUserAddress.Should().Be("trustee-a");
+        approval.TrusteeDisplayName.Should().Be("Alice");
+        approval.ApprovalNote.Should().Be("Looks correct.");
+    }
+
+    [Fact]
+    public void GovernedProposalExecutionTransitions_PersistFailureAndRetryableSuccessMetadata()
+    {
+        var election = CreateTrusteeElection();
+        var proposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Close,
+            proposedByPublicAddress: "owner-address");
+        var failed = proposal.RecordExecutionFailure(
+            failureReason: "transition failed",
+            attemptedAt: DateTime.UtcNow,
+            executionTriggeredByPublicAddress: "owner-address");
+
+        failed.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionFailed);
+        failed.ExecutionFailureReason.Should().Be("transition failed");
+        failed.CanRetry.Should().BeTrue();
+        failed.IsPending.Should().BeTrue();
+
+        var succeeded = failed.RecordExecutionSuccess(
+            executedAt: DateTime.UtcNow,
+            executionTriggeredByPublicAddress: "owner-address");
+
+        succeeded.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionSucceeded);
+        succeeded.ExecutionFailureReason.Should().BeNull();
+        succeeded.ExecutedAt.Should().NotBeNull();
+        succeeded.CanRetry.Should().BeFalse();
+        succeeded.IsPending.Should().BeFalse();
+    }
+
+    private static ElectionRecord CreateTrusteeElection() =>
+        ElectionModelFactory.CreateDraftRecord(
+            electionId: ElectionId.NewElectionId,
+            title: "Governed Referendum",
+            shortDescription: "Policy vote",
+            ownerPublicAddress: "owner-address",
+            externalReferenceCode: "REF-1",
+            electionClass: ElectionClass.OrganizationalRemoteVoting,
+            bindingStatus: ElectionBindingStatus.Binding,
+            governanceMode: ElectionGovernanceMode.TrusteeThreshold,
+            disclosureMode: ElectionDisclosureMode.FinalResultsOnly,
+            participationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
+            voteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
+            eligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            outcomeRule: CreatePassFailRule(),
+            approvedClientApplications:
+            [
+                new ApprovedClientApplicationRecord("hushsocial", "1.0.0"),
+            ],
+            protocolOmegaVersion: "omega-v1.0.0",
+            reportingPolicy: ReportingPolicy.DefaultPhaseOnePackage,
+            reviewWindowPolicy: ReviewWindowPolicy.GovernedReviewWindowReserved,
+            ownerOptions:
+            [
+                new ElectionOptionDefinition("yes", "Yes", null, 1, IsBlankOption: false),
+                new ElectionOptionDefinition("no", "No", null, 2, IsBlankOption: false),
+            ],
+            requiredApprovalCount: 2);
+
     private static OutcomeRuleDefinition CreateSingleWinnerRule() =>
         new(
             OutcomeRuleKind.SingleWinner,

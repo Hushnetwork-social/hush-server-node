@@ -100,4 +100,63 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
             Context.Entry(existing).CurrentValues.SetValues(invitation);
         }
     }
+
+    public async Task<IReadOnlyList<ElectionGovernedProposalRecord>> GetGovernedProposalsAsync(ElectionId electionId) =>
+        await Context.ElectionGovernedProposals
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync();
+
+    public async Task<ElectionGovernedProposalRecord?> GetGovernedProposalAsync(Guid proposalId) =>
+        await Context.ElectionGovernedProposals
+            .FirstOrDefaultAsync(x => x.Id == proposalId);
+
+    public async Task<ElectionGovernedProposalRecord?> GetPendingGovernedProposalAsync(ElectionId electionId)
+    {
+        var pendingProposals = await Context.ElectionGovernedProposals
+            .Where(x =>
+                x.ElectionId == electionId &&
+                x.ExecutionStatus != ElectionGovernedProposalExecutionStatus.ExecutionSucceeded)
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync();
+
+        return pendingProposals.Count switch
+        {
+            0 => null,
+            1 => pendingProposals[0],
+            _ => throw new InvalidOperationException(
+                $"Election {electionId} has multiple pending governed proposals, which violates the FEAT-096 invariant."),
+        };
+    }
+
+    public async Task SaveGovernedProposalAsync(ElectionGovernedProposalRecord proposal) =>
+        await Context.ElectionGovernedProposals.AddAsync(proposal);
+
+    public async Task UpdateGovernedProposalAsync(ElectionGovernedProposalRecord proposal)
+    {
+        var existing = await Context.ElectionGovernedProposals
+            .FirstOrDefaultAsync(x => x.Id == proposal.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(proposal);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionGovernedProposalApprovalRecord>> GetGovernedProposalApprovalsAsync(Guid proposalId) =>
+        await Context.ElectionGovernedProposalApprovals
+            .Where(x => x.ProposalId == proposalId)
+            .OrderBy(x => x.ApprovedAt)
+            .ToListAsync();
+
+    public async Task<ElectionGovernedProposalApprovalRecord?> GetGovernedProposalApprovalAsync(
+        Guid proposalId,
+        string trusteeUserAddress) =>
+        await Context.ElectionGovernedProposalApprovals
+            .FirstOrDefaultAsync(x =>
+                x.ProposalId == proposalId &&
+                x.TrusteeUserAddress == trusteeUserAddress);
+
+    public async Task SaveGovernedProposalApprovalAsync(ElectionGovernedProposalApprovalRecord approval) =>
+        await Context.ElectionGovernedProposalApprovals.AddAsync(approval);
 }

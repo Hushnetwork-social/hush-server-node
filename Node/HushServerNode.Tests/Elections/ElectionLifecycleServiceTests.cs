@@ -584,6 +584,8 @@ public class ElectionLifecycleServiceTests
         public List<ElectionBoundaryArtifactRecord> BoundaryArtifacts { get; } = [];
         public List<ElectionWarningAcknowledgementRecord> WarningAcknowledgements { get; } = [];
         public Dictionary<Guid, ElectionTrusteeInvitationRecord> TrusteeInvitations { get; } = [];
+        public Dictionary<Guid, ElectionGovernedProposalRecord> GovernedProposals { get; } = [];
+        public List<ElectionGovernedProposalApprovalRecord> GovernedProposalApprovals { get; } = [];
     }
 
     private sealed class FakeUnitOfWorkProvider(ElectionStore store) : IUnitOfWorkProvider<ElectionsDbContext>
@@ -721,6 +723,67 @@ public class ElectionLifecycleServiceTests
         public Task UpdateTrusteeInvitationAsync(ElectionTrusteeInvitationRecord invitation)
         {
             store.TrusteeInvitations[invitation.Id] = invitation;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionGovernedProposalRecord>> GetGovernedProposalsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionGovernedProposalRecord>>(
+                store.GovernedProposals.Values
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.CreatedAt)
+                    .ToArray());
+
+        public Task<ElectionGovernedProposalRecord?> GetGovernedProposalAsync(Guid proposalId) =>
+            Task.FromResult(store.GovernedProposals.GetValueOrDefault(proposalId));
+
+        public Task<ElectionGovernedProposalRecord?> GetPendingGovernedProposalAsync(ElectionId electionId)
+        {
+            var pending = store.GovernedProposals.Values
+                .Where(x =>
+                    x.ElectionId == electionId &&
+                    x.ExecutionStatus != ElectionGovernedProposalExecutionStatus.ExecutionSucceeded)
+                .OrderBy(x => x.CreatedAt)
+                .ToArray();
+
+            return pending.Length switch
+            {
+                0 => Task.FromResult<ElectionGovernedProposalRecord?>(null),
+                1 => Task.FromResult<ElectionGovernedProposalRecord?>(pending[0]),
+                _ => throw new InvalidOperationException(
+                    $"Election {electionId} has multiple pending governed proposals, which violates the FEAT-096 invariant."),
+            };
+        }
+
+        public Task SaveGovernedProposalAsync(ElectionGovernedProposalRecord proposal)
+        {
+            store.GovernedProposals[proposal.Id] = proposal;
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateGovernedProposalAsync(ElectionGovernedProposalRecord proposal)
+        {
+            store.GovernedProposals[proposal.Id] = proposal;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionGovernedProposalApprovalRecord>> GetGovernedProposalApprovalsAsync(Guid proposalId) =>
+            Task.FromResult<IReadOnlyList<ElectionGovernedProposalApprovalRecord>>(
+                store.GovernedProposalApprovals
+                    .Where(x => x.ProposalId == proposalId)
+                    .OrderBy(x => x.ApprovedAt)
+                    .ToArray());
+
+        public Task<ElectionGovernedProposalApprovalRecord?> GetGovernedProposalApprovalAsync(
+            Guid proposalId,
+            string trusteeUserAddress) =>
+            Task.FromResult(
+                store.GovernedProposalApprovals.FirstOrDefault(x =>
+                    x.ProposalId == proposalId &&
+                    x.TrusteeUserAddress == trusteeUserAddress));
+
+        public Task SaveGovernedProposalApprovalAsync(ElectionGovernedProposalApprovalRecord approval)
+        {
+            store.GovernedProposalApprovals.Add(approval);
             return Task.CompletedTask;
         }
     }

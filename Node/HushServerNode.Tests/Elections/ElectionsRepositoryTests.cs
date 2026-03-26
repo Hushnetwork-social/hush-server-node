@@ -87,6 +87,77 @@ public class ElectionsRepositoryTests
         artifacts[0].ArtifactType.Should().Be(ElectionBoundaryArtifactType.Open);
     }
 
+    [Fact]
+    public async Task SaveGovernedProposalAndApprovals_ShouldRoundTripDurableExecutionState()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateTrusteeElection();
+        var proposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Open,
+            proposedByPublicAddress: "owner-address");
+        var approval = ElectionModelFactory.CreateGovernedProposalApproval(
+            proposal,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            approvalNote: "Safe to proceed.");
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveGovernedProposalAsync(proposal);
+        await repository.SaveGovernedProposalApprovalAsync(approval);
+        await context.SaveChangesAsync();
+
+        var failedProposal = proposal.RecordExecutionFailure(
+            failureReason: "open transition failed",
+            attemptedAt: DateTime.UtcNow,
+            executionTriggeredByPublicAddress: "owner-address");
+        await repository.UpdateGovernedProposalAsync(failedProposal);
+        await context.SaveChangesAsync();
+
+        var storedProposal = await repository.GetGovernedProposalAsync(proposal.Id);
+        var pendingProposal = await repository.GetPendingGovernedProposalAsync(election.ElectionId);
+        var approvals = await repository.GetGovernedProposalApprovalsAsync(proposal.Id);
+
+        storedProposal.Should().NotBeNull();
+        storedProposal!.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionFailed);
+        storedProposal.ExecutionFailureReason.Should().Be("open transition failed");
+        storedProposal.LastExecutionTriggeredByPublicAddress.Should().Be("owner-address");
+        pendingProposal.Should().NotBeNull();
+        pendingProposal!.Id.Should().Be(proposal.Id);
+        approvals.Should().ContainSingle();
+        approvals[0].ApprovalNote.Should().Be("Safe to proceed.");
+        approvals[0].ActionType.Should().Be(ElectionGovernedActionType.Open);
+    }
+
+    [Fact]
+    public async Task GetPendingGovernedProposalAsync_WithMultiplePendingProposals_ShouldThrow()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateTrusteeElection();
+        var waitingProposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Open,
+            proposedByPublicAddress: "owner-address");
+        var failedProposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Open,
+            proposedByPublicAddress: "owner-address").RecordExecutionFailure(
+                failureReason: "transient execution failure",
+                attemptedAt: DateTime.UtcNow);
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveGovernedProposalAsync(waitingProposal);
+        await repository.SaveGovernedProposalAsync(failedProposal);
+        await context.SaveChangesAsync();
+
+        var act = async () => await repository.GetPendingGovernedProposalAsync(election.ElectionId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*multiple pending governed proposals*");
+    }
+
     private static ElectionsRepository CreateRepository(ElectionsDbContext context)
     {
         var repository = new ElectionsRepository();
