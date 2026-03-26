@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Playwright;
+using System.Text.Json;
 using TechTalk.SpecFlow;
 using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
@@ -1047,9 +1048,8 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         Console.WriteLine($"[E2E] Hovering over message to reveal reaction button...");
         await messageToReact.HoverAsync();
 
-        // Wait for useFeedReactions to derive the ElGamal key (async, ~100-200ms)
-        Console.WriteLine($"[E2E] Waiting for key derivation and re-render (1.5s)...");
-        await Task.Delay(1500);
+        Console.WriteLine($"[E2E] Waiting for reaction prover readiness...");
+        await WaitForReactionProverReadyAsync(page, userName);
 
         // IMPORTANT: Create transaction waiter BEFORE clicking the emoji
         // to prevent race condition where the event fires before we start listening
@@ -1906,9 +1906,8 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         // Hover to reveal reaction button
         await targetMessage.First.HoverAsync();
 
-        // Wait for useFeedReactions to derive the ElGamal key (async, ~100-200ms)
-        Console.WriteLine($"[E2E] Waiting for key derivation and re-render (1.5s)...");
-        await Task.Delay(1500);
+        Console.WriteLine($"[E2E] Waiting for reaction prover readiness...");
+        await WaitForReactionProverReadyAsync(page, userName);
 
         // IMPORTANT: Create transaction waiter BEFORE clicking the emoji
         // to prevent race condition where the event fires before we start listening
@@ -2034,6 +2033,43 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         throw new TimeoutException($"Feed '{testId}' did not become ready within {timeoutMs}ms");
     }
 
+    private static async Task WaitForReactionProverReadyAsync(IPage page, string userName)
+    {
+        var timeoutAt = DateTime.UtcNow.AddSeconds(15);
+        ReactionRuntimeStatusPayload? runtimeStatus = null;
+
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            var runtimeJson = await page.EvaluateAsync<string>(@"() => {
+                const store = window.__zustand_stores?.reactionsStore;
+                const state = store?.getState?.();
+
+                return JSON.stringify({
+                    storeExposed: !!store,
+                    isProverReady: !!state?.isProverReady,
+                    isGeneratingProof: !!state?.isGeneratingProof,
+                    lastError: state?.lastError ?? null,
+                });
+            }");
+
+            runtimeStatus = JsonSerializer.Deserialize<ReactionRuntimeStatusPayload>(
+                runtimeJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (runtimeStatus?.StoreExposed == true && runtimeStatus.IsProverReady)
+            {
+                return;
+            }
+
+            await Task.Delay(250);
+        }
+
+        throw new InvalidOperationException(
+            $"Reaction prover was not ready on the active page for {userName}. " +
+            $"storeExposed={runtimeStatus?.StoreExposed}, isProverReady={runtimeStatus?.IsProverReady}, " +
+            $"lastError={runtimeStatus?.LastError ?? "<none>"}");
+    }
+
     /// <summary>
     /// Waits until the app lands on any valid authenticated route/shell.
     /// </summary>
@@ -2077,6 +2113,12 @@ internal sealed class MultiUserSteps : BrowserStepsBase
         sanitized = System.Text.RegularExpressions.Regex.Replace(sanitized, "-+", "-");
         return sanitized.Trim('-');
     }
+
+    private sealed record ReactionRuntimeStatusPayload(
+        bool StoreExposed,
+        bool IsProverReady,
+        bool IsGeneratingProof,
+        string? LastError);
 
     // =============================================================================
     // Original Helper Methods
