@@ -80,6 +80,7 @@ public static class ElectionModelFactory
             timestamp,
             timestamp,
             OpenedAt: null,
+            VoteAcceptanceLockedAt: null,
             ClosedAt: null,
             FinalizedAt: null,
             TallyReadyAt: null,

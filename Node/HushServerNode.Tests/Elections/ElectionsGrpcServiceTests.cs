@@ -111,6 +111,42 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task StartElectionGovernedProposal_WithValidRequest_MapsGovernedProposalPayload()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection();
+        var proposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Open,
+            proposedByPublicAddress: "owner-address");
+
+        mocker.GetMock<Domain.IElectionLifecycleService>()
+            .Setup(x => x.StartGovernedProposalAsync(It.Is<Domain.StartElectionGovernedProposalRequest>(request =>
+                request.ElectionId == election.ElectionId &&
+                request.ActionType == ElectionGovernedActionType.Open &&
+                request.ActorPublicAddress == "owner-address")))
+            .ReturnsAsync(Domain.ElectionCommandResult.Success(election, governedProposal: proposal));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new Proto.StartElectionGovernedProposalRequest
+        {
+            ElectionId = election.ElectionId.ToString(),
+            ActionType = ElectionGovernedActionTypeProto.GovernedActionOpen,
+            ActorPublicAddress = "owner-address",
+        };
+
+        // Act
+        var response = await sut.StartElectionGovernedProposal(request, CreateMockServerCallContext());
+
+        // Assert
+        response.Success.Should().BeTrue();
+        response.GovernedProposal.Should().NotBeNull();
+        response.GovernedProposal.ActionType.Should().Be(ElectionGovernedActionTypeProto.GovernedActionOpen);
+        response.GovernedProposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.WaitingForApprovals);
+    }
+
+    [Fact]
     public async Task GetElection_WithInvalidElectionId_ThrowsInvalidArgumentRpcException()
     {
         // Arrange
@@ -221,6 +257,44 @@ public class ElectionsGrpcServiceTests
                 new ElectionOptionDefinition("alice", "Alice", null, 1, IsBlankOption: false),
                 new ElectionOptionDefinition("bob", "Bob", null, 2, IsBlankOption: false),
             ]);
+
+    private static ElectionRecord CreateTrusteeElection() =>
+        ElectionModelFactory.CreateDraftRecord(
+            electionId: ElectionId.NewElectionId,
+            title: "Referendum",
+            shortDescription: "Policy vote",
+            ownerPublicAddress: "owner-address",
+            externalReferenceCode: "REF-2026-01",
+            electionClass: ElectionClass.OrganizationalRemoteVoting,
+            bindingStatus: ElectionBindingStatus.Binding,
+            governanceMode: ElectionGovernanceMode.TrusteeThreshold,
+            disclosureMode: ElectionDisclosureMode.FinalResultsOnly,
+            participationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
+            voteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
+            eligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            outcomeRule: new OutcomeRuleDefinition(
+                OutcomeRuleKind.PassFail,
+                "pass_fail_yes_no",
+                SeatCount: 1,
+                BlankVoteCountsForTurnout: true,
+                BlankVoteExcludedFromWinnerSelection: true,
+                BlankVoteExcludedFromThresholdDenominator: true,
+                TieResolutionRule: "tie_unresolved",
+                CalculationBasis: "simple_majority_of_non_blank_votes"),
+            approvedClientApplications:
+            [
+                new ApprovedClientApplicationRecord("hushsocial", "1.0.0"),
+            ],
+            protocolOmegaVersion: "omega-v1.0.0",
+            reportingPolicy: ReportingPolicy.DefaultPhaseOnePackage,
+            reviewWindowPolicy: ReviewWindowPolicy.GovernedReviewWindowReserved,
+            ownerOptions:
+            [
+                new ElectionOptionDefinition("yes", "Yes", null, 1, IsBlankOption: false),
+                new ElectionOptionDefinition("no", "No", null, 2, IsBlankOption: false),
+            ],
+            requiredApprovalCount: 2);
 
     private static ServerCallContext CreateMockServerCallContext() => new TestServerCallContext();
 }

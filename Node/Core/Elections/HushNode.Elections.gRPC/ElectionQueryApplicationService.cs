@@ -1,5 +1,6 @@
 using HushNetwork.proto;
 using HushNode.Elections.Storage;
+using HushShared.Elections.Model;
 using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Elections.gRPC;
@@ -27,6 +28,12 @@ public class ElectionQueryApplicationService(IUnitOfWorkProvider<ElectionsDbCont
         var warningAcknowledgements = await repository.GetWarningAcknowledgementsAsync(electionId);
         var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(electionId);
         var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(electionId);
+        var governedProposals = await repository.GetGovernedProposalsAsync(electionId);
+        var governedProposalApprovals = new List<ElectionGovernedProposalApprovalRecord>();
+        foreach (var proposal in governedProposals)
+        {
+            governedProposalApprovals.AddRange(await repository.GetGovernedProposalApprovalsAsync(proposal.Id));
+        }
 
         var response = new GetElectionResponse
         {
@@ -43,6 +50,10 @@ public class ElectionQueryApplicationService(IUnitOfWorkProvider<ElectionsDbCont
         response.WarningAcknowledgements.AddRange(warningAcknowledgements.Select(x => x.ToProto()));
         response.TrusteeInvitations.AddRange(trusteeInvitations.Select(x => x.ToProto()));
         response.BoundaryArtifacts.AddRange(boundaryArtifacts.Select(x => x.ToProto()));
+        response.GovernedProposals.AddRange(governedProposals.Select(x => x.ToProto()));
+        response.GovernedProposalApprovals.AddRange(governedProposalApprovals
+            .OrderBy(x => x.ApprovedAt)
+            .Select(x => x.ToProto()));
 
         return response;
     }

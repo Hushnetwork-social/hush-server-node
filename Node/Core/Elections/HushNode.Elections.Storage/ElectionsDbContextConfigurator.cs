@@ -57,6 +57,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.CreatedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.OpenedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.VoteAcceptanceLockedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.ClosedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.FinalizedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.TallyReadyAt).HasColumnType("timestamp with time zone");

@@ -321,15 +321,19 @@ public class ElectionLifecycleService(
             return validationResult;
         }
 
+        var proposalCreatedAt = DateTime.UtcNow;
         var proposal = ElectionModelFactory.CreateGovernedProposal(
             election,
             request.ActionType,
-            request.ActorPublicAddress);
+            request.ActorPublicAddress,
+            createdAt: proposalCreatedAt);
+        var updatedElection = ApplyGovernedProposalStartEffects(election, request.ActionType, proposalCreatedAt);
 
         await repository.SaveGovernedProposalAsync(proposal);
+        await repository.SaveElectionAsync(updatedElection);
         await unitOfWork.CommitAsync();
 
-        return ElectionCommandResult.Success(election, governedProposal: proposal);
+        return ElectionCommandResult.Success(updatedElection, governedProposal: proposal);
     }
 
     public async Task<ElectionCommandResult> ApproveGovernedProposalAsync(ApproveElectionGovernedProposalRequest request)
@@ -571,6 +575,7 @@ public class ElectionLifecycleService(
             {
                 LifecycleState = ElectionLifecycleState.Closed,
                 LastUpdatedAt = transitionTime,
+                VoteAcceptanceLockedAt = election.VoteAcceptanceLockedAt ?? transitionTime,
                 ClosedAt = transitionTime,
                 TallyReadyAt = artifact.FinalEncryptedTallyHash is { Length: > 0 } ? transitionTime : null,
                 CloseArtifactId = artifact.Id,
@@ -583,6 +588,23 @@ public class ElectionLifecycleService(
                 FinalizeArtifactId = artifact.Id,
             },
             _ => throw new ArgumentOutOfRangeException(nameof(artifact), artifact.ArtifactType, "Unsupported lifecycle transition artifact."),
+        };
+
+    private static ElectionRecord ApplyGovernedProposalStartEffects(
+        ElectionRecord election,
+        ElectionGovernedActionType actionType,
+        DateTime proposalCreatedAt) =>
+        actionType switch
+        {
+            ElectionGovernedActionType.Close => election with
+            {
+                LastUpdatedAt = proposalCreatedAt,
+                VoteAcceptanceLockedAt = election.VoteAcceptanceLockedAt ?? proposalCreatedAt,
+            },
+            _ => election with
+            {
+                LastUpdatedAt = proposalCreatedAt,
+            },
         };
 
     private async Task<ElectionCommandResult?> ValidateGovernedProposalStartAsync(
@@ -776,6 +798,7 @@ public class ElectionLifecycleService(
             LifecycleState = ElectionLifecycleState.Open,
             LastUpdatedAt = openedAt,
             OpenedAt = openedAt,
+            VoteAcceptanceLockedAt = null,
             OpenArtifactId = artifact.Id,
         };
 

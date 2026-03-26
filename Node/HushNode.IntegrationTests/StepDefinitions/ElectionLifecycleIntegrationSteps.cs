@@ -3,7 +3,10 @@ using Google.Protobuf;
 using HushNetwork.proto;
 using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
+using HushServerNode;
 using HushServerNode.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using TechTalk.SpecFlow;
 
 namespace HushNode.IntegrationTests.StepDefinitions;
@@ -19,6 +22,7 @@ public sealed class ElectionLifecycleIntegrationSteps
     private HushElections.HushElectionsClient? _client;
     private TestIdentity? _owner;
     private string? _electionId;
+    private string? _lastGovernedProposalId;
     private ElectionCommandResponse? _lastCommandResponse;
     private GetElectionOpenReadinessResponse? _lastReadinessResponse;
     private GetElectionResponse? _lastElectionResponse;
@@ -35,6 +39,7 @@ public sealed class ElectionLifecycleIntegrationSteps
         _owner = TestIdentities.Alice;
         _observedStates.Clear();
         _electionId = null;
+        _lastGovernedProposalId = null;
         _lastCommandResponse = null;
         _lastReadinessResponse = null;
         _lastElectionResponse = null;
@@ -248,6 +253,19 @@ public sealed class ElectionLifecycleIntegrationSteps
         await WhenTheOwnerReloadsTheElectionThroughGrpc();
     }
 
+    [Given(@"the owner has an open trustee-threshold election through governed approval gRPC")]
+    public async Task GivenTheOwnerHasAnOpenTrusteeThresholdElectionThroughGovernedApprovalGrpc()
+    {
+        await WhenTheOwnerCreatesATrusteeThresholdElectionDraftThroughGrpc();
+        await WhenTheOwnerInvitesTrusteeThroughGrpc("Bob");
+        await WhenTrusteeAcceptsTheInvitationThroughGrpc("Bob");
+        await WhenTheOwnerInvitesTrusteeThroughGrpc("Charlie");
+        await WhenTrusteeAcceptsTheInvitationThroughGrpc("Charlie");
+        await WhenTheOwnerStartsAGovernedProposalThroughGrpc("open");
+        await WhenTrusteeApprovesTheGovernedProposalThroughGrpc("Bob");
+        await WhenTheOwnerReloadsTheElectionThroughGrpc();
+    }
+
     [When(@"the owner attempts to change the binding status after open")]
     public async Task WhenTheOwnerAttemptsToChangeTheBindingStatusAfterOpen()
     {
@@ -260,6 +278,144 @@ public sealed class ElectionLifecycleIntegrationSteps
         });
 
         _lastCommandResponse = response;
+    }
+
+    [When(@"the owner starts an? ""(.*)"" governed proposal through gRPC")]
+    public async Task WhenTheOwnerStartsAGovernedProposalThroughGrpc(string actionType)
+    {
+        var response = await GetClient().StartElectionGovernedProposalAsync(new StartElectionGovernedProposalRequest
+        {
+            ElectionId = GetElectionId(),
+            ActionType = ParseGovernedActionType(actionType),
+            ActorPublicAddress = GetOwner().PublicSigningAddress,
+        });
+
+        response.Success.Should().BeTrue($"governed proposal start should succeed: {response.ErrorMessage}");
+        response.GovernedProposal.Should().NotBeNull();
+        response.GovernedProposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.WaitingForApprovals);
+
+        _lastGovernedProposalId = response.GovernedProposal.Id;
+        _lastCommandResponse = response;
+    }
+
+    [When(@"trustee ""(.*)"" approves the governed proposal through gRPC")]
+    public async Task WhenTrusteeApprovesTheGovernedProposalThroughGrpc(string trusteeAlias)
+    {
+        var trustee = ResolveIdentity(trusteeAlias);
+        var response = await GetClient().ApproveElectionGovernedProposalAsync(new ApproveElectionGovernedProposalRequest
+        {
+            ElectionId = GetElectionId(),
+            ProposalId = GetLastGovernedProposalId(),
+            ActorPublicAddress = trustee.PublicSigningAddress,
+            ApprovalNote = $"Approved by {trustee.DisplayName} in FEAT-096 integration coverage.",
+        });
+
+        response.Success.Should().BeTrue($"governed approval should succeed: {response.ErrorMessage}");
+        response.GovernedProposalApproval.Should().NotBeNull();
+
+        if (response.GovernedProposal is not null)
+        {
+            _lastGovernedProposalId = response.GovernedProposal.Id;
+        }
+
+        _lastCommandResponse = response;
+    }
+
+    [When(@"the owner retries the governed proposal execution through gRPC")]
+    public async Task WhenTheOwnerRetriesTheGovernedProposalExecutionThroughGrpc()
+    {
+        var response = await GetClient().RetryElectionGovernedProposalExecutionAsync(new RetryElectionGovernedProposalExecutionRequest
+        {
+            ElectionId = GetElectionId(),
+            ProposalId = GetLastGovernedProposalId(),
+            ActorPublicAddress = GetOwner().PublicSigningAddress,
+        });
+
+        response.Success.Should().BeTrue($"governed retry should succeed: {response.ErrorMessage}");
+        response.GovernedProposal.Should().NotBeNull();
+
+        _lastCommandResponse = response;
+    }
+
+    [When(@"the owner attempts to update the trustee-threshold draft title to ""(.*)"" while a governed open proposal is pending")]
+    public async Task WhenTheOwnerAttemptsToUpdateTheTrusteeThresholdDraftTitleWhileAGovernedOpenProposalIsPending(string title)
+    {
+        var response = await GetClient().UpdateElectionDraftAsync(new UpdateElectionDraftRequest
+        {
+            ElectionId = GetElectionId(),
+            ActorPublicAddress = GetOwner().PublicSigningAddress,
+            SnapshotReason = "governed-open-pending-draft-edit",
+            Draft = BuildTrusteeThresholdDraftInput(title),
+        });
+
+        _lastCommandResponse = response;
+    }
+
+    [When(@"the integration test forces the election into a stale ""(.*)"" state before the governed proposal executes")]
+    public async Task WhenTheIntegrationTestForcesTheElectionIntoAStaleStateBeforeTheGovernedProposalExecutes(string lifecycleState)
+    {
+        var now = DateTime.UtcNow;
+        await using var scope = GetNode().Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+
+        switch (lifecycleState.Trim().ToLowerInvariant())
+        {
+            case "closed":
+                await dbContext.Database.ExecuteSqlRawAsync(
+                    """
+                    UPDATE "Elections"."ElectionRecord"
+                    SET "LifecycleState" = {0},
+                        "LastUpdatedAt" = {1},
+                        "OpenedAt" = COALESCE("OpenedAt", {1}),
+                        "ClosedAt" = {1},
+                        "FinalizedAt" = NULL,
+                        "TallyReadyAt" = NULL,
+                        "VoteAcceptanceLockedAt" = COALESCE("VoteAcceptanceLockedAt", {1})
+                    WHERE "ElectionId" = {2}
+                    """,
+                    "Closed",
+                    now,
+                    GetElectionId());
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(lifecycleState), lifecycleState, "Unsupported forced lifecycle state.");
+        }
+    }
+
+    [When(@"the integration test restores the election to the ""(.*)"" state for governed retry")]
+    public async Task WhenTheIntegrationTestRestoresTheElectionToTheStateForGovernedRetry(string lifecycleState)
+    {
+        var now = DateTime.UtcNow;
+        await using var scope = GetNode().Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+
+        switch (lifecycleState.Trim().ToLowerInvariant())
+        {
+            case "draft":
+                await dbContext.Database.ExecuteSqlRawAsync(
+                    """
+                    UPDATE "Elections"."ElectionRecord"
+                    SET "LifecycleState" = {0},
+                        "LastUpdatedAt" = {1},
+                        "OpenedAt" = NULL,
+                        "ClosedAt" = NULL,
+                        "FinalizedAt" = NULL,
+                        "TallyReadyAt" = NULL,
+                        "OpenArtifactId" = NULL,
+                        "CloseArtifactId" = NULL,
+                        "FinalizeArtifactId" = NULL,
+                        "VoteAcceptanceLockedAt" = NULL
+                    WHERE "ElectionId" = {2}
+                    """,
+                    "Draft",
+                    now,
+                    GetElectionId());
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(lifecycleState), lifecycleState, "Unsupported restored lifecycle state.");
+        }
     }
 
     [Then(@"the election lifecycle should progress through ""(.*)""")]
@@ -385,8 +541,71 @@ public sealed class ElectionLifecycleIntegrationSteps
             error.Contains("FEAT-096", StringComparison.Ordinal));
     }
 
+    [Then(@"the pending governed open should block further draft changes")]
+    public void ThenThePendingGovernedOpenShouldBlockFurtherDraftChanges()
+    {
+        _lastCommandResponse.Should().NotBeNull();
+        _lastCommandResponse!.Success.Should().BeFalse();
+        _lastCommandResponse.ErrorCode.Should().Be(ElectionCommandErrorCodeProto.InvalidState);
+        _lastCommandResponse.ErrorMessage.Should().Contain("blocked while a governed open proposal is pending");
+    }
+
+    [Then(@"the governed proposal should remain pending for ""(.*)"" while the election stays ""(.*)""")]
+    public async Task ThenTheGovernedProposalShouldRemainPendingForWhileTheElectionStays(string actionType, string lifecycleState)
+    {
+        var response = await ReloadElectionAsync();
+        var proposal = response.GovernedProposals.Single(x => x.Id == GetLastGovernedProposalId());
+
+        proposal.ActionType.Should().Be(ParseGovernedActionType(actionType));
+        proposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.WaitingForApprovals);
+        response.Election.LifecycleState.Should().Be(ParseProtoLifecycleState(lifecycleState));
+
+        _lastElectionResponse = response;
+    }
+
+    [Then(@"vote acceptance should be locked immediately on the election")]
+    public async Task ThenVoteAcceptanceShouldBeLockedImmediatelyOnTheElection()
+    {
+        var response = _lastElectionResponse ?? await ReloadElectionAsync();
+
+        response.Election.VoteAcceptanceLockedAt.Should().NotBeNull();
+        response.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Open);
+
+        _lastElectionResponse = response;
+    }
+
+    [Then(@"the governed proposal should execute and transition the election to ""(.*)""")]
+    public async Task ThenTheGovernedProposalShouldExecuteAndTransitionTheElectionTo(string lifecycleState)
+    {
+        var response = await ReloadElectionAsync();
+        var proposal = response.GovernedProposals.Single(x => x.Id == GetLastGovernedProposalId());
+
+        proposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.ExecutionSucceeded);
+        response.Election.LifecycleState.Should().Be(ParseProtoLifecycleState(lifecycleState));
+        response.GovernedProposalApprovals.Should().Contain(x => x.ProposalId == proposal.Id);
+
+        _lastElectionResponse = response;
+    }
+
+    [Then(@"the governed proposal should record an execution failure for ""(.*)""")]
+    public async Task ThenTheGovernedProposalShouldRecordAnExecutionFailureFor(string actionType)
+    {
+        var response = await ReloadElectionAsync();
+        var proposal = response.GovernedProposals.Single(x => x.Id == GetLastGovernedProposalId());
+
+        proposal.ActionType.Should().Be(ParseGovernedActionType(actionType));
+        proposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.ExecutionFailed);
+        proposal.ExecutionFailureReason.Should().NotBeNullOrWhiteSpace();
+        response.GovernedProposalApprovals.Should().Contain(x => x.ProposalId == proposal.Id);
+
+        _lastElectionResponse = response;
+    }
+
     private GrpcClientFactory GetGrpcFactory() =>
         _scenarioContext.Get<GrpcClientFactory>(ScenarioHooks.GrpcFactoryKey);
+
+    private HushServerNodeCore GetNode() =>
+        _scenarioContext.Get<HushServerNodeCore>(ScenarioHooks.NodeKey);
 
     private HushElections.HushElectionsClient GetClient() =>
         _client ?? throw new InvalidOperationException("Election gRPC client not initialized. Call the availability step first.");
@@ -396,6 +615,9 @@ public sealed class ElectionLifecycleIntegrationSteps
 
     private string GetElectionId() =>
         _electionId ?? throw new InvalidOperationException("Election ID not initialized.");
+
+    private string GetLastGovernedProposalId() =>
+        _lastGovernedProposalId ?? throw new InvalidOperationException("No governed proposal has been recorded for this scenario.");
 
     private string GetTrusteeInvitationId(string trusteePublicAddress) =>
         _trusteeInvitationIds.TryGetValue(trusteePublicAddress, out var invitationId)
@@ -441,6 +663,25 @@ public sealed class ElectionLifecycleIntegrationSteps
         Enum.TryParse<ElectionWarningCodeProto>(warningCode, ignoreCase: false, out var parsed)
             ? parsed
             : throw new ArgumentOutOfRangeException(nameof(warningCode), warningCode, "Unsupported warning code.");
+
+    private static ElectionGovernedActionTypeProto ParseGovernedActionType(string actionType) =>
+        actionType.Trim().ToLowerInvariant() switch
+        {
+            "open" => ElectionGovernedActionTypeProto.GovernedActionOpen,
+            "close" => ElectionGovernedActionTypeProto.GovernedActionClose,
+            "finalize" => ElectionGovernedActionTypeProto.GovernedActionFinalize,
+            _ => throw new ArgumentOutOfRangeException(nameof(actionType), actionType, "Unsupported governed action type."),
+        };
+
+    private static ElectionLifecycleStateProto ParseProtoLifecycleState(string lifecycleState) =>
+        lifecycleState.Trim().ToLowerInvariant() switch
+        {
+            "draft" => ElectionLifecycleStateProto.Draft,
+            "open" => ElectionLifecycleStateProto.Open,
+            "closed" => ElectionLifecycleStateProto.Closed,
+            "finalized" => ElectionLifecycleStateProto.Finalized,
+            _ => throw new ArgumentOutOfRangeException(nameof(lifecycleState), lifecycleState, "Unsupported lifecycle state."),
+        };
 
     private static ElectionDraftInput BuildDraftInput(
         string title,

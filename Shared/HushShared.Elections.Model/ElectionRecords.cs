@@ -27,6 +27,7 @@ public record ElectionRecord(
     DateTime CreatedAt,
     DateTime LastUpdatedAt,
     DateTime? OpenedAt,
+    DateTime? VoteAcceptanceLockedAt,
     DateTime? ClosedAt,
     DateTime? FinalizedAt,
     DateTime? TallyReadyAt,

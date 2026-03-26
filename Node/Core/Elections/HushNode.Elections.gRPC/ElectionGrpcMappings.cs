@@ -81,6 +81,16 @@ internal static class ElectionGrpcMappings
             response.TrusteeInvitation = result.TrusteeInvitation.ToProto();
         }
 
+        if (result.GovernedProposal is not null)
+        {
+            response.GovernedProposal = result.GovernedProposal.ToProto();
+        }
+
+        if (result.GovernedProposalApproval is not null)
+        {
+            response.GovernedProposalApproval = result.GovernedProposalApproval.ToProto();
+        }
+
         return response;
     }
 
@@ -149,6 +159,16 @@ internal static class ElectionGrpcMappings
         if (election.FinalizedAt.HasValue)
         {
             view.FinalizedAt = ToTimestamp(election.FinalizedAt.Value);
+        }
+
+        if (election.TallyReadyAt.HasValue)
+        {
+            view.TallyReadyAt = ToTimestamp(election.TallyReadyAt.Value);
+        }
+
+        if (election.VoteAcceptanceLockedAt.HasValue)
+        {
+            view.VoteAcceptanceLockedAt = ToTimestamp(election.VoteAcceptanceLockedAt.Value);
         }
 
         return view;
@@ -267,6 +287,48 @@ internal static class ElectionGrpcMappings
 
         return proto;
     }
+
+    public static ElectionGovernedProposal ToProto(this ElectionGovernedProposalRecord proposal)
+    {
+        var proto = new ElectionGovernedProposal
+        {
+            Id = proposal.Id.ToString(),
+            ElectionId = proposal.ElectionId.ToString(),
+            ActionType = (ElectionGovernedActionTypeProto)(int)proposal.ActionType,
+            LifecycleStateAtCreation = (ElectionLifecycleStateProto)(int)proposal.LifecycleStateAtCreation,
+            ProposedByPublicAddress = proposal.ProposedByPublicAddress,
+            CreatedAt = ToTimestamp(proposal.CreatedAt),
+            ExecutionStatus = (ElectionGovernedProposalExecutionStatusProto)(int)proposal.ExecutionStatus,
+            ExecutionFailureReason = proposal.ExecutionFailureReason ?? string.Empty,
+            LastExecutionTriggeredByPublicAddress = proposal.LastExecutionTriggeredByPublicAddress ?? string.Empty,
+        };
+
+        if (proposal.LastExecutionAttemptedAt.HasValue)
+        {
+            proto.LastExecutionAttemptedAt = ToTimestamp(proposal.LastExecutionAttemptedAt.Value);
+        }
+
+        if (proposal.ExecutedAt.HasValue)
+        {
+            proto.ExecutedAt = ToTimestamp(proposal.ExecutedAt.Value);
+        }
+
+        return proto;
+    }
+
+    public static ElectionGovernedProposalApproval ToProto(this ElectionGovernedProposalApprovalRecord approval) =>
+        new()
+        {
+            Id = approval.Id.ToString(),
+            ProposalId = approval.ProposalId.ToString(),
+            ElectionId = approval.ElectionId.ToString(),
+            ActionType = (ElectionGovernedActionTypeProto)(int)approval.ActionType,
+            LifecycleStateAtProposalCreation = (ElectionLifecycleStateProto)(int)approval.LifecycleStateAtProposalCreation,
+            TrusteeUserAddress = approval.TrusteeUserAddress,
+            TrusteeDisplayName = approval.TrusteeDisplayName ?? string.Empty,
+            ApprovalNote = approval.ApprovalNote ?? string.Empty,
+            ApprovedAt = ToTimestamp(approval.ApprovedAt),
+        };
 
     public static ElectionMetadata ToProto(this ElectionMetadataSnapshot metadata) =>
         new()

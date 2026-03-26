@@ -33,6 +33,15 @@ public class ElectionQueryApplicationServiceTests
             trusteeDisplayName: "Alice",
             invitedByPublicAddress: "owner-address",
             sentAtDraftRevision: election.CurrentDraftRevision);
+        var proposal = ElectionModelFactory.CreateGovernedProposal(
+            election with { VoteAcceptanceLockedAt = DateTime.UtcNow },
+            ElectionGovernedActionType.Close,
+            proposedByPublicAddress: "owner-address");
+        var approval = ElectionModelFactory.CreateGovernedProposalApproval(
+            proposal,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            approvalNote: "Ready.");
         var boundaryArtifact = ElectionModelFactory.CreateBoundaryArtifact(
             ElectionBoundaryArtifactType.Open,
             election,
@@ -46,6 +55,8 @@ public class ElectionQueryApplicationServiceTests
             repo.Setup(x => x.GetWarningAcknowledgementsAsync(election.ElectionId)).ReturnsAsync([warning]);
             repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync([invitation]);
             repo.Setup(x => x.GetBoundaryArtifactsAsync(election.ElectionId)).ReturnsAsync([boundaryArtifact]);
+            repo.Setup(x => x.GetGovernedProposalsAsync(election.ElectionId)).ReturnsAsync([proposal]);
+            repo.Setup(x => x.GetGovernedProposalApprovalsAsync(proposal.Id)).ReturnsAsync([approval]);
         });
 
         var sut = mocker.CreateInstance<ElectionQueryApplicationService>();
@@ -63,6 +74,10 @@ public class ElectionQueryApplicationServiceTests
         response.WarningAcknowledgements[0].WarningCode.Should().Be(ElectionWarningCodeProto.LowAnonymitySet);
         response.TrusteeInvitations.Should().ContainSingle();
         response.BoundaryArtifacts.Should().ContainSingle();
+        response.GovernedProposals.Should().ContainSingle();
+        response.GovernedProposals[0].ActionType.Should().Be(ElectionGovernedActionTypeProto.GovernedActionClose);
+        response.GovernedProposalApprovals.Should().ContainSingle();
+        response.GovernedProposalApprovals[0].ApprovalNote.Should().Be("Ready.");
     }
 
     [Fact]

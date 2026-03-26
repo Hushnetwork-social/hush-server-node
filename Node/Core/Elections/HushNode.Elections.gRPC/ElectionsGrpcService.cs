@@ -73,6 +73,31 @@ public class ElectionsGrpcService(
         }
     }
 
+    public override Task<ElectionCommandResponse> StartElectionGovernedProposal(Proto.StartElectionGovernedProposalRequest request, ServerCallContext context) =>
+        ExecuteCommandAsync(
+            () => _lifecycleService.StartGovernedProposalAsync(new Domain.StartElectionGovernedProposalRequest(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                (HushShared.Elections.Model.ElectionGovernedActionType)(int)request.ActionType,
+                request.ActorPublicAddress)),
+            nameof(StartElectionGovernedProposal));
+
+    public override Task<ElectionCommandResponse> ApproveElectionGovernedProposal(Proto.ApproveElectionGovernedProposalRequest request, ServerCallContext context) =>
+        ExecuteCommandAsync(
+            () => _lifecycleService.ApproveGovernedProposalAsync(new Domain.ApproveElectionGovernedProposalRequest(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                ElectionGrpcMappings.ParseGuid(request.ProposalId, nameof(request.ProposalId)),
+                request.ActorPublicAddress,
+                NormalizeOptionalString(request.ApprovalNote))),
+            nameof(ApproveElectionGovernedProposal));
+
+    public override Task<ElectionCommandResponse> RetryElectionGovernedProposalExecution(Proto.RetryElectionGovernedProposalExecutionRequest request, ServerCallContext context) =>
+        ExecuteCommandAsync(
+            () => _lifecycleService.RetryGovernedProposalExecutionAsync(new Domain.RetryElectionGovernedProposalExecutionRequest(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                ElectionGrpcMappings.ParseGuid(request.ProposalId, nameof(request.ProposalId)),
+                request.ActorPublicAddress)),
+            nameof(RetryElectionGovernedProposalExecution));
+
     public override Task<ElectionCommandResponse> OpenElection(Proto.OpenElectionRequest request, ServerCallContext context) =>
         ExecuteCommandAsync(
             () => _lifecycleService.OpenElectionAsync(new Domain.OpenElectionRequest(

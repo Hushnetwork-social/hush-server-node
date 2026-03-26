@@ -40,3 +40,43 @@ Feature: FEAT-094 election lifecycle integration
     And the readiness response should report the "AllTrusteesRequiredFragility" warning as missing
     And the readiness response should include the pending trustee and FEAT-096 blockers
     And the blocked trustee open should be rejected through gRPC
+
+  @FEAT-096 @AT-GOV-096-OPEN
+  Scenario: Governed open blocks further draft edits and opens at trustee threshold
+    Given FEAT-094 election integration services are available
+    When the owner creates a trustee-threshold election draft through gRPC
+    And the owner invites trustee "Bob" through gRPC
+    And trustee "Bob" accepts the invitation through gRPC
+    And the owner invites trustee "Charlie" through gRPC
+    And trustee "Charlie" accepts the invitation through gRPC
+    And the owner starts an "open" governed proposal through gRPC
+    And the owner attempts to update the trustee-threshold draft title to "Governed Referendum Revised" while a governed open proposal is pending
+    Then the pending governed open should block further draft changes
+    When trustee "Bob" approves the governed proposal through gRPC
+    Then the governed proposal should execute and transition the election to "Open"
+
+  @FEAT-096 @AT-GOV-096-CLOSE
+  Scenario: Governed close locks vote acceptance immediately and closes at threshold
+    Given FEAT-094 election integration services are available
+    And the owner has an open trustee-threshold election through governed approval gRPC
+    When the owner starts an "close" governed proposal through gRPC
+    Then the governed proposal should remain pending for "close" while the election stays "Open"
+    And vote acceptance should be locked immediately on the election
+    When trustee "Bob" approves the governed proposal through gRPC
+    Then the governed proposal should execute and transition the election to "Closed"
+
+  @FEAT-096 @AT-GOV-096-RETRY
+  Scenario: Owner can retry a failed governed proposal after the blocking state is repaired
+    Given FEAT-094 election integration services are available
+    When the owner creates a trustee-threshold election draft through gRPC
+    And the owner invites trustee "Bob" through gRPC
+    And trustee "Bob" accepts the invitation through gRPC
+    And the owner invites trustee "Charlie" through gRPC
+    And trustee "Charlie" accepts the invitation through gRPC
+    And the owner starts an "open" governed proposal through gRPC
+    And the integration test forces the election into a stale "Closed" state before the governed proposal executes
+    And trustee "Bob" approves the governed proposal through gRPC
+    Then the governed proposal should record an execution failure for "open"
+    When the integration test restores the election to the "Draft" state for governed retry
+    And the owner retries the governed proposal execution through gRPC
+    Then the governed proposal should execute and transition the election to "Open"

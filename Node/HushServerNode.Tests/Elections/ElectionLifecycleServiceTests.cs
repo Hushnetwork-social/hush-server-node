@@ -358,6 +358,33 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task StartGovernedProposalAsync_WithValidCloseRequest_LocksVoteAcceptanceImmediately()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = DateTime.UtcNow,
+            OpenArtifactId = Guid.NewGuid(),
+            LastUpdatedAt = DateTime.UtcNow,
+        };
+
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.StartGovernedProposalAsync(new StartElectionGovernedProposalRequest(
+            election.ElectionId,
+            ElectionGovernedActionType.Close,
+            "owner-address"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Election.Should().NotBeNull();
+        result.Election!.VoteAcceptanceLockedAt.Should().NotBeNull();
+        result.GovernedProposal.Should().NotBeNull();
+        store.Elections[election.ElectionId].VoteAcceptanceLockedAt.Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task UpdateDraftAsync_WithPendingGovernedOpenProposal_ReturnsInvalidState()
     {
         var store = new ElectionStore();
@@ -660,12 +687,14 @@ public class ElectionLifecycleServiceTests
 
         closeResult.IsSuccess.Should().BeTrue();
         finalizeResult.IsSuccess.Should().BeTrue();
+        closeResult.Election!.VoteAcceptanceLockedAt.Should().NotBeNull();
         finalizeResult.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Finalized);
         store.BoundaryArtifacts.Select(x => x.ArtifactType).Should().Equal(
             ElectionBoundaryArtifactType.Close,
             ElectionBoundaryArtifactType.Finalize);
         store.BoundaryArtifacts[0].AcceptedBallotSetHash.Should().Equal(closeBallotHash);
         store.BoundaryArtifacts[1].FinalEncryptedTallyHash.Should().Equal(finalizeTallyHash);
+        store.Elections[election.ElectionId].VoteAcceptanceLockedAt.Should().NotBeNull();
         store.Elections[election.ElectionId].CloseArtifactId.Should().Be(closeResult.BoundaryArtifact!.Id);
         store.Elections[election.ElectionId].FinalizeArtifactId.Should().Be(finalizeResult.BoundaryArtifact!.Id);
     }

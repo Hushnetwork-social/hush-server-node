@@ -14,6 +14,9 @@ service HushElections {
   rpc RejectElectionTrusteeInvitation(ResolveElectionTrusteeInvitationRequest) returns (ElectionCommandResponse);
   rpc RevokeElectionTrusteeInvitation(ResolveElectionTrusteeInvitationRequest) returns (ElectionCommandResponse);
   rpc GetElectionOpenReadiness(GetElectionOpenReadinessRequest) returns (GetElectionOpenReadinessResponse);
+  rpc StartElectionGovernedProposal(StartElectionGovernedProposalRequest) returns (ElectionCommandResponse);
+  rpc ApproveElectionGovernedProposal(ApproveElectionGovernedProposalRequest) returns (ElectionCommandResponse);
+  rpc RetryElectionGovernedProposalExecution(RetryElectionGovernedProposalExecutionRequest) returns (ElectionCommandResponse);
   rpc OpenElection(OpenElectionRequest) returns (ElectionCommandResponse);
   rpc CloseElection(CloseElectionRequest) returns (ElectionCommandResponse);
   rpc FinalizeElection(FinalizeElectionRequest) returns (ElectionCommandResponse);
@@ -99,6 +102,18 @@ enum ElectionTrusteeInvitationStatusProto {
   Accepted = 1;
   Rejected = 2;
   Revoked = 3;
+}
+
+enum ElectionGovernedActionTypeProto {
+  GovernedActionOpen = 0;
+  GovernedActionClose = 1;
+  GovernedActionFinalize = 2;
+}
+
+enum ElectionGovernedProposalExecutionStatusProto {
+  WaitingForApprovals = 0;
+  ExecutionSucceeded = 1;
+  ExecutionFailed = 2;
 }
 
 enum ElectionCommandErrorCodeProto {
@@ -203,6 +218,8 @@ message ElectionRecordView {
   string OpenArtifactId = 29;
   string CloseArtifactId = 30;
   string FinalizeArtifactId = 31;
+  google.protobuf.Timestamp TallyReadyAt = 32;
+  google.protobuf.Timestamp VoteAcceptanceLockedAt = 33;
 }
 
 message ElectionSummary {
@@ -274,6 +291,32 @@ message ElectionTrusteeInvitation {
   google.protobuf.Timestamp RevokedAt = 12;
 }
 
+message ElectionGovernedProposal {
+  string Id = 1;
+  string ElectionId = 2;
+  ElectionGovernedActionTypeProto ActionType = 3;
+  ElectionLifecycleStateProto LifecycleStateAtCreation = 4;
+  string ProposedByPublicAddress = 5;
+  google.protobuf.Timestamp CreatedAt = 6;
+  ElectionGovernedProposalExecutionStatusProto ExecutionStatus = 7;
+  google.protobuf.Timestamp LastExecutionAttemptedAt = 8;
+  google.protobuf.Timestamp ExecutedAt = 9;
+  string ExecutionFailureReason = 10;
+  string LastExecutionTriggeredByPublicAddress = 11;
+}
+
+message ElectionGovernedProposalApproval {
+  string Id = 1;
+  string ProposalId = 2;
+  string ElectionId = 3;
+  ElectionGovernedActionTypeProto ActionType = 4;
+  ElectionLifecycleStateProto LifecycleStateAtProposalCreation = 5;
+  string TrusteeUserAddress = 6;
+  string TrusteeDisplayName = 7;
+  string ApprovalNote = 8;
+  google.protobuf.Timestamp ApprovedAt = 9;
+}
+
 message ElectionDraftInput {
   string Title = 1;
   string ShortDescription = 2;
@@ -323,6 +366,25 @@ message ResolveElectionTrusteeInvitationRequest {
   string ActorPublicAddress = 3;
 }
 
+message StartElectionGovernedProposalRequest {
+  string ElectionId = 1;
+  ElectionGovernedActionTypeProto ActionType = 2;
+  string ActorPublicAddress = 3;
+}
+
+message ApproveElectionGovernedProposalRequest {
+  string ElectionId = 1;
+  string ProposalId = 2;
+  string ActorPublicAddress = 3;
+  string ApprovalNote = 4;
+}
+
+message RetryElectionGovernedProposalExecutionRequest {
+  string ElectionId = 1;
+  string ProposalId = 2;
+  string ActorPublicAddress = 3;
+}
+
 message GetElectionOpenReadinessRequest {
   string ElectionId = 1;
   repeated ElectionWarningCodeProto RequiredWarningCodes = 2;
@@ -369,6 +431,8 @@ message ElectionCommandResponse {
   ElectionDraftSnapshot DraftSnapshot = 6;
   ElectionBoundaryArtifact BoundaryArtifact = 7;
   ElectionTrusteeInvitation TrusteeInvitation = 8;
+  ElectionGovernedProposal GovernedProposal = 9;
+  ElectionGovernedProposalApproval GovernedProposalApproval = 10;
 }
 
 message GetElectionOpenReadinessResponse {
@@ -386,6 +450,8 @@ message GetElectionResponse {
   repeated ElectionWarningAcknowledgement WarningAcknowledgements = 5;
   repeated ElectionTrusteeInvitation TrusteeInvitations = 6;
   repeated ElectionBoundaryArtifact BoundaryArtifacts = 7;
+  repeated ElectionGovernedProposal GovernedProposals = 8;
+  repeated ElectionGovernedProposalApproval GovernedProposalApprovals = 9;
 }
 
 message GetElectionsByOwnerResponse {

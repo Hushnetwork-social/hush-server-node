@@ -255,6 +255,181 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Governed open blocks further draft edits and opens at trustee threshold")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
+        [Xunit.TraitAttribute("Description", "Governed open blocks further draft edits and opens at trustee threshold")]
+        [Xunit.TraitAttribute("Category", "FEAT-096")]
+        [Xunit.TraitAttribute("Category", "AT-GOV-096-OPEN")]
+        public void GovernedOpenBlocksFurtherDraftEditsAndOpensAtTrusteeThreshold()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-096",
+                    "AT-GOV-096-OPEN"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Governed open blocks further draft edits and opens at trustee threshold", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 45
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 46
+    testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 47
+    testRunner.When("the owner creates a trustee-threshold election draft through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 48
+    testRunner.And("the owner invites trustee \"Bob\" through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 49
+    testRunner.And("trustee \"Bob\" accepts the invitation through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 50
+    testRunner.And("the owner invites trustee \"Charlie\" through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 51
+    testRunner.And("trustee \"Charlie\" accepts the invitation through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 52
+    testRunner.And("the owner starts an \"open\" governed proposal through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 53
+    testRunner.And("the owner attempts to update the trustee-threshold draft title to \"Governed Refer" +
+                        "endum Revised\" while a governed open proposal is pending", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 54
+    testRunner.Then("the pending governed open should block further draft changes", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 55
+    testRunner.When("trustee \"Bob\" approves the governed proposal through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 56
+    testRunner.Then("the governed proposal should execute and transition the election to \"Open\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Governed close locks vote acceptance immediately and closes at threshold")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
+        [Xunit.TraitAttribute("Description", "Governed close locks vote acceptance immediately and closes at threshold")]
+        [Xunit.TraitAttribute("Category", "FEAT-096")]
+        [Xunit.TraitAttribute("Category", "AT-GOV-096-CLOSE")]
+        public void GovernedCloseLocksVoteAcceptanceImmediatelyAndClosesAtThreshold()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-096",
+                    "AT-GOV-096-CLOSE"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Governed close locks vote acceptance immediately and closes at threshold", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 59
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 60
+    testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 61
+    testRunner.And("the owner has an open trustee-threshold election through governed approval gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 62
+    testRunner.When("the owner starts an \"close\" governed proposal through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 63
+    testRunner.Then("the governed proposal should remain pending for \"close\" while the election stays " +
+                        "\"Open\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 64
+    testRunner.And("vote acceptance should be locked immediately on the election", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 65
+    testRunner.When("trustee \"Bob\" approves the governed proposal through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 66
+    testRunner.Then("the governed proposal should execute and transition the election to \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Owner can retry a failed governed proposal after the blocking state is repaired")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
+        [Xunit.TraitAttribute("Description", "Owner can retry a failed governed proposal after the blocking state is repaired")]
+        [Xunit.TraitAttribute("Category", "FEAT-096")]
+        [Xunit.TraitAttribute("Category", "AT-GOV-096-RETRY")]
+        public void OwnerCanRetryAFailedGovernedProposalAfterTheBlockingStateIsRepaired()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-096",
+                    "AT-GOV-096-RETRY"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Owner can retry a failed governed proposal after the blocking state is repaired", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 69
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 70
+    testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 71
+    testRunner.When("the owner creates a trustee-threshold election draft through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 72
+    testRunner.And("the owner invites trustee \"Bob\" through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 73
+    testRunner.And("trustee \"Bob\" accepts the invitation through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 74
+    testRunner.And("the owner invites trustee \"Charlie\" through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 75
+    testRunner.And("trustee \"Charlie\" accepts the invitation through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 76
+    testRunner.And("the owner starts an \"open\" governed proposal through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 77
+    testRunner.And("the integration test forces the election into a stale \"Closed\" state before the g" +
+                        "overned proposal executes", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 78
+    testRunner.And("trustee \"Bob\" approves the governed proposal through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 79
+    testRunner.Then("the governed proposal should record an execution failure for \"open\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 80
+    testRunner.When("the integration test restores the election to the \"Draft\" state for governed retr" +
+                        "y", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 81
+    testRunner.And("the owner retries the governed proposal execution through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 82
+    testRunner.Then("the governed proposal should execute and transition the election to \"Open\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable
