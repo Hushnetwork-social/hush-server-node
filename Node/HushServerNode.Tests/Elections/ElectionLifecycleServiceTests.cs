@@ -158,6 +158,41 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task InviteTrusteeAsync_AfterRevocation_AllowsExplicitReinvite()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection();
+        var revokedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision).Revoke(
+                DateTime.UtcNow,
+                election.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[revokedInvitation.Id] = revokedInvitation;
+
+        var result = await service.InviteTrusteeAsync(new InviteElectionTrusteeRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            TrusteeUserAddress: "trustee-a",
+            TrusteeDisplayName: "Alice"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.TrusteeInvitation.Should().NotBeNull();
+        result.TrusteeInvitation!.Status.Should().Be(ElectionTrusteeInvitationStatus.Pending);
+        result.TrusteeInvitation.Id.Should().NotBe(revokedInvitation.Id);
+        store.TrusteeInvitations.Values.Count(x =>
+            string.Equals(x.TrusteeUserAddress, "trustee-a", StringComparison.OrdinalIgnoreCase))
+            .Should()
+            .Be(2);
+    }
+
+    [Fact]
     public async Task AcceptTrusteeInvitation_AfterElectionOpened_ReturnsInvalidState()
     {
         var store = new ElectionStore();
@@ -233,6 +268,49 @@ public class ElectionLifecycleServiceTests
         result.IsReadyToOpen.Should().BeFalse();
         result.MissingWarningAcknowledgements.Should().Contain(ElectionWarningCode.LowAnonymitySet);
         result.ValidationErrors.Should().Contain(x => x.Contains("LowAnonymitySet", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithPendingTrusteeAndExactThreshold_RequiresFragilityWarningAndBlocksOpen()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection() with
+        {
+            RequiredApprovalCount = 1,
+        };
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
+                DateTime.UtcNow,
+                election.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+        var pendingInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-b",
+            trusteeDisplayName: "Bob",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedInvitation.Id] = acceptedInvitation;
+        store.TrusteeInvitations[pendingInvitation.Id] = pendingInvitation;
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            election.ElectionId,
+            RequiredWarningCodes: []));
+
+        result.IsReadyToOpen.Should().BeFalse();
+        result.RequiredWarningCodes.Should().Contain(ElectionWarningCode.AllTrusteesRequiredFragility);
+        result.MissingWarningAcknowledgements.Should().Contain(ElectionWarningCode.AllTrusteesRequiredFragility);
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains("remain pending", StringComparison.OrdinalIgnoreCase));
+        result.ValidationErrors.Should().Contain(x => x.Contains("FEAT-096", StringComparison.Ordinal));
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains("AllTrusteesRequiredFragility", StringComparison.Ordinal));
     }
 
     [Fact]

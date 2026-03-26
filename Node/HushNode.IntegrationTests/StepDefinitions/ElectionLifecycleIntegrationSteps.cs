@@ -14,6 +14,7 @@ public sealed class ElectionLifecycleIntegrationSteps
 {
     private readonly ScenarioContext _scenarioContext;
     private readonly List<ElectionLifecycleStateProto> _observedStates = [];
+    private readonly Dictionary<string, string> _trusteeInvitationIds = new(StringComparer.OrdinalIgnoreCase);
 
     private HushElections.HushElectionsClient? _client;
     private TestIdentity? _owner;
@@ -37,6 +38,7 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastCommandResponse = null;
         _lastReadinessResponse = null;
         _lastElectionResponse = null;
+        _trusteeInvitationIds.Clear();
     }
 
     [When(@"the owner creates an admin-only election draft through gRPC")]
@@ -48,6 +50,23 @@ public sealed class ElectionLifecycleIntegrationSteps
             ActorPublicAddress = GetOwner().PublicSigningAddress,
             SnapshotReason = "initial draft",
             Draft = BuildDraftInput("Board Election"),
+        });
+
+        response.Success.Should().BeTrue($"draft creation should succeed: {response.ErrorMessage}");
+        _lastCommandResponse = response;
+        _electionId = response.Election.ElectionId;
+        RecordState(response.Election.LifecycleState);
+    }
+
+    [When(@"the owner creates a trustee-threshold election draft through gRPC")]
+    public async Task WhenTheOwnerCreatesATrusteeThresholdElectionDraftThroughGrpc()
+    {
+        var response = await GetClient().CreateElectionDraftAsync(new CreateElectionDraftRequest
+        {
+            OwnerPublicAddress = GetOwner().PublicSigningAddress,
+            ActorPublicAddress = GetOwner().PublicSigningAddress,
+            SnapshotReason = "trustee-threshold draft",
+            Draft = BuildTrusteeThresholdDraftInput("Governed Referendum"),
         });
 
         response.Success.Should().BeTrue($"draft creation should succeed: {response.ErrorMessage}");
@@ -89,6 +108,20 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastReadinessResponse = response;
     }
 
+    [When(@"the owner checks open readiness for the trustee-threshold election")]
+    public async Task WhenTheOwnerChecksOpenReadinessForTheTrusteeThresholdElection()
+    {
+        var response = await GetClient().GetElectionOpenReadinessAsync(new GetElectionOpenReadinessRequest
+        {
+            ElectionId = GetElectionId(),
+        });
+
+        response.IsReadyToOpen.Should().BeFalse(
+            "trustee-threshold FEAT-094 elections must remain blocked until FEAT-096 is implemented.");
+
+        _lastReadinessResponse = response;
+    }
+
     [When(@"the owner opens the election through gRPC")]
     public async Task WhenTheOwnerOpensTheElectionThroughGrpc()
     {
@@ -109,6 +142,57 @@ public sealed class ElectionLifecycleIntegrationSteps
 
         _lastCommandResponse = response;
         RecordState(response.Election.LifecycleState);
+    }
+
+    [When(@"the owner invites trustee ""(.*)"" through gRPC")]
+    public async Task WhenTheOwnerInvitesTrusteeThroughGrpc(string trusteeAlias)
+    {
+        var trustee = ResolveIdentity(trusteeAlias);
+        var response = await GetClient().InviteElectionTrusteeAsync(new InviteElectionTrusteeRequest
+        {
+            ElectionId = GetElectionId(),
+            ActorPublicAddress = GetOwner().PublicSigningAddress,
+            TrusteeUserAddress = trustee.PublicSigningAddress,
+            TrusteeDisplayName = trustee.DisplayName,
+        });
+
+        response.Success.Should().BeTrue($"trustee invite should succeed: {response.ErrorMessage}");
+        response.TrusteeInvitation.Should().NotBeNull();
+        _trusteeInvitationIds[trustee.PublicSigningAddress] = response.TrusteeInvitation.Id;
+        _lastCommandResponse = response;
+    }
+
+    [When(@"trustee ""(.*)"" accepts the invitation through gRPC")]
+    public async Task WhenTrusteeAcceptsTheInvitationThroughGrpc(string trusteeAlias)
+    {
+        var trustee = ResolveIdentity(trusteeAlias);
+        var response = await GetClient().AcceptElectionTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest
+        {
+            ElectionId = GetElectionId(),
+            InvitationId = GetTrusteeInvitationId(trustee.PublicSigningAddress),
+            ActorPublicAddress = trustee.PublicSigningAddress,
+        });
+
+        response.Success.Should().BeTrue($"trustee acceptance should succeed: {response.ErrorMessage}");
+        response.TrusteeInvitation.Should().NotBeNull();
+        response.TrusteeInvitation.Status.Should().Be(ElectionTrusteeInvitationStatusProto.Accepted);
+        _lastCommandResponse = response;
+    }
+
+    [When(@"the owner attempts to open the trustee-threshold election through gRPC")]
+    public async Task WhenTheOwnerAttemptsToOpenTheTrusteeThresholdElectionThroughGrpc()
+    {
+        var response = await GetClient().OpenElectionAsync(new OpenElectionRequest
+        {
+            ElectionId = GetElectionId(),
+            ActorPublicAddress = GetOwner().PublicSigningAddress,
+            FrozenEligibleVoterSetHash = ByteString.CopyFromUtf8("trustee-threshold-roster"),
+            TrusteePolicyExecutionReference = "reserved-feat-096-governance",
+            ReportingPolicyExecutionReference = "phase-one-reporting-package",
+            ReviewWindowExecutionReference = "governed-review-window-reserved",
+        });
+
+        _lastCommandResponse = response;
     }
 
     [When(@"the owner reloads the election through gRPC")]
@@ -265,6 +349,42 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastElectionResponse = response;
     }
 
+    [Then(@"the readiness response should require the ""(.*)"" warning")]
+    public void ThenTheReadinessResponseShouldRequireTheWarning(string warningCode)
+    {
+        _lastReadinessResponse.Should().NotBeNull();
+        _lastReadinessResponse!.RequiredWarningCodes.Should().Contain(ParseWarningCode(warningCode));
+    }
+
+    [Then(@"the readiness response should report the ""(.*)"" warning as missing")]
+    public void ThenTheReadinessResponseShouldReportTheWarningAsMissing(string warningCode)
+    {
+        _lastReadinessResponse.Should().NotBeNull();
+        _lastReadinessResponse!.MissingWarningAcknowledgements.Should().Contain(ParseWarningCode(warningCode));
+    }
+
+    [Then(@"the readiness response should include the pending trustee and FEAT-096 blockers")]
+    public void ThenTheReadinessResponseShouldIncludeThePendingTrusteeAndFeatBlockers()
+    {
+        _lastReadinessResponse.Should().NotBeNull();
+        _lastReadinessResponse!.ValidationErrors.Should().Contain(error =>
+            error.Contains("remain pending", StringComparison.OrdinalIgnoreCase));
+        _lastReadinessResponse.ValidationErrors.Should().Contain(error =>
+            error.Contains("FEAT-096", StringComparison.Ordinal));
+    }
+
+    [Then(@"the blocked trustee open should be rejected through gRPC")]
+    public void ThenTheBlockedTrusteeOpenShouldBeRejectedThroughGrpc()
+    {
+        _lastCommandResponse.Should().NotBeNull();
+        _lastCommandResponse!.Success.Should().BeFalse();
+        _lastCommandResponse.ErrorCode.Should().Be(ElectionCommandErrorCodeProto.DependencyBlocked);
+        _lastCommandResponse.ValidationErrors.Should().Contain(error =>
+            error.Contains("remain pending", StringComparison.OrdinalIgnoreCase));
+        _lastCommandResponse.ValidationErrors.Should().Contain(error =>
+            error.Contains("FEAT-096", StringComparison.Ordinal));
+    }
+
     private GrpcClientFactory GetGrpcFactory() =>
         _scenarioContext.Get<GrpcClientFactory>(ScenarioHooks.GrpcFactoryKey);
 
@@ -276,6 +396,11 @@ public sealed class ElectionLifecycleIntegrationSteps
 
     private string GetElectionId() =>
         _electionId ?? throw new InvalidOperationException("Election ID not initialized.");
+
+    private string GetTrusteeInvitationId(string trusteePublicAddress) =>
+        _trusteeInvitationIds.TryGetValue(trusteePublicAddress, out var invitationId)
+            ? invitationId
+            : throw new InvalidOperationException($"No trustee invitation recorded for {trusteePublicAddress}.");
 
     private async Task<GetElectionResponse> ReloadElectionAsync()
     {
@@ -302,6 +427,20 @@ public sealed class ElectionLifecycleIntegrationSteps
             ElectionLifecycleStateProto.Finalized => "Finalized",
             _ => lifecycleState.ToString(),
         };
+
+    private static TestIdentity ResolveIdentity(string alias) =>
+        alias.Trim().ToLowerInvariant() switch
+        {
+            "alice" => TestIdentities.Alice,
+            "bob" => TestIdentities.Bob,
+            "charlie" => TestIdentities.Charlie,
+            _ => throw new ArgumentOutOfRangeException(nameof(alias), alias, "Unsupported test identity alias."),
+        };
+
+    private static ElectionWarningCodeProto ParseWarningCode(string warningCode) =>
+        Enum.TryParse<ElectionWarningCodeProto>(warningCode, ignoreCase: false, out var parsed)
+            ? parsed
+            : throw new ArgumentOutOfRangeException(nameof(warningCode), warningCode, "Unsupported warning code.");
 
     private static ElectionDraftInput BuildDraftInput(
         string title,
@@ -358,6 +497,63 @@ public sealed class ElectionLifecycleIntegrationSteps
             IsBlankOption = false,
         });
         draft.AcknowledgedWarningCodes.Add(ElectionWarningCodeProto.LowAnonymitySet);
+
+        return draft;
+    }
+
+    private static ElectionDraftInput BuildTrusteeThresholdDraftInput(string title)
+    {
+        var draft = new ElectionDraftInput
+        {
+            Title = title,
+            ShortDescription = "Governed policy vote",
+            ExternalReferenceCode = "REF-2026-01",
+            ElectionClass = ElectionClassProto.OrganizationalRemoteVoting,
+            BindingStatus = ElectionBindingStatusProto.Binding,
+            GovernanceMode = ElectionGovernanceModeProto.TrusteeThreshold,
+            DisclosureMode = ElectionDisclosureModeProto.FinalResultsOnly,
+            ParticipationPrivacyMode = ParticipationPrivacyModeProto.PublicCheckoffAnonymousBallotPrivateChoice,
+            VoteUpdatePolicy = VoteUpdatePolicyProto.SingleSubmissionOnly,
+            EligibilitySourceType = EligibilitySourceTypeProto.OrganizationImportedRoster,
+            EligibilityMutationPolicy = EligibilityMutationPolicyProto.FrozenAtOpen,
+            OutcomeRule = new OutcomeRule
+            {
+                Kind = OutcomeRuleKindProto.PassFail,
+                TemplateKey = "pass_fail_yes_no",
+                SeatCount = 1,
+                BlankVoteCountsForTurnout = true,
+                BlankVoteExcludedFromWinnerSelection = true,
+                BlankVoteExcludedFromThresholdDenominator = true,
+                TieResolutionRule = "tie_unresolved",
+                CalculationBasis = "simple_majority_of_non_blank_votes",
+            },
+            ProtocolOmegaVersion = "omega-v1.0.0",
+            ReportingPolicy = ReportingPolicyProto.DefaultPhaseOnePackage,
+            ReviewWindowPolicy = ReviewWindowPolicyProto.GovernedReviewWindowReserved,
+            RequiredApprovalCount = 1,
+        };
+
+        draft.ApprovedClientApplications.Add(new ApprovedClientApplication
+        {
+            ApplicationId = "hushsocial",
+            Version = "1.0.0",
+        });
+        draft.OwnerOptions.Add(new ElectionOption
+        {
+            OptionId = "yes",
+            DisplayLabel = "Yes",
+            ShortDescription = "Approve the proposal",
+            BallotOrder = 1,
+            IsBlankOption = false,
+        });
+        draft.OwnerOptions.Add(new ElectionOption
+        {
+            OptionId = "no",
+            DisplayLabel = "No",
+            ShortDescription = "Reject the proposal",
+            BallotOrder = 2,
+            IsBlankOption = false,
+        });
 
         return draft;
     }

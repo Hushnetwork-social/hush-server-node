@@ -26,3 +26,17 @@ Feature: FEAT-094 election lifecycle integration
     When the owner attempts to change the binding status after open
     Then the immutable update should be rejected through gRPC
     And the open-time binding status should remain "Binding"
+
+  @AT-PROC-I01 @AT-PROC-U02
+  Scenario: Trustee-threshold open remains blocked while pending invitations and warning gaps remain
+    Given FEAT-094 election integration services are available
+    When the owner creates a trustee-threshold election draft through gRPC
+    And the owner invites trustee "Bob" through gRPC
+    And trustee "Bob" accepts the invitation through gRPC
+    And the owner invites trustee "Charlie" through gRPC
+    And the owner checks open readiness for the trustee-threshold election
+    And the owner attempts to open the trustee-threshold election through gRPC
+    Then the readiness response should require the "AllTrusteesRequiredFragility" warning
+    And the readiness response should report the "AllTrusteesRequiredFragility" warning as missing
+    And the readiness response should include the pending trustee and FEAT-096 blockers
+    And the blocked trustee open should be rejected through gRPC

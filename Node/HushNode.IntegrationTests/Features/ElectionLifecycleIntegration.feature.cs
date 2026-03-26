@@ -192,6 +192,69 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Trustee-threshold open remains blocked while pending invitations and warning gaps" +
+            " remain")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
+        [Xunit.TraitAttribute("Description", "Trustee-threshold open remains blocked while pending invitations and warning gaps" +
+            " remain")]
+        [Xunit.TraitAttribute("Category", "AT-PROC-I01")]
+        [Xunit.TraitAttribute("Category", "AT-PROC-U02")]
+        public void Trustee_ThresholdOpenRemainsBlockedWhilePendingInvitationsAndWarningGapsRemain()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "AT-PROC-I01",
+                    "AT-PROC-U02"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Trustee-threshold open remains blocked while pending invitations and warning gaps" +
+                    " remain", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 31
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 32
+    testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 33
+    testRunner.When("the owner creates a trustee-threshold election draft through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 34
+    testRunner.And("the owner invites trustee \"Bob\" through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 35
+    testRunner.And("trustee \"Bob\" accepts the invitation through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 36
+    testRunner.And("the owner invites trustee \"Charlie\" through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 37
+    testRunner.And("the owner checks open readiness for the trustee-threshold election", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 38
+    testRunner.And("the owner attempts to open the trustee-threshold election through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 39
+    testRunner.Then("the readiness response should require the \"AllTrusteesRequiredFragility\" warning", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 40
+    testRunner.And("the readiness response should report the \"AllTrusteesRequiredFragility\" warning a" +
+                        "s missing", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 41
+    testRunner.And("the readiness response should include the pending trustee and FEAT-096 blockers", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 42
+    testRunner.And("the blocked trustee open should be rejected through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable
