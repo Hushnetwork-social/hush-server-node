@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\HushNode.Elections.Storage\HushNode.Elections.Storage.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.2" />
+  </ItemGroup>
+
+</Project>

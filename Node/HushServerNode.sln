@@ -139,6 +139,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Elections", "Elections", "{
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Elections.Storage", "Core\Elections\HushNode.Elections.Storage\HushNode.Elections.Storage.csproj", "{BD15698C-1F00-42D0-9FFF-64E6DBCF6374}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Elections", "Core\Elections\HushNode.Elections\HushNode.Elections.csproj", "{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -833,6 +835,18 @@ Global
 		{BD15698C-1F00-42D0-9FFF-64E6DBCF6374}.Release|x64.Build.0 = Release|Any CPU
 		{BD15698C-1F00-42D0-9FFF-64E6DBCF6374}.Release|x86.ActiveCfg = Release|Any CPU
 		{BD15698C-1F00-42D0-9FFF-64E6DBCF6374}.Release|x86.Build.0 = Release|Any CPU
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}.Debug|x64.Build.0 = Debug|Any CPU
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}.Debug|x86.Build.0 = Debug|Any CPU
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}.Release|x64.ActiveCfg = Release|Any CPU
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}.Release|x64.Build.0 = Release|Any CPU
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}.Release|x86.ActiveCfg = Release|Any CPU
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -886,5 +900,6 @@ Global
 		{E31E08B1-D8D2-4F33-B647-351445018B0C} = {3B894B78-73BE-0D64-6742-1C888FCDE52F}
 		{EC60F65B-9915-48C1-5E8D-4FBBFE4BE46C} = {E205815F-3B3D-4B6F-BA1A-F8A941F68E9D}
 		{BD15698C-1F00-42D0-9FFF-64E6DBCF6374} = {EC60F65B-9915-48C1-5E8D-4FBBFE4BE46C}
+		{2A0C12FC-6774-4A8D-B374-DB8D9835E0AD} = {EC60F65B-9915-48C1-5E8D-4FBBFE4BE46C}
 	EndGlobalSection
 EndGlobal
