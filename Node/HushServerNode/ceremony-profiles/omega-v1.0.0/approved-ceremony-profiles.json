@@ -1,0 +1,26 @@
+{
+  "version": "omega-v1.0.0",
+  "generatedBy": "FEAT-097 Phase 6 shipped ceremony profile registry",
+  "profiles": [
+    {
+      "profileId": "dkg-dev-3of5",
+      "displayName": "Development 3 of 5",
+      "description": "Fast dev/test ceremony profile for the initial 3-of-5 trustee rollout over 5 trustees.",
+      "providerKey": "hush-dkg-profile-manifest",
+      "profileVersion": "omega-v1.0.0-dev-3of5",
+      "trusteeCount": 5,
+      "requiredApprovalCount": 3,
+      "devOnly": true
+    },
+    {
+      "profileId": "dkg-prod-3of5",
+      "displayName": "Production-Like 3 of 5",
+      "description": "Production-like manifest-backed ceremony profile for the initial 3-of-5 trustee rollout over 5 trustees.",
+      "providerKey": "hush-dkg-profile-manifest",
+      "profileVersion": "omega-v1.0.0-prod-3of5",
+      "trusteeCount": 5,
+      "requiredApprovalCount": 3,
+      "devOnly": false
+    }
+  ]
+}

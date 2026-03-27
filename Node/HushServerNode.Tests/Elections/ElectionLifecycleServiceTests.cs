@@ -480,7 +480,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
-    public async Task EvaluateOpenReadinessAsync_WithReadyCeremonyAtExactThreshold_RequiresFragilityWarningWithoutPendingInviteBlock()
+    public async Task EvaluateOpenReadinessAsync_WithReadyCeremonyAtExactThreshold_ReturnsReadyWithoutPendingInviteBlock()
     {
         var store = new ElectionStore();
         var service = CreateService(store);
@@ -518,10 +518,10 @@ public class ElectionLifecycleServiceTests
             election.ElectionId,
             RequiredWarningCodes: []));
 
-        result.IsReadyToOpen.Should().BeFalse();
+        result.IsReadyToOpen.Should().BeTrue();
         result.RequiredWarningCodes.Should().Contain(ElectionWarningCode.AllTrusteesRequiredFragility);
         result.MissingWarningAcknowledgements.Should().BeEmpty();
-        result.ValidationErrors.Should().Contain(x => x.Contains("FEAT-096", StringComparison.Ordinal));
+        result.ValidationErrors.Should().BeEmpty();
         result.ValidationErrors.Should().NotContain(x =>
             x.Contains("remain pending", StringComparison.OrdinalIgnoreCase));
         result.CeremonySnapshot.Should().NotBeNull();

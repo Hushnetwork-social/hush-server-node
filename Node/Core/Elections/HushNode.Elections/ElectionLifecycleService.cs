@@ -799,7 +799,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             activeCeremonyTrusteeStates,
             warningAcknowledgements,
             request.RequiredWarningCodes,
-            blockGovernedWorkflowMissing: true);
+            blockGovernedWorkflowMissing: false);
     }
 
     public async Task<ElectionCommandResult> StartGovernedProposalAsync(StartElectionGovernedProposalRequest request)
