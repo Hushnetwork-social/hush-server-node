@@ -21,6 +21,12 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionTrusteeInvitation(modelBuilder);
         ConfigureElectionGovernedProposal(modelBuilder);
         ConfigureElectionGovernedProposalApproval(modelBuilder);
+        ConfigureElectionCeremonyProfile(modelBuilder);
+        ConfigureElectionCeremonyVersion(modelBuilder);
+        ConfigureElectionCeremonyTranscriptEvent(modelBuilder);
+        ConfigureElectionCeremonyMessageEnvelope(modelBuilder);
+        ConfigureElectionCeremonyTrusteeState(modelBuilder);
+        ConfigureElectionCeremonyShareCustody(modelBuilder);
     }
 
     private static void ConfigureElectionRecord(ModelBuilder modelBuilder)
@@ -262,6 +268,184 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.HasIndex(x => x.ProposalId);
             entity.HasIndex(x => new { x.ProposalId, x.TrusteeUserAddress }).IsUnique();
             entity.HasIndex(x => new { x.ElectionId, x.ActionType });
+        });
+    }
+
+    private static void ConfigureElectionCeremonyProfile(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionCeremonyProfileRecord>(entity =>
+        {
+            entity.ToTable("ElectionCeremonyProfileRecord", "Elections");
+            entity.HasKey(x => x.ProfileId);
+
+            entity.Property(x => x.ProfileId).HasColumnType("varchar(96)");
+            entity.Property(x => x.DisplayName).HasColumnType("varchar(200)");
+            entity.Property(x => x.Description).HasColumnType("text");
+            entity.Property(x => x.ProviderKey).HasColumnType("varchar(96)");
+            entity.Property(x => x.ProfileVersion).HasColumnType("varchar(64)");
+            entity.Property(x => x.TrusteeCount).HasColumnType("integer");
+            entity.Property(x => x.RequiredApprovalCount).HasColumnType("integer");
+            entity.Property(x => x.DevOnly).HasColumnType("boolean");
+            entity.Property(x => x.RegisteredAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => x.DevOnly);
+            entity.HasIndex(x => new { x.TrusteeCount, x.RequiredApprovalCount });
+        });
+    }
+
+    private static void ConfigureElectionCeremonyVersion(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionCeremonyVersionRecord>(entity =>
+        {
+            entity.ToTable("ElectionCeremonyVersionRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.VersionNumber).HasColumnType("integer");
+            entity.Property(x => x.ProfileId).HasColumnType("varchar(96)");
+            entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(24)");
+            entity.Property(x => x.TrusteeCount).HasColumnType("integer");
+            entity.Property(x => x.RequiredApprovalCount).HasColumnType("integer");
+            entity.Property(x => x.StartedByPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.StartedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.CompletedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SupersededAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SupersededReason).HasColumnType("text");
+            entity.Property(x => x.TallyPublicKeyFingerprint).HasColumnType("varchar(256)");
+
+            ConfigureJsonProperty(entity.Property(x => x.BoundTrustees));
+
+            entity.HasIndex(x => new { x.ElectionId, x.VersionNumber }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.Status });
+        });
+    }
+
+    private static void ConfigureElectionCeremonyTranscriptEvent(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionCeremonyTranscriptEventRecord>(entity =>
+        {
+            entity.ToTable("ElectionCeremonyTranscriptEventRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.CeremonyVersionId).HasColumnType("uuid");
+            entity.Property(x => x.VersionNumber).HasColumnType("integer");
+            entity.Property(x => x.EventType).HasConversion<string>().HasColumnType("varchar(48)");
+            entity.Property(x => x.ActorPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.TrusteeUserAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.TrusteeDisplayName).HasColumnType("varchar(200)");
+            entity.Property(x => x.TrusteeState).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.EventSummary).HasColumnType("text");
+            entity.Property(x => x.EvidenceReference).HasColumnType("text");
+            entity.Property(x => x.RestartReason).HasColumnType("text");
+            entity.Property(x => x.TallyPublicKeyFingerprint).HasColumnType("varchar(256)");
+            entity.Property(x => x.OccurredAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.CeremonyVersionId, x.OccurredAt });
+            entity.HasIndex(x => new { x.ElectionId, x.VersionNumber });
+        });
+    }
+
+    private static void ConfigureElectionCeremonyMessageEnvelope(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionCeremonyMessageEnvelopeRecord>(entity =>
+        {
+            entity.ToTable("ElectionCeremonyMessageEnvelopeRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.CeremonyVersionId).HasColumnType("uuid");
+            entity.Property(x => x.VersionNumber).HasColumnType("integer");
+            entity.Property(x => x.ProfileId).HasColumnType("varchar(96)");
+            entity.Property(x => x.SenderTrusteeUserAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.RecipientTrusteeUserAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.MessageType).HasColumnType("varchar(96)");
+            entity.Property(x => x.PayloadVersion).HasColumnType("varchar(64)");
+            entity.Property(x => x.EncryptedPayload).HasColumnType("bytea");
+            entity.Property(x => x.PayloadFingerprint).HasColumnType("varchar(256)");
+            entity.Property(x => x.SubmittedAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.CeremonyVersionId, x.SubmittedAt });
+            entity.HasIndex(x => new { x.CeremonyVersionId, x.RecipientTrusteeUserAddress });
+        });
+    }
+
+    private static void ConfigureElectionCeremonyTrusteeState(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionCeremonyTrusteeStateRecord>(entity =>
+        {
+            entity.ToTable("ElectionCeremonyTrusteeStateRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.CeremonyVersionId).HasColumnType("uuid");
+            entity.Property(x => x.TrusteeUserAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.TrusteeDisplayName).HasColumnType("varchar(200)");
+            entity.Property(x => x.State).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.TransportPublicKeyFingerprint).HasColumnType("varchar(256)");
+            entity.Property(x => x.TransportPublicKeyPublishedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.JoinedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SelfTestSucceededAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.MaterialSubmittedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ValidationFailedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ValidationFailureReason).HasColumnType("text");
+            entity.Property(x => x.CompletedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.RemovedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ShareVersion).HasColumnType("varchar(64)");
+            entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.CeremonyVersionId, x.TrusteeUserAddress }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.State });
+        });
+    }
+
+    private static void ConfigureElectionCeremonyShareCustody(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionCeremonyShareCustodyRecord>(entity =>
+        {
+            entity.ToTable("ElectionCeremonyShareCustodyRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.CeremonyVersionId).HasColumnType("uuid");
+            entity.Property(x => x.TrusteeUserAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.ShareVersion).HasColumnType("varchar(64)");
+            entity.Property(x => x.PasswordProtected).HasColumnType("boolean");
+            entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.LastExportedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LastImportedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LastImportFailedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LastImportFailureReason).HasColumnType("text");
+            entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.CeremonyVersionId, x.TrusteeUserAddress }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.Status });
         });
     }
 

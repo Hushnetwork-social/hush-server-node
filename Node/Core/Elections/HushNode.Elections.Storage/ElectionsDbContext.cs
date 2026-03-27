@@ -16,6 +16,12 @@ public class ElectionsDbContext(
     public DbSet<ElectionTrusteeInvitationRecord> ElectionTrusteeInvitations { get; set; }
     public DbSet<ElectionGovernedProposalRecord> ElectionGovernedProposals { get; set; }
     public DbSet<ElectionGovernedProposalApprovalRecord> ElectionGovernedProposalApprovals { get; set; }
+    public DbSet<ElectionCeremonyProfileRecord> ElectionCeremonyProfiles { get; set; }
+    public DbSet<ElectionCeremonyVersionRecord> ElectionCeremonyVersions { get; set; }
+    public DbSet<ElectionCeremonyTranscriptEventRecord> ElectionCeremonyTranscriptEvents { get; set; }
+    public DbSet<ElectionCeremonyMessageEnvelopeRecord> ElectionCeremonyMessageEnvelopes { get; set; }
+    public DbSet<ElectionCeremonyTrusteeStateRecord> ElectionCeremonyTrusteeStates { get; set; }
+    public DbSet<ElectionCeremonyShareCustodyRecord> ElectionCeremonyShareCustodyRecords { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

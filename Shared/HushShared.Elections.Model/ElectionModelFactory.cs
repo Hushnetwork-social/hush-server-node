@@ -382,6 +382,227 @@ public static class ElectionModelFactory
             sourceBlockId);
     }
 
+    public static ElectionCeremonyProfileRecord CreateCeremonyProfile(
+        string profileId,
+        string displayName,
+        string description,
+        string providerKey,
+        string profileVersion,
+        int trusteeCount,
+        int requiredApprovalCount,
+        bool devOnly,
+        DateTime? registeredAt = null)
+    {
+        if (trusteeCount < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(trusteeCount), "Trustee count must be at least 1.");
+        }
+
+        if (requiredApprovalCount < 1 || requiredApprovalCount > trusteeCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(requiredApprovalCount), "Required approval count must be between 1 and the trustee count.");
+        }
+
+        var timestamp = registeredAt ?? DateTime.UtcNow;
+
+        return new ElectionCeremonyProfileRecord(
+            NormalizeRequiredText(profileId, nameof(profileId)),
+            NormalizeRequiredText(displayName, nameof(displayName)),
+            NormalizeRequiredText(description, nameof(description)),
+            NormalizeRequiredText(providerKey, nameof(providerKey)),
+            NormalizeRequiredText(profileVersion, nameof(profileVersion)),
+            trusteeCount,
+            requiredApprovalCount,
+            devOnly,
+            timestamp,
+            timestamp);
+    }
+
+    public static ElectionCeremonyVersionRecord CreateCeremonyVersion(
+        ElectionId electionId,
+        int versionNumber,
+        string profileId,
+        int requiredApprovalCount,
+        IReadOnlyList<ElectionTrusteeReference> boundTrustees,
+        string startedByPublicAddress,
+        DateTime? startedAt = null)
+    {
+        if (versionNumber < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(versionNumber), "Ceremony version number must be at least 1.");
+        }
+
+        if (boundTrustees is null || boundTrustees.Count == 0)
+        {
+            throw new ArgumentException("At least one bound trustee is required.", nameof(boundTrustees));
+        }
+
+        var normalizedTrustees = boundTrustees
+            .Select(x => new ElectionTrusteeReference(
+                NormalizeRequiredText(x.TrusteeUserAddress, nameof(boundTrustees)),
+                NormalizeOptionalText(x.TrusteeDisplayName)))
+            .ToArray();
+
+        var duplicateTrustee = normalizedTrustees
+            .GroupBy(x => x.TrusteeUserAddress, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(x => x.Count() > 1);
+        if (duplicateTrustee is not null)
+        {
+            throw new ArgumentException($"Duplicate bound trustee detected: {duplicateTrustee.Key}", nameof(boundTrustees));
+        }
+
+        if (requiredApprovalCount < 1 || requiredApprovalCount > normalizedTrustees.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(requiredApprovalCount), "Required approval count must be between 1 and the bound trustee count.");
+        }
+
+        return new ElectionCeremonyVersionRecord(
+            Guid.NewGuid(),
+            electionId,
+            versionNumber,
+            NormalizeRequiredText(profileId, nameof(profileId)),
+            ElectionCeremonyVersionStatus.InProgress,
+            normalizedTrustees.Length,
+            requiredApprovalCount,
+            normalizedTrustees,
+            NormalizeRequiredText(startedByPublicAddress, nameof(startedByPublicAddress)),
+            startedAt ?? DateTime.UtcNow,
+            CompletedAt: null,
+            SupersededAt: null,
+            SupersededReason: null,
+            TallyPublicKeyFingerprint: null);
+    }
+
+    public static ElectionCeremonyTranscriptEventRecord CreateCeremonyTranscriptEvent(
+        ElectionId electionId,
+        Guid ceremonyVersionId,
+        int versionNumber,
+        ElectionCeremonyTranscriptEventType eventType,
+        string eventSummary,
+        DateTime? occurredAt = null,
+        string? actorPublicAddress = null,
+        string? trusteeUserAddress = null,
+        string? trusteeDisplayName = null,
+        ElectionTrusteeCeremonyState? trusteeState = null,
+        string? evidenceReference = null,
+        string? restartReason = null,
+        string? tallyPublicKeyFingerprint = null)
+    {
+        if (versionNumber < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(versionNumber), "Ceremony version number must be at least 1.");
+        }
+
+        return new ElectionCeremonyTranscriptEventRecord(
+            Guid.NewGuid(),
+            electionId,
+            ceremonyVersionId,
+            versionNumber,
+            eventType,
+            NormalizeOptionalText(actorPublicAddress),
+            NormalizeOptionalText(trusteeUserAddress),
+            NormalizeOptionalText(trusteeDisplayName),
+            trusteeState,
+            NormalizeRequiredText(eventSummary, nameof(eventSummary)),
+            NormalizeOptionalText(evidenceReference),
+            NormalizeOptionalText(restartReason),
+            NormalizeOptionalText(tallyPublicKeyFingerprint),
+            occurredAt ?? DateTime.UtcNow);
+    }
+
+    public static ElectionCeremonyMessageEnvelopeRecord CreateCeremonyMessageEnvelope(
+        ElectionId electionId,
+        Guid ceremonyVersionId,
+        int versionNumber,
+        string profileId,
+        string senderTrusteeUserAddress,
+        string? recipientTrusteeUserAddress,
+        string messageType,
+        string payloadVersion,
+        byte[] encryptedPayload,
+        string payloadFingerprint,
+        DateTime? submittedAt = null)
+    {
+        if (versionNumber < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(versionNumber), "Ceremony version number must be at least 1.");
+        }
+
+        if (encryptedPayload is null || encryptedPayload.Length == 0)
+        {
+            throw new ArgumentException("Encrypted payload is required.", nameof(encryptedPayload));
+        }
+
+        return new ElectionCeremonyMessageEnvelopeRecord(
+            Guid.NewGuid(),
+            electionId,
+            ceremonyVersionId,
+            versionNumber,
+            NormalizeRequiredText(profileId, nameof(profileId)),
+            NormalizeRequiredText(senderTrusteeUserAddress, nameof(senderTrusteeUserAddress)),
+            NormalizeOptionalText(recipientTrusteeUserAddress),
+            NormalizeRequiredText(messageType, nameof(messageType)),
+            NormalizeRequiredText(payloadVersion, nameof(payloadVersion)),
+            CloneBytes(encryptedPayload)!,
+            NormalizeRequiredText(payloadFingerprint, nameof(payloadFingerprint)),
+            submittedAt ?? DateTime.UtcNow);
+    }
+
+    public static ElectionCeremonyTrusteeStateRecord CreateCeremonyTrusteeState(
+        ElectionId electionId,
+        Guid ceremonyVersionId,
+        string trusteeUserAddress,
+        string? trusteeDisplayName,
+        ElectionTrusteeCeremonyState state = ElectionTrusteeCeremonyState.CeremonyNotStarted,
+        DateTime? recordedAt = null)
+    {
+        var timestamp = recordedAt ?? DateTime.UtcNow;
+
+        return new ElectionCeremonyTrusteeStateRecord(
+            Guid.NewGuid(),
+            electionId,
+            ceremonyVersionId,
+            NormalizeRequiredText(trusteeUserAddress, nameof(trusteeUserAddress)),
+            NormalizeOptionalText(trusteeDisplayName),
+            state,
+            TransportPublicKeyFingerprint: null,
+            TransportPublicKeyPublishedAt: null,
+            JoinedAt: null,
+            SelfTestSucceededAt: null,
+            MaterialSubmittedAt: null,
+            ValidationFailedAt: null,
+            ValidationFailureReason: null,
+            CompletedAt: null,
+            RemovedAt: null,
+            ShareVersion: null,
+            LastUpdatedAt: timestamp);
+    }
+
+    public static ElectionCeremonyShareCustodyRecord CreateCeremonyShareCustodyRecord(
+        ElectionId electionId,
+        Guid ceremonyVersionId,
+        string trusteeUserAddress,
+        string shareVersion,
+        bool passwordProtected = true,
+        DateTime? recordedAt = null)
+    {
+        var timestamp = recordedAt ?? DateTime.UtcNow;
+
+        return new ElectionCeremonyShareCustodyRecord(
+            Guid.NewGuid(),
+            electionId,
+            ceremonyVersionId,
+            NormalizeRequiredText(trusteeUserAddress, nameof(trusteeUserAddress)),
+            NormalizeRequiredText(shareVersion, nameof(shareVersion)),
+            passwordProtected,
+            ElectionCeremonyShareCustodyStatus.NotExported,
+            LastExportedAt: null,
+            LastImportedAt: null,
+            LastImportFailedAt: null,
+            LastImportFailureReason: null,
+            LastUpdatedAt: timestamp);
+    }
+
     private static int? NormalizeRequiredApprovalCount(
         ElectionGovernanceMode governanceMode,
         int? requiredApprovalCount)

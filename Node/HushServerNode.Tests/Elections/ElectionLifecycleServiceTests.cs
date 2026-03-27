@@ -885,6 +885,12 @@ public class ElectionLifecycleServiceTests
         public Dictionary<Guid, ElectionTrusteeInvitationRecord> TrusteeInvitations { get; } = [];
         public Dictionary<Guid, ElectionGovernedProposalRecord> GovernedProposals { get; } = [];
         public List<ElectionGovernedProposalApprovalRecord> GovernedProposalApprovals { get; } = [];
+        public Dictionary<string, ElectionCeremonyProfileRecord> CeremonyProfiles { get; } = [];
+        public Dictionary<Guid, ElectionCeremonyVersionRecord> CeremonyVersions { get; } = [];
+        public List<ElectionCeremonyTranscriptEventRecord> CeremonyTranscriptEvents { get; } = [];
+        public List<ElectionCeremonyMessageEnvelopeRecord> CeremonyMessageEnvelopes { get; } = [];
+        public Dictionary<Guid, ElectionCeremonyTrusteeStateRecord> CeremonyTrusteeStates { get; } = [];
+        public Dictionary<Guid, ElectionCeremonyShareCustodyRecord> CeremonyShareCustodyRecords { get; } = [];
     }
 
     private sealed class FakeUnitOfWorkProvider(ElectionStore store) : IUnitOfWorkProvider<ElectionsDbContext>
@@ -1083,6 +1089,159 @@ public class ElectionLifecycleServiceTests
         public Task SaveGovernedProposalApprovalAsync(ElectionGovernedProposalApprovalRecord approval)
         {
             store.GovernedProposalApprovals.Add(approval);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionCeremonyProfileRecord>> GetCeremonyProfilesAsync() =>
+            Task.FromResult<IReadOnlyList<ElectionCeremonyProfileRecord>>(
+                store.CeremonyProfiles.Values
+                    .OrderBy(x => x.RequiredApprovalCount)
+                    .ThenBy(x => x.TrusteeCount)
+                    .ThenBy(x => x.ProfileId)
+                    .ToArray());
+
+        public Task<ElectionCeremonyProfileRecord?> GetCeremonyProfileAsync(string profileId) =>
+            Task.FromResult(store.CeremonyProfiles.GetValueOrDefault(profileId));
+
+        public Task SaveCeremonyProfileAsync(ElectionCeremonyProfileRecord profile)
+        {
+            store.CeremonyProfiles[profile.ProfileId] = profile;
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateCeremonyProfileAsync(ElectionCeremonyProfileRecord profile)
+        {
+            store.CeremonyProfiles[profile.ProfileId] = profile;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionCeremonyVersionRecord>> GetCeremonyVersionsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionCeremonyVersionRecord>>(
+                store.CeremonyVersions.Values
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.VersionNumber)
+                    .ToArray());
+
+        public Task<ElectionCeremonyVersionRecord?> GetCeremonyVersionAsync(Guid ceremonyVersionId) =>
+            Task.FromResult(store.CeremonyVersions.GetValueOrDefault(ceremonyVersionId));
+
+        public Task<ElectionCeremonyVersionRecord?> GetActiveCeremonyVersionAsync(ElectionId electionId)
+        {
+            var active = store.CeremonyVersions.Values
+                .Where(x =>
+                    x.ElectionId == electionId &&
+                    x.Status != ElectionCeremonyVersionStatus.Superseded)
+                .OrderBy(x => x.VersionNumber)
+                .ToArray();
+
+            return active.Length switch
+            {
+                0 => Task.FromResult<ElectionCeremonyVersionRecord?>(null),
+                1 => Task.FromResult<ElectionCeremonyVersionRecord?>(active[0]),
+                _ => throw new InvalidOperationException(
+                    $"Election {electionId} has multiple active ceremony versions, which violates the FEAT-097 invariant."),
+            };
+        }
+
+        public Task SaveCeremonyVersionAsync(ElectionCeremonyVersionRecord version)
+        {
+            store.CeremonyVersions[version.Id] = version;
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateCeremonyVersionAsync(ElectionCeremonyVersionRecord version)
+        {
+            store.CeremonyVersions[version.Id] = version;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionCeremonyTranscriptEventRecord>> GetCeremonyTranscriptEventsAsync(Guid ceremonyVersionId) =>
+            Task.FromResult<IReadOnlyList<ElectionCeremonyTranscriptEventRecord>>(
+                store.CeremonyTranscriptEvents
+                    .Where(x => x.CeremonyVersionId == ceremonyVersionId)
+                    .OrderBy(x => x.OccurredAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
+
+        public Task SaveCeremonyTranscriptEventAsync(ElectionCeremonyTranscriptEventRecord transcriptEvent)
+        {
+            store.CeremonyTranscriptEvents.Add(transcriptEvent);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionCeremonyMessageEnvelopeRecord>> GetCeremonyMessageEnvelopesAsync(Guid ceremonyVersionId) =>
+            Task.FromResult<IReadOnlyList<ElectionCeremonyMessageEnvelopeRecord>>(
+                store.CeremonyMessageEnvelopes
+                    .Where(x => x.CeremonyVersionId == ceremonyVersionId)
+                    .OrderBy(x => x.SubmittedAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
+
+        public Task<IReadOnlyList<ElectionCeremonyMessageEnvelopeRecord>> GetCeremonyMessageEnvelopesForRecipientAsync(
+            Guid ceremonyVersionId,
+            string trusteeUserAddress) =>
+            Task.FromResult<IReadOnlyList<ElectionCeremonyMessageEnvelopeRecord>>(
+                store.CeremonyMessageEnvelopes
+                    .Where(x =>
+                        x.CeremonyVersionId == ceremonyVersionId &&
+                        x.RecipientTrusteeUserAddress == trusteeUserAddress)
+                    .OrderBy(x => x.SubmittedAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
+
+        public Task SaveCeremonyMessageEnvelopeAsync(ElectionCeremonyMessageEnvelopeRecord messageEnvelope)
+        {
+            store.CeremonyMessageEnvelopes.Add(messageEnvelope);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionCeremonyTrusteeStateRecord>> GetCeremonyTrusteeStatesAsync(Guid ceremonyVersionId) =>
+            Task.FromResult<IReadOnlyList<ElectionCeremonyTrusteeStateRecord>>(
+                store.CeremonyTrusteeStates.Values
+                    .Where(x => x.CeremonyVersionId == ceremonyVersionId)
+                    .OrderBy(x => x.TrusteeUserAddress)
+                    .ToArray());
+
+        public Task<ElectionCeremonyTrusteeStateRecord?> GetCeremonyTrusteeStateAsync(Guid ceremonyVersionId, string trusteeUserAddress) =>
+            Task.FromResult(
+                store.CeremonyTrusteeStates.Values.FirstOrDefault(x =>
+                    x.CeremonyVersionId == ceremonyVersionId &&
+                    x.TrusteeUserAddress == trusteeUserAddress));
+
+        public Task SaveCeremonyTrusteeStateAsync(ElectionCeremonyTrusteeStateRecord trusteeState)
+        {
+            store.CeremonyTrusteeStates[trusteeState.Id] = trusteeState;
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateCeremonyTrusteeStateAsync(ElectionCeremonyTrusteeStateRecord trusteeState)
+        {
+            store.CeremonyTrusteeStates[trusteeState.Id] = trusteeState;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionCeremonyShareCustodyRecord>> GetCeremonyShareCustodyRecordsAsync(Guid ceremonyVersionId) =>
+            Task.FromResult<IReadOnlyList<ElectionCeremonyShareCustodyRecord>>(
+                store.CeremonyShareCustodyRecords.Values
+                    .Where(x => x.CeremonyVersionId == ceremonyVersionId)
+                    .OrderBy(x => x.TrusteeUserAddress)
+                    .ToArray());
+
+        public Task<ElectionCeremonyShareCustodyRecord?> GetCeremonyShareCustodyRecordAsync(Guid ceremonyVersionId, string trusteeUserAddress) =>
+            Task.FromResult(
+                store.CeremonyShareCustodyRecords.Values.FirstOrDefault(x =>
+                    x.CeremonyVersionId == ceremonyVersionId &&
+                    x.TrusteeUserAddress == trusteeUserAddress));
+
+        public Task SaveCeremonyShareCustodyRecordAsync(ElectionCeremonyShareCustodyRecord shareCustodyRecord)
+        {
+            store.CeremonyShareCustodyRecords[shareCustodyRecord.Id] = shareCustodyRecord;
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateCeremonyShareCustodyRecordAsync(ElectionCeremonyShareCustodyRecord shareCustodyRecord)
+        {
+            store.CeremonyShareCustodyRecords[shareCustodyRecord.Id] = shareCustodyRecord;
             return Task.CompletedTask;
         }
     }

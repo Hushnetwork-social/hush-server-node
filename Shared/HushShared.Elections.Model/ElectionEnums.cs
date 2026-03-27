@@ -108,3 +108,44 @@ public enum ElectionTrusteeInvitationStatus
     Rejected = 2,
     Revoked = 3,
 }
+
+public enum ElectionCeremonyVersionStatus
+{
+    InProgress = 0,
+    Ready = 1,
+    Superseded = 2,
+}
+
+public enum ElectionCeremonyTranscriptEventType
+{
+    VersionStarted = 0,
+    TrusteeTransportKeyPublished = 1,
+    TrusteeJoined = 2,
+    TrusteeSelfTestSucceeded = 3,
+    TrusteeMaterialSubmitted = 4,
+    TrusteeValidationFailed = 5,
+    TrusteeCompleted = 6,
+    TrusteeRemoved = 7,
+    VersionReady = 8,
+    VersionSuperseded = 9,
+}
+
+public enum ElectionTrusteeCeremonyState
+{
+    Invited = 0,
+    AcceptedTrustee = 1,
+    CeremonyNotStarted = 2,
+    CeremonyJoined = 3,
+    CeremonyMaterialSubmitted = 4,
+    CeremonyValidationFailed = 5,
+    CeremonyCompleted = 6,
+    Removed = 7,
+}
+
+public enum ElectionCeremonyShareCustodyStatus
+{
+    NotExported = 0,
+    Exported = 1,
+    Imported = 2,
+    ImportFailed = 3,
+}
