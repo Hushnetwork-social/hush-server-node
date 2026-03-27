@@ -150,6 +150,89 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         proposalResponse.ValidationErrors.Should().Contain(x => x.Contains("ready key-ceremony version", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task RestartElectionCeremony_AfterProgress_SupersedesPreviousVersionAndKeepsOpenBlocked()
+    {
+        var client = await StartClientAsync(enableDevProfiles: true);
+        var createResponse = await CreateTrusteeThresholdDraftAsync(client, "FEAT-097 Superseded Ceremony");
+        var electionId = createResponse.Election.ElectionId;
+
+        await InviteAndAcceptRolloutTrusteesAsync(client, electionId);
+        var firstVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
+        await PublishAndJoinAsync(client, electionId, firstVersionId, RolloutTrustees[0], 0);
+
+        var restartResponse = await client.RestartElectionCeremonyAsync(new RestartElectionCeremonyRequest
+        {
+            ElectionId = electionId,
+            ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
+            ProfileId = "dkg-prod-3of5",
+            RestartReason = "Replace the partially completed version.",
+        });
+
+        restartResponse.Success.Should().BeTrue(restartResponse.ErrorMessage);
+        restartResponse.CeremonyVersion.Should().NotBeNull();
+        restartResponse.CeremonyVersion!.VersionNumber.Should().Be(2);
+
+        var electionResponse = await client.GetElectionAsync(new GetElectionRequest
+        {
+            ElectionId = electionId,
+        });
+
+        electionResponse.Success.Should().BeTrue();
+        electionResponse.CeremonyVersions.Should().ContainSingle(x =>
+            string.Equals(x.Id, firstVersionId, StringComparison.Ordinal) &&
+            x.Status == ElectionCeremonyVersionStatusProto.CeremonyVersionSuperseded);
+        electionResponse.CeremonyVersions.Should().ContainSingle(x =>
+            string.Equals(x.Id, restartResponse.CeremonyVersion.Id, StringComparison.Ordinal) &&
+            x.Status == ElectionCeremonyVersionStatusProto.CeremonyVersionInProgress);
+
+        var readiness = await client.GetElectionOpenReadinessAsync(new GetElectionOpenReadinessRequest
+        {
+            ElectionId = electionId,
+        });
+
+        readiness.IsReadyToOpen.Should().BeFalse();
+        readiness.ValidationErrors.Should().Contain(x => x.Contains("ready key-ceremony version", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task SubmitElectionCeremonyMaterial_WithoutSelfTest_ReturnsValidationFailedAndKeepsTrusteeIncomplete()
+    {
+        var client = await StartClientAsync(enableDevProfiles: true);
+        var createResponse = await CreateTrusteeThresholdDraftAsync(client, "FEAT-097 Self-Test Required");
+        var electionId = createResponse.Election.ElectionId;
+
+        await InviteAndAcceptRolloutTrusteesAsync(client, electionId);
+        var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
+        var trustee = RolloutTrustees[0];
+        await PublishAndJoinAsync(client, electionId, ceremonyVersionId, trustee, 0);
+
+        var submitResponse = await client.SubmitElectionCeremonyMaterialAsync(new SubmitElectionCeremonyMaterialRequest
+        {
+            ElectionId = electionId,
+            CeremonyVersionId = ceremonyVersionId,
+            ActorPublicAddress = trustee.PublicSigningAddress,
+            MessageType = "dkg-share-package",
+            PayloadVersion = "omega-v1.0.0",
+            EncryptedPayload = ByteString.CopyFromUtf8("payload-without-self-test"),
+            PayloadFingerprint = "payload-without-self-test",
+        });
+
+        submitResponse.Success.Should().BeFalse();
+        submitResponse.ErrorCode.Should().Be(ElectionCommandErrorCodeProto.ValidationFailed);
+        submitResponse.ErrorMessage.Should().Contain("self-test");
+
+        var electionResponse = await client.GetElectionAsync(new GetElectionRequest
+        {
+            ElectionId = electionId,
+        });
+
+        electionResponse.Success.Should().BeTrue();
+        electionResponse.ActiveCeremonyTrusteeStates.Should().ContainSingle(x =>
+            string.Equals(x.TrusteeUserAddress, trustee.PublicSigningAddress, StringComparison.Ordinal) &&
+            x.State == ElectionTrusteeCeremonyStateProto.CeremonyStateJoined);
+    }
+
     private async Task<HushElections.HushElectionsClient> StartClientAsync(bool enableDevProfiles)
     {
         await DisposeNodeAsync();
@@ -282,6 +365,25 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         TestIdentity trustee,
         int index)
     {
+        await PublishAndJoinAsync(client, electionId, ceremonyVersionId, trustee, index);
+
+        var selfTestResponse = await client.RecordElectionCeremonySelfTestSuccessAsync(new RecordElectionCeremonySelfTestRequest
+        {
+            ElectionId = electionId,
+            CeremonyVersionId = ceremonyVersionId,
+            ActorPublicAddress = trustee.PublicSigningAddress,
+        });
+
+        selfTestResponse.Success.Should().BeTrue(selfTestResponse.ErrorMessage);
+    }
+
+    private static async Task PublishAndJoinAsync(
+        HushElections.HushElectionsClient client,
+        string electionId,
+        string ceremonyVersionId,
+        TestIdentity trustee,
+        int index)
+    {
         var publishResponse = await client.PublishElectionCeremonyTransportKeyAsync(new PublishElectionCeremonyTransportKeyRequest
         {
             ElectionId = electionId,
@@ -300,15 +402,6 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         });
 
         joinResponse.Success.Should().BeTrue(joinResponse.ErrorMessage);
-
-        var selfTestResponse = await client.RecordElectionCeremonySelfTestSuccessAsync(new RecordElectionCeremonySelfTestRequest
-        {
-            ElectionId = electionId,
-            CeremonyVersionId = ceremonyVersionId,
-            ActorPublicAddress = trustee.PublicSigningAddress,
-        });
-
-        selfTestResponse.Success.Should().BeTrue(selfTestResponse.ErrorMessage);
     }
 
     private static ElectionDraftInput BuildTrusteeThresholdDraft(string title)
