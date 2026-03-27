@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Google.Protobuf;
 using HushNetwork.proto;
 using HushNode.IntegrationTests.Infrastructure;
 using HushServerNode;
@@ -75,16 +74,14 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         electionResponse.Success.Should().BeTrue();
         electionResponse.CeremonyProfiles.Select(x => x.ProfileId).Should().Equal("dkg-prod-3of5");
 
-        var startResponse = await client.StartElectionCeremonyAsync(new StartElectionCeremonyRequest
-        {
-            ElectionId = createResponse.Election.ElectionId,
-            ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
-            ProfileId = "dkg-dev-3of5",
-        });
+        var startSubmitResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.StartElectionCeremony(
+                TestIdentities.Alice,
+                new ElectionId(Guid.Parse(createResponse.Election.ElectionId)),
+                "dkg-dev-3of5"));
 
-        startResponse.Success.Should().BeFalse();
-        startResponse.ErrorCode.Should().Be(ElectionCommandErrorCodeProto.NotSupported);
-        startResponse.ErrorMessage.Should().Contain("disabled");
+        startSubmitResponse.Successfull.Should().BeFalse();
+        startSubmitResponse.Message.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
@@ -165,13 +162,10 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         var firstVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
         await PublishAndJoinAsync(client, electionId, firstVersionId, RolloutTrustees[0], 0);
 
-        var restartResponse = await client.RestartElectionCeremonyAsync(new RestartElectionCeremonyRequest
-        {
-            ElectionId = electionId,
-            ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
-            ProfileId = "dkg-prod-3of5",
-            RestartReason = "Replace the partially completed version.",
-        });
+        var restartResponse = await RestartCeremonyAsync(
+            electionId,
+            "dkg-prod-3of5",
+            "Replace the partially completed version.");
 
         restartResponse.Success.Should().BeTrue(restartResponse.ErrorMessage);
         restartResponse.CeremonyVersion.Should().NotBeNull();
@@ -211,20 +205,19 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         var trustee = RolloutTrustees[0];
         await PublishAndJoinAsync(client, electionId, ceremonyVersionId, trustee, 0);
 
-        var submitResponse = await client.SubmitElectionCeremonyMaterialAsync(new SubmitElectionCeremonyMaterialRequest
-        {
-            ElectionId = electionId,
-            CeremonyVersionId = ceremonyVersionId,
-            ActorPublicAddress = trustee.PublicSigningAddress,
-            MessageType = "dkg-share-package",
-            PayloadVersion = "omega-v1.0.0",
-            EncryptedPayload = ByteString.CopyFromUtf8("payload-without-self-test"),
-            PayloadFingerprint = "payload-without-self-test",
-        });
+        var submitResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.SubmitElectionCeremonyMaterial(
+                trustee,
+                new ElectionId(Guid.Parse(electionId)),
+                Guid.Parse(ceremonyVersionId),
+                recipientTrusteeUserAddress: null,
+                messageType: "dkg-share-package",
+                payloadVersion: "omega-v1.0.0",
+                encryptedPayload: "payload-without-self-test",
+                payloadFingerprint: "payload-without-self-test"));
 
-        submitResponse.Success.Should().BeFalse();
-        submitResponse.ErrorCode.Should().Be(ElectionCommandErrorCodeProto.ValidationFailed);
-        submitResponse.ErrorMessage.Should().Contain("self-test");
+        submitResponse.Successfull.Should().BeFalse();
+        submitResponse.Message.Should().NotBeNullOrWhiteSpace();
 
         var electionResponse = await client.GetElectionAsync(new GetElectionRequest
         {
@@ -268,20 +261,12 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         HushElections.HushElectionsClient client,
         string title)
     {
-        var blockchainClient = _grpcFactory!.CreateClient<HushBlockchain.HushBlockchainClient>();
         var (signedTransaction, electionId) = TestTransactionFactory.CreateElectionDraft(
             TestIdentities.Alice,
             "feat-097 integration draft",
             BuildTrusteeThresholdDraftSpecification(title));
-        using var waiter = _node!.StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
-
-        var submitResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
-        {
-            SignedTransaction = signedTransaction,
-        });
+        var submitResponse = await SubmitBlockchainTransactionAsync(signedTransaction);
         submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
-        await waiter.WaitAsync();
-        await _blockControl!.ProduceBlockAsync();
 
         var response = await client.GetElectionAsync(new GetElectionRequest
         {
@@ -302,47 +287,77 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
     {
         foreach (var trustee in RolloutTrustees)
         {
-            var blockchainClient = _grpcFactory!.CreateClient<HushBlockchain.HushBlockchainClient>();
             var (signedTransaction, invitationId) = TestTransactionFactory.CreateElectionTrusteeInvitation(
                 TestIdentities.Alice,
                 new ElectionId(Guid.Parse(electionId)),
                 trustee);
-            using var waiter = _node!.StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+            var inviteSubmitResponse = await SubmitBlockchainTransactionAsync(signedTransaction);
+            inviteSubmitResponse.Successfull.Should().BeTrue(inviteSubmitResponse.Message);
 
-            var submitResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
-            {
-                SignedTransaction = signedTransaction,
-            });
-            submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
-            await waiter.WaitAsync();
-            await _blockControl!.ProduceBlockAsync();
-
-            var acceptResponse = await client.AcceptElectionTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest
-            {
-                ElectionId = electionId,
-                InvitationId = invitationId.ToString(),
-                ActorPublicAddress = trustee.PublicSigningAddress,
-            });
-
-            acceptResponse.Success.Should().BeTrue(acceptResponse.ErrorMessage);
+            var acceptSubmitResponse = await SubmitBlockchainTransactionAsync(
+                TestTransactionFactory.AcceptElectionTrusteeInvitation(
+                    trustee,
+                    new ElectionId(Guid.Parse(electionId)),
+                    invitationId));
+            acceptSubmitResponse.Successfull.Should().BeTrue(acceptSubmitResponse.Message);
         }
     }
 
-    private static async Task<string> StartCeremonyAsync(
+    private async Task<string> StartCeremonyAsync(
         HushElections.HushElectionsClient client,
         string electionId,
         string profileId)
     {
-        var response = await client.StartElectionCeremonyAsync(new StartElectionCeremonyRequest
+        var submitResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.StartElectionCeremony(
+                TestIdentities.Alice,
+                new ElectionId(Guid.Parse(electionId)),
+                profileId));
+        submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
+
+        var response = await client.GetElectionAsync(new GetElectionRequest
         {
             ElectionId = electionId,
-            ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
-            ProfileId = profileId,
         });
 
         response.Success.Should().BeTrue(response.ErrorMessage);
-        response.CeremonyVersion.Should().NotBeNull();
-        return response.CeremonyVersion!.Id;
+        return response.CeremonyVersions
+            .Where(x => x.ProfileId == profileId)
+            .OrderByDescending(x => x.VersionNumber)
+            .First()
+            .Id;
+    }
+
+    private async Task<ElectionCommandResponse> RestartCeremonyAsync(
+        string electionId,
+        string profileId,
+        string restartReason)
+    {
+        var submitResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.RestartElectionCeremony(
+                TestIdentities.Alice,
+                new ElectionId(Guid.Parse(electionId)),
+                profileId,
+                restartReason));
+        submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
+
+        var response = await _grpcFactory!.CreateClient<HushElections.HushElectionsClient>().GetElectionAsync(new GetElectionRequest
+        {
+            ElectionId = electionId,
+        });
+
+        response.Success.Should().BeTrue(response.ErrorMessage);
+        var version = response.CeremonyVersions
+            .Where(x => x.ProfileId == profileId)
+            .OrderByDescending(x => x.VersionNumber)
+            .First();
+
+        return new ElectionCommandResponse
+        {
+            Success = true,
+            Election = response.Election,
+            CeremonyVersion = version,
+        };
     }
 
     private async Task<GetElectionResponse> StartGovernedProposalViaBlockchainAsync(
@@ -388,7 +403,7 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         return (submitResponse, proposalId);
     }
 
-    private static async Task CompleteReadyThresholdAsync(
+    private async Task CompleteReadyThresholdAsync(
         HushElections.HushElectionsClient client,
         string electionId,
         string ceremonyVersionId,
@@ -401,34 +416,31 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
             var trustee = RolloutTrustees[index];
             await PublishJoinAndSelfTestAsync(client, electionId, ceremonyVersionId, trustee, index);
 
-            var submitResponse = await client.SubmitElectionCeremonyMaterialAsync(new SubmitElectionCeremonyMaterialRequest
-            {
-                ElectionId = electionId,
-                CeremonyVersionId = ceremonyVersionId,
-                ActorPublicAddress = trustee.PublicSigningAddress,
-                MessageType = "dkg-share-package",
-                PayloadVersion = "omega-v1.0.0",
-                EncryptedPayload = ByteString.CopyFromUtf8($"payload-{index}"),
-                PayloadFingerprint = $"payload-fingerprint-{index}",
-            });
+            var submitResponse = await SubmitBlockchainTransactionAsync(
+                TestTransactionFactory.SubmitElectionCeremonyMaterial(
+                    trustee,
+                    new ElectionId(Guid.Parse(electionId)),
+                    Guid.Parse(ceremonyVersionId),
+                    recipientTrusteeUserAddress: null,
+                    messageType: "dkg-share-package",
+                    payloadVersion: "omega-v1.0.0",
+                    encryptedPayload: $"payload-{index}",
+                    payloadFingerprint: $"payload-fingerprint-{index}"));
+            submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
 
-            submitResponse.Success.Should().BeTrue(submitResponse.ErrorMessage);
-
-            var completeResponse = await client.CompleteElectionCeremonyTrusteeAsync(new CompleteElectionCeremonyTrusteeRequest
-            {
-                ElectionId = electionId,
-                CeremonyVersionId = ceremonyVersionId,
-                ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
-                TrusteeUserAddress = trustee.PublicSigningAddress,
-                ShareVersion = $"share-v1-{index}",
-                TallyPublicKeyFingerprint = tallyFingerprint,
-            });
-
-            completeResponse.Success.Should().BeTrue(completeResponse.ErrorMessage);
+            var completeResponse = await SubmitBlockchainTransactionAsync(
+                TestTransactionFactory.CompleteElectionCeremonyTrustee(
+                    TestIdentities.Alice,
+                    new ElectionId(Guid.Parse(electionId)),
+                    Guid.Parse(ceremonyVersionId),
+                    trustee.PublicSigningAddress,
+                    $"share-v1-{index}",
+                    tallyFingerprint));
+            completeResponse.Successfull.Should().BeTrue(completeResponse.Message);
         }
     }
 
-    private static async Task PublishJoinAndSelfTestAsync(
+    private async Task PublishJoinAndSelfTestAsync(
         HushElections.HushElectionsClient client,
         string electionId,
         string ceremonyVersionId,
@@ -437,41 +449,54 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
     {
         await PublishAndJoinAsync(client, electionId, ceremonyVersionId, trustee, index);
 
-        var selfTestResponse = await client.RecordElectionCeremonySelfTestSuccessAsync(new RecordElectionCeremonySelfTestRequest
-        {
-            ElectionId = electionId,
-            CeremonyVersionId = ceremonyVersionId,
-            ActorPublicAddress = trustee.PublicSigningAddress,
-        });
-
-        selfTestResponse.Success.Should().BeTrue(selfTestResponse.ErrorMessage);
+        var selfTestResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.RecordElectionCeremonySelfTestSuccess(
+                trustee,
+                new ElectionId(Guid.Parse(electionId)),
+                Guid.Parse(ceremonyVersionId)));
+        selfTestResponse.Successfull.Should().BeTrue(selfTestResponse.Message);
     }
 
-    private static async Task PublishAndJoinAsync(
+    private async Task PublishAndJoinAsync(
         HushElections.HushElectionsClient client,
         string electionId,
         string ceremonyVersionId,
         TestIdentity trustee,
         int index)
     {
-        var publishResponse = await client.PublishElectionCeremonyTransportKeyAsync(new PublishElectionCeremonyTransportKeyRequest
+        var publishResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.PublishElectionCeremonyTransportKey(
+                trustee,
+                new ElectionId(Guid.Parse(electionId)),
+                Guid.Parse(ceremonyVersionId),
+                $"transport-fingerprint-{index}"));
+        publishResponse.Successfull.Should().BeTrue(publishResponse.Message);
+
+        var joinResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.JoinElectionCeremony(
+                trustee,
+                new ElectionId(Guid.Parse(electionId)),
+                Guid.Parse(ceremonyVersionId)));
+        joinResponse.Successfull.Should().BeTrue(joinResponse.Message);
+    }
+
+    private async Task<SubmitSignedTransactionReply> SubmitBlockchainTransactionAsync(string signedTransaction)
+    {
+        var blockchainClient = _grpcFactory!.CreateClient<HushBlockchain.HushBlockchainClient>();
+        using var waiter = _node!.StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
         {
-            ElectionId = electionId,
-            CeremonyVersionId = ceremonyVersionId,
-            ActorPublicAddress = trustee.PublicSigningAddress,
-            TransportPublicKeyFingerprint = $"transport-fingerprint-{index}",
+            SignedTransaction = signedTransaction,
         });
 
-        publishResponse.Success.Should().BeTrue(publishResponse.ErrorMessage);
-
-        var joinResponse = await client.JoinElectionCeremonyAsync(new JoinElectionCeremonyRequest
+        if (submitResponse.Successfull)
         {
-            ElectionId = electionId,
-            CeremonyVersionId = ceremonyVersionId,
-            ActorPublicAddress = trustee.PublicSigningAddress,
-        });
+            await waiter.WaitAsync();
+            await _blockControl!.ProduceBlockAsync();
+        }
 
-        joinResponse.Success.Should().BeTrue(joinResponse.ErrorMessage);
+        return submitResponse;
     }
 
     private static ElectionDraftSpecification BuildTrusteeThresholdDraftSpecification(string title) =>

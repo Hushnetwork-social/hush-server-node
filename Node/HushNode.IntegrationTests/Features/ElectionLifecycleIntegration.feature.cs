@@ -192,6 +192,45 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Legacy plaintext election writes are rejected before MemPool admission")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
+        [Xunit.TraitAttribute("Description", "Legacy plaintext election writes are rejected before MemPool admission")]
+        [Xunit.TraitAttribute("Category", "AT-PROC-I01")]
+        public void LegacyPlaintextElectionWritesAreRejectedBeforeMemPoolAdmission()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "AT-PROC-I01"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Legacy plaintext election writes are rejected before MemPool admission", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 31
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 32
+    testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 33
+    testRunner.When("the owner creates an admin-only election draft through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 34
+    testRunner.When("the owner submits a legacy plaintext open election transaction", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 35
+    testRunner.Then("the legacy plaintext election transaction should be rejected before the MemPool", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 36
+    testRunner.And("the election should remain in \"Draft\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [Xunit.SkippableFactAttribute(DisplayName="Trustee-threshold open remains blocked while the key ceremony boundary is incompl" +
             "ete")]
         [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
@@ -207,7 +246,7 @@ namespace HushNode.IntegrationTests.Features
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Trustee-threshold open remains blocked while the key ceremony boundary is incompl" +
                     "ete", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 31
+#line 39
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -217,33 +256,33 @@ namespace HushNode.IntegrationTests.Features
             else
             {
                 this.ScenarioStart();
-#line 32
+#line 40
     testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 33
+#line 41
     testRunner.When("the owner creates a trustee-threshold election draft through blockchain submissio" +
                         "n", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 34
+#line 42
     testRunner.And("the owner invites trustee \"Bob\" through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 35
-    testRunner.And("trustee \"Bob\" accepts the invitation through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line 43
+    testRunner.And("trustee \"Bob\" accepts the invitation through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 36
+#line 44
     testRunner.And("the owner invites trustee \"Charlie\" through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 37
+#line 45
     testRunner.And("the owner checks open readiness for the trustee-threshold election", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 38
+#line 46
     testRunner.And("the owner attempts to open the trustee-threshold election through blockchain subm" +
                         "ission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 39
+#line 47
     testRunner.Then("the readiness response should include the missing ready-ceremony blocker", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 40
+#line 48
     testRunner.And("the trustee-threshold open transaction should be rejected before the MemPool", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
@@ -262,7 +301,7 @@ namespace HushNode.IntegrationTests.Features
                     "AT-GOV-096-OPEN"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Governed open blocks further draft edits and opens at trustee threshold", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 43
+#line 51
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -272,36 +311,36 @@ namespace HushNode.IntegrationTests.Features
             else
             {
                 this.ScenarioStart();
-#line 44
+#line 52
     testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 45
+#line 53
     testRunner.When("the owner creates a trustee-threshold election draft through blockchain submissio" +
                         "n", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 46
-    testRunner.And("the owner prepares a ready trustee ceremony through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line 54
+    testRunner.And("the owner prepares a ready trustee ceremony through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 47
+#line 55
     testRunner.And("the owner starts an \"open\" governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 48
+#line 56
     testRunner.And("the owner attempts to update the trustee-threshold draft title to \"Governed Refer" +
                         "endum Revised\" while a governed open proposal is pending", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 49
+#line 57
     testRunner.Then("the pending governed open should block further draft changes", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 50
+#line 58
     testRunner.When("trustee \"Bob\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 51
+#line 59
     testRunner.And("trustee \"Charlie\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 52
+#line 60
     testRunner.And("trustee \"Delta\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 53
+#line 61
     testRunner.Then("the governed proposal should execute and transition the election to \"Open\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
@@ -320,7 +359,7 @@ namespace HushNode.IntegrationTests.Features
                     "AT-GOV-096-CLOSE"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Governed close locks vote acceptance immediately and closes at threshold", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 56
+#line 64
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -330,33 +369,33 @@ namespace HushNode.IntegrationTests.Features
             else
             {
                 this.ScenarioStart();
-#line 57
+#line 65
     testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 58
+#line 66
     testRunner.And("the owner has an open trustee-threshold election through governed approval blockc" +
                         "hain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 59
+#line 67
     testRunner.When("the owner starts an \"close\" governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 60
+#line 68
     testRunner.Then("the governed proposal should remain pending for \"close\" while the election stays " +
                         "\"Open\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 61
+#line 69
     testRunner.And("vote acceptance should be locked immediately on the election", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 62
+#line 70
     testRunner.When("trustee \"Bob\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 63
+#line 71
     testRunner.And("trustee \"Charlie\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 64
+#line 72
     testRunner.And("trustee \"Delta\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 65
+#line 73
     testRunner.Then("the governed proposal should execute and transition the election to \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }
@@ -375,7 +414,7 @@ namespace HushNode.IntegrationTests.Features
                     "AT-GOV-096-RETRY"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Owner can retry a failed governed proposal after the blocking state is repaired", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 68
+#line 76
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -385,43 +424,43 @@ namespace HushNode.IntegrationTests.Features
             else
             {
                 this.ScenarioStart();
-#line 69
+#line 77
     testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 70
+#line 78
     testRunner.When("the owner creates a trustee-threshold election draft through blockchain submissio" +
                         "n", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 71
-    testRunner.And("the owner prepares a ready trustee ceremony through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line 79
+    testRunner.And("the owner prepares a ready trustee ceremony through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 72
+#line 80
     testRunner.And("the owner starts an \"open\" governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 73
+#line 81
     testRunner.And("the integration test forces the election into a stale \"Closed\" state before the g" +
                         "overned proposal executes", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 74
+#line 82
     testRunner.And("trustee \"Bob\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 75
+#line 83
     testRunner.And("trustee \"Charlie\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 76
+#line 84
     testRunner.And("trustee \"Delta\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 77
+#line 85
     testRunner.Then("the governed proposal should record an execution failure for \"open\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 78
+#line 86
     testRunner.When("the integration test restores the election to the \"Draft\" state for governed retr" +
                         "y", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 79
+#line 87
     testRunner.And("the owner retries the governed proposal execution through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 80
+#line 88
     testRunner.Then("the governed proposal should execute and transition the election to \"Open\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }

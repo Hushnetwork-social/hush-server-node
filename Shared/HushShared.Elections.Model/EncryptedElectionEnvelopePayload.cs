@@ -33,11 +33,128 @@ public record InviteElectionTrusteeActionPayload(
     string TrusteeEncryptedElectionPrivateKey,
     string? TrusteeDisplayName);
 
+public record ResolveElectionTrusteeInvitationActionPayload(
+    Guid InvitationId,
+    string ActorPublicAddress);
+
+public record RevokeElectionTrusteeInvitationActionPayload(
+    Guid InvitationId,
+    string ActorPublicAddress);
+
+public record StartElectionGovernedProposalActionPayload(
+    Guid ProposalId,
+    ElectionGovernedActionType ActionType,
+    string ActorPublicAddress);
+
+public record ApproveElectionGovernedProposalActionPayload(
+    Guid ProposalId,
+    string ActorPublicAddress,
+    string? ApprovalNote);
+
+public record RetryElectionGovernedProposalExecutionActionPayload(
+    Guid ProposalId,
+    string ActorPublicAddress);
+
+public record OpenElectionActionPayload(
+    string ActorPublicAddress,
+    ElectionWarningCode[] RequiredWarningCodes,
+    byte[]? FrozenEligibleVoterSetHash,
+    string? TrusteePolicyExecutionReference,
+    string? ReportingPolicyExecutionReference,
+    string? ReviewWindowExecutionReference);
+
+public record CloseElectionActionPayload(
+    string ActorPublicAddress,
+    byte[]? AcceptedBallotSetHash,
+    byte[]? FinalEncryptedTallyHash);
+
+public record FinalizeElectionActionPayload(
+    string ActorPublicAddress,
+    byte[]? AcceptedBallotSetHash,
+    byte[]? FinalEncryptedTallyHash);
+
+public record StartElectionCeremonyActionPayload(
+    string ActorPublicAddress,
+    string ProfileId);
+
+public record RestartElectionCeremonyActionPayload(
+    string ActorPublicAddress,
+    string ProfileId,
+    string RestartReason);
+
+public record PublishElectionCeremonyTransportKeyActionPayload(
+    Guid CeremonyVersionId,
+    string ActorPublicAddress,
+    string TransportPublicKeyFingerprint);
+
+public record JoinElectionCeremonyActionPayload(
+    Guid CeremonyVersionId,
+    string ActorPublicAddress);
+
+public record RecordElectionCeremonySelfTestActionPayload(
+    Guid CeremonyVersionId,
+    string ActorPublicAddress);
+
+public record SubmitElectionCeremonyMaterialActionPayload(
+    Guid CeremonyVersionId,
+    string ActorPublicAddress,
+    string? RecipientTrusteeUserAddress,
+    string MessageType,
+    string PayloadVersion,
+    string EncryptedPayload,
+    string PayloadFingerprint);
+
+public record RecordElectionCeremonyValidationFailureActionPayload(
+    Guid CeremonyVersionId,
+    string ActorPublicAddress,
+    string TrusteeUserAddress,
+    string ValidationFailureReason,
+    string? EvidenceReference);
+
+public record CompleteElectionCeremonyTrusteeActionPayload(
+    Guid CeremonyVersionId,
+    string ActorPublicAddress,
+    string TrusteeUserAddress,
+    string ShareVersion,
+    string? TallyPublicKeyFingerprint);
+
+public record RecordElectionCeremonyShareExportActionPayload(
+    Guid CeremonyVersionId,
+    string ActorPublicAddress,
+    string ShareVersion);
+
+public record RecordElectionCeremonyShareImportActionPayload(
+    Guid CeremonyVersionId,
+    string ActorPublicAddress,
+    ElectionId ImportedElectionId,
+    Guid ImportedCeremonyVersionId,
+    string ImportedTrusteeUserAddress,
+    string ImportedShareVersion);
+
 public static class EncryptedElectionEnvelopeActionTypes
 {
     public const string CreateDraft = "create_draft";
     public const string UpdateDraft = "update_draft";
     public const string InviteTrustee = "invite_trustee";
+    public const string AcceptTrusteeInvitation = "accept_trustee_invitation";
+    public const string RejectTrusteeInvitation = "reject_trustee_invitation";
+    public const string RevokeTrusteeInvitation = "revoke_trustee_invitation";
+    public const string StartGovernedProposal = "start_governed_proposal";
+    public const string ApproveGovernedProposal = "approve_governed_proposal";
+    public const string RetryGovernedProposalExecution = "retry_governed_proposal_execution";
+    public const string OpenElection = "open_election";
+    public const string CloseElection = "close_election";
+    public const string FinalizeElection = "finalize_election";
+    public const string StartCeremony = "start_ceremony";
+    public const string RestartCeremony = "restart_ceremony";
+    public const string PublishCeremonyTransportKey = "publish_ceremony_transport_key";
+    public const string JoinCeremony = "join_ceremony";
+    public const string RecordCeremonySelfTestSuccess = "record_ceremony_self_test_success";
+    public const string SubmitCeremonyMaterial = "submit_ceremony_material";
+    public const string RecordCeremonyValidationFailure = "record_ceremony_validation_failure";
+    public const string CompleteCeremonyTrustee = "complete_ceremony_trustee";
+    public const string RecordCeremonyShareExport = "record_ceremony_share_export";
+    public const string RecordCeremonyShareImport = "record_ceremony_share_import";
 }
 
 public static class EncryptedElectionEnvelopePayloadHandler

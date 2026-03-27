@@ -109,13 +109,26 @@ public class EncryptedElectionEnvelopeTests
                 PrivateEncryptKey = validatorEncryptKeys.PrivateKey,
             });
 
+        var lifecycleService = new Mock<IElectionLifecycleService>();
         var unitOfWorkProvider = new Mock<Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext>>();
         var sut = new EncryptedElectionEnvelopeContentHandler(
             cryptoService.Object,
             validationService.Object,
             new UpdateElectionDraftContentHandler(credentialsProvider.Object, unitOfWorkProvider.Object),
             new InviteElectionTrusteeContentHandler(credentialsProvider.Object, unitOfWorkProvider.Object),
-            credentialsProvider.Object);
+            new RevokeElectionTrusteeInvitationContentHandler(credentialsProvider.Object, unitOfWorkProvider.Object),
+            new StartElectionGovernedProposalContentHandler(credentialsProvider.Object, unitOfWorkProvider.Object, lifecycleService.Object),
+            new ApproveElectionGovernedProposalContentHandler(credentialsProvider.Object, unitOfWorkProvider.Object),
+            new RetryElectionGovernedProposalExecutionContentHandler(credentialsProvider.Object, unitOfWorkProvider.Object),
+            new OpenElectionContentHandler(credentialsProvider.Object, unitOfWorkProvider.Object, lifecycleService.Object),
+            new CloseElectionContentHandler(credentialsProvider.Object, unitOfWorkProvider.Object),
+            new FinalizeElectionContentHandler(credentialsProvider.Object, unitOfWorkProvider.Object),
+            credentialsProvider.Object,
+            unitOfWorkProvider.Object,
+            new ElectionCeremonyOptions(
+                EnableDevCeremonyProfiles: true,
+                ApprovedRegistryRelativePath: "ignored",
+                RequiredRolloutVersion: "test"));
 
         var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
 

@@ -1,29 +1,27 @@
 using System.Text;
-using System.Text.Json;
+using HushNode.Caching;
 using HushNode.Elections.Storage;
 using HushNode.Indexing.Interfaces;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Elections.Model;
+using Microsoft.Extensions.Logging;
 using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Elections;
 
 public class EncryptedElectionEnvelopeIndexStrategy(
     IElectionEnvelopeCryptoService envelopeCryptoService,
-    ICreateElectionDraftTransactionHandler createElectionDraftTransactionHandler,
-    IUpdateElectionDraftTransactionHandler updateElectionDraftTransactionHandler,
-    IInviteElectionTrusteeTransactionHandler inviteElectionTrusteeTransactionHandler,
-    IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider) : IIndexStrategy
+    IElectionLifecycleService electionLifecycleService,
+    IBlockchainCache blockchainCache,
+    IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
+    ILogger<EncryptedElectionEnvelopeIndexStrategy> logger) : IIndexStrategy
 {
     private readonly IElectionEnvelopeCryptoService _envelopeCryptoService = envelopeCryptoService;
-    private readonly ICreateElectionDraftTransactionHandler _createElectionDraftTransactionHandler =
-        createElectionDraftTransactionHandler;
-    private readonly IUpdateElectionDraftTransactionHandler _updateElectionDraftTransactionHandler =
-        updateElectionDraftTransactionHandler;
-    private readonly IInviteElectionTrusteeTransactionHandler _inviteElectionTrusteeTransactionHandler =
-        inviteElectionTrusteeTransactionHandler;
+    private readonly IElectionLifecycleService _electionLifecycleService = electionLifecycleService;
+    private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider = unitOfWorkProvider;
+    private readonly ILogger<EncryptedElectionEnvelopeIndexStrategy> _logger = logger;
 
     public bool CanHandle(AbstractTransaction transaction) =>
         EncryptedElectionEnvelopePayloadHandler.EncryptedElectionEnvelopePayloadKind == transaction.PayloadKind;
@@ -36,114 +34,540 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             return;
         }
 
-        switch (decryptedEnvelope.ActionType)
+        ElectionCommandResult result = decryptedEnvelope.ActionType switch
         {
-            case EncryptedElectionEnvelopeActionTypes.CreateDraft:
-                await HandleCreateDraftAsync(decryptedEnvelope);
-                return;
-            case EncryptedElectionEnvelopeActionTypes.UpdateDraft:
-                await HandleUpdateDraftAsync(decryptedEnvelope);
-                return;
-            case EncryptedElectionEnvelopeActionTypes.InviteTrustee:
-                await HandleInviteTrusteeAsync(decryptedEnvelope);
-                return;
-            default:
-                return;
+            EncryptedElectionEnvelopeActionTypes.CreateDraft =>
+                await HandleCreateDraftAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.UpdateDraft =>
+                await HandleUpdateDraftAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.InviteTrustee =>
+                await HandleInviteTrusteeAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.AcceptTrusteeInvitation =>
+                await HandleAcceptTrusteeInvitationAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RejectTrusteeInvitation =>
+                await HandleRejectTrusteeInvitationAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RevokeTrusteeInvitation =>
+                await HandleRevokeTrusteeInvitationAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.StartGovernedProposal =>
+                await HandleStartGovernedProposalAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.ApproveGovernedProposal =>
+                await HandleApproveGovernedProposalAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RetryGovernedProposalExecution =>
+                await HandleRetryGovernedProposalExecutionAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.OpenElection =>
+                await HandleOpenElectionAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.CloseElection =>
+                await HandleCloseElectionAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.FinalizeElection =>
+                await HandleFinalizeElectionAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.StartCeremony =>
+                await HandleStartCeremonyAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RestartCeremony =>
+                await HandleRestartCeremonyAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.PublishCeremonyTransportKey =>
+                await HandlePublishCeremonyTransportKeyAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.JoinCeremony =>
+                await HandleJoinCeremonyAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RecordCeremonySelfTestSuccess =>
+                await HandleRecordCeremonySelfTestAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.SubmitCeremonyMaterial =>
+                await HandleSubmitCeremonyMaterialAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RecordCeremonyValidationFailure =>
+                await HandleRecordCeremonyValidationFailureAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.CompleteCeremonyTrustee =>
+                await HandleCompleteCeremonyTrusteeAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RecordCeremonyShareExport =>
+                await HandleRecordCeremonyShareExportAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RecordCeremonyShareImport =>
+                await HandleRecordCeremonyShareImportAsync(decryptedEnvelope),
+            _ => ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotSupported,
+                $"Unsupported encrypted election action type {decryptedEnvelope.ActionType}."),
+        };
+
+        if (!result.IsSuccess)
+        {
+            _logger.LogWarning(
+                "[EncryptedElectionEnvelopeIndexStrategy] Failed to index encrypted election envelope {TransactionId} ({ActionType}): {ErrorCode} {ErrorMessage}",
+                decryptedEnvelope.Transaction.TransactionId,
+                decryptedEnvelope.ActionType,
+                result.ErrorCode,
+                result.ErrorMessage);
         }
     }
 
-    private async Task HandleCreateDraftAsync(
+    private async Task<ElectionCommandResult> HandleCreateDraftAsync(
         DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
     {
         var createDraftAction = decryptedEnvelope.DeserializeAction<CreateElectionDraftActionPayload>();
         if (createDraftAction is null)
         {
-            return;
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Create draft action payload could not be deserialized.");
         }
 
-        var payload = new CreateElectionDraftPayload(
-            decryptedEnvelope.Transaction.Payload.ElectionId,
-            createDraftAction.OwnerPublicAddress,
-            createDraftAction.SnapshotReason,
-            createDraftAction.Draft);
-        var payloadSize = Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(payload));
-        var syntheticTransaction = new ValidatedTransaction<CreateElectionDraftPayload>(
-            decryptedEnvelope.Transaction.TransactionId,
-            CreateElectionDraftPayloadHandler.CreateElectionDraftPayloadKind,
-            decryptedEnvelope.Transaction.TransactionTimeStamp,
-            payload,
-            payloadSize,
-            decryptedEnvelope.Transaction.UserSignature,
-            decryptedEnvelope.Transaction.ValidatorSignature);
+        var result = await _electionLifecycleService.CreateDraftAsync(new CreateElectionDraftRequest(
+            OwnerPublicAddress: createDraftAction.OwnerPublicAddress,
+            ActorPublicAddress: createDraftAction.OwnerPublicAddress,
+            SnapshotReason: createDraftAction.SnapshotReason,
+            Draft: createDraftAction.Draft,
+            PreassignedElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
 
-        await _createElectionDraftTransactionHandler.HandleCreateElectionDraftTransaction(syntheticTransaction);
-        await SaveElectionEnvelopeAccessAsync(
-            decryptedEnvelope.Transaction.Payload.ElectionId,
-            createDraftAction.OwnerPublicAddress,
-            decryptedEnvelope.Transaction.Payload.ActorEncryptedElectionPrivateKey,
-            decryptedEnvelope.Transaction.TransactionTimeStamp.Value,
-            decryptedEnvelope.Transaction.TransactionId.Value);
+        if (result.IsSuccess)
+        {
+            await SaveElectionEnvelopeAccessAsync(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                createDraftAction.OwnerPublicAddress,
+                decryptedEnvelope.Transaction.Payload.ActorEncryptedElectionPrivateKey,
+                decryptedEnvelope.Transaction.TransactionTimeStamp.Value,
+                decryptedEnvelope.Transaction.TransactionId.Value);
+        }
+
+        return result;
     }
 
-    private async Task HandleUpdateDraftAsync(
+    private async Task<ElectionCommandResult> HandleUpdateDraftAsync(
         DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
     {
         var updateDraftAction = decryptedEnvelope.DeserializeAction<UpdateElectionDraftActionPayload>();
         if (updateDraftAction is null)
         {
-            return;
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Update draft action payload could not be deserialized.");
         }
 
-        var payload = new UpdateElectionDraftPayload(
-            decryptedEnvelope.Transaction.Payload.ElectionId,
-            updateDraftAction.ActorPublicAddress,
-            updateDraftAction.SnapshotReason,
-            updateDraftAction.Draft);
-        var payloadSize = Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(payload));
-        var syntheticTransaction = new ValidatedTransaction<UpdateElectionDraftPayload>(
-            decryptedEnvelope.Transaction.TransactionId,
-            UpdateElectionDraftPayloadHandler.UpdateElectionDraftPayloadKind,
-            decryptedEnvelope.Transaction.TransactionTimeStamp,
-            payload,
-            payloadSize,
-            decryptedEnvelope.Transaction.UserSignature,
-            decryptedEnvelope.Transaction.ValidatorSignature);
-
-        await _updateElectionDraftTransactionHandler.HandleUpdateElectionDraftTransaction(syntheticTransaction);
+        return await _electionLifecycleService.UpdateDraftAsync(new UpdateElectionDraftRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ActorPublicAddress: updateDraftAction.ActorPublicAddress,
+            SnapshotReason: updateDraftAction.SnapshotReason,
+            Draft: updateDraftAction.Draft,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
     }
 
-    private async Task HandleInviteTrusteeAsync(
+    private async Task<ElectionCommandResult> HandleInviteTrusteeAsync(
         DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
     {
         var inviteTrusteeAction = decryptedEnvelope.DeserializeAction<InviteElectionTrusteeActionPayload>();
         if (inviteTrusteeAction is null)
         {
-            return;
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Invite trustee action payload could not be deserialized.");
         }
 
-        var payload = new InviteElectionTrusteePayload(
-            decryptedEnvelope.Transaction.Payload.ElectionId,
-            inviteTrusteeAction.InvitationId,
-            inviteTrusteeAction.ActorPublicAddress,
-            inviteTrusteeAction.TrusteeUserAddress,
-            inviteTrusteeAction.TrusteeDisplayName);
-        var payloadSize = Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(payload));
-        var syntheticTransaction = new ValidatedTransaction<InviteElectionTrusteePayload>(
-            decryptedEnvelope.Transaction.TransactionId,
-            InviteElectionTrusteePayloadHandler.InviteElectionTrusteePayloadKind,
-            decryptedEnvelope.Transaction.TransactionTimeStamp,
-            payload,
-            payloadSize,
-            decryptedEnvelope.Transaction.UserSignature,
-            decryptedEnvelope.Transaction.ValidatorSignature);
+        var result = await _electionLifecycleService.InviteTrusteeAsync(new InviteElectionTrusteeRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ActorPublicAddress: inviteTrusteeAction.ActorPublicAddress,
+            TrusteeUserAddress: inviteTrusteeAction.TrusteeUserAddress,
+            TrusteeDisplayName: inviteTrusteeAction.TrusteeDisplayName,
+            PreassignedInvitationId: inviteTrusteeAction.InvitationId,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
 
-        await _inviteElectionTrusteeTransactionHandler.HandleInviteElectionTrusteeTransaction(syntheticTransaction);
-        await SaveElectionEnvelopeAccessAsync(
+        if (result.IsSuccess)
+        {
+            await SaveElectionEnvelopeAccessAsync(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                inviteTrusteeAction.TrusteeUserAddress,
+                inviteTrusteeAction.TrusteeEncryptedElectionPrivateKey,
+                decryptedEnvelope.Transaction.TransactionTimeStamp.Value,
+                decryptedEnvelope.Transaction.TransactionId.Value);
+        }
+
+        return result;
+    }
+
+    private async Task<ElectionCommandResult> HandleAcceptTrusteeInvitationAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var resolveAction = decryptedEnvelope.DeserializeAction<ResolveElectionTrusteeInvitationActionPayload>();
+        if (resolveAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Accept trustee invitation action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.AcceptTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            InvitationId: resolveAction.InvitationId,
+            ActorPublicAddress: resolveAction.ActorPublicAddress,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleRejectTrusteeInvitationAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var resolveAction = decryptedEnvelope.DeserializeAction<ResolveElectionTrusteeInvitationActionPayload>();
+        if (resolveAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Reject trustee invitation action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.RejectTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            InvitationId: resolveAction.InvitationId,
+            ActorPublicAddress: resolveAction.ActorPublicAddress,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleRevokeTrusteeInvitationAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var revokeAction = decryptedEnvelope.DeserializeAction<RevokeElectionTrusteeInvitationActionPayload>();
+        if (revokeAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Revoke trustee invitation action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.RevokeTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            InvitationId: revokeAction.InvitationId,
+            ActorPublicAddress: revokeAction.ActorPublicAddress,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleStartGovernedProposalAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var startAction = decryptedEnvelope.DeserializeAction<StartElectionGovernedProposalActionPayload>();
+        if (startAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Start governed proposal action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.StartGovernedProposalAsync(new StartElectionGovernedProposalRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ActionType: startAction.ActionType,
+            ActorPublicAddress: startAction.ActorPublicAddress,
+            PreassignedProposalId: startAction.ProposalId,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleApproveGovernedProposalAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var approveAction = decryptedEnvelope.DeserializeAction<ApproveElectionGovernedProposalActionPayload>();
+        if (approveAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Approve governed proposal action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ProposalId: approveAction.ProposalId,
+            ActorPublicAddress: approveAction.ActorPublicAddress,
+            ApprovalNote: approveAction.ApprovalNote,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleRetryGovernedProposalExecutionAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var retryAction = decryptedEnvelope.DeserializeAction<RetryElectionGovernedProposalExecutionActionPayload>();
+        if (retryAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Retry governed proposal execution action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.RetryGovernedProposalExecutionAsync(
+            new RetryElectionGovernedProposalExecutionRequest(
+                ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+                ProposalId: retryAction.ProposalId,
+                ActorPublicAddress: retryAction.ActorPublicAddress,
+                SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+                SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+                SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleOpenElectionAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var openAction = decryptedEnvelope.DeserializeAction<OpenElectionActionPayload>();
+        if (openAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Open election action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.OpenElectionAsync(new OpenElectionRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ActorPublicAddress: openAction.ActorPublicAddress,
+            RequiredWarningCodes: openAction.RequiredWarningCodes,
+            FrozenEligibleVoterSetHash: openAction.FrozenEligibleVoterSetHash,
+            TrusteePolicyExecutionReference: openAction.TrusteePolicyExecutionReference,
+            ReportingPolicyExecutionReference: openAction.ReportingPolicyExecutionReference,
+            ReviewWindowExecutionReference: openAction.ReviewWindowExecutionReference,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleCloseElectionAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var closeAction = decryptedEnvelope.DeserializeAction<CloseElectionActionPayload>();
+        if (closeAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Close election action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.CloseElectionAsync(new CloseElectionRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ActorPublicAddress: closeAction.ActorPublicAddress,
+            AcceptedBallotSetHash: closeAction.AcceptedBallotSetHash,
+            FinalEncryptedTallyHash: closeAction.FinalEncryptedTallyHash,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleFinalizeElectionAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var finalizeAction = decryptedEnvelope.DeserializeAction<FinalizeElectionActionPayload>();
+        if (finalizeAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Finalize election action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.FinalizeElectionAsync(new FinalizeElectionRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ActorPublicAddress: finalizeAction.ActorPublicAddress,
+            AcceptedBallotSetHash: finalizeAction.AcceptedBallotSetHash,
+            FinalEncryptedTallyHash: finalizeAction.FinalEncryptedTallyHash,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleStartCeremonyAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var startAction = decryptedEnvelope.DeserializeAction<StartElectionCeremonyActionPayload>();
+        if (startAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Start ceremony action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.StartElectionCeremonyAsync(new StartElectionCeremonyRequest(
             decryptedEnvelope.Transaction.Payload.ElectionId,
-            inviteTrusteeAction.TrusteeUserAddress,
-            inviteTrusteeAction.TrusteeEncryptedElectionPrivateKey,
-            decryptedEnvelope.Transaction.TransactionTimeStamp!.Value,
-            decryptedEnvelope.Transaction.TransactionId!.Value);
+            startAction.ActorPublicAddress,
+            startAction.ProfileId));
+    }
+
+    private async Task<ElectionCommandResult> HandleRestartCeremonyAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var restartAction = decryptedEnvelope.DeserializeAction<RestartElectionCeremonyActionPayload>();
+        if (restartAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Restart ceremony action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.RestartElectionCeremonyAsync(new RestartElectionCeremonyRequest(
+            decryptedEnvelope.Transaction.Payload.ElectionId,
+            restartAction.ActorPublicAddress,
+            restartAction.ProfileId,
+            restartAction.RestartReason));
+    }
+
+    private async Task<ElectionCommandResult> HandlePublishCeremonyTransportKeyAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var publishAction = decryptedEnvelope.DeserializeAction<PublishElectionCeremonyTransportKeyActionPayload>();
+        if (publishAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Publish ceremony transport key action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.PublishElectionCeremonyTransportKeyAsync(
+            new PublishElectionCeremonyTransportKeyRequest(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                publishAction.CeremonyVersionId,
+                publishAction.ActorPublicAddress,
+                publishAction.TransportPublicKeyFingerprint));
+    }
+
+    private async Task<ElectionCommandResult> HandleJoinCeremonyAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var joinAction = decryptedEnvelope.DeserializeAction<JoinElectionCeremonyActionPayload>();
+        if (joinAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Join ceremony action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.JoinElectionCeremonyAsync(new JoinElectionCeremonyRequest(
+            decryptedEnvelope.Transaction.Payload.ElectionId,
+            joinAction.CeremonyVersionId,
+            joinAction.ActorPublicAddress));
+    }
+
+    private async Task<ElectionCommandResult> HandleRecordCeremonySelfTestAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var selfTestAction = decryptedEnvelope.DeserializeAction<RecordElectionCeremonySelfTestActionPayload>();
+        if (selfTestAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Record ceremony self-test action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.RecordElectionCeremonySelfTestSuccessAsync(
+            new RecordElectionCeremonySelfTestRequest(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                selfTestAction.CeremonyVersionId,
+                selfTestAction.ActorPublicAddress));
+    }
+
+    private async Task<ElectionCommandResult> HandleSubmitCeremonyMaterialAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var submitAction = decryptedEnvelope.DeserializeAction<SubmitElectionCeremonyMaterialActionPayload>();
+        if (submitAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Submit ceremony material action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.SubmitElectionCeremonyMaterialAsync(
+            new SubmitElectionCeremonyMaterialRequest(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                submitAction.CeremonyVersionId,
+                submitAction.ActorPublicAddress,
+                submitAction.RecipientTrusteeUserAddress,
+                submitAction.MessageType,
+                submitAction.PayloadVersion,
+                Encoding.UTF8.GetBytes(submitAction.EncryptedPayload),
+                submitAction.PayloadFingerprint));
+    }
+
+    private async Task<ElectionCommandResult> HandleRecordCeremonyValidationFailureAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var validationFailureAction =
+            decryptedEnvelope.DeserializeAction<RecordElectionCeremonyValidationFailureActionPayload>();
+        if (validationFailureAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Record ceremony validation failure action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.RecordElectionCeremonyValidationFailureAsync(
+            new RecordElectionCeremonyValidationFailureRequest(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                validationFailureAction.CeremonyVersionId,
+                validationFailureAction.ActorPublicAddress,
+                validationFailureAction.TrusteeUserAddress,
+                validationFailureAction.ValidationFailureReason,
+                validationFailureAction.EvidenceReference));
+    }
+
+    private async Task<ElectionCommandResult> HandleCompleteCeremonyTrusteeAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var completeAction = decryptedEnvelope.DeserializeAction<CompleteElectionCeremonyTrusteeActionPayload>();
+        if (completeAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Complete ceremony trustee action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.CompleteElectionCeremonyTrusteeAsync(
+            new CompleteElectionCeremonyTrusteeRequest(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                completeAction.CeremonyVersionId,
+                completeAction.ActorPublicAddress,
+                completeAction.TrusteeUserAddress,
+                completeAction.ShareVersion,
+                completeAction.TallyPublicKeyFingerprint));
+    }
+
+    private async Task<ElectionCommandResult> HandleRecordCeremonyShareExportAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var exportAction = decryptedEnvelope.DeserializeAction<RecordElectionCeremonyShareExportActionPayload>();
+        if (exportAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Record ceremony share export action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.RecordElectionCeremonyShareExportAsync(
+            new RecordElectionCeremonyShareExportRequest(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                exportAction.CeremonyVersionId,
+                exportAction.ActorPublicAddress,
+                exportAction.ShareVersion));
+    }
+
+    private async Task<ElectionCommandResult> HandleRecordCeremonyShareImportAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var importAction = decryptedEnvelope.DeserializeAction<RecordElectionCeremonyShareImportActionPayload>();
+        if (importAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Record ceremony share import action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.RecordElectionCeremonyShareImportAsync(
+            new RecordElectionCeremonyShareImportRequest(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                importAction.CeremonyVersionId,
+                importAction.ActorPublicAddress,
+                importAction.ImportedElectionId,
+                importAction.ImportedCeremonyVersionId,
+                importAction.ImportedTrusteeUserAddress,
+                importAction.ImportedShareVersion));
     }
 
     private async Task SaveElectionEnvelopeAccessAsync(

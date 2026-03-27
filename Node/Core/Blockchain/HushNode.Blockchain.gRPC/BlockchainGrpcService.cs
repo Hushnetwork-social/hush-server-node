@@ -137,10 +137,12 @@ public class BlockchainGrpcService(
                 }
             }
 
+            var handledByValidator = false;
             foreach (var item in this._transactionContentHandlers)
             {
                 if (item.CanValidate(transaction.PayloadKind))
                 {
+                    handledByValidator = true;
                     var transactionSignedByValidator = item is IAsyncTransactionContentHandler asyncHandler
                         ? await asyncHandler.ValidateAndSignAsync(transaction)
                         : item.ValidateAndSign(transaction);
@@ -190,6 +192,13 @@ public class BlockchainGrpcService(
 
                     break;
                 }
+            }
+
+            if (!handledByValidator)
+            {
+                successful = false;
+                status = TransactionStatus.Rejected;
+                message = "Transaction payload kind is not accepted for direct submission";
             }
         }
 

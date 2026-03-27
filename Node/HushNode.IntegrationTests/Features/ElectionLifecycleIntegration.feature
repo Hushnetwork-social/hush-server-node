@@ -27,12 +27,20 @@ Feature: FEAT-094 election lifecycle integration
     Then the immutable update transaction should be rejected before indexing
     And the open-time binding status should remain "Binding"
 
+  @AT-PROC-I01
+  Scenario: Legacy plaintext election writes are rejected before MemPool admission
+    Given FEAT-094 election integration services are available
+    When the owner creates an admin-only election draft through blockchain submission
+    When the owner submits a legacy plaintext open election transaction
+    Then the legacy plaintext election transaction should be rejected before the MemPool
+    And the election should remain in "Draft"
+
   @AT-PROC-I01 @AT-PROC-U02
   Scenario: Trustee-threshold open remains blocked while the key ceremony boundary is incomplete
     Given FEAT-094 election integration services are available
     When the owner creates a trustee-threshold election draft through blockchain submission
     And the owner invites trustee "Bob" through blockchain submission
-    And trustee "Bob" accepts the invitation through gRPC
+    And trustee "Bob" accepts the invitation through blockchain submission
     And the owner invites trustee "Charlie" through blockchain submission
     And the owner checks open readiness for the trustee-threshold election
     And the owner attempts to open the trustee-threshold election through blockchain submission
@@ -43,7 +51,7 @@ Feature: FEAT-094 election lifecycle integration
   Scenario: Governed open blocks further draft edits and opens at trustee threshold
     Given FEAT-094 election integration services are available
     When the owner creates a trustee-threshold election draft through blockchain submission
-    And the owner prepares a ready trustee ceremony through gRPC
+    And the owner prepares a ready trustee ceremony through blockchain submission
     And the owner starts an "open" governed proposal through blockchain submission
     And the owner attempts to update the trustee-threshold draft title to "Governed Referendum Revised" while a governed open proposal is pending
     Then the pending governed open should block further draft changes
@@ -68,7 +76,7 @@ Feature: FEAT-094 election lifecycle integration
   Scenario: Owner can retry a failed governed proposal after the blocking state is repaired
     Given FEAT-094 election integration services are available
     When the owner creates a trustee-threshold election draft through blockchain submission
-    And the owner prepares a ready trustee ceremony through gRPC
+    And the owner prepares a ready trustee ceremony through blockchain submission
     And the owner starts an "open" governed proposal through blockchain submission
     And the integration test forces the election into a stale "Closed" state before the governed proposal executes
     And trustee "Bob" approves the governed proposal through blockchain submission

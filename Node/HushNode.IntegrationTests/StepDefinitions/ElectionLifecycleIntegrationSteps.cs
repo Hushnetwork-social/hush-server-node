@@ -168,16 +168,11 @@ public sealed class ElectionLifecycleIntegrationSteps
         };
     }
 
-    [When(@"trustee ""(.*)"" accepts the invitation through gRPC")]
-    public async Task WhenTrusteeAcceptsTheInvitationThroughGrpc(string trusteeAlias)
+    [When(@"trustee ""(.*)"" accepts the invitation through blockchain submission")]
+    public async Task WhenTrusteeAcceptsTheInvitationThroughBlockchainSubmission(string trusteeAlias)
     {
         var trustee = ResolveIdentity(trusteeAlias);
-        var response = await GetClient().AcceptElectionTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest
-        {
-            ElectionId = GetElectionId(),
-            InvitationId = GetTrusteeInvitationId(trustee.PublicSigningAddress),
-            ActorPublicAddress = trustee.PublicSigningAddress,
-        });
+        var response = await AcceptTrusteeInvitationViaBlockchainAsync(trustee);
 
         response.Success.Should().BeTrue($"trustee acceptance should succeed: {response.ErrorMessage}");
         response.TrusteeInvitation.Should().NotBeNull();
@@ -194,6 +189,17 @@ public sealed class ElectionLifecycleIntegrationSteps
             trusteePolicyExecutionReference: "reserved-feat-096-governance",
             reportingPolicyExecutionReference: "phase-one-reporting-package",
             reviewWindowExecutionReference: "governed-review-window-reserved");
+    }
+
+    [When(@"the owner submits a legacy plaintext open election transaction")]
+    public async Task WhenTheOwnerSubmitsALegacyPlaintextOpenElectionTransaction()
+    {
+        _lastSubmitTransactionResponse = await SubmitLegacyPlaintextOpenElectionViaBlockchainAsync(
+            [ElectionWarningCode.LowAnonymitySet],
+            ByteString.CopyFromUtf8("legacy-open-frozen-voters").ToByteArray(),
+            trusteePolicyExecutionReference: string.Empty,
+            reportingPolicyExecutionReference: "phase-one-reporting-package",
+            reviewWindowExecutionReference: string.Empty);
     }
 
     [When(@"the owner reloads the election through gRPC")]
@@ -249,7 +255,7 @@ public sealed class ElectionLifecycleIntegrationSteps
     public async Task GivenTheOwnerHasAnOpenTrusteeThresholdElectionThroughGovernedApprovalBlockchainSubmission()
     {
         await WhenTheOwnerCreatesATrusteeThresholdElectionDraftThroughGrpc();
-        await WhenTheOwnerPreparesAReadyTrusteeCeremonyThroughGrpc();
+        await WhenTheOwnerPreparesAReadyTrusteeCeremonyThroughBlockchainSubmission();
         await WhenTheOwnerStartsAGovernedProposalThroughBlockchainSubmission("open");
         await WhenTrusteeApprovesTheGovernedProposalThroughBlockchainSubmission("Bob");
         await WhenTrusteeApprovesTheGovernedProposalThroughBlockchainSubmission("Charlie");
@@ -257,8 +263,8 @@ public sealed class ElectionLifecycleIntegrationSteps
         await WhenTheOwnerReloadsTheElectionThroughGrpc();
     }
 
-    [When(@"the owner prepares a ready trustee ceremony through gRPC")]
-    public async Task WhenTheOwnerPreparesAReadyTrusteeCeremonyThroughGrpc()
+    [When(@"the owner prepares a ready trustee ceremony through blockchain submission")]
+    public async Task WhenTheOwnerPreparesAReadyTrusteeCeremonyThroughBlockchainSubmission()
     {
         const string tallyFingerprint = "feat094-ready-tally-fingerprint";
 
@@ -272,67 +278,48 @@ public sealed class ElectionLifecycleIntegrationSteps
             await EnsureTrusteeAcceptedAsync(trustee);
         }
 
-        var startResponse = await GetClient().StartElectionCeremonyAsync(new StartElectionCeremonyRequest
-        {
-            ElectionId = GetElectionId(),
-            ActorPublicAddress = GetOwner().PublicSigningAddress,
-            ProfileId = "dkg-prod-3of5",
-        });
+        var startResponse = await StartElectionCeremonyViaBlockchainAsync("dkg-prod-3of5");
 
         startResponse.Success.Should().BeTrue($"ceremony start should succeed: {startResponse.ErrorMessage}");
         startResponse.CeremonyVersion.Should().NotBeNull();
         var ceremonyVersionId = startResponse.CeremonyVersion!.Id;
+        var ceremonyVersionGuid = Guid.Parse(ceremonyVersionId);
 
         for (var index = 0; index < 3; index++)
         {
             var trustee = RolloutTrustees[index];
 
-            var publishResponse = await GetClient().PublishElectionCeremonyTransportKeyAsync(new PublishElectionCeremonyTransportKeyRequest
-            {
-                ElectionId = GetElectionId(),
-                CeremonyVersionId = ceremonyVersionId,
-                ActorPublicAddress = trustee.PublicSigningAddress,
-                TransportPublicKeyFingerprint = $"feat094-transport-{index}",
-            });
+            var publishResponse = await PublishElectionCeremonyTransportKeyViaBlockchainAsync(
+                trustee,
+                ceremonyVersionGuid,
+                $"feat094-transport-{index}");
             publishResponse.Success.Should().BeTrue($"transport publish should succeed: {publishResponse.ErrorMessage}");
 
-            var joinResponse = await GetClient().JoinElectionCeremonyAsync(new JoinElectionCeremonyRequest
-            {
-                ElectionId = GetElectionId(),
-                CeremonyVersionId = ceremonyVersionId,
-                ActorPublicAddress = trustee.PublicSigningAddress,
-            });
+            var joinResponse = await JoinElectionCeremonyViaBlockchainAsync(
+                trustee,
+                ceremonyVersionGuid);
             joinResponse.Success.Should().BeTrue($"ceremony join should succeed: {joinResponse.ErrorMessage}");
 
-            var selfTestResponse = await GetClient().RecordElectionCeremonySelfTestSuccessAsync(new RecordElectionCeremonySelfTestRequest
-            {
-                ElectionId = GetElectionId(),
-                CeremonyVersionId = ceremonyVersionId,
-                ActorPublicAddress = trustee.PublicSigningAddress,
-            });
+            var selfTestResponse = await RecordElectionCeremonySelfTestSuccessViaBlockchainAsync(
+                trustee,
+                ceremonyVersionGuid);
             selfTestResponse.Success.Should().BeTrue($"self-test should succeed: {selfTestResponse.ErrorMessage}");
 
-            var submitResponse = await GetClient().SubmitElectionCeremonyMaterialAsync(new SubmitElectionCeremonyMaterialRequest
-            {
-                ElectionId = GetElectionId(),
-                CeremonyVersionId = ceremonyVersionId,
-                ActorPublicAddress = trustee.PublicSigningAddress,
-                MessageType = "dkg-share-package",
-                PayloadVersion = "omega-v1.0.0",
-                EncryptedPayload = ByteString.CopyFromUtf8($"feat094-payload-{index}"),
-                PayloadFingerprint = $"feat094-payload-{index}",
-            });
+            var submitResponse = await SubmitElectionCeremonyMaterialViaBlockchainAsync(
+                trustee,
+                ceremonyVersionGuid,
+                recipientTrusteeUserAddress: null,
+                messageType: "dkg-share-package",
+                payloadVersion: "omega-v1.0.0",
+                encryptedPayload: $"feat094-payload-{index}",
+                payloadFingerprint: $"feat094-payload-{index}");
             submitResponse.Success.Should().BeTrue($"material submit should succeed: {submitResponse.ErrorMessage}");
 
-            var completeResponse = await GetClient().CompleteElectionCeremonyTrusteeAsync(new CompleteElectionCeremonyTrusteeRequest
-            {
-                ElectionId = GetElectionId(),
-                CeremonyVersionId = ceremonyVersionId,
-                ActorPublicAddress = GetOwner().PublicSigningAddress,
-                TrusteeUserAddress = trustee.PublicSigningAddress,
-                ShareVersion = $"feat094-share-v1-{index}",
-                TallyPublicKeyFingerprint = tallyFingerprint,
-            });
+            var completeResponse = await CompleteElectionCeremonyTrusteeViaBlockchainAsync(
+                trustee.PublicSigningAddress,
+                ceremonyVersionGuid,
+                $"feat094-share-v1-{index}",
+                tallyFingerprint);
             completeResponse.Success.Should().BeTrue($"ceremony completion should succeed: {completeResponse.ErrorMessage}");
         }
     }
@@ -577,6 +564,23 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastSubmitTransactionResponse!.Successfull.Should().BeFalse();
     }
 
+    [Then(@"the legacy plaintext election transaction should be rejected before the MemPool")]
+    public void ThenTheLegacyPlaintextElectionTransactionShouldBeRejectedBeforeTheMemPool()
+    {
+        _lastSubmitTransactionResponse.Should().NotBeNull();
+        _lastSubmitTransactionResponse!.Successfull.Should().BeFalse();
+        _lastSubmitTransactionResponse.Status.Should().Be(TransactionStatus.Rejected);
+        _lastSubmitTransactionResponse.Message.Should().Contain("not accepted for direct submission");
+    }
+
+    [Then(@"the election should remain in ""(.*)""")]
+    public async Task ThenTheElectionShouldRemainIn(string lifecycleState)
+    {
+        var response = await ReloadElectionAsync();
+        response.Election.LifecycleState.Should().Be(ParseProtoLifecycleState(lifecycleState));
+        _lastElectionResponse = response;
+    }
+
     [Then(@"the pending governed open should block further draft changes")]
     public void ThenThePendingGovernedOpenShouldBlockFurtherDraftChanges()
     {
@@ -808,6 +812,28 @@ public sealed class ElectionLifecycleIntegrationSteps
         string? reviewWindowExecutionReference)
     {
         var signedTransaction = TestTransactionFactory.OpenElection(
+            GetOwner(),
+            new ElectionId(Guid.Parse(GetElectionId())),
+            requiredWarningCodes,
+            frozenEligibleVoterSetHash,
+            trusteePolicyExecutionReference,
+            reportingPolicyExecutionReference,
+            reviewWindowExecutionReference);
+
+        return await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+    }
+
+    private async Task<SubmitSignedTransactionReply> SubmitLegacyPlaintextOpenElectionViaBlockchainAsync(
+        ElectionWarningCode[] requiredWarningCodes,
+        byte[]? frozenEligibleVoterSetHash,
+        string? trusteePolicyExecutionReference,
+        string? reportingPolicyExecutionReference,
+        string? reviewWindowExecutionReference)
+    {
+        var signedTransaction = TestTransactionFactory.LegacyPlaintextOpenElection(
             GetOwner(),
             new ElectionId(Guid.Parse(GetElectionId())),
             requiredWarningCodes,
@@ -1214,17 +1240,261 @@ public sealed class ElectionLifecycleIntegrationSteps
 
     private async Task EnsureTrusteeAcceptedAsync(TestIdentity trustee)
     {
-        var invitationId = GetTrusteeInvitationId(trustee.PublicSigningAddress);
-        var response = await GetClient().AcceptElectionTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest
-        {
-            ElectionId = GetElectionId(),
-            InvitationId = invitationId,
-            ActorPublicAddress = trustee.PublicSigningAddress,
-        });
-
+        var response = await AcceptTrusteeInvitationViaBlockchainAsync(trustee);
         response.Success.Should().BeTrue($"trustee acceptance should succeed: {response.ErrorMessage}");
         response.TrusteeInvitation.Should().NotBeNull();
         response.TrusteeInvitation!.Status.Should().Be(ElectionTrusteeInvitationStatusProto.Accepted);
         _lastCommandResponse = response;
+    }
+
+    private async Task<ElectionCommandResponse> AcceptTrusteeInvitationViaBlockchainAsync(TestIdentity trustee)
+    {
+        var signedTransaction = TestTransactionFactory.AcceptElectionTrusteeInvitation(
+            trustee,
+            new ElectionId(Guid.Parse(GetElectionId())),
+            Guid.Parse(GetTrusteeInvitationId(trustee.PublicSigningAddress)));
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"trustee acceptance transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+
+        var response = await ReloadElectionAsync();
+        var invitation = response.TrusteeInvitations.Single(x => x.Id == GetTrusteeInvitationId(trustee.PublicSigningAddress));
+        invitation.Status.Should().Be(ElectionTrusteeInvitationStatusProto.Accepted);
+
+        return new ElectionCommandResponse
+        {
+            Success = true,
+            Election = response.Election,
+            TrusteeInvitation = invitation,
+        };
+    }
+
+    private async Task<ElectionCommandResponse> StartElectionCeremonyViaBlockchainAsync(string profileId)
+    {
+        var signedTransaction = TestTransactionFactory.StartElectionCeremony(
+            GetOwner(),
+            new ElectionId(Guid.Parse(GetElectionId())),
+            profileId);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"start ceremony transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+
+        var response = await ReloadElectionAsync();
+        var version = response.CeremonyVersions
+            .Where(x => x.ProfileId == profileId)
+            .OrderByDescending(x => x.VersionNumber)
+            .First();
+
+        return new ElectionCommandResponse
+        {
+            Success = true,
+            Election = response.Election,
+            CeremonyVersion = version,
+            CeremonyProfile = response.CeremonyProfiles.SingleOrDefault(x => x.ProfileId == profileId),
+        };
+    }
+
+    private async Task<ElectionCommandResponse> PublishElectionCeremonyTransportKeyViaBlockchainAsync(
+        TestIdentity trustee,
+        Guid ceremonyVersionId,
+        string transportPublicKeyFingerprint)
+    {
+        var signedTransaction = TestTransactionFactory.PublishElectionCeremonyTransportKey(
+            trustee,
+            new ElectionId(Guid.Parse(GetElectionId())),
+            ceremonyVersionId,
+            transportPublicKeyFingerprint);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"publish transport key transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+
+        var response = await ReloadElectionAsync();
+        var trusteeState = response.ActiveCeremonyTrusteeStates.Single(x =>
+            x.TrusteeUserAddress == trustee.PublicSigningAddress &&
+            x.CeremonyVersionId == ceremonyVersionId.ToString());
+        trusteeState.TransportPublicKeyFingerprint.Should().Be(transportPublicKeyFingerprint);
+
+        return new ElectionCommandResponse
+        {
+            Success = true,
+            Election = response.Election,
+            CeremonyTrusteeState = trusteeState,
+        };
+    }
+
+    private async Task<ElectionCommandResponse> JoinElectionCeremonyViaBlockchainAsync(
+        TestIdentity trustee,
+        Guid ceremonyVersionId)
+    {
+        var signedTransaction = TestTransactionFactory.JoinElectionCeremony(
+            trustee,
+            new ElectionId(Guid.Parse(GetElectionId())),
+            ceremonyVersionId);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"join ceremony transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+
+        var response = await ReloadElectionAsync();
+        var trusteeState = response.ActiveCeremonyTrusteeStates.Single(x =>
+            x.TrusteeUserAddress == trustee.PublicSigningAddress &&
+            x.CeremonyVersionId == ceremonyVersionId.ToString());
+        trusteeState.JoinedAt.Should().NotBeNull();
+
+        return new ElectionCommandResponse
+        {
+            Success = true,
+            Election = response.Election,
+            CeremonyTrusteeState = trusteeState,
+        };
+    }
+
+    private async Task<ElectionCommandResponse> RecordElectionCeremonySelfTestSuccessViaBlockchainAsync(
+        TestIdentity trustee,
+        Guid ceremonyVersionId)
+    {
+        var signedTransaction = TestTransactionFactory.RecordElectionCeremonySelfTestSuccess(
+            trustee,
+            new ElectionId(Guid.Parse(GetElectionId())),
+            ceremonyVersionId);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"self-test transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+
+        var response = await ReloadElectionAsync();
+        var trusteeState = response.ActiveCeremonyTrusteeStates.Single(x =>
+            x.TrusteeUserAddress == trustee.PublicSigningAddress &&
+            x.CeremonyVersionId == ceremonyVersionId.ToString());
+        trusteeState.SelfTestSucceededAt.Should().NotBeNull();
+
+        return new ElectionCommandResponse
+        {
+            Success = true,
+            Election = response.Election,
+            CeremonyTrusteeState = trusteeState,
+        };
+    }
+
+    private async Task<ElectionCommandResponse> SubmitElectionCeremonyMaterialViaBlockchainAsync(
+        TestIdentity trustee,
+        Guid ceremonyVersionId,
+        string? recipientTrusteeUserAddress,
+        string messageType,
+        string payloadVersion,
+        string encryptedPayload,
+        string payloadFingerprint)
+    {
+        var signedTransaction = TestTransactionFactory.SubmitElectionCeremonyMaterial(
+            trustee,
+            new ElectionId(Guid.Parse(GetElectionId())),
+            ceremonyVersionId,
+            recipientTrusteeUserAddress,
+            messageType,
+            payloadVersion,
+            encryptedPayload,
+            payloadFingerprint);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"ceremony material transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+
+        var response = await ReloadElectionAsync();
+        var trusteeState = response.ActiveCeremonyTrusteeStates.Single(x =>
+            x.TrusteeUserAddress == trustee.PublicSigningAddress &&
+            x.CeremonyVersionId == ceremonyVersionId.ToString());
+        trusteeState.MaterialSubmittedAt.Should().NotBeNull();
+
+        return new ElectionCommandResponse
+        {
+            Success = true,
+            Election = response.Election,
+            CeremonyTrusteeState = trusteeState,
+        };
+    }
+
+    private async Task<ElectionCommandResponse> CompleteElectionCeremonyTrusteeViaBlockchainAsync(
+        string trusteeUserAddress,
+        Guid ceremonyVersionId,
+        string shareVersion,
+        string? tallyPublicKeyFingerprint)
+    {
+        var signedTransaction = TestTransactionFactory.CompleteElectionCeremonyTrustee(
+            GetOwner(),
+            new ElectionId(Guid.Parse(GetElectionId())),
+            ceremonyVersionId,
+            trusteeUserAddress,
+            shareVersion,
+            tallyPublicKeyFingerprint);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"ceremony completion transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+
+        var response = await ReloadElectionAsync();
+        var trusteeState = response.ActiveCeremonyTrusteeStates.Single(x =>
+            x.TrusteeUserAddress == trusteeUserAddress &&
+            x.CeremonyVersionId == ceremonyVersionId.ToString());
+        trusteeState.CompletedAt.Should().NotBeNull();
+        trusteeState.ShareVersion.Should().Be(shareVersion);
+
+        return new ElectionCommandResponse
+        {
+            Success = true,
+            Election = response.Election,
+            CeremonyTrusteeState = trusteeState,
+        };
     }
 }
