@@ -1857,8 +1857,7 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
                 var hasAnyVariant = false;
                 foreach (var variant in expectedTagVariants)
                 {
-                    var tag = memberCard.GetByText(variant, new LocatorGetByTextOptions { Exact = true }).First;
-                    if (await tag.CountAsync() > 0 && await tag.IsVisibleAsync())
+                    if (await HasVisibleExactTextAsync(memberCard, variant))
                     {
                         hasAnyVariant = true;
                         break;
@@ -1930,13 +1929,7 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         await circleCard.ClickAsync();
         await AwaitTransactionsAndProduceBlockAsync(waiter);
         await TriggerSyncAsync(ownerPage);
-
-        var tag = memberCard.GetByText(circleName, new LocatorGetByTextOptions { Exact = true }).First;
-        await tag.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Visible,
-            Timeout = 10000
-        });
+        await WaitForVisibleExactTextAsync(memberCard, circleName, 10000);
     }
 
     [Given(@"Owner creates Close post ""(.*)"" for circle ""(.*)"" via browser")]
@@ -2936,6 +2929,37 @@ internal sealed class HushSocialE2ESteps : BrowserStepsBase
         }
 
         throw new TimeoutException("Could not open Following tab in HushSocial.");
+    }
+
+    private static async Task<bool> HasVisibleExactTextAsync(ILocator scope, string text)
+    {
+        var matches = scope.GetByText(text, new LocatorGetByTextOptions { Exact = true });
+        var count = await matches.CountAsync();
+        for (var index = 0; index < count; index++)
+        {
+            if (await matches.Nth(index).IsVisibleAsync())
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task WaitForVisibleExactTextAsync(ILocator scope, string text, int timeoutMs)
+    {
+        var timeoutAt = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            if (await HasVisibleExactTextAsync(scope, text))
+            {
+                return;
+            }
+
+            await Task.Delay(250);
+        }
+
+        throw new TimeoutException($"Timed out waiting for visible exact text '{text}'.");
     }
 
     private static async Task<ILocator> WaitForCircleCardByNameAsync(IPage page, string circleName, int timeoutMs)
