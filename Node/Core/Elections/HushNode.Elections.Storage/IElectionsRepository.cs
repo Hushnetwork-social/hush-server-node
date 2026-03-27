@@ -19,6 +19,12 @@ public interface IElectionsRepository : IRepository
 
     Task SaveDraftSnapshotAsync(ElectionDraftSnapshotRecord snapshot);
 
+    Task<ElectionEnvelopeAccessRecord?> GetElectionEnvelopeAccessAsync(ElectionId electionId, string actorPublicAddress);
+
+    Task SaveElectionEnvelopeAccessAsync(ElectionEnvelopeAccessRecord accessRecord);
+
+    Task UpdateElectionEnvelopeAccessAsync(ElectionEnvelopeAccessRecord accessRecord);
+
     Task<IReadOnlyList<ElectionBoundaryArtifactRecord>> GetBoundaryArtifactsAsync(ElectionId electionId);
 
     Task SaveBoundaryArtifactAsync(ElectionBoundaryArtifactRecord artifact);

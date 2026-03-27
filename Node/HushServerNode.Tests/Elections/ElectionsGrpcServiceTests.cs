@@ -16,69 +16,136 @@ namespace HushServerNode.Tests.Elections;
 public class ElectionsGrpcServiceTests
 {
     [Fact]
-    public async Task CreateElectionDraft_WithValidRequest_MapsLifecycleResultToProtoResponse()
+    public async Task CreateElectionDraft_RejectsDirectCommandPath()
     {
         // Arrange
         var mocker = new AutoMocker();
-        var election = CreateAdminElection();
-        var snapshot = ElectionModelFactory.CreateDraftSnapshot(
-            election,
-            snapshotReason: "initial draft",
-            recordedByPublicAddress: "owner-address");
-
-        mocker.GetMock<Domain.IElectionLifecycleService>()
-            .Setup(x => x.CreateDraftAsync(It.Is<Domain.CreateElectionDraftRequest>(request =>
-                request.OwnerPublicAddress == "owner-address" &&
-                request.ActorPublicAddress == "owner-address" &&
-                request.SnapshotReason == "initial draft" &&
-                request.Draft.Title == "Board Election" &&
-                request.Draft.OwnerOptions.Count == 2)))
-            .ReturnsAsync(Domain.ElectionCommandResult.Success(election, draftSnapshot: snapshot));
-
         var sut = mocker.CreateInstance<ElectionsGrpcService>();
         var request = CreateDraftRequest();
 
         // Act
-        var response = await sut.CreateElectionDraft(request, CreateMockServerCallContext());
+        var act = async () => await sut.CreateElectionDraft(request, CreateMockServerCallContext());
 
         // Assert
-        response.Success.Should().BeTrue();
-        response.ErrorCode.Should().Be(ElectionCommandErrorCodeProto.None);
-        response.Election.Should().NotBeNull();
-        response.Election.Title.Should().Be("Board Election");
-        response.DraftSnapshot.Should().NotBeNull();
-        response.DraftSnapshot.SnapshotReason.Should().Be("initial draft");
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
     }
 
     [Fact]
-    public async Task OpenElection_WithDependencyBlockedFailure_MapsValidationErrors()
+    public async Task InviteElectionTrustee_RejectsDirectCommandPath()
     {
         // Arrange
         var mocker = new AutoMocker();
-        var electionId = ElectionId.NewElectionId;
-
-        mocker.GetMock<Domain.IElectionLifecycleService>()
-            .Setup(x => x.OpenElectionAsync(It.IsAny<Domain.OpenElectionRequest>()))
-            .ReturnsAsync(Domain.ElectionCommandResult.Failure(
-                Domain.ElectionCommandErrorCode.DependencyBlocked,
-                "Election cannot be opened.",
-                ["Trustee-threshold elections cannot open until FEAT-096 provides the governed approval workflow."]));
-
         var sut = mocker.CreateInstance<ElectionsGrpcService>();
-        var request = new OpenElectionRequest
+        var request = new InviteElectionTrusteeRequest
         {
-            ElectionId = electionId.ToString(),
+            ElectionId = ElectionId.NewElectionId.ToString(),
             ActorPublicAddress = "owner-address",
+            TrusteeUserAddress = "trustee-address",
+            TrusteeDisplayName = "Trustee",
         };
 
         // Act
-        var response = await sut.OpenElection(request, CreateMockServerCallContext());
+        var act = async () => await sut.InviteElectionTrustee(request, CreateMockServerCallContext());
 
         // Assert
-        response.Success.Should().BeFalse();
-        response.ErrorCode.Should().Be(ElectionCommandErrorCodeProto.DependencyBlocked);
-        response.ValidationErrors.Should().ContainSingle();
-        response.ValidationErrors[0].Should().Contain("FEAT-096");
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
+    }
+
+    [Fact]
+    public async Task UpdateElectionDraft_RejectsDirectCommandPath()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new UpdateElectionDraftRequest
+        {
+            ElectionId = ElectionId.NewElectionId.ToString(),
+            ActorPublicAddress = "owner-address",
+            SnapshotReason = "owner update",
+            Draft = CreateDraftRequest().Draft,
+        };
+
+        var act = async () => await sut.UpdateElectionDraft(request, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
+    }
+
+    [Fact]
+    public async Task RevokeElectionTrusteeInvitation_RejectsDirectCommandPath()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new ResolveElectionTrusteeInvitationRequest
+        {
+            ElectionId = ElectionId.NewElectionId.ToString(),
+            InvitationId = Guid.NewGuid().ToString(),
+            ActorPublicAddress = "owner-address",
+        };
+
+        var act = async () => await sut.RevokeElectionTrusteeInvitation(request, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
+    }
+
+    [Fact]
+    public async Task OpenElection_RejectsDirectCommandPath()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new OpenElectionRequest
+        {
+            ElectionId = ElectionId.NewElectionId.ToString(),
+            ActorPublicAddress = "owner-address",
+        };
+
+        var act = async () => await sut.OpenElection(request, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
+    }
+
+    [Fact]
+    public async Task CloseElection_RejectsDirectCommandPath()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new CloseElectionRequest
+        {
+            ElectionId = ElectionId.NewElectionId.ToString(),
+            ActorPublicAddress = "owner-address",
+        };
+
+        var act = async () => await sut.CloseElection(request, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
+    }
+
+    [Fact]
+    public async Task FinalizeElection_RejectsDirectCommandPath()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new FinalizeElectionRequest
+        {
+            ElectionId = ElectionId.NewElectionId.ToString(),
+            ActorPublicAddress = "owner-address",
+        };
+
+        var act = async () => await sut.FinalizeElection(request, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
     }
 
     [Fact]
@@ -216,39 +283,61 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
-    public async Task StartElectionGovernedProposal_WithValidRequest_MapsGovernedProposalPayload()
+    public async Task StartElectionGovernedProposal_RejectsDirectCommandPath()
     {
-        // Arrange
         var mocker = new AutoMocker();
-        var election = CreateTrusteeElection();
-        var proposal = ElectionModelFactory.CreateGovernedProposal(
-            election,
-            ElectionGovernedActionType.Open,
-            proposedByPublicAddress: "owner-address");
-
-        mocker.GetMock<Domain.IElectionLifecycleService>()
-            .Setup(x => x.StartGovernedProposalAsync(It.Is<Domain.StartElectionGovernedProposalRequest>(request =>
-                request.ElectionId == election.ElectionId &&
-                request.ActionType == ElectionGovernedActionType.Open &&
-                request.ActorPublicAddress == "owner-address")))
-            .ReturnsAsync(Domain.ElectionCommandResult.Success(election, governedProposal: proposal));
-
         var sut = mocker.CreateInstance<ElectionsGrpcService>();
         var request = new Proto.StartElectionGovernedProposalRequest
         {
-            ElectionId = election.ElectionId.ToString(),
+            ElectionId = ElectionId.NewElectionId.ToString(),
             ActionType = ElectionGovernedActionTypeProto.GovernedActionOpen,
             ActorPublicAddress = "owner-address",
         };
 
-        // Act
-        var response = await sut.StartElectionGovernedProposal(request, CreateMockServerCallContext());
+        var act = async () => await sut.StartElectionGovernedProposal(request, CreateMockServerCallContext());
 
-        // Assert
-        response.Success.Should().BeTrue();
-        response.GovernedProposal.Should().NotBeNull();
-        response.GovernedProposal.ActionType.Should().Be(ElectionGovernedActionTypeProto.GovernedActionOpen);
-        response.GovernedProposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.WaitingForApprovals);
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
+    }
+
+    [Fact]
+    public async Task ApproveElectionGovernedProposal_RejectsDirectCommandPath()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new Proto.ApproveElectionGovernedProposalRequest
+        {
+            ElectionId = ElectionId.NewElectionId.ToString(),
+            ProposalId = Guid.NewGuid().ToString(),
+            ActorPublicAddress = "trustee-address",
+            ApprovalNote = "Approved",
+        };
+
+        var act = async () => await sut.ApproveElectionGovernedProposal(request, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
+    }
+
+    [Fact]
+    public async Task RetryElectionGovernedProposalExecution_RejectsDirectCommandPath()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new Proto.RetryElectionGovernedProposalExecutionRequest
+        {
+            ElectionId = ElectionId.NewElectionId.ToString(),
+            ProposalId = Guid.NewGuid().ToString(),
+            ActorPublicAddress = "owner-address",
+        };
+
+        var act = async () => await sut.RetryElectionGovernedProposalExecution(request, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
     }
 
     [Fact]

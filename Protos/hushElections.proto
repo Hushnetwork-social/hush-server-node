@@ -31,6 +31,7 @@ service HushElections {
   rpc CloseElection(CloseElectionRequest) returns (ElectionCommandResponse);
   rpc FinalizeElection(FinalizeElectionRequest) returns (ElectionCommandResponse);
   rpc GetElection(GetElectionRequest) returns (GetElectionResponse);
+  rpc GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest) returns (GetElectionEnvelopeAccessResponse);
   rpc GetElectionCeremonyActionView(GetElectionCeremonyActionViewRequest) returns (GetElectionCeremonyActionViewResponse);
   rpc GetElectionsByOwner(GetElectionsByOwnerRequest) returns (GetElectionsByOwnerResponse);
 }
@@ -677,6 +678,17 @@ message FinalizeElectionRequest {
 
 message GetElectionRequest {
   string ElectionId = 1;
+}
+
+message GetElectionEnvelopeAccessRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+}
+
+message GetElectionEnvelopeAccessResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ActorEncryptedElectionPrivateKey = 3;
 }
 
 message GetElectionCeremonyActionViewRequest {

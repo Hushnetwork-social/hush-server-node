@@ -245,6 +245,7 @@ public static class ElectionModelFactory
         string? trusteeDisplayName,
         string invitedByPublicAddress,
         int sentAtDraftRevision,
+        Guid? invitationId = null,
         DateTime? sentAt = null,
         Guid? linkedMessageId = null,
         Guid? latestTransactionId = null,
@@ -267,7 +268,7 @@ public static class ElectionModelFactory
         }
 
         return new ElectionTrusteeInvitationRecord(
-            Guid.NewGuid(),
+            invitationId ?? Guid.NewGuid(),
             electionId,
             trusteeUserAddress.Trim(),
             NormalizeOptionalText(trusteeDisplayName),
@@ -381,6 +382,7 @@ public static class ElectionModelFactory
         ElectionRecord election,
         ElectionGovernedActionType actionType,
         string proposedByPublicAddress,
+        Guid? preassignedProposalId = null,
         DateTime? createdAt = null,
         Guid? latestTransactionId = null,
         long? latestBlockHeight = null,
@@ -392,7 +394,7 @@ public static class ElectionModelFactory
         }
 
         return new ElectionGovernedProposalRecord(
-            Guid.NewGuid(),
+            preassignedProposalId ?? Guid.NewGuid(),
             election.ElectionId,
             actionType,
             election.LifecycleState,

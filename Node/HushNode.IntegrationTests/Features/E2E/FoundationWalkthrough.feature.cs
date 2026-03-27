@@ -48,8 +48,9 @@ namespace HushNode.IntegrationTests.Features.E2E
         public static void FeatureSetup()
         {
             testRunner = TechTalk.SpecFlow.TestRunnerManager.GetTestRunner();
-            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Foundation User Walkthrough", "    As a new user\r\n    I want to create my identity, send a message, and add a re" +
-                    "action\r\n    So that I can verify the full system works end-to-end", ProgrammingLanguage.CSharp, featureTags);
+            TechTalk.SpecFlow.FeatureInfo featureInfo = new TechTalk.SpecFlow.FeatureInfo(new System.Globalization.CultureInfo("en-US"), "Features/E2E", "Foundation User Walkthrough", "    As a new user\r\n    I want to create my identity, send a message, and react to" +
+                    " another user\'s message\r\n    So that I can verify the full system works end-to-e" +
+                    "nd", ProgrammingLanguage.CSharp, featureTags);
             testRunner.OnFeatureStart(featureInfo);
         }
         
@@ -197,18 +198,18 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="User adds reaction to a message")]
+        [Xunit.SkippableFactAttribute(DisplayName="User adds reaction to another user\'s message")]
         [Xunit.TraitAttribute("FeatureTitle", "Foundation User Walkthrough")]
-        [Xunit.TraitAttribute("Description", "User adds reaction to a message")]
+        [Xunit.TraitAttribute("Description", "User adds reaction to another user\'s message")]
         [Xunit.TraitAttribute("Category", "Reactions")]
         [Xunit.TraitAttribute("Category", "ReactionVerifierDev")]
-        public void UserAddsReactionToAMessage()
+        public void UserAddsReactionToAnotherUsersMessage()
         {
             string[] tagsOfScenario = new string[] {
                     "Reactions",
                     "ReactionVerifierDev"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("User adds reaction to a message", null, tagsOfScenario, argumentsOfScenario, featureTags);
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("User adds reaction to another user\'s message", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 50
     this.ScenarioInitialize(scenarioInfo);
 #line hidden
@@ -223,21 +224,36 @@ namespace HushNode.IntegrationTests.Features.E2E
     this.FeatureBackground();
 #line hidden
 #line 52
-        testRunner.Given("the user has created identity \"TestUser\" via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+        testRunner.Given("a browser context for \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
 #line 53
-        testRunner.And("the user has sent message \"Test message\" to their personal feed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.And("\"Alice\" has created identity via browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 54
         testRunner.And("the browser forces dev-mode reactions", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 57
-        testRunner.When("the user adds reaction 0 to the message \"Test message\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line 55
+        testRunner.And("Alice has a backend ChatFeed with \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 56
+        testRunner.And("Bob sends a confirmed backend message \"Test message\" to ChatFeed(Alice,Bob)", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 59
-        testRunner.And("the transaction is processed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+        testRunner.When("Alice triggers feed sync", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 60
+        testRunner.And("Alice opens ChatFeed with \"Bob\" in browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 61
+        testRunner.Then("Alice should see message \"Test message\" from Bob", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 62
+        testRunner.When("the user adds reaction 0 to the message \"Test message\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 63
+        testRunner.And("the transaction is processed", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 66
         testRunner.Then("the message \"Test message\" should show a reaction badge", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
             }

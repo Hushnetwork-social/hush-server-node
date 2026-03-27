@@ -616,6 +616,37 @@ namespace HushServerNode.Migrations
                     b.ToTable("ElectionDraftSnapshotRecord", "Elections");
                 });
 
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionEnvelopeAccessRecord", b =>
+                {
+                    b.Property<string>("ElectionId")
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("ActorPublicAddress")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("ActorEncryptedElectionPrivateKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("SourceBlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("SourceBlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SourceTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ElectionId", "ActorPublicAddress");
+
+                    b.HasIndex("ActorPublicAddress");
+
+                    b.ToTable("ElectionEnvelopeAccessRecord", "Elections");
+                });
+
             modelBuilder.Entity("HushShared.Elections.Model.ElectionGovernedProposalApprovalRecord", b =>
                 {
                     b.Property<Guid>("Id")

@@ -64,6 +64,13 @@ internal sealed class ReactionSteps : BrowserStepsBase
             Timeout = 5000,
             State = WaitForSelectorState.Visible
         });
+
+        var enabledDeadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < enabledDeadline && await reactionButton.IsDisabledAsync())
+        {
+            await Task.Delay(200);
+        }
+
         await reactionButton.ClickAsync();
 
         // Wait for the picker and select the requested emoji button by index.

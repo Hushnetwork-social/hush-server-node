@@ -38,7 +38,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Only the owner can create the draft election.");
         }
 
-        var validationErrors = ValidateDraftRequest(request.ActorPublicAddress, request.SnapshotReason, request.Draft);
+        var validationErrors = ElectionDraftValidator.ValidateDraftRequest(
+            request.ActorPublicAddress,
+            request.SnapshotReason,
+            request.Draft);
         if (validationErrors.Count > 0)
         {
             return ElectionCommandResult.Failure(
@@ -48,7 +51,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var election = ElectionModelFactory.CreateDraftRecord(
-            electionId: ElectionId.NewElectionId,
+            electionId: request.PreassignedElectionId ?? ElectionId.NewElectionId,
             title: request.Draft.Title,
             shortDescription: request.Draft.ShortDescription,
             ownerPublicAddress: request.OwnerPublicAddress,
@@ -73,12 +76,18 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var snapshot = ElectionModelFactory.CreateDraftSnapshot(
             election,
             request.SnapshotReason,
-            request.ActorPublicAddress);
+            request.ActorPublicAddress,
+            sourceTransactionId: request.SourceTransactionId,
+            sourceBlockHeight: request.SourceBlockHeight,
+            sourceBlockId: request.SourceBlockId);
         var warningAcknowledgements = CreateWarningAcknowledgementsForRevision(
             election.ElectionId,
             election.CurrentDraftRevision,
             request.ActorPublicAddress,
-            election.AcknowledgedWarningCodes);
+            election.AcknowledgedWarningCodes,
+            sourceTransactionId: request.SourceTransactionId,
+            sourceBlockHeight: request.SourceBlockHeight,
+            sourceBlockId: request.SourceBlockId);
 
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
@@ -102,7 +111,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
     public async Task<ElectionCommandResult> UpdateDraftAsync(UpdateElectionDraftRequest request)
     {
-        var validationErrors = ValidateDraftRequest(request.ActorPublicAddress, request.SnapshotReason, request.Draft);
+        var validationErrors = ElectionDraftValidator.ValidateDraftRequest(
+            request.ActorPublicAddress,
+            request.SnapshotReason,
+            request.Draft);
         if (validationErrors.Count > 0)
         {
             return ElectionCommandResult.Failure(
@@ -174,12 +186,18 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var snapshot = ElectionModelFactory.CreateDraftSnapshot(
             updated,
             request.SnapshotReason,
-            request.ActorPublicAddress);
+            request.ActorPublicAddress,
+            sourceTransactionId: request.SourceTransactionId,
+            sourceBlockHeight: request.SourceBlockHeight,
+            sourceBlockId: request.SourceBlockId);
         var warningAcknowledgements = CreateWarningAcknowledgementsForRevision(
             updated.ElectionId,
             updated.CurrentDraftRevision,
             request.ActorPublicAddress,
-            updated.AcknowledgedWarningCodes);
+            updated.AcknowledgedWarningCodes,
+            sourceTransactionId: request.SourceTransactionId,
+            sourceBlockHeight: request.SourceBlockHeight,
+            sourceBlockId: request.SourceBlockId);
 
         await repository.SaveElectionAsync(updated);
         await repository.SaveDraftSnapshotAsync(snapshot);
@@ -241,7 +259,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
             request.TrusteeUserAddress,
             request.TrusteeDisplayName,
             request.ActorPublicAddress,
-            election.CurrentDraftRevision);
+            election.CurrentDraftRevision,
+            invitationId: request.PreassignedInvitationId,
+            latestTransactionId: request.SourceTransactionId,
+            latestBlockHeight: request.SourceBlockHeight,
+            latestBlockId: request.SourceBlockId);
 
         await repository.SaveTrusteeInvitationAsync(invitation);
         await unitOfWork.CommitAsync();
@@ -254,21 +276,39 @@ public class ElectionLifecycleService : IElectionLifecycleService
             request,
             ownerOnly: false,
             transition: (invitation, draftRevision, lifecycleState) =>
-                invitation.Accept(DateTime.UtcNow, draftRevision, lifecycleState));
+                invitation.Accept(
+                    DateTime.UtcNow,
+                    draftRevision,
+                    lifecycleState,
+                    latestTransactionId: request.SourceTransactionId,
+                    latestBlockHeight: request.SourceBlockHeight,
+                    latestBlockId: request.SourceBlockId));
 
     public Task<ElectionCommandResult> RejectTrusteeInvitationAsync(ResolveElectionTrusteeInvitationRequest request) =>
         ResolveTrusteeInvitationAsync(
             request,
             ownerOnly: false,
             transition: (invitation, draftRevision, lifecycleState) =>
-                invitation.Reject(DateTime.UtcNow, draftRevision, lifecycleState));
+                invitation.Reject(
+                    DateTime.UtcNow,
+                    draftRevision,
+                    lifecycleState,
+                    latestTransactionId: request.SourceTransactionId,
+                    latestBlockHeight: request.SourceBlockHeight,
+                    latestBlockId: request.SourceBlockId));
 
     public Task<ElectionCommandResult> RevokeTrusteeInvitationAsync(ResolveElectionTrusteeInvitationRequest request) =>
         ResolveTrusteeInvitationAsync(
             request,
             ownerOnly: true,
             transition: (invitation, draftRevision, lifecycleState) =>
-                invitation.Revoke(DateTime.UtcNow, draftRevision, lifecycleState));
+                invitation.Revoke(
+                    DateTime.UtcNow,
+                    draftRevision,
+                    lifecycleState,
+                    latestTransactionId: request.SourceTransactionId,
+                    latestBlockHeight: request.SourceBlockHeight,
+                    latestBlockId: request.SourceBlockId));
 
     public async Task<ElectionCommandResult> StartElectionCeremonyAsync(StartElectionCeremonyRequest request)
     {
@@ -837,6 +877,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Only one pending governed proposal may exist per election.");
         }
 
+        if (request.PreassignedProposalId.HasValue)
+        {
+            var existingProposal = await repository.GetGovernedProposalAsync(request.PreassignedProposalId.Value);
+            if (existingProposal is not null)
+            {
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.Conflict,
+                    $"Governed proposal {request.PreassignedProposalId.Value} already exists.");
+            }
+        }
+
         var validationResult = await ValidateGovernedProposalStartAsync(repository, election, request.ActionType);
         if (validationResult is not null)
         {
@@ -848,7 +899,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
             election,
             request.ActionType,
             request.ActorPublicAddress,
-            createdAt: proposalCreatedAt);
+            preassignedProposalId: request.PreassignedProposalId,
+            createdAt: proposalCreatedAt,
+            latestTransactionId: request.SourceTransactionId,
+            latestBlockHeight: request.SourceBlockHeight,
+            latestBlockId: request.SourceBlockId);
         var updatedElection = ApplyGovernedProposalStartEffects(election, request.ActionType, proposalCreatedAt);
 
         await repository.SaveGovernedProposalAsync(proposal);
@@ -918,7 +973,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             governanceTrustees
                 .First(x => string.Equals(x.TrusteeUserAddress, request.ActorPublicAddress, StringComparison.Ordinal))
                 .TrusteeDisplayName,
-            request.ApprovalNote);
+            request.ApprovalNote,
+            sourceTransactionId: request.SourceTransactionId,
+            sourceBlockHeight: request.SourceBlockHeight,
+            sourceBlockId: request.SourceBlockId);
         var currentApprovals = await repository.GetGovernedProposalApprovalsAsync(proposal.Id);
         var nextApprovalCount = currentApprovals.Count + 1;
 
@@ -930,7 +988,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 repository,
                 election,
                 proposal,
-                request.ActorPublicAddress);
+                request.ActorPublicAddress,
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
 
             await unitOfWork.CommitAsync();
 
@@ -996,7 +1057,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             repository,
             election,
             proposal,
-            request.ActorPublicAddress);
+            request.ActorPublicAddress,
+            request.SourceTransactionId,
+            request.SourceBlockHeight,
+            request.SourceBlockId);
 
         await unitOfWork.CommitAsync();
 
@@ -1027,7 +1091,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             request.TrusteePolicyExecutionReference,
             request.ReportingPolicyExecutionReference,
             request.ReviewWindowExecutionReference,
-            allowTrusteeThresholdExecution: false);
+            allowTrusteeThresholdExecution: false,
+            request.SourceTransactionId,
+            request.SourceBlockHeight,
+            request.SourceBlockId);
 
         if (result.IsSuccess)
         {
@@ -1045,7 +1112,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             ElectionBoundaryArtifactType.Close,
             request.AcceptedBallotSetHash,
             request.FinalEncryptedTallyHash,
-            allowTrusteeThresholdExecution: false);
+            allowTrusteeThresholdExecution: false,
+            request.SourceTransactionId,
+            request.SourceBlockHeight,
+            request.SourceBlockId);
 
     public Task<ElectionCommandResult> FinalizeElectionAsync(FinalizeElectionRequest request) =>
         TransitionElectionAsync(
@@ -1055,7 +1125,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             ElectionBoundaryArtifactType.Finalize,
             request.AcceptedBallotSetHash,
             request.FinalEncryptedTallyHash,
-            allowTrusteeThresholdExecution: false);
+            allowTrusteeThresholdExecution: false,
+            request.SourceTransactionId,
+            request.SourceBlockHeight,
+            request.SourceBlockId);
 
     private Task<ElectionCommandResult> ResolveTrusteeInvitationAsync(
         ResolveElectionTrusteeInvitationRequest request,
@@ -1072,7 +1145,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionBoundaryArtifactType artifactType,
         byte[]? acceptedBallotSetHash,
         byte[]? finalEncryptedTallyHash,
-        bool allowTrusteeThresholdExecution)
+        bool allowTrusteeThresholdExecution,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
     {
         return TransitionElectionInternalAsync(
             electionId,
@@ -1081,7 +1157,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             artifactType,
             acceptedBallotSetHash,
             finalEncryptedTallyHash,
-            allowTrusteeThresholdExecution);
+            allowTrusteeThresholdExecution,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
     }
 
     private static ElectionRecord ApplyLifecycleTransition(
@@ -1188,24 +1267,39 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IElectionsRepository repository,
         ElectionRecord election,
         ElectionGovernedProposalRecord proposal,
-        string executionTriggeredByPublicAddress)
+        string executionTriggeredByPublicAddress,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
     {
         try
         {
-            var executionResult = await ExecuteGovernedProposalCoreAsync(repository, election, proposal);
+            var executionResult = await ExecuteGovernedProposalCoreAsync(
+                repository,
+                election,
+                proposal,
+                sourceTransactionId,
+                sourceBlockHeight,
+                sourceBlockId);
             if (!executionResult.IsSuccess || executionResult.Election is null)
             {
                 var failedProposal = proposal.RecordExecutionFailure(
                     BuildFailureReason(executionResult, "Governed proposal execution failed."),
                     DateTime.UtcNow,
-                    executionTriggeredByPublicAddress);
+                    executionTriggeredByPublicAddress,
+                    latestTransactionId: sourceTransactionId,
+                    latestBlockHeight: sourceBlockHeight,
+                    latestBlockId: sourceBlockId);
                 await repository.UpdateGovernedProposalAsync(failedProposal);
                 return (election, failedProposal, null);
             }
 
             var succeededProposal = proposal.RecordExecutionSuccess(
                 DateTime.UtcNow,
-                executionTriggeredByPublicAddress);
+                executionTriggeredByPublicAddress,
+                latestTransactionId: sourceTransactionId,
+                latestBlockHeight: sourceBlockHeight,
+                latestBlockId: sourceBlockId);
             await repository.UpdateGovernedProposalAsync(succeededProposal);
             return (executionResult.Election, succeededProposal, executionResult.BoundaryArtifact);
         }
@@ -1219,7 +1313,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             var failedProposal = proposal.RecordExecutionFailure(
                 ex.Message,
                 DateTime.UtcNow,
-                executionTriggeredByPublicAddress);
+                executionTriggeredByPublicAddress,
+                latestTransactionId: sourceTransactionId,
+                latestBlockHeight: sourceBlockHeight,
+                latestBlockId: sourceBlockId);
             await repository.UpdateGovernedProposalAsync(failedProposal);
             return (election, failedProposal, null);
         }
@@ -1228,7 +1325,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private Task<ElectionCommandResult> ExecuteGovernedProposalCoreAsync(
         IElectionsRepository repository,
         ElectionRecord election,
-        ElectionGovernedProposalRecord proposal) =>
+        ElectionGovernedProposalRecord proposal,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null) =>
         proposal.ActionType switch
         {
             ElectionGovernedActionType.Open => OpenElectionInternalAsync(
@@ -1240,7 +1340,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 trusteePolicyExecutionReference: "feat-096-governed-proposal",
                 reportingPolicyExecutionReference: null,
                 reviewWindowExecutionReference: null,
-                allowTrusteeThresholdExecution: true),
+                allowTrusteeThresholdExecution: true,
+                sourceTransactionId: sourceTransactionId,
+                sourceBlockHeight: sourceBlockHeight,
+                sourceBlockId: sourceBlockId),
             ElectionGovernedActionType.Close => ExecuteTransitionInternalAsync(
                 repository,
                 election,
@@ -1249,7 +1352,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ElectionBoundaryArtifactType.Close,
                 acceptedBallotSetHash: null,
                 finalEncryptedTallyHash: null,
-                allowTrusteeThresholdExecution: true),
+                allowTrusteeThresholdExecution: true,
+                sourceTransactionId: sourceTransactionId,
+                sourceBlockHeight: sourceBlockHeight,
+                sourceBlockId: sourceBlockId),
             ElectionGovernedActionType.Finalize => ExecuteTransitionInternalAsync(
                 repository,
                 election,
@@ -1258,7 +1364,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ElectionBoundaryArtifactType.Finalize,
                 acceptedBallotSetHash: null,
                 finalEncryptedTallyHash: null,
-                allowTrusteeThresholdExecution: true),
+                allowTrusteeThresholdExecution: true,
+                sourceTransactionId: sourceTransactionId,
+                sourceBlockHeight: sourceBlockHeight,
+                sourceBlockId: sourceBlockId),
             _ => throw new ArgumentOutOfRangeException(nameof(proposal), proposal.ActionType, "Unsupported governed action type."),
         };
 
@@ -1271,7 +1380,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
         string? trusteePolicyExecutionReference,
         string? reportingPolicyExecutionReference,
         string? reviewWindowExecutionReference,
-        bool allowTrusteeThresholdExecution)
+        bool allowTrusteeThresholdExecution,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
     {
         if (!string.Equals(election.OwnerPublicAddress, actorPublicAddress, StringComparison.Ordinal))
         {
@@ -1323,7 +1435,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             frozenEligibleVoterSetHash: frozenEligibleVoterSetHash,
             trusteePolicyExecutionReference: trusteePolicyExecutionReference,
             reportingPolicyExecutionReference: reportingPolicyExecutionReference,
-            reviewWindowExecutionReference: reviewWindowExecutionReference);
+            reviewWindowExecutionReference: reviewWindowExecutionReference,
+            sourceTransactionId: sourceTransactionId,
+            sourceBlockHeight: sourceBlockHeight,
+            sourceBlockId: sourceBlockId);
 
         var openedElection = election with
         {
@@ -1546,192 +1661,6 @@ public class ElectionLifecycleService : IElectionLifecycleService
             activeCeremonyVersion.TallyPublicKeyFingerprint);
     }
 
-    private static List<string> ValidateDraftRequest(
-        string actorPublicAddress,
-        string snapshotReason,
-        ElectionDraftSpecification draft)
-    {
-        var errors = new List<string>();
-
-        if (string.IsNullOrWhiteSpace(actorPublicAddress))
-        {
-            errors.Add("Actor public address is required.");
-        }
-
-        if (string.IsNullOrWhiteSpace(snapshotReason))
-        {
-            errors.Add("Snapshot reason is required.");
-        }
-
-        if (string.IsNullOrWhiteSpace(draft.Title))
-        {
-            errors.Add("Election title is required.");
-        }
-
-        if (string.IsNullOrWhiteSpace(draft.ProtocolOmegaVersion))
-        {
-            errors.Add("Protocol Omega version is required.");
-        }
-
-        if (draft.ElectionClass != ElectionClass.OrganizationalRemoteVoting)
-        {
-            errors.Add("FEAT-094 only supports organizational remote voting elections.");
-        }
-
-        if (draft.DisclosureMode != ElectionDisclosureMode.FinalResultsOnly)
-        {
-            errors.Add("FEAT-094 only supports the final-results-only disclosure mode.");
-        }
-
-        if (draft.ParticipationPrivacyMode != ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice)
-        {
-            errors.Add("FEAT-094 only supports the phase-one participation privacy mode.");
-        }
-
-        if (draft.VoteUpdatePolicy != VoteUpdatePolicy.SingleSubmissionOnly)
-        {
-            errors.Add("FEAT-094 only supports the single-submission-only vote update policy.");
-        }
-
-        if (draft.EligibilitySourceType != EligibilitySourceType.OrganizationImportedRoster)
-        {
-            errors.Add("FEAT-094 only supports the organization-imported-roster eligibility source.");
-        }
-
-        if (draft.EligibilityMutationPolicy != EligibilityMutationPolicy.FrozenAtOpen)
-        {
-            errors.Add("FEAT-094 only supports the frozen-at-open eligibility mutation policy.");
-        }
-
-        if (draft.ReportingPolicy != ReportingPolicy.DefaultPhaseOnePackage)
-        {
-            errors.Add("FEAT-094 only supports the default phase-one reporting policy.");
-        }
-
-        if (draft.GovernanceMode == ElectionGovernanceMode.AdminOnly && draft.RequiredApprovalCount.HasValue)
-        {
-            errors.Add("Admin-only elections must not set a required approval count.");
-        }
-
-        if (draft.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold &&
-            (!draft.RequiredApprovalCount.HasValue || draft.RequiredApprovalCount.Value < 1))
-        {
-            errors.Add("Trustee-threshold elections require a required approval count of at least 1.");
-        }
-
-        errors.AddRange(ValidateOutcomeRule(draft.OutcomeRule));
-        errors.AddRange(ValidateOwnerOptions(draft.OwnerOptions));
-
-        return errors;
-    }
-
-    private static IReadOnlyList<string> ValidateOutcomeRule(OutcomeRuleDefinition outcomeRule)
-    {
-        var errors = new List<string>();
-
-        if (string.IsNullOrWhiteSpace(outcomeRule.TemplateKey))
-        {
-            errors.Add("Outcome rule template key is required.");
-        }
-
-        if (string.IsNullOrWhiteSpace(outcomeRule.TieResolutionRule))
-        {
-            errors.Add("Outcome rule tie-resolution policy is required.");
-        }
-
-        if (string.IsNullOrWhiteSpace(outcomeRule.CalculationBasis))
-        {
-            errors.Add("Outcome rule calculation basis is required.");
-        }
-
-        switch (outcomeRule.Kind)
-        {
-            case OutcomeRuleKind.SingleWinner:
-                if (outcomeRule.SeatCount != 1)
-                {
-                    errors.Add("Single-winner elections must use seat count 1.");
-                }
-                break;
-
-            case OutcomeRuleKind.PassFail:
-                if (outcomeRule.SeatCount != 1)
-                {
-                    errors.Add("Pass/fail elections must use seat count 1.");
-                }
-                if (!outcomeRule.BlankVoteExcludedFromThresholdDenominator)
-                {
-                    errors.Add("Pass/fail elections must exclude blank votes from the threshold denominator.");
-                }
-                break;
-
-            default:
-                errors.Add("FEAT-094 does not support this outcome rule kind.");
-                break;
-        }
-
-        if (!outcomeRule.BlankVoteCountsForTurnout)
-        {
-            errors.Add("Blank vote turnout accounting must remain enabled in FEAT-094.");
-        }
-
-        if (!outcomeRule.BlankVoteExcludedFromWinnerSelection)
-        {
-            errors.Add("Blank vote must remain excluded from winner selection in FEAT-094.");
-        }
-
-        return errors;
-    }
-
-    private static IReadOnlyList<string> ValidateOwnerOptions(IReadOnlyList<ElectionOptionDefinition> ownerOptions)
-    {
-        var errors = new List<string>();
-        if (ownerOptions is null)
-        {
-            errors.Add("Owner options are required.");
-            return errors;
-        }
-
-        foreach (var option in ownerOptions)
-        {
-            if (string.IsNullOrWhiteSpace(option.OptionId))
-            {
-                errors.Add("Each election option must have a stable option id.");
-            }
-
-            if (string.IsNullOrWhiteSpace(option.DisplayLabel))
-            {
-                errors.Add("Each election option must have a display label.");
-            }
-
-            if (option.BallotOrder < 0)
-            {
-                errors.Add("Election option ballot order must be zero or greater.");
-            }
-
-            if (option.IsBlankOption)
-            {
-                errors.Add("Owner options must not mark themselves as the reserved blank vote option.");
-            }
-
-            if (string.Equals(option.OptionId, ElectionOptionDefinition.ReservedBlankOptionId, StringComparison.OrdinalIgnoreCase))
-            {
-                errors.Add("Owner options must not reuse the reserved blank option id.");
-            }
-        }
-
-        if (ownerOptions.GroupBy(x => x.OptionId, StringComparer.OrdinalIgnoreCase).Any(x => x.Count() > 1))
-        {
-            errors.Add("Election option ids must be unique.");
-        }
-
-        if (ownerOptions.GroupBy(x => x.BallotOrder).Any(x => x.Count() > 1))
-        {
-            errors.Add("Election option ballot order must be unique.");
-        }
-
-        return errors;
-    }
-
     private static IReadOnlyList<ElectionOptionDefinition> NormalizeOwnerOptions(IReadOnlyList<ElectionOptionDefinition> ownerOptions) =>
         ownerOptions
             .Select(x => new ElectionOptionDefinition(
@@ -1759,13 +1688,19 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionId electionId,
         int draftRevision,
         string actorPublicAddress,
-        IReadOnlyList<ElectionWarningCode> warningCodes) =>
+        IReadOnlyList<ElectionWarningCode> warningCodes,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null) =>
         warningCodes
             .Select(x => ElectionModelFactory.CreateWarningAcknowledgement(
                 electionId,
                 x,
                 draftRevision,
-                actorPublicAddress))
+                actorPublicAddress,
+                sourceTransactionId: sourceTransactionId,
+                sourceBlockHeight: sourceBlockHeight,
+                sourceBlockId: sourceBlockId))
             .ToArray();
 
     private async Task<ElectionCommandResult> StartOrRestartElectionCeremonyInternalAsync(
@@ -2246,7 +2181,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionBoundaryArtifactType artifactType,
         byte[]? acceptedBallotSetHash,
         byte[]? finalEncryptedTallyHash,
-        bool allowTrusteeThresholdExecution)
+        bool allowTrusteeThresholdExecution,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
@@ -2267,7 +2205,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             artifactType,
             acceptedBallotSetHash,
             finalEncryptedTallyHash,
-            allowTrusteeThresholdExecution);
+            allowTrusteeThresholdExecution,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
 
         if (result.IsSuccess)
         {
@@ -2285,7 +2226,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionBoundaryArtifactType artifactType,
         byte[]? acceptedBallotSetHash,
         byte[]? finalEncryptedTallyHash,
-        bool allowTrusteeThresholdExecution)
+        bool allowTrusteeThresholdExecution,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
     {
         if (!string.Equals(election.OwnerPublicAddress, actorPublicAddress, StringComparison.Ordinal))
         {
@@ -2327,7 +2271,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             actorPublicAddress,
             recordedAt: transitionTime,
             acceptedBallotSetHash: acceptedBallotSetHash,
-            finalEncryptedTallyHash: finalEncryptedTallyHash);
+            finalEncryptedTallyHash: finalEncryptedTallyHash,
+            sourceTransactionId: sourceTransactionId,
+            sourceBlockHeight: sourceBlockHeight,
+            sourceBlockId: sourceBlockId);
 
         var updatedElection = ApplyLifecycleTransition(election, artifact, transitionTime);
 

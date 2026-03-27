@@ -58,6 +58,30 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
     public async Task SaveDraftSnapshotAsync(ElectionDraftSnapshotRecord snapshot) =>
         await Context.ElectionDraftSnapshots.AddAsync(snapshot);
 
+    public async Task<ElectionEnvelopeAccessRecord?> GetElectionEnvelopeAccessAsync(
+        ElectionId electionId,
+        string actorPublicAddress) =>
+        await Context.ElectionEnvelopeAccessRecords
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.ActorPublicAddress == actorPublicAddress);
+
+    public async Task SaveElectionEnvelopeAccessAsync(ElectionEnvelopeAccessRecord accessRecord) =>
+        await Context.ElectionEnvelopeAccessRecords.AddAsync(accessRecord);
+
+    public async Task UpdateElectionEnvelopeAccessAsync(ElectionEnvelopeAccessRecord accessRecord)
+    {
+        var existing = await Context.ElectionEnvelopeAccessRecords
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == accessRecord.ElectionId &&
+                x.ActorPublicAddress == accessRecord.ActorPublicAddress);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(accessRecord);
+        }
+    }
+
     public async Task<IReadOnlyList<ElectionBoundaryArtifactRecord>> GetBoundaryArtifactsAsync(ElectionId electionId) =>
         await Context.ElectionBoundaryArtifacts
             .Where(x => x.ElectionId == electionId)

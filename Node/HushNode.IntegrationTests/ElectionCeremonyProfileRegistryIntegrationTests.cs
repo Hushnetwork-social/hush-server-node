@@ -4,6 +4,7 @@ using HushNetwork.proto;
 using HushNode.IntegrationTests.Infrastructure;
 using HushServerNode;
 using HushServerNode.Testing;
+using HushShared.Elections.Model;
 using Xunit;
 
 namespace HushNode.IntegrationTests;
@@ -107,16 +108,15 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         readiness.CeremonySnapshot!.ProfileId.Should().Be("dkg-prod-3of5");
         readiness.CeremonySnapshot.CompletedTrustees.Should().HaveCount(3);
 
-        var proposalResponse = await client.StartElectionGovernedProposalAsync(new StartElectionGovernedProposalRequest
-        {
-            ElectionId = electionId,
-            ActionType = ElectionGovernedActionTypeProto.GovernedActionOpen,
-            ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
-        });
+        var proposalResponse = await StartGovernedProposalViaBlockchainAsync(
+            client,
+            electionId,
+            ElectionGovernedActionType.Open);
 
         proposalResponse.Success.Should().BeTrue();
-        proposalResponse.GovernedProposal.Should().NotBeNull();
-        proposalResponse.GovernedProposal!.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.WaitingForApprovals);
+        proposalResponse.GovernedProposals.Should().ContainSingle(x =>
+            x.ActionType == ElectionGovernedActionTypeProto.GovernedActionOpen &&
+            x.ExecutionStatus == ElectionGovernedProposalExecutionStatusProto.WaitingForApprovals);
     }
 
     [Fact]
@@ -138,16 +138,20 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         readiness.IsReadyToOpen.Should().BeFalse();
         readiness.ValidationErrors.Should().Contain(x => x.Contains("ready key-ceremony version", StringComparison.OrdinalIgnoreCase));
 
-        var proposalResponse = await client.StartElectionGovernedProposalAsync(new StartElectionGovernedProposalRequest
+        var (submitResponse, proposalId) = await SubmitStartGovernedProposalAsync(
+            electionId,
+            ElectionGovernedActionType.Open);
+
+        submitResponse.Successfull.Should().BeFalse();
+        submitResponse.Message.Should().NotBeNullOrWhiteSpace();
+
+        var electionResponse = await client.GetElectionAsync(new GetElectionRequest
         {
             ElectionId = electionId,
-            ActionType = ElectionGovernedActionTypeProto.GovernedActionOpen,
-            ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
         });
 
-        proposalResponse.Success.Should().BeFalse();
-        proposalResponse.ErrorCode.Should().Be(ElectionCommandErrorCodeProto.ValidationFailed);
-        proposalResponse.ValidationErrors.Should().Contain(x => x.Contains("ready key-ceremony version", StringComparison.OrdinalIgnoreCase));
+        electionResponse.Success.Should().BeTrue();
+        electionResponse.GovernedProposals.Should().NotContain(x => x.Id == proposalId.ToString());
     }
 
     [Fact]
@@ -260,40 +264,63 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         }
     }
 
-    private static async Task<ElectionCommandResponse> CreateTrusteeThresholdDraftAsync(
+    private async Task<ElectionCommandResponse> CreateTrusteeThresholdDraftAsync(
         HushElections.HushElectionsClient client,
         string title)
     {
-        var response = await client.CreateElectionDraftAsync(new CreateElectionDraftRequest
+        var blockchainClient = _grpcFactory!.CreateClient<HushBlockchain.HushBlockchainClient>();
+        var (signedTransaction, electionId) = TestTransactionFactory.CreateElectionDraft(
+            TestIdentities.Alice,
+            "feat-097 integration draft",
+            BuildTrusteeThresholdDraftSpecification(title));
+        using var waiter = _node!.StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
         {
-            OwnerPublicAddress = TestIdentities.Alice.PublicSigningAddress,
-            ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
-            SnapshotReason = "feat-097 integration draft",
-            Draft = BuildTrusteeThresholdDraft(title),
+            SignedTransaction = signedTransaction,
+        });
+        submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
+        await waiter.WaitAsync();
+        await _blockControl!.ProduceBlockAsync();
+
+        var response = await client.GetElectionAsync(new GetElectionRequest
+        {
+            ElectionId = electionId.ToString(),
         });
 
         response.Success.Should().BeTrue(response.ErrorMessage);
-        return response;
+        response.LatestDraftSnapshot.Should().NotBeNull();
+        return new ElectionCommandResponse
+        {
+            Success = true,
+            Election = response.Election,
+            DraftSnapshot = response.LatestDraftSnapshot,
+        };
     }
 
-    private static async Task InviteAndAcceptRolloutTrusteesAsync(HushElections.HushElectionsClient client, string electionId)
+    private async Task InviteAndAcceptRolloutTrusteesAsync(HushElections.HushElectionsClient client, string electionId)
     {
         foreach (var trustee in RolloutTrustees)
         {
-            var inviteResponse = await client.InviteElectionTrusteeAsync(new InviteElectionTrusteeRequest
-            {
-                ElectionId = electionId,
-                ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
-                TrusteeUserAddress = trustee.PublicSigningAddress,
-                TrusteeDisplayName = trustee.DisplayName,
-            });
+            var blockchainClient = _grpcFactory!.CreateClient<HushBlockchain.HushBlockchainClient>();
+            var (signedTransaction, invitationId) = TestTransactionFactory.CreateElectionTrusteeInvitation(
+                TestIdentities.Alice,
+                new ElectionId(Guid.Parse(electionId)),
+                trustee);
+            using var waiter = _node!.StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
 
-            inviteResponse.Success.Should().BeTrue(inviteResponse.ErrorMessage);
+            var submitResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+            {
+                SignedTransaction = signedTransaction,
+            });
+            submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
+            await waiter.WaitAsync();
+            await _blockControl!.ProduceBlockAsync();
 
             var acceptResponse = await client.AcceptElectionTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest
             {
                 ElectionId = electionId,
-                InvitationId = inviteResponse.TrusteeInvitation!.Id,
+                InvitationId = invitationId.ToString(),
                 ActorPublicAddress = trustee.PublicSigningAddress,
             });
 
@@ -316,6 +343,49 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         response.Success.Should().BeTrue(response.ErrorMessage);
         response.CeremonyVersion.Should().NotBeNull();
         return response.CeremonyVersion!.Id;
+    }
+
+    private async Task<GetElectionResponse> StartGovernedProposalViaBlockchainAsync(
+        HushElections.HushElectionsClient client,
+        string electionId,
+        ElectionGovernedActionType actionType)
+    {
+        var (submitResponse, proposalId) = await SubmitStartGovernedProposalAsync(electionId, actionType);
+        submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
+        await _blockControl!.ProduceBlockAsync();
+
+        var response = await client.GetElectionAsync(new GetElectionRequest
+        {
+            ElectionId = electionId,
+        });
+
+        response.Success.Should().BeTrue(response.ErrorMessage);
+        response.GovernedProposals.Should().ContainSingle(x => x.Id == proposalId.ToString());
+        return response;
+    }
+
+    private async Task<(SubmitSignedTransactionReply SubmitResponse, Guid ProposalId)> SubmitStartGovernedProposalAsync(
+        string electionId,
+        ElectionGovernedActionType actionType)
+    {
+        var blockchainClient = _grpcFactory!.CreateClient<HushBlockchain.HushBlockchainClient>();
+        var (signedTransaction, proposalId) = TestTransactionFactory.StartElectionGovernedProposal(
+            TestIdentities.Alice,
+            new ElectionId(Guid.Parse(electionId)),
+            actionType);
+        using var waiter = _node!.StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        if (submitResponse.Successfull)
+        {
+            await waiter.WaitAsync();
+        }
+
+        return (submitResponse, proposalId);
     }
 
     private static async Task CompleteReadyThresholdAsync(
@@ -404,61 +474,43 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         joinResponse.Success.Should().BeTrue(joinResponse.ErrorMessage);
     }
 
-    private static ElectionDraftInput BuildTrusteeThresholdDraft(string title)
-    {
-        var draft = new ElectionDraftInput
-        {
-            Title = title,
-            ShortDescription = "Governed policy vote",
-            ExternalReferenceCode = "REF-2026-097",
-            ElectionClass = ElectionClassProto.OrganizationalRemoteVoting,
-            BindingStatus = ElectionBindingStatusProto.Binding,
-            GovernanceMode = ElectionGovernanceModeProto.TrusteeThreshold,
-            DisclosureMode = ElectionDisclosureModeProto.FinalResultsOnly,
-            ParticipationPrivacyMode = ParticipationPrivacyModeProto.PublicCheckoffAnonymousBallotPrivateChoice,
-            VoteUpdatePolicy = VoteUpdatePolicyProto.SingleSubmissionOnly,
-            EligibilitySourceType = EligibilitySourceTypeProto.OrganizationImportedRoster,
-            EligibilityMutationPolicy = EligibilityMutationPolicyProto.FrozenAtOpen,
-            OutcomeRule = new OutcomeRule
-            {
-                Kind = OutcomeRuleKindProto.PassFail,
-                TemplateKey = "pass_fail_yes_no",
-                SeatCount = 1,
-                BlankVoteCountsForTurnout = true,
-                BlankVoteExcludedFromWinnerSelection = true,
-                BlankVoteExcludedFromThresholdDenominator = true,
-                TieResolutionRule = "tie_unresolved",
-                CalculationBasis = "simple_majority_of_non_blank_votes",
-            },
-            ProtocolOmegaVersion = "omega-v1.0.0",
-            ReportingPolicy = ReportingPolicyProto.DefaultPhaseOnePackage,
-            ReviewWindowPolicy = ReviewWindowPolicyProto.GovernedReviewWindowReserved,
-            RequiredApprovalCount = 3,
-        };
-
-        draft.ApprovedClientApplications.Add(new ApprovedClientApplication
-        {
-            ApplicationId = "hushsocial",
-            Version = "1.0.0",
-        });
-        draft.OwnerOptions.Add(new ElectionOption
-        {
-            OptionId = "yes",
-            DisplayLabel = "Yes",
-            ShortDescription = "Approve the proposal",
-            BallotOrder = 1,
-            IsBlankOption = false,
-        });
-        draft.OwnerOptions.Add(new ElectionOption
-        {
-            OptionId = "no",
-            DisplayLabel = "No",
-            ShortDescription = "Reject the proposal",
-            BallotOrder = 2,
-            IsBlankOption = false,
-        });
-        draft.AcknowledgedWarningCodes.Add(ElectionWarningCodeProto.AllTrusteesRequiredFragility);
-
-        return draft;
-    }
+    private static ElectionDraftSpecification BuildTrusteeThresholdDraftSpecification(string title) =>
+        new(
+            Title: title,
+            ShortDescription: "Governed policy vote",
+            ExternalReferenceCode: "REF-2026-097",
+            ElectionClass: ElectionClass.OrganizationalRemoteVoting,
+            BindingStatus: ElectionBindingStatus.Binding,
+            GovernanceMode: ElectionGovernanceMode.TrusteeThreshold,
+            DisclosureMode: ElectionDisclosureMode.FinalResultsOnly,
+            ParticipationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
+            VoteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
+            EligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
+            EligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            OutcomeRule: new OutcomeRuleDefinition(
+                OutcomeRuleKind.PassFail,
+                "pass_fail_yes_no",
+                SeatCount: 1,
+                BlankVoteCountsForTurnout: true,
+                BlankVoteExcludedFromWinnerSelection: true,
+                BlankVoteExcludedFromThresholdDenominator: true,
+                TieResolutionRule: "tie_unresolved",
+                CalculationBasis: "simple_majority_of_non_blank_votes"),
+            ApprovedClientApplications:
+            [
+                new ApprovedClientApplicationRecord("hushsocial", "1.0.0"),
+            ],
+            ProtocolOmegaVersion: "omega-v1.0.0",
+            ReportingPolicy: ReportingPolicy.DefaultPhaseOnePackage,
+            ReviewWindowPolicy: ReviewWindowPolicy.GovernedReviewWindowReserved,
+            OwnerOptions:
+            [
+                new ElectionOptionDefinition("yes", "Yes", "Approve the proposal", 1, false),
+                new ElectionOptionDefinition("no", "No", "Reject the proposal", 2, false),
+            ],
+            AcknowledgedWarningCodes:
+            [
+                ElectionWarningCode.AllTrusteesRequiredFragility,
+            ],
+            RequiredApprovalCount: 3);
 }

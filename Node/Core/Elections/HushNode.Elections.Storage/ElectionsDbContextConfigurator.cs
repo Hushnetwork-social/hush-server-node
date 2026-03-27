@@ -16,6 +16,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
     {
         ConfigureElectionRecord(modelBuilder);
         ConfigureElectionDraftSnapshot(modelBuilder);
+        ConfigureElectionEnvelopeAccess(modelBuilder);
         ConfigureElectionBoundaryArtifact(modelBuilder);
         ConfigureElectionWarningAcknowledgement(modelBuilder);
         ConfigureElectionTrusteeInvitation(modelBuilder);
@@ -110,6 +111,29 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             ConfigureJsonProperty(entity.Property(x => x.AcknowledgedWarningCodes));
 
             entity.HasIndex(x => new { x.ElectionId, x.DraftRevision }).IsUnique();
+        });
+    }
+
+    private static void ConfigureElectionEnvelopeAccess(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionEnvelopeAccessRecord>(entity =>
+        {
+            entity.ToTable("ElectionEnvelopeAccessRecord", "Elections");
+            entity.HasKey(x => new { x.ElectionId, x.ActorPublicAddress });
+
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.ActorPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.ActorEncryptedElectionPrivateKey).HasColumnType("text");
+            entity.Property(x => x.GrantedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            entity.HasIndex(x => x.ActorPublicAddress);
         });
     }
 

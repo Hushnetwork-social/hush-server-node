@@ -205,6 +205,34 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionEnvelopeAccessAsync_WithStoredAccess_ReturnsWrappedElectionKey()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var accessRecord = new ElectionEnvelopeAccessRecord(
+            electionId,
+            "trustee-address",
+            "wrapped-election-private-key",
+            DateTime.UtcNow,
+            Guid.NewGuid(),
+            12,
+            Guid.NewGuid());
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionEnvelopeAccessAsync(electionId, "trustee-address"))
+                .ReturnsAsync(accessRecord);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionEnvelopeAccessAsync(electionId, "trustee-address");
+
+        response.Success.Should().BeTrue();
+        response.ActorEncryptedElectionPrivateKey.Should().Be("wrapped-election-private-key");
+    }
+
+    [Fact]
     public async Task GetElectionAsync_WithDevProfilesDisabled_FiltersDevOnlyCeremonyProfiles()
     {
         var mocker = new AutoMocker();

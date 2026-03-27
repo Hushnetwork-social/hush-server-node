@@ -17,31 +17,19 @@ public class ElectionsGrpcService(
     private readonly ILogger<ElectionsGrpcService> _logger = logger;
 
     public override Task<ElectionCommandResponse> CreateElectionDraft(Proto.CreateElectionDraftRequest request, ServerCallContext context) =>
-        ExecuteCommandAsync(
-            () => _lifecycleService.CreateDraftAsync(new Domain.CreateElectionDraftRequest(
-                request.OwnerPublicAddress,
-                request.ActorPublicAddress,
-                request.SnapshotReason,
-                request.Draft.ToDomain())),
-            nameof(CreateElectionDraft));
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for CreateElectionDraft."));
 
     public override Task<ElectionCommandResponse> UpdateElectionDraft(Proto.UpdateElectionDraftRequest request, ServerCallContext context) =>
-        ExecuteCommandAsync(
-            () => _lifecycleService.UpdateDraftAsync(new Domain.UpdateElectionDraftRequest(
-                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
-                request.ActorPublicAddress,
-                request.SnapshotReason,
-                request.Draft.ToDomain())),
-            nameof(UpdateElectionDraft));
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for UpdateElectionDraft."));
 
     public override Task<ElectionCommandResponse> InviteElectionTrustee(Proto.InviteElectionTrusteeRequest request, ServerCallContext context) =>
-        ExecuteCommandAsync(
-            () => _lifecycleService.InviteTrusteeAsync(new Domain.InviteElectionTrusteeRequest(
-                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
-                request.ActorPublicAddress,
-                request.TrusteeUserAddress,
-                NormalizeOptionalString(request.TrusteeDisplayName))),
-            nameof(InviteElectionTrustee));
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for InviteElectionTrustee."));
 
     public override Task<ElectionCommandResponse> AcceptElectionTrusteeInvitation(Proto.ResolveElectionTrusteeInvitationRequest request, ServerCallContext context) =>
         ResolveTrusteeInvitationAsync(request, _lifecycleService.AcceptTrusteeInvitationAsync, nameof(AcceptElectionTrusteeInvitation));
@@ -50,7 +38,9 @@ public class ElectionsGrpcService(
         ResolveTrusteeInvitationAsync(request, _lifecycleService.RejectTrusteeInvitationAsync, nameof(RejectElectionTrusteeInvitation));
 
     public override Task<ElectionCommandResponse> RevokeElectionTrusteeInvitation(Proto.ResolveElectionTrusteeInvitationRequest request, ServerCallContext context) =>
-        ResolveTrusteeInvitationAsync(request, _lifecycleService.RevokeTrusteeInvitationAsync, nameof(RevokeElectionTrusteeInvitation));
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for RevokeElectionTrusteeInvitation."));
 
     public override Task<ElectionCommandResponse> StartElectionCeremony(Proto.StartElectionCeremonyRequest request, ServerCallContext context) =>
         ExecuteCommandAsync(
@@ -172,59 +162,34 @@ public class ElectionsGrpcService(
     }
 
     public override Task<ElectionCommandResponse> StartElectionGovernedProposal(Proto.StartElectionGovernedProposalRequest request, ServerCallContext context) =>
-        ExecuteCommandAsync(
-            () => _lifecycleService.StartGovernedProposalAsync(new Domain.StartElectionGovernedProposalRequest(
-                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
-                (HushShared.Elections.Model.ElectionGovernedActionType)(int)request.ActionType,
-                request.ActorPublicAddress)),
-            nameof(StartElectionGovernedProposal));
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for StartElectionGovernedProposal."));
 
     public override Task<ElectionCommandResponse> ApproveElectionGovernedProposal(Proto.ApproveElectionGovernedProposalRequest request, ServerCallContext context) =>
-        ExecuteCommandAsync(
-            () => _lifecycleService.ApproveGovernedProposalAsync(new Domain.ApproveElectionGovernedProposalRequest(
-                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
-                ElectionGrpcMappings.ParseGuid(request.ProposalId, nameof(request.ProposalId)),
-                request.ActorPublicAddress,
-                NormalizeOptionalString(request.ApprovalNote))),
-            nameof(ApproveElectionGovernedProposal));
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for ApproveElectionGovernedProposal."));
 
     public override Task<ElectionCommandResponse> RetryElectionGovernedProposalExecution(Proto.RetryElectionGovernedProposalExecutionRequest request, ServerCallContext context) =>
-        ExecuteCommandAsync(
-            () => _lifecycleService.RetryGovernedProposalExecutionAsync(new Domain.RetryElectionGovernedProposalExecutionRequest(
-                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
-                ElectionGrpcMappings.ParseGuid(request.ProposalId, nameof(request.ProposalId)),
-                request.ActorPublicAddress)),
-            nameof(RetryElectionGovernedProposalExecution));
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for RetryElectionGovernedProposalExecution."));
 
     public override Task<ElectionCommandResponse> OpenElection(Proto.OpenElectionRequest request, ServerCallContext context) =>
-        ExecuteCommandAsync(
-            () => _lifecycleService.OpenElectionAsync(new Domain.OpenElectionRequest(
-                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
-                request.ActorPublicAddress,
-                request.RequiredWarningCodes.Select(x => (HushShared.Elections.Model.ElectionWarningCode)(int)x).ToArray(),
-                request.FrozenEligibleVoterSetHash.ToNullableBytes(),
-                NormalizeOptionalString(request.TrusteePolicyExecutionReference),
-                NormalizeOptionalString(request.ReportingPolicyExecutionReference),
-                NormalizeOptionalString(request.ReviewWindowExecutionReference))),
-            nameof(OpenElection));
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for OpenElection."));
 
     public override Task<ElectionCommandResponse> CloseElection(Proto.CloseElectionRequest request, ServerCallContext context) =>
-        ExecuteCommandAsync(
-            () => _lifecycleService.CloseElectionAsync(new Domain.CloseElectionRequest(
-                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
-                request.ActorPublicAddress,
-                request.AcceptedBallotSetHash.ToNullableBytes(),
-                request.FinalEncryptedTallyHash.ToNullableBytes())),
-            nameof(CloseElection));
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for CloseElection."));
 
     public override Task<ElectionCommandResponse> FinalizeElection(Proto.FinalizeElectionRequest request, ServerCallContext context) =>
-        ExecuteCommandAsync(
-            () => _lifecycleService.FinalizeElectionAsync(new Domain.FinalizeElectionRequest(
-                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
-                request.ActorPublicAddress,
-                request.AcceptedBallotSetHash.ToNullableBytes(),
-                request.FinalEncryptedTallyHash.ToNullableBytes())),
-            nameof(FinalizeElection));
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for FinalizeElection."));
 
     public override async Task<GetElectionResponse> GetElection(GetElectionRequest request, ServerCallContext context)
     {
@@ -240,6 +205,25 @@ public class ElectionsGrpcService(
         {
             _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElection));
             throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch election."));
+        }
+    }
+
+    public override async Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest request, ServerCallContext context)
+    {
+        try
+        {
+            return await _queryApplicationService.GetElectionEnvelopeAccessAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress);
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionEnvelopeAccess));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch election envelope access."));
         }
     }
 

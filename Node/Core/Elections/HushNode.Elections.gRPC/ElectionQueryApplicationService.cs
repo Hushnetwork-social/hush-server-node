@@ -97,6 +97,31 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         return response;
     }
 
+    public async Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccessAsync(
+        ElectionId electionId,
+        string actorPublicAddress)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+
+        var accessRecord = await repository.GetElectionEnvelopeAccessAsync(electionId, actorPublicAddress);
+        if (accessRecord is null)
+        {
+            return new GetElectionEnvelopeAccessResponse
+            {
+                Success = false,
+                ErrorMessage = $"No election envelope access was found for actor '{actorPublicAddress}' on election {electionId}.",
+            };
+        }
+
+        return new GetElectionEnvelopeAccessResponse
+        {
+            Success = true,
+            ErrorMessage = string.Empty,
+            ActorEncryptedElectionPrivateKey = accessRecord.ActorEncryptedElectionPrivateKey,
+        };
+    }
+
     public async Task<GetElectionCeremonyActionViewResponse> GetElectionCeremonyActionViewAsync(
         ElectionId electionId,
         string actorPublicAddress)

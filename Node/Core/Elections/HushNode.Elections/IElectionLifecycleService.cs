@@ -51,49 +51,42 @@ public interface IElectionLifecycleService
     Task<ElectionCommandResult> FinalizeElectionAsync(FinalizeElectionRequest request);
 }
 
-public record ElectionDraftSpecification(
-    string Title,
-    string? ShortDescription,
-    string? ExternalReferenceCode,
-    ElectionClass ElectionClass,
-    ElectionBindingStatus BindingStatus,
-    ElectionGovernanceMode GovernanceMode,
-    ElectionDisclosureMode DisclosureMode,
-    ParticipationPrivacyMode ParticipationPrivacyMode,
-    VoteUpdatePolicy VoteUpdatePolicy,
-    EligibilitySourceType EligibilitySourceType,
-    EligibilityMutationPolicy EligibilityMutationPolicy,
-    OutcomeRuleDefinition OutcomeRule,
-    IReadOnlyList<ApprovedClientApplicationRecord> ApprovedClientApplications,
-    string ProtocolOmegaVersion,
-    ReportingPolicy ReportingPolicy,
-    ReviewWindowPolicy ReviewWindowPolicy,
-    IReadOnlyList<ElectionOptionDefinition> OwnerOptions,
-    IReadOnlyList<ElectionWarningCode>? AcknowledgedWarningCodes = null,
-    int? RequiredApprovalCount = null);
-
 public record CreateElectionDraftRequest(
     string OwnerPublicAddress,
     string ActorPublicAddress,
     string SnapshotReason,
-    ElectionDraftSpecification Draft);
+    ElectionDraftSpecification Draft,
+    ElectionId? PreassignedElectionId = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record UpdateElectionDraftRequest(
     ElectionId ElectionId,
     string ActorPublicAddress,
     string SnapshotReason,
-    ElectionDraftSpecification Draft);
+    ElectionDraftSpecification Draft,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record InviteElectionTrusteeRequest(
     ElectionId ElectionId,
     string ActorPublicAddress,
     string TrusteeUserAddress,
-    string? TrusteeDisplayName);
+    string? TrusteeDisplayName,
+    Guid? PreassignedInvitationId = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record ResolveElectionTrusteeInvitationRequest(
     ElectionId ElectionId,
     Guid InvitationId,
-    string ActorPublicAddress);
+    string ActorPublicAddress,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record StartElectionCeremonyRequest(
     ElectionId ElectionId,
@@ -170,18 +163,28 @@ public record EvaluateElectionOpenReadinessRequest(
 public record StartElectionGovernedProposalRequest(
     ElectionId ElectionId,
     ElectionGovernedActionType ActionType,
-    string ActorPublicAddress);
+    string ActorPublicAddress,
+    Guid? PreassignedProposalId = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record ApproveElectionGovernedProposalRequest(
     ElectionId ElectionId,
     Guid ProposalId,
     string ActorPublicAddress,
-    string? ApprovalNote = null);
+    string? ApprovalNote = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record RetryElectionGovernedProposalExecutionRequest(
     ElectionId ElectionId,
     Guid ProposalId,
-    string ActorPublicAddress);
+    string ActorPublicAddress,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record OpenElectionRequest(
     ElectionId ElectionId,
@@ -190,19 +193,28 @@ public record OpenElectionRequest(
     byte[]? FrozenEligibleVoterSetHash = null,
     string? TrusteePolicyExecutionReference = null,
     string? ReportingPolicyExecutionReference = null,
-    string? ReviewWindowExecutionReference = null);
+    string? ReviewWindowExecutionReference = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record CloseElectionRequest(
     ElectionId ElectionId,
     string ActorPublicAddress,
     byte[]? AcceptedBallotSetHash = null,
-    byte[]? FinalEncryptedTallyHash = null);
+    byte[]? FinalEncryptedTallyHash = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record FinalizeElectionRequest(
     ElectionId ElectionId,
     string ActorPublicAddress,
     byte[]? AcceptedBallotSetHash = null,
-    byte[]? FinalEncryptedTallyHash = null);
+    byte[]? FinalEncryptedTallyHash = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public enum ElectionCommandErrorCode
 {

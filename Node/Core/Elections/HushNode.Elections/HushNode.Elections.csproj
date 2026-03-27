@@ -1,8 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Blockchain\HushNode.Blockchain\HushNode.Blockchain.csproj" />
+    <ProjectReference Include="..\..\Indexing\HushNode.Indexing.Interfaces\HushNode.Indexing.Interfaces.csproj" />
     <ProjectReference Include="..\HushNode.Elections.Storage\HushNode.Elections.Storage.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\HushNode.Caching\HushNode.Caching.csproj" />
+    <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Olimpo.EncryptingManager\EncryptingManager.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />
   </ItemGroup>

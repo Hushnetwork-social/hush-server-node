@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\HushNode.Events\HushNode.Events.csproj" />
     <ProjectReference Include="..\..\Idempotency\HushNode.Idempotency\HushNode.Idempotency.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.EventAggregatorManager\EventAggregatorManager.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Feeds.Model\HushShared.Feeds.Model.csproj" />
     <ProjectReference Include="..\..\Feeds\HushNode.Feeds.Storage\HushNode.Feeds.Storage.csproj" />
   </ItemGroup>

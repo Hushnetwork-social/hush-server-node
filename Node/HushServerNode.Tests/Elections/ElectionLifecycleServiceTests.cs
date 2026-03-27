@@ -34,6 +34,39 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task CreateDraftAsync_WithPreassignedElectionIdAndTransactionSource_PersistsBoundIdentifiers()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var electionId = ElectionId.NewElectionId;
+        var transactionId = Guid.NewGuid();
+        var blockId = Guid.NewGuid();
+
+        var result = await service.CreateDraftAsync(new CreateElectionDraftRequest(
+            OwnerPublicAddress: "owner-address",
+            ActorPublicAddress: "owner-address",
+            SnapshotReason: "initial draft",
+            Draft: CreateAdminDraftSpecification(
+                acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]),
+            PreassignedElectionId: electionId,
+            SourceTransactionId: transactionId,
+            SourceBlockHeight: 17,
+            SourceBlockId: blockId));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Election.Should().NotBeNull();
+        result.Election!.ElectionId.Should().Be(electionId);
+        result.DraftSnapshot.Should().NotBeNull();
+        result.DraftSnapshot!.SourceTransactionId.Should().Be(transactionId);
+        result.DraftSnapshot.SourceBlockHeight.Should().Be(17);
+        result.DraftSnapshot.SourceBlockId.Should().Be(blockId);
+        store.WarningAcknowledgements.Should().ContainSingle();
+        store.WarningAcknowledgements[0].SourceTransactionId.Should().Be(transactionId);
+        store.WarningAcknowledgements[0].SourceBlockHeight.Should().Be(17);
+        store.WarningAcknowledgements[0].SourceBlockId.Should().Be(blockId);
+    }
+
+    [Fact]
     public async Task CreateDraftAsync_WithNonOwnerActor_ReturnsForbidden()
     {
         var service = CreateService(new ElectionStore());
@@ -93,6 +126,43 @@ public class ElectionLifecycleServiceTests
         store.DraftSnapshots.Should().HaveCount(2);
         store.DraftSnapshots.Select(x => x.DraftRevision).Should().Equal(1, 2);
         store.WarningAcknowledgements.Count(x => x.DraftRevision == 2).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task UpdateDraftAsync_WithTransactionSource_PersistsSnapshotAndWarningEvidence()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var createResult = await service.CreateDraftAsync(new CreateElectionDraftRequest(
+            OwnerPublicAddress: "owner-address",
+            ActorPublicAddress: "owner-address",
+            SnapshotReason: "initial draft",
+            Draft: CreateAdminDraftSpecification(
+                title: "Board Election",
+                acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet])));
+        var transactionId = Guid.NewGuid();
+        var blockId = Guid.NewGuid();
+
+        var updateResult = await service.UpdateDraftAsync(new UpdateElectionDraftRequest(
+            ElectionId: createResult.Election!.ElectionId,
+            ActorPublicAddress: "owner-address",
+            SnapshotReason: "owner updated title",
+            Draft: CreateAdminDraftSpecification(
+                title: "Board Election 2026",
+                acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]),
+            SourceTransactionId: transactionId,
+            SourceBlockHeight: 19,
+            SourceBlockId: blockId));
+
+        updateResult.IsSuccess.Should().BeTrue();
+        updateResult.DraftSnapshot.Should().NotBeNull();
+        updateResult.DraftSnapshot!.SourceTransactionId.Should().Be(transactionId);
+        updateResult.DraftSnapshot.SourceBlockHeight.Should().Be(19);
+        updateResult.DraftSnapshot.SourceBlockId.Should().Be(blockId);
+        store.WarningAcknowledgements.Count(x => x.DraftRevision == 2).Should().Be(1);
+        store.WarningAcknowledgements.Single(x => x.DraftRevision == 2).SourceTransactionId.Should().Be(transactionId);
+        store.WarningAcknowledgements.Single(x => x.DraftRevision == 2).SourceBlockHeight.Should().Be(19);
+        store.WarningAcknowledgements.Single(x => x.DraftRevision == 2).SourceBlockId.Should().Be(blockId);
     }
 
     [Fact]
@@ -193,6 +263,39 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task InviteTrusteeAsync_WithPreassignedInvitationIdAndTransactionSource_PersistsBoundIdentifiers()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection();
+        var invitationId = Guid.NewGuid();
+        var sourceTransactionId = Guid.NewGuid();
+        var sourceBlockId = Guid.NewGuid();
+
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.InviteTrusteeAsync(new InviteElectionTrusteeRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            TrusteeUserAddress: "trustee-a",
+            TrusteeDisplayName: "Alice",
+            PreassignedInvitationId: invitationId,
+            SourceTransactionId: sourceTransactionId,
+            SourceBlockHeight: 17,
+            SourceBlockId: sourceBlockId));
+
+        result.IsSuccess.Should().BeTrue();
+        result.TrusteeInvitation.Should().NotBeNull();
+        result.TrusteeInvitation!.Id.Should().Be(invitationId);
+        result.TrusteeInvitation.LatestTransactionId.Should().Be(sourceTransactionId);
+        result.TrusteeInvitation.LatestBlockHeight.Should().Be(17);
+        result.TrusteeInvitation.LatestBlockId.Should().Be(sourceBlockId);
+        store.TrusteeInvitations[invitationId].LatestTransactionId.Should().Be(sourceTransactionId);
+        store.TrusteeInvitations[invitationId].LatestBlockHeight.Should().Be(17);
+        store.TrusteeInvitations[invitationId].LatestBlockId.Should().Be(sourceBlockId);
+    }
+
+    [Fact]
     public async Task AcceptTrusteeInvitation_AfterElectionOpened_ReturnsInvalidState()
     {
         var store = new ElectionStore();
@@ -249,6 +352,40 @@ public class ElectionLifecycleServiceTests
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+    }
+
+    [Fact]
+    public async Task RevokeTrusteeInvitation_WithTransactionSource_PersistsLatestIdentifiers()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection();
+        var invitation = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision);
+        var transactionId = Guid.NewGuid();
+        var blockId = Guid.NewGuid();
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[invitation.Id] = invitation;
+
+        var result = await service.RevokeTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest(
+            ElectionId: election.ElectionId,
+            InvitationId: invitation.Id,
+            ActorPublicAddress: "owner-address",
+            SourceTransactionId: transactionId,
+            SourceBlockHeight: 27,
+            SourceBlockId: blockId));
+
+        result.IsSuccess.Should().BeTrue();
+        result.TrusteeInvitation.Should().NotBeNull();
+        result.TrusteeInvitation!.Status.Should().Be(ElectionTrusteeInvitationStatus.Revoked);
+        result.TrusteeInvitation.LatestTransactionId.Should().Be(transactionId);
+        result.TrusteeInvitation.LatestBlockHeight.Should().Be(27);
+        result.TrusteeInvitation.LatestBlockId.Should().Be(blockId);
     }
 
     [Fact]
@@ -535,6 +672,8 @@ public class ElectionLifecycleServiceTests
         var store = new ElectionStore();
         var service = CreateService(store);
         var election = CreateTrusteeElection(requiredApprovalCount: 1);
+        var proposalId = Guid.NewGuid();
+        var sourceTransactionId = Guid.NewGuid();
         var acceptedTrusteeA = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
         var acceptedTrusteeB = CreateAcceptedTrusteeInvitation(election, "trustee-b", "Bob");
         var profile = RegisterCeremonyProfile(store, "dkg-prod-1of2", trusteeCount: 2, requiredApprovalCount: 1);
@@ -553,13 +692,21 @@ public class ElectionLifecycleServiceTests
         var result = await service.StartGovernedProposalAsync(new StartElectionGovernedProposalRequest(
             election.ElectionId,
             ElectionGovernedActionType.Open,
-            "owner-address"));
+            "owner-address",
+            PreassignedProposalId: proposalId,
+            SourceTransactionId: sourceTransactionId,
+            SourceBlockHeight: 43,
+            SourceBlockId: Guid.NewGuid()));
 
         result.IsSuccess.Should().BeTrue();
         result.GovernedProposal.Should().NotBeNull();
+        result.GovernedProposal!.Id.Should().Be(proposalId);
         result.GovernedProposal!.ActionType.Should().Be(ElectionGovernedActionType.Open);
         result.GovernedProposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.WaitingForApprovals);
+        result.GovernedProposal.LatestTransactionId.Should().Be(sourceTransactionId);
+        result.GovernedProposal.LatestBlockHeight.Should().Be(43);
         store.GovernedProposals.Should().ContainSingle();
+        store.GovernedProposals.Values.Single().Id.Should().Be(proposalId);
     }
 
     [Fact]
@@ -621,6 +768,7 @@ public class ElectionLifecycleServiceTests
         var service = CreateService(store);
         var election = CreateAdminElection(
             acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]);
+        var sourceTransactionId = Guid.NewGuid();
         var warning = ElectionModelFactory.CreateWarningAcknowledgement(
             election.ElectionId,
             ElectionWarningCode.LowAnonymitySet,
@@ -638,13 +786,18 @@ public class ElectionLifecycleServiceTests
             FrozenEligibleVoterSetHash: frozenRosterHash,
             TrusteePolicyExecutionReference: "n/a",
             ReportingPolicyExecutionReference: "reporting-v1",
-            ReviewWindowExecutionReference: "no-review"));
+            ReviewWindowExecutionReference: "no-review",
+            SourceTransactionId: sourceTransactionId,
+            SourceBlockHeight: 41,
+            SourceBlockId: Guid.NewGuid()));
 
         result.IsSuccess.Should().BeTrue();
         result.BoundaryArtifact.Should().NotBeNull();
         result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Open);
         result.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.Open);
         result.BoundaryArtifact.FrozenEligibleVoterSetHash.Should().Equal(frozenRosterHash);
+        result.BoundaryArtifact.SourceTransactionId.Should().Be(sourceTransactionId);
+        result.BoundaryArtifact.SourceBlockHeight.Should().Be(41);
         store.BoundaryArtifacts.Should().ContainSingle();
         store.Elections[election.ElectionId].OpenArtifactId.Should().Be(result.BoundaryArtifact.Id);
     }
@@ -702,6 +855,7 @@ public class ElectionLifecycleServiceTests
         var store = new ElectionStore();
         var service = CreateService(store);
         var election = CreateTrusteeElection(requiredApprovalCount: 1);
+        var approvalTransactionId = Guid.NewGuid();
         var acceptedTrusteeA = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
         var acceptedTrusteeB = CreateAcceptedTrusteeInvitation(election, "trustee-b", "Bob");
         var profile = RegisterCeremonyProfile(store, "dkg-prod-1of2-open", trusteeCount: 2, requiredApprovalCount: 1);
@@ -726,18 +880,27 @@ public class ElectionLifecycleServiceTests
             election.ElectionId,
             proposal.Id,
             "trustee-a",
-            "Ready."));
+            "Ready.",
+            SourceTransactionId: approvalTransactionId,
+            SourceBlockHeight: 47,
+            SourceBlockId: Guid.NewGuid()));
 
         result.IsSuccess.Should().BeTrue();
         result.Election.Should().NotBeNull();
         result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Open);
         result.GovernedProposal.Should().NotBeNull();
         result.GovernedProposal!.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionSucceeded);
+        result.GovernedProposal.LatestTransactionId.Should().Be(approvalTransactionId);
+        result.GovernedProposal.LatestBlockHeight.Should().Be(47);
         result.GovernedProposalApproval.Should().NotBeNull();
+        result.GovernedProposalApproval!.SourceTransactionId.Should().Be(approvalTransactionId);
+        result.GovernedProposalApproval.SourceBlockHeight.Should().Be(47);
         result.BoundaryArtifact.Should().NotBeNull();
         result.BoundaryArtifact!.CeremonySnapshot.Should().NotBeNull();
         result.BoundaryArtifact.CeremonySnapshot!.ProfileId.Should().Be(profile.ProfileId);
         result.BoundaryArtifact.CeremonySnapshot.ActiveTrustees.Should().HaveCount(2);
+        result.BoundaryArtifact.SourceTransactionId.Should().Be(approvalTransactionId);
+        result.BoundaryArtifact.SourceBlockHeight.Should().Be(47);
         store.GovernedProposalApprovals.Should().ContainSingle();
         store.BoundaryArtifacts.Should().ContainSingle();
         store.Elections[election.ElectionId].OpenArtifactId.Should().Be(result.BoundaryArtifact!.Id);
@@ -790,6 +953,8 @@ public class ElectionLifecycleServiceTests
     {
         var store = new ElectionStore();
         var service = CreateService(store);
+        var approvalTransactionId = Guid.NewGuid();
+        var retryTransactionId = Guid.NewGuid();
         var openElection = CreateTrusteeElection() with
         {
             RequiredApprovalCount = 1,
@@ -835,25 +1000,38 @@ public class ElectionLifecycleServiceTests
         var approvalResult = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
             openElection.ElectionId,
             proposal.Id,
-            "trustee-a"));
+            "trustee-a",
+            SourceTransactionId: approvalTransactionId,
+            SourceBlockHeight: 51,
+            SourceBlockId: Guid.NewGuid()));
 
         approvalResult.IsSuccess.Should().BeTrue();
         approvalResult.GovernedProposal.Should().NotBeNull();
         approvalResult.GovernedProposal!.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionFailed);
         approvalResult.GovernedProposal.ExecutionFailureReason.Should().Contain("close is only allowed from the open state");
+        approvalResult.GovernedProposal.LatestTransactionId.Should().Be(approvalTransactionId);
+        approvalResult.GovernedProposal.LatestBlockHeight.Should().Be(51);
 
         store.Elections[openElection.ElectionId] = openElection;
 
         var retryResult = await service.RetryGovernedProposalExecutionAsync(new RetryElectionGovernedProposalExecutionRequest(
             openElection.ElectionId,
             proposal.Id,
-            "owner-address"));
+            "owner-address",
+            SourceTransactionId: retryTransactionId,
+            SourceBlockHeight: 52,
+            SourceBlockId: Guid.NewGuid()));
 
         retryResult.IsSuccess.Should().BeTrue();
         retryResult.Election.Should().NotBeNull();
         retryResult.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Closed);
         retryResult.GovernedProposal.Should().NotBeNull();
         retryResult.GovernedProposal!.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionSucceeded);
+        retryResult.GovernedProposal.LatestTransactionId.Should().Be(retryTransactionId);
+        retryResult.GovernedProposal.LatestBlockHeight.Should().Be(52);
+        retryResult.BoundaryArtifact.Should().NotBeNull();
+        retryResult.BoundaryArtifact!.SourceTransactionId.Should().Be(retryTransactionId);
+        retryResult.BoundaryArtifact.SourceBlockHeight.Should().Be(52);
         store.GovernedProposalApprovals.Should().ContainSingle();
         store.BoundaryArtifacts.Should().ContainSingle();
     }
@@ -864,6 +1042,8 @@ public class ElectionLifecycleServiceTests
         var store = new ElectionStore();
         var service = CreateService(store);
         var election = CreateOpenElection();
+        var closeTransactionId = Guid.NewGuid();
+        var finalizeTransactionId = Guid.NewGuid();
         var closeBallotHash = new byte[] { 7, 8 };
         var closeTallyHash = new byte[] { 9, 10 };
         var finalizeBallotHash = new byte[] { 11, 12 };
@@ -875,13 +1055,19 @@ public class ElectionLifecycleServiceTests
             ElectionId: election.ElectionId,
             ActorPublicAddress: "owner-address",
             AcceptedBallotSetHash: closeBallotHash,
-            FinalEncryptedTallyHash: closeTallyHash));
+            FinalEncryptedTallyHash: closeTallyHash,
+            SourceTransactionId: closeTransactionId,
+            SourceBlockHeight: 52,
+            SourceBlockId: Guid.NewGuid()));
 
         var finalizeResult = await service.FinalizeElectionAsync(new FinalizeElectionRequest(
             ElectionId: election.ElectionId,
             ActorPublicAddress: "owner-address",
             AcceptedBallotSetHash: finalizeBallotHash,
-            FinalEncryptedTallyHash: finalizeTallyHash));
+            FinalEncryptedTallyHash: finalizeTallyHash,
+            SourceTransactionId: finalizeTransactionId,
+            SourceBlockHeight: 53,
+            SourceBlockId: Guid.NewGuid()));
 
         closeResult.IsSuccess.Should().BeTrue();
         finalizeResult.IsSuccess.Should().BeTrue();
@@ -891,7 +1077,11 @@ public class ElectionLifecycleServiceTests
             ElectionBoundaryArtifactType.Close,
             ElectionBoundaryArtifactType.Finalize);
         store.BoundaryArtifacts[0].AcceptedBallotSetHash.Should().Equal(closeBallotHash);
+        store.BoundaryArtifacts[0].SourceTransactionId.Should().Be(closeTransactionId);
+        store.BoundaryArtifacts[0].SourceBlockHeight.Should().Be(52);
         store.BoundaryArtifacts[1].FinalEncryptedTallyHash.Should().Equal(finalizeTallyHash);
+        store.BoundaryArtifacts[1].SourceTransactionId.Should().Be(finalizeTransactionId);
+        store.BoundaryArtifacts[1].SourceBlockHeight.Should().Be(53);
         store.Elections[election.ElectionId].VoteAcceptanceLockedAt.Should().NotBeNull();
         store.Elections[election.ElectionId].CloseArtifactId.Should().Be(closeResult.BoundaryArtifact!.Id);
         store.Elections[election.ElectionId].FinalizeArtifactId.Should().Be(finalizeResult.BoundaryArtifact!.Id);
@@ -1174,6 +1364,7 @@ public class ElectionLifecycleServiceTests
     private sealed class ElectionStore
     {
         public Dictionary<ElectionId, ElectionRecord> Elections { get; } = [];
+        public Dictionary<(ElectionId ElectionId, string ActorPublicAddress), ElectionEnvelopeAccessRecord> ElectionEnvelopeAccessRecords { get; } = [];
         public List<ElectionDraftSnapshotRecord> DraftSnapshots { get; } = [];
         public List<ElectionBoundaryArtifactRecord> BoundaryArtifacts { get; } = [];
         public List<ElectionWarningAcknowledgementRecord> WarningAcknowledgements { get; } = [];
@@ -1287,6 +1478,22 @@ public class ElectionLifecycleServiceTests
         public Task SaveBoundaryArtifactAsync(ElectionBoundaryArtifactRecord artifact)
         {
             store.BoundaryArtifacts.Add(artifact);
+            return Task.CompletedTask;
+        }
+
+        public Task<ElectionEnvelopeAccessRecord?> GetElectionEnvelopeAccessAsync(ElectionId electionId, string actorPublicAddress) =>
+            Task.FromResult(
+                store.ElectionEnvelopeAccessRecords.GetValueOrDefault((electionId, actorPublicAddress)));
+
+        public Task SaveElectionEnvelopeAccessAsync(ElectionEnvelopeAccessRecord accessRecord)
+        {
+            store.ElectionEnvelopeAccessRecords[(accessRecord.ElectionId, accessRecord.ActorPublicAddress)] = accessRecord;
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateElectionEnvelopeAccessAsync(ElectionEnvelopeAccessRecord accessRecord)
+        {
+            store.ElectionEnvelopeAccessRecords[(accessRecord.ElectionId, accessRecord.ActorPublicAddress)] = accessRecord;
             return Task.CompletedTask;
         }
 

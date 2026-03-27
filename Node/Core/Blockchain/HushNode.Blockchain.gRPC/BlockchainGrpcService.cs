@@ -2,6 +2,7 @@ using System.Text.Json;
 using Grpc.Core;
 using HushNetwork.proto;
 using HushNode.Blockchain.Storage;
+using HushNode.Credentials;
 using HushNode.Events;
 using HushNode.Feeds.Storage;
 using HushNode.Idempotency;
@@ -9,6 +10,7 @@ using HushNode.Interfaces.Models;
 using HushNode.MemPool;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
+using HushShared.Elections.Model;
 using HushShared.Feeds.Model;
 using Microsoft.Extensions.Logging;
 using Olimpo;
@@ -22,6 +24,7 @@ public class BlockchainGrpcService(
     IEventAggregator eventAggregator,
     IIdempotencyService idempotencyService,
     IAttachmentTempStorageService attachmentTempStorageService,
+    ICredentialsProvider credentialsProvider,
     ILogger<BlockchainGrpcService> logger) : HushBlockchain.HushBlockchainBase
 {
     private readonly IBlockchainStorageService _blockchainStorageService = blockchainStorageService;
@@ -30,6 +33,7 @@ public class BlockchainGrpcService(
     private readonly IEventAggregator _eventAggregator = eventAggregator;
     private readonly IIdempotencyService _idempotencyService = idempotencyService;
     private readonly IAttachmentTempStorageService _attachmentTempStorageService = attachmentTempStorageService;
+    private readonly ICredentialsProvider _credentialsProvider = credentialsProvider;
     private readonly ILogger<BlockchainGrpcService> _logger = logger;
 
     /// <summary>FEAT-066: Maximum number of attachments per message.</summary>
@@ -48,6 +52,19 @@ public class BlockchainGrpcService(
         {
             Index = blockchainState.BlockIndex.Value
         };
+    }
+
+    public override Task<GetElectionEnvelopeContextReply> GetElectionEnvelopeContext(
+        GetElectionEnvelopeContextRequest request,
+        ServerCallContext context)
+    {
+        var credentials = _credentialsProvider.GetCredentials();
+
+        return Task.FromResult(new GetElectionEnvelopeContextReply
+        {
+            NodePublicEncryptAddress = credentials.PublicEncryptAddress,
+            ElectionEnvelopeVersion = EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+        });
     }
 
     public override async Task<SubmitSignedTransactionReply> SubmitSignedTransaction(
