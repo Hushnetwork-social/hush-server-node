@@ -91,6 +91,33 @@ internal static class ElectionGrpcMappings
             response.GovernedProposalApproval = result.GovernedProposalApproval.ToProto();
         }
 
+        if (result.CeremonyProfile is not null)
+        {
+            response.CeremonyProfile = result.CeremonyProfile.ToProto();
+        }
+
+        if (result.CeremonyVersion is not null)
+        {
+            response.CeremonyVersion = result.CeremonyVersion.ToProto();
+        }
+
+        response.CeremonyTranscriptEvents.AddRange(result.CeremonyTranscriptEvents.Select(x => x.ToProto()));
+
+        if (result.CeremonyTrusteeState is not null)
+        {
+            response.CeremonyTrusteeState = result.CeremonyTrusteeState.ToProto();
+        }
+
+        if (result.CeremonyMessageEnvelope is not null)
+        {
+            response.CeremonyMessageEnvelope = result.CeremonyMessageEnvelope.ToProto();
+        }
+
+        if (result.CeremonyShareCustody is not null)
+        {
+            response.CeremonyShareCustody = result.CeremonyShareCustody.ToProto();
+        }
+
         return response;
     }
 
@@ -104,6 +131,12 @@ internal static class ElectionGrpcMappings
         response.ValidationErrors.AddRange(result.ValidationErrors);
         response.RequiredWarningCodes.AddRange(result.RequiredWarningCodes.Select(x => (ElectionWarningCodeProto)(int)x));
         response.MissingWarningAcknowledgements.AddRange(result.MissingWarningAcknowledgements.Select(x => (ElectionWarningCodeProto)(int)x));
+
+        if (result.CeremonySnapshot is not null)
+        {
+            response.CeremonySnapshot = result.CeremonySnapshot.ToProto();
+        }
+
         return response;
     }
 
@@ -239,6 +272,11 @@ internal static class ElectionGrpcMappings
         if (artifact.TrusteeSnapshot is not null)
         {
             proto.TrusteeSnapshot = artifact.TrusteeSnapshot.ToProto();
+        }
+
+        if (artifact.CeremonySnapshot is not null)
+        {
+            proto.CeremonySnapshot = artifact.CeremonySnapshot.ToProto();
         }
 
         return proto;
@@ -380,6 +418,210 @@ internal static class ElectionGrpcMappings
             TrusteeUserAddress = x.TrusteeUserAddress,
             TrusteeDisplayName = x.TrusteeDisplayName ?? string.Empty,
         }));
+
+        return proto;
+    }
+
+    public static ElectionCeremonyProfile ToProto(this ElectionCeremonyProfileRecord profile) =>
+        new()
+        {
+            ProfileId = profile.ProfileId,
+            DisplayName = profile.DisplayName,
+            Description = profile.Description,
+            ProviderKey = profile.ProviderKey,
+            ProfileVersion = profile.ProfileVersion,
+            TrusteeCount = profile.TrusteeCount,
+            RequiredApprovalCount = profile.RequiredApprovalCount,
+            DevOnly = profile.DevOnly,
+            RegisteredAt = ToTimestamp(profile.RegisteredAt),
+            LastUpdatedAt = ToTimestamp(profile.LastUpdatedAt),
+        };
+
+    public static HushNetwork.proto.ElectionCeremonyBindingSnapshot ToProto(this HushShared.Elections.Model.ElectionCeremonyBindingSnapshot snapshot)
+    {
+        var proto = new HushNetwork.proto.ElectionCeremonyBindingSnapshot
+        {
+            CeremonyVersionId = snapshot.CeremonyVersionId.ToString(),
+            VersionNumber = snapshot.CeremonyVersionNumber,
+            ProfileId = snapshot.ProfileId,
+            TrusteeCount = snapshot.BoundTrusteeCount,
+            RequiredApprovalCount = snapshot.RequiredApprovalCount,
+            TallyPublicKeyFingerprint = snapshot.TallyPublicKeyFingerprint,
+        };
+
+        proto.CompletedTrustees.AddRange(snapshot.ActiveTrustees.Select(x => new HushNetwork.proto.ElectionTrusteeReference
+        {
+            TrusteeUserAddress = x.TrusteeUserAddress,
+            TrusteeDisplayName = x.TrusteeDisplayName ?? string.Empty,
+        }));
+
+        return proto;
+    }
+
+    public static ElectionCeremonyVersion ToProto(this ElectionCeremonyVersionRecord version)
+    {
+        var proto = new ElectionCeremonyVersion
+        {
+            Id = version.Id.ToString(),
+            ElectionId = version.ElectionId.ToString(),
+            VersionNumber = version.VersionNumber,
+            ProfileId = version.ProfileId,
+            Status = (ElectionCeremonyVersionStatusProto)(int)version.Status,
+            TrusteeCount = version.TrusteeCount,
+            RequiredApprovalCount = version.RequiredApprovalCount,
+            StartedByPublicAddress = version.StartedByPublicAddress,
+            StartedAt = ToTimestamp(version.StartedAt),
+            SupersededReason = version.SupersededReason ?? string.Empty,
+            TallyPublicKeyFingerprint = version.TallyPublicKeyFingerprint ?? string.Empty,
+        };
+
+        proto.BoundTrustees.AddRange(version.BoundTrustees.Select(x => new HushNetwork.proto.ElectionTrusteeReference
+        {
+            TrusteeUserAddress = x.TrusteeUserAddress,
+            TrusteeDisplayName = x.TrusteeDisplayName ?? string.Empty,
+        }));
+
+        if (version.CompletedAt.HasValue)
+        {
+            proto.CompletedAt = ToTimestamp(version.CompletedAt.Value);
+        }
+
+        if (version.SupersededAt.HasValue)
+        {
+            proto.SupersededAt = ToTimestamp(version.SupersededAt.Value);
+        }
+
+        return proto;
+    }
+
+    public static ElectionCeremonyTranscriptEvent ToProto(this ElectionCeremonyTranscriptEventRecord transcriptEvent)
+    {
+        var proto = new ElectionCeremonyTranscriptEvent
+        {
+            Id = transcriptEvent.Id.ToString(),
+            ElectionId = transcriptEvent.ElectionId.ToString(),
+            CeremonyVersionId = transcriptEvent.CeremonyVersionId.ToString(),
+            VersionNumber = transcriptEvent.VersionNumber,
+            EventType = (ElectionCeremonyTranscriptEventTypeProto)(int)transcriptEvent.EventType,
+            ActorPublicAddress = transcriptEvent.ActorPublicAddress ?? string.Empty,
+            TrusteeUserAddress = transcriptEvent.TrusteeUserAddress ?? string.Empty,
+            TrusteeDisplayName = transcriptEvent.TrusteeDisplayName ?? string.Empty,
+            EventSummary = transcriptEvent.EventSummary,
+            EvidenceReference = transcriptEvent.EvidenceReference ?? string.Empty,
+            RestartReason = transcriptEvent.RestartReason ?? string.Empty,
+            TallyPublicKeyFingerprint = transcriptEvent.TallyPublicKeyFingerprint ?? string.Empty,
+            OccurredAt = ToTimestamp(transcriptEvent.OccurredAt),
+            HasTrusteeState = transcriptEvent.TrusteeState.HasValue,
+        };
+
+        if (transcriptEvent.TrusteeState.HasValue)
+        {
+            proto.TrusteeState = (ElectionTrusteeCeremonyStateProto)(int)transcriptEvent.TrusteeState.Value;
+        }
+
+        return proto;
+    }
+
+    public static ElectionCeremonyMessageEnvelope ToProto(this ElectionCeremonyMessageEnvelopeRecord messageEnvelope) =>
+        new()
+        {
+            Id = messageEnvelope.Id.ToString(),
+            ElectionId = messageEnvelope.ElectionId.ToString(),
+            CeremonyVersionId = messageEnvelope.CeremonyVersionId.ToString(),
+            VersionNumber = messageEnvelope.VersionNumber,
+            ProfileId = messageEnvelope.ProfileId,
+            SenderTrusteeUserAddress = messageEnvelope.SenderTrusteeUserAddress,
+            RecipientTrusteeUserAddress = messageEnvelope.RecipientTrusteeUserAddress ?? string.Empty,
+            MessageType = messageEnvelope.MessageType,
+            PayloadVersion = messageEnvelope.PayloadVersion,
+            EncryptedPayload = ToByteString(messageEnvelope.EncryptedPayload),
+            PayloadFingerprint = messageEnvelope.PayloadFingerprint,
+            SubmittedAt = ToTimestamp(messageEnvelope.SubmittedAt),
+        };
+
+    public static ElectionCeremonyTrusteeState ToProto(this ElectionCeremonyTrusteeStateRecord trusteeState)
+    {
+        var proto = new ElectionCeremonyTrusteeState
+        {
+            Id = trusteeState.Id.ToString(),
+            ElectionId = trusteeState.ElectionId.ToString(),
+            CeremonyVersionId = trusteeState.CeremonyVersionId.ToString(),
+            TrusteeUserAddress = trusteeState.TrusteeUserAddress,
+            TrusteeDisplayName = trusteeState.TrusteeDisplayName ?? string.Empty,
+            State = (ElectionTrusteeCeremonyStateProto)(int)trusteeState.State,
+            TransportPublicKeyFingerprint = trusteeState.TransportPublicKeyFingerprint ?? string.Empty,
+            ValidationFailureReason = trusteeState.ValidationFailureReason ?? string.Empty,
+            ShareVersion = trusteeState.ShareVersion ?? string.Empty,
+            LastUpdatedAt = ToTimestamp(trusteeState.LastUpdatedAt),
+        };
+
+        if (trusteeState.TransportPublicKeyPublishedAt.HasValue)
+        {
+            proto.TransportPublicKeyPublishedAt = ToTimestamp(trusteeState.TransportPublicKeyPublishedAt.Value);
+        }
+
+        if (trusteeState.JoinedAt.HasValue)
+        {
+            proto.JoinedAt = ToTimestamp(trusteeState.JoinedAt.Value);
+        }
+
+        if (trusteeState.SelfTestSucceededAt.HasValue)
+        {
+            proto.SelfTestSucceededAt = ToTimestamp(trusteeState.SelfTestSucceededAt.Value);
+        }
+
+        if (trusteeState.MaterialSubmittedAt.HasValue)
+        {
+            proto.MaterialSubmittedAt = ToTimestamp(trusteeState.MaterialSubmittedAt.Value);
+        }
+
+        if (trusteeState.ValidationFailedAt.HasValue)
+        {
+            proto.ValidationFailedAt = ToTimestamp(trusteeState.ValidationFailedAt.Value);
+        }
+
+        if (trusteeState.CompletedAt.HasValue)
+        {
+            proto.CompletedAt = ToTimestamp(trusteeState.CompletedAt.Value);
+        }
+
+        if (trusteeState.RemovedAt.HasValue)
+        {
+            proto.RemovedAt = ToTimestamp(trusteeState.RemovedAt.Value);
+        }
+
+        return proto;
+    }
+
+    public static ElectionCeremonyShareCustody ToProto(this ElectionCeremonyShareCustodyRecord shareCustody)
+    {
+        var proto = new ElectionCeremonyShareCustody
+        {
+            Id = shareCustody.Id.ToString(),
+            ElectionId = shareCustody.ElectionId.ToString(),
+            CeremonyVersionId = shareCustody.CeremonyVersionId.ToString(),
+            TrusteeUserAddress = shareCustody.TrusteeUserAddress,
+            ShareVersion = shareCustody.ShareVersion,
+            PasswordProtected = shareCustody.PasswordProtected,
+            Status = (ElectionCeremonyShareCustodyStatusProto)(int)shareCustody.Status,
+            LastImportFailureReason = shareCustody.LastImportFailureReason ?? string.Empty,
+            LastUpdatedAt = ToTimestamp(shareCustody.LastUpdatedAt),
+        };
+
+        if (shareCustody.LastExportedAt.HasValue)
+        {
+            proto.LastExportedAt = ToTimestamp(shareCustody.LastExportedAt.Value);
+        }
+
+        if (shareCustody.LastImportedAt.HasValue)
+        {
+            proto.LastImportedAt = ToTimestamp(shareCustody.LastImportedAt.Value);
+        }
+
+        if (shareCustody.LastImportFailedAt.HasValue)
+        {
+            proto.LastImportFailedAt = ToTimestamp(shareCustody.LastImportFailedAt.Value);
+        }
 
         return proto;
     }

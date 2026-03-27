@@ -7,5 +7,7 @@ public interface IElectionQueryApplicationService
 {
     Task<GetElectionResponse> GetElectionAsync(ElectionId electionId);
 
+    Task<GetElectionCeremonyActionViewResponse> GetElectionCeremonyActionViewAsync(ElectionId electionId, string actorPublicAddress);
+
     Task<GetElectionsByOwnerResponse> GetElectionsByOwnerAsync(string ownerPublicAddress);
 }

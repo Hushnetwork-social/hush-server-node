@@ -9,6 +9,7 @@ using Moq.AutoMock;
 using Xunit;
 using Domain = HushNode.Elections;
 using Proto = HushNetwork.proto;
+using SharedTrusteeReference = HushShared.Elections.Model.ElectionTrusteeReference;
 
 namespace HushServerNode.Tests.Elections;
 
@@ -81,6 +82,61 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task StartElectionCeremony_WithValidRequest_MapsCeremonyPayload()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection();
+        var profile = ElectionModelFactory.CreateCeremonyProfile(
+            "prod-1of1-v1",
+            "Production 1 of 1",
+            "Production profile",
+            "provider-a",
+            "v1",
+            trusteeCount: 1,
+            requiredApprovalCount: 1,
+            devOnly: false);
+        var version = ElectionModelFactory.CreateCeremonyVersion(
+            election.ElectionId,
+            versionNumber: 1,
+            profileId: profile.ProfileId,
+            requiredApprovalCount: 1,
+            boundTrustees:
+            [
+                new SharedTrusteeReference("trustee-a", "Alice"),
+            ],
+            startedByPublicAddress: "owner-address");
+
+        mocker.GetMock<Domain.IElectionLifecycleService>()
+            .Setup(x => x.StartElectionCeremonyAsync(It.Is<Domain.StartElectionCeremonyRequest>(request =>
+                request.ElectionId == election.ElectionId &&
+                request.ActorPublicAddress == "owner-address" &&
+                request.ProfileId == profile.ProfileId)))
+            .ReturnsAsync(Domain.ElectionCommandResult.Success(
+                election,
+                ceremonyProfile: profile,
+                ceremonyVersion: version));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new Proto.StartElectionCeremonyRequest
+        {
+            ElectionId = election.ElectionId.ToString(),
+            ActorPublicAddress = "owner-address",
+            ProfileId = profile.ProfileId,
+        };
+
+        // Act
+        var response = await sut.StartElectionCeremony(request, CreateMockServerCallContext());
+
+        // Assert
+        response.Success.Should().BeTrue();
+        response.CeremonyProfile.Should().NotBeNull();
+        response.CeremonyProfile.ProfileId.Should().Be(profile.ProfileId);
+        response.CeremonyVersion.Should().NotBeNull();
+        response.CeremonyVersion.VersionNumber.Should().Be(1);
+    }
+
+    [Fact]
     public async Task GetElectionOpenReadiness_WithWarningGap_MapsReadinessResponse()
     {
         // Arrange
@@ -108,6 +164,55 @@ public class ElectionsGrpcServiceTests
         response.IsReadyToOpen.Should().BeFalse();
         response.RequiredWarningCodes.Should().Contain(ElectionWarningCodeProto.LowAnonymitySet);
         response.MissingWarningAcknowledgements.Should().Contain(ElectionWarningCodeProto.LowAnonymitySet);
+    }
+
+    [Fact]
+    public async Task GetElectionCeremonyActionView_WithValidRequest_ReturnsRoleScopedActionPayload()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var versionId = Guid.NewGuid();
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionCeremonyActionViewAsync(
+                electionId,
+                "trustee-a"))
+            .ReturnsAsync(new GetElectionCeremonyActionViewResponse
+            {
+                Success = true,
+                ActorRole = ElectionCeremonyActorRoleProto.CeremonyActorTrustee,
+                ActorPublicAddress = "trustee-a",
+                PendingIncomingMessageCount = 1,
+                ActiveCeremonyVersion = new ElectionCeremonyVersion
+                {
+                    Id = versionId.ToString(),
+                    ElectionId = electionId.ToString(),
+                    VersionNumber = 1,
+                    ProfileId = "prod-1of1-v1",
+                    Status = ElectionCeremonyVersionStatusProto.CeremonyVersionInProgress,
+                    TrusteeCount = 1,
+                    RequiredApprovalCount = 1,
+                    StartedByPublicAddress = "owner-address",
+                    StartedAt = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc)),
+                },
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        // Act
+        var response = await sut.GetElectionCeremonyActionView(new GetElectionCeremonyActionViewRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = "trustee-a",
+        }, CreateMockServerCallContext());
+
+        // Assert
+        response.Success.Should().BeTrue();
+        response.ActorRole.Should().Be(ElectionCeremonyActorRoleProto.CeremonyActorTrustee);
+        response.PendingIncomingMessageCount.Should().Be(1);
+        response.ActiveCeremonyVersion.Should().NotBeNull();
+        response.ActiveCeremonyVersion.ProfileId.Should().Be("prod-1of1-v1");
     }
 
     [Fact]
