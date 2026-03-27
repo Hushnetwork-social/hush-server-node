@@ -146,6 +146,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             ConfigureJsonProperty(entity.Property(x => x.Options));
             ConfigureJsonProperty(entity.Property(x => x.AcknowledgedWarningCodes));
             ConfigureJsonProperty(entity.Property(x => x.TrusteeSnapshot));
+            ConfigureJsonProperty(entity.Property(x => x.CeremonySnapshot));
 
             entity.HasIndex(x => new { x.ElectionId, x.ArtifactType }).IsUnique();
         });

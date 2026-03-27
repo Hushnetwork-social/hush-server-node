@@ -147,6 +147,7 @@ public static class ElectionModelFactory
         ElectionRecord election,
         string recordedByPublicAddress,
         ElectionTrusteeBoundarySnapshot? trusteeSnapshot = null,
+        ElectionCeremonyBindingSnapshot? ceremonySnapshot = null,
         DateTime? recordedAt = null,
         byte[]? frozenEligibleVoterSetHash = null,
         string? trusteePolicyExecutionReference = null,
@@ -192,6 +193,7 @@ public static class ElectionModelFactory
             CloneOptions(election.Options),
             NormalizeWarningCodes(election.AcknowledgedWarningCodes),
             CloneTrusteeSnapshot(trusteeSnapshot),
+            CloneCeremonySnapshot(ceremonySnapshot),
             CloneBytes(frozenEligibleVoterSetHash),
             NormalizeOptionalText(trusteePolicyExecutionReference),
             NormalizeOptionalText(reportingPolicyExecutionReference),
@@ -319,6 +321,60 @@ public static class ElectionModelFactory
             requiredApprovalCount,
             normalizedTrustees,
             EveryAcceptedTrusteeMustApprove: normalizedTrustees.Length == requiredApprovalCount);
+    }
+
+    public static ElectionCeremonyBindingSnapshot CreateCeremonyBindingSnapshot(
+        Guid ceremonyVersionId,
+        int ceremonyVersionNumber,
+        string profileId,
+        int boundTrusteeCount,
+        int requiredApprovalCount,
+        IReadOnlyList<ElectionTrusteeReference> activeTrustees,
+        string tallyPublicKeyFingerprint)
+    {
+        if (ceremonyVersionNumber < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(ceremonyVersionNumber), "Ceremony version number must be at least 1.");
+        }
+
+        if (boundTrusteeCount < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(boundTrusteeCount), "Bound trustee count must be at least 1.");
+        }
+
+        if (activeTrustees is null || activeTrustees.Count == 0)
+        {
+            throw new ArgumentException("At least one active trustee is required.", nameof(activeTrustees));
+        }
+
+        var normalizedTrustees = activeTrustees
+            .Select(x => new ElectionTrusteeReference(
+                NormalizeRequiredText(x.TrusteeUserAddress, nameof(activeTrustees)),
+                NormalizeOptionalText(x.TrusteeDisplayName)))
+            .ToArray();
+
+        var duplicateTrustee = normalizedTrustees
+            .GroupBy(x => x.TrusteeUserAddress, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(x => x.Count() > 1);
+        if (duplicateTrustee is not null)
+        {
+            throw new ArgumentException($"Duplicate active trustee detected: {duplicateTrustee.Key}", nameof(activeTrustees));
+        }
+
+        if (requiredApprovalCount < 1 || requiredApprovalCount > normalizedTrustees.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(requiredApprovalCount), "Required approval count must be between 1 and the active trustee count.");
+        }
+
+        return new ElectionCeremonyBindingSnapshot(
+            ceremonyVersionId,
+            ceremonyVersionNumber,
+            NormalizeRequiredText(profileId, nameof(profileId)),
+            boundTrusteeCount,
+            requiredApprovalCount,
+            normalizedTrustees,
+            EveryActiveTrusteeMustApprove: normalizedTrustees.Length == requiredApprovalCount,
+            NormalizeRequiredText(tallyPublicKeyFingerprint, nameof(tallyPublicKeyFingerprint)));
     }
 
     public static ElectionGovernedProposalRecord CreateGovernedProposal(
@@ -721,6 +777,21 @@ public static class ElectionModelFactory
                     .Select(x => new ElectionTrusteeReference(x.TrusteeUserAddress, x.TrusteeDisplayName))
                     .ToArray(),
                 snapshot.EveryAcceptedTrusteeMustApprove);
+
+    private static ElectionCeremonyBindingSnapshot? CloneCeremonySnapshot(ElectionCeremonyBindingSnapshot? snapshot) =>
+        snapshot is null
+            ? null
+            : new ElectionCeremonyBindingSnapshot(
+                snapshot.CeremonyVersionId,
+                snapshot.CeremonyVersionNumber,
+                snapshot.ProfileId,
+                snapshot.BoundTrusteeCount,
+                snapshot.RequiredApprovalCount,
+                snapshot.ActiveTrustees
+                    .Select(x => new ElectionTrusteeReference(x.TrusteeUserAddress, x.TrusteeDisplayName))
+                    .ToArray(),
+                snapshot.EveryActiveTrusteeMustApprove,
+                snapshot.TallyPublicKeyFingerprint);
 
     private static byte[]? CloneBytes(byte[]? value) => value is null ? null : value.ToArray();
 

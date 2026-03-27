@@ -17,6 +17,18 @@ public class ElectionBoundaryAndTrusteeRecordTests
                 new ElectionTrusteeReference("trustee-a", "Alice"),
                 new ElectionTrusteeReference("trustee-b", "Bob"),
             ]);
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            ceremonyVersionId: Guid.NewGuid(),
+            ceremonyVersionNumber: 3,
+            profileId: "dkg-prod-2of2",
+            boundTrusteeCount: 2,
+            requiredApprovalCount: 2,
+            activeTrustees:
+            [
+                new ElectionTrusteeReference("trustee-a", "Alice"),
+                new ElectionTrusteeReference("trustee-b", "Bob"),
+            ],
+            tallyPublicKeyFingerprint: "tally-fingerprint-1");
         var eligibleHash = new byte[] { 1, 2, 3, 4 };
         var acceptedBallotHash = new byte[] { 5, 6, 7, 8 };
 
@@ -25,6 +37,7 @@ public class ElectionBoundaryAndTrusteeRecordTests
             election: election,
             recordedByPublicAddress: "owner-address",
             trusteeSnapshot: trusteeSnapshot,
+            ceremonySnapshot: ceremonySnapshot,
             frozenEligibleVoterSetHash: eligibleHash,
             trusteePolicyExecutionReference: "governance-placeholder",
             acceptedBallotSetHash: acceptedBallotHash);
@@ -35,6 +48,9 @@ public class ElectionBoundaryAndTrusteeRecordTests
         artifact.Policy.RequiredApprovalCount.Should().Be(2);
         artifact.TrusteeSnapshot.Should().NotBeNull();
         artifact.TrusteeSnapshot!.EveryAcceptedTrusteeMustApprove.Should().BeTrue();
+        artifact.CeremonySnapshot.Should().NotBeNull();
+        artifact.CeremonySnapshot!.ProfileId.Should().Be("dkg-prod-2of2");
+        artifact.CeremonySnapshot.TallyPublicKeyFingerprint.Should().Be("tally-fingerprint-1");
         artifact.FrozenEligibleVoterSetHash.Should().Equal(eligibleHash);
         artifact.AcceptedBallotSetHash.Should().Equal(acceptedBallotHash);
         artifact.Options.Last().OptionId.Should().Be(ElectionOptionDefinition.ReservedBlankOptionId);

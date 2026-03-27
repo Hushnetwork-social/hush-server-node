@@ -61,6 +61,7 @@ public record ElectionBoundaryArtifactRecord(
     IReadOnlyList<ElectionOptionDefinition> Options,
     IReadOnlyList<ElectionWarningCode> AcknowledgedWarningCodes,
     ElectionTrusteeBoundarySnapshot? TrusteeSnapshot,
+    ElectionCeremonyBindingSnapshot? CeremonySnapshot,
     byte[]? FrozenEligibleVoterSetHash,
     string? TrusteePolicyExecutionReference,
     string? ReportingPolicyExecutionReference,
@@ -83,6 +84,16 @@ public record ElectionWarningAcknowledgementRecord(
     Guid? SourceTransactionId,
     long? SourceBlockHeight,
     Guid? SourceBlockId);
+
+public record ElectionCeremonyBindingSnapshot(
+    Guid CeremonyVersionId,
+    int CeremonyVersionNumber,
+    string ProfileId,
+    int BoundTrusteeCount,
+    int RequiredApprovalCount,
+    IReadOnlyList<ElectionTrusteeReference> ActiveTrustees,
+    bool EveryActiveTrusteeMustApprove,
+    string TallyPublicKeyFingerprint);
 
 public record ElectionTrusteeInvitationRecord(
     Guid Id,

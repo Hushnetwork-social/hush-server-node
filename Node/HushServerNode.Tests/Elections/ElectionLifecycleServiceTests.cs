@@ -252,6 +252,215 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task StartElectionCeremonyAsync_WithMatchingProfile_PersistsVersionAndAcceptedTrusteeStates()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection(requiredApprovalCount: 2);
+        var acceptedTrusteeA = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
+        var acceptedTrusteeB = CreateAcceptedTrusteeInvitation(election, "trustee-b", "Bob");
+        var profile = RegisterCeremonyProfile(store, "dkg-prod-2of2", trusteeCount: 2, requiredApprovalCount: 2);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedTrusteeA.Id] = acceptedTrusteeA;
+        store.TrusteeInvitations[acceptedTrusteeB.Id] = acceptedTrusteeB;
+
+        var result = await service.StartElectionCeremonyAsync(new StartElectionCeremonyRequest(
+            election.ElectionId,
+            "owner-address",
+            profile.ProfileId));
+
+        result.IsSuccess.Should().BeTrue();
+        result.CeremonyProfile.Should().NotBeNull();
+        result.CeremonyVersion.Should().NotBeNull();
+        result.CeremonyVersion!.ProfileId.Should().Be(profile.ProfileId);
+        result.CeremonyVersion.BoundTrustees.Should().HaveCount(2);
+        result.CeremonyTranscriptEvents.Should().ContainSingle(x =>
+            x.EventType == ElectionCeremonyTranscriptEventType.VersionStarted);
+        store.CeremonyVersions.Should().ContainSingle();
+        store.CeremonyTrusteeStates.Values.Should().HaveCount(2);
+        store.CeremonyTrusteeStates.Values.Should().OnlyContain(x =>
+            x.State == ElectionTrusteeCeremonyState.AcceptedTrustee);
+    }
+
+    [Fact]
+    public async Task StartElectionCeremonyAsync_WithDevProfileDisabled_ReturnsNotSupported()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store, new ElectionCeremonyOptions(EnableDevCeremonyProfiles: false));
+        var election = CreateTrusteeElection(requiredApprovalCount: 1);
+        var acceptedTrustee = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
+        var profile = RegisterCeremonyProfile(store, "dkg-dev-1of1", trusteeCount: 1, requiredApprovalCount: 1, devOnly: true);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedTrustee.Id] = acceptedTrustee;
+
+        var result = await service.StartElectionCeremonyAsync(new StartElectionCeremonyRequest(
+            election.ElectionId,
+            "owner-address",
+            profile.ProfileId));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.NotSupported);
+        store.CeremonyVersions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AcceptTrusteeInvitation_WithAcceptedRosterChangeAfterCeremonyProgress_SupersedesActiveVersion()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection(requiredApprovalCount: 1);
+        var acceptedTrustee = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
+        var pendingTrustee = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-b",
+            trusteeDisplayName: "Bob",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision);
+        var profile = RegisterCeremonyProfile(store, "dkg-prod-1of1-progress", trusteeCount: 1, requiredApprovalCount: 1);
+        var version = RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            [acceptedTrustee],
+            completedTrustees: [],
+            ready: false);
+        var progressedState = store.CeremonyTrusteeStates.Values.Single()
+            .PublishTransportKey("transport-a", DateTime.UtcNow)
+            .MarkJoined(DateTime.UtcNow);
+        store.CeremonyTrusteeStates[progressedState.Id] = progressedState;
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedTrustee.Id] = acceptedTrustee;
+        store.TrusteeInvitations[pendingTrustee.Id] = pendingTrustee;
+
+        var result = await service.AcceptTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest(
+            election.ElectionId,
+            pendingTrustee.Id,
+            "trustee-b"));
+
+        result.IsSuccess.Should().BeTrue();
+        store.CeremonyVersions[version.Id].Status.Should().Be(ElectionCeremonyVersionStatus.Superseded);
+        store.CeremonyTranscriptEvents.Should().Contain(x =>
+            x.EventType == ElectionCeremonyTranscriptEventType.VersionSuperseded &&
+            x.RestartReason!.Contains("changed the active ceremony roster", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task SubmitElectionCeremonyMaterialAsync_WithoutSelfTest_ReturnsValidationFailed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection(requiredApprovalCount: 1);
+        var acceptedTrustee = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
+        var profile = RegisterCeremonyProfile(store, "dkg-prod-1of1-submit", trusteeCount: 1, requiredApprovalCount: 1);
+        var version = RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            [acceptedTrustee],
+            completedTrustees: [],
+            ready: false);
+        var joinedState = store.CeremonyTrusteeStates.Values.Single()
+            .PublishTransportKey("transport-a", DateTime.UtcNow)
+            .MarkJoined(DateTime.UtcNow);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedTrustee.Id] = acceptedTrustee;
+        store.CeremonyTrusteeStates[joinedState.Id] = joinedState;
+
+        var result = await service.SubmitElectionCeremonyMaterialAsync(new SubmitElectionCeremonyMaterialRequest(
+            election.ElectionId,
+            version.Id,
+            "trustee-a",
+            RecipientTrusteeUserAddress: null,
+            MessageType: "share-package",
+            PayloadVersion: "v1",
+            EncryptedPayload: [1, 2, 3],
+            PayloadFingerprint: "payload-fingerprint"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        store.CeremonyMessageEnvelopes.Should().BeEmpty();
+        store.CeremonyTrusteeStates[joinedState.Id].State.Should().Be(ElectionTrusteeCeremonyState.CeremonyJoined);
+    }
+
+    [Fact]
+    public async Task CompleteElectionCeremonyTrusteeAsync_WhenThresholdReached_MarksVersionReadyAndCreatesShareCustody()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection(requiredApprovalCount: 1);
+        var acceptedTrustee = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
+        var profile = RegisterCeremonyProfile(store, "dkg-prod-1of1-ready", trusteeCount: 1, requiredApprovalCount: 1);
+        var version = RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            [acceptedTrustee],
+            completedTrustees: [],
+            ready: false);
+        var submittedState = store.CeremonyTrusteeStates.Values.Single()
+            .PublishTransportKey("transport-a", DateTime.UtcNow)
+            .MarkJoined(DateTime.UtcNow)
+            .RecordSelfTestSuccess(DateTime.UtcNow)
+            .RecordMaterialSubmitted(DateTime.UtcNow);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedTrustee.Id] = acceptedTrustee;
+        store.CeremonyTrusteeStates[submittedState.Id] = submittedState;
+
+        var result = await service.CompleteElectionCeremonyTrusteeAsync(new CompleteElectionCeremonyTrusteeRequest(
+            election.ElectionId,
+            version.Id,
+            "owner-address",
+            "trustee-a",
+            "share-v1",
+            TallyPublicKeyFingerprint: "tally-fingerprint-1"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.CeremonyVersion.Should().NotBeNull();
+        result.CeremonyVersion!.Status.Should().Be(ElectionCeremonyVersionStatus.Ready);
+        result.CeremonyShareCustody.Should().NotBeNull();
+        result.CeremonyShareCustody!.ShareVersion.Should().Be("share-v1");
+        store.CeremonyTranscriptEvents.Should().Contain(x =>
+            x.EventType == ElectionCeremonyTranscriptEventType.VersionReady);
+    }
+
+    [Fact]
+    public async Task RecordElectionCeremonyShareImportAsync_WithMismatchedBinding_ReturnsValidationFailedAndPersistsFailure()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection(requiredApprovalCount: 1);
+        var acceptedTrustee = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
+        var profile = RegisterCeremonyProfile(store, "dkg-prod-1of1-import", trusteeCount: 1, requiredApprovalCount: 1);
+        var version = RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            [acceptedTrustee],
+            completedTrustees: ["trustee-a"],
+            ready: true);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedTrustee.Id] = acceptedTrustee;
+
+        var result = await service.RecordElectionCeremonyShareImportAsync(new RecordElectionCeremonyShareImportRequest(
+            election.ElectionId,
+            version.Id,
+            "trustee-a",
+            ImportedElectionId: ElectionId.NewElectionId,
+            ImportedCeremonyVersionId: version.Id,
+            ImportedTrusteeUserAddress: "trustee-a",
+            ImportedShareVersion: "share-v1"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        store.CeremonyShareCustodyRecords.Values.Single().Status.Should().Be(ElectionCeremonyShareCustodyStatus.ImportFailed);
+    }
+
+    [Fact]
     public async Task EvaluateOpenReadinessAsync_WithMissingCurrentRevisionWarningAcknowledgement_ReturnsNotReady()
     {
         var store = new ElectionStore();
@@ -271,33 +480,39 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
-    public async Task EvaluateOpenReadinessAsync_WithPendingTrusteeAndExactThreshold_RequiresFragilityWarningAndBlocksOpen()
+    public async Task EvaluateOpenReadinessAsync_WithReadyCeremonyAtExactThreshold_RequiresFragilityWarningWithoutPendingInviteBlock()
     {
         var store = new ElectionStore();
         var service = CreateService(store);
-        var election = CreateTrusteeElection() with
-        {
-            RequiredApprovalCount = 1,
-        };
-        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
-            election.ElectionId,
-            trusteeUserAddress: "trustee-a",
-            trusteeDisplayName: "Alice",
-            invitedByPublicAddress: "owner-address",
-            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
-                DateTime.UtcNow,
-                election.CurrentDraftRevision,
-                ElectionLifecycleState.Draft);
+        var election = CreateTrusteeElection(requiredApprovalCount: 1);
+        var acceptedInvitation = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
         var pendingInvitation = ElectionModelFactory.CreateTrusteeInvitation(
             election.ElectionId,
             trusteeUserAddress: "trustee-b",
             trusteeDisplayName: "Bob",
             invitedByPublicAddress: "owner-address",
             sentAtDraftRevision: election.CurrentDraftRevision);
+        var warningAcknowledgement = ElectionModelFactory.CreateWarningAcknowledgement(
+            election.ElectionId,
+            ElectionWarningCode.AllTrusteesRequiredFragility,
+            election.CurrentDraftRevision,
+            acknowledgedByPublicAddress: "owner-address");
+        var profile = RegisterCeremonyProfile(store, "dkg-prod-1of1", trusteeCount: 1, requiredApprovalCount: 1);
+        RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            [acceptedInvitation],
+            completedTrustees: ["trustee-a"],
+            ready: true);
 
-        store.Elections[election.ElectionId] = election;
+        store.Elections[election.ElectionId] = election with
+        {
+            AcknowledgedWarningCodes = [ElectionWarningCode.AllTrusteesRequiredFragility],
+        };
         store.TrusteeInvitations[acceptedInvitation.Id] = acceptedInvitation;
         store.TrusteeInvitations[pendingInvitation.Id] = pendingInvitation;
+        store.WarningAcknowledgements.Add(warningAcknowledgement);
 
         var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
             election.ElectionId,
@@ -305,12 +520,13 @@ public class ElectionLifecycleServiceTests
 
         result.IsReadyToOpen.Should().BeFalse();
         result.RequiredWarningCodes.Should().Contain(ElectionWarningCode.AllTrusteesRequiredFragility);
-        result.MissingWarningAcknowledgements.Should().Contain(ElectionWarningCode.AllTrusteesRequiredFragility);
-        result.ValidationErrors.Should().Contain(x =>
-            x.Contains("remain pending", StringComparison.OrdinalIgnoreCase));
+        result.MissingWarningAcknowledgements.Should().BeEmpty();
         result.ValidationErrors.Should().Contain(x => x.Contains("FEAT-096", StringComparison.Ordinal));
-        result.ValidationErrors.Should().Contain(x =>
-            x.Contains("AllTrusteesRequiredFragility", StringComparison.Ordinal));
+        result.ValidationErrors.Should().NotContain(x =>
+            x.Contains("remain pending", StringComparison.OrdinalIgnoreCase));
+        result.CeremonySnapshot.Should().NotBeNull();
+        result.CeremonySnapshot!.ActiveTrustees.Should().ContainSingle(x =>
+            string.Equals(x.TrusteeUserAddress, "trustee-a", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -318,28 +534,17 @@ public class ElectionLifecycleServiceTests
     {
         var store = new ElectionStore();
         var service = CreateService(store);
-        var election = CreateTrusteeElection() with
-        {
-            RequiredApprovalCount = 1,
-        };
-        var acceptedTrusteeA = ElectionModelFactory.CreateTrusteeInvitation(
-            election.ElectionId,
-            trusteeUserAddress: "trustee-a",
-            trusteeDisplayName: "Alice",
-            invitedByPublicAddress: "owner-address",
-            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
-                DateTime.UtcNow,
-                election.CurrentDraftRevision,
-                ElectionLifecycleState.Draft);
-        var acceptedTrusteeB = ElectionModelFactory.CreateTrusteeInvitation(
-            election.ElectionId,
-            trusteeUserAddress: "trustee-b",
-            trusteeDisplayName: "Bob",
-            invitedByPublicAddress: "owner-address",
-            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
-                DateTime.UtcNow,
-                election.CurrentDraftRevision,
-                ElectionLifecycleState.Draft);
+        var election = CreateTrusteeElection(requiredApprovalCount: 1);
+        var acceptedTrusteeA = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
+        var acceptedTrusteeB = CreateAcceptedTrusteeInvitation(election, "trustee-b", "Bob");
+        var profile = RegisterCeremonyProfile(store, "dkg-prod-1of2", trusteeCount: 2, requiredApprovalCount: 1);
+        RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            [acceptedTrusteeA, acceptedTrusteeB],
+            completedTrustees: ["trustee-a", "trustee-b"],
+            ready: true);
 
         store.Elections[election.ElectionId] = election;
         store.TrusteeInvitations[acceptedTrusteeA.Id] = acceptedTrusteeA;
@@ -496,28 +701,17 @@ public class ElectionLifecycleServiceTests
     {
         var store = new ElectionStore();
         var service = CreateService(store);
-        var election = CreateTrusteeElection() with
-        {
-            RequiredApprovalCount = 1,
-        };
-        var acceptedTrusteeA = ElectionModelFactory.CreateTrusteeInvitation(
-            election.ElectionId,
-            trusteeUserAddress: "trustee-a",
-            trusteeDisplayName: "Alice",
-            invitedByPublicAddress: "owner-address",
-            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
-                DateTime.UtcNow,
-                election.CurrentDraftRevision,
-                ElectionLifecycleState.Draft);
-        var acceptedTrusteeB = ElectionModelFactory.CreateTrusteeInvitation(
-            election.ElectionId,
-            trusteeUserAddress: "trustee-b",
-            trusteeDisplayName: "Bob",
-            invitedByPublicAddress: "owner-address",
-            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
-                DateTime.UtcNow,
-                election.CurrentDraftRevision,
-                ElectionLifecycleState.Draft);
+        var election = CreateTrusteeElection(requiredApprovalCount: 1);
+        var acceptedTrusteeA = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
+        var acceptedTrusteeB = CreateAcceptedTrusteeInvitation(election, "trustee-b", "Bob");
+        var profile = RegisterCeremonyProfile(store, "dkg-prod-1of2-open", trusteeCount: 2, requiredApprovalCount: 1);
+        RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            [acceptedTrusteeA, acceptedTrusteeB],
+            completedTrustees: ["trustee-a", "trustee-b"],
+            ready: true);
         var proposal = ElectionModelFactory.CreateGovernedProposal(
             election,
             ElectionGovernedActionType.Open,
@@ -540,6 +734,10 @@ public class ElectionLifecycleServiceTests
         result.GovernedProposal.Should().NotBeNull();
         result.GovernedProposal!.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionSucceeded);
         result.GovernedProposalApproval.Should().NotBeNull();
+        result.BoundaryArtifact.Should().NotBeNull();
+        result.BoundaryArtifact!.CeremonySnapshot.Should().NotBeNull();
+        result.BoundaryArtifact.CeremonySnapshot!.ProfileId.Should().Be(profile.ProfileId);
+        result.BoundaryArtifact.CeremonySnapshot.ActiveTrustees.Should().HaveCount(2);
         store.GovernedProposalApprovals.Should().ContainSingle();
         store.BoundaryArtifacts.Should().ContainSingle();
         store.Elections[election.ElectionId].OpenArtifactId.Should().Be(result.BoundaryArtifact!.Id);
@@ -715,8 +913,13 @@ public class ElectionLifecycleServiceTests
         result.ErrorCode.Should().Be(ElectionCommandErrorCode.InvalidState);
     }
 
-    private static ElectionLifecycleService CreateService(ElectionStore store) =>
-        new(new FakeUnitOfWorkProvider(store), NullLogger<ElectionLifecycleService>.Instance);
+    private static ElectionLifecycleService CreateService(
+        ElectionStore store,
+        ElectionCeremonyOptions? ceremonyOptions = null) =>
+        new(
+            new FakeUnitOfWorkProvider(store),
+            NullLogger<ElectionLifecycleService>.Instance,
+            ceremonyOptions ?? new ElectionCeremonyOptions());
 
     private static ElectionRecord CreateAdminElection(
         string title = "Board Election",
@@ -760,7 +963,8 @@ public class ElectionLifecycleServiceTests
         };
 
     private static ElectionRecord CreateTrusteeElection(
-        IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null) =>
+        IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null,
+        int requiredApprovalCount = 2) =>
         ElectionModelFactory.CreateDraftRecord(
             electionId: ElectionId.NewElectionId,
             title: "Referendum",
@@ -789,7 +993,98 @@ public class ElectionLifecycleServiceTests
                 new ElectionOptionDefinition("no", "No", null, 2, IsBlankOption: false),
             ],
             acknowledgedWarningCodes: acknowledgedWarningCodes,
-            requiredApprovalCount: 2);
+            requiredApprovalCount: requiredApprovalCount);
+
+    private static ElectionTrusteeInvitationRecord CreateAcceptedTrusteeInvitation(
+        ElectionRecord election,
+        string trusteeUserAddress,
+        string trusteeDisplayName) =>
+        ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: trusteeUserAddress,
+            trusteeDisplayName: trusteeDisplayName,
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision).Accept(
+                DateTime.UtcNow,
+                election.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+
+    private static ElectionCeremonyProfileRecord RegisterCeremonyProfile(
+        ElectionStore store,
+        string profileId,
+        int trusteeCount,
+        int requiredApprovalCount,
+        bool devOnly = false)
+    {
+        var profile = ElectionModelFactory.CreateCeremonyProfile(
+            profileId: profileId,
+            displayName: profileId,
+            description: $"Test profile {profileId}",
+            providerKey: devOnly ? "hush-dev" : "hush-prod",
+            profileVersion: "v1",
+            trusteeCount: trusteeCount,
+            requiredApprovalCount: requiredApprovalCount,
+            devOnly: devOnly);
+        store.CeremonyProfiles[profile.ProfileId] = profile;
+        return profile;
+    }
+
+    private static ElectionCeremonyVersionRecord RegisterCeremonyVersion(
+        ElectionStore store,
+        ElectionRecord election,
+        ElectionCeremonyProfileRecord profile,
+        IReadOnlyList<ElectionTrusteeInvitationRecord> acceptedInvitations,
+        IReadOnlyList<string>? completedTrustees = null,
+        bool ready = false,
+        string tallyFingerprint = "tally-fingerprint-v1")
+    {
+        var version = ElectionModelFactory.CreateCeremonyVersion(
+            election.ElectionId,
+            versionNumber: 1,
+            profile.ProfileId,
+            profile.RequiredApprovalCount,
+            acceptedInvitations
+                .Select(x => new ElectionTrusteeReference(x.TrusteeUserAddress, x.TrusteeDisplayName))
+                .ToArray(),
+            startedByPublicAddress: "owner-address");
+
+        foreach (var invitation in acceptedInvitations)
+        {
+            var trusteeState = ElectionModelFactory.CreateCeremonyTrusteeState(
+                election.ElectionId,
+                version.Id,
+                invitation.TrusteeUserAddress,
+                invitation.TrusteeDisplayName,
+                state: ElectionTrusteeCeremonyState.AcceptedTrustee);
+
+            if (completedTrustees?.Contains(invitation.TrusteeUserAddress, StringComparer.OrdinalIgnoreCase) == true)
+            {
+                trusteeState = trusteeState
+                    .PublishTransportKey($"transport-{invitation.TrusteeUserAddress}", DateTime.UtcNow)
+                    .MarkJoined(DateTime.UtcNow)
+                    .RecordSelfTestSuccess(DateTime.UtcNow)
+                    .RecordMaterialSubmitted(DateTime.UtcNow)
+                    .MarkCompleted(DateTime.UtcNow, "share-v1");
+
+                var custodyRecord = ElectionModelFactory.CreateCeremonyShareCustodyRecord(
+                    election.ElectionId,
+                    version.Id,
+                    invitation.TrusteeUserAddress,
+                    "share-v1");
+                store.CeremonyShareCustodyRecords[custodyRecord.Id] = custodyRecord;
+            }
+
+            store.CeremonyTrusteeStates[trusteeState.Id] = trusteeState;
+        }
+
+        if (ready)
+        {
+            version = version.MarkReady(DateTime.UtcNow, tallyFingerprint);
+        }
+
+        store.CeremonyVersions[version.Id] = version;
+        return version;
+    }
 
     private static ElectionDraftSpecification CreateAdminDraftSpecification(
         string title = "Board Election",
