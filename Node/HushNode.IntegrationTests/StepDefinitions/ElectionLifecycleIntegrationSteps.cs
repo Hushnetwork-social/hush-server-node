@@ -529,16 +529,13 @@ public sealed class ElectionLifecycleIntegrationSteps
             error.Contains("FEAT-096", StringComparison.Ordinal));
     }
 
-    [Then(@"the blocked trustee open should be rejected through gRPC")]
-    public void ThenTheBlockedTrusteeOpenShouldBeRejectedThroughGrpc()
+    [Then(@"the direct trustee open endpoint should reject the request through gRPC")]
+    public void ThenTheDirectTrusteeOpenEndpointShouldRejectTheRequestThroughGrpc()
     {
         _lastCommandResponse.Should().NotBeNull();
         _lastCommandResponse!.Success.Should().BeFalse();
-        _lastCommandResponse.ErrorCode.Should().Be(ElectionCommandErrorCodeProto.DependencyBlocked);
-        _lastCommandResponse.ValidationErrors.Should().Contain(error =>
-            error.Contains("remain pending", StringComparison.OrdinalIgnoreCase));
-        _lastCommandResponse.ValidationErrors.Should().Contain(error =>
-            error.Contains("FEAT-096", StringComparison.Ordinal));
+        _lastCommandResponse.ErrorCode.Should().Be(ElectionCommandErrorCodeProto.NotSupported);
+        _lastCommandResponse.ErrorMessage.Should().Contain("governed proposal workflow");
     }
 
     [Then(@"the pending governed open should block further draft changes")]

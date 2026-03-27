@@ -39,7 +39,7 @@ Feature: FEAT-094 election lifecycle integration
     Then the readiness response should require the "AllTrusteesRequiredFragility" warning
     And the readiness response should report the "AllTrusteesRequiredFragility" warning as missing
     And the readiness response should include the pending trustee and FEAT-096 blockers
-    And the blocked trustee open should be rejected through gRPC
+    And the direct trustee open endpoint should reject the request through gRPC
 
   @FEAT-096 @AT-GOV-096-OPEN
   Scenario: Governed open blocks further draft edits and opens at trustee threshold

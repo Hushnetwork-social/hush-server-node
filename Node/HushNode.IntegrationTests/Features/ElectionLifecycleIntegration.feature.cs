@@ -249,7 +249,7 @@ namespace HushNode.IntegrationTests.Features
     testRunner.And("the readiness response should include the pending trustee and FEAT-096 blockers", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 42
-    testRunner.And("the blocked trustee open should be rejected through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("the direct trustee open endpoint should reject the request through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
             this.ScenarioCleanup();
