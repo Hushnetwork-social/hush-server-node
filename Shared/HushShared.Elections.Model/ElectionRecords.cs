@@ -61,6 +61,7 @@ public record ElectionBoundaryArtifactRecord(
     IReadOnlyList<ElectionOptionDefinition> Options,
     IReadOnlyList<ElectionWarningCode> AcknowledgedWarningCodes,
     ElectionTrusteeBoundarySnapshot? TrusteeSnapshot,
+    ElectionCeremonyBindingSnapshot? CeremonySnapshot,
     byte[]? FrozenEligibleVoterSetHash,
     string? TrusteePolicyExecutionReference,
     string? ReportingPolicyExecutionReference,
@@ -83,6 +84,16 @@ public record ElectionWarningAcknowledgementRecord(
     Guid? SourceTransactionId,
     long? SourceBlockHeight,
     Guid? SourceBlockId);
+
+public record ElectionCeremonyBindingSnapshot(
+    Guid CeremonyVersionId,
+    int CeremonyVersionNumber,
+    string ProfileId,
+    int BoundTrusteeCount,
+    int RequiredApprovalCount,
+    IReadOnlyList<ElectionTrusteeReference> ActiveTrustees,
+    bool EveryActiveTrusteeMustApprove,
+    string TallyPublicKeyFingerprint);
 
 public record ElectionTrusteeInvitationRecord(
     Guid Id,
@@ -293,3 +304,346 @@ public record ElectionGovernedProposalApprovalRecord(
     Guid? SourceTransactionId,
     long? SourceBlockHeight,
     Guid? SourceBlockId);
+
+public record ElectionCeremonyProfileRecord(
+    string ProfileId,
+    string DisplayName,
+    string Description,
+    string ProviderKey,
+    string ProfileVersion,
+    int TrusteeCount,
+    int RequiredApprovalCount,
+    bool DevOnly,
+    DateTime RegisteredAt,
+    DateTime LastUpdatedAt);
+
+public record ElectionCeremonyVersionRecord(
+    Guid Id,
+    ElectionId ElectionId,
+    int VersionNumber,
+    string ProfileId,
+    ElectionCeremonyVersionStatus Status,
+    int TrusteeCount,
+    int RequiredApprovalCount,
+    IReadOnlyList<ElectionTrusteeReference> BoundTrustees,
+    string StartedByPublicAddress,
+    DateTime StartedAt,
+    DateTime? CompletedAt,
+    DateTime? SupersededAt,
+    string? SupersededReason,
+    string? TallyPublicKeyFingerprint)
+{
+    public bool IsActive => Status != ElectionCeremonyVersionStatus.Superseded;
+
+    public ElectionCeremonyVersionRecord MarkReady(
+        DateTime completedAt,
+        string tallyPublicKeyFingerprint)
+    {
+        EnsureInProgress();
+
+        if (string.IsNullOrWhiteSpace(tallyPublicKeyFingerprint))
+        {
+            throw new ArgumentException("Tally public key fingerprint is required.", nameof(tallyPublicKeyFingerprint));
+        }
+
+        return this with
+        {
+            Status = ElectionCeremonyVersionStatus.Ready,
+            CompletedAt = completedAt,
+            TallyPublicKeyFingerprint = tallyPublicKeyFingerprint.Trim(),
+        };
+    }
+
+    public ElectionCeremonyVersionRecord Supersede(
+        DateTime supersededAt,
+        string supersededReason)
+    {
+        if (Status == ElectionCeremonyVersionStatus.Superseded)
+        {
+            throw new InvalidOperationException("Ceremony version is already superseded.");
+        }
+
+        if (string.IsNullOrWhiteSpace(supersededReason))
+        {
+            throw new ArgumentException("Superseded reason is required.", nameof(supersededReason));
+        }
+
+        return this with
+        {
+            Status = ElectionCeremonyVersionStatus.Superseded,
+            SupersededAt = supersededAt,
+            SupersededReason = supersededReason.Trim(),
+        };
+    }
+
+    private void EnsureInProgress()
+    {
+        if (Status != ElectionCeremonyVersionStatus.InProgress)
+        {
+            throw new InvalidOperationException("Only in-progress ceremony versions can become ready.");
+        }
+    }
+}
+
+public record ElectionCeremonyTranscriptEventRecord(
+    Guid Id,
+    ElectionId ElectionId,
+    Guid CeremonyVersionId,
+    int VersionNumber,
+    ElectionCeremonyTranscriptEventType EventType,
+    string? ActorPublicAddress,
+    string? TrusteeUserAddress,
+    string? TrusteeDisplayName,
+    ElectionTrusteeCeremonyState? TrusteeState,
+    string EventSummary,
+    string? EvidenceReference,
+    string? RestartReason,
+    string? TallyPublicKeyFingerprint,
+    DateTime OccurredAt);
+
+public record ElectionCeremonyMessageEnvelopeRecord(
+    Guid Id,
+    ElectionId ElectionId,
+    Guid CeremonyVersionId,
+    int VersionNumber,
+    string ProfileId,
+    string SenderTrusteeUserAddress,
+    string? RecipientTrusteeUserAddress,
+    string MessageType,
+    string PayloadVersion,
+    byte[] EncryptedPayload,
+    string PayloadFingerprint,
+    DateTime SubmittedAt);
+
+public record ElectionCeremonyTrusteeStateRecord(
+    Guid Id,
+    ElectionId ElectionId,
+    Guid CeremonyVersionId,
+    string TrusteeUserAddress,
+    string? TrusteeDisplayName,
+    ElectionTrusteeCeremonyState State,
+    string? TransportPublicKeyFingerprint,
+    DateTime? TransportPublicKeyPublishedAt,
+    DateTime? JoinedAt,
+    DateTime? SelfTestSucceededAt,
+    DateTime? MaterialSubmittedAt,
+    DateTime? ValidationFailedAt,
+    string? ValidationFailureReason,
+    DateTime? CompletedAt,
+    DateTime? RemovedAt,
+    string? ShareVersion,
+    DateTime LastUpdatedAt)
+{
+    public bool HasPublishedTransportKey =>
+        !string.IsNullOrWhiteSpace(TransportPublicKeyFingerprint) &&
+        TransportPublicKeyPublishedAt.HasValue;
+
+    public ElectionCeremonyTrusteeStateRecord PublishTransportKey(
+        string transportPublicKeyFingerprint,
+        DateTime publishedAt)
+    {
+        EnsureMutable();
+
+        if (string.IsNullOrWhiteSpace(transportPublicKeyFingerprint))
+        {
+            throw new ArgumentException("Transport public key fingerprint is required.", nameof(transportPublicKeyFingerprint));
+        }
+
+        return this with
+        {
+            TransportPublicKeyFingerprint = transportPublicKeyFingerprint.Trim(),
+            TransportPublicKeyPublishedAt = publishedAt,
+            LastUpdatedAt = publishedAt,
+        };
+    }
+
+    public ElectionCeremonyTrusteeStateRecord MarkJoined(DateTime joinedAt)
+    {
+        EnsureMutable();
+        EnsureTransportKeyPublished();
+        EnsureStateIn(ElectionTrusteeCeremonyState.AcceptedTrustee, ElectionTrusteeCeremonyState.CeremonyNotStarted);
+
+        return this with
+        {
+            State = ElectionTrusteeCeremonyState.CeremonyJoined,
+            JoinedAt = joinedAt,
+            LastUpdatedAt = joinedAt,
+        };
+    }
+
+    public ElectionCeremonyTrusteeStateRecord RecordSelfTestSuccess(DateTime succeededAt)
+    {
+        EnsureMutable();
+        EnsureStateIn(ElectionTrusteeCeremonyState.CeremonyJoined, ElectionTrusteeCeremonyState.CeremonyValidationFailed);
+
+        return this with
+        {
+            SelfTestSucceededAt = succeededAt,
+            ValidationFailedAt = null,
+            ValidationFailureReason = null,
+            LastUpdatedAt = succeededAt,
+        };
+    }
+
+    public ElectionCeremonyTrusteeStateRecord RecordMaterialSubmitted(DateTime submittedAt)
+    {
+        EnsureMutable();
+        EnsureStateIn(ElectionTrusteeCeremonyState.CeremonyJoined, ElectionTrusteeCeremonyState.CeremonyValidationFailed);
+
+        if (!SelfTestSucceededAt.HasValue)
+        {
+            throw new InvalidOperationException("Trustee material cannot be submitted before a successful self-test.");
+        }
+
+        return this with
+        {
+            State = ElectionTrusteeCeremonyState.CeremonyMaterialSubmitted,
+            MaterialSubmittedAt = submittedAt,
+            LastUpdatedAt = submittedAt,
+        };
+    }
+
+    public ElectionCeremonyTrusteeStateRecord RecordValidationFailure(
+        string validationFailureReason,
+        DateTime failedAt)
+    {
+        EnsureMutable();
+        EnsureStateIn(ElectionTrusteeCeremonyState.CeremonyMaterialSubmitted);
+
+        if (string.IsNullOrWhiteSpace(validationFailureReason))
+        {
+            throw new ArgumentException("Validation failure reason is required.", nameof(validationFailureReason));
+        }
+
+        return this with
+        {
+            State = ElectionTrusteeCeremonyState.CeremonyValidationFailed,
+            ValidationFailedAt = failedAt,
+            ValidationFailureReason = validationFailureReason.Trim(),
+            LastUpdatedAt = failedAt,
+        };
+    }
+
+    public ElectionCeremonyTrusteeStateRecord MarkCompleted(
+        DateTime completedAt,
+        string shareVersion)
+    {
+        EnsureMutable();
+        EnsureStateIn(ElectionTrusteeCeremonyState.CeremonyMaterialSubmitted);
+
+        if (string.IsNullOrWhiteSpace(shareVersion))
+        {
+            throw new ArgumentException("Share version is required.", nameof(shareVersion));
+        }
+
+        return this with
+        {
+            State = ElectionTrusteeCeremonyState.CeremonyCompleted,
+            CompletedAt = completedAt,
+            ValidationFailedAt = null,
+            ValidationFailureReason = null,
+            ShareVersion = shareVersion.Trim(),
+            LastUpdatedAt = completedAt,
+        };
+    }
+
+    public ElectionCeremonyTrusteeStateRecord MarkRemoved(DateTime removedAt)
+    {
+        if (State == ElectionTrusteeCeremonyState.Removed)
+        {
+            throw new InvalidOperationException("Trustee is already removed from this ceremony version.");
+        }
+
+        return this with
+        {
+            State = ElectionTrusteeCeremonyState.Removed,
+            RemovedAt = removedAt,
+            LastUpdatedAt = removedAt,
+        };
+    }
+
+    private void EnsureMutable()
+    {
+        if (State == ElectionTrusteeCeremonyState.Removed)
+        {
+            throw new InvalidOperationException("Removed trustees cannot advance the ceremony state.");
+        }
+    }
+
+    private void EnsureTransportKeyPublished()
+    {
+        if (!HasPublishedTransportKey)
+        {
+            throw new InvalidOperationException("Trustee must publish a transport key before joining the ceremony.");
+        }
+    }
+
+    private void EnsureStateIn(params ElectionTrusteeCeremonyState[] allowedStates)
+    {
+        if (!allowedStates.Contains(State))
+        {
+            throw new InvalidOperationException($"Trustee state '{State}' is not valid for this transition.");
+        }
+    }
+}
+
+public record ElectionCeremonyShareCustodyRecord(
+    Guid Id,
+    ElectionId ElectionId,
+    Guid CeremonyVersionId,
+    string TrusteeUserAddress,
+    string ShareVersion,
+    bool PasswordProtected,
+    ElectionCeremonyShareCustodyStatus Status,
+    DateTime? LastExportedAt,
+    DateTime? LastImportedAt,
+    DateTime? LastImportFailedAt,
+    string? LastImportFailureReason,
+    DateTime LastUpdatedAt)
+{
+    public bool MatchesImportBinding(
+        ElectionId electionId,
+        Guid ceremonyVersionId,
+        string trusteeUserAddress,
+        string shareVersion) =>
+        ElectionId == electionId &&
+        CeremonyVersionId == ceremonyVersionId &&
+        string.Equals(TrusteeUserAddress, trusteeUserAddress, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(ShareVersion, shareVersion, StringComparison.Ordinal);
+
+    public ElectionCeremonyShareCustodyRecord RecordExport(DateTime exportedAt) =>
+        this with
+        {
+            Status = ElectionCeremonyShareCustodyStatus.Exported,
+            LastExportedAt = exportedAt,
+            LastUpdatedAt = exportedAt,
+        };
+
+    public ElectionCeremonyShareCustodyRecord RecordImportSuccess(DateTime importedAt) =>
+        this with
+        {
+            Status = ElectionCeremonyShareCustodyStatus.Imported,
+            LastImportedAt = importedAt,
+            LastImportFailedAt = null,
+            LastImportFailureReason = null,
+            LastUpdatedAt = importedAt,
+        };
+
+    public ElectionCeremonyShareCustodyRecord RecordImportFailure(
+        string failureReason,
+        DateTime failedAt)
+    {
+        if (string.IsNullOrWhiteSpace(failureReason))
+        {
+            throw new ArgumentException("Import failure reason is required.", nameof(failureReason));
+        }
+
+        return this with
+        {
+            Status = ElectionCeremonyShareCustodyStatus.ImportFailed,
+            LastImportFailedAt = failedAt,
+            LastImportFailureReason = failureReason.Trim(),
+            LastUpdatedAt = failedAt,
+        };
+    }
+}

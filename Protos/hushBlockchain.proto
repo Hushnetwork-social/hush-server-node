@@ -6,6 +6,7 @@ package rpcHush;
 
 service HushBlockchain {
   rpc GetBlockchainHeight (GetBlockchainHeightRequest) returns (GetBlockchainHeightReply);
+  rpc GetElectionEnvelopeContext (GetElectionEnvelopeContextRequest) returns (GetElectionEnvelopeContextReply);
   rpc SubmitSignedTransaction(SubmitSignedTransactionRequest) returns (SubmitSignedTransactionReply);
 }
 
@@ -15,6 +16,13 @@ message GetBlockchainHeightRequest { }
 // The response message containing the last BlockIndex.
 message GetBlockchainHeightReply {
   int64 Index = 1;
+}
+
+message GetElectionEnvelopeContextRequest { }
+
+message GetElectionEnvelopeContextReply {
+  string NodePublicEncryptAddress = 1;
+  string ElectionEnvelopeVersion = 2;
 }
 
 message SubmitSignedTransactionRequest {

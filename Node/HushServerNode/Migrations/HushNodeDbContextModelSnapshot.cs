@@ -154,6 +154,9 @@ namespace HushServerNode.Migrations
                         .IsRequired()
                         .HasColumnType("varchar(24)");
 
+                    b.Property<string>("CeremonySnapshot")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("ElectionId")
                         .IsRequired()
                         .HasColumnType("varchar(40)");
@@ -219,6 +222,343 @@ namespace HushServerNode.Migrations
                     b.ToTable("ElectionBoundaryArtifactRecord", "Elections");
                 });
 
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionCeremonyMessageEnvelopeRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CeremonyVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<byte[]>("EncryptedPayload")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("MessageType")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("PayloadFingerprint")
+                        .IsRequired()
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<string>("PayloadVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("RecipientTrusteeUserAddress")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("SenderTrusteeUserAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CeremonyVersionId", "RecipientTrusteeUserAddress");
+
+                    b.HasIndex("CeremonyVersionId", "SubmittedAt");
+
+                    b.ToTable("ElectionCeremonyMessageEnvelopeRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionCeremonyProfileRecord", b =>
+                {
+                    b.Property<string>("ProfileId")
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("DevOnly")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTime>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProfileVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("ProviderKey")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<DateTime>("RegisteredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RequiredApprovalCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TrusteeCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ProfileId");
+
+                    b.HasIndex("DevOnly");
+
+                    b.HasIndex("TrusteeCount", "RequiredApprovalCount");
+
+                    b.ToTable("ElectionCeremonyProfileRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionCeremonyShareCustodyRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CeremonyVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTime?>("LastExportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastImportFailedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastImportFailureReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("PasswordProtected")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ShareVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("TrusteeUserAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CeremonyVersionId", "TrusteeUserAddress")
+                        .IsUnique();
+
+                    b.HasIndex("ElectionId", "Status");
+
+                    b.ToTable("ElectionCeremonyShareCustodyRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionCeremonyTranscriptEventRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorPublicAddress")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<Guid>("CeremonyVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("EventSummary")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("varchar(48)");
+
+                    b.Property<string>("EvidenceReference")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RestartReason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TallyPublicKeyFingerprint")
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<string>("TrusteeDisplayName")
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("TrusteeState")
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("TrusteeUserAddress")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CeremonyVersionId", "OccurredAt");
+
+                    b.HasIndex("ElectionId", "VersionNumber");
+
+                    b.ToTable("ElectionCeremonyTranscriptEventRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionCeremonyTrusteeStateRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CeremonyVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTime?>("JoinedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("MaterialSubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SelfTestSucceededAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ShareVersion")
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("TransportPublicKeyFingerprint")
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<DateTime?>("TransportPublicKeyPublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TrusteeDisplayName")
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("TrusteeUserAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<DateTime?>("ValidationFailedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ValidationFailureReason")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CeremonyVersionId", "TrusteeUserAddress")
+                        .IsUnique();
+
+                    b.HasIndex("ElectionId", "State");
+
+                    b.ToTable("ElectionCeremonyTrusteeStateRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionCeremonyVersionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BoundTrustees")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<int>("RequiredApprovalCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StartedByPublicAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(24)");
+
+                    b.Property<DateTime?>("SupersededAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SupersededReason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TallyPublicKeyFingerprint")
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<int>("TrusteeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ElectionId", "Status");
+
+                    b.HasIndex("ElectionId", "VersionNumber")
+                        .IsUnique();
+
+                    b.ToTable("ElectionCeremonyVersionRecord", "Elections");
+                });
+
             modelBuilder.Entity("HushShared.Elections.Model.ElectionDraftSnapshotRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -274,6 +614,37 @@ namespace HushServerNode.Migrations
                         .IsUnique();
 
                     b.ToTable("ElectionDraftSnapshotRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionEnvelopeAccessRecord", b =>
+                {
+                    b.Property<string>("ElectionId")
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("ActorPublicAddress")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("ActorEncryptedElectionPrivateKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("SourceBlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("SourceBlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SourceTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ElectionId", "ActorPublicAddress");
+
+                    b.HasIndex("ActorPublicAddress");
+
+                    b.ToTable("ElectionEnvelopeAccessRecord", "Elections");
                 });
 
             modelBuilder.Entity("HushShared.Elections.Model.ElectionGovernedProposalApprovalRecord", b =>

@@ -1,7 +1,7 @@
 @E2E @FoundationWalkthrough @PR @Critical
 Feature: Foundation User Walkthrough
     As a new user
-    I want to create my identity, send a message, and add a reaction
+    I want to create my identity, send a message, and react to another user's message
     So that I can verify the full system works end-to-end
 
     Background:
@@ -47,15 +47,19 @@ Feature: Foundation User Walkthrough
         And the message "Hello World!" should show confirmed status icon
 
     @Reactions @ReactionVerifierDev
-    Scenario: User adds reaction to a message
-        # Setup: Create identity and send message
-        Given the user has created identity "TestUser" via browser
-        And the user has sent message "Test message" to their personal feed
+    Scenario: User adds reaction to another user's message
+        # Setup: Alice creates identity in browser, Bob provides a backend chat message
+        Given a browser context for "Alice"
+        And "Alice" has created identity via browser
         And the browser forces dev-mode reactions
+        And Alice has a backend ChatFeed with "Bob"
+        And Bob sends a confirmed backend message "Test message" to ChatFeed(Alice,Bob)
 
-        # Action: Add reaction (using thumbs-up emoji index 0)
+        # Action: Alice syncs, opens the chat, and reacts to Bob's message in dev-mode
+        When Alice triggers feed sync
+        And Alice opens ChatFeed with "Bob" in browser
+        Then Alice should see message "Test message" from Bob
         When the user adds reaction 0 to the message "Test message"
-        # Wait for reaction transaction to reach mempool, produce block, wait for indexing
         And the transaction is processed
 
         # Verification

@@ -19,6 +19,12 @@ public interface IElectionsRepository : IRepository
 
     Task SaveDraftSnapshotAsync(ElectionDraftSnapshotRecord snapshot);
 
+    Task<ElectionEnvelopeAccessRecord?> GetElectionEnvelopeAccessAsync(ElectionId electionId, string actorPublicAddress);
+
+    Task SaveElectionEnvelopeAccessAsync(ElectionEnvelopeAccessRecord accessRecord);
+
+    Task UpdateElectionEnvelopeAccessAsync(ElectionEnvelopeAccessRecord accessRecord);
+
     Task<IReadOnlyList<ElectionBoundaryArtifactRecord>> GetBoundaryArtifactsAsync(ElectionId electionId);
 
     Task SaveBoundaryArtifactAsync(ElectionBoundaryArtifactRecord artifact);
@@ -50,4 +56,48 @@ public interface IElectionsRepository : IRepository
     Task<ElectionGovernedProposalApprovalRecord?> GetGovernedProposalApprovalAsync(Guid proposalId, string trusteeUserAddress);
 
     Task SaveGovernedProposalApprovalAsync(ElectionGovernedProposalApprovalRecord approval);
+
+    Task<IReadOnlyList<ElectionCeremonyProfileRecord>> GetCeremonyProfilesAsync();
+
+    Task<ElectionCeremonyProfileRecord?> GetCeremonyProfileAsync(string profileId);
+
+    Task SaveCeremonyProfileAsync(ElectionCeremonyProfileRecord profile);
+
+    Task UpdateCeremonyProfileAsync(ElectionCeremonyProfileRecord profile);
+
+    Task<IReadOnlyList<ElectionCeremonyVersionRecord>> GetCeremonyVersionsAsync(ElectionId electionId);
+
+    Task<ElectionCeremonyVersionRecord?> GetCeremonyVersionAsync(Guid ceremonyVersionId);
+
+    Task<ElectionCeremonyVersionRecord?> GetActiveCeremonyVersionAsync(ElectionId electionId);
+
+    Task SaveCeremonyVersionAsync(ElectionCeremonyVersionRecord version);
+
+    Task UpdateCeremonyVersionAsync(ElectionCeremonyVersionRecord version);
+
+    Task<IReadOnlyList<ElectionCeremonyTranscriptEventRecord>> GetCeremonyTranscriptEventsAsync(Guid ceremonyVersionId);
+
+    Task SaveCeremonyTranscriptEventAsync(ElectionCeremonyTranscriptEventRecord transcriptEvent);
+
+    Task<IReadOnlyList<ElectionCeremonyMessageEnvelopeRecord>> GetCeremonyMessageEnvelopesAsync(Guid ceremonyVersionId);
+
+    Task<IReadOnlyList<ElectionCeremonyMessageEnvelopeRecord>> GetCeremonyMessageEnvelopesForRecipientAsync(Guid ceremonyVersionId, string trusteeUserAddress);
+
+    Task SaveCeremonyMessageEnvelopeAsync(ElectionCeremonyMessageEnvelopeRecord messageEnvelope);
+
+    Task<IReadOnlyList<ElectionCeremonyTrusteeStateRecord>> GetCeremonyTrusteeStatesAsync(Guid ceremonyVersionId);
+
+    Task<ElectionCeremonyTrusteeStateRecord?> GetCeremonyTrusteeStateAsync(Guid ceremonyVersionId, string trusteeUserAddress);
+
+    Task SaveCeremonyTrusteeStateAsync(ElectionCeremonyTrusteeStateRecord trusteeState);
+
+    Task UpdateCeremonyTrusteeStateAsync(ElectionCeremonyTrusteeStateRecord trusteeState);
+
+    Task<IReadOnlyList<ElectionCeremonyShareCustodyRecord>> GetCeremonyShareCustodyRecordsAsync(Guid ceremonyVersionId);
+
+    Task<ElectionCeremonyShareCustodyRecord?> GetCeremonyShareCustodyRecordAsync(Guid ceremonyVersionId, string trusteeUserAddress);
+
+    Task SaveCeremonyShareCustodyRecordAsync(ElectionCeremonyShareCustodyRecord shareCustodyRecord);
+
+    Task UpdateCeremonyShareCustodyRecordAsync(ElectionCeremonyShareCustodyRecord shareCustodyRecord);
 }

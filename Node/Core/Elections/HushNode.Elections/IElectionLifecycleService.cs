@@ -16,6 +16,26 @@ public interface IElectionLifecycleService
 
     Task<ElectionCommandResult> RevokeTrusteeInvitationAsync(ResolveElectionTrusteeInvitationRequest request);
 
+    Task<ElectionCommandResult> StartElectionCeremonyAsync(StartElectionCeremonyRequest request);
+
+    Task<ElectionCommandResult> RestartElectionCeremonyAsync(RestartElectionCeremonyRequest request);
+
+    Task<ElectionCommandResult> PublishElectionCeremonyTransportKeyAsync(PublishElectionCeremonyTransportKeyRequest request);
+
+    Task<ElectionCommandResult> JoinElectionCeremonyAsync(JoinElectionCeremonyRequest request);
+
+    Task<ElectionCommandResult> RecordElectionCeremonySelfTestSuccessAsync(RecordElectionCeremonySelfTestRequest request);
+
+    Task<ElectionCommandResult> SubmitElectionCeremonyMaterialAsync(SubmitElectionCeremonyMaterialRequest request);
+
+    Task<ElectionCommandResult> RecordElectionCeremonyValidationFailureAsync(RecordElectionCeremonyValidationFailureRequest request);
+
+    Task<ElectionCommandResult> CompleteElectionCeremonyTrusteeAsync(CompleteElectionCeremonyTrusteeRequest request);
+
+    Task<ElectionCommandResult> RecordElectionCeremonyShareExportAsync(RecordElectionCeremonyShareExportRequest request);
+
+    Task<ElectionCommandResult> RecordElectionCeremonyShareImportAsync(RecordElectionCeremonyShareImportRequest request);
+
     Task<ElectionOpenValidationResult> EvaluateOpenReadinessAsync(EvaluateElectionOpenReadinessRequest request);
 
     Task<ElectionCommandResult> StartGovernedProposalAsync(StartElectionGovernedProposalRequest request);
@@ -31,49 +51,110 @@ public interface IElectionLifecycleService
     Task<ElectionCommandResult> FinalizeElectionAsync(FinalizeElectionRequest request);
 }
 
-public record ElectionDraftSpecification(
-    string Title,
-    string? ShortDescription,
-    string? ExternalReferenceCode,
-    ElectionClass ElectionClass,
-    ElectionBindingStatus BindingStatus,
-    ElectionGovernanceMode GovernanceMode,
-    ElectionDisclosureMode DisclosureMode,
-    ParticipationPrivacyMode ParticipationPrivacyMode,
-    VoteUpdatePolicy VoteUpdatePolicy,
-    EligibilitySourceType EligibilitySourceType,
-    EligibilityMutationPolicy EligibilityMutationPolicy,
-    OutcomeRuleDefinition OutcomeRule,
-    IReadOnlyList<ApprovedClientApplicationRecord> ApprovedClientApplications,
-    string ProtocolOmegaVersion,
-    ReportingPolicy ReportingPolicy,
-    ReviewWindowPolicy ReviewWindowPolicy,
-    IReadOnlyList<ElectionOptionDefinition> OwnerOptions,
-    IReadOnlyList<ElectionWarningCode>? AcknowledgedWarningCodes = null,
-    int? RequiredApprovalCount = null);
-
 public record CreateElectionDraftRequest(
     string OwnerPublicAddress,
     string ActorPublicAddress,
     string SnapshotReason,
-    ElectionDraftSpecification Draft);
+    ElectionDraftSpecification Draft,
+    ElectionId? PreassignedElectionId = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record UpdateElectionDraftRequest(
     ElectionId ElectionId,
     string ActorPublicAddress,
     string SnapshotReason,
-    ElectionDraftSpecification Draft);
+    ElectionDraftSpecification Draft,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record InviteElectionTrusteeRequest(
     ElectionId ElectionId,
     string ActorPublicAddress,
     string TrusteeUserAddress,
-    string? TrusteeDisplayName);
+    string? TrusteeDisplayName,
+    Guid? PreassignedInvitationId = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record ResolveElectionTrusteeInvitationRequest(
     ElectionId ElectionId,
     Guid InvitationId,
+    string ActorPublicAddress,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
+public record StartElectionCeremonyRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    string ProfileId);
+
+public record RestartElectionCeremonyRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    string ProfileId,
+    string RestartReason);
+
+public record PublishElectionCeremonyTransportKeyRequest(
+    ElectionId ElectionId,
+    Guid CeremonyVersionId,
+    string ActorPublicAddress,
+    string TransportPublicKeyFingerprint);
+
+public record JoinElectionCeremonyRequest(
+    ElectionId ElectionId,
+    Guid CeremonyVersionId,
     string ActorPublicAddress);
+
+public record RecordElectionCeremonySelfTestRequest(
+    ElectionId ElectionId,
+    Guid CeremonyVersionId,
+    string ActorPublicAddress);
+
+public record SubmitElectionCeremonyMaterialRequest(
+    ElectionId ElectionId,
+    Guid CeremonyVersionId,
+    string ActorPublicAddress,
+    string? RecipientTrusteeUserAddress,
+    string MessageType,
+    string PayloadVersion,
+    byte[] EncryptedPayload,
+    string PayloadFingerprint);
+
+public record RecordElectionCeremonyValidationFailureRequest(
+    ElectionId ElectionId,
+    Guid CeremonyVersionId,
+    string ActorPublicAddress,
+    string TrusteeUserAddress,
+    string ValidationFailureReason,
+    string? EvidenceReference = null);
+
+public record CompleteElectionCeremonyTrusteeRequest(
+    ElectionId ElectionId,
+    Guid CeremonyVersionId,
+    string ActorPublicAddress,
+    string TrusteeUserAddress,
+    string ShareVersion,
+    string? TallyPublicKeyFingerprint = null);
+
+public record RecordElectionCeremonyShareExportRequest(
+    ElectionId ElectionId,
+    Guid CeremonyVersionId,
+    string ActorPublicAddress,
+    string ShareVersion);
+
+public record RecordElectionCeremonyShareImportRequest(
+    ElectionId ElectionId,
+    Guid CeremonyVersionId,
+    string ActorPublicAddress,
+    ElectionId ImportedElectionId,
+    Guid ImportedCeremonyVersionId,
+    string ImportedTrusteeUserAddress,
+    string ImportedShareVersion);
 
 public record EvaluateElectionOpenReadinessRequest(
     ElectionId ElectionId,
@@ -82,18 +163,28 @@ public record EvaluateElectionOpenReadinessRequest(
 public record StartElectionGovernedProposalRequest(
     ElectionId ElectionId,
     ElectionGovernedActionType ActionType,
-    string ActorPublicAddress);
+    string ActorPublicAddress,
+    Guid? PreassignedProposalId = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record ApproveElectionGovernedProposalRequest(
     ElectionId ElectionId,
     Guid ProposalId,
     string ActorPublicAddress,
-    string? ApprovalNote = null);
+    string? ApprovalNote = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record RetryElectionGovernedProposalExecutionRequest(
     ElectionId ElectionId,
     Guid ProposalId,
-    string ActorPublicAddress);
+    string ActorPublicAddress,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record OpenElectionRequest(
     ElectionId ElectionId,
@@ -102,19 +193,28 @@ public record OpenElectionRequest(
     byte[]? FrozenEligibleVoterSetHash = null,
     string? TrusteePolicyExecutionReference = null,
     string? ReportingPolicyExecutionReference = null,
-    string? ReviewWindowExecutionReference = null);
+    string? ReviewWindowExecutionReference = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record CloseElectionRequest(
     ElectionId ElectionId,
     string ActorPublicAddress,
     byte[]? AcceptedBallotSetHash = null,
-    byte[]? FinalEncryptedTallyHash = null);
+    byte[]? FinalEncryptedTallyHash = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public record FinalizeElectionRequest(
     ElectionId ElectionId,
     string ActorPublicAddress,
     byte[]? AcceptedBallotSetHash = null,
-    byte[]? FinalEncryptedTallyHash = null);
+    byte[]? FinalEncryptedTallyHash = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
 
 public enum ElectionCommandErrorCode
 {
@@ -140,6 +240,12 @@ public record ElectionCommandResult
     public ElectionTrusteeInvitationRecord? TrusteeInvitation { get; init; }
     public ElectionGovernedProposalRecord? GovernedProposal { get; init; }
     public ElectionGovernedProposalApprovalRecord? GovernedProposalApproval { get; init; }
+    public ElectionCeremonyProfileRecord? CeremonyProfile { get; init; }
+    public ElectionCeremonyVersionRecord? CeremonyVersion { get; init; }
+    public IReadOnlyList<ElectionCeremonyTranscriptEventRecord> CeremonyTranscriptEvents { get; init; } = Array.Empty<ElectionCeremonyTranscriptEventRecord>();
+    public ElectionCeremonyTrusteeStateRecord? CeremonyTrusteeState { get; init; }
+    public ElectionCeremonyMessageEnvelopeRecord? CeremonyMessageEnvelope { get; init; }
+    public ElectionCeremonyShareCustodyRecord? CeremonyShareCustody { get; init; }
 
     public static ElectionCommandResult Success(
         ElectionRecord election,
@@ -147,7 +253,13 @@ public record ElectionCommandResult
         ElectionBoundaryArtifactRecord? boundaryArtifact = null,
         ElectionTrusteeInvitationRecord? trusteeInvitation = null,
         ElectionGovernedProposalRecord? governedProposal = null,
-        ElectionGovernedProposalApprovalRecord? governedProposalApproval = null) =>
+        ElectionGovernedProposalApprovalRecord? governedProposalApproval = null,
+        ElectionCeremonyProfileRecord? ceremonyProfile = null,
+        ElectionCeremonyVersionRecord? ceremonyVersion = null,
+        IReadOnlyList<ElectionCeremonyTranscriptEventRecord>? ceremonyTranscriptEvents = null,
+        ElectionCeremonyTrusteeStateRecord? ceremonyTrusteeState = null,
+        ElectionCeremonyMessageEnvelopeRecord? ceremonyMessageEnvelope = null,
+        ElectionCeremonyShareCustodyRecord? ceremonyShareCustody = null) =>
         new()
         {
             IsSuccess = true,
@@ -158,6 +270,12 @@ public record ElectionCommandResult
             TrusteeInvitation = trusteeInvitation,
             GovernedProposal = governedProposal,
             GovernedProposalApproval = governedProposalApproval,
+            CeremonyProfile = ceremonyProfile,
+            CeremonyVersion = ceremonyVersion,
+            CeremonyTranscriptEvents = ceremonyTranscriptEvents ?? Array.Empty<ElectionCeremonyTranscriptEventRecord>(),
+            CeremonyTrusteeState = ceremonyTrusteeState,
+            CeremonyMessageEnvelope = ceremonyMessageEnvelope,
+            CeremonyShareCustody = ceremonyShareCustody,
         };
 
     public static ElectionCommandResult Failure(
@@ -179,23 +297,29 @@ public record ElectionOpenValidationResult
     public IReadOnlyList<string> ValidationErrors { get; init; } = Array.Empty<string>();
     public IReadOnlyList<ElectionWarningCode> RequiredWarningCodes { get; init; } = Array.Empty<ElectionWarningCode>();
     public IReadOnlyList<ElectionWarningCode> MissingWarningAcknowledgements { get; init; } = Array.Empty<ElectionWarningCode>();
+    public ElectionCeremonyBindingSnapshot? CeremonySnapshot { get; init; }
 
-    public static ElectionOpenValidationResult Ready(IReadOnlyList<ElectionWarningCode> requiredWarningCodes) =>
+    public static ElectionOpenValidationResult Ready(
+        IReadOnlyList<ElectionWarningCode> requiredWarningCodes,
+        ElectionCeremonyBindingSnapshot? ceremonySnapshot = null) =>
         new()
         {
             IsReadyToOpen = true,
             RequiredWarningCodes = requiredWarningCodes,
+            CeremonySnapshot = ceremonySnapshot,
         };
 
     public static ElectionOpenValidationResult NotReady(
         IReadOnlyList<string> validationErrors,
         IReadOnlyList<ElectionWarningCode> requiredWarningCodes,
-        IReadOnlyList<ElectionWarningCode> missingWarningAcknowledgements) =>
+        IReadOnlyList<ElectionWarningCode> missingWarningAcknowledgements,
+        ElectionCeremonyBindingSnapshot? ceremonySnapshot = null) =>
         new()
         {
             IsReadyToOpen = false,
             ValidationErrors = validationErrors,
             RequiredWarningCodes = requiredWarningCodes,
             MissingWarningAcknowledgements = missingWarningAcknowledgements,
+            CeremonySnapshot = ceremonySnapshot,
         };
 }

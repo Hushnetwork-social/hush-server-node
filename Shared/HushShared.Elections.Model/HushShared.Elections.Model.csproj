@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <ItemGroup>
+    <ProjectReference Include="..\HushShared.Blockchain.Model\HushShared.Blockchain.Model.csproj" />
+    <ProjectReference Include="..\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

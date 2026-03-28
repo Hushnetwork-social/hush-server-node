@@ -1,12 +1,15 @@
+using System.Text.Json;
 using HushShared.Blockchain.Model;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
+using HushShared.Elections.Model;
 using HushShared.Feeds.Model;
 using HushShared.Identity.Model;
 using HushShared.Reactions.Model;
 using HushNode.Reactions.Crypto;
 using HushServerNode.Testing;
 using Olimpo;
+using System.Collections.Concurrent;
 
 namespace HushNode.IntegrationTests.Infrastructure;
 
@@ -15,6 +18,8 @@ namespace HushNode.IntegrationTests.Infrastructure;
 /// </summary>
 internal static class TestTransactionFactory
 {
+    private static readonly ConcurrentDictionary<string, EncryptKeys> ElectionKeysByElectionId = new();
+
     /// <summary>
     /// Creates a signed identity registration transaction.
     /// </summary>
@@ -40,6 +45,478 @@ internal static class TestTransactionFactory
         var signedTransaction = new SignedTransaction<FullIdentityPayload>(
             unsignedTransaction,
             new SignatureInfo(identity.PublicSigningAddress, signature));
+
+        return signedTransaction.ToJson();
+    }
+
+    /// <summary>
+    /// Creates a signed election draft creation transaction.
+    /// </summary>
+    public static (string Transaction, ElectionId ElectionId) CreateElectionDraft(
+        TestIdentity owner,
+        string snapshotReason,
+        ElectionDraftSpecification draft)
+    {
+        var electionId = ElectionId.NewElectionId;
+        var electionEncryptKeys = new EncryptKeys();
+        ElectionKeysByElectionId[electionId.ToString()] = electionEncryptKeys;
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.CreateDraft,
+            JsonSerializer.SerializeToElement(new CreateElectionDraftActionPayload(
+                owner.PublicSigningAddress,
+                snapshotReason,
+                draft)));
+        var unsignedTransaction = EncryptedElectionEnvelopePayloadHandler.CreateNew(
+            electionId,
+            EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+            EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, TestIdentities.BlockProducer.PublicEncryptAddress),
+            EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, owner.PublicEncryptAddress),
+            EncryptKeys.Encrypt(JsonSerializer.Serialize(actionEnvelope), electionEncryptKeys.PublicKey));
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            owner.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            unsignedTransaction,
+            new SignatureInfo(owner.PublicSigningAddress, signature));
+
+        return (signedTransaction.ToJson(), electionId);
+    }
+
+    /// <summary>
+    /// Creates a signed election trustee invitation transaction.
+    /// </summary>
+    public static (string Transaction, Guid InvitationId) CreateElectionTrusteeInvitation(
+        TestIdentity owner,
+        ElectionId electionId,
+        TestIdentity trustee)
+    {
+        var invitationId = Guid.NewGuid();
+        var electionEncryptKeys = ElectionKeysByElectionId[electionId.ToString()];
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.InviteTrustee,
+            JsonSerializer.SerializeToElement(new InviteElectionTrusteeActionPayload(
+                invitationId,
+                owner.PublicSigningAddress,
+                trustee.PublicSigningAddress,
+                EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, trustee.PublicEncryptAddress),
+                trustee.DisplayName)));
+
+        return (CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope), invitationId);
+    }
+
+    public static string AcceptElectionTrusteeInvitation(
+        TestIdentity trustee,
+        ElectionId electionId,
+        Guid invitationId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.AcceptTrusteeInvitation,
+            JsonSerializer.SerializeToElement(new ResolveElectionTrusteeInvitationActionPayload(
+                invitationId,
+                trustee.PublicSigningAddress)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
+    }
+
+    public static string RejectElectionTrusteeInvitation(
+        TestIdentity trustee,
+        ElectionId electionId,
+        Guid invitationId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RejectTrusteeInvitation,
+            JsonSerializer.SerializeToElement(new ResolveElectionTrusteeInvitationActionPayload(
+                invitationId,
+                trustee.PublicSigningAddress)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
+    }
+
+    /// <summary>
+    /// Creates a signed election draft update transaction.
+    /// </summary>
+    public static string UpdateElectionDraft(
+        TestIdentity owner,
+        ElectionId electionId,
+        string snapshotReason,
+        ElectionDraftSpecification draft)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.UpdateDraft,
+            JsonSerializer.SerializeToElement(new UpdateElectionDraftActionPayload(
+                owner.PublicSigningAddress,
+                snapshotReason,
+                draft)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    public static string StartElectionCeremony(
+        TestIdentity owner,
+        ElectionId electionId,
+        string profileId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.StartCeremony,
+            JsonSerializer.SerializeToElement(new StartElectionCeremonyActionPayload(
+                owner.PublicSigningAddress,
+                profileId)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    public static string RestartElectionCeremony(
+        TestIdentity owner,
+        ElectionId electionId,
+        string profileId,
+        string restartReason)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RestartCeremony,
+            JsonSerializer.SerializeToElement(new RestartElectionCeremonyActionPayload(
+                owner.PublicSigningAddress,
+                profileId,
+                restartReason)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    public static string PublishElectionCeremonyTransportKey(
+        TestIdentity trustee,
+        ElectionId electionId,
+        Guid ceremonyVersionId,
+        string transportPublicKeyFingerprint)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.PublishCeremonyTransportKey,
+            JsonSerializer.SerializeToElement(new PublishElectionCeremonyTransportKeyActionPayload(
+                ceremonyVersionId,
+                trustee.PublicSigningAddress,
+                transportPublicKeyFingerprint)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
+    }
+
+    public static string JoinElectionCeremony(
+        TestIdentity trustee,
+        ElectionId electionId,
+        Guid ceremonyVersionId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.JoinCeremony,
+            JsonSerializer.SerializeToElement(new JoinElectionCeremonyActionPayload(
+                ceremonyVersionId,
+                trustee.PublicSigningAddress)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
+    }
+
+    public static string RecordElectionCeremonySelfTestSuccess(
+        TestIdentity trustee,
+        ElectionId electionId,
+        Guid ceremonyVersionId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RecordCeremonySelfTestSuccess,
+            JsonSerializer.SerializeToElement(new RecordElectionCeremonySelfTestActionPayload(
+                ceremonyVersionId,
+                trustee.PublicSigningAddress)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
+    }
+
+    public static string SubmitElectionCeremonyMaterial(
+        TestIdentity trustee,
+        ElectionId electionId,
+        Guid ceremonyVersionId,
+        string? recipientTrusteeUserAddress,
+        string messageType,
+        string payloadVersion,
+        string encryptedPayload,
+        string payloadFingerprint)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.SubmitCeremonyMaterial,
+            JsonSerializer.SerializeToElement(new SubmitElectionCeremonyMaterialActionPayload(
+                ceremonyVersionId,
+                trustee.PublicSigningAddress,
+                recipientTrusteeUserAddress,
+                messageType,
+                payloadVersion,
+                encryptedPayload,
+                payloadFingerprint)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
+    }
+
+    public static string RecordElectionCeremonyValidationFailure(
+        TestIdentity owner,
+        ElectionId electionId,
+        Guid ceremonyVersionId,
+        string trusteeUserAddress,
+        string validationFailureReason,
+        string? evidenceReference = null)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RecordCeremonyValidationFailure,
+            JsonSerializer.SerializeToElement(new RecordElectionCeremonyValidationFailureActionPayload(
+                ceremonyVersionId,
+                owner.PublicSigningAddress,
+                trusteeUserAddress,
+                validationFailureReason,
+                evidenceReference)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    public static string CompleteElectionCeremonyTrustee(
+        TestIdentity owner,
+        ElectionId electionId,
+        Guid ceremonyVersionId,
+        string trusteeUserAddress,
+        string shareVersion,
+        string? tallyPublicKeyFingerprint = null)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.CompleteCeremonyTrustee,
+            JsonSerializer.SerializeToElement(new CompleteElectionCeremonyTrusteeActionPayload(
+                ceremonyVersionId,
+                owner.PublicSigningAddress,
+                trusteeUserAddress,
+                shareVersion,
+                tallyPublicKeyFingerprint)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    public static string RecordElectionCeremonyShareExport(
+        TestIdentity trustee,
+        ElectionId electionId,
+        Guid ceremonyVersionId,
+        string shareVersion)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RecordCeremonyShareExport,
+            JsonSerializer.SerializeToElement(new RecordElectionCeremonyShareExportActionPayload(
+                ceremonyVersionId,
+                trustee.PublicSigningAddress,
+                shareVersion)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
+    }
+
+    public static string RecordElectionCeremonyShareImport(
+        TestIdentity trustee,
+        ElectionId electionId,
+        Guid ceremonyVersionId,
+        ElectionId importedElectionId,
+        Guid importedCeremonyVersionId,
+        string importedTrusteeUserAddress,
+        string importedShareVersion)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RecordCeremonyShareImport,
+            JsonSerializer.SerializeToElement(new RecordElectionCeremonyShareImportActionPayload(
+                ceremonyVersionId,
+                trustee.PublicSigningAddress,
+                importedElectionId,
+                importedCeremonyVersionId,
+                importedTrusteeUserAddress,
+                importedShareVersion)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
+    }
+
+    /// <summary>
+    /// Creates a signed election trustee invitation revoke transaction.
+    /// </summary>
+    public static string RevokeElectionTrusteeInvitation(
+        TestIdentity owner,
+        ElectionId electionId,
+        Guid invitationId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RevokeTrusteeInvitation,
+            JsonSerializer.SerializeToElement(new RevokeElectionTrusteeInvitationActionPayload(
+                invitationId,
+                owner.PublicSigningAddress)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    private static string CreateEncryptedElectionEnvelopeTransaction(
+        TestIdentity actor,
+        ElectionId electionId,
+        EncryptedElectionActionEnvelope actionEnvelope)
+    {
+        if (!ElectionKeysByElectionId.TryGetValue(electionId.ToString(), out var electionEncryptKeys))
+        {
+            throw new InvalidOperationException($"Election private key for {electionId} is not available in the integration transaction factory.");
+        }
+
+        var unsignedTransaction = EncryptedElectionEnvelopePayloadHandler.CreateNew(
+            electionId,
+            EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+            EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, TestIdentities.BlockProducer.PublicEncryptAddress),
+            EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, actor.PublicEncryptAddress),
+            EncryptKeys.Encrypt(JsonSerializer.Serialize(actionEnvelope), electionEncryptKeys.PublicKey));
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            actor.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            unsignedTransaction,
+            new SignatureInfo(actor.PublicSigningAddress, signature));
+
+        return signedTransaction.ToJson();
+    }
+
+    /// <summary>
+    /// Creates a signed open election transaction.
+    /// </summary>
+    public static string OpenElection(
+        TestIdentity owner,
+        ElectionId electionId,
+        ElectionWarningCode[] requiredWarningCodes,
+        byte[]? frozenEligibleVoterSetHash,
+        string? trusteePolicyExecutionReference,
+        string? reportingPolicyExecutionReference,
+        string? reviewWindowExecutionReference)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.OpenElection,
+            JsonSerializer.SerializeToElement(new OpenElectionActionPayload(
+                owner.PublicSigningAddress,
+                requiredWarningCodes,
+                frozenEligibleVoterSetHash,
+                trusteePolicyExecutionReference,
+                reportingPolicyExecutionReference,
+                reviewWindowExecutionReference)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    /// <summary>
+    /// Creates a signed close election transaction.
+    /// </summary>
+    public static string CloseElection(
+        TestIdentity owner,
+        ElectionId electionId,
+        byte[]? acceptedBallotSetHash,
+        byte[]? finalEncryptedTallyHash)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.CloseElection,
+            JsonSerializer.SerializeToElement(new CloseElectionActionPayload(
+                owner.PublicSigningAddress,
+                acceptedBallotSetHash,
+                finalEncryptedTallyHash)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    /// <summary>
+    /// Creates a signed finalize election transaction.
+    /// </summary>
+    public static string FinalizeElection(
+        TestIdentity owner,
+        ElectionId electionId,
+        byte[]? acceptedBallotSetHash,
+        byte[]? finalEncryptedTallyHash)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.FinalizeElection,
+            JsonSerializer.SerializeToElement(new FinalizeElectionActionPayload(
+                owner.PublicSigningAddress,
+                acceptedBallotSetHash,
+                finalEncryptedTallyHash)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    /// <summary>
+    /// Creates a signed governed proposal start transaction.
+    /// </summary>
+    public static (string Transaction, Guid ProposalId) StartElectionGovernedProposal(
+        TestIdentity owner,
+        ElectionId electionId,
+        ElectionGovernedActionType actionType)
+    {
+        var proposalId = Guid.NewGuid();
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.StartGovernedProposal,
+            JsonSerializer.SerializeToElement(new StartElectionGovernedProposalActionPayload(
+                proposalId,
+                actionType,
+                owner.PublicSigningAddress)));
+
+        return (CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope), proposalId);
+    }
+
+    /// <summary>
+    /// Creates a signed governed proposal approval transaction.
+    /// </summary>
+    public static string ApproveElectionGovernedProposal(
+        TestIdentity trustee,
+        ElectionId electionId,
+        Guid proposalId,
+        string? approvalNote)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.ApproveGovernedProposal,
+            JsonSerializer.SerializeToElement(new ApproveElectionGovernedProposalActionPayload(
+                proposalId,
+                trustee.PublicSigningAddress,
+                approvalNote)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
+    }
+
+    /// <summary>
+    /// Creates a signed governed proposal retry transaction.
+    /// </summary>
+    public static string RetryElectionGovernedProposalExecution(
+        TestIdentity owner,
+        ElectionId electionId,
+        Guid proposalId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RetryGovernedProposalExecution,
+            JsonSerializer.SerializeToElement(new RetryElectionGovernedProposalExecutionActionPayload(
+                proposalId,
+                owner.PublicSigningAddress)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    public static string LegacyPlaintextOpenElection(
+        TestIdentity owner,
+        ElectionId electionId,
+        ElectionWarningCode[] requiredWarningCodes,
+        byte[]? frozenEligibleVoterSetHash,
+        string? trusteePolicyExecutionReference,
+        string? reportingPolicyExecutionReference,
+        string? reviewWindowExecutionReference)
+    {
+        var unsignedTransaction = OpenElectionPayloadHandler.CreateNew(
+            electionId,
+            owner.PublicSigningAddress,
+            requiredWarningCodes,
+            frozenEligibleVoterSetHash,
+            trusteePolicyExecutionReference,
+            reportingPolicyExecutionReference,
+            reviewWindowExecutionReference);
+
+        var signature = DigitalSignature.SignMessage(
+            unsignedTransaction.ToJson(),
+            owner.PrivateSigningKey);
+
+        var signedTransaction = new SignedTransaction<OpenElectionPayload>(
+            unsignedTransaction,
+            new SignatureInfo(owner.PublicSigningAddress, signature));
 
         return signedTransaction.ToJson();
     }

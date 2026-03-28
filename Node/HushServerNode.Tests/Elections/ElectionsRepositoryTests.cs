@@ -60,7 +60,19 @@ public class ElectionsRepositoryTests
                 [
                     new ElectionTrusteeReference("trustee-a", "Alice"),
                     new ElectionTrusteeReference("trustee-b", "Bob"),
-                ]));
+                ]),
+            ceremonySnapshot: ElectionModelFactory.CreateCeremonyBindingSnapshot(
+                ceremonyVersionId: Guid.NewGuid(),
+                ceremonyVersionNumber: 1,
+                profileId: "dkg-prod-2of2",
+                boundTrusteeCount: 2,
+                requiredApprovalCount: 2,
+                activeTrustees:
+                [
+                    new ElectionTrusteeReference("trustee-a", "Alice"),
+                    new ElectionTrusteeReference("trustee-b", "Bob"),
+                ],
+                tallyPublicKeyFingerprint: "tally-fingerprint-1"));
 
         await repository.SaveElectionAsync(election);
         await repository.SaveWarningAcknowledgementAsync(warning);
@@ -85,6 +97,8 @@ public class ElectionsRepositoryTests
         invitations[0].Status.Should().Be(ElectionTrusteeInvitationStatus.Accepted);
         artifacts.Should().ContainSingle();
         artifacts[0].ArtifactType.Should().Be(ElectionBoundaryArtifactType.Open);
+        artifacts[0].CeremonySnapshot.Should().NotBeNull();
+        artifacts[0].CeremonySnapshot!.ProfileId.Should().Be("dkg-prod-2of2");
     }
 
     [Fact]

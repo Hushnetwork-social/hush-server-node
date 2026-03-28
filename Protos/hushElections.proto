@@ -13,6 +13,16 @@ service HushElections {
   rpc AcceptElectionTrusteeInvitation(ResolveElectionTrusteeInvitationRequest) returns (ElectionCommandResponse);
   rpc RejectElectionTrusteeInvitation(ResolveElectionTrusteeInvitationRequest) returns (ElectionCommandResponse);
   rpc RevokeElectionTrusteeInvitation(ResolveElectionTrusteeInvitationRequest) returns (ElectionCommandResponse);
+  rpc StartElectionCeremony(StartElectionCeremonyRequest) returns (ElectionCommandResponse);
+  rpc RestartElectionCeremony(RestartElectionCeremonyRequest) returns (ElectionCommandResponse);
+  rpc PublishElectionCeremonyTransportKey(PublishElectionCeremonyTransportKeyRequest) returns (ElectionCommandResponse);
+  rpc JoinElectionCeremony(JoinElectionCeremonyRequest) returns (ElectionCommandResponse);
+  rpc RecordElectionCeremonySelfTestSuccess(RecordElectionCeremonySelfTestRequest) returns (ElectionCommandResponse);
+  rpc SubmitElectionCeremonyMaterial(SubmitElectionCeremonyMaterialRequest) returns (ElectionCommandResponse);
+  rpc RecordElectionCeremonyValidationFailure(RecordElectionCeremonyValidationFailureRequest) returns (ElectionCommandResponse);
+  rpc CompleteElectionCeremonyTrustee(CompleteElectionCeremonyTrusteeRequest) returns (ElectionCommandResponse);
+  rpc RecordElectionCeremonyShareExport(RecordElectionCeremonyShareExportRequest) returns (ElectionCommandResponse);
+  rpc RecordElectionCeremonyShareImport(RecordElectionCeremonyShareImportRequest) returns (ElectionCommandResponse);
   rpc GetElectionOpenReadiness(GetElectionOpenReadinessRequest) returns (GetElectionOpenReadinessResponse);
   rpc StartElectionGovernedProposal(StartElectionGovernedProposalRequest) returns (ElectionCommandResponse);
   rpc ApproveElectionGovernedProposal(ApproveElectionGovernedProposalRequest) returns (ElectionCommandResponse);
@@ -21,6 +31,8 @@ service HushElections {
   rpc CloseElection(CloseElectionRequest) returns (ElectionCommandResponse);
   rpc FinalizeElection(FinalizeElectionRequest) returns (ElectionCommandResponse);
   rpc GetElection(GetElectionRequest) returns (GetElectionResponse);
+  rpc GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest) returns (GetElectionEnvelopeAccessResponse);
+  rpc GetElectionCeremonyActionView(GetElectionCeremonyActionViewRequest) returns (GetElectionCeremonyActionViewResponse);
   rpc GetElectionsByOwner(GetElectionsByOwnerRequest) returns (GetElectionsByOwnerResponse);
 }
 
@@ -127,6 +139,62 @@ enum ElectionCommandErrorCodeProto {
   NotSupported = 7;
 }
 
+enum ElectionCeremonyVersionStatusProto {
+  CeremonyVersionInProgress = 0;
+  CeremonyVersionReady = 1;
+  CeremonyVersionSuperseded = 2;
+}
+
+enum ElectionCeremonyTranscriptEventTypeProto {
+  CeremonyEventVersionStarted = 0;
+  CeremonyEventTrusteeTransportKeyPublished = 1;
+  CeremonyEventTrusteeJoined = 2;
+  CeremonyEventTrusteeSelfTestSucceeded = 3;
+  CeremonyEventTrusteeMaterialSubmitted = 4;
+  CeremonyEventTrusteeValidationFailed = 5;
+  CeremonyEventTrusteeCompleted = 6;
+  CeremonyEventTrusteeRemoved = 7;
+  CeremonyEventVersionReady = 8;
+  CeremonyEventVersionSuperseded = 9;
+}
+
+enum ElectionTrusteeCeremonyStateProto {
+  CeremonyStateInvited = 0;
+  CeremonyStateAcceptedTrustee = 1;
+  CeremonyStateNotStarted = 2;
+  CeremonyStateJoined = 3;
+  CeremonyStateMaterialSubmitted = 4;
+  CeremonyStateValidationFailed = 5;
+  CeremonyStateCompleted = 6;
+  CeremonyStateRemoved = 7;
+}
+
+enum ElectionCeremonyShareCustodyStatusProto {
+  ShareCustodyNotExported = 0;
+  ShareCustodyExported = 1;
+  ShareCustodyImported = 2;
+  ShareCustodyImportFailed = 3;
+}
+
+enum ElectionCeremonyActorRoleProto {
+  CeremonyActorUnknown = 0;
+  CeremonyActorOwner = 1;
+  CeremonyActorTrustee = 2;
+  CeremonyActorReadOnly = 3;
+}
+
+enum ElectionCeremonyActionTypeProto {
+  CeremonyActionUnknown = 0;
+  CeremonyActionStartVersion = 1;
+  CeremonyActionRestartVersion = 2;
+  CeremonyActionPublishTransportKey = 3;
+  CeremonyActionJoinVersion = 4;
+  CeremonyActionRunSelfTest = 5;
+  CeremonyActionSubmitMaterial = 6;
+  CeremonyActionExportShare = 7;
+  CeremonyActionImportShare = 8;
+}
+
 message ApprovedClientApplication {
   string ApplicationId = 1;
   string Version = 2;
@@ -184,6 +252,121 @@ message ElectionTrusteeBoundarySnapshot {
   int32 RequiredApprovalCount = 1;
   repeated ElectionTrusteeReference AcceptedTrustees = 2;
   bool EveryAcceptedTrusteeMustApprove = 3;
+}
+
+message ElectionCeremonyProfile {
+  string ProfileId = 1;
+  string DisplayName = 2;
+  string Description = 3;
+  string ProviderKey = 4;
+  string ProfileVersion = 5;
+  int32 TrusteeCount = 6;
+  int32 RequiredApprovalCount = 7;
+  bool DevOnly = 8;
+  google.protobuf.Timestamp RegisteredAt = 9;
+  google.protobuf.Timestamp LastUpdatedAt = 10;
+}
+
+message ElectionCeremonyBindingSnapshot {
+  string CeremonyVersionId = 1;
+  int32 VersionNumber = 2;
+  string ProfileId = 3;
+  int32 TrusteeCount = 4;
+  int32 RequiredApprovalCount = 5;
+  repeated ElectionTrusteeReference CompletedTrustees = 6;
+  string TallyPublicKeyFingerprint = 7;
+}
+
+message ElectionCeremonyVersion {
+  string Id = 1;
+  string ElectionId = 2;
+  int32 VersionNumber = 3;
+  string ProfileId = 4;
+  ElectionCeremonyVersionStatusProto Status = 5;
+  int32 TrusteeCount = 6;
+  int32 RequiredApprovalCount = 7;
+  repeated ElectionTrusteeReference BoundTrustees = 8;
+  string StartedByPublicAddress = 9;
+  google.protobuf.Timestamp StartedAt = 10;
+  google.protobuf.Timestamp CompletedAt = 11;
+  google.protobuf.Timestamp SupersededAt = 12;
+  string SupersededReason = 13;
+  string TallyPublicKeyFingerprint = 14;
+}
+
+message ElectionCeremonyTranscriptEvent {
+  string Id = 1;
+  string ElectionId = 2;
+  string CeremonyVersionId = 3;
+  int32 VersionNumber = 4;
+  ElectionCeremonyTranscriptEventTypeProto EventType = 5;
+  string ActorPublicAddress = 6;
+  string TrusteeUserAddress = 7;
+  string TrusteeDisplayName = 8;
+  ElectionTrusteeCeremonyStateProto TrusteeState = 9;
+  string EventSummary = 10;
+  string EvidenceReference = 11;
+  string RestartReason = 12;
+  string TallyPublicKeyFingerprint = 13;
+  google.protobuf.Timestamp OccurredAt = 14;
+  bool HasTrusteeState = 15;
+}
+
+message ElectionCeremonyMessageEnvelope {
+  string Id = 1;
+  string ElectionId = 2;
+  string CeremonyVersionId = 3;
+  int32 VersionNumber = 4;
+  string ProfileId = 5;
+  string SenderTrusteeUserAddress = 6;
+  string RecipientTrusteeUserAddress = 7;
+  string MessageType = 8;
+  string PayloadVersion = 9;
+  bytes EncryptedPayload = 10;
+  string PayloadFingerprint = 11;
+  google.protobuf.Timestamp SubmittedAt = 12;
+}
+
+message ElectionCeremonyTrusteeState {
+  string Id = 1;
+  string ElectionId = 2;
+  string CeremonyVersionId = 3;
+  string TrusteeUserAddress = 4;
+  string TrusteeDisplayName = 5;
+  ElectionTrusteeCeremonyStateProto State = 6;
+  string TransportPublicKeyFingerprint = 7;
+  google.protobuf.Timestamp TransportPublicKeyPublishedAt = 8;
+  google.protobuf.Timestamp JoinedAt = 9;
+  google.protobuf.Timestamp SelfTestSucceededAt = 10;
+  google.protobuf.Timestamp MaterialSubmittedAt = 11;
+  google.protobuf.Timestamp ValidationFailedAt = 12;
+  string ValidationFailureReason = 13;
+  google.protobuf.Timestamp CompletedAt = 14;
+  google.protobuf.Timestamp RemovedAt = 15;
+  string ShareVersion = 16;
+  google.protobuf.Timestamp LastUpdatedAt = 17;
+}
+
+message ElectionCeremonyShareCustody {
+  string Id = 1;
+  string ElectionId = 2;
+  string CeremonyVersionId = 3;
+  string TrusteeUserAddress = 4;
+  string ShareVersion = 5;
+  bool PasswordProtected = 6;
+  ElectionCeremonyShareCustodyStatusProto Status = 7;
+  google.protobuf.Timestamp LastExportedAt = 8;
+  google.protobuf.Timestamp LastImportedAt = 9;
+  google.protobuf.Timestamp LastImportFailedAt = 10;
+  string LastImportFailureReason = 11;
+  google.protobuf.Timestamp LastUpdatedAt = 12;
+}
+
+message ElectionCeremonyActionAvailability {
+  ElectionCeremonyActionTypeProto ActionType = 1;
+  bool IsAvailable = 2;
+  bool IsCompleted = 3;
+  string Reason = 4;
 }
 
 message ElectionRecordView {
@@ -265,6 +448,7 @@ message ElectionBoundaryArtifact {
   bytes FinalEncryptedTallyHash = 16;
   google.protobuf.Timestamp RecordedAt = 17;
   string RecordedByPublicAddress = 18;
+  ElectionCeremonyBindingSnapshot CeremonySnapshot = 19;
 }
 
 message ElectionWarningAcknowledgement {
@@ -366,6 +550,84 @@ message ResolveElectionTrusteeInvitationRequest {
   string ActorPublicAddress = 3;
 }
 
+message StartElectionCeremonyRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string ProfileId = 3;
+}
+
+message RestartElectionCeremonyRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string ProfileId = 3;
+  string RestartReason = 4;
+}
+
+message PublishElectionCeremonyTransportKeyRequest {
+  string ElectionId = 1;
+  string CeremonyVersionId = 2;
+  string ActorPublicAddress = 3;
+  string TransportPublicKeyFingerprint = 4;
+}
+
+message JoinElectionCeremonyRequest {
+  string ElectionId = 1;
+  string CeremonyVersionId = 2;
+  string ActorPublicAddress = 3;
+}
+
+message RecordElectionCeremonySelfTestRequest {
+  string ElectionId = 1;
+  string CeremonyVersionId = 2;
+  string ActorPublicAddress = 3;
+}
+
+message SubmitElectionCeremonyMaterialRequest {
+  string ElectionId = 1;
+  string CeremonyVersionId = 2;
+  string ActorPublicAddress = 3;
+  string RecipientTrusteeUserAddress = 4;
+  string MessageType = 5;
+  string PayloadVersion = 6;
+  bytes EncryptedPayload = 7;
+  string PayloadFingerprint = 8;
+}
+
+message RecordElectionCeremonyValidationFailureRequest {
+  string ElectionId = 1;
+  string CeremonyVersionId = 2;
+  string ActorPublicAddress = 3;
+  string TrusteeUserAddress = 4;
+  string ValidationFailureReason = 5;
+  string EvidenceReference = 6;
+}
+
+message CompleteElectionCeremonyTrusteeRequest {
+  string ElectionId = 1;
+  string CeremonyVersionId = 2;
+  string ActorPublicAddress = 3;
+  string TrusteeUserAddress = 4;
+  string ShareVersion = 5;
+  string TallyPublicKeyFingerprint = 6;
+}
+
+message RecordElectionCeremonyShareExportRequest {
+  string ElectionId = 1;
+  string CeremonyVersionId = 2;
+  string ActorPublicAddress = 3;
+  string ShareVersion = 4;
+}
+
+message RecordElectionCeremonyShareImportRequest {
+  string ElectionId = 1;
+  string CeremonyVersionId = 2;
+  string ActorPublicAddress = 3;
+  string ImportedElectionId = 4;
+  string ImportedCeremonyVersionId = 5;
+  string ImportedTrusteeUserAddress = 6;
+  string ImportedShareVersion = 7;
+}
+
 message StartElectionGovernedProposalRequest {
   string ElectionId = 1;
   ElectionGovernedActionTypeProto ActionType = 2;
@@ -418,6 +680,22 @@ message GetElectionRequest {
   string ElectionId = 1;
 }
 
+message GetElectionEnvelopeAccessRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+}
+
+message GetElectionEnvelopeAccessResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ActorEncryptedElectionPrivateKey = 3;
+}
+
+message GetElectionCeremonyActionViewRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+}
+
 message GetElectionsByOwnerRequest {
   string OwnerPublicAddress = 1;
 }
@@ -433,6 +711,12 @@ message ElectionCommandResponse {
   ElectionTrusteeInvitation TrusteeInvitation = 8;
   ElectionGovernedProposal GovernedProposal = 9;
   ElectionGovernedProposalApproval GovernedProposalApproval = 10;
+  ElectionCeremonyProfile CeremonyProfile = 11;
+  ElectionCeremonyVersion CeremonyVersion = 12;
+  repeated ElectionCeremonyTranscriptEvent CeremonyTranscriptEvents = 13;
+  ElectionCeremonyTrusteeState CeremonyTrusteeState = 14;
+  ElectionCeremonyMessageEnvelope CeremonyMessageEnvelope = 15;
+  ElectionCeremonyShareCustody CeremonyShareCustody = 16;
 }
 
 message GetElectionOpenReadinessResponse {
@@ -440,6 +724,7 @@ message GetElectionOpenReadinessResponse {
   repeated string ValidationErrors = 2;
   repeated ElectionWarningCodeProto RequiredWarningCodes = 3;
   repeated ElectionWarningCodeProto MissingWarningAcknowledgements = 4;
+  ElectionCeremonyBindingSnapshot CeremonySnapshot = 5;
 }
 
 message GetElectionResponse {
@@ -452,6 +737,24 @@ message GetElectionResponse {
   repeated ElectionBoundaryArtifact BoundaryArtifacts = 7;
   repeated ElectionGovernedProposal GovernedProposals = 8;
   repeated ElectionGovernedProposalApproval GovernedProposalApprovals = 9;
+  repeated ElectionCeremonyProfile CeremonyProfiles = 10;
+  repeated ElectionCeremonyVersion CeremonyVersions = 11;
+  repeated ElectionCeremonyTranscriptEvent CeremonyTranscriptEvents = 12;
+  repeated ElectionCeremonyTrusteeState ActiveCeremonyTrusteeStates = 13;
+}
+
+message GetElectionCeremonyActionViewResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  ElectionCeremonyActorRoleProto ActorRole = 3;
+  string ActorPublicAddress = 4;
+  ElectionCeremonyVersion ActiveCeremonyVersion = 5;
+  repeated ElectionCeremonyActionAvailability OwnerActions = 6;
+  repeated ElectionCeremonyActionAvailability TrusteeActions = 7;
+  ElectionCeremonyTrusteeState SelfTrusteeState = 8;
+  ElectionCeremonyShareCustody SelfShareCustody = 9;
+  int32 PendingIncomingMessageCount = 10;
+  repeated string BlockedReasons = 11;
 }
 
 message GetElectionsByOwnerResponse {
