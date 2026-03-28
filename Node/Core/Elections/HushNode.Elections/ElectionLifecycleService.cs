@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Data;
 using System.Security.Cryptography;
 using System.Text;
@@ -13,6 +14,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider;
     private readonly ILogger<ElectionLifecycleService> _logger;
     private readonly ElectionCeremonyOptions _ceremonyOptions;
+    private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
 
     public ElectionLifecycleService(
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
@@ -549,6 +551,283 @@ public class ElectionLifecycleService : IElectionLifecycleService
             updatedElection,
             rosterEntry: updatedEntry,
             eligibilityActivationEvent: activationEvent);
+    }
+
+    public async Task<ElectionCommitmentRegistrationResult> RegisterVotingCommitmentAsync(
+        RegisterElectionVotingCommitmentRequest request)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+        if (election is null)
+        {
+            return ElectionCommitmentRegistrationResult.Failure(
+                ElectionCommitmentRegistrationFailureReason.NotFound,
+                $"Election {request.ElectionId} was not found.");
+        }
+
+        if (election.VoteAcceptanceLockedAt.HasValue || election.LifecycleState == ElectionLifecycleState.Closed || election.LifecycleState == ElectionLifecycleState.Finalized)
+        {
+            return ElectionCommitmentRegistrationResult.Failure(
+                ElectionCommitmentRegistrationFailureReason.ClosePersisted,
+                "Voting commitment registration is closed because the election close boundary is already persisted.");
+        }
+
+        if (election.LifecycleState != ElectionLifecycleState.Open)
+        {
+            return ElectionCommitmentRegistrationResult.Failure(
+                ElectionCommitmentRegistrationFailureReason.ElectionNotOpenableForRegistration,
+                "Voting commitment registration is only available while the election is open.");
+        }
+
+        var rosterEntry = await repository.GetRosterEntryByLinkedActorAsync(request.ElectionId, request.ActorPublicAddress);
+        if (rosterEntry is null)
+        {
+            return ElectionCommitmentRegistrationResult.Failure(
+                ElectionCommitmentRegistrationFailureReason.NotLinked,
+                "The authenticated Hush account is not linked to a roster entry for this election.");
+        }
+
+        if (!rosterEntry.WasPresentAtOpen)
+        {
+            return ElectionCommitmentRegistrationResult.Failure(
+                ElectionCommitmentRegistrationFailureReason.ElectionNotOpenableForRegistration,
+                "Only voters who were already rostered at open can register a voting commitment.");
+        }
+
+        if (!IsRosterEntryEligibleForCommitmentRegistration(election, rosterEntry))
+        {
+            return ElectionCommitmentRegistrationResult.Failure(
+                ElectionCommitmentRegistrationFailureReason.NotActive,
+                "This voter does not currently hold an active voting right for commitment registration.");
+        }
+
+        var existingRegistration = await repository.GetCommitmentRegistrationAsync(
+            request.ElectionId,
+            rosterEntry.OrganizationVoterId);
+        if (existingRegistration is not null)
+        {
+            return ElectionCommitmentRegistrationResult.Failure(
+                ElectionCommitmentRegistrationFailureReason.AlreadyRegistered,
+                "A voting commitment is already registered for this voter in this election.");
+        }
+
+        var registeredAt = DateTime.UtcNow;
+
+        try
+        {
+            var commitmentRegistration = ElectionModelFactory.CreateCommitmentRegistrationRecord(
+                request.ElectionId,
+                rosterEntry.OrganizationVoterId,
+                request.ActorPublicAddress,
+                request.CommitmentHash,
+                registeredAt);
+            var updatedElection = election with
+            {
+                LastUpdatedAt = registeredAt,
+            };
+
+            await repository.SaveCommitmentRegistrationAsync(commitmentRegistration);
+            await repository.SaveElectionAsync(updatedElection);
+            await unitOfWork.CommitAsync();
+
+            return ElectionCommitmentRegistrationResult.Success(
+                updatedElection,
+                rosterEntry,
+                commitmentRegistration);
+        }
+        catch (ArgumentException ex)
+        {
+            return ElectionCommitmentRegistrationResult.Failure(
+                ElectionCommitmentRegistrationFailureReason.ValidationFailed,
+                ex.Message);
+        }
+    }
+
+    public async Task<ElectionCastAcceptanceResult> AcceptBallotCastAsync(AcceptElectionBallotCastRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            return ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.ValidationFailed,
+                "A non-empty idempotency key is required.");
+        }
+
+        if (request.EligibleSetHash is null || request.EligibleSetHash.Length == 0)
+        {
+            return ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.ValidationFailed,
+                "A non-empty eligible-set hash is required.");
+        }
+
+        var idempotencyKeyHash = ComputeScopedHash(request.IdempotencyKey);
+        var pendingKey = BuildPendingCastTrackingKey(request.ElectionId, idempotencyKeyHash);
+        if (!_pendingCastTracking.TryAdd(pendingKey, true))
+        {
+            return ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.StillProcessing,
+                "This election-scoped submission key is already pending in the mempool.");
+        }
+
+        try
+        {
+            using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+            var repository = unitOfWork.GetRepository<IElectionsRepository>();
+            var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+            if (election is null)
+            {
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.NotFound,
+                    $"Election {request.ElectionId} was not found.");
+            }
+
+            if (election.VoteAcceptanceLockedAt.HasValue ||
+                election.LifecycleState == ElectionLifecycleState.Closed ||
+                election.LifecycleState == ElectionLifecycleState.Finalized)
+            {
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.ClosePersisted,
+                    "Vote acceptance is closed because the persisted close boundary has already been reached.");
+            }
+
+            if (election.LifecycleState != ElectionLifecycleState.Open)
+            {
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.WrongElectionContext,
+                    "Votes can only be accepted while the election is open.");
+            }
+
+            var existingIdempotency = await repository.GetCastIdempotencyRecordAsync(request.ElectionId, idempotencyKeyHash);
+            if (existingIdempotency is not null)
+            {
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.AlreadyUsed,
+                    "This election-scoped submission key has already been used.");
+            }
+
+            var rosterEntry = await repository.GetRosterEntryByLinkedActorAsync(request.ElectionId, request.ActorPublicAddress);
+            if (rosterEntry is null)
+            {
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.NotLinked,
+                    "The authenticated Hush account is not linked to a roster entry for this election.");
+            }
+
+            if (!IsRosterEntryEligibleForCommitmentRegistration(election, rosterEntry))
+            {
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.NotActive,
+                    "This voter does not currently hold an active voting right for cast acceptance.");
+            }
+
+            var commitmentRegistration = await repository.GetCommitmentRegistrationAsync(
+                request.ElectionId,
+                rosterEntry.OrganizationVoterId);
+            if (commitmentRegistration is null ||
+                !string.Equals(commitmentRegistration.LinkedActorPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
+            {
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.CommitmentMissing,
+                    "A voting commitment must be registered before the final cast can be accepted.");
+            }
+
+            var checkoffConsumption = await repository.GetCheckoffConsumptionAsync(
+                request.ElectionId,
+                rosterEntry.OrganizationVoterId);
+            if (checkoffConsumption is not null)
+            {
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.AlreadyVoted,
+                    "This voter has already consumed the voting right for this election.");
+            }
+
+            var existingParticipation = await repository.GetParticipationRecordAsync(
+                request.ElectionId,
+                rosterEntry.OrganizationVoterId);
+            if (existingParticipation?.CountsAsParticipation == true)
+            {
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.AlreadyVoted,
+                    "This voter is already counted as voted for this election.");
+            }
+
+            var acceptedBallotWithSameNullifier = await repository.GetAcceptedBallotByNullifierAsync(
+                request.ElectionId,
+                request.BallotNullifier);
+            if (acceptedBallotWithSameNullifier is not null)
+            {
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.DuplicateNullifier,
+                    "This ballot nullifier has already been accepted for the election.");
+            }
+
+            var boundaryValidation = await ValidateCastBoundaryContextAsync(repository, election, request);
+            if (boundaryValidation is not null)
+            {
+                return boundaryValidation;
+            }
+
+            var acceptedAt = DateTime.UtcNow;
+
+            try
+            {
+                var updatedElection = election with
+                {
+                    LastUpdatedAt = acceptedAt,
+                };
+                var participationRecord = existingParticipation is null
+                    ? ElectionModelFactory.CreateParticipationRecord(
+                        request.ElectionId,
+                        rosterEntry.OrganizationVoterId,
+                        ElectionParticipationStatus.CountedAsVoted,
+                        acceptedAt)
+                    : existingParticipation.UpdateStatus(
+                        ElectionParticipationStatus.CountedAsVoted,
+                        acceptedAt);
+                var newCheckoffConsumption = ElectionModelFactory.CreateCheckoffConsumptionRecord(
+                    request.ElectionId,
+                    rosterEntry.OrganizationVoterId,
+                    acceptedAt);
+                var acceptedBallot = ElectionModelFactory.CreateAcceptedBallotRecord(
+                    request.ElectionId,
+                    request.EncryptedBallotPackage,
+                    request.ProofBundle,
+                    request.BallotNullifier,
+                    acceptedAt);
+                var idempotencyRecord = ElectionModelFactory.CreateCastIdempotencyRecord(
+                    request.ElectionId,
+                    idempotencyKeyHash,
+                    acceptedAt);
+
+                await repository.SaveParticipationRecordAsync(participationRecord);
+                await repository.SaveCheckoffConsumptionAsync(newCheckoffConsumption);
+                await repository.SaveAcceptedBallotAsync(acceptedBallot);
+                await repository.SaveCastIdempotencyRecordAsync(idempotencyRecord);
+                await repository.SaveElectionAsync(updatedElection);
+                await unitOfWork.CommitAsync();
+
+                return ElectionCastAcceptanceResult.Success(
+                    updatedElection,
+                    rosterEntry,
+                    commitmentRegistration,
+                    participationRecord,
+                    newCheckoffConsumption,
+                    acceptedBallot,
+                    idempotencyRecord);
+            }
+            catch (ArgumentException ex)
+            {
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.ValidationFailed,
+                    ex.Message);
+            }
+        }
+        finally
+        {
+            _pendingCastTracking.TryRemove(pendingKey, out _);
+        }
     }
 
     public async Task<ElectionCommandResult> InviteTrusteeAsync(InviteElectionTrusteeRequest request)
@@ -2108,6 +2387,96 @@ public class ElectionLifecycleService : IElectionLifecycleService
         });
 
         return ElectionCommandResult.Failure(errorCode, errorMessage);
+    }
+
+    private static bool IsRosterEntryEligibleForCommitmentRegistration(
+        ElectionRecord election,
+        ElectionRosterEntryRecord rosterEntry)
+    {
+        if (election.LifecycleState != ElectionLifecycleState.Open || !rosterEntry.WasPresentAtOpen)
+        {
+            return false;
+        }
+
+        return election.EligibilityMutationPolicy switch
+        {
+            EligibilityMutationPolicy.FrozenAtOpen => rosterEntry.WasActiveAtOpen,
+            EligibilityMutationPolicy.LateActivationForRosteredVotersOnly => rosterEntry.IsActive,
+            _ => false,
+        };
+    }
+
+    private async Task<ElectionCastAcceptanceResult?> ValidateCastBoundaryContextAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        AcceptElectionBallotCastRequest request)
+    {
+        if (!election.OpenArtifactId.HasValue || election.OpenArtifactId.Value != request.OpenArtifactId)
+        {
+            return ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.WrongElectionContext,
+                "The cast request is bound to a different open boundary than the active election.");
+        }
+
+        var openArtifact = (await repository.GetBoundaryArtifactsAsync(request.ElectionId))
+            .FirstOrDefault(x =>
+                x.Id == request.OpenArtifactId &&
+                x.ArtifactType == ElectionBoundaryArtifactType.Open);
+        if (openArtifact is null)
+        {
+            return ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.WrongElectionContext,
+                "The referenced open boundary artifact was not found.");
+        }
+
+        if (!BytesEqual(openArtifact.FrozenEligibleVoterSetHash, request.EligibleSetHash))
+        {
+            return ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.WrongElectionContext,
+                "The cast request is bound to a different eligible-set hash than the active election.");
+        }
+
+        var ceremonySnapshot = openArtifact.CeremonySnapshot;
+        if (ceremonySnapshot is null)
+        {
+            return ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.WrongElectionContext,
+                "The active open boundary does not expose a ceremony snapshot for cast validation.");
+        }
+
+        if (ceremonySnapshot.CeremonyVersionId != request.CeremonyVersionId ||
+            !string.Equals(ceremonySnapshot.ProfileId, request.DkgProfileId, StringComparison.Ordinal) ||
+            !string.Equals(ceremonySnapshot.TallyPublicKeyFingerprint, request.TallyPublicKeyFingerprint, StringComparison.Ordinal))
+        {
+            return ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.WrongElectionContext,
+                "The cast request is bound to a different ceremony or tally-key context than the active election.");
+        }
+
+        return null;
+    }
+
+    private static string BuildPendingCastTrackingKey(ElectionId electionId, string idempotencyKeyHash) =>
+        $"{electionId}:{idempotencyKeyHash}";
+
+    private static string ComputeScopedHash(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException("A non-empty value is required.", nameof(value));
+        }
+
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.Trim())));
+    }
+
+    private static bool BytesEqual(byte[]? left, byte[]? right)
+    {
+        if (left is null || right is null || left.Length != right.Length)
+        {
+            return false;
+        }
+
+        return CryptographicOperations.FixedTimeEquals(left, right);
     }
 
     private static byte[] ResolveOpenBoundaryEligibleHash(

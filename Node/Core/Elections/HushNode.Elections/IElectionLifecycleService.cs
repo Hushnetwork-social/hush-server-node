@@ -57,6 +57,10 @@ public interface IElectionLifecycleService
     Task<ElectionCommandResult> FinalizeElectionAsync(FinalizeElectionRequest request);
 
     Task<ElectionCommandResult> SubmitFinalizationShareAsync(SubmitElectionFinalizationShareRequest request);
+
+    Task<ElectionCommitmentRegistrationResult> RegisterVotingCommitmentAsync(RegisterElectionVotingCommitmentRequest request);
+
+    Task<ElectionCastAcceptanceResult> AcceptBallotCastAsync(AcceptElectionBallotCastRequest request);
 }
 
 public record CreateElectionDraftRequest(
@@ -267,6 +271,24 @@ public record SubmitElectionFinalizationShareRequest(
     long? SourceBlockHeight = null,
     Guid? SourceBlockId = null);
 
+public record RegisterElectionVotingCommitmentRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    string CommitmentHash);
+
+public record AcceptElectionBallotCastRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    string IdempotencyKey,
+    string EncryptedBallotPackage,
+    string ProofBundle,
+    string BallotNullifier,
+    Guid OpenArtifactId,
+    byte[] EligibleSetHash,
+    Guid CeremonyVersionId,
+    string DkgProfileId,
+    string TallyPublicKeyFingerprint);
+
 public enum ElectionCommandErrorCode
 {
     None = 0,
@@ -277,6 +299,34 @@ public enum ElectionCommandErrorCode
     DependencyBlocked = 5,
     Conflict = 6,
     NotSupported = 7,
+}
+
+public enum ElectionCommitmentRegistrationFailureReason
+{
+    None = 0,
+    ValidationFailed = 1,
+    NotFound = 2,
+    NotLinked = 3,
+    NotActive = 4,
+    AlreadyRegistered = 5,
+    ElectionNotOpenableForRegistration = 6,
+    ClosePersisted = 7,
+}
+
+public enum ElectionCastAcceptanceFailureReason
+{
+    None = 0,
+    ValidationFailed = 1,
+    NotFound = 2,
+    NotLinked = 3,
+    NotActive = 4,
+    CommitmentMissing = 5,
+    StillProcessing = 6,
+    AlreadyUsed = 7,
+    DuplicateNullifier = 8,
+    WrongElectionContext = 9,
+    ClosePersisted = 10,
+    AlreadyVoted = 11,
 }
 
 public record ElectionCommandResult
@@ -363,6 +413,84 @@ public record ElectionCommandResult
             ErrorCode = errorCode,
             ErrorMessage = errorMessage,
             ValidationErrors = validationErrors ?? Array.Empty<string>(),
+        };
+}
+
+public record ElectionCommitmentRegistrationResult
+{
+    public bool IsSuccess { get; init; }
+    public ElectionCommitmentRegistrationFailureReason FailureReason { get; init; }
+    public string? ErrorMessage { get; init; }
+    public ElectionRecord? Election { get; init; }
+    public ElectionRosterEntryRecord? RosterEntry { get; init; }
+    public ElectionCommitmentRegistrationRecord? CommitmentRegistration { get; init; }
+
+    public static ElectionCommitmentRegistrationResult Success(
+        ElectionRecord election,
+        ElectionRosterEntryRecord rosterEntry,
+        ElectionCommitmentRegistrationRecord commitmentRegistration) =>
+        new()
+        {
+            IsSuccess = true,
+            FailureReason = ElectionCommitmentRegistrationFailureReason.None,
+            Election = election,
+            RosterEntry = rosterEntry,
+            CommitmentRegistration = commitmentRegistration,
+        };
+
+    public static ElectionCommitmentRegistrationResult Failure(
+        ElectionCommitmentRegistrationFailureReason failureReason,
+        string errorMessage) =>
+        new()
+        {
+            IsSuccess = false,
+            FailureReason = failureReason,
+            ErrorMessage = errorMessage,
+        };
+}
+
+public record ElectionCastAcceptanceResult
+{
+    public bool IsSuccess { get; init; }
+    public ElectionCastAcceptanceFailureReason FailureReason { get; init; }
+    public string? ErrorMessage { get; init; }
+    public ElectionRecord? Election { get; init; }
+    public ElectionRosterEntryRecord? RosterEntry { get; init; }
+    public ElectionCommitmentRegistrationRecord? CommitmentRegistration { get; init; }
+    public ElectionParticipationRecord? ParticipationRecord { get; init; }
+    public ElectionCheckoffConsumptionRecord? CheckoffConsumption { get; init; }
+    public ElectionAcceptedBallotRecord? AcceptedBallot { get; init; }
+    public ElectionCastIdempotencyRecord? CastIdempotencyRecord { get; init; }
+
+    public static ElectionCastAcceptanceResult Success(
+        ElectionRecord election,
+        ElectionRosterEntryRecord rosterEntry,
+        ElectionCommitmentRegistrationRecord commitmentRegistration,
+        ElectionParticipationRecord participationRecord,
+        ElectionCheckoffConsumptionRecord checkoffConsumption,
+        ElectionAcceptedBallotRecord acceptedBallot,
+        ElectionCastIdempotencyRecord castIdempotencyRecord) =>
+        new()
+        {
+            IsSuccess = true,
+            FailureReason = ElectionCastAcceptanceFailureReason.None,
+            Election = election,
+            RosterEntry = rosterEntry,
+            CommitmentRegistration = commitmentRegistration,
+            ParticipationRecord = participationRecord,
+            CheckoffConsumption = checkoffConsumption,
+            AcceptedBallot = acceptedBallot,
+            CastIdempotencyRecord = castIdempotencyRecord,
+        };
+
+    public static ElectionCastAcceptanceResult Failure(
+        ElectionCastAcceptanceFailureReason failureReason,
+        string errorMessage) =>
+        new()
+        {
+            IsSuccess = false,
+            FailureReason = failureReason,
+            ErrorMessage = errorMessage,
         };
 }
 

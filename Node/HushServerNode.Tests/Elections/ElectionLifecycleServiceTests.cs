@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using FluentAssertions;
 using HushNode.Elections;
 using HushNode.Elections.Storage;
@@ -392,6 +394,206 @@ public class ElectionLifecycleServiceTests
         result.ErrorCode.Should().Be(ElectionCommandErrorCode.NotFound);
         store.EligibilityActivationEvents.Should().ContainSingle();
         store.EligibilityActivationEvents[0].BlockReason.Should().Be(ElectionEligibilityActivationBlockReason.RosterEntryNotFound);
+    }
+
+    [Fact]
+    public async Task RegisterVotingCommitmentAsync_WithEligibleLinkedVoter_PersistsRegistrationWithoutParticipation()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store);
+
+        var result = await service.RegisterVotingCommitmentAsync(new RegisterElectionVotingCommitmentRequest(
+            scenario.Election.ElectionId,
+            "voter-address",
+            "commitment-hash-1"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.CommitmentRegistration.Should().NotBeNull();
+        result.CommitmentRegistration!.OrganizationVoterId.Should().Be(scenario.RosterEntry.OrganizationVoterId);
+        result.CommitmentRegistration.LinkedActorPublicAddress.Should().Be("voter-address");
+        store.CommitmentRegistrations.Should().ContainSingle();
+        store.ParticipationRecords.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RegisterVotingCommitmentAsync_WithFrozenPolicyInactiveAtOpen_ReturnsNotActive()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(
+            store,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            wasActiveAtOpen: false,
+            currentlyActive: false,
+            createCommitmentRegistration: false);
+
+        var result = await service.RegisterVotingCommitmentAsync(new RegisterElectionVotingCommitmentRequest(
+            scenario.Election.ElectionId,
+            "voter-address",
+            "commitment-hash-1"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCommitmentRegistrationFailureReason.NotActive);
+        store.CommitmentRegistrations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RegisterVotingCommitmentAsync_WhenAlreadyRegistered_ReturnsAlreadyRegistered()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+
+        var result = await service.RegisterVotingCommitmentAsync(new RegisterElectionVotingCommitmentRequest(
+            scenario.Election.ElectionId,
+            "voter-address",
+            "commitment-hash-2"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCommitmentRegistrationFailureReason.AlreadyRegistered);
+        store.CommitmentRegistrations.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WithEligibleCommittedVoter_WritesMinimalArtifactsAndMarksParticipation()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+
+        var result = await service.AcceptBallotCastAsync(CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-1",
+            ballotNullifier: "nullifier-1"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.ParticipationRecord.Should().NotBeNull();
+        result.ParticipationRecord!.ParticipationStatus.Should().Be(ElectionParticipationStatus.CountedAsVoted);
+        result.CheckoffConsumption.Should().NotBeNull();
+        result.CheckoffConsumption!.OrganizationVoterId.Should().Be(scenario.RosterEntry.OrganizationVoterId);
+        result.AcceptedBallot.Should().NotBeNull();
+        result.AcceptedBallot!.BallotNullifier.Should().Be("nullifier-1");
+        result.CastIdempotencyRecord.Should().NotBeNull();
+        store.ParticipationRecords.Should().ContainSingle();
+        store.CheckoffConsumptions.Should().ContainSingle();
+        store.AcceptedBallots.Should().ContainSingle();
+        store.CastIdempotencyRecords.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WithWrongBoundaryContext_ReturnsWrongElectionContext()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        var request = CreateCastRequest(scenario) with
+        {
+            TallyPublicKeyFingerprint = "wrong-tally",
+        };
+
+        var result = await service.AcceptBallotCastAsync(request);
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.WrongElectionContext);
+        store.CheckoffConsumptions.Should().BeEmpty();
+        store.AcceptedBallots.Should().BeEmpty();
+        store.CastIdempotencyRecords.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WithDuplicateNullifier_ReturnsDuplicateNullifier()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        store.AcceptedBallots.Add(ElectionModelFactory.CreateAcceptedBallotRecord(
+            scenario.Election.ElectionId,
+            encryptedBallotPackage: "existing-ciphertext",
+            proofBundle: "existing-proof",
+            ballotNullifier: "nullifier-1",
+            acceptedAt: DateTime.UtcNow.AddMinutes(-1)));
+
+        var result = await service.AcceptBallotCastAsync(CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-2",
+            ballotNullifier: "nullifier-1"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.DuplicateNullifier);
+        store.CheckoffConsumptions.Should().BeEmpty();
+        store.CastIdempotencyRecords.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WithCommittedSameElectionKey_ReturnsAlreadyUsed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        store.CastIdempotencyRecords.Add(ElectionModelFactory.CreateCastIdempotencyRecord(
+            scenario.Election.ElectionId,
+            ComputeScopedHash("cast-key-3"),
+            DateTime.UtcNow.AddMinutes(-1)));
+
+        var result = await service.AcceptBallotCastAsync(CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-3",
+            ballotNullifier: "nullifier-3"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.AlreadyUsed);
+        store.CheckoffConsumptions.Should().BeEmpty();
+        store.AcceptedBallots.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WithPendingSameElectionKey_ReturnsStillProcessing()
+    {
+        var store = new ElectionStore
+        {
+            GetElectionForUpdateEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
+            ReleaseGetElectionForUpdate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
+        };
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        var request = CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-pending",
+            ballotNullifier: "nullifier-pending");
+
+        var firstAttempt = service.AcceptBallotCastAsync(request);
+        await store.GetElectionForUpdateEntered.Task;
+
+        var secondAttempt = await service.AcceptBallotCastAsync(request);
+
+        secondAttempt.IsSuccess.Should().BeFalse();
+        secondAttempt.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.StillProcessing);
+
+        store.ReleaseGetElectionForUpdate.SetResult(true);
+        var firstResult = await firstAttempt;
+        firstResult.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WhenCloseBoundaryIsPersisted_ReturnsClosePersisted()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(
+            store,
+            createCommitmentRegistration: true,
+            voteAcceptanceLockedAt: DateTime.UtcNow.AddSeconds(-5));
+
+        var result = await service.AcceptBallotCastAsync(CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-closed",
+            ballotNullifier: "nullifier-closed"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.ClosePersisted);
+        store.CheckoffConsumptions.Should().BeEmpty();
+        store.AcceptedBallots.Should().BeEmpty();
     }
 
     [Fact]
@@ -1914,6 +2116,23 @@ public class ElectionLifecycleServiceTests
             participationStatus,
             recordedAt);
 
+    private static AcceptElectionBallotCastRequest CreateCastRequest(
+        CastAcceptanceScenario scenario,
+        string idempotencyKey = "cast-key-1",
+        string ballotNullifier = "nullifier-1") =>
+        new(
+            scenario.Election.ElectionId,
+            "voter-address",
+            idempotencyKey,
+            EncryptedBallotPackage: "ciphertext-payload",
+            ProofBundle: "proof-bundle",
+            BallotNullifier: ballotNullifier,
+            OpenArtifactId: scenario.OpenArtifact.Id,
+            EligibleSetHash: scenario.EligibleSetHash.ToArray(),
+            CeremonyVersionId: scenario.CeremonySnapshot.CeremonyVersionId,
+            DkgProfileId: scenario.CeremonySnapshot.ProfileId,
+            TallyPublicKeyFingerprint: scenario.CeremonySnapshot.TallyPublicKeyFingerprint);
+
     private static void AddRosterEntries(ElectionStore store, params ElectionRosterEntryRecord[] rosterEntries)
     {
         foreach (var rosterEntry in rosterEntries)
@@ -1945,6 +2164,90 @@ public class ElectionLifecycleServiceTests
             ElectionRosterContactType.Phone => $"+41{organizationVoterId.PadLeft(8, '0')}",
             _ => throw new ArgumentOutOfRangeException(nameof(contactType), contactType, "Unsupported contact type."),
         };
+
+    private static CastAcceptanceScenario SeedOpenElectionForCast(
+        ElectionStore store,
+        EligibilityMutationPolicy eligibilityMutationPolicy = EligibilityMutationPolicy.FrozenAtOpen,
+        bool wasActiveAtOpen = true,
+        bool currentlyActive = true,
+        bool createCommitmentRegistration = false,
+        DateTime? voteAcceptanceLockedAt = null)
+    {
+        var openedAt = DateTime.UtcNow.AddMinutes(-10);
+        var eligibleSetHash = new byte[] { 11, 12, 13, 14 };
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            ceremonyVersionId: Guid.NewGuid(),
+            ceremonyVersionNumber: 1,
+            profileId: "dkg-feat-099",
+            boundTrusteeCount: 1,
+            requiredApprovalCount: 1,
+            activeTrustees:
+            [
+                new ElectionTrusteeReference("trustee-a", "Alice"),
+            ],
+            tallyPublicKeyFingerprint: "tally-feat-099");
+
+        var election = CreateAdminElection(acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]) with
+        {
+            EligibilityMutationPolicy = eligibilityMutationPolicy,
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            VoteAcceptanceLockedAt = voteAcceptanceLockedAt,
+            LastUpdatedAt = voteAcceptanceLockedAt ?? openedAt,
+        };
+
+        var rosterEntry = CreateRosterEntry(
+                election,
+                organizationVoterId: "4001",
+                votingRightStatus: wasActiveAtOpen ? ElectionVotingRightStatus.Active : ElectionVotingRightStatus.Inactive)
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address", openedAt.AddMinutes(1));
+
+        if (!wasActiveAtOpen && currentlyActive)
+        {
+            rosterEntry = rosterEntry.MarkVotingRightActive("owner-address", openedAt.AddMinutes(2));
+        }
+
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            election,
+            recordedByPublicAddress: "owner-address",
+            ceremonySnapshot: ceremonySnapshot,
+            recordedAt: openedAt,
+            frozenEligibleVoterSetHash: eligibleSetHash);
+
+        election = election with
+        {
+            OpenArtifactId = openArtifact.Id,
+        };
+
+        ElectionCommitmentRegistrationRecord? commitmentRegistration = null;
+        if (createCommitmentRegistration)
+        {
+            commitmentRegistration = ElectionModelFactory.CreateCommitmentRegistrationRecord(
+                election.ElectionId,
+                rosterEntry.OrganizationVoterId,
+                "voter-address",
+                "commitment-hash-seeded",
+                openedAt.AddMinutes(3));
+            store.CommitmentRegistrations.Add(commitmentRegistration);
+        }
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, rosterEntry);
+        store.BoundaryArtifacts.Add(openArtifact);
+
+        return new CastAcceptanceScenario(
+            election,
+            openArtifact,
+            rosterEntry,
+            eligibleSetHash,
+            ceremonySnapshot,
+            commitmentRegistration);
+    }
+
+    private static string ComputeScopedHash(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.Trim())));
 
     private static TrusteeFinalizationScenario SeedClosedTrusteeElectionForFinalization(
         ElectionStore store,
@@ -2252,6 +2555,14 @@ public class ElectionLifecycleServiceTests
         byte[] AcceptedBallotSetHash,
         byte[] FinalEncryptedTallyHash);
 
+    private sealed record CastAcceptanceScenario(
+        ElectionRecord Election,
+        ElectionBoundaryArtifactRecord OpenArtifact,
+        ElectionRosterEntryRecord RosterEntry,
+        byte[] EligibleSetHash,
+        ElectionCeremonyBindingSnapshot CeremonySnapshot,
+        ElectionCommitmentRegistrationRecord? CommitmentRegistration);
+
     private sealed class ElectionStore
     {
         public Dictionary<ElectionId, ElectionRecord> Elections { get; } = [];
@@ -2260,8 +2571,12 @@ public class ElectionLifecycleServiceTests
         public List<ElectionRosterEntryRecord> RosterEntries { get; } = [];
         public List<ElectionEligibilityActivationEventRecord> EligibilityActivationEvents { get; } = [];
         public List<ElectionParticipationRecord> ParticipationRecords { get; } = [];
+        public List<ElectionCommitmentRegistrationRecord> CommitmentRegistrations { get; } = [];
+        public List<ElectionCheckoffConsumptionRecord> CheckoffConsumptions { get; } = [];
         public List<ElectionEligibilitySnapshotRecord> EligibilitySnapshots { get; } = [];
         public List<ElectionBoundaryArtifactRecord> BoundaryArtifacts { get; } = [];
+        public List<ElectionAcceptedBallotRecord> AcceptedBallots { get; } = [];
+        public List<ElectionCastIdempotencyRecord> CastIdempotencyRecords { get; } = [];
         public List<ElectionWarningAcknowledgementRecord> WarningAcknowledgements { get; } = [];
         public Dictionary<Guid, ElectionTrusteeInvitationRecord> TrusteeInvitations { get; } = [];
         public Dictionary<Guid, ElectionGovernedProposalRecord> GovernedProposals { get; } = [];
@@ -2275,6 +2590,8 @@ public class ElectionLifecycleServiceTests
         public Dictionary<Guid, ElectionFinalizationSessionRecord> FinalizationSessions { get; } = [];
         public List<ElectionFinalizationShareRecord> FinalizationShares { get; } = [];
         public List<ElectionFinalizationReleaseEvidenceRecord> FinalizationReleaseEvidenceRecords { get; } = [];
+        public TaskCompletionSource<bool>? GetElectionForUpdateEntered { get; set; }
+        public TaskCompletionSource<bool>? ReleaseGetElectionForUpdate { get; set; }
     }
 
     private sealed class FakeUnitOfWorkProvider(ElectionStore store) : IUnitOfWorkProvider<ElectionsDbContext>
@@ -2328,8 +2645,18 @@ public class ElectionLifecycleServiceTests
         public Task<ElectionRecord?> GetElectionAsync(ElectionId electionId) =>
             Task.FromResult(store.Elections.GetValueOrDefault(electionId));
 
-        public Task<ElectionRecord?> GetElectionForUpdateAsync(ElectionId electionId) =>
-            Task.FromResult(store.Elections.GetValueOrDefault(electionId));
+        public async Task<ElectionRecord?> GetElectionForUpdateAsync(ElectionId electionId)
+        {
+            store.GetElectionForUpdateEntered?.TrySetResult(true);
+
+            if (store.ReleaseGetElectionForUpdate is not null)
+            {
+                await store.ReleaseGetElectionForUpdate.Task;
+                store.ReleaseGetElectionForUpdate = null;
+            }
+
+            return store.Elections.GetValueOrDefault(electionId);
+        }
 
         public Task<IReadOnlyList<ElectionRecord>> GetElectionsByOwnerAsync(string ownerPublicAddress) =>
             Task.FromResult<IReadOnlyList<ElectionRecord>>(
@@ -2471,6 +2798,65 @@ public class ElectionLifecycleServiceTests
         public Task UpdateParticipationRecordAsync(ElectionParticipationRecord participationRecord) =>
             SaveParticipationRecordAsync(participationRecord);
 
+        public Task<IReadOnlyList<ElectionCommitmentRegistrationRecord>> GetCommitmentRegistrationsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionCommitmentRegistrationRecord>>(
+                store.CommitmentRegistrations
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.RegisteredAt)
+                    .ToArray());
+
+        public Task<ElectionCommitmentRegistrationRecord?> GetCommitmentRegistrationAsync(
+            ElectionId electionId,
+            string organizationVoterId) =>
+            Task.FromResult(
+                store.CommitmentRegistrations.FirstOrDefault(x =>
+                    x.ElectionId == electionId &&
+                    string.Equals(x.OrganizationVoterId, organizationVoterId, StringComparison.OrdinalIgnoreCase)));
+
+        public Task<ElectionCommitmentRegistrationRecord?> GetCommitmentRegistrationByLinkedActorAsync(
+            ElectionId electionId,
+            string actorPublicAddress) =>
+            Task.FromResult(
+                store.CommitmentRegistrations.FirstOrDefault(x =>
+                    x.ElectionId == electionId &&
+                    string.Equals(x.LinkedActorPublicAddress, actorPublicAddress, StringComparison.Ordinal)));
+
+        public Task SaveCommitmentRegistrationAsync(ElectionCommitmentRegistrationRecord commitmentRegistration)
+        {
+            store.CommitmentRegistrations.RemoveAll(x =>
+                x.ElectionId == commitmentRegistration.ElectionId &&
+                string.Equals(x.OrganizationVoterId, commitmentRegistration.OrganizationVoterId, StringComparison.OrdinalIgnoreCase));
+            store.CommitmentRegistrations.Add(commitmentRegistration);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateCommitmentRegistrationAsync(ElectionCommitmentRegistrationRecord commitmentRegistration) =>
+            SaveCommitmentRegistrationAsync(commitmentRegistration);
+
+        public Task<IReadOnlyList<ElectionCheckoffConsumptionRecord>> GetCheckoffConsumptionsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionCheckoffConsumptionRecord>>(
+                store.CheckoffConsumptions
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.ConsumedAt)
+                    .ToArray());
+
+        public Task<ElectionCheckoffConsumptionRecord?> GetCheckoffConsumptionAsync(
+            ElectionId electionId,
+            string organizationVoterId) =>
+            Task.FromResult(
+                store.CheckoffConsumptions.FirstOrDefault(x =>
+                    x.ElectionId == electionId &&
+                    string.Equals(x.OrganizationVoterId, organizationVoterId, StringComparison.OrdinalIgnoreCase)));
+
+        public Task SaveCheckoffConsumptionAsync(ElectionCheckoffConsumptionRecord checkoffConsumption)
+        {
+            store.CheckoffConsumptions.RemoveAll(x =>
+                x.ElectionId == checkoffConsumption.ElectionId &&
+                string.Equals(x.OrganizationVoterId, checkoffConsumption.OrganizationVoterId, StringComparison.OrdinalIgnoreCase));
+            store.CheckoffConsumptions.Add(checkoffConsumption);
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<ElectionEligibilitySnapshotRecord>> GetEligibilitySnapshotsAsync(ElectionId electionId) =>
             Task.FromResult<IReadOnlyList<ElectionEligibilitySnapshotRecord>>(
                 store.EligibilitySnapshots
@@ -2495,6 +2881,55 @@ public class ElectionLifecycleServiceTests
                 x.ElectionId == snapshot.ElectionId &&
                 x.SnapshotType == snapshot.SnapshotType);
             store.EligibilitySnapshots.Add(snapshot);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionAcceptedBallotRecord>> GetAcceptedBallotsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionAcceptedBallotRecord>>(
+                store.AcceptedBallots
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.AcceptedAt)
+                    .ToArray());
+
+        public Task<ElectionAcceptedBallotRecord?> GetAcceptedBallotAsync(Guid acceptedBallotId) =>
+            Task.FromResult(store.AcceptedBallots.FirstOrDefault(x => x.Id == acceptedBallotId));
+
+        public Task<ElectionAcceptedBallotRecord?> GetAcceptedBallotByNullifierAsync(
+            ElectionId electionId,
+            string ballotNullifier) =>
+            Task.FromResult(
+                store.AcceptedBallots.FirstOrDefault(x =>
+                    x.ElectionId == electionId &&
+                    string.Equals(x.BallotNullifier, ballotNullifier, StringComparison.Ordinal)));
+
+        public Task SaveAcceptedBallotAsync(ElectionAcceptedBallotRecord acceptedBallot)
+        {
+            store.AcceptedBallots.RemoveAll(x => x.Id == acceptedBallot.Id);
+            store.AcceptedBallots.Add(acceptedBallot);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionCastIdempotencyRecord>> GetCastIdempotencyRecordsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionCastIdempotencyRecord>>(
+                store.CastIdempotencyRecords
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.RecordedAt)
+                    .ToArray());
+
+        public Task<ElectionCastIdempotencyRecord?> GetCastIdempotencyRecordAsync(
+            ElectionId electionId,
+            string idempotencyKeyHash) =>
+            Task.FromResult(
+                store.CastIdempotencyRecords.FirstOrDefault(x =>
+                    x.ElectionId == electionId &&
+                    string.Equals(x.IdempotencyKeyHash, idempotencyKeyHash, StringComparison.Ordinal)));
+
+        public Task SaveCastIdempotencyRecordAsync(ElectionCastIdempotencyRecord idempotencyRecord)
+        {
+            store.CastIdempotencyRecords.RemoveAll(x =>
+                x.ElectionId == idempotencyRecord.ElectionId &&
+                string.Equals(x.IdempotencyKeyHash, idempotencyRecord.IdempotencyKeyHash, StringComparison.Ordinal));
+            store.CastIdempotencyRecords.Add(idempotencyRecord);
             return Task.CompletedTask;
         }
 
