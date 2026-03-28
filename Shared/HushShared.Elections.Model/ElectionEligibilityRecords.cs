@@ -1,5 +1,11 @@
 namespace HushShared.Elections.Model;
 
+public record ElectionRosterImportItem(
+    string OrganizationVoterId,
+    ElectionRosterContactType ContactType,
+    string ContactValue,
+    bool IsInitiallyActive = true);
+
 public record ElectionRosterEntryRecord(
     ElectionId ElectionId,
     string OrganizationVoterId,

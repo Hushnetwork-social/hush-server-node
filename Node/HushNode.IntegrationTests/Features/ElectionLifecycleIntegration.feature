@@ -8,6 +8,7 @@ Feature: FEAT-094 election lifecycle integration
   Scenario: Admin-only lifecycle roundtrip persists through gRPC reads
     Given FEAT-094 election integration services are available
     When the owner creates an admin-only election draft through blockchain submission
+    And the owner imports the default election roster through blockchain submission
     And the owner updates the election draft title to "Board Election Final"
     And the owner checks open readiness for the election
     And the owner opens the election through blockchain submission
@@ -39,6 +40,7 @@ Feature: FEAT-094 election lifecycle integration
   Scenario: Trustee-threshold open remains blocked while the key ceremony boundary is incomplete
     Given FEAT-094 election integration services are available
     When the owner creates a trustee-threshold election draft through blockchain submission
+    And the owner imports the default election roster through blockchain submission
     And the owner invites trustee "Bob" through blockchain submission
     And trustee "Bob" accepts the invitation through blockchain submission
     And the owner invites trustee "Charlie" through blockchain submission
@@ -47,10 +49,29 @@ Feature: FEAT-094 election lifecycle integration
     Then the readiness response should include the missing ready-ceremony blocker
     And the trustee-threshold open transaction should be rejected before the MemPool
 
+  @FEAT-095 @AT-PROC-U03 @AT-PROC-U04 @AT-PROC-U11 @NON_E2E
+  Scenario: Eligibility claim and late activation surface through restricted and voter views
+    Given FEAT-094 election integration services are available
+    When the owner creates a late-activation admin-only election draft through blockchain submission
+    And the owner imports the default election roster through blockchain submission
+    And voter "Bob" claims roster entry "voter-bob" with temporary verification code through blockchain submission
+    And the owner checks open readiness for the election
+    And the owner opens the election through blockchain submission
+    And the owner activates roster entry "voter-bob" through blockchain submission
+    And the actor "Bob" requests the election eligibility view through gRPC
+    Then the eligibility view should show actor role "EligibilityActorLinkedVoter"
+    And the eligibility view should expose temporary verification code "1111"
+    And the eligibility self row should show organization voter "voter-bob" as "VotingRightActive" with participation "ParticipationDidNotVote"
+    When the actor "Alice" requests the election eligibility view through gRPC
+    Then the eligibility view should show actor role "EligibilityActorOwner"
+    And the owner eligibility summary should report 3 rostered voters, 1 linked voters, and 1 activation events
+    And the restricted eligibility roster should include 3 entries
+
   @FEAT-096 @AT-GOV-096-OPEN
   Scenario: Governed open blocks further draft edits and opens at trustee threshold
     Given FEAT-094 election integration services are available
     When the owner creates a trustee-threshold election draft through blockchain submission
+    And the owner imports the default election roster through blockchain submission
     And the owner prepares a ready trustee ceremony through blockchain submission
     And the owner starts an "open" governed proposal through blockchain submission
     And the owner attempts to update the trustee-threshold draft title to "Governed Referendum Revised" while a governed open proposal is pending
@@ -76,6 +97,7 @@ Feature: FEAT-094 election lifecycle integration
   Scenario: Owner can retry a failed governed proposal after the blocking state is repaired
     Given FEAT-094 election integration services are available
     When the owner creates a trustee-threshold election draft through blockchain submission
+    And the owner imports the default election roster through blockchain submission
     And the owner prepares a ready trustee ceremony through blockchain submission
     And the owner starts an "open" governed proposal through blockchain submission
     And the integration test forces the election into a stale "Closed" state before the governed proposal executes

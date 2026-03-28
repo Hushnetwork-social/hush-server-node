@@ -84,6 +84,12 @@ public class EncryptedElectionEnvelopeContentHandler(
                 IsValidCreateDraftAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.UpdateDraft =>
                 IsValidUpdateDraftAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.ImportRoster =>
+                IsValidImportRosterAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.ClaimRosterEntry =>
+                IsValidClaimRosterEntryAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.ActivateRosterEntry =>
+                IsValidActivateRosterEntryAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.InviteTrustee =>
                 IsValidInviteTrusteeAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.AcceptTrusteeInvitation =>
@@ -169,6 +175,99 @@ public class EncryptedElectionEnvelopeContentHandler(
             new SignatureInfo(signatory, decryptedEnvelope.Transaction.UserSignature!.Signature));
 
         return _updateElectionDraftContentHandler.ValidateAndSign(signedTransaction) is not null;
+    }
+
+    private bool IsValidImportRosterAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var importAction = decryptedEnvelope.DeserializeAction<ImportElectionRosterActionPayload>();
+        if (importAction is null
+            || !HasMatchingActor(signatory, importAction.ActorPublicAddress)
+            || ElectionEligibilityContracts.ValidateRosterImportEntries(importAction.RosterEntries).Count > 0)
+        {
+            return false;
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
+        if (election is null
+            || election.LifecycleState != ElectionLifecycleState.Draft
+            || !string.Equals(election.OwnerPublicAddress, importAction.ActorPublicAddress, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var pendingProposal = repository
+            .GetPendingGovernedProposalAsync(decryptedEnvelope.Transaction.Payload.ElectionId)
+            .GetAwaiter()
+            .GetResult();
+        return !IsDraftBlockedByPendingOpenProposal(pendingProposal);
+    }
+
+    private bool IsValidClaimRosterEntryAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var claimAction = decryptedEnvelope.DeserializeAction<ClaimElectionRosterEntryActionPayload>();
+        if (claimAction is null
+            || !HasMatchingActor(signatory, claimAction.ActorPublicAddress)
+            || !string.Equals(
+                claimAction.VerificationCode?.Trim(),
+                ElectionEligibilityContracts.TemporaryVerificationCode,
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
+        if (election is null
+            || (election.LifecycleState != ElectionLifecycleState.Draft &&
+                election.LifecycleState != ElectionLifecycleState.Open))
+        {
+            return false;
+        }
+
+        var rosterEntry = repository
+            .GetRosterEntryAsync(decryptedEnvelope.Transaction.Payload.ElectionId, claimAction.OrganizationVoterId)
+            .GetAwaiter()
+            .GetResult();
+        if (rosterEntry is null
+            || (election.LifecycleState == ElectionLifecycleState.Open && !rosterEntry.WasPresentAtOpen))
+        {
+            return false;
+        }
+
+        var actorExistingEntry = repository
+            .GetRosterEntryByLinkedActorAsync(decryptedEnvelope.Transaction.Payload.ElectionId, claimAction.ActorPublicAddress)
+            .GetAwaiter()
+            .GetResult();
+        return actorExistingEntry is null
+            || string.Equals(
+                actorExistingEntry.OrganizationVoterId,
+                claimAction.OrganizationVoterId,
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsValidActivateRosterEntryAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var activateAction = decryptedEnvelope.DeserializeAction<ActivateElectionRosterEntryActionPayload>();
+        if (activateAction is null || !HasMatchingActor(signatory, activateAction.ActorPublicAddress))
+        {
+            return false;
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
+        return election is not null
+            && election.LifecycleState == ElectionLifecycleState.Open
+            && string.Equals(election.OwnerPublicAddress, activateAction.ActorPublicAddress, StringComparison.Ordinal);
     }
 
     private bool IsValidInviteTrusteeAction(

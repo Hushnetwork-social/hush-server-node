@@ -2,6 +2,7 @@ using HushNetwork.proto;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
 using Olimpo.EntityFramework.Persistency;
+using Timestamp = Google.Protobuf.WellKnownTypes.Timestamp;
 
 namespace HushNode.Elections.gRPC;
 
@@ -104,6 +105,103 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         response.FinalizationSessions.AddRange(finalizationSessions.Select(x => x.ToProto()));
         response.FinalizationShares.AddRange(finalizationShares.Select(x => x.ToProto()));
         response.FinalizationReleaseEvidenceRecords.AddRange(finalizationReleaseEvidenceRecords.Select(x => x.ToProto()));
+
+        return response;
+    }
+
+    public async Task<GetElectionEligibilityViewResponse> GetElectionEligibilityViewAsync(
+        ElectionId electionId,
+        string actorPublicAddress)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var normalizedActorPublicAddress = actorPublicAddress?.Trim() ?? string.Empty;
+
+        var election = await repository.GetElectionAsync(electionId);
+        if (election is null)
+        {
+            return new GetElectionEligibilityViewResponse
+            {
+                Success = false,
+                ErrorMessage = $"Election {electionId} was not found.",
+                ActorPublicAddress = normalizedActorPublicAddress,
+            };
+        }
+
+        var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(electionId);
+        var rosterEntries = await repository.GetRosterEntriesAsync(electionId);
+        var participationRecords = await repository.GetParticipationRecordsAsync(electionId);
+        var activationEvents = await repository.GetEligibilityActivationEventsAsync(electionId);
+        var snapshots = await repository.GetEligibilitySnapshotsAsync(electionId);
+        var selfRosterEntry = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
+            ? null
+            : await repository.GetRosterEntryByLinkedActorAsync(electionId, normalizedActorPublicAddress);
+        var actorRole = ResolveEligibilityActorRole(
+            election,
+            trusteeInvitations,
+            selfRosterEntry,
+            normalizedActorPublicAddress);
+        var participationLookup = participationRecords.ToDictionary(
+            x => x.OrganizationVoterId,
+            StringComparer.OrdinalIgnoreCase);
+        var canReviewRestrictedRoster =
+            actorRole == ElectionEligibilityActorRoleProto.EligibilityActorOwner ||
+            actorRole == ElectionEligibilityActorRoleProto.EligibilityActorRestrictedReviewer;
+
+        var response = new GetElectionEligibilityViewResponse
+        {
+            Success = true,
+            ErrorMessage = string.Empty,
+            ActorPublicAddress = normalizedActorPublicAddress,
+            ActorRole = actorRole,
+            CanImportRoster =
+                actorRole == ElectionEligibilityActorRoleProto.EligibilityActorOwner &&
+                election.LifecycleState == ElectionLifecycleState.Draft,
+            CanActivateRoster =
+                actorRole == ElectionEligibilityActorRoleProto.EligibilityActorOwner &&
+                election.LifecycleState == ElectionLifecycleState.Open &&
+                election.EligibilityMutationPolicy == EligibilityMutationPolicy.LateActivationForRosteredVotersOnly,
+            CanReviewRestrictedRoster = canReviewRestrictedRoster,
+            CanClaimIdentity =
+                !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
+                actorRole != ElectionEligibilityActorRoleProto.EligibilityActorOwner &&
+                selfRosterEntry is null &&
+                (election.LifecycleState == ElectionLifecycleState.Draft ||
+                 election.LifecycleState == ElectionLifecycleState.Open),
+            UsesTemporaryVerificationCode = true,
+            TemporaryVerificationCode = ElectionEligibilityContracts.TemporaryVerificationCode,
+            Summary = BuildEligibilitySummary(
+                election,
+                rosterEntries,
+                participationLookup,
+                activationEvents.Count),
+        };
+
+        if (selfRosterEntry is not null)
+        {
+            response.SelfRosterEntry = ToEligibilityRosterEntryView(
+                election,
+                selfRosterEntry,
+                participationLookup.GetValueOrDefault(selfRosterEntry.OrganizationVoterId));
+        }
+
+        if (canReviewRestrictedRoster)
+        {
+            response.RestrictedRosterEntries.AddRange(rosterEntries
+                .OrderBy(x => x.OrganizationVoterId, StringComparer.OrdinalIgnoreCase)
+                .Select(x => ToEligibilityRosterEntryView(
+                    election,
+                    x,
+                    participationLookup.GetValueOrDefault(x.OrganizationVoterId))));
+            response.ActivationEvents.AddRange(activationEvents
+                .OrderByDescending(x => x.OccurredAt)
+                .ThenByDescending(x => x.Id)
+                .Select(ToEligibilityActivationEventView));
+            response.EligibilitySnapshots.AddRange(snapshots
+                .OrderBy(x => x.RecordedAt)
+                .ThenBy(x => x.SnapshotType)
+                .Select(ToEligibilitySnapshotView));
+        }
 
         return response;
     }
@@ -237,6 +335,35 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         return response;
     }
 
+    private static ElectionEligibilitySummaryView BuildEligibilitySummary(
+        ElectionRecord election,
+        IReadOnlyList<ElectionRosterEntryRecord> rosterEntries,
+        IReadOnlyDictionary<string, ElectionParticipationRecord> participationLookup,
+        int activationEventCount)
+    {
+        var scopedRosterEntries = ResolveScopedRosterEntries(election, rosterEntries);
+        var denominatorEntries = ResolveCurrentDenominatorEntries(election, rosterEntries);
+        var countedParticipationCount = denominatorEntries.Count(x =>
+            participationLookup.TryGetValue(x.OrganizationVoterId, out var participation) &&
+            participation.CountsAsParticipation);
+        var blankCount = denominatorEntries.Count(x =>
+            participationLookup.TryGetValue(x.OrganizationVoterId, out var participation) &&
+            participation.ParticipationStatus == ElectionParticipationStatus.Blank);
+
+        return new ElectionEligibilitySummaryView
+        {
+            RosteredCount = scopedRosterEntries.Count,
+            LinkedCount = scopedRosterEntries.Count(x => x.IsLinked),
+            ActiveCount = scopedRosterEntries.Count(x => x.IsActive),
+            ActiveAtOpenCount = scopedRosterEntries.Count(x => x.WasActiveAtOpen),
+            CurrentDenominatorCount = denominatorEntries.Count,
+            CountedParticipationCount = countedParticipationCount,
+            BlankCount = blankCount,
+            DidNotVoteCount = Math.Max(0, denominatorEntries.Count - countedParticipationCount),
+            ActivationEventCount = activationEventCount,
+        };
+    }
+
     private IReadOnlyList<ElectionCeremonyProfileRecord> FilterVisibleCeremonyProfiles(
         IReadOnlyList<ElectionCeremonyProfileRecord> ceremonyProfiles) =>
         ceremonyProfiles
@@ -244,6 +371,32 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             .OrderBy(x => x.DevOnly)
             .ThenBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    private static ElectionEligibilityActorRoleProto ResolveEligibilityActorRole(
+        ElectionRecord election,
+        IReadOnlyList<ElectionTrusteeInvitationRecord> trusteeInvitations,
+        ElectionRosterEntryRecord? selfRosterEntry,
+        string actorPublicAddress)
+    {
+        if (!string.IsNullOrWhiteSpace(actorPublicAddress) &&
+            string.Equals(election.OwnerPublicAddress, actorPublicAddress, StringComparison.OrdinalIgnoreCase))
+        {
+            return ElectionEligibilityActorRoleProto.EligibilityActorOwner;
+        }
+
+        var hasAcceptedTrusteeInvitation = !string.IsNullOrWhiteSpace(actorPublicAddress) &&
+            trusteeInvitations.Any(x =>
+                x.Status == ElectionTrusteeInvitationStatus.Accepted &&
+                string.Equals(x.TrusteeUserAddress, actorPublicAddress, StringComparison.OrdinalIgnoreCase));
+        if (hasAcceptedTrusteeInvitation)
+        {
+            return ElectionEligibilityActorRoleProto.EligibilityActorRestrictedReviewer;
+        }
+
+        return selfRosterEntry is not null
+            ? ElectionEligibilityActorRoleProto.EligibilityActorLinkedVoter
+            : ElectionEligibilityActorRoleProto.EligibilityActorReadOnly;
+    }
 
     private static ElectionCeremonyActorRoleProto ResolveActorRole(
         ElectionRecord election,
@@ -263,6 +416,153 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             ? ElectionCeremonyActorRoleProto.CeremonyActorTrustee
             : ElectionCeremonyActorRoleProto.CeremonyActorReadOnly;
     }
+
+    private static ElectionRosterEntryView ToEligibilityRosterEntryView(
+        ElectionRecord election,
+        ElectionRosterEntryRecord rosterEntry,
+        ElectionParticipationRecord? participationRecord) =>
+        new()
+        {
+            ElectionId = rosterEntry.ElectionId.ToString(),
+            OrganizationVoterId = rosterEntry.OrganizationVoterId,
+            ContactType = (ElectionRosterContactTypeProto)(int)rosterEntry.ContactType,
+            ContactValueHint = BuildContactValueHint(rosterEntry.ContactType, rosterEntry.ContactValue),
+            LinkStatus = (ElectionVoterLinkStatusProto)(int)rosterEntry.LinkStatus,
+            VotingRightStatus = (ElectionVotingRightStatusProto)(int)rosterEntry.VotingRightStatus,
+            WasPresentAtOpen = rosterEntry.WasPresentAtOpen,
+            WasActiveAtOpen = rosterEntry.WasActiveAtOpen,
+            InCurrentDenominator = IsInCurrentDenominator(election, rosterEntry),
+            ParticipationStatus = (ElectionParticipationStatusProto)(int)(participationRecord?.ParticipationStatus
+                ?? ElectionParticipationStatus.DidNotVote),
+            CountsAsParticipation = participationRecord?.CountsAsParticipation ?? false,
+        };
+
+    private static ElectionEligibilityActivationEventView ToEligibilityActivationEventView(
+        ElectionEligibilityActivationEventRecord activationEvent) =>
+        new()
+        {
+            Id = activationEvent.Id.ToString(),
+            ElectionId = activationEvent.ElectionId.ToString(),
+            OrganizationVoterId = activationEvent.OrganizationVoterId,
+            AttemptedByPublicAddress = activationEvent.AttemptedByPublicAddress,
+            Outcome = (ElectionEligibilityActivationOutcomeProto)(int)activationEvent.Outcome,
+            BlockReason = (ElectionEligibilityActivationBlockReasonProto)(int)activationEvent.BlockReason,
+            OccurredAt = ToProtoTimestamp(activationEvent.OccurredAt),
+        };
+
+    private static ElectionEligibilitySnapshotView ToEligibilitySnapshotView(
+        ElectionEligibilitySnapshotRecord snapshot) =>
+        new()
+        {
+            Id = snapshot.Id.ToString(),
+            ElectionId = snapshot.ElectionId.ToString(),
+            SnapshotType = (ElectionEligibilitySnapshotTypeProto)(int)snapshot.SnapshotType,
+            EligibilityMutationPolicy = (EligibilityMutationPolicyProto)(int)snapshot.EligibilityMutationPolicy,
+            RosteredCount = snapshot.RosteredCount,
+            LinkedCount = snapshot.LinkedCount,
+            ActiveDenominatorCount = snapshot.ActiveDenominatorCount,
+            CountedParticipationCount = snapshot.CountedParticipationCount,
+            BlankCount = snapshot.BlankCount,
+            DidNotVoteCount = snapshot.DidNotVoteCount,
+            RosteredVoterSetHash = EncodeHash(snapshot.RosteredVoterSetHash),
+            ActiveDenominatorSetHash = EncodeHash(snapshot.ActiveDenominatorSetHash),
+            CountedParticipationSetHash = EncodeHash(snapshot.CountedParticipationSetHash),
+            BoundaryArtifactId = snapshot.BoundaryArtifactId?.ToString() ?? string.Empty,
+            RecordedAt = ToProtoTimestamp(snapshot.RecordedAt),
+            RecordedByPublicAddress = snapshot.RecordedByPublicAddress,
+        };
+
+    private static IReadOnlyList<ElectionRosterEntryRecord> ResolveScopedRosterEntries(
+        ElectionRecord election,
+        IReadOnlyList<ElectionRosterEntryRecord> rosterEntries) =>
+        election.LifecycleState == ElectionLifecycleState.Draft
+            ? rosterEntries
+            : rosterEntries.Where(x => x.WasPresentAtOpen).ToArray();
+
+    private static IReadOnlyList<ElectionRosterEntryRecord> ResolveCurrentDenominatorEntries(
+        ElectionRecord election,
+        IReadOnlyList<ElectionRosterEntryRecord> rosterEntries)
+    {
+        var scopedRosterEntries = ResolveScopedRosterEntries(election, rosterEntries);
+        if (election.LifecycleState == ElectionLifecycleState.Draft)
+        {
+            return scopedRosterEntries.Where(x => x.IsActive).ToArray();
+        }
+
+        return election.EligibilityMutationPolicy switch
+        {
+            EligibilityMutationPolicy.FrozenAtOpen => scopedRosterEntries
+                .Where(x => x.WasActiveAtOpen)
+                .ToArray(),
+            EligibilityMutationPolicy.LateActivationForRosteredVotersOnly => scopedRosterEntries
+                .Where(x => x.IsActive)
+                .ToArray(),
+            _ => Array.Empty<ElectionRosterEntryRecord>(),
+        };
+    }
+
+    private static bool IsInCurrentDenominator(ElectionRecord election, ElectionRosterEntryRecord rosterEntry)
+    {
+        if (election.LifecycleState == ElectionLifecycleState.Draft)
+        {
+            return rosterEntry.IsActive;
+        }
+
+        if (!rosterEntry.WasPresentAtOpen)
+        {
+            return false;
+        }
+
+        return election.EligibilityMutationPolicy switch
+        {
+            EligibilityMutationPolicy.FrozenAtOpen => rosterEntry.WasActiveAtOpen,
+            EligibilityMutationPolicy.LateActivationForRosteredVotersOnly => rosterEntry.IsActive,
+            _ => false,
+        };
+    }
+
+    private static string BuildContactValueHint(
+        ElectionRosterContactType contactType,
+        string contactValue)
+    {
+        var normalized = contactValue?.Trim() ?? string.Empty;
+        return contactType switch
+        {
+            ElectionRosterContactType.Phone => BuildPhoneHint(normalized),
+            ElectionRosterContactType.Email => BuildEmailHint(normalized),
+            _ => "Contact on file",
+        };
+    }
+
+    private static string BuildPhoneHint(string contactValue)
+    {
+        var digits = new string(contactValue.Where(char.IsDigit).ToArray());
+        if (digits.Length < 4)
+        {
+            return "SMS on file";
+        }
+
+        return $"SMS to ***{digits[^4..]}";
+    }
+
+    private static string BuildEmailHint(string contactValue)
+    {
+        var atIndex = contactValue.LastIndexOf('@');
+        if (atIndex >= 0 && atIndex < contactValue.Length - 1)
+        {
+            return $"Email ending @{contactValue[(atIndex + 1)..]}";
+        }
+
+        return "Email on file";
+    }
+
+    private static string EncodeHash(byte[]? value) =>
+        value is null || value.Length == 0
+            ? string.Empty
+            : Convert.ToBase64String(value);
+
+    private static Timestamp ToProtoTimestamp(DateTime value) =>
+        Timestamp.FromDateTime(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 
     private static IReadOnlyList<ElectionCeremonyActionAvailability> BuildOwnerActions(
         ElectionRecord election,

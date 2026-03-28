@@ -289,6 +289,139 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionEligibilityViewAsync_WithOwnerRole_ReturnsRestrictedEligibilityData()
+    {
+        var mocker = new AutoMocker();
+        var openedAt = DateTime.UtcNow.AddMinutes(-30);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            EligibilityMutationPolicy = EligibilityMutationPolicy.LateActivationForRosteredVotersOnly,
+            OpenedAt = openedAt,
+            OpenArtifactId = Guid.NewGuid(),
+            LastUpdatedAt = openedAt,
+        };
+        var linkedActiveEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "1001",
+                ElectionRosterContactType.Phone,
+                "+41790001001",
+                ElectionVotingRightStatus.Active,
+                importedAt: openedAt.AddHours(-2))
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address", openedAt.AddMinutes(1));
+        var lateActivatedEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "1002",
+                ElectionRosterContactType.Email,
+                "voter-1002@example.org",
+                ElectionVotingRightStatus.Inactive,
+                importedAt: openedAt.AddHours(-2))
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-two", openedAt.AddMinutes(2))
+            .MarkVotingRightActive("owner-address", openedAt.AddMinutes(5));
+        var participation = ElectionModelFactory.CreateParticipationRecord(
+            election.ElectionId,
+            "1001",
+            ElectionParticipationStatus.CountedAsVoted,
+            openedAt.AddMinutes(10));
+        var activationEvent = ElectionModelFactory.CreateEligibilityActivationEvent(
+            election.ElectionId,
+            "1002",
+            "owner-address",
+            ElectionEligibilityActivationOutcome.Activated,
+            occurredAt: openedAt.AddMinutes(5));
+        var snapshot = ElectionModelFactory.CreateEligibilitySnapshot(
+            election.ElectionId,
+            ElectionEligibilitySnapshotType.Open,
+            election.EligibilityMutationPolicy,
+            rosteredCount: 2,
+            linkedCount: 2,
+            activeDenominatorCount: 1,
+            countedParticipationCount: 0,
+            blankCount: 0,
+            didNotVoteCount: 1,
+            rosteredVoterSetHash: [1, 2, 3],
+            activeDenominatorSetHash: [4, 5, 6],
+            countedParticipationSetHash: [7, 8, 9],
+            recordedByPublicAddress: "owner-address",
+            boundaryArtifactId: election.OpenArtifactId,
+            recordedAt: openedAt);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetRosterEntriesAsync(election.ElectionId)).ReturnsAsync([linkedActiveEntry, lateActivatedEntry]);
+            repo.Setup(x => x.GetParticipationRecordsAsync(election.ElectionId)).ReturnsAsync([participation]);
+            repo.Setup(x => x.GetEligibilityActivationEventsAsync(election.ElectionId)).ReturnsAsync([activationEvent]);
+            repo.Setup(x => x.GetEligibilitySnapshotsAsync(election.ElectionId)).ReturnsAsync([snapshot]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionEligibilityViewAsync(election.ElectionId, "owner-address");
+
+        response.Success.Should().BeTrue();
+        response.ActorRole.Should().Be(ElectionEligibilityActorRoleProto.EligibilityActorOwner);
+        response.CanImportRoster.Should().BeFalse();
+        response.CanActivateRoster.Should().BeTrue();
+        response.CanReviewRestrictedRoster.Should().BeTrue();
+        response.CanClaimIdentity.Should().BeFalse();
+        response.UsesTemporaryVerificationCode.Should().BeTrue();
+        response.TemporaryVerificationCode.Should().Be("1111");
+        response.RestrictedRosterEntries.Should().HaveCount(2);
+        response.ActivationEvents.Should().ContainSingle();
+        response.EligibilitySnapshots.Should().ContainSingle();
+        response.Summary.RosteredCount.Should().Be(2);
+        response.Summary.LinkedCount.Should().Be(2);
+        response.Summary.ActiveCount.Should().Be(2);
+        response.Summary.CurrentDenominatorCount.Should().Be(2);
+        response.Summary.CountedParticipationCount.Should().Be(1);
+        response.Summary.DidNotVoteCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetElectionEligibilityViewAsync_WithLinkedVoterRole_ReturnsSelfStatusOnly()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection();
+        var linkedEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "1001",
+                ElectionRosterContactType.Email,
+                "voter-1001@example.org")
+            .LinkToActor("voter-address", DateTime.UtcNow);
+        var participation = ElectionModelFactory.CreateParticipationRecord(
+            election.ElectionId,
+            "1001",
+            ElectionParticipationStatus.Blank);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetRosterEntriesAsync(election.ElectionId)).ReturnsAsync([linkedEntry]);
+            repo.Setup(x => x.GetParticipationRecordsAsync(election.ElectionId)).ReturnsAsync([participation]);
+            repo.Setup(x => x.GetRosterEntryByLinkedActorAsync(election.ElectionId, "voter-address"))
+                .ReturnsAsync(linkedEntry);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionEligibilityViewAsync(election.ElectionId, "voter-address");
+
+        response.Success.Should().BeTrue();
+        response.ActorRole.Should().Be(ElectionEligibilityActorRoleProto.EligibilityActorLinkedVoter);
+        response.CanReviewRestrictedRoster.Should().BeFalse();
+        response.CanClaimIdentity.Should().BeFalse();
+        response.SelfRosterEntry.Should().NotBeNull();
+        response.SelfRosterEntry.OrganizationVoterId.Should().Be("1001");
+        response.SelfRosterEntry.ParticipationStatus.Should().Be(ElectionParticipationStatusProto.ParticipationBlank);
+        response.RestrictedRosterEntries.Should().BeEmpty();
+        response.ActivationEvents.Should().BeEmpty();
+        response.EligibilitySnapshots.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task GetElectionAsync_WithDevProfilesDisabled_FiltersDevOnlyCeremonyProfiles()
     {
         var mocker = new AutoMocker();
@@ -493,6 +626,16 @@ public class ElectionQueryApplicationServiceTests
             .ReturnsAsync(Array.Empty<ElectionFinalizationShareRecord>());
         repository.Setup(x => x.GetFinalizationReleaseEvidenceRecordsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionFinalizationReleaseEvidenceRecord>());
+        repository.Setup(x => x.GetRosterEntriesAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionRosterEntryRecord>());
+        repository.Setup(x => x.GetParticipationRecordsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionParticipationRecord>());
+        repository.Setup(x => x.GetEligibilityActivationEventsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionEligibilityActivationEventRecord>());
+        repository.Setup(x => x.GetEligibilitySnapshotsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionEligibilitySnapshotRecord>());
+        repository.Setup(x => x.GetRosterEntryByLinkedActorAsync(It.IsAny<ElectionId>(), It.IsAny<string>()))
+            .ReturnsAsync((ElectionRosterEntryRecord?)null);
         repository.Setup(x => x.GetCeremonyShareCustodyRecordAsync(It.IsAny<Guid>(), It.IsAny<string>()))
             .ReturnsAsync((ElectionCeremonyShareCustodyRecord?)null);
         repository.Setup(x => x.GetCeremonyMessageEnvelopesForRecipientAsync(It.IsAny<Guid>(), It.IsAny<string>()))

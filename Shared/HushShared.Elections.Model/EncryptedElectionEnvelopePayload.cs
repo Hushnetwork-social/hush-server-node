@@ -26,6 +26,19 @@ public record UpdateElectionDraftActionPayload(
     string SnapshotReason,
     ElectionDraftSpecification Draft);
 
+public record ImportElectionRosterActionPayload(
+    string ActorPublicAddress,
+    IReadOnlyList<ElectionRosterImportItem> RosterEntries);
+
+public record ClaimElectionRosterEntryActionPayload(
+    string ActorPublicAddress,
+    string OrganizationVoterId,
+    string VerificationCode);
+
+public record ActivateElectionRosterEntryActionPayload(
+    string ActorPublicAddress,
+    string OrganizationVoterId);
+
 public record InviteElectionTrusteeActionPayload(
     Guid InvitationId,
     string ActorPublicAddress,
@@ -149,6 +162,9 @@ public static class EncryptedElectionEnvelopeActionTypes
 {
     public const string CreateDraft = "create_draft";
     public const string UpdateDraft = "update_draft";
+    public const string ImportRoster = "import_roster";
+    public const string ClaimRosterEntry = "claim_roster_entry";
+    public const string ActivateRosterEntry = "activate_roster_entry";
     public const string InviteTrustee = "invite_trustee";
     public const string AcceptTrusteeInvitation = "accept_trustee_invitation";
     public const string RejectTrusteeInvitation = "reject_trustee_invitation";

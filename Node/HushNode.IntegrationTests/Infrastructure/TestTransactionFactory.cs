@@ -153,6 +153,50 @@ internal static class TestTransactionFactory
         return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
     }
 
+    public static string ImportElectionRoster(
+        TestIdentity owner,
+        ElectionId electionId,
+        IReadOnlyList<ElectionRosterImportItem> rosterEntries)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.ImportRoster,
+            JsonSerializer.SerializeToElement(new ImportElectionRosterActionPayload(
+                owner.PublicSigningAddress,
+                rosterEntries)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    public static string ClaimElectionRosterEntry(
+        TestIdentity actor,
+        ElectionId electionId,
+        string organizationVoterId,
+        string verificationCode)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.ClaimRosterEntry,
+            JsonSerializer.SerializeToElement(new ClaimElectionRosterEntryActionPayload(
+                actor.PublicSigningAddress,
+                organizationVoterId,
+                verificationCode)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(actor, electionId, actionEnvelope);
+    }
+
+    public static string ActivateElectionRosterEntry(
+        TestIdentity owner,
+        ElectionId electionId,
+        string organizationVoterId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.ActivateRosterEntry,
+            JsonSerializer.SerializeToElement(new ActivateElectionRosterEntryActionPayload(
+                owner.PublicSigningAddress,
+                organizationVoterId)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
     public static string StartElectionCeremony(
         TestIdentity owner,
         ElectionId electionId,

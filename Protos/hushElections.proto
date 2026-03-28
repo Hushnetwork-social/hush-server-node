@@ -31,6 +31,7 @@ service HushElections {
   rpc CloseElection(CloseElectionRequest) returns (ElectionCommandResponse);
   rpc FinalizeElection(FinalizeElectionRequest) returns (ElectionCommandResponse);
   rpc GetElection(GetElectionRequest) returns (GetElectionResponse);
+  rpc GetElectionEligibilityView(GetElectionEligibilityViewRequest) returns (GetElectionEligibilityViewResponse);
   rpc GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest) returns (GetElectionEnvelopeAccessResponse);
   rpc GetElectionCeremonyActionView(GetElectionCeremonyActionViewRequest) returns (GetElectionCeremonyActionViewResponse);
   rpc GetElectionsByOwner(GetElectionsByOwnerRequest) returns (GetElectionsByOwnerResponse);
@@ -76,6 +77,47 @@ enum VoteUpdatePolicyProto {
 
 enum EligibilitySourceTypeProto {
   OrganizationImportedRoster = 0;
+}
+
+enum ElectionRosterContactTypeProto {
+  RosterContactEmail = 0;
+  RosterContactPhone = 1;
+}
+
+enum ElectionVoterLinkStatusProto {
+  VoterLinkUnlinked = 0;
+  VoterLinkLinked = 1;
+}
+
+enum ElectionVotingRightStatusProto {
+  VotingRightInactive = 0;
+  VotingRightActive = 1;
+}
+
+enum ElectionParticipationStatusProto {
+  ParticipationDidNotVote = 0;
+  ParticipationCountedAsVoted = 1;
+  ParticipationBlank = 2;
+}
+
+enum ElectionEligibilityActivationOutcomeProto {
+  EligibilityActivationSucceeded = 0;
+  EligibilityActivationBlocked = 1;
+}
+
+enum ElectionEligibilityActivationBlockReasonProto {
+  EligibilityActivationBlockReasonNone = 0;
+  EligibilityActivationBlockReasonRosterEntryNotFound = 1;
+  EligibilityActivationBlockReasonNotRosteredAtOpen = 2;
+  EligibilityActivationBlockReasonAlreadyActive = 3;
+  EligibilityActivationBlockReasonPolicyDisallowsLateActivation = 4;
+  EligibilityActivationBlockReasonElectionNotOpen = 5;
+  EligibilityActivationBlockReasonNotLinkedToHushAccount = 6;
+}
+
+enum ElectionEligibilitySnapshotTypeProto {
+  EligibilitySnapshotOpen = 0;
+  EligibilitySnapshotClose = 1;
 }
 
 enum EligibilityMutationPolicyProto {
@@ -764,6 +806,11 @@ message GetElectionRequest {
   string ElectionId = 1;
 }
 
+message GetElectionEligibilityViewRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+}
+
 message GetElectionEnvelopeAccessRequest {
   string ElectionId = 1;
   string ActorPublicAddress = 2;
@@ -773,6 +820,87 @@ message GetElectionEnvelopeAccessResponse {
   bool Success = 1;
   string ErrorMessage = 2;
   string ActorEncryptedElectionPrivateKey = 3;
+}
+
+enum ElectionEligibilityActorRoleProto {
+  EligibilityActorUnknown = 0;
+  EligibilityActorOwner = 1;
+  EligibilityActorRestrictedReviewer = 2;
+  EligibilityActorLinkedVoter = 3;
+  EligibilityActorReadOnly = 4;
+}
+
+message ElectionEligibilitySummaryView {
+  int32 RosteredCount = 1;
+  int32 LinkedCount = 2;
+  int32 ActiveCount = 3;
+  int32 ActiveAtOpenCount = 4;
+  int32 CurrentDenominatorCount = 5;
+  int32 CountedParticipationCount = 6;
+  int32 BlankCount = 7;
+  int32 DidNotVoteCount = 8;
+  int32 ActivationEventCount = 9;
+}
+
+message ElectionRosterEntryView {
+  string ElectionId = 1;
+  string OrganizationVoterId = 2;
+  ElectionRosterContactTypeProto ContactType = 3;
+  string ContactValueHint = 4;
+  ElectionVoterLinkStatusProto LinkStatus = 5;
+  ElectionVotingRightStatusProto VotingRightStatus = 6;
+  bool WasPresentAtOpen = 7;
+  bool WasActiveAtOpen = 8;
+  bool InCurrentDenominator = 9;
+  ElectionParticipationStatusProto ParticipationStatus = 10;
+  bool CountsAsParticipation = 11;
+}
+
+message ElectionEligibilityActivationEventView {
+  string Id = 1;
+  string ElectionId = 2;
+  string OrganizationVoterId = 3;
+  string AttemptedByPublicAddress = 4;
+  ElectionEligibilityActivationOutcomeProto Outcome = 5;
+  ElectionEligibilityActivationBlockReasonProto BlockReason = 6;
+  google.protobuf.Timestamp OccurredAt = 7;
+}
+
+message ElectionEligibilitySnapshotView {
+  string Id = 1;
+  string ElectionId = 2;
+  ElectionEligibilitySnapshotTypeProto SnapshotType = 3;
+  EligibilityMutationPolicyProto EligibilityMutationPolicy = 4;
+  int32 RosteredCount = 5;
+  int32 LinkedCount = 6;
+  int32 ActiveDenominatorCount = 7;
+  int32 CountedParticipationCount = 8;
+  int32 BlankCount = 9;
+  int32 DidNotVoteCount = 10;
+  string RosteredVoterSetHash = 11;
+  string ActiveDenominatorSetHash = 12;
+  string CountedParticipationSetHash = 13;
+  string BoundaryArtifactId = 14;
+  google.protobuf.Timestamp RecordedAt = 15;
+  string RecordedByPublicAddress = 16;
+}
+
+message GetElectionEligibilityViewResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ActorPublicAddress = 3;
+  ElectionEligibilityActorRoleProto ActorRole = 4;
+  bool CanImportRoster = 5;
+  bool CanActivateRoster = 6;
+  bool CanReviewRestrictedRoster = 7;
+  bool CanClaimIdentity = 8;
+  bool UsesTemporaryVerificationCode = 9;
+  string TemporaryVerificationCode = 10;
+  ElectionEligibilitySummaryView Summary = 11;
+  ElectionRosterEntryView SelfRosterEntry = 12;
+  repeated ElectionRosterEntryView RestrictedRosterEntries = 13;
+  repeated ElectionEligibilityActivationEventView ActivationEvents = 14;
+  repeated ElectionEligibilitySnapshotView EligibilitySnapshots = 15;
 }
 
 message GetElectionCeremonyActionViewRequest {

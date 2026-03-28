@@ -246,6 +246,52 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task GetElectionEligibilityView_WithValidRequest_ReturnsEligibilityPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionEligibilityViewAsync(
+                electionId,
+                "voter-address"))
+            .ReturnsAsync(new GetElectionEligibilityViewResponse
+            {
+                Success = true,
+                ActorRole = ElectionEligibilityActorRoleProto.EligibilityActorLinkedVoter,
+                ActorPublicAddress = "voter-address",
+                UsesTemporaryVerificationCode = true,
+                TemporaryVerificationCode = "1111",
+                Summary = new ElectionEligibilitySummaryView
+                {
+                    RosteredCount = 12,
+                    CurrentDenominatorCount = 9,
+                },
+                SelfRosterEntry = new ElectionRosterEntryView
+                {
+                    ElectionId = electionId.ToString(),
+                    OrganizationVoterId = "1001",
+                    ParticipationStatus = ElectionParticipationStatusProto.ParticipationDidNotVote,
+                },
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionEligibilityView(new GetElectionEligibilityViewRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = "voter-address",
+        }, CreateMockServerCallContext());
+
+        response.Success.Should().BeTrue();
+        response.ActorRole.Should().Be(ElectionEligibilityActorRoleProto.EligibilityActorLinkedVoter);
+        response.TemporaryVerificationCode.Should().Be("1111");
+        response.SelfRosterEntry.Should().NotBeNull();
+        response.SelfRosterEntry.OrganizationVoterId.Should().Be("1001");
+        response.Summary.RosteredCount.Should().Be(12);
+    }
+
+    [Fact]
     public async Task StartElectionGovernedProposal_RejectsDirectCommandPath()
     {
         var mocker = new AutoMocker();

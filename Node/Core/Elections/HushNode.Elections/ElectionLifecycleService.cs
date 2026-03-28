@@ -218,6 +218,339 @@ public class ElectionLifecycleService : IElectionLifecycleService
         return ElectionCommandResult.Success(updated, draftSnapshot: snapshot);
     }
 
+    public async Task<ElectionCommandResult> ImportRosterAsync(ImportElectionRosterRequest request)
+    {
+        var validationErrors = ElectionEligibilityContracts.ValidateRosterImportEntries(request.RosterEntries);
+        if (validationErrors.Count > 0)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Election roster import validation failed.",
+                validationErrors);
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+        if (election is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Election {request.ElectionId} was not found.");
+        }
+
+        if (election.LifecycleState != ElectionLifecycleState.Draft)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.InvalidState,
+                "Roster import is only allowed while the election remains in draft.");
+        }
+
+        if (!string.Equals(election.OwnerPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Forbidden,
+                "Only the owner can import the election roster.");
+        }
+
+        var pendingProposal = await repository.GetPendingGovernedProposalAsync(request.ElectionId);
+        var governedDraftLock = ValidateDraftNotBlockedByGovernedOpenProposal(pendingProposal);
+        if (governedDraftLock is not null)
+        {
+            return governedDraftLock;
+        }
+
+        ElectionRosterEntryRecord[] rosterEntries;
+        try
+        {
+            var importedAt = DateTime.UtcNow;
+            rosterEntries = request.RosterEntries
+                .Select(entry => ElectionModelFactory.CreateRosterEntry(
+                    request.ElectionId,
+                    entry.OrganizationVoterId,
+                    entry.ContactType,
+                    entry.ContactValue,
+                    entry.IsInitiallyActive
+                        ? ElectionVotingRightStatus.Active
+                        : ElectionVotingRightStatus.Inactive,
+                    importedAt,
+                    request.SourceTransactionId,
+                    request.SourceBlockHeight,
+                    request.SourceBlockId))
+                .ToArray();
+
+            await repository.DeleteRosterEntriesAsync(request.ElectionId);
+            foreach (var rosterEntry in rosterEntries)
+            {
+                await repository.SaveRosterEntryAsync(rosterEntry);
+            }
+
+            await repository.SaveElectionAsync(election with
+            {
+                LastUpdatedAt = importedAt,
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Election roster import validation failed.",
+                [ex.Message]);
+        }
+
+        await unitOfWork.CommitAsync();
+
+        return ElectionCommandResult.Success(
+            election with
+            {
+                LastUpdatedAt = rosterEntries[0].ImportedAt,
+            },
+            rosterEntries: rosterEntries);
+    }
+
+    public async Task<ElectionCommandResult> ClaimRosterEntryAsync(ClaimElectionRosterEntryRequest request)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+        if (election is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Election {request.ElectionId} was not found.");
+        }
+
+        if (election.LifecycleState != ElectionLifecycleState.Draft &&
+            election.LifecycleState != ElectionLifecycleState.Open)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.InvalidState,
+                "Identity claim-linking is only allowed while the election is draft or open.");
+        }
+
+        var rosterEntry = await repository.GetRosterEntryAsync(request.ElectionId, request.OrganizationVoterId);
+        if (rosterEntry is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Roster entry {request.OrganizationVoterId} was not found for election {request.ElectionId}.");
+        }
+
+        if (!string.Equals(
+                request.VerificationCode?.Trim(),
+                ElectionEligibilityContracts.TemporaryVerificationCode,
+                StringComparison.Ordinal))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                $"Temporary verification code must currently be {ElectionEligibilityContracts.TemporaryVerificationCode}.");
+        }
+
+        if (election.LifecycleState == ElectionLifecycleState.Open && !rosterEntry.WasPresentAtOpen)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "Only voters who were rostered before open can claim this election identity.");
+        }
+
+        var actorExistingEntry = await repository.GetRosterEntryByLinkedActorAsync(
+            request.ElectionId,
+            request.ActorPublicAddress);
+        if (actorExistingEntry is not null &&
+            !string.Equals(actorExistingEntry.OrganizationVoterId, request.OrganizationVoterId, StringComparison.OrdinalIgnoreCase))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "This Hush account is already linked to a different roster entry for the election.");
+        }
+
+        ElectionRosterEntryRecord updatedEntry;
+        try
+        {
+            var linkedAt = DateTime.UtcNow;
+            updatedEntry = rosterEntry.LinkToActor(
+                request.ActorPublicAddress,
+                linkedAt,
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+
+            await repository.UpdateRosterEntryAsync(updatedEntry);
+            await repository.SaveElectionAsync(election with
+            {
+                LastUpdatedAt = linkedAt,
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                ex.Message);
+        }
+
+        await unitOfWork.CommitAsync();
+
+        return ElectionCommandResult.Success(
+            election with
+            {
+                LastUpdatedAt = updatedEntry.LastUpdatedAt,
+            },
+            rosterEntry: updatedEntry);
+    }
+
+    public async Task<ElectionCommandResult> ActivateRosterEntryAsync(ActivateElectionRosterEntryRequest request)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+        if (election is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Election {request.ElectionId} was not found.");
+        }
+
+        if (!string.Equals(election.OwnerPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Forbidden,
+                "Only the owner can activate a rostered voter.");
+        }
+
+        if (election.LifecycleState != ElectionLifecycleState.Open)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.InvalidState,
+                "Late activation is only allowed while the election remains open.");
+        }
+
+        var rosterEntry = await repository.GetRosterEntryAsync(request.ElectionId, request.OrganizationVoterId);
+        if (rosterEntry is null)
+        {
+            var blockedResult = await RecordBlockedActivationAsync(
+                repository,
+                election,
+                request.OrganizationVoterId,
+                request.ActorPublicAddress,
+                ElectionEligibilityActivationBlockReason.RosterEntryNotFound,
+                ElectionCommandErrorCode.NotFound,
+                $"Roster entry {request.OrganizationVoterId} was not found in the frozen election roster.",
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+            await unitOfWork.CommitAsync();
+            return blockedResult;
+        }
+
+        if (election.EligibilityMutationPolicy != EligibilityMutationPolicy.LateActivationForRosteredVotersOnly)
+        {
+            var blockedResult = await RecordBlockedActivationAsync(
+                repository,
+                election,
+                rosterEntry.OrganizationVoterId,
+                request.ActorPublicAddress,
+                ElectionEligibilityActivationBlockReason.PolicyDisallowsLateActivation,
+                ElectionCommandErrorCode.InvalidState,
+                "This election freezes the active voter set at open and does not allow late activation.",
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+            await unitOfWork.CommitAsync();
+            return blockedResult;
+        }
+
+        if (!rosterEntry.WasPresentAtOpen)
+        {
+            var blockedResult = await RecordBlockedActivationAsync(
+                repository,
+                election,
+                rosterEntry.OrganizationVoterId,
+                request.ActorPublicAddress,
+                ElectionEligibilityActivationBlockReason.NotRosteredAtOpen,
+                ElectionCommandErrorCode.ValidationFailed,
+                "Late activation is only allowed for voters who were already rostered at open.",
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+            await unitOfWork.CommitAsync();
+            return blockedResult;
+        }
+
+        if (!rosterEntry.IsLinked)
+        {
+            var blockedResult = await RecordBlockedActivationAsync(
+                repository,
+                election,
+                rosterEntry.OrganizationVoterId,
+                request.ActorPublicAddress,
+                ElectionEligibilityActivationBlockReason.NotLinkedToHushAccount,
+                ElectionCommandErrorCode.ValidationFailed,
+                "Late activation requires the voter to claim-link a Hush account first.",
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+            await unitOfWork.CommitAsync();
+            return blockedResult;
+        }
+
+        if (rosterEntry.IsActive)
+        {
+            var blockedResult = await RecordBlockedActivationAsync(
+                repository,
+                election,
+                rosterEntry.OrganizationVoterId,
+                request.ActorPublicAddress,
+                ElectionEligibilityActivationBlockReason.AlreadyActive,
+                ElectionCommandErrorCode.Conflict,
+                "Voting rights are already active for this roster entry.",
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+            await unitOfWork.CommitAsync();
+            return blockedResult;
+        }
+
+        var activatedAt = DateTime.UtcNow;
+        var updatedEntry = rosterEntry.MarkVotingRightActive(
+            request.ActorPublicAddress,
+            activatedAt,
+            request.SourceTransactionId,
+            request.SourceBlockHeight,
+            request.SourceBlockId);
+        var activationEvent = ElectionModelFactory.CreateEligibilityActivationEvent(
+            request.ElectionId,
+            rosterEntry.OrganizationVoterId,
+            request.ActorPublicAddress,
+            ElectionEligibilityActivationOutcome.Activated,
+            occurredAt: activatedAt,
+            sourceTransactionId: request.SourceTransactionId,
+            sourceBlockHeight: request.SourceBlockHeight,
+            sourceBlockId: request.SourceBlockId);
+        var updatedElection = election with
+        {
+            LastUpdatedAt = activatedAt,
+        };
+
+        await repository.UpdateRosterEntryAsync(updatedEntry);
+        await repository.SaveEligibilityActivationEventAsync(activationEvent);
+        await repository.SaveElectionAsync(updatedElection);
+        await unitOfWork.CommitAsync();
+
+        return ElectionCommandResult.Success(
+            updatedElection,
+            rosterEntry: updatedEntry,
+            eligibilityActivationEvent: activationEvent);
+    }
+
     public async Task<ElectionCommandResult> InviteTrusteeAsync(InviteElectionTrusteeRequest request)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
@@ -828,6 +1161,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var invitations = await repository.GetTrusteeInvitationsAsync(request.ElectionId);
+        var rosterEntries = await repository.GetRosterEntriesAsync(request.ElectionId);
         var warningAcknowledgements = await repository.GetWarningAcknowledgementsAsync(request.ElectionId);
         var activeCeremonyVersion = await repository.GetActiveCeremonyVersionAsync(request.ElectionId);
         var activeCeremonyTrusteeStates = activeCeremonyVersion is null
@@ -837,6 +1171,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         return EvaluateOpenReadiness(
             election,
             invitations,
+            rosterEntries,
             activeCeremonyVersion,
             activeCeremonyTrusteeStates,
             warningAcknowledgements,
@@ -1000,6 +1335,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return ElectionCommandResult.Success(
                 executionOutcome.Election,
                 boundaryArtifact: executionOutcome.BoundaryArtifact,
+                eligibilitySnapshot: executionOutcome.EligibilitySnapshot,
                 governedProposal: executionOutcome.Proposal,
                 governedProposalApproval: approval,
                 finalizationSession: executionOutcome.FinalizationSession,
@@ -1072,6 +1408,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         return ElectionCommandResult.Success(
             executionOutcome.Election,
             boundaryArtifact: executionOutcome.BoundaryArtifact,
+            eligibilitySnapshot: executionOutcome.EligibilitySnapshot,
             governedProposal: executionOutcome.Proposal,
             finalizationSession: executionOutcome.FinalizationSession,
             finalizationShare: executionOutcome.FinalizationShare,
@@ -1438,6 +1775,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             case ElectionGovernedActionType.Open:
             {
                 var invitations = await repository.GetTrusteeInvitationsAsync(election.ElectionId);
+                var rosterEntries = await repository.GetRosterEntriesAsync(election.ElectionId);
                 var warningAcknowledgements = await repository.GetWarningAcknowledgementsAsync(election.ElectionId);
                 var activeCeremonyVersion = await repository.GetActiveCeremonyVersionAsync(election.ElectionId);
                 var activeCeremonyTrusteeStates = activeCeremonyVersion is null
@@ -1446,6 +1784,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 var readiness = EvaluateOpenReadiness(
                     election,
                     invitations,
+                    rosterEntries,
                     activeCeremonyVersion,
                     activeCeremonyTrusteeStates,
                     warningAcknowledgements,
@@ -1490,6 +1829,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionRecord Election,
         ElectionGovernedProposalRecord Proposal,
         ElectionBoundaryArtifactRecord? BoundaryArtifact,
+        ElectionEligibilitySnapshotRecord? EligibilitySnapshot,
         ElectionFinalizationSessionRecord? FinalizationSession,
         ElectionFinalizationShareRecord? FinalizationShare,
         ElectionFinalizationReleaseEvidenceRecord? FinalizationReleaseEvidence)> ExecuteGovernedProposalAndPersistOutcomeAsync(
@@ -1515,12 +1855,12 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 var failedProposal = proposal.RecordExecutionFailure(
                     BuildFailureReason(executionResult, "Governed proposal execution failed."),
                     DateTime.UtcNow,
-                    executionTriggeredByPublicAddress,
-                    latestTransactionId: sourceTransactionId,
-                    latestBlockHeight: sourceBlockHeight,
-                    latestBlockId: sourceBlockId);
+                executionTriggeredByPublicAddress,
+                latestTransactionId: sourceTransactionId,
+                latestBlockHeight: sourceBlockHeight,
+                latestBlockId: sourceBlockId);
                 await repository.UpdateGovernedProposalAsync(failedProposal);
-                return (election, failedProposal, null, null, null, null);
+                return (election, failedProposal, null, null, null, null, null);
             }
 
             var succeededProposal = proposal.RecordExecutionSuccess(
@@ -1534,6 +1874,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 executionResult.Election,
                 succeededProposal,
                 executionResult.BoundaryArtifact,
+                executionResult.EligibilitySnapshot,
                 executionResult.FinalizationSession,
                 executionResult.FinalizationShare,
                 executionResult.FinalizationReleaseEvidence);
@@ -1553,7 +1894,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 latestBlockHeight: sourceBlockHeight,
                 latestBlockId: sourceBlockId);
             await repository.UpdateGovernedProposalAsync(failedProposal);
-            return (election, failedProposal, null, null, null, null);
+            return (election, failedProposal, null, null, null, null, null);
         }
     }
 
@@ -1633,6 +1974,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var invitations = await repository.GetTrusteeInvitationsAsync(election.ElectionId);
+        var rosterEntries = await repository.GetRosterEntriesAsync(election.ElectionId);
         var warningAcknowledgements = await repository.GetWarningAcknowledgementsAsync(election.ElectionId);
         var activeCeremonyVersion = await repository.GetActiveCeremonyVersionAsync(election.ElectionId);
         var activeCeremonyTrusteeStates = activeCeremonyVersion is null
@@ -1641,6 +1983,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var readiness = EvaluateOpenReadiness(
             election,
             invitations,
+            rosterEntries,
             activeCeremonyVersion,
             activeCeremonyTrusteeStates,
             warningAcknowledgements,
@@ -1658,6 +2001,24 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var openedAt = DateTime.UtcNow;
+        var frozenRosterEntries = rosterEntries
+            .Select(x => x.FreezeAtOpen(
+                openedAt,
+                sourceTransactionId,
+                sourceBlockHeight,
+                sourceBlockId))
+            .ToArray();
+        var resolvedFrozenEligibleVoterSetHash = ResolveOpenBoundaryEligibleHash(
+            frozenRosterEntries,
+            election.EligibilityMutationPolicy);
+        if (frozenEligibleVoterSetHash is { Length: > 0 } &&
+            !ByteArrayEquals(frozenEligibleVoterSetHash, resolvedFrozenEligibleVoterSetHash))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Provided frozen eligible voter set hash does not match the server-derived eligibility basis.");
+        }
+
         var artifact = ElectionModelFactory.CreateBoundaryArtifact(
             artifactType: ElectionBoundaryArtifactType.Open,
             election: election,
@@ -1665,13 +2026,24 @@ public class ElectionLifecycleService : IElectionLifecycleService
             recordedAt: openedAt,
             trusteeSnapshot: CreateTrusteeSnapshot(election, invitations, readiness.CeremonySnapshot),
             ceremonySnapshot: readiness.CeremonySnapshot,
-            frozenEligibleVoterSetHash: frozenEligibleVoterSetHash,
+            frozenEligibleVoterSetHash: frozenEligibleVoterSetHash is { Length: > 0 }
+                ? frozenEligibleVoterSetHash
+                : resolvedFrozenEligibleVoterSetHash,
             trusteePolicyExecutionReference: trusteePolicyExecutionReference,
             reportingPolicyExecutionReference: reportingPolicyExecutionReference,
             reviewWindowExecutionReference: reviewWindowExecutionReference,
             sourceTransactionId: sourceTransactionId,
             sourceBlockHeight: sourceBlockHeight,
             sourceBlockId: sourceBlockId);
+        var openSnapshot = BuildOpenEligibilitySnapshot(
+            election,
+            frozenRosterEntries,
+            artifact.Id,
+            actorPublicAddress,
+            openedAt,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
 
         var openedElection = election with
         {
@@ -1682,10 +2054,20 @@ public class ElectionLifecycleService : IElectionLifecycleService
             OpenArtifactId = artifact.Id,
         };
 
+        foreach (var rosterEntry in frozenRosterEntries)
+        {
+            await repository.UpdateRosterEntryAsync(rosterEntry);
+        }
+
         await repository.SaveBoundaryArtifactAsync(artifact);
+        await repository.SaveEligibilitySnapshotAsync(openSnapshot);
         await repository.SaveElectionAsync(openedElection);
 
-        return ElectionCommandResult.Success(openedElection, boundaryArtifact: artifact);
+        return ElectionCommandResult.Success(
+            openedElection,
+            boundaryArtifact: artifact,
+            rosterEntries: frozenRosterEntries,
+            eligibilitySnapshot: openSnapshot);
     }
 
     private static ElectionCommandResult? ValidateDraftNotBlockedByGovernedOpenProposal(ElectionGovernedProposalRecord? pendingProposal) =>
@@ -1694,6 +2076,180 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ElectionCommandErrorCode.InvalidState,
                 "Draft election changes are blocked while a governed open proposal is pending.")
             : null;
+
+    private async Task<ElectionCommandResult> RecordBlockedActivationAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        string organizationVoterId,
+        string actorPublicAddress,
+        ElectionEligibilityActivationBlockReason blockReason,
+        ElectionCommandErrorCode errorCode,
+        string errorMessage,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
+    {
+        var occurredAt = DateTime.UtcNow;
+        var activationEvent = ElectionModelFactory.CreateEligibilityActivationEvent(
+            election.ElectionId,
+            organizationVoterId,
+            actorPublicAddress,
+            ElectionEligibilityActivationOutcome.Blocked,
+            blockReason,
+            occurredAt,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
+
+        await repository.SaveEligibilityActivationEventAsync(activationEvent);
+        await repository.SaveElectionAsync(election with
+        {
+            LastUpdatedAt = occurredAt,
+        });
+
+        return ElectionCommandResult.Failure(errorCode, errorMessage);
+    }
+
+    private static byte[] ResolveOpenBoundaryEligibleHash(
+        IReadOnlyList<ElectionRosterEntryRecord> rosterEntries,
+        EligibilityMutationPolicy eligibilityMutationPolicy) =>
+        eligibilityMutationPolicy switch
+        {
+            EligibilityMutationPolicy.FrozenAtOpen => HashOrganizationVoterIds(
+                rosterEntries
+                    .Where(x => x.WasPresentAtOpen && x.WasActiveAtOpen)
+                    .Select(x => x.OrganizationVoterId)),
+            EligibilityMutationPolicy.LateActivationForRosteredVotersOnly => HashOrganizationVoterIds(
+                rosterEntries
+                    .Where(x => x.WasPresentAtOpen)
+                    .Select(x => x.OrganizationVoterId)),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(eligibilityMutationPolicy),
+                eligibilityMutationPolicy,
+                "Unsupported eligibility mutation policy."),
+        };
+
+    private static ElectionEligibilitySnapshotRecord BuildOpenEligibilitySnapshot(
+        ElectionRecord election,
+        IReadOnlyList<ElectionRosterEntryRecord> rosterEntries,
+        Guid boundaryArtifactId,
+        string actorPublicAddress,
+        DateTime recordedAt,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
+    {
+        var frozenRosterEntries = rosterEntries
+            .Where(x => x.WasPresentAtOpen)
+            .ToArray();
+        var linkedEntries = frozenRosterEntries
+            .Where(x => x.IsLinked)
+            .ToArray();
+        var activeAtOpenEntries = frozenRosterEntries
+            .Where(x => x.WasActiveAtOpen)
+            .ToArray();
+
+        return ElectionModelFactory.CreateEligibilitySnapshot(
+            election.ElectionId,
+            ElectionEligibilitySnapshotType.Open,
+            election.EligibilityMutationPolicy,
+            rosteredCount: frozenRosterEntries.Length,
+            linkedCount: linkedEntries.Length,
+            activeDenominatorCount: activeAtOpenEntries.Length,
+            countedParticipationCount: 0,
+            blankCount: 0,
+            didNotVoteCount: activeAtOpenEntries.Length,
+            rosteredVoterSetHash: HashOrganizationVoterIds(frozenRosterEntries.Select(x => x.OrganizationVoterId)),
+            activeDenominatorSetHash: HashOrganizationVoterIds(activeAtOpenEntries.Select(x => x.OrganizationVoterId)),
+            countedParticipationSetHash: HashOrganizationVoterIds(Array.Empty<string>()),
+            recordedByPublicAddress: actorPublicAddress,
+            boundaryArtifactId: boundaryArtifactId,
+            recordedAt: recordedAt,
+            sourceTransactionId: sourceTransactionId,
+            sourceBlockHeight: sourceBlockHeight,
+            sourceBlockId: sourceBlockId);
+    }
+
+    private static ElectionEligibilitySnapshotRecord BuildCloseEligibilitySnapshot(
+        ElectionRecord election,
+        IReadOnlyList<ElectionRosterEntryRecord> rosterEntries,
+        IReadOnlyList<ElectionParticipationRecord> participationRecords,
+        Guid boundaryArtifactId,
+        string actorPublicAddress,
+        DateTime recordedAt,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
+    {
+        var frozenRosterEntries = rosterEntries
+            .Where(x => x.WasPresentAtOpen)
+            .ToArray();
+        var linkedEntries = frozenRosterEntries
+            .Where(x => x.IsLinked)
+            .ToArray();
+        var activeDenominatorEntries = ResolveActiveDenominatorRosterEntries(election, frozenRosterEntries);
+        var activeDenominatorIds = new HashSet<string>(
+            activeDenominatorEntries.Select(x => x.OrganizationVoterId),
+            StringComparer.OrdinalIgnoreCase);
+        var countedParticipationRecords = participationRecords
+            .Where(x =>
+                activeDenominatorIds.Contains(x.OrganizationVoterId) &&
+                x.CountsAsParticipation)
+            .ToArray();
+        var blankParticipationRecords = countedParticipationRecords
+            .Where(x => x.ParticipationStatus == ElectionParticipationStatus.Blank)
+            .ToArray();
+
+        return ElectionModelFactory.CreateEligibilitySnapshot(
+            election.ElectionId,
+            ElectionEligibilitySnapshotType.Close,
+            election.EligibilityMutationPolicy,
+            rosteredCount: frozenRosterEntries.Length,
+            linkedCount: linkedEntries.Length,
+            activeDenominatorCount: activeDenominatorEntries.Count,
+            countedParticipationCount: countedParticipationRecords.Length,
+            blankCount: blankParticipationRecords.Length,
+            didNotVoteCount: activeDenominatorEntries.Count - countedParticipationRecords.Length,
+            rosteredVoterSetHash: HashOrganizationVoterIds(frozenRosterEntries.Select(x => x.OrganizationVoterId)),
+            activeDenominatorSetHash: HashOrganizationVoterIds(activeDenominatorEntries.Select(x => x.OrganizationVoterId)),
+            countedParticipationSetHash: HashOrganizationVoterIds(countedParticipationRecords.Select(x => x.OrganizationVoterId)),
+            recordedByPublicAddress: actorPublicAddress,
+            boundaryArtifactId: boundaryArtifactId,
+            recordedAt: recordedAt,
+            sourceTransactionId: sourceTransactionId,
+            sourceBlockHeight: sourceBlockHeight,
+            sourceBlockId: sourceBlockId);
+    }
+
+    private static IReadOnlyList<ElectionRosterEntryRecord> ResolveActiveDenominatorRosterEntries(
+        ElectionRecord election,
+        IReadOnlyList<ElectionRosterEntryRecord> frozenRosterEntries) =>
+        election.EligibilityMutationPolicy switch
+        {
+            EligibilityMutationPolicy.FrozenAtOpen => frozenRosterEntries
+                .Where(x => x.WasActiveAtOpen)
+                .ToArray(),
+            EligibilityMutationPolicy.LateActivationForRosteredVotersOnly => frozenRosterEntries
+                .Where(x => x.VotingRightStatus == ElectionVotingRightStatus.Active)
+                .ToArray(),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(election),
+                election.EligibilityMutationPolicy,
+                "Unsupported eligibility mutation policy."),
+        };
+
+    private static byte[] HashOrganizationVoterIds(IEnumerable<string> organizationVoterIds)
+    {
+        var normalizedIds = organizationVoterIds
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .Select(x => $"{x.Length}:{x}");
+
+        return SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"feat095:organization-voter-set:{string.Join("\n", normalizedIds)}"));
+    }
 
     private static ElectionTrusteeBoundarySnapshot? CreateTrusteeSnapshot(
         ElectionRecord election,
@@ -1762,6 +2318,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private static ElectionOpenValidationResult EvaluateOpenReadiness(
         ElectionRecord election,
         IReadOnlyList<ElectionTrusteeInvitationRecord> invitations,
+        IReadOnlyList<ElectionRosterEntryRecord> rosterEntries,
         ElectionCeremonyVersionRecord? activeCeremonyVersion,
         IReadOnlyList<ElectionCeremonyTrusteeStateRecord> activeCeremonyTrusteeStates,
         IReadOnlyList<ElectionWarningAcknowledgementRecord> warningAcknowledgements,
@@ -1792,6 +2349,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
             election.ReviewWindowPolicy != ReviewWindowPolicy.NoReviewWindow)
         {
             errors.Add("Admin-only elections must use the no-review-window policy in FEAT-094.");
+        }
+
+        if (rosterEntries.Count == 0)
+        {
+            errors.Add("An imported election roster is required before opening the election.");
+        }
+
+        if (election.EligibilityMutationPolicy == EligibilityMutationPolicy.FrozenAtOpen &&
+            rosterEntries.All(x => x.VotingRightStatus != ElectionVotingRightStatus.Active))
+        {
+            errors.Add("Frozen-at-open elections require at least one active rostered voter before open.");
         }
 
         if (election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold)
@@ -2514,13 +3082,37 @@ public class ElectionLifecycleService : IElectionLifecycleService
             sourceTransactionId: sourceTransactionId,
             sourceBlockHeight: sourceBlockHeight,
             sourceBlockId: sourceBlockId);
+        ElectionEligibilitySnapshotRecord? eligibilitySnapshot = null;
+        if (artifactType == ElectionBoundaryArtifactType.Close)
+        {
+            var rosterEntries = await repository.GetRosterEntriesAsync(election.ElectionId);
+            var participationRecords = await repository.GetParticipationRecordsAsync(election.ElectionId);
+            eligibilitySnapshot = BuildCloseEligibilitySnapshot(
+                election,
+                rosterEntries,
+                participationRecords,
+                artifact.Id,
+                actorPublicAddress,
+                transitionTime,
+                sourceTransactionId,
+                sourceBlockHeight,
+                sourceBlockId);
+        }
 
         var updatedElection = ApplyLifecycleTransition(election, artifact, transitionTime);
 
         await repository.SaveBoundaryArtifactAsync(artifact);
+        if (eligibilitySnapshot is not null)
+        {
+            await repository.SaveEligibilitySnapshotAsync(eligibilitySnapshot);
+        }
+
         await repository.SaveElectionAsync(updatedElection);
 
-        return ElectionCommandResult.Success(updatedElection, boundaryArtifact: artifact);
+        return ElectionCommandResult.Success(
+            updatedElection,
+            boundaryArtifact: artifact,
+            eligibilitySnapshot: eligibilitySnapshot);
     }
 
     private async Task<ElectionCommandResult> StartFinalizationSessionInternalAsync(

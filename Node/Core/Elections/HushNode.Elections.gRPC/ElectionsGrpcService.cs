@@ -164,6 +164,27 @@ public class ElectionsGrpcService(
         }
     }
 
+    public override async Task<GetElectionEligibilityViewResponse> GetElectionEligibilityView(
+        GetElectionEligibilityViewRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            return await _queryApplicationService.GetElectionEligibilityViewAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress);
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionEligibilityView));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch election eligibility view."));
+        }
+    }
+
     public override async Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest request, ServerCallContext context)
     {
         try

@@ -99,6 +99,23 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task CreateDraftAsync_WithLateActivationPolicy_PersistsDraft()
+    {
+        var service = CreateService(new ElectionStore());
+
+        var result = await service.CreateDraftAsync(new CreateElectionDraftRequest(
+            OwnerPublicAddress: "owner-address",
+            ActorPublicAddress: "owner-address",
+            SnapshotReason: "initial draft",
+            Draft: CreateAdminDraftSpecification(
+                eligibilityMutationPolicy: EligibilityMutationPolicy.LateActivationForRosteredVotersOnly)));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Election.Should().NotBeNull();
+        result.Election!.EligibilityMutationPolicy.Should().Be(EligibilityMutationPolicy.LateActivationForRosteredVotersOnly);
+    }
+
+    [Fact]
     public async Task UpdateDraftAsync_WithValidOwner_PersistsNextRevisionHistory()
     {
         var store = new ElectionStore();
@@ -199,6 +216,182 @@ public class ElectionLifecycleServiceTests
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ElectionCommandErrorCode.InvalidState);
+    }
+
+    [Fact]
+    public async Task ImportRosterAsync_WithDraftElection_ReplacesExistingRosterEntries()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection();
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(
+            store,
+            CreateRosterEntry(election, "1001"),
+            CreateRosterEntry(election, "1002"));
+
+        var result = await service.ImportRosterAsync(new ImportElectionRosterRequest(
+            election.ElectionId,
+            "owner-address",
+            [
+                CreateRosterImportItem("2001"),
+                CreateRosterImportItem("2002", isInitiallyActive: false, contactType: ElectionRosterContactType.Phone),
+            ]));
+
+        result.IsSuccess.Should().BeTrue();
+        result.RosterEntries.Should().HaveCount(2);
+        store.RosterEntries
+            .Where(x => x.ElectionId == election.ElectionId)
+            .Select(x => x.OrganizationVoterId)
+            .Should()
+            .BeEquivalentTo("2001", "2002");
+        store.RosterEntries
+            .Single(x =>
+                x.ElectionId == election.ElectionId &&
+                string.Equals(x.OrganizationVoterId, "2002", StringComparison.OrdinalIgnoreCase))
+            .VotingRightStatus
+            .Should()
+            .Be(ElectionVotingRightStatus.Inactive);
+    }
+
+    [Fact]
+    public async Task ClaimRosterEntryAsync_WithTemporaryMasterCode_LinksRosterEntry()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection();
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, CreateRosterEntry(election, "2001"));
+
+        var result = await service.ClaimRosterEntryAsync(new ClaimElectionRosterEntryRequest(
+            election.ElectionId,
+            "voter-address",
+            "2001",
+            "1111"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.RosterEntry.Should().NotBeNull();
+        result.RosterEntry!.IsLinked.Should().BeTrue();
+        result.RosterEntry.LinkedActorPublicAddress.Should().Be("voter-address");
+        store.RosterEntries.Single(x => x.ElectionId == election.ElectionId).LinkedActorPublicAddress.Should().Be("voter-address");
+    }
+
+    [Fact]
+    public async Task ClaimRosterEntryAsync_WithWrongVerificationCode_ReturnsValidationFailed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection();
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, CreateRosterEntry(election, "2001"));
+
+        var result = await service.ClaimRosterEntryAsync(new ClaimElectionRosterEntryRequest(
+            election.ElectionId,
+            "voter-address",
+            "2001",
+            "9999"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        result.ErrorMessage.Should().Contain("1111");
+        store.RosterEntries.Single(x => x.ElectionId == election.ElectionId).IsLinked.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ActivateRosterEntryAsync_WithLateActivationPolicy_ActivatesLinkedFrozenVoter()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var openedAt = DateTime.UtcNow.AddMinutes(-5);
+        var election = CreateAdminElection() with
+        {
+            EligibilityMutationPolicy = EligibilityMutationPolicy.LateActivationForRosteredVotersOnly,
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            OpenArtifactId = Guid.NewGuid(),
+            LastUpdatedAt = openedAt,
+        };
+        var rosterEntry = CreateRosterEntry(
+                election,
+                "3001",
+                ElectionVotingRightStatus.Inactive)
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address", openedAt.AddMinutes(1));
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, rosterEntry);
+
+        var result = await service.ActivateRosterEntryAsync(new ActivateElectionRosterEntryRequest(
+            election.ElectionId,
+            "owner-address",
+            "3001"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.RosterEntry.Should().NotBeNull();
+        result.RosterEntry!.VotingRightStatus.Should().Be(ElectionVotingRightStatus.Active);
+        result.EligibilityActivationEvent.Should().NotBeNull();
+        result.EligibilityActivationEvent!.Outcome.Should().Be(ElectionEligibilityActivationOutcome.Activated);
+        store.EligibilityActivationEvents.Should().ContainSingle();
+        store.EligibilityActivationEvents[0].BlockReason.Should().Be(ElectionEligibilityActivationBlockReason.None);
+    }
+
+    [Fact]
+    public async Task ActivateRosterEntryAsync_WithFrozenPolicy_ReturnsInvalidStateAndPersistsBlockedEvent()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var openedAt = DateTime.UtcNow.AddMinutes(-5);
+        var election = CreateOpenElection() with
+        {
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+        };
+        var rosterEntry = CreateRosterEntry(
+                election,
+                "3001",
+                ElectionVotingRightStatus.Inactive)
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address", openedAt.AddMinutes(1));
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, rosterEntry);
+
+        var result = await service.ActivateRosterEntryAsync(new ActivateElectionRosterEntryRequest(
+            election.ElectionId,
+            "owner-address",
+            "3001"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.InvalidState);
+        store.EligibilityActivationEvents.Should().ContainSingle();
+        store.EligibilityActivationEvents[0].Outcome.Should().Be(ElectionEligibilityActivationOutcome.Blocked);
+        store.EligibilityActivationEvents[0].BlockReason.Should().Be(ElectionEligibilityActivationBlockReason.PolicyDisallowsLateActivation);
+    }
+
+    [Fact]
+    public async Task ActivateRosterEntryAsync_WithMissingRosterEntry_ReturnsNotFoundAndPersistsBlockedEvent()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateOpenElection() with
+        {
+            EligibilityMutationPolicy = EligibilityMutationPolicy.LateActivationForRosteredVotersOnly,
+        };
+
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.ActivateRosterEntryAsync(new ActivateElectionRosterEntryRequest(
+            election.ElectionId,
+            "owner-address",
+            "9999"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.NotFound);
+        store.EligibilityActivationEvents.Should().ContainSingle();
+        store.EligibilityActivationEvents[0].BlockReason.Should().Be(ElectionEligibilityActivationBlockReason.RosterEntryNotFound);
     }
 
     [Fact]
@@ -606,6 +799,7 @@ public class ElectionLifecycleServiceTests
             acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]);
 
         store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
 
         var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
             election.ElectionId,
@@ -650,6 +844,7 @@ public class ElectionLifecycleServiceTests
         store.TrusteeInvitations[acceptedInvitation.Id] = acceptedInvitation;
         store.TrusteeInvitations[pendingInvitation.Id] = pendingInvitation;
         store.WarningAcknowledgements.Add(warningAcknowledgement);
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
 
         var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
             election.ElectionId,
@@ -664,6 +859,48 @@ public class ElectionLifecycleServiceTests
         result.CeremonySnapshot.Should().NotBeNull();
         result.CeremonySnapshot!.ActiveTrustees.Should().ContainSingle(x =>
             string.Equals(x.TrusteeUserAddress, "trustee-a", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithoutImportedRoster_ReturnsNotReady()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection();
+
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            election.ElectionId,
+            RequiredWarningCodes: []));
+
+        result.IsReadyToOpen.Should().BeFalse();
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains("imported election roster", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithFrozenPolicyAndNoActiveRosteredVoter_ReturnsNotReady()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection();
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(
+            store,
+            CreateRosterEntry(
+                election,
+                "4002",
+                ElectionVotingRightStatus.Inactive));
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            election.ElectionId,
+            RequiredWarningCodes: []));
+
+        result.IsReadyToOpen.Should().BeFalse();
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains("at least one active rostered voter", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -688,6 +925,7 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId] = election;
         store.TrusteeInvitations[acceptedTrusteeA.Id] = acceptedTrusteeA;
         store.TrusteeInvitations[acceptedTrusteeB.Id] = acceptedTrusteeB;
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
 
         var result = await service.StartGovernedProposalAsync(new StartElectionGovernedProposalRequest(
             election.ElectionId,
@@ -774,16 +1012,16 @@ public class ElectionLifecycleServiceTests
             ElectionWarningCode.LowAnonymitySet,
             election.CurrentDraftRevision,
             acknowledgedByPublicAddress: "owner-address");
-        var frozenRosterHash = new byte[] { 1, 2, 3, 4 };
+        var rosterEntry = CreateRosterEntry(election, "4001");
 
         store.Elections[election.ElectionId] = election;
         store.WarningAcknowledgements.Add(warning);
+        AddRosterEntries(store, rosterEntry);
 
         var result = await service.OpenElectionAsync(new OpenElectionRequest(
             ElectionId: election.ElectionId,
             ActorPublicAddress: "owner-address",
             RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet],
-            FrozenEligibleVoterSetHash: frozenRosterHash,
             TrusteePolicyExecutionReference: "n/a",
             ReportingPolicyExecutionReference: "reporting-v1",
             ReviewWindowExecutionReference: "no-review",
@@ -795,10 +1033,19 @@ public class ElectionLifecycleServiceTests
         result.BoundaryArtifact.Should().NotBeNull();
         result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Open);
         result.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.Open);
-        result.BoundaryArtifact.FrozenEligibleVoterSetHash.Should().Equal(frozenRosterHash);
+        result.BoundaryArtifact.FrozenEligibleVoterSetHash.Should().NotBeNull().And.NotBeEmpty();
+        result.EligibilitySnapshot.Should().NotBeNull();
+        result.EligibilitySnapshot!.SnapshotType.Should().Be(ElectionEligibilitySnapshotType.Open);
+        result.EligibilitySnapshot.ActiveDenominatorCount.Should().Be(1);
+        result.EligibilitySnapshot.DidNotVoteCount.Should().Be(1);
+        result.EligibilitySnapshot.ActiveDenominatorSetHash.Should().Equal(result.BoundaryArtifact.FrozenEligibleVoterSetHash);
+        result.RosterEntries.Should().ContainSingle();
+        result.RosterEntries[0].WasPresentAtOpen.Should().BeTrue();
+        result.RosterEntries[0].WasActiveAtOpen.Should().BeTrue();
         result.BoundaryArtifact.SourceTransactionId.Should().Be(sourceTransactionId);
         result.BoundaryArtifact.SourceBlockHeight.Should().Be(41);
         store.BoundaryArtifacts.Should().ContainSingle();
+        store.EligibilitySnapshots.Should().ContainSingle();
         store.Elections[election.ElectionId].OpenArtifactId.Should().Be(result.BoundaryArtifact.Id);
     }
 
@@ -837,6 +1084,7 @@ public class ElectionLifecycleServiceTests
         store.WarningAcknowledgements.Add(warning);
         store.TrusteeInvitations[acceptedTrusteeA.Id] = acceptedTrusteeA;
         store.TrusteeInvitations[acceptedTrusteeB.Id] = acceptedTrusteeB;
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
 
         var result = await service.OpenElectionAsync(new OpenElectionRequest(
             ElectionId: election.ElectionId,
@@ -875,6 +1123,7 @@ public class ElectionLifecycleServiceTests
         store.TrusteeInvitations[acceptedTrusteeA.Id] = acceptedTrusteeA;
         store.TrusteeInvitations[acceptedTrusteeB.Id] = acceptedTrusteeB;
         store.GovernedProposals[proposal.Id] = proposal;
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
 
         var result = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
             election.ElectionId,
@@ -899,10 +1148,12 @@ public class ElectionLifecycleServiceTests
         result.BoundaryArtifact!.CeremonySnapshot.Should().NotBeNull();
         result.BoundaryArtifact.CeremonySnapshot!.ProfileId.Should().Be(profile.ProfileId);
         result.BoundaryArtifact.CeremonySnapshot.ActiveTrustees.Should().HaveCount(2);
+        result.EligibilitySnapshot.Should().NotBeNull();
         result.BoundaryArtifact.SourceTransactionId.Should().Be(approvalTransactionId);
         result.BoundaryArtifact.SourceBlockHeight.Should().Be(47);
         store.GovernedProposalApprovals.Should().ContainSingle();
         store.BoundaryArtifacts.Should().ContainSingle();
+        store.EligibilitySnapshots.Should().ContainSingle();
         store.Elections[election.ElectionId].OpenArtifactId.Should().Be(result.BoundaryArtifact!.Id);
     }
 
@@ -1408,6 +1659,109 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task CloseElectionAsync_WithFrozenPolicy_UsesOpenActiveDenominator()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var openedAt = DateTime.UtcNow.AddMinutes(-10);
+        var election = CreateOpenElection() with
+        {
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+        };
+        var activeAtOpenEntry = CreateRosterEntry(
+                election,
+                "5001",
+                ElectionVotingRightStatus.Active)
+            .FreezeAtOpen(openedAt);
+        var laterActivatedEntry = CreateRosterEntry(
+                election,
+                "5002",
+                ElectionVotingRightStatus.Inactive)
+            .FreezeAtOpen(openedAt)
+            .MarkVotingRightActive("owner-address", openedAt.AddMinutes(2));
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, activeAtOpenEntry, laterActivatedEntry);
+        AddParticipationRecords(
+            store,
+            CreateParticipationRecord(
+                election,
+                "5001",
+                ElectionParticipationStatus.CountedAsVoted,
+                openedAt.AddMinutes(3)),
+            CreateParticipationRecord(
+                election,
+                "5002",
+                ElectionParticipationStatus.Blank,
+                openedAt.AddMinutes(4)));
+
+        var result = await service.CloseElectionAsync(new CloseElectionRequest(
+            election.ElectionId,
+            "owner-address"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.EligibilitySnapshot.Should().NotBeNull();
+        result.EligibilitySnapshot!.SnapshotType.Should().Be(ElectionEligibilitySnapshotType.Close);
+        result.EligibilitySnapshot.ActiveDenominatorCount.Should().Be(1);
+        result.EligibilitySnapshot.CountedParticipationCount.Should().Be(1);
+        result.EligibilitySnapshot.BlankCount.Should().Be(0);
+        result.EligibilitySnapshot.DidNotVoteCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CloseElectionAsync_WithLateActivationPolicy_UsesFinalActiveDenominator()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var openedAt = DateTime.UtcNow.AddMinutes(-10);
+        var election = CreateOpenElection() with
+        {
+            EligibilityMutationPolicy = EligibilityMutationPolicy.LateActivationForRosteredVotersOnly,
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+        };
+        var activeAtOpenEntry = CreateRosterEntry(
+                election,
+                "5001",
+                ElectionVotingRightStatus.Active)
+            .FreezeAtOpen(openedAt);
+        var laterActivatedEntry = CreateRosterEntry(
+                election,
+                "5002",
+                ElectionVotingRightStatus.Inactive)
+            .FreezeAtOpen(openedAt)
+            .MarkVotingRightActive("owner-address", openedAt.AddMinutes(2));
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, activeAtOpenEntry, laterActivatedEntry);
+        AddParticipationRecords(
+            store,
+            CreateParticipationRecord(
+                election,
+                "5001",
+                ElectionParticipationStatus.CountedAsVoted,
+                openedAt.AddMinutes(3)),
+            CreateParticipationRecord(
+                election,
+                "5002",
+                ElectionParticipationStatus.Blank,
+                openedAt.AddMinutes(4)));
+
+        var result = await service.CloseElectionAsync(new CloseElectionRequest(
+            election.ElectionId,
+            "owner-address"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.EligibilitySnapshot.Should().NotBeNull();
+        result.EligibilitySnapshot!.SnapshotType.Should().Be(ElectionEligibilitySnapshotType.Close);
+        result.EligibilitySnapshot.ActiveDenominatorCount.Should().Be(2);
+        result.EligibilitySnapshot.CountedParticipationCount.Should().Be(2);
+        result.EligibilitySnapshot.BlankCount.Should().Be(1);
+        result.EligibilitySnapshot.DidNotVoteCount.Should().Be(0);
+    }
+
+    [Fact]
     public async Task CloseAndFinalizeAsync_WithValidOrdering_PersistsCanonicalBoundaryArtifacts()
     {
         var store = new ElectionStore();
@@ -1523,6 +1877,73 @@ public class ElectionLifecycleServiceTests
             OpenedAt = DateTime.UtcNow,
             OpenArtifactId = Guid.NewGuid(),
             LastUpdatedAt = DateTime.UtcNow,
+        };
+
+    private static ElectionRosterImportItem CreateRosterImportItem(
+        string organizationVoterId,
+        bool isInitiallyActive = true,
+        ElectionRosterContactType contactType = ElectionRosterContactType.Email,
+        string? contactValue = null) =>
+        new(
+            organizationVoterId,
+            contactType,
+            contactValue ?? ResolveContactValue(organizationVoterId, contactType),
+            isInitiallyActive);
+
+    private static ElectionRosterEntryRecord CreateRosterEntry(
+        ElectionRecord election,
+        string organizationVoterId,
+        ElectionVotingRightStatus votingRightStatus = ElectionVotingRightStatus.Active,
+        ElectionRosterContactType contactType = ElectionRosterContactType.Email,
+        string? contactValue = null) =>
+        ElectionModelFactory.CreateRosterEntry(
+            election.ElectionId,
+            organizationVoterId,
+            contactType,
+            contactValue ?? ResolveContactValue(organizationVoterId, contactType),
+            votingRightStatus);
+
+    private static ElectionParticipationRecord CreateParticipationRecord(
+        ElectionRecord election,
+        string organizationVoterId,
+        ElectionParticipationStatus participationStatus,
+        DateTime? recordedAt = null) =>
+        ElectionModelFactory.CreateParticipationRecord(
+            election.ElectionId,
+            organizationVoterId,
+            participationStatus,
+            recordedAt);
+
+    private static void AddRosterEntries(ElectionStore store, params ElectionRosterEntryRecord[] rosterEntries)
+    {
+        foreach (var rosterEntry in rosterEntries)
+        {
+            store.RosterEntries.RemoveAll(x =>
+                x.ElectionId == rosterEntry.ElectionId &&
+                string.Equals(x.OrganizationVoterId, rosterEntry.OrganizationVoterId, StringComparison.OrdinalIgnoreCase));
+            store.RosterEntries.Add(rosterEntry);
+        }
+    }
+
+    private static void AddParticipationRecords(ElectionStore store, params ElectionParticipationRecord[] participationRecords)
+    {
+        foreach (var participationRecord in participationRecords)
+        {
+            store.ParticipationRecords.RemoveAll(x =>
+                x.ElectionId == participationRecord.ElectionId &&
+                string.Equals(x.OrganizationVoterId, participationRecord.OrganizationVoterId, StringComparison.OrdinalIgnoreCase));
+            store.ParticipationRecords.Add(participationRecord);
+        }
+    }
+
+    private static string ResolveContactValue(
+        string organizationVoterId,
+        ElectionRosterContactType contactType) =>
+        contactType switch
+        {
+            ElectionRosterContactType.Email => $"{organizationVoterId}@example.com",
+            ElectionRosterContactType.Phone => $"+41{organizationVoterId.PadLeft(8, '0')}",
+            _ => throw new ArgumentOutOfRangeException(nameof(contactType), contactType, "Unsupported contact type."),
         };
 
     private static TrusteeFinalizationScenario SeedClosedTrusteeElectionForFinalization(
@@ -1739,7 +2160,8 @@ public class ElectionLifecycleServiceTests
     private static ElectionDraftSpecification CreateAdminDraftSpecification(
         string title = "Board Election",
         ElectionDisclosureMode disclosureMode = ElectionDisclosureMode.FinalResultsOnly,
-        IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null) =>
+        IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null,
+        EligibilityMutationPolicy eligibilityMutationPolicy = EligibilityMutationPolicy.FrozenAtOpen) =>
         new(
             Title: title,
             ShortDescription: "Annual board vote",
@@ -1751,7 +2173,7 @@ public class ElectionLifecycleServiceTests
             ParticipationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
             VoteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
             EligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
-            EligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            EligibilityMutationPolicy: eligibilityMutationPolicy,
             OutcomeRule: CreateSingleWinnerRule(),
             ApprovedClientApplications:
             [
@@ -1835,6 +2257,10 @@ public class ElectionLifecycleServiceTests
         public Dictionary<ElectionId, ElectionRecord> Elections { get; } = [];
         public Dictionary<(ElectionId ElectionId, string ActorPublicAddress), ElectionEnvelopeAccessRecord> ElectionEnvelopeAccessRecords { get; } = [];
         public List<ElectionDraftSnapshotRecord> DraftSnapshots { get; } = [];
+        public List<ElectionRosterEntryRecord> RosterEntries { get; } = [];
+        public List<ElectionEligibilityActivationEventRecord> EligibilityActivationEvents { get; } = [];
+        public List<ElectionParticipationRecord> ParticipationRecords { get; } = [];
+        public List<ElectionEligibilitySnapshotRecord> EligibilitySnapshots { get; } = [];
         public List<ElectionBoundaryArtifactRecord> BoundaryArtifacts { get; } = [];
         public List<ElectionWarningAcknowledgementRecord> WarningAcknowledgements { get; } = [];
         public Dictionary<Guid, ElectionTrusteeInvitationRecord> TrusteeInvitations { get; } = [];
@@ -1966,6 +2392,109 @@ public class ElectionLifecycleServiceTests
         public Task UpdateElectionEnvelopeAccessAsync(ElectionEnvelopeAccessRecord accessRecord)
         {
             store.ElectionEnvelopeAccessRecords[(accessRecord.ElectionId, accessRecord.ActorPublicAddress)] = accessRecord;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionRosterEntryRecord>> GetRosterEntriesAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionRosterEntryRecord>>(
+                store.RosterEntries
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.OrganizationVoterId, StringComparer.OrdinalIgnoreCase)
+                    .ToArray());
+
+        public Task<ElectionRosterEntryRecord?> GetRosterEntryAsync(ElectionId electionId, string organizationVoterId) =>
+            Task.FromResult(
+                store.RosterEntries.FirstOrDefault(x =>
+                    x.ElectionId == electionId &&
+                    string.Equals(x.OrganizationVoterId, organizationVoterId, StringComparison.OrdinalIgnoreCase)));
+
+        public Task<ElectionRosterEntryRecord?> GetRosterEntryByLinkedActorAsync(ElectionId electionId, string actorPublicAddress) =>
+            Task.FromResult(
+                store.RosterEntries.FirstOrDefault(x =>
+                    x.ElectionId == electionId &&
+                    string.Equals(x.LinkedActorPublicAddress, actorPublicAddress, StringComparison.Ordinal)));
+
+        public Task SaveRosterEntryAsync(ElectionRosterEntryRecord rosterEntry)
+        {
+            store.RosterEntries.RemoveAll(x =>
+                x.ElectionId == rosterEntry.ElectionId &&
+                string.Equals(x.OrganizationVoterId, rosterEntry.OrganizationVoterId, StringComparison.OrdinalIgnoreCase));
+            store.RosterEntries.Add(rosterEntry);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateRosterEntryAsync(ElectionRosterEntryRecord rosterEntry) =>
+            SaveRosterEntryAsync(rosterEntry);
+
+        public Task DeleteRosterEntriesAsync(ElectionId electionId)
+        {
+            store.RosterEntries.RemoveAll(x => x.ElectionId == electionId);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionEligibilityActivationEventRecord>> GetEligibilityActivationEventsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionEligibilityActivationEventRecord>>(
+                store.EligibilityActivationEvents
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.OccurredAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
+
+        public Task SaveEligibilityActivationEventAsync(ElectionEligibilityActivationEventRecord activationEvent)
+        {
+            store.EligibilityActivationEvents.Add(activationEvent);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionParticipationRecord>> GetParticipationRecordsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionParticipationRecord>>(
+                store.ParticipationRecords
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.OrganizationVoterId, StringComparer.OrdinalIgnoreCase)
+                    .ToArray());
+
+        public Task<ElectionParticipationRecord?> GetParticipationRecordAsync(ElectionId electionId, string organizationVoterId) =>
+            Task.FromResult(
+                store.ParticipationRecords.FirstOrDefault(x =>
+                    x.ElectionId == electionId &&
+                    string.Equals(x.OrganizationVoterId, organizationVoterId, StringComparison.OrdinalIgnoreCase)));
+
+        public Task SaveParticipationRecordAsync(ElectionParticipationRecord participationRecord)
+        {
+            store.ParticipationRecords.RemoveAll(x =>
+                x.ElectionId == participationRecord.ElectionId &&
+                string.Equals(x.OrganizationVoterId, participationRecord.OrganizationVoterId, StringComparison.OrdinalIgnoreCase));
+            store.ParticipationRecords.Add(participationRecord);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateParticipationRecordAsync(ElectionParticipationRecord participationRecord) =>
+            SaveParticipationRecordAsync(participationRecord);
+
+        public Task<IReadOnlyList<ElectionEligibilitySnapshotRecord>> GetEligibilitySnapshotsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionEligibilitySnapshotRecord>>(
+                store.EligibilitySnapshots
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.RecordedAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
+
+        public Task<ElectionEligibilitySnapshotRecord?> GetEligibilitySnapshotAsync(
+            ElectionId electionId,
+            ElectionEligibilitySnapshotType snapshotType) =>
+            Task.FromResult(
+                store.EligibilitySnapshots
+                    .Where(x => x.ElectionId == electionId && x.SnapshotType == snapshotType)
+                    .OrderByDescending(x => x.RecordedAt)
+                    .ThenByDescending(x => x.Id)
+                    .FirstOrDefault());
+
+        public Task SaveEligibilitySnapshotAsync(ElectionEligibilitySnapshotRecord snapshot)
+        {
+            store.EligibilitySnapshots.RemoveAll(x =>
+                x.ElectionId == snapshot.ElectionId &&
+                x.SnapshotType == snapshot.SnapshotType);
+            store.EligibilitySnapshots.Add(snapshot);
             return Task.CompletedTask;
         }
 

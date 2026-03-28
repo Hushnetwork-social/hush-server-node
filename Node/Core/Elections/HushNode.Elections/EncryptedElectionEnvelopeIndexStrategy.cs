@@ -40,6 +40,12 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleCreateDraftAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.UpdateDraft =>
                 await HandleUpdateDraftAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.ImportRoster =>
+                await HandleImportRosterAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.ClaimRosterEntry =>
+                await HandleClaimRosterEntryAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.ActivateRosterEntry =>
+                await HandleActivateRosterEntryAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.InviteTrustee =>
                 await HandleInviteTrusteeAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.AcceptTrusteeInvitation =>
@@ -148,6 +154,79 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             ActorPublicAddress: updateDraftAction.ActorPublicAddress,
             SnapshotReason: updateDraftAction.SnapshotReason,
             Draft: updateDraftAction.Draft,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleImportRosterAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var importAction = decryptedEnvelope.DeserializeAction<ImportElectionRosterActionPayload>();
+        if (importAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Import roster action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.ImportRosterAsync(new ImportElectionRosterRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ActorPublicAddress: importAction.ActorPublicAddress,
+            RosterEntries: importAction.RosterEntries,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleClaimRosterEntryAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var claimAction = decryptedEnvelope.DeserializeAction<ClaimElectionRosterEntryActionPayload>();
+        if (claimAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Claim roster entry action payload could not be deserialized.");
+        }
+
+        var result = await _electionLifecycleService.ClaimRosterEntryAsync(new ClaimElectionRosterEntryRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ActorPublicAddress: claimAction.ActorPublicAddress,
+            OrganizationVoterId: claimAction.OrganizationVoterId,
+            VerificationCode: claimAction.VerificationCode,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+
+        if (result.IsSuccess)
+        {
+            await SaveElectionEnvelopeAccessAsync(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                claimAction.ActorPublicAddress,
+                decryptedEnvelope.Transaction.Payload.ActorEncryptedElectionPrivateKey,
+                decryptedEnvelope.Transaction.TransactionTimeStamp.Value,
+                decryptedEnvelope.Transaction.TransactionId.Value);
+        }
+
+        return result;
+    }
+
+    private async Task<ElectionCommandResult> HandleActivateRosterEntryAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var activateAction = decryptedEnvelope.DeserializeAction<ActivateElectionRosterEntryActionPayload>();
+        if (activateAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Activate roster entry action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.ActivateRosterEntryAsync(new ActivateElectionRosterEntryRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ActorPublicAddress: activateAction.ActorPublicAddress,
+            OrganizationVoterId: activateAction.OrganizationVoterId,
             SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
             SourceBlockId: _blockchainCache.CurrentBlockId.Value));

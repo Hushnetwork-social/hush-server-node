@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using FluentAssertions;
 using Google.Protobuf;
 using HushNetwork.proto;
@@ -40,6 +42,7 @@ public sealed class ElectionLifecycleIntegrationSteps
     private SubmitSignedTransactionReply? _lastSubmitTransactionResponse;
     private GetElectionOpenReadinessResponse? _lastReadinessResponse;
     private GetElectionResponse? _lastElectionResponse;
+    private GetElectionEligibilityViewResponse? _lastEligibilityViewResponse;
 
     public ElectionLifecycleIntegrationSteps(ScenarioContext scenarioContext)
     {
@@ -58,6 +61,7 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastSubmitTransactionResponse = null;
         _lastReadinessResponse = null;
         _lastElectionResponse = null;
+        _lastEligibilityViewResponse = null;
         _trusteeInvitationIds.Clear();
     }
 
@@ -83,6 +87,45 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastCommandResponse = response;
         _electionId = response.Election.ElectionId;
         RecordState(response.Election.LifecycleState);
+    }
+
+    [When(@"the owner creates a late-activation admin-only election draft through blockchain submission")]
+    public async Task WhenTheOwnerCreatesALateActivationAdminOnlyElectionDraftThroughBlockchainSubmission()
+    {
+        var response = await CreateElectionDraftViaBlockchainAsync(
+            snapshotReason: "late-activation draft",
+            draft: BuildAdminDraftSpecification(
+                "Late Activation Board Election",
+                eligibilityMutationPolicy: EligibilityMutationPolicy.LateActivationForRosteredVotersOnly));
+
+        _lastCommandResponse = response;
+        _electionId = response.Election.ElectionId;
+        RecordState(response.Election.LifecycleState);
+    }
+
+    [When(@"the owner imports the default election roster through blockchain submission")]
+    public async Task WhenTheOwnerImportsTheDefaultElectionRosterThroughBlockchainSubmission()
+    {
+        var response = await ImportRosterViaBlockchainAsync(BuildDefaultRosterImportItems());
+
+        _lastCommandResponse = new ElectionCommandResponse
+        {
+            Success = response.Success,
+            ErrorMessage = response.ErrorMessage,
+            Election = response.Election,
+        };
+        _lastElectionResponse = response;
+    }
+
+    [When(@"voter ""(.*)"" claims roster entry ""(.*)"" with temporary verification code through blockchain submission")]
+    public async Task WhenVoterClaimsRosterEntryWithTemporaryVerificationCodeThroughBlockchainSubmission(
+        string voterAlias,
+        string organizationVoterId)
+    {
+        _lastEligibilityViewResponse = await ClaimRosterEntryViaBlockchainAsync(
+            ResolveIdentity(voterAlias),
+            organizationVoterId,
+            "1111");
     }
 
     [When(@"the owner updates the election draft title to ""(.*)""")]
@@ -134,9 +177,10 @@ public sealed class ElectionLifecycleIntegrationSteps
     [When(@"the owner opens the election through blockchain submission")]
     public async Task WhenTheOwnerOpensTheElectionThroughBlockchainSubmission()
     {
+        var frozenEligibleVoterSetHash = await BuildExpectedFrozenEligibleVoterSetHashAsync();
         var response = await OpenElectionViaBlockchainAsync(
             [ElectionWarningCode.LowAnonymitySet],
-            ByteString.CopyFromUtf8("frozen-eligible-voters").ToByteArray(),
+            frozenEligibleVoterSetHash,
             trusteePolicyExecutionReference: string.Empty,
             reportingPolicyExecutionReference: "phase-one-reporting-package",
             reviewWindowExecutionReference: string.Empty);
@@ -183,9 +227,10 @@ public sealed class ElectionLifecycleIntegrationSteps
     [When(@"the owner attempts to open the trustee-threshold election through blockchain submission")]
     public async Task WhenTheOwnerAttemptsToOpenTheTrusteeThresholdElectionThroughBlockchainSubmission()
     {
+        var frozenEligibleVoterSetHash = await BuildExpectedFrozenEligibleVoterSetHashAsync();
         _lastSubmitTransactionResponse = await SubmitOpenElectionViaBlockchainAsync(
             Array.Empty<ElectionWarningCode>(),
-            ByteString.CopyFromUtf8("trustee-threshold-roster").ToByteArray(),
+            frozenEligibleVoterSetHash,
             trusteePolicyExecutionReference: "reserved-feat-096-governance",
             reportingPolicyExecutionReference: "phase-one-reporting-package",
             reviewWindowExecutionReference: "governed-review-window-reserved");
@@ -194,9 +239,10 @@ public sealed class ElectionLifecycleIntegrationSteps
     [When(@"the owner submits a legacy plaintext open election transaction")]
     public async Task WhenTheOwnerSubmitsALegacyPlaintextOpenElectionTransaction()
     {
+        var frozenEligibleVoterSetHash = await BuildExpectedFrozenEligibleVoterSetHashAsync();
         _lastSubmitTransactionResponse = await SubmitLegacyPlaintextOpenElectionViaBlockchainAsync(
             [ElectionWarningCode.LowAnonymitySet],
-            ByteString.CopyFromUtf8("legacy-open-frozen-voters").ToByteArray(),
+            frozenEligibleVoterSetHash,
             trusteePolicyExecutionReference: string.Empty,
             reportingPolicyExecutionReference: "phase-one-reporting-package",
             reviewWindowExecutionReference: string.Empty);
@@ -207,6 +253,12 @@ public sealed class ElectionLifecycleIntegrationSteps
     {
         _lastElectionResponse = await ReloadElectionAsync();
         RecordState(_lastElectionResponse.Election.LifecycleState);
+    }
+
+    [When(@"the actor ""(.*)"" requests the election eligibility view through gRPC")]
+    public async Task WhenTheActorRequestsTheElectionEligibilityViewThroughGrpc(string actorAlias)
+    {
+        _lastEligibilityViewResponse = await GetElectionEligibilityViewAsync(ResolveIdentity(actorAlias));
     }
 
     [When(@"the owner closes the election through blockchain submission")]
@@ -242,10 +294,17 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastElectionResponse = await ReloadElectionAsync();
     }
 
+    [When(@"the owner activates roster entry ""(.*)"" through blockchain submission")]
+    public async Task WhenTheOwnerActivatesRosterEntryThroughBlockchainSubmission(string organizationVoterId)
+    {
+        _lastEligibilityViewResponse = await ActivateRosterEntryViaBlockchainAsync(organizationVoterId);
+    }
+
     [Given(@"the owner has an open admin-only election through blockchain submission")]
     public async Task GivenTheOwnerHasAnOpenAdminOnlyElectionThroughBlockchainSubmission()
     {
         await WhenTheOwnerCreatesAnAdminOnlyElectionDraftThroughGrpc();
+        await WhenTheOwnerImportsTheDefaultElectionRosterThroughBlockchainSubmission();
         await WhenTheOwnerChecksOpenReadinessForTheElection();
         await WhenTheOwnerOpensTheElectionThroughBlockchainSubmission();
         await WhenTheOwnerReloadsTheElectionThroughGrpc();
@@ -255,6 +314,7 @@ public sealed class ElectionLifecycleIntegrationSteps
     public async Task GivenTheOwnerHasAnOpenTrusteeThresholdElectionThroughGovernedApprovalBlockchainSubmission()
     {
         await WhenTheOwnerCreatesATrusteeThresholdElectionDraftThroughGrpc();
+        await WhenTheOwnerImportsTheDefaultElectionRosterThroughBlockchainSubmission();
         await WhenTheOwnerPreparesAReadyTrusteeCeremonyThroughBlockchainSubmission();
         await WhenTheOwnerStartsAGovernedProposalThroughBlockchainSubmission("open");
         await WhenTrusteeApprovesTheGovernedProposalThroughBlockchainSubmission("Bob");
@@ -752,6 +812,58 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastElectionResponse = response;
     }
 
+    [Then(@"the eligibility view should show actor role ""(.*)""")]
+    public void ThenTheEligibilityViewShouldShowActorRole(string expectedActorRole)
+    {
+        GetLastEligibilityView()
+            .ActorRole
+            .Should()
+            .Be(ParseEligibilityActorRole(expectedActorRole));
+    }
+
+    [Then(@"the eligibility view should expose temporary verification code ""(.*)""")]
+    public void ThenTheEligibilityViewShouldExposeTemporaryVerificationCode(string expectedVerificationCode)
+    {
+        var response = GetLastEligibilityView();
+        response.UsesTemporaryVerificationCode.Should().BeTrue();
+        response.TemporaryVerificationCode.Should().Be(expectedVerificationCode);
+    }
+
+    [Then(@"the eligibility self row should show organization voter ""(.*)"" as ""(.*)"" with participation ""(.*)""")]
+    public void ThenTheEligibilitySelfRowShouldShowOrganizationVoterAsWithParticipation(
+        string organizationVoterId,
+        string expectedVotingRightStatus,
+        string expectedParticipationStatus)
+    {
+        var selfRosterEntry = GetLastEligibilityView().SelfRosterEntry;
+        selfRosterEntry.Should().NotBeNull("linked voters should receive a self roster entry view");
+        selfRosterEntry.OrganizationVoterId.Should().Be(organizationVoterId);
+        selfRosterEntry.VotingRightStatus.Should().Be(ParseVotingRightStatus(expectedVotingRightStatus));
+        selfRosterEntry.ParticipationStatus.Should().Be(ParseParticipationStatus(expectedParticipationStatus));
+    }
+
+    [Then(@"the owner eligibility summary should report (\d+) rostered voters, (\d+) linked voters, and (\d+) activation events")]
+    public void ThenTheOwnerEligibilitySummaryShouldReportCounts(
+        int expectedRosteredCount,
+        int expectedLinkedCount,
+        int expectedActivationEventCount)
+    {
+        var response = GetLastEligibilityView();
+        response.CanReviewRestrictedRoster.Should().BeTrue();
+        response.Summary.RosteredCount.Should().Be(expectedRosteredCount);
+        response.Summary.LinkedCount.Should().Be(expectedLinkedCount);
+        response.Summary.ActivationEventCount.Should().Be(expectedActivationEventCount);
+    }
+
+    [Then(@"the restricted eligibility roster should include (\d+) entries")]
+    public void ThenTheRestrictedEligibilityRosterShouldIncludeEntries(int expectedEntryCount)
+    {
+        GetLastEligibilityView()
+            .RestrictedRosterEntries
+            .Should()
+            .HaveCount(expectedEntryCount);
+    }
+
     [Then(@"the governed proposal should record an execution failure for ""(.*)""")]
     public async Task ThenTheGovernedProposalShouldRecordAnExecutionFailureFor(string actionType)
     {
@@ -804,6 +916,40 @@ public sealed class ElectionLifecycleIntegrationSteps
 
         response.Success.Should().BeTrue($"GetElection should succeed for {GetElectionId()}: {response.ErrorMessage}");
         return response;
+    }
+
+    private async Task<GetElectionEligibilityViewResponse> GetElectionEligibilityViewAsync(TestIdentity actor)
+    {
+        var response = await GetClient().GetElectionEligibilityViewAsync(new GetElectionEligibilityViewRequest
+        {
+            ElectionId = GetElectionId(),
+            ActorPublicAddress = actor.PublicSigningAddress,
+        });
+
+        response.Success.Should().BeTrue(
+            $"GetElectionEligibilityView should succeed for {GetElectionId()} and actor {actor.PublicSigningAddress}: {response.ErrorMessage}");
+        return response;
+    }
+
+    private async Task<byte[]> BuildExpectedFrozenEligibleVoterSetHashAsync()
+    {
+        var electionResponse = await ReloadElectionAsync();
+        var eligibilityView = await GetElectionEligibilityViewAsync(GetOwner());
+
+        var eligibleOrganizationVoterIds = electionResponse.Election.EligibilityMutationPolicy switch
+        {
+            EligibilityMutationPolicyProto.FrozenAtOpen => eligibilityView.RestrictedRosterEntries
+                .Where(x => x.VotingRightStatus == ElectionVotingRightStatusProto.VotingRightActive)
+                .Select(x => x.OrganizationVoterId),
+            EligibilityMutationPolicyProto.LateActivationForRosteredVotersOnly => eligibilityView.RestrictedRosterEntries
+                .Select(x => x.OrganizationVoterId),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(electionResponse.Election.EligibilityMutationPolicy),
+                electionResponse.Election.EligibilityMutationPolicy,
+                "Unsupported eligibility mutation policy."),
+        };
+
+        return HashOrganizationVoterIds(eligibleOrganizationVoterIds);
     }
 
     private async Task<ElectionCommandResponse> CreateElectionDraftViaBlockchainAsync(
@@ -867,6 +1013,28 @@ public sealed class ElectionLifecycleIntegrationSteps
         return response;
     }
 
+    private async Task<GetElectionResponse> ImportRosterViaBlockchainAsync(
+        IReadOnlyList<ElectionRosterImportItem> rosterEntries)
+    {
+        var signedTransaction = TestTransactionFactory.ImportElectionRoster(
+            GetOwner(),
+            new ElectionId(Guid.Parse(GetElectionId())),
+            rosterEntries);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"roster import transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+
+        return await ReloadElectionAsync();
+    }
+
     private async Task<SubmitSignedTransactionReply> SubmitDraftUpdateViaBlockchainAsync(
         string snapshotReason,
         ElectionDraftSpecification draft)
@@ -881,6 +1049,35 @@ public sealed class ElectionLifecycleIntegrationSteps
         {
             SignedTransaction = signedTransaction,
         });
+    }
+
+    private async Task<GetElectionEligibilityViewResponse> ClaimRosterEntryViaBlockchainAsync(
+        TestIdentity actor,
+        string organizationVoterId,
+        string verificationCode)
+    {
+        var signedTransaction = TestTransactionFactory.ClaimElectionRosterEntry(
+            actor,
+            new ElectionId(Guid.Parse(GetElectionId())),
+            organizationVoterId,
+            verificationCode);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"roster claim transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+
+        var response = await GetElectionEligibilityViewAsync(actor);
+        response.ActorRole.Should().Be(ElectionEligibilityActorRoleProto.EligibilityActorLinkedVoter);
+        response.SelfRosterEntry.Should().NotBeNull();
+        response.SelfRosterEntry.OrganizationVoterId.Should().Be(organizationVoterId);
+        return response;
     }
 
     private async Task<Guid> InviteTrusteeViaBlockchainAsync(TestIdentity trustee)
@@ -904,6 +1101,31 @@ public sealed class ElectionLifecycleIntegrationSteps
         response.Success.Should().BeTrue($"invite query should succeed for {GetElectionId()}: {response.ErrorMessage}");
         response.TrusteeInvitations.Should().Contain(x => x.Id == invitationId.ToString());
         return invitationId;
+    }
+
+    private async Task<GetElectionEligibilityViewResponse> ActivateRosterEntryViaBlockchainAsync(string organizationVoterId)
+    {
+        var signedTransaction = TestTransactionFactory.ActivateElectionRosterEntry(
+            GetOwner(),
+            new ElectionId(Guid.Parse(GetElectionId())),
+            organizationVoterId);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"roster activation transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+
+        var response = await GetElectionEligibilityViewAsync(GetOwner());
+        response.ActivationEvents.Should().Contain(x =>
+            x.OrganizationVoterId == organizationVoterId &&
+            x.Outcome == ElectionEligibilityActivationOutcomeProto.EligibilityActivationSucceeded);
+        return response;
     }
 
     private async Task<GetElectionResponse> OpenElectionViaBlockchainAsync(
@@ -1185,9 +1407,48 @@ public sealed class ElectionLifecycleIntegrationSteps
             ? parsed
             : throw new ArgumentOutOfRangeException(nameof(warningCode), warningCode, "Unsupported warning code.");
 
+    private static ElectionEligibilityActorRoleProto ParseEligibilityActorRole(string actorRole) =>
+        Enum.TryParse<ElectionEligibilityActorRoleProto>(actorRole, ignoreCase: false, out var parsed)
+            ? parsed
+            : throw new ArgumentOutOfRangeException(nameof(actorRole), actorRole, "Unsupported eligibility actor role.");
+
+    private static ElectionVotingRightStatusProto ParseVotingRightStatus(string votingRightStatus) =>
+        Enum.TryParse<ElectionVotingRightStatusProto>(votingRightStatus, ignoreCase: false, out var parsed)
+            ? parsed
+            : throw new ArgumentOutOfRangeException(nameof(votingRightStatus), votingRightStatus, "Unsupported voting right status.");
+
+    private static ElectionParticipationStatusProto ParseParticipationStatus(string participationStatus) =>
+        Enum.TryParse<ElectionParticipationStatusProto>(participationStatus, ignoreCase: false, out var parsed)
+            ? parsed
+            : throw new ArgumentOutOfRangeException(nameof(participationStatus), participationStatus, "Unsupported participation status.");
+
+    private static IReadOnlyList<ElectionRosterImportItem> BuildDefaultRosterImportItems() =>
+    [
+        new ElectionRosterImportItem("voter-alice", ElectionRosterContactType.Email, "alice.eligibility@hush.test"),
+        new ElectionRosterImportItem("voter-bob", ElectionRosterContactType.Phone, "+15550001002", IsInitiallyActive: false),
+        new ElectionRosterImportItem("voter-charlie", ElectionRosterContactType.Email, "charlie.eligibility@hush.test"),
+    ];
+
+    private static byte[] HashOrganizationVoterIds(IEnumerable<string> organizationVoterIds)
+    {
+        var normalizedIds = organizationVoterIds
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .Select(x => $"{x.Length}:{x}");
+
+        return SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"feat095:organization-voter-set:{string.Join("\n", normalizedIds)}"));
+    }
+
+    private GetElectionEligibilityViewResponse GetLastEligibilityView() =>
+        _lastEligibilityViewResponse ?? throw new InvalidOperationException("No election eligibility view has been loaded for this scenario.");
+
     private static ElectionDraftSpecification BuildAdminDraftSpecification(
         string title,
-        ElectionBindingStatus bindingStatus = ElectionBindingStatus.Binding) =>
+        ElectionBindingStatus bindingStatus = ElectionBindingStatus.Binding,
+        EligibilityMutationPolicy eligibilityMutationPolicy = EligibilityMutationPolicy.FrozenAtOpen) =>
         new(
             Title: title,
             ShortDescription: "Annual board vote",
@@ -1199,7 +1460,7 @@ public sealed class ElectionLifecycleIntegrationSteps
             ParticipationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
             VoteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
             EligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
-            EligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            EligibilityMutationPolicy: eligibilityMutationPolicy,
             OutcomeRule: new OutcomeRuleDefinition(
                 OutcomeRuleKind.SingleWinner,
                 "single_winner",

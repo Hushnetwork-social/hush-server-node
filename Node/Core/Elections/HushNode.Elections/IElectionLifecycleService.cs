@@ -8,6 +8,12 @@ public interface IElectionLifecycleService
 
     Task<ElectionCommandResult> UpdateDraftAsync(UpdateElectionDraftRequest request);
 
+    Task<ElectionCommandResult> ImportRosterAsync(ImportElectionRosterRequest request);
+
+    Task<ElectionCommandResult> ClaimRosterEntryAsync(ClaimElectionRosterEntryRequest request);
+
+    Task<ElectionCommandResult> ActivateRosterEntryAsync(ActivateElectionRosterEntryRequest request);
+
     Task<ElectionCommandResult> InviteTrusteeAsync(InviteElectionTrusteeRequest request);
 
     Task<ElectionCommandResult> AcceptTrusteeInvitationAsync(ResolveElectionTrusteeInvitationRequest request);
@@ -68,6 +74,31 @@ public record UpdateElectionDraftRequest(
     string ActorPublicAddress,
     string SnapshotReason,
     ElectionDraftSpecification Draft,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
+public record ImportElectionRosterRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    IReadOnlyList<ElectionRosterImportItem> RosterEntries,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
+public record ClaimElectionRosterEntryRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    string OrganizationVoterId,
+    string VerificationCode,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
+public record ActivateElectionRosterEntryRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    string OrganizationVoterId,
     Guid? SourceTransactionId = null,
     long? SourceBlockHeight = null,
     Guid? SourceBlockId = null);
@@ -257,6 +288,11 @@ public record ElectionCommandResult
     public ElectionRecord? Election { get; init; }
     public ElectionDraftSnapshotRecord? DraftSnapshot { get; init; }
     public ElectionBoundaryArtifactRecord? BoundaryArtifact { get; init; }
+    public ElectionRosterEntryRecord? RosterEntry { get; init; }
+    public IReadOnlyList<ElectionRosterEntryRecord> RosterEntries { get; init; } = Array.Empty<ElectionRosterEntryRecord>();
+    public ElectionEligibilityActivationEventRecord? EligibilityActivationEvent { get; init; }
+    public ElectionParticipationRecord? ParticipationRecord { get; init; }
+    public ElectionEligibilitySnapshotRecord? EligibilitySnapshot { get; init; }
     public ElectionTrusteeInvitationRecord? TrusteeInvitation { get; init; }
     public ElectionGovernedProposalRecord? GovernedProposal { get; init; }
     public ElectionGovernedProposalApprovalRecord? GovernedProposalApproval { get; init; }
@@ -274,6 +310,11 @@ public record ElectionCommandResult
         ElectionRecord election,
         ElectionDraftSnapshotRecord? draftSnapshot = null,
         ElectionBoundaryArtifactRecord? boundaryArtifact = null,
+        ElectionRosterEntryRecord? rosterEntry = null,
+        IReadOnlyList<ElectionRosterEntryRecord>? rosterEntries = null,
+        ElectionEligibilityActivationEventRecord? eligibilityActivationEvent = null,
+        ElectionParticipationRecord? participationRecord = null,
+        ElectionEligibilitySnapshotRecord? eligibilitySnapshot = null,
         ElectionTrusteeInvitationRecord? trusteeInvitation = null,
         ElectionGovernedProposalRecord? governedProposal = null,
         ElectionGovernedProposalApprovalRecord? governedProposalApproval = null,
@@ -293,6 +334,11 @@ public record ElectionCommandResult
             Election = election,
             DraftSnapshot = draftSnapshot,
             BoundaryArtifact = boundaryArtifact,
+            RosterEntry = rosterEntry,
+            RosterEntries = rosterEntries ?? Array.Empty<ElectionRosterEntryRecord>(),
+            EligibilityActivationEvent = eligibilityActivationEvent,
+            ParticipationRecord = participationRecord,
+            EligibilitySnapshot = eligibilitySnapshot,
             TrusteeInvitation = trusteeInvitation,
             GovernedProposal = governedProposal,
             GovernedProposalApproval = governedProposalApproval,

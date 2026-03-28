@@ -56,9 +56,11 @@ internal static class ElectionDraftValidator
             errors.Add("FEAT-094 only supports the organization-imported-roster eligibility source.");
         }
 
-        if (draft.EligibilityMutationPolicy != EligibilityMutationPolicy.FrozenAtOpen)
+        if (draft.EligibilityMutationPolicy != EligibilityMutationPolicy.FrozenAtOpen &&
+            draft.EligibilityMutationPolicy != EligibilityMutationPolicy.LateActivationForRosteredVotersOnly)
         {
-            errors.Add("FEAT-094 only supports the frozen-at-open eligibility mutation policy.");
+            errors.Add(
+                "The eligibility mutation policy must be frozen-at-open or late-activation-for-rostered-voters-only.");
         }
 
         if (draft.ReportingPolicy != ReportingPolicy.DefaultPhaseOnePackage)
