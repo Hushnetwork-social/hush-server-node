@@ -173,6 +173,166 @@ public class ElectionsRepositoryTests
     }
 
     [Fact]
+    public async Task SaveEligibilityData_ShouldRoundTripRosterParticipationAndSnapshots()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection();
+        var importedAt = DateTime.UtcNow.AddMinutes(-15);
+        var openedAt = importedAt.AddMinutes(5);
+        var activatedAt = openedAt.AddMinutes(2);
+        var blankUpdatedAt = activatedAt.AddMinutes(1);
+
+        var inactiveRosterEntry = ElectionModelFactory.CreateRosterEntry(
+            election.ElectionId,
+            organizationVoterId: "VOTER-1001",
+            contactType: ElectionRosterContactType.Email,
+            contactValue: "voter@example.com",
+            votingRightStatus: ElectionVotingRightStatus.Inactive,
+            importedAt: importedAt);
+        var activeRosterEntry = ElectionModelFactory.CreateRosterEntry(
+            election.ElectionId,
+            organizationVoterId: "VOTER-1002",
+            contactType: ElectionRosterContactType.Phone,
+            contactValue: "+15555550123",
+            votingRightStatus: ElectionVotingRightStatus.Active,
+            importedAt: importedAt.AddSeconds(1));
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveRosterEntryAsync(inactiveRosterEntry);
+        await repository.SaveRosterEntryAsync(activeRosterEntry);
+        await context.SaveChangesAsync();
+
+        var linkedAndActivatedEntry = inactiveRosterEntry
+            .LinkToActor("voter-address", importedAt.AddMinutes(1))
+            .FreezeAtOpen(openedAt)
+            .MarkVotingRightActive("owner-address", activatedAt);
+        var frozenActiveEntry = activeRosterEntry.FreezeAtOpen(openedAt);
+        var blockedActivation = ElectionModelFactory.CreateEligibilityActivationEvent(
+            election.ElectionId,
+            organizationVoterId: "VOTER-9999",
+            attemptedByPublicAddress: "owner-address",
+            outcome: ElectionEligibilityActivationOutcome.Blocked,
+            blockReason: ElectionEligibilityActivationBlockReason.NotRosteredAtOpen,
+            occurredAt: openedAt.AddMinutes(1));
+        var successfulActivation = ElectionModelFactory.CreateEligibilityActivationEvent(
+            election.ElectionId,
+            organizationVoterId: "VOTER-1001",
+            attemptedByPublicAddress: "owner-address",
+            outcome: ElectionEligibilityActivationOutcome.Activated,
+            occurredAt: activatedAt);
+        var participation = ElectionModelFactory.CreateParticipationRecord(
+            election.ElectionId,
+            organizationVoterId: "VOTER-1001",
+            participationStatus: ElectionParticipationStatus.CountedAsVoted,
+            recordedAt: activatedAt);
+        var updatedParticipation = participation.UpdateStatus(
+            ElectionParticipationStatus.Blank,
+            blankUpdatedAt);
+        var openSnapshot = ElectionModelFactory.CreateEligibilitySnapshot(
+            election.ElectionId,
+            snapshotType: ElectionEligibilitySnapshotType.Open,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.LateActivationForRosteredVotersOnly,
+            rosteredCount: 2,
+            linkedCount: 1,
+            activeDenominatorCount: 1,
+            countedParticipationCount: 0,
+            blankCount: 0,
+            didNotVoteCount: 1,
+            rosteredVoterSetHash: [1, 2, 3],
+            activeDenominatorSetHash: [4, 5, 6],
+            countedParticipationSetHash: [7, 8, 9],
+            recordedByPublicAddress: "owner-address",
+            recordedAt: openedAt);
+        var closeSnapshot = ElectionModelFactory.CreateEligibilitySnapshot(
+            election.ElectionId,
+            snapshotType: ElectionEligibilitySnapshotType.Close,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.LateActivationForRosteredVotersOnly,
+            rosteredCount: 2,
+            linkedCount: 1,
+            activeDenominatorCount: 2,
+            countedParticipationCount: 1,
+            blankCount: 1,
+            didNotVoteCount: 1,
+            rosteredVoterSetHash: [10, 11, 12],
+            activeDenominatorSetHash: [13, 14, 15],
+            countedParticipationSetHash: [16, 17, 18],
+            recordedByPublicAddress: "owner-address",
+            recordedAt: blankUpdatedAt.AddMinutes(1));
+
+        await repository.UpdateRosterEntryAsync(linkedAndActivatedEntry);
+        await repository.UpdateRosterEntryAsync(frozenActiveEntry);
+        await repository.SaveEligibilityActivationEventAsync(blockedActivation);
+        await repository.SaveEligibilityActivationEventAsync(successfulActivation);
+        await repository.SaveParticipationRecordAsync(participation);
+        await repository.SaveEligibilitySnapshotAsync(openSnapshot);
+        await repository.SaveEligibilitySnapshotAsync(closeSnapshot);
+        await context.SaveChangesAsync();
+
+        await repository.UpdateParticipationRecordAsync(updatedParticipation);
+        await context.SaveChangesAsync();
+
+        var rosterEntries = await repository.GetRosterEntriesAsync(election.ElectionId);
+        var linkedEntry = await repository.GetRosterEntryByLinkedActorAsync(election.ElectionId, "voter-address");
+        var activationEvents = await repository.GetEligibilityActivationEventsAsync(election.ElectionId);
+        var participationRecords = await repository.GetParticipationRecordsAsync(election.ElectionId);
+        var closeSnapshotRecord = await repository.GetEligibilitySnapshotAsync(
+            election.ElectionId,
+            ElectionEligibilitySnapshotType.Close);
+        var snapshotRecords = await repository.GetEligibilitySnapshotsAsync(election.ElectionId);
+
+        rosterEntries.Should().HaveCount(2);
+        linkedEntry.Should().NotBeNull();
+        linkedEntry!.OrganizationVoterId.Should().Be("VOTER-1001");
+        linkedEntry.WasPresentAtOpen.Should().BeTrue();
+        linkedEntry.WasActiveAtOpen.Should().BeFalse();
+        linkedEntry.VotingRightStatus.Should().Be(ElectionVotingRightStatus.Active);
+        activationEvents.Should().HaveCount(2);
+        activationEvents[0].Outcome.Should().Be(ElectionEligibilityActivationOutcome.Blocked);
+        activationEvents[0].BlockReason.Should().Be(ElectionEligibilityActivationBlockReason.NotRosteredAtOpen);
+        activationEvents[1].Outcome.Should().Be(ElectionEligibilityActivationOutcome.Activated);
+        activationEvents[1].BlockReason.Should().Be(ElectionEligibilityActivationBlockReason.None);
+        participationRecords.Should().ContainSingle();
+        participationRecords[0].ParticipationStatus.Should().Be(ElectionParticipationStatus.Blank);
+        participationRecords[0].CountsAsParticipation.Should().BeTrue();
+        closeSnapshotRecord.Should().NotBeNull();
+        closeSnapshotRecord!.ActiveDenominatorCount.Should().Be(2);
+        closeSnapshotRecord.BlankCount.Should().Be(1);
+        closeSnapshotRecord.DidNotVoteCount.Should().Be(1);
+        snapshotRecords.Select(x => x.SnapshotType).Should().Equal(
+            ElectionEligibilitySnapshotType.Open,
+            ElectionEligibilitySnapshotType.Close);
+    }
+
+    [Fact]
+    public async Task DeleteRosterEntriesAsync_ShouldRemovePriorImportRows()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection();
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveRosterEntryAsync(ElectionModelFactory.CreateRosterEntry(
+            election.ElectionId,
+            organizationVoterId: "VOTER-1001",
+            contactType: ElectionRosterContactType.Email,
+            contactValue: "voter1@example.com"));
+        await repository.SaveRosterEntryAsync(ElectionModelFactory.CreateRosterEntry(
+            election.ElectionId,
+            organizationVoterId: "VOTER-1002",
+            contactType: ElectionRosterContactType.Phone,
+            contactValue: "+15555550124"));
+        await context.SaveChangesAsync();
+
+        await repository.DeleteRosterEntriesAsync(election.ElectionId);
+        await context.SaveChangesAsync();
+
+        var rosterEntries = await repository.GetRosterEntriesAsync(election.ElectionId);
+
+        rosterEntries.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task SaveFinalizationSessionSharesAndReleaseEvidence_ShouldRoundTrip()
     {
         using var context = CreateContext();

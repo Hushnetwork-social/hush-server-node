@@ -56,6 +56,54 @@ public enum EligibilityMutationPolicy
     LateActivationForRosteredVotersOnly = 1,
 }
 
+public enum ElectionRosterContactType
+{
+    Email = 0,
+    Phone = 1,
+}
+
+public enum ElectionVoterLinkStatus
+{
+    Unlinked = 0,
+    Linked = 1,
+}
+
+public enum ElectionVotingRightStatus
+{
+    Inactive = 0,
+    Active = 1,
+}
+
+public enum ElectionParticipationStatus
+{
+    DidNotVote = 0,
+    CountedAsVoted = 1,
+    Blank = 2,
+}
+
+public enum ElectionEligibilityActivationOutcome
+{
+    Activated = 0,
+    Blocked = 1,
+}
+
+public enum ElectionEligibilityActivationBlockReason
+{
+    None = 0,
+    RosterEntryNotFound = 1,
+    NotRosteredAtOpen = 2,
+    AlreadyActive = 3,
+    PolicyDisallowsLateActivation = 4,
+    ElectionNotOpen = 5,
+    NotLinkedToHushAccount = 6,
+}
+
+public enum ElectionEligibilitySnapshotType
+{
+    Open = 0,
+    Close = 1,
+}
+
 public enum OutcomeRuleKind
 {
     SingleWinner = 0,

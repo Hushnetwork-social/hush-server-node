@@ -1,6 +1,6 @@
 namespace HushShared.Elections.Model;
 
-public static class ElectionModelFactory
+public static partial class ElectionModelFactory
 {
     public static ElectionRecord CreateDraftRecord(
         ElectionId electionId,

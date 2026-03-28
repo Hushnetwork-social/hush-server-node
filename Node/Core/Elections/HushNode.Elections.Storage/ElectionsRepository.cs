@@ -82,6 +82,111 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         }
     }
 
+    public async Task<IReadOnlyList<ElectionRosterEntryRecord>> GetRosterEntriesAsync(ElectionId electionId) =>
+        await Context.ElectionRosterEntries
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.OrganizationVoterId)
+            .ToListAsync();
+
+    public async Task<ElectionRosterEntryRecord?> GetRosterEntryAsync(
+        ElectionId electionId,
+        string organizationVoterId) =>
+        await Context.ElectionRosterEntries
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.OrganizationVoterId == organizationVoterId);
+
+    public async Task<ElectionRosterEntryRecord?> GetRosterEntryByLinkedActorAsync(
+        ElectionId electionId,
+        string actorPublicAddress) =>
+        await Context.ElectionRosterEntries
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.LinkedActorPublicAddress == actorPublicAddress);
+
+    public async Task SaveRosterEntryAsync(ElectionRosterEntryRecord rosterEntry) =>
+        await Context.ElectionRosterEntries.AddAsync(rosterEntry);
+
+    public async Task UpdateRosterEntryAsync(ElectionRosterEntryRecord rosterEntry)
+    {
+        var existing = await Context.ElectionRosterEntries
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == rosterEntry.ElectionId &&
+                x.OrganizationVoterId == rosterEntry.OrganizationVoterId);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(rosterEntry);
+        }
+    }
+
+    public async Task DeleteRosterEntriesAsync(ElectionId electionId)
+    {
+        var existing = await Context.ElectionRosterEntries
+            .Where(x => x.ElectionId == electionId)
+            .ToListAsync();
+
+        Context.ElectionRosterEntries.RemoveRange(existing);
+    }
+
+    public async Task<IReadOnlyList<ElectionEligibilityActivationEventRecord>> GetEligibilityActivationEventsAsync(ElectionId electionId) =>
+        await Context.ElectionEligibilityActivationEvents
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.OccurredAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task SaveEligibilityActivationEventAsync(ElectionEligibilityActivationEventRecord activationEvent) =>
+        await Context.ElectionEligibilityActivationEvents.AddAsync(activationEvent);
+
+    public async Task<IReadOnlyList<ElectionParticipationRecord>> GetParticipationRecordsAsync(ElectionId electionId) =>
+        await Context.ElectionParticipationRecords
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.OrganizationVoterId)
+            .ToListAsync();
+
+    public async Task<ElectionParticipationRecord?> GetParticipationRecordAsync(
+        ElectionId electionId,
+        string organizationVoterId) =>
+        await Context.ElectionParticipationRecords
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.OrganizationVoterId == organizationVoterId);
+
+    public async Task SaveParticipationRecordAsync(ElectionParticipationRecord participationRecord) =>
+        await Context.ElectionParticipationRecords.AddAsync(participationRecord);
+
+    public async Task UpdateParticipationRecordAsync(ElectionParticipationRecord participationRecord)
+    {
+        var existing = await Context.ElectionParticipationRecords
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == participationRecord.ElectionId &&
+                x.OrganizationVoterId == participationRecord.OrganizationVoterId);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(participationRecord);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionEligibilitySnapshotRecord>> GetEligibilitySnapshotsAsync(ElectionId electionId) =>
+        await Context.ElectionEligibilitySnapshots
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.RecordedAt)
+            .ThenBy(x => x.SnapshotType)
+            .ToListAsync();
+
+    public async Task<ElectionEligibilitySnapshotRecord?> GetEligibilitySnapshotAsync(
+        ElectionId electionId,
+        ElectionEligibilitySnapshotType snapshotType) =>
+        await Context.ElectionEligibilitySnapshots
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.SnapshotType == snapshotType);
+
+    public async Task SaveEligibilitySnapshotAsync(ElectionEligibilitySnapshotRecord snapshot) =>
+        await Context.ElectionEligibilitySnapshots.AddAsync(snapshot);
+
     public async Task<IReadOnlyList<ElectionBoundaryArtifactRecord>> GetBoundaryArtifactsAsync(ElectionId electionId) =>
         await Context.ElectionBoundaryArtifacts
             .Where(x => x.ElectionId == electionId)

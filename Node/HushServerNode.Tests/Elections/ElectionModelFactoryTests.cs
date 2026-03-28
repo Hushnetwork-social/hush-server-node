@@ -232,6 +232,77 @@ public class ElectionModelFactoryTests
         succeeded.IsPending.Should().BeFalse();
     }
 
+    [Fact]
+    public void CreateRosterEntry_SeparatesLinkVotingRightAndOpenSnapshotState()
+    {
+        var importedAt = DateTime.UtcNow.AddMinutes(-10);
+        var linkedAt = importedAt.AddMinutes(1);
+        var openedAt = importedAt.AddMinutes(2);
+        var activatedAt = importedAt.AddMinutes(3);
+
+        var entry = ElectionModelFactory.CreateRosterEntry(
+            electionId: ElectionId.NewElectionId,
+            organizationVoterId: "VOTER-1001",
+            contactType: ElectionRosterContactType.Email,
+            contactValue: "voter@example.com",
+            votingRightStatus: ElectionVotingRightStatus.Inactive,
+            importedAt: importedAt);
+
+        entry.LinkStatus.Should().Be(ElectionVoterLinkStatus.Unlinked);
+        entry.IsLinked.Should().BeFalse();
+        entry.VotingRightStatus.Should().Be(ElectionVotingRightStatus.Inactive);
+        entry.WasPresentAtOpen.Should().BeFalse();
+        entry.WasActiveAtOpen.Should().BeFalse();
+
+        var linkedEntry = entry.LinkToActor("voter-address", linkedAt);
+        var frozenEntry = linkedEntry.FreezeAtOpen(openedAt);
+        var activatedEntry = frozenEntry.MarkVotingRightActive("owner-address", activatedAt);
+
+        linkedEntry.LinkedActorPublicAddress.Should().Be("voter-address");
+        linkedEntry.LinkedAt.Should().Be(linkedAt);
+        frozenEntry.WasPresentAtOpen.Should().BeTrue();
+        frozenEntry.WasActiveAtOpen.Should().BeFalse();
+        activatedEntry.VotingRightStatus.Should().Be(ElectionVotingRightStatus.Active);
+        activatedEntry.WasActiveAtOpen.Should().BeFalse();
+        activatedEntry.LastActivatedByPublicAddress.Should().Be("owner-address");
+        activatedEntry.LastActivatedAt.Should().Be(activatedAt);
+    }
+
+    [Fact]
+    public void CreateEligibilityActivationEvent_WithBlockedOutcomeAndNoReason_ShouldThrow()
+    {
+        var act = () => ElectionModelFactory.CreateEligibilityActivationEvent(
+            electionId: ElectionId.NewElectionId,
+            organizationVoterId: "VOTER-1001",
+            attemptedByPublicAddress: "owner-address",
+            outcome: ElectionEligibilityActivationOutcome.Blocked);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*block reason*");
+    }
+
+    [Fact]
+    public void CreateEligibilitySnapshot_WithInconsistentCounts_ShouldThrow()
+    {
+        var act = () => ElectionModelFactory.CreateEligibilitySnapshot(
+            electionId: ElectionId.NewElectionId,
+            snapshotType: ElectionEligibilitySnapshotType.Close,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.LateActivationForRosteredVotersOnly,
+            rosteredCount: 3,
+            linkedCount: 2,
+            activeDenominatorCount: 2,
+            countedParticipationCount: 2,
+            blankCount: 1,
+            didNotVoteCount: 1,
+            rosteredVoterSetHash: [1, 2, 3],
+            activeDenominatorSetHash: [4, 5, 6],
+            countedParticipationSetHash: [7, 8, 9],
+            recordedByPublicAddress: "owner-address");
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*did-not-vote*");
+    }
+
     private static ElectionRecord CreateTrusteeElection() =>
         ElectionModelFactory.CreateDraftRecord(
             electionId: ElectionId.NewElectionId,
