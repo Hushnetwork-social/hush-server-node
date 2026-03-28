@@ -275,6 +275,14 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
 
         response.Success.Should().BeTrue(response.ErrorMessage);
         response.LatestDraftSnapshot.Should().NotBeNull();
+
+        var importRosterResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.ImportElectionRoster(
+                TestIdentities.Alice,
+                electionId,
+                BuildOpenReadyRosterEntries()));
+        importRosterResponse.Successfull.Should().BeTrue(importRosterResponse.Message);
+
         return new ElectionCommandResponse
         {
             Success = true,
@@ -282,6 +290,13 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
             DraftSnapshot = response.LatestDraftSnapshot,
         };
     }
+
+    private static IReadOnlyList<ElectionRosterImportItem> BuildOpenReadyRosterEntries() =>
+    [
+        new ElectionRosterImportItem("feat097-owner-ready-001", ElectionRosterContactType.Email, "ready-owner-001@hush.test"),
+        new ElectionRosterImportItem("feat097-owner-ready-002", ElectionRosterContactType.Phone, "+15550002002", IsInitiallyActive: false),
+        new ElectionRosterImportItem("feat097-owner-ready-003", ElectionRosterContactType.Email, "ready-owner-003@hush.test"),
+    ];
 
     private async Task InviteAndAcceptRolloutTrusteesAsync(HushElections.HushElectionsClient client, string electionId)
     {
