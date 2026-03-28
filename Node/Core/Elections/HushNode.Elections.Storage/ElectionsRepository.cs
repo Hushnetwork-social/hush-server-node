@@ -17,7 +17,7 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
                 @"SELECT * FROM ""Elections"".""ElectionRecord""
                   WHERE ""ElectionId"" = {0} FOR UPDATE",
                 electionIdValue)
-            .FirstOrDefaultAsync();
+            .SingleOrDefaultAsync();
     }
 
     public async Task<IReadOnlyList<ElectionRecord>> GetElectionsByOwnerAsync(string ownerPublicAddress) =>
