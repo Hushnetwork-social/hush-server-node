@@ -20,8 +20,12 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionRosterEntry(modelBuilder);
         ConfigureElectionEligibilityActivationEvent(modelBuilder);
         ConfigureElectionParticipation(modelBuilder);
+        ConfigureElectionCommitmentRegistration(modelBuilder);
+        ConfigureElectionCheckoffConsumption(modelBuilder);
         ConfigureElectionEligibilitySnapshot(modelBuilder);
         ConfigureElectionBoundaryArtifact(modelBuilder);
+        ConfigureElectionAcceptedBallot(modelBuilder);
+        ConfigureElectionCastIdempotency(modelBuilder);
         ConfigureElectionWarningAcknowledgement(modelBuilder);
         ConfigureElectionTrusteeInvitation(modelBuilder);
         ConfigureElectionGovernedProposal(modelBuilder);
@@ -272,6 +276,51 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         });
     }
 
+    private static void ConfigureElectionCommitmentRegistration(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionCommitmentRegistrationRecord>(entity =>
+        {
+            entity.ToTable("ElectionCommitmentRegistrationRecord", "Elections");
+            entity.HasKey(x => new { x.ElectionId, x.OrganizationVoterId });
+
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.OrganizationVoterId).HasColumnType("varchar(128)");
+            entity.Property(x => x.LinkedActorPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.CommitmentHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.RegisteredAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.ElectionId, x.LinkedActorPublicAddress }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.CommitmentHash }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.RegisteredAt });
+        });
+    }
+
+    private static void ConfigureElectionCheckoffConsumption(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionCheckoffConsumptionRecord>(entity =>
+        {
+            entity.ToTable("ElectionCheckoffConsumptionRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.OrganizationVoterId).HasColumnType("varchar(128)");
+            entity.Property(x => x.ParticipationStatus).HasConversion<string>().HasColumnType("varchar(24)");
+            entity.Property(x => x.ConsumedAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.ElectionId, x.OrganizationVoterId }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.ConsumedAt });
+        });
+    }
+
     private static void ConfigureElectionEligibilitySnapshot(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ElectionEligibilitySnapshotRecord>(entity =>
@@ -304,6 +353,48 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
 
             entity.HasIndex(x => new { x.ElectionId, x.SnapshotType }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.RecordedAt });
+        });
+    }
+
+    private static void ConfigureElectionAcceptedBallot(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionAcceptedBallotRecord>(entity =>
+        {
+            entity.ToTable("ElectionAcceptedBallotRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.EncryptedBallotPackage).HasColumnType("text");
+            entity.Property(x => x.ProofBundle).HasColumnType("text");
+            entity.Property(x => x.BallotNullifier).HasColumnType("varchar(256)");
+            entity.Property(x => x.AcceptedAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.ElectionId, x.BallotNullifier }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.AcceptedAt });
+        });
+    }
+
+    private static void ConfigureElectionCastIdempotency(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionCastIdempotencyRecord>(entity =>
+        {
+            entity.ToTable("ElectionCastIdempotencyRecord", "Elections");
+            entity.HasKey(x => new { x.ElectionId, x.IdempotencyKeyHash });
+
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.IdempotencyKeyHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.RecordedAt).HasColumnType("timestamp with time zone");
+
             entity.HasIndex(x => new { x.ElectionId, x.RecordedAt });
         });
     }

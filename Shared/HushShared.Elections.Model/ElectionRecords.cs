@@ -74,6 +74,41 @@ public record ElectionBoundaryArtifactRecord(
     long? SourceBlockHeight,
     Guid? SourceBlockId);
 
+public record ElectionAcceptedBallotRecord(
+    Guid Id,
+    ElectionId ElectionId,
+    string EncryptedBallotPackage,
+    string ProofBundle,
+    string BallotNullifier,
+    DateTime AcceptedAt)
+{
+    public string EncryptedBallotPackage { get; init; } =
+        ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
+            EncryptedBallotPackage,
+            nameof(EncryptedBallotPackage));
+
+    public string ProofBundle { get; init; } =
+        ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
+            ProofBundle,
+            nameof(ProofBundle));
+
+    public string BallotNullifier { get; init; } =
+        ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
+            BallotNullifier,
+            nameof(BallotNullifier));
+}
+
+public record ElectionCastIdempotencyRecord(
+    ElectionId ElectionId,
+    string IdempotencyKeyHash,
+    DateTime RecordedAt)
+{
+    public string IdempotencyKeyHash { get; init; } =
+        ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
+            IdempotencyKeyHash,
+            nameof(IdempotencyKeyHash));
+}
+
 public record ElectionWarningAcknowledgementRecord(
     Guid Id,
     ElectionId ElectionId,

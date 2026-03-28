@@ -55,6 +55,27 @@ public interface IElectionsRepository : IRepository
 
     Task UpdateParticipationRecordAsync(ElectionParticipationRecord participationRecord) => Task.CompletedTask;
 
+    Task<IReadOnlyList<ElectionCommitmentRegistrationRecord>> GetCommitmentRegistrationsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionCommitmentRegistrationRecord>>(Array.Empty<ElectionCommitmentRegistrationRecord>());
+
+    Task<ElectionCommitmentRegistrationRecord?> GetCommitmentRegistrationAsync(ElectionId electionId, string organizationVoterId) =>
+        Task.FromResult<ElectionCommitmentRegistrationRecord?>(null);
+
+    Task<ElectionCommitmentRegistrationRecord?> GetCommitmentRegistrationByLinkedActorAsync(ElectionId electionId, string actorPublicAddress) =>
+        Task.FromResult<ElectionCommitmentRegistrationRecord?>(null);
+
+    Task SaveCommitmentRegistrationAsync(ElectionCommitmentRegistrationRecord commitmentRegistration) => Task.CompletedTask;
+
+    Task UpdateCommitmentRegistrationAsync(ElectionCommitmentRegistrationRecord commitmentRegistration) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionCheckoffConsumptionRecord>> GetCheckoffConsumptionsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionCheckoffConsumptionRecord>>(Array.Empty<ElectionCheckoffConsumptionRecord>());
+
+    Task<ElectionCheckoffConsumptionRecord?> GetCheckoffConsumptionAsync(ElectionId electionId, string organizationVoterId) =>
+        Task.FromResult<ElectionCheckoffConsumptionRecord?>(null);
+
+    Task SaveCheckoffConsumptionAsync(ElectionCheckoffConsumptionRecord checkoffConsumption) => Task.CompletedTask;
+
     Task<IReadOnlyList<ElectionEligibilitySnapshotRecord>> GetEligibilitySnapshotsAsync(ElectionId electionId) =>
         Task.FromResult<IReadOnlyList<ElectionEligibilitySnapshotRecord>>(Array.Empty<ElectionEligibilitySnapshotRecord>());
 
@@ -62,6 +83,25 @@ public interface IElectionsRepository : IRepository
         Task.FromResult<ElectionEligibilitySnapshotRecord?>(null);
 
     Task SaveEligibilitySnapshotAsync(ElectionEligibilitySnapshotRecord snapshot) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionAcceptedBallotRecord>> GetAcceptedBallotsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionAcceptedBallotRecord>>(Array.Empty<ElectionAcceptedBallotRecord>());
+
+    Task<ElectionAcceptedBallotRecord?> GetAcceptedBallotAsync(Guid acceptedBallotId) =>
+        Task.FromResult<ElectionAcceptedBallotRecord?>(null);
+
+    Task<ElectionAcceptedBallotRecord?> GetAcceptedBallotByNullifierAsync(ElectionId electionId, string ballotNullifier) =>
+        Task.FromResult<ElectionAcceptedBallotRecord?>(null);
+
+    Task SaveAcceptedBallotAsync(ElectionAcceptedBallotRecord acceptedBallot) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionCastIdempotencyRecord>> GetCastIdempotencyRecordsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionCastIdempotencyRecord>>(Array.Empty<ElectionCastIdempotencyRecord>());
+
+    Task<ElectionCastIdempotencyRecord?> GetCastIdempotencyRecordAsync(ElectionId electionId, string idempotencyKeyHash) =>
+        Task.FromResult<ElectionCastIdempotencyRecord?>(null);
+
+    Task SaveCastIdempotencyRecordAsync(ElectionCastIdempotencyRecord idempotencyRecord) => Task.CompletedTask;
 
     Task<IReadOnlyList<ElectionBoundaryArtifactRecord>> GetBoundaryArtifactsAsync(ElectionId electionId);
 

@@ -149,6 +149,61 @@ public record ElectionParticipationRecord(
         };
 }
 
+public record ElectionCommitmentRegistrationRecord(
+    ElectionId ElectionId,
+    string OrganizationVoterId,
+    string LinkedActorPublicAddress,
+    string CommitmentHash,
+    DateTime RegisteredAt)
+{
+    public string OrganizationVoterId { get; init; } =
+        NormalizeRequiredValue(OrganizationVoterId, nameof(OrganizationVoterId));
+
+    public string LinkedActorPublicAddress { get; init; } =
+        NormalizeRequiredValue(LinkedActorPublicAddress, nameof(LinkedActorPublicAddress));
+
+    public string CommitmentHash { get; init; } =
+        NormalizeRequiredValue(CommitmentHash, nameof(CommitmentHash));
+
+    public static string NormalizeRequiredValue(string value, string paramName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException("A non-empty value is required.", paramName);
+        }
+
+        return value.Trim();
+    }
+}
+
+public record ElectionCheckoffConsumptionRecord(
+    Guid Id,
+    ElectionId ElectionId,
+    string OrganizationVoterId,
+    ElectionParticipationStatus ParticipationStatus,
+    DateTime ConsumedAt)
+{
+    public string OrganizationVoterId { get; init; } =
+        ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
+            OrganizationVoterId,
+            nameof(OrganizationVoterId));
+
+    public ElectionParticipationStatus ParticipationStatus { get; init; } =
+        ValidateParticipationStatus(ParticipationStatus);
+
+    private static ElectionParticipationStatus ValidateParticipationStatus(ElectionParticipationStatus participationStatus)
+    {
+        if (participationStatus != ElectionParticipationStatus.CountedAsVoted)
+        {
+            throw new ArgumentException(
+                "Checkoff consumption only supports CountedAsVoted in FEAT-099.",
+                nameof(participationStatus));
+        }
+
+        return participationStatus;
+    }
+}
+
 public record ElectionEligibilitySnapshotRecord(
     Guid Id,
     ElectionId ElectionId,

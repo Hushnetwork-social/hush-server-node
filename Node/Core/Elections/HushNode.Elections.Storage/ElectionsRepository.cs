@@ -169,6 +169,61 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         }
     }
 
+    public async Task<IReadOnlyList<ElectionCommitmentRegistrationRecord>> GetCommitmentRegistrationsAsync(ElectionId electionId) =>
+        await Context.ElectionCommitmentRegistrations
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.OrganizationVoterId)
+            .ToListAsync();
+
+    public async Task<ElectionCommitmentRegistrationRecord?> GetCommitmentRegistrationAsync(
+        ElectionId electionId,
+        string organizationVoterId) =>
+        await Context.ElectionCommitmentRegistrations
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.OrganizationVoterId == organizationVoterId);
+
+    public async Task<ElectionCommitmentRegistrationRecord?> GetCommitmentRegistrationByLinkedActorAsync(
+        ElectionId electionId,
+        string actorPublicAddress) =>
+        await Context.ElectionCommitmentRegistrations
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.LinkedActorPublicAddress == actorPublicAddress);
+
+    public async Task SaveCommitmentRegistrationAsync(ElectionCommitmentRegistrationRecord commitmentRegistration) =>
+        await Context.ElectionCommitmentRegistrations.AddAsync(commitmentRegistration);
+
+    public async Task UpdateCommitmentRegistrationAsync(ElectionCommitmentRegistrationRecord commitmentRegistration)
+    {
+        var existing = await Context.ElectionCommitmentRegistrations
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == commitmentRegistration.ElectionId &&
+                x.OrganizationVoterId == commitmentRegistration.OrganizationVoterId);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(commitmentRegistration);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionCheckoffConsumptionRecord>> GetCheckoffConsumptionsAsync(ElectionId electionId) =>
+        await Context.ElectionCheckoffConsumptions
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.ConsumedAt)
+            .ToListAsync();
+
+    public async Task<ElectionCheckoffConsumptionRecord?> GetCheckoffConsumptionAsync(
+        ElectionId electionId,
+        string organizationVoterId) =>
+        await Context.ElectionCheckoffConsumptions
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.OrganizationVoterId == organizationVoterId);
+
+    public async Task SaveCheckoffConsumptionAsync(ElectionCheckoffConsumptionRecord checkoffConsumption) =>
+        await Context.ElectionCheckoffConsumptions.AddAsync(checkoffConsumption);
+
     public async Task<IReadOnlyList<ElectionEligibilitySnapshotRecord>> GetEligibilitySnapshotsAsync(ElectionId electionId) =>
         await Context.ElectionEligibilitySnapshots
             .Where(x => x.ElectionId == electionId)
@@ -186,6 +241,44 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task SaveEligibilitySnapshotAsync(ElectionEligibilitySnapshotRecord snapshot) =>
         await Context.ElectionEligibilitySnapshots.AddAsync(snapshot);
+
+    public async Task<IReadOnlyList<ElectionAcceptedBallotRecord>> GetAcceptedBallotsAsync(ElectionId electionId) =>
+        await Context.ElectionAcceptedBallots
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.AcceptedAt)
+            .ToListAsync();
+
+    public async Task<ElectionAcceptedBallotRecord?> GetAcceptedBallotAsync(Guid acceptedBallotId) =>
+        await Context.ElectionAcceptedBallots
+            .FirstOrDefaultAsync(x => x.Id == acceptedBallotId);
+
+    public async Task<ElectionAcceptedBallotRecord?> GetAcceptedBallotByNullifierAsync(
+        ElectionId electionId,
+        string ballotNullifier) =>
+        await Context.ElectionAcceptedBallots
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.BallotNullifier == ballotNullifier);
+
+    public async Task SaveAcceptedBallotAsync(ElectionAcceptedBallotRecord acceptedBallot) =>
+        await Context.ElectionAcceptedBallots.AddAsync(acceptedBallot);
+
+    public async Task<IReadOnlyList<ElectionCastIdempotencyRecord>> GetCastIdempotencyRecordsAsync(ElectionId electionId) =>
+        await Context.ElectionCastIdempotencyRecords
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.RecordedAt)
+            .ToListAsync();
+
+    public async Task<ElectionCastIdempotencyRecord?> GetCastIdempotencyRecordAsync(
+        ElectionId electionId,
+        string idempotencyKeyHash) =>
+        await Context.ElectionCastIdempotencyRecords
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.IdempotencyKeyHash == idempotencyKeyHash);
+
+    public async Task SaveCastIdempotencyRecordAsync(ElectionCastIdempotencyRecord idempotencyRecord) =>
+        await Context.ElectionCastIdempotencyRecords.AddAsync(idempotencyRecord);
 
     public async Task<IReadOnlyList<ElectionBoundaryArtifactRecord>> GetBoundaryArtifactsAsync(ElectionId electionId) =>
         await Context.ElectionBoundaryArtifacts

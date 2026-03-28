@@ -303,6 +303,67 @@ public class ElectionModelFactoryTests
             .WithMessage("*did-not-vote*");
     }
 
+    [Fact]
+    public void CreateAcceptanceRecords_ShouldKeepMinimalDurableState()
+    {
+        var electionId = ElectionId.NewElectionId;
+        var registeredAt = DateTime.UtcNow.AddMinutes(-2);
+        var consumedAt = registeredAt.AddMinutes(1);
+        var acceptedAt = consumedAt.AddMinutes(1);
+
+        var commitment = ElectionModelFactory.CreateCommitmentRegistrationRecord(
+            electionId,
+            organizationVoterId: "VOTER-1001",
+            linkedActorPublicAddress: "voter-address",
+            commitmentHash: "commitment-hash-1",
+            registeredAt: registeredAt);
+        var checkoff = ElectionModelFactory.CreateCheckoffConsumptionRecord(
+            electionId,
+            organizationVoterId: "VOTER-1001",
+            consumedAt: consumedAt);
+        var ballot = ElectionModelFactory.CreateAcceptedBallotRecord(
+            electionId,
+            encryptedBallotPackage: "ciphertext-payload",
+            proofBundle: "proof-bundle",
+            ballotNullifier: "nullifier-1",
+            acceptedAt: acceptedAt);
+        var idempotency = ElectionModelFactory.CreateCastIdempotencyRecord(
+            electionId,
+            idempotencyKeyHash: "idem-hash-1",
+            recordedAt: acceptedAt);
+
+        commitment.OrganizationVoterId.Should().Be("VOTER-1001");
+        commitment.LinkedActorPublicAddress.Should().Be("voter-address");
+        commitment.CommitmentHash.Should().Be("commitment-hash-1");
+        commitment.RegisteredAt.Should().Be(registeredAt);
+
+        checkoff.OrganizationVoterId.Should().Be("VOTER-1001");
+        checkoff.ParticipationStatus.Should().Be(ElectionParticipationStatus.CountedAsVoted);
+        checkoff.ConsumedAt.Should().Be(consumedAt);
+
+        ballot.EncryptedBallotPackage.Should().Be("ciphertext-payload");
+        ballot.ProofBundle.Should().Be("proof-bundle");
+        ballot.BallotNullifier.Should().Be("nullifier-1");
+        ballot.AcceptedAt.Should().Be(acceptedAt);
+
+        idempotency.IdempotencyKeyHash.Should().Be("idem-hash-1");
+        idempotency.RecordedAt.Should().Be(acceptedAt);
+    }
+
+    [Fact]
+    public void CheckoffConsumptionRecord_WithNonVotedStatus_ShouldThrow()
+    {
+        var act = () => new ElectionCheckoffConsumptionRecord(
+            Guid.NewGuid(),
+            ElectionId.NewElectionId,
+            "VOTER-1001",
+            ElectionParticipationStatus.Blank,
+            DateTime.UtcNow);
+
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*CountedAsVoted*");
+    }
+
     private static ElectionRecord CreateTrusteeElection() =>
         ElectionModelFactory.CreateDraftRecord(
             electionId: ElectionId.NewElectionId,

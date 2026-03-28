@@ -305,6 +305,71 @@ public class ElectionsRepositoryTests
     }
 
     [Fact]
+    public async Task SaveAcceptanceArtifacts_ShouldRoundTripCommitmentCheckoffBallotAndIdempotencyRecords()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection();
+        var commitment = ElectionModelFactory.CreateCommitmentRegistrationRecord(
+            election.ElectionId,
+            organizationVoterId: "VOTER-1001",
+            linkedActorPublicAddress: "voter-address",
+            commitmentHash: "commitment-hash-1");
+        var checkoff = ElectionModelFactory.CreateCheckoffConsumptionRecord(
+            election.ElectionId,
+            organizationVoterId: "VOTER-1001");
+        var ballot = ElectionModelFactory.CreateAcceptedBallotRecord(
+            election.ElectionId,
+            encryptedBallotPackage: "ciphertext-payload",
+            proofBundle: "proof-bundle",
+            ballotNullifier: "nullifier-1");
+        var idempotency = ElectionModelFactory.CreateCastIdempotencyRecord(
+            election.ElectionId,
+            idempotencyKeyHash: "idem-hash-1");
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveCommitmentRegistrationAsync(commitment);
+        await repository.SaveCheckoffConsumptionAsync(checkoff);
+        await repository.SaveAcceptedBallotAsync(ballot);
+        await repository.SaveCastIdempotencyRecordAsync(idempotency);
+        await context.SaveChangesAsync();
+
+        var commitments = await repository.GetCommitmentRegistrationsAsync(election.ElectionId);
+        var storedCommitment = await repository.GetCommitmentRegistrationByLinkedActorAsync(
+            election.ElectionId,
+            "voter-address");
+        var storedCheckoff = await repository.GetCheckoffConsumptionAsync(
+            election.ElectionId,
+            "VOTER-1001");
+        var acceptedBallots = await repository.GetAcceptedBallotsAsync(election.ElectionId);
+        var storedBallot = await repository.GetAcceptedBallotByNullifierAsync(
+            election.ElectionId,
+            "nullifier-1");
+        var idempotencyRecords = await repository.GetCastIdempotencyRecordsAsync(election.ElectionId);
+        var storedIdempotency = await repository.GetCastIdempotencyRecordAsync(
+            election.ElectionId,
+            "idem-hash-1");
+
+        commitments.Should().ContainSingle();
+        commitments[0].CommitmentHash.Should().Be("commitment-hash-1");
+        storedCommitment.Should().NotBeNull();
+        storedCommitment!.OrganizationVoterId.Should().Be("VOTER-1001");
+
+        storedCheckoff.Should().NotBeNull();
+        storedCheckoff!.ParticipationStatus.Should().Be(ElectionParticipationStatus.CountedAsVoted);
+
+        acceptedBallots.Should().ContainSingle();
+        acceptedBallots[0].BallotNullifier.Should().Be("nullifier-1");
+        storedBallot.Should().NotBeNull();
+        storedBallot!.ProofBundle.Should().Be("proof-bundle");
+
+        idempotencyRecords.Should().ContainSingle();
+        idempotencyRecords[0].IdempotencyKeyHash.Should().Be("idem-hash-1");
+        storedIdempotency.Should().NotBeNull();
+        storedIdempotency!.ElectionId.Should().Be(election.ElectionId);
+    }
+
+    [Fact]
     public async Task DeleteRosterEntriesAsync_ShouldRemovePriorImportRows()
     {
         using var context = CreateContext();
