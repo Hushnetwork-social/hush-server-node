@@ -438,6 +438,43 @@ internal static class TestTransactionFactory
     }
 
     /// <summary>
+    /// Creates a signed finalization share submission transaction.
+    /// </summary>
+    public static string SubmitElectionFinalizationShare(
+        TestIdentity trustee,
+        ElectionId electionId,
+        Guid finalizationSessionId,
+        int shareIndex,
+        string shareVersion,
+        ElectionFinalizationTargetType targetType,
+        Guid claimedCloseArtifactId,
+        byte[]? claimedAcceptedBallotSetHash,
+        byte[]? claimedFinalEncryptedTallyHash,
+        string claimedTargetTallyId,
+        Guid? claimedCeremonyVersionId,
+        string? claimedTallyPublicKeyFingerprint,
+        string shareMaterial)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.SubmitFinalizationShare,
+            JsonSerializer.SerializeToElement(new SubmitElectionFinalizationShareActionPayload(
+                finalizationSessionId,
+                trustee.PublicSigningAddress,
+                shareIndex,
+                shareVersion,
+                targetType,
+                claimedCloseArtifactId,
+                claimedAcceptedBallotSetHash,
+                claimedFinalEncryptedTallyHash,
+                claimedTargetTallyId,
+                claimedCeremonyVersionId,
+                claimedTallyPublicKeyFingerprint,
+                shareMaterial)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
+    }
+
+    /// <summary>
     /// Creates a signed governed proposal start transaction.
     /// </summary>
     public static (string Transaction, Guid ProposalId) StartElectionGovernedProposal(

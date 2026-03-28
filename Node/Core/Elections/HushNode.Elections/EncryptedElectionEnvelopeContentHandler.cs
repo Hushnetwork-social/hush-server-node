@@ -104,6 +104,8 @@ public class EncryptedElectionEnvelopeContentHandler(
                 IsValidCloseElectionAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.FinalizeElection =>
                 IsValidFinalizeElectionAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.SubmitFinalizationShare =>
+                IsValidSubmitFinalizationShareAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.StartCeremony =>
                 IsValidStartCeremonyAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.RestartCeremony =>
@@ -385,6 +387,39 @@ public class EncryptedElectionEnvelopeContentHandler(
             new SignatureInfo(signatory, decryptedEnvelope.Transaction.UserSignature!.Signature));
 
         return _finalizeElectionContentHandler.ValidateAndSign(signedTransaction) is not null;
+    }
+
+    private bool IsValidSubmitFinalizationShareAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var shareAction = decryptedEnvelope.DeserializeAction<SubmitElectionFinalizationShareActionPayload>();
+        if (shareAction is null || !HasMatchingActor(signatory, shareAction.ActorPublicAddress))
+        {
+            return false;
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
+        if (election is null ||
+            election.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold ||
+            election.LifecycleState != ElectionLifecycleState.Closed ||
+            !election.TallyReadyAt.HasValue)
+        {
+            return false;
+        }
+
+        var session = repository.GetFinalizationSessionAsync(shareAction.FinalizationSessionId).GetAwaiter().GetResult();
+        if (session is null ||
+            session.ElectionId != decryptedEnvelope.Transaction.Payload.ElectionId ||
+            session.Status == ElectionFinalizationSessionStatus.Completed)
+        {
+            return false;
+        }
+
+        return session.EligibleTrustees.Any(x =>
+            string.Equals(x.TrusteeUserAddress, signatory, StringComparison.OrdinalIgnoreCase));
     }
 
     private bool IsValidStartCeremonyAction(

@@ -49,6 +49,8 @@ public interface IElectionLifecycleService
     Task<ElectionCommandResult> CloseElectionAsync(CloseElectionRequest request);
 
     Task<ElectionCommandResult> FinalizeElectionAsync(FinalizeElectionRequest request);
+
+    Task<ElectionCommandResult> SubmitFinalizationShareAsync(SubmitElectionFinalizationShareRequest request);
 }
 
 public record CreateElectionDraftRequest(
@@ -216,6 +218,24 @@ public record FinalizeElectionRequest(
     long? SourceBlockHeight = null,
     Guid? SourceBlockId = null);
 
+public record SubmitElectionFinalizationShareRequest(
+    ElectionId ElectionId,
+    Guid FinalizationSessionId,
+    string ActorPublicAddress,
+    int ShareIndex,
+    string ShareVersion,
+    ElectionFinalizationTargetType TargetType,
+    Guid ClaimedCloseArtifactId,
+    byte[]? ClaimedAcceptedBallotSetHash,
+    byte[]? ClaimedFinalEncryptedTallyHash,
+    string ClaimedTargetTallyId,
+    Guid? ClaimedCeremonyVersionId,
+    string? ClaimedTallyPublicKeyFingerprint,
+    string ShareMaterial,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
 public enum ElectionCommandErrorCode
 {
     None = 0,
@@ -246,6 +266,9 @@ public record ElectionCommandResult
     public ElectionCeremonyTrusteeStateRecord? CeremonyTrusteeState { get; init; }
     public ElectionCeremonyMessageEnvelopeRecord? CeremonyMessageEnvelope { get; init; }
     public ElectionCeremonyShareCustodyRecord? CeremonyShareCustody { get; init; }
+    public ElectionFinalizationSessionRecord? FinalizationSession { get; init; }
+    public ElectionFinalizationShareRecord? FinalizationShare { get; init; }
+    public ElectionFinalizationReleaseEvidenceRecord? FinalizationReleaseEvidence { get; init; }
 
     public static ElectionCommandResult Success(
         ElectionRecord election,
@@ -259,7 +282,10 @@ public record ElectionCommandResult
         IReadOnlyList<ElectionCeremonyTranscriptEventRecord>? ceremonyTranscriptEvents = null,
         ElectionCeremonyTrusteeStateRecord? ceremonyTrusteeState = null,
         ElectionCeremonyMessageEnvelopeRecord? ceremonyMessageEnvelope = null,
-        ElectionCeremonyShareCustodyRecord? ceremonyShareCustody = null) =>
+        ElectionCeremonyShareCustodyRecord? ceremonyShareCustody = null,
+        ElectionFinalizationSessionRecord? finalizationSession = null,
+        ElectionFinalizationShareRecord? finalizationShare = null,
+        ElectionFinalizationReleaseEvidenceRecord? finalizationReleaseEvidence = null) =>
         new()
         {
             IsSuccess = true,
@@ -276,6 +302,9 @@ public record ElectionCommandResult
             CeremonyTrusteeState = ceremonyTrusteeState,
             CeremonyMessageEnvelope = ceremonyMessageEnvelope,
             CeremonyShareCustody = ceremonyShareCustody,
+            FinalizationSession = finalizationSession,
+            FinalizationShare = finalizationShare,
+            FinalizationReleaseEvidence = finalizationReleaseEvidence,
         };
 
     public static ElectionCommandResult Failure(

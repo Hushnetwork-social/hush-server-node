@@ -949,6 +949,63 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task ApproveGovernedProposalAsync_ForCloseAtThreshold_MaterializesTallyReadyBoundary()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var approvalTransactionId = Guid.NewGuid();
+        var openElection = CreateTrusteeElection(requiredApprovalCount: 1) with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = DateTime.UtcNow.AddMinutes(-10),
+            OpenArtifactId = Guid.NewGuid(),
+            VoteAcceptanceLockedAt = DateTime.UtcNow.AddMinutes(-1),
+            LastUpdatedAt = DateTime.UtcNow.AddMinutes(-1),
+        };
+        var acceptedTrustee = ElectionModelFactory.CreateTrusteeInvitation(
+            openElection.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: openElection.CurrentDraftRevision).Accept(
+                DateTime.UtcNow,
+                openElection.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+        var proposal = ElectionModelFactory.CreateGovernedProposal(
+            openElection,
+            ElectionGovernedActionType.Close,
+            proposedByPublicAddress: "owner-address");
+
+        store.Elections[openElection.ElectionId] = openElection;
+        store.TrusteeInvitations[acceptedTrustee.Id] = acceptedTrustee;
+        store.GovernedProposals[proposal.Id] = proposal;
+
+        var result = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            openElection.ElectionId,
+            proposal.Id,
+            "trustee-a",
+            "Close now.",
+            SourceTransactionId: approvalTransactionId,
+            SourceBlockHeight: 48,
+            SourceBlockId: Guid.NewGuid()));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Election.Should().NotBeNull();
+        result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+        result.Election.TallyReadyAt.Should().NotBeNull();
+        result.GovernedProposal.Should().NotBeNull();
+        result.GovernedProposal!.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionSucceeded);
+        result.BoundaryArtifact.Should().NotBeNull();
+        result.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.Close);
+        result.BoundaryArtifact.AcceptedBallotSetHash.Should().NotBeNull().And.NotBeEmpty();
+        result.BoundaryArtifact.FinalEncryptedTallyHash.Should().NotBeNull().And.NotBeEmpty();
+        result.BoundaryArtifact.SourceTransactionId.Should().Be(approvalTransactionId);
+        result.BoundaryArtifact.SourceBlockHeight.Should().Be(48);
+        store.Elections[openElection.ElectionId].CloseArtifactId.Should().Be(result.BoundaryArtifact.Id);
+        store.Elections[openElection.ElectionId].TallyReadyAt.Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task RetryGovernedProposalExecutionAsync_AfterRecordedFailure_ReusesExistingApproval()
     {
         var store = new ElectionStore();
@@ -1037,6 +1094,320 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task ApproveGovernedProposalAsync_ForFinalizeAtThreshold_StartsBoundFinalizationSessionAndKeepsElectionClosed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedClosedTrusteeElectionForFinalization(store, requiredApprovalCount: 1);
+        var approvalTransactionId = Guid.NewGuid();
+
+        var result = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            scenario.Election.ElectionId,
+            scenario.Proposal.Id,
+            "trustee-a",
+            "Ready to finalize.",
+            SourceTransactionId: approvalTransactionId,
+            SourceBlockHeight: 61,
+            SourceBlockId: Guid.NewGuid()));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Election.Should().NotBeNull();
+        result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+        result.GovernedProposal.Should().NotBeNull();
+        result.GovernedProposal!.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatus.ExecutionSucceeded);
+        result.GovernedProposal.LatestTransactionId.Should().Be(approvalTransactionId);
+        result.GovernedProposal.LatestBlockHeight.Should().Be(61);
+        result.FinalizationSession.Should().NotBeNull();
+        result.FinalizationSession!.Status.Should().Be(ElectionFinalizationSessionStatus.AwaitingShares);
+        result.FinalizationSession.GovernedProposalId.Should().Be(scenario.Proposal.Id);
+        result.FinalizationSession.CloseArtifactId.Should().Be(scenario.CloseArtifact.Id);
+        result.FinalizationSession.CeremonySnapshot.Should().NotBeNull();
+        result.FinalizationSession.CeremonySnapshot!.CeremonyVersionId.Should().Be(scenario.CeremonyVersion.Id);
+        result.FinalizationSession.RequiredShareCount.Should().Be(1);
+        result.BoundaryArtifact.Should().BeNull();
+        result.FinalizationReleaseEvidence.Should().BeNull();
+        store.FinalizationSessions.Should().ContainSingle();
+        store.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+        store.Elections[scenario.Election.ElectionId].FinalizeArtifactId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SubmitFinalizationShareAsync_WhenThresholdReached_FinalizesElectionAndStoresReleaseEvidence()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedClosedTrusteeElectionForFinalization(store, requiredApprovalCount: 1);
+        var approvalResult = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            scenario.Election.ElectionId,
+            scenario.Proposal.Id,
+            "trustee-a",
+            "Ready to finalize."));
+        var session = approvalResult.FinalizationSession!;
+        var shareTransactionId = Guid.NewGuid();
+
+        var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
+            ElectionId: scenario.Election.ElectionId,
+            FinalizationSessionId: session.Id,
+            ActorPublicAddress: "trustee-a",
+            ShareIndex: 1,
+            ShareVersion: "share-v1",
+            TargetType: ElectionFinalizationTargetType.AggregateTally,
+            ClaimedCloseArtifactId: session.CloseArtifactId,
+            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
+            ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
+            ClaimedTargetTallyId: session.TargetTallyId,
+            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
+            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
+            ShareMaterial: "ciphertext-share-material",
+            SourceTransactionId: shareTransactionId,
+            SourceBlockHeight: 71,
+            SourceBlockId: Guid.NewGuid()));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Election.Should().NotBeNull();
+        result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Finalized);
+        result.BoundaryArtifact.Should().NotBeNull();
+        result.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.Finalize);
+        result.BoundaryArtifact.SourceTransactionId.Should().Be(shareTransactionId);
+        result.BoundaryArtifact.SourceBlockHeight.Should().Be(71);
+        result.FinalizationShare.Should().NotBeNull();
+        result.FinalizationShare!.Status.Should().Be(ElectionFinalizationShareStatus.Accepted);
+        result.FinalizationShare.SourceTransactionId.Should().Be(shareTransactionId);
+        result.FinalizationSession.Should().NotBeNull();
+        result.FinalizationSession!.Status.Should().Be(ElectionFinalizationSessionStatus.Completed);
+        result.FinalizationReleaseEvidence.Should().NotBeNull();
+        result.FinalizationReleaseEvidence!.AcceptedShareCount.Should().Be(1);
+        result.FinalizationReleaseEvidence.SourceTransactionId.Should().Be(shareTransactionId);
+        store.FinalizationShares.Should().ContainSingle();
+        store.FinalizationReleaseEvidenceRecords.Should().ContainSingle();
+        store.FinalizationReleaseEvidenceRecords[0].FinalizationSessionId.Should().Be(session.Id);
+        store.Elections[scenario.Election.ElectionId].FinalizeArtifactId.Should().Be(result.BoundaryArtifact.Id);
+    }
+
+    [Fact]
+    public async Task SubmitFinalizationShareAsync_WithSingleBallotTarget_PersistsRejectedShareAndKeepsSessionWaiting()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedClosedTrusteeElectionForFinalization(store, requiredApprovalCount: 1);
+        var approvalResult = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            scenario.Election.ElectionId,
+            scenario.Proposal.Id,
+            "trustee-a",
+            "Ready to finalize."));
+        var session = approvalResult.FinalizationSession!;
+
+        var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
+            ElectionId: scenario.Election.ElectionId,
+            FinalizationSessionId: session.Id,
+            ActorPublicAddress: "trustee-a",
+            ShareIndex: 1,
+            ShareVersion: "share-v1",
+            TargetType: ElectionFinalizationTargetType.SingleBallot,
+            ClaimedCloseArtifactId: session.CloseArtifactId,
+            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
+            ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
+            ClaimedTargetTallyId: session.TargetTallyId,
+            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
+            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
+            ShareMaterial: "ciphertext-share-material"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        result.ErrorMessage.Should().Contain("aggregate-tally");
+        store.FinalizationShares.Should().ContainSingle();
+        store.FinalizationShares[0].Status.Should().Be(ElectionFinalizationShareStatus.Rejected);
+        store.FinalizationShares[0].FailureCode.Should().Be("SINGLE_BALLOT_RELEASE_FORBIDDEN");
+        store.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+        store.Elections[scenario.Election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+        store.FinalizationSessions[session.Id].Status.Should().Be(ElectionFinalizationSessionStatus.AwaitingShares);
+    }
+
+    [Fact]
+    public async Task SubmitFinalizationShareAsync_WithWrongTargetClaim_PersistsRejectedShareAndLeavesElectionClosed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedClosedTrusteeElectionForFinalization(store, requiredApprovalCount: 1);
+        var approvalResult = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            scenario.Election.ElectionId,
+            scenario.Proposal.Id,
+            "trustee-a",
+            "Ready to finalize."));
+        var session = approvalResult.FinalizationSession!;
+
+        var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
+            ElectionId: scenario.Election.ElectionId,
+            FinalizationSessionId: session.Id,
+            ActorPublicAddress: "trustee-a",
+            ShareIndex: 1,
+            ShareVersion: "share-v1",
+            TargetType: ElectionFinalizationTargetType.AggregateTally,
+            ClaimedCloseArtifactId: session.CloseArtifactId,
+            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
+            ClaimedFinalEncryptedTallyHash: [99, 98, 97],
+            ClaimedTargetTallyId: session.TargetTallyId,
+            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
+            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
+            ShareMaterial: "ciphertext-share-material"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        result.ErrorMessage.Should().Contain("exact close-boundary target");
+        store.FinalizationShares.Should().ContainSingle();
+        store.FinalizationShares[0].Status.Should().Be(ElectionFinalizationShareStatus.Rejected);
+        store.FinalizationShares[0].FailureCode.Should().Be("WRONG_TARGET_SHARE");
+        store.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+        store.Elections[scenario.Election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+        store.FinalizationSessions[session.Id].Status.Should().Be(ElectionFinalizationSessionStatus.AwaitingShares);
+    }
+
+    [Fact]
+    public async Task SubmitFinalizationShareAsync_WithDuplicateAcceptedShare_PersistsRejectedShareAndKeepsElectionClosed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedClosedTrusteeElectionForFinalization(store, requiredApprovalCount: 2);
+        var firstApprovalResult = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            scenario.Election.ElectionId,
+            scenario.Proposal.Id,
+            "trustee-a",
+            "Ready to finalize."));
+        firstApprovalResult.IsSuccess.Should().BeTrue();
+        firstApprovalResult.FinalizationSession.Should().BeNull();
+
+        var secondApprovalResult = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            scenario.Election.ElectionId,
+            scenario.Proposal.Id,
+            "trustee-b",
+            "Ready to finalize."));
+        var session = secondApprovalResult.FinalizationSession!;
+
+        var firstResult = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
+            ElectionId: scenario.Election.ElectionId,
+            FinalizationSessionId: session.Id,
+            ActorPublicAddress: "trustee-a",
+            ShareIndex: 1,
+            ShareVersion: "share-v1",
+            TargetType: ElectionFinalizationTargetType.AggregateTally,
+            ClaimedCloseArtifactId: session.CloseArtifactId,
+            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
+            ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
+            ClaimedTargetTallyId: session.TargetTallyId,
+            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
+            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
+            ShareMaterial: "ciphertext-share-material"));
+
+        firstResult.IsSuccess.Should().BeTrue();
+        firstResult.FinalizationShare.Should().NotBeNull();
+        firstResult.FinalizationShare!.Status.Should().Be(ElectionFinalizationShareStatus.Accepted);
+        store.Elections[scenario.Election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+
+        var duplicateResult = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
+            ElectionId: scenario.Election.ElectionId,
+            FinalizationSessionId: session.Id,
+            ActorPublicAddress: "trustee-a",
+            ShareIndex: 1,
+            ShareVersion: "share-v1",
+            TargetType: ElectionFinalizationTargetType.AggregateTally,
+            ClaimedCloseArtifactId: session.CloseArtifactId,
+            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
+            ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
+            ClaimedTargetTallyId: session.TargetTallyId,
+            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
+            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
+            ShareMaterial: "ciphertext-share-material"));
+
+        duplicateResult.IsSuccess.Should().BeFalse();
+        duplicateResult.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+        duplicateResult.ErrorMessage.Should().Contain("already recorded");
+        store.FinalizationShares.Should().HaveCount(2);
+        store.FinalizationShares[1].Status.Should().Be(ElectionFinalizationShareStatus.Rejected);
+        store.FinalizationShares[1].FailureCode.Should().Be("DUPLICATE_SHARE");
+        store.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+        store.Elections[scenario.Election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+        store.FinalizationSessions[session.Id].Status.Should().Be(ElectionFinalizationSessionStatus.AwaitingShares);
+    }
+
+    [Fact]
+    public async Task SubmitFinalizationShareAsync_WithMalformedShare_PersistsRejectedShareAndLeavesElectionClosed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedClosedTrusteeElectionForFinalization(store, requiredApprovalCount: 1);
+        var approvalResult = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            scenario.Election.ElectionId,
+            scenario.Proposal.Id,
+            "trustee-a",
+            "Ready to finalize."));
+        var session = approvalResult.FinalizationSession!;
+
+        var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
+            ElectionId: scenario.Election.ElectionId,
+            FinalizationSessionId: session.Id,
+            ActorPublicAddress: "trustee-a",
+            ShareIndex: 1,
+            ShareVersion: "share-v1",
+            TargetType: ElectionFinalizationTargetType.AggregateTally,
+            ClaimedCloseArtifactId: session.CloseArtifactId,
+            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
+            ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
+            ClaimedTargetTallyId: session.TargetTallyId,
+            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
+            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
+            ShareMaterial: ""));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        result.ErrorMessage.Should().Contain("missing required share or target fields");
+        store.FinalizationShares.Should().ContainSingle();
+        store.FinalizationShares[0].Status.Should().Be(ElectionFinalizationShareStatus.Rejected);
+        store.FinalizationShares[0].FailureCode.Should().Be("MALFORMED_SHARE");
+        store.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+        store.Elections[scenario.Election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+        store.FinalizationSessions[session.Id].Status.Should().Be(ElectionFinalizationSessionStatus.AwaitingShares);
+    }
+
+    [Fact]
+    public async Task SubmitFinalizationShareAsync_WithWrongCeremonyBinding_PersistsRejectedShareAndLeavesElectionClosed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedClosedTrusteeElectionForFinalization(store, requiredApprovalCount: 1);
+        var approvalResult = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
+            scenario.Election.ElectionId,
+            scenario.Proposal.Id,
+            "trustee-a",
+            "Ready to finalize."));
+        var session = approvalResult.FinalizationSession!;
+
+        var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
+            ElectionId: scenario.Election.ElectionId,
+            FinalizationSessionId: session.Id,
+            ActorPublicAddress: "trustee-a",
+            ShareIndex: 1,
+            ShareVersion: "share-v1",
+            TargetType: ElectionFinalizationTargetType.AggregateTally,
+            ClaimedCloseArtifactId: session.CloseArtifactId,
+            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
+            ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
+            ClaimedTargetTallyId: session.TargetTallyId,
+            ClaimedCeremonyVersionId: Guid.NewGuid(),
+            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
+            ShareMaterial: "ciphertext-share-material"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        result.ErrorMessage.Should().Contain("exact session ceremony binding");
+        store.FinalizationShares.Should().ContainSingle();
+        store.FinalizationShares[0].Status.Should().Be(ElectionFinalizationShareStatus.Rejected);
+        store.FinalizationShares[0].FailureCode.Should().Be("WRONG_TARGET_SHARE");
+        store.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+        store.Elections[scenario.Election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+        store.FinalizationSessions[session.Id].Status.Should().Be(ElectionFinalizationSessionStatus.AwaitingShares);
+    }
+
+    [Fact]
     public async Task CloseAndFinalizeAsync_WithValidOrdering_PersistsCanonicalBoundaryArtifacts()
     {
         var store = new ElectionStore();
@@ -1046,8 +1417,6 @@ public class ElectionLifecycleServiceTests
         var finalizeTransactionId = Guid.NewGuid();
         var closeBallotHash = new byte[] { 7, 8 };
         var closeTallyHash = new byte[] { 9, 10 };
-        var finalizeBallotHash = new byte[] { 11, 12 };
-        var finalizeTallyHash = new byte[] { 13, 14 };
 
         store.Elections[election.ElectionId] = election;
 
@@ -1063,8 +1432,8 @@ public class ElectionLifecycleServiceTests
         var finalizeResult = await service.FinalizeElectionAsync(new FinalizeElectionRequest(
             ElectionId: election.ElectionId,
             ActorPublicAddress: "owner-address",
-            AcceptedBallotSetHash: finalizeBallotHash,
-            FinalEncryptedTallyHash: finalizeTallyHash,
+            AcceptedBallotSetHash: closeBallotHash,
+            FinalEncryptedTallyHash: closeTallyHash,
             SourceTransactionId: finalizeTransactionId,
             SourceBlockHeight: 53,
             SourceBlockId: Guid.NewGuid()));
@@ -1079,12 +1448,16 @@ public class ElectionLifecycleServiceTests
         store.BoundaryArtifacts[0].AcceptedBallotSetHash.Should().Equal(closeBallotHash);
         store.BoundaryArtifacts[0].SourceTransactionId.Should().Be(closeTransactionId);
         store.BoundaryArtifacts[0].SourceBlockHeight.Should().Be(52);
-        store.BoundaryArtifacts[1].FinalEncryptedTallyHash.Should().Equal(finalizeTallyHash);
+        store.BoundaryArtifacts[1].FinalEncryptedTallyHash.Should().Equal(closeTallyHash);
         store.BoundaryArtifacts[1].SourceTransactionId.Should().Be(finalizeTransactionId);
         store.BoundaryArtifacts[1].SourceBlockHeight.Should().Be(53);
         store.Elections[election.ElectionId].VoteAcceptanceLockedAt.Should().NotBeNull();
         store.Elections[election.ElectionId].CloseArtifactId.Should().Be(closeResult.BoundaryArtifact!.Id);
         store.Elections[election.ElectionId].FinalizeArtifactId.Should().Be(finalizeResult.BoundaryArtifact!.Id);
+        finalizeResult.FinalizationSession.Should().NotBeNull();
+        finalizeResult.FinalizationSession!.Status.Should().Be(ElectionFinalizationSessionStatus.Completed);
+        finalizeResult.FinalizationReleaseEvidence.Should().NotBeNull();
+        finalizeResult.FinalizationReleaseEvidence!.AcceptedShareCount.Should().Be(0);
     }
 
     [Fact]
@@ -1151,6 +1524,93 @@ public class ElectionLifecycleServiceTests
             OpenArtifactId = Guid.NewGuid(),
             LastUpdatedAt = DateTime.UtcNow,
         };
+
+    private static TrusteeFinalizationScenario SeedClosedTrusteeElectionForFinalization(
+        ElectionStore store,
+        int requiredApprovalCount)
+    {
+        var draftElection = CreateTrusteeElection(requiredApprovalCount: requiredApprovalCount);
+        var trusteeA = CreateAcceptedTrusteeInvitation(draftElection, "trustee-a", "Alice");
+        var trusteeB = CreateAcceptedTrusteeInvitation(draftElection, "trustee-b", "Bob");
+        var profile = RegisterCeremonyProfile(
+            store,
+            $"dkg-prod-2of2-finalize-{requiredApprovalCount}",
+            trusteeCount: 2,
+            requiredApprovalCount: requiredApprovalCount);
+        var ceremonyVersion = RegisterCeremonyVersion(
+            store,
+            draftElection,
+            profile,
+            [trusteeA, trusteeB],
+            completedTrustees: ["trustee-a", "trustee-b"],
+            ready: true,
+            tallyFingerprint: $"finalize-tally-{requiredApprovalCount}");
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            ceremonyVersion.Id,
+            ceremonyVersion.VersionNumber,
+            profile.ProfileId,
+            profile.TrusteeCount,
+            profile.RequiredApprovalCount,
+            [
+                new ElectionTrusteeReference(trusteeA.TrusteeUserAddress, trusteeA.TrusteeDisplayName),
+                new ElectionTrusteeReference(trusteeB.TrusteeUserAddress, trusteeB.TrusteeDisplayName),
+            ],
+            ceremonyVersion.TallyPublicKeyFingerprint!);
+        var openElection = draftElection with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = DateTime.UtcNow.AddMinutes(-10),
+            LastUpdatedAt = DateTime.UtcNow.AddMinutes(-10),
+        };
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            openElection,
+            recordedByPublicAddress: "owner-address",
+            recordedAt: openElection.OpenedAt!.Value,
+            ceremonySnapshot: ceremonySnapshot);
+        var closeBallotHash = new byte[] { 41, 42, 43 };
+        var closeTallyHash = new byte[] { 51, 52, 53 };
+        var closedElection = openElection with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            OpenArtifactId = openArtifact.Id,
+            ClosedAt = DateTime.UtcNow.AddMinutes(-5),
+            TallyReadyAt = DateTime.UtcNow.AddMinutes(-4),
+            VoteAcceptanceLockedAt = DateTime.UtcNow.AddMinutes(-5),
+            LastUpdatedAt = DateTime.UtcNow.AddMinutes(-4),
+        };
+        var closeArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Close,
+            closedElection,
+            recordedByPublicAddress: "owner-address",
+            recordedAt: closedElection.ClosedAt!.Value,
+            acceptedBallotSetHash: closeBallotHash,
+            finalEncryptedTallyHash: closeTallyHash);
+        var storedElection = closedElection with
+        {
+            CloseArtifactId = closeArtifact.Id,
+        };
+        var proposal = ElectionModelFactory.CreateGovernedProposal(
+            storedElection,
+            ElectionGovernedActionType.Finalize,
+            proposedByPublicAddress: "owner-address");
+
+        store.Elections[storedElection.ElectionId] = storedElection;
+        store.TrusteeInvitations[trusteeA.Id] = trusteeA;
+        store.TrusteeInvitations[trusteeB.Id] = trusteeB;
+        store.BoundaryArtifacts.Add(openArtifact);
+        store.BoundaryArtifacts.Add(closeArtifact);
+        store.GovernedProposals[proposal.Id] = proposal;
+
+        return new TrusteeFinalizationScenario(
+            storedElection,
+            proposal,
+            ceremonyVersion,
+            openArtifact,
+            closeArtifact,
+            closeBallotHash,
+            closeTallyHash);
+    }
 
     private static ElectionRecord CreateTrusteeElection(
         IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null,
@@ -1361,6 +1821,15 @@ public class ElectionLifecycleServiceTests
             TieResolutionRule: "tie_unresolved",
             CalculationBasis: "simple_majority_of_non_blank_votes");
 
+    private sealed record TrusteeFinalizationScenario(
+        ElectionRecord Election,
+        ElectionGovernedProposalRecord Proposal,
+        ElectionCeremonyVersionRecord CeremonyVersion,
+        ElectionBoundaryArtifactRecord OpenArtifact,
+        ElectionBoundaryArtifactRecord CloseArtifact,
+        byte[] AcceptedBallotSetHash,
+        byte[] FinalEncryptedTallyHash);
+
     private sealed class ElectionStore
     {
         public Dictionary<ElectionId, ElectionRecord> Elections { get; } = [];
@@ -1377,6 +1846,9 @@ public class ElectionLifecycleServiceTests
         public List<ElectionCeremonyMessageEnvelopeRecord> CeremonyMessageEnvelopes { get; } = [];
         public Dictionary<Guid, ElectionCeremonyTrusteeStateRecord> CeremonyTrusteeStates { get; } = [];
         public Dictionary<Guid, ElectionCeremonyShareCustodyRecord> CeremonyShareCustodyRecords { get; } = [];
+        public Dictionary<Guid, ElectionFinalizationSessionRecord> FinalizationSessions { get; } = [];
+        public List<ElectionFinalizationShareRecord> FinalizationShares { get; } = [];
+        public List<ElectionFinalizationReleaseEvidenceRecord> FinalizationReleaseEvidenceRecords { get; } = [];
     }
 
     private sealed class FakeUnitOfWorkProvider(ElectionStore store) : IUnitOfWorkProvider<ElectionsDbContext>
@@ -1744,6 +2216,90 @@ public class ElectionLifecycleServiceTests
         public Task UpdateCeremonyShareCustodyRecordAsync(ElectionCeremonyShareCustodyRecord shareCustodyRecord)
         {
             store.CeremonyShareCustodyRecords[shareCustodyRecord.Id] = shareCustodyRecord;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionFinalizationSessionRecord>> GetFinalizationSessionsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionFinalizationSessionRecord>>(
+                store.FinalizationSessions.Values
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.CreatedAt)
+                    .ToArray());
+
+        public Task<ElectionFinalizationSessionRecord?> GetFinalizationSessionAsync(Guid finalizationSessionId) =>
+            Task.FromResult(store.FinalizationSessions.GetValueOrDefault(finalizationSessionId));
+
+        public Task<ElectionFinalizationSessionRecord?> GetActiveFinalizationSessionAsync(ElectionId electionId)
+        {
+            var activeSessions = store.FinalizationSessions.Values
+                .Where(x =>
+                    x.ElectionId == electionId &&
+                    x.Status != ElectionFinalizationSessionStatus.Completed)
+                .OrderBy(x => x.CreatedAt)
+                .ToArray();
+
+            return activeSessions.Length switch
+            {
+                0 => Task.FromResult<ElectionFinalizationSessionRecord?>(null),
+                1 => Task.FromResult<ElectionFinalizationSessionRecord?>(activeSessions[0]),
+                _ => throw new InvalidOperationException(
+                    $"Election {electionId} has multiple active finalization sessions, which violates the FEAT-098 invariant."),
+            };
+        }
+
+        public Task SaveFinalizationSessionAsync(ElectionFinalizationSessionRecord session)
+        {
+            store.FinalizationSessions[session.Id] = session;
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateFinalizationSessionAsync(ElectionFinalizationSessionRecord session)
+        {
+            store.FinalizationSessions[session.Id] = session;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionFinalizationShareRecord>> GetFinalizationSharesAsync(Guid finalizationSessionId) =>
+            Task.FromResult<IReadOnlyList<ElectionFinalizationShareRecord>>(
+                store.FinalizationShares
+                    .Where(x => x.FinalizationSessionId == finalizationSessionId)
+                    .OrderBy(x => x.SubmittedAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
+
+        public Task<ElectionFinalizationShareRecord?> GetAcceptedFinalizationShareAsync(
+            Guid finalizationSessionId,
+            string trusteeUserAddress) =>
+            Task.FromResult(
+                store.FinalizationShares
+                    .Where(x =>
+                        x.FinalizationSessionId == finalizationSessionId &&
+                        x.TrusteeUserAddress == trusteeUserAddress &&
+                        x.Status == ElectionFinalizationShareStatus.Accepted)
+                    .OrderByDescending(x => x.SubmittedAt)
+                    .ThenByDescending(x => x.Id)
+                    .FirstOrDefault());
+
+        public Task SaveFinalizationShareAsync(ElectionFinalizationShareRecord shareRecord)
+        {
+            store.FinalizationShares.Add(shareRecord);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionFinalizationReleaseEvidenceRecord>> GetFinalizationReleaseEvidenceRecordsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionFinalizationReleaseEvidenceRecord>>(
+                store.FinalizationReleaseEvidenceRecords
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.CompletedAt)
+                    .ToArray());
+
+        public Task<ElectionFinalizationReleaseEvidenceRecord?> GetFinalizationReleaseEvidenceRecordAsync(Guid finalizationSessionId) =>
+            Task.FromResult(
+                store.FinalizationReleaseEvidenceRecords.FirstOrDefault(x => x.FinalizationSessionId == finalizationSessionId));
+
+        public Task SaveFinalizationReleaseEvidenceRecordAsync(ElectionFinalizationReleaseEvidenceRecord releaseEvidenceRecord)
+        {
+            store.FinalizationReleaseEvidenceRecords.Add(releaseEvidenceRecord);
             return Task.CompletedTask;
         }
     }

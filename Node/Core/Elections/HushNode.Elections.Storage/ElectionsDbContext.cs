@@ -23,6 +23,9 @@ public class ElectionsDbContext(
     public DbSet<ElectionCeremonyMessageEnvelopeRecord> ElectionCeremonyMessageEnvelopes { get; set; }
     public DbSet<ElectionCeremonyTrusteeStateRecord> ElectionCeremonyTrusteeStates { get; set; }
     public DbSet<ElectionCeremonyShareCustodyRecord> ElectionCeremonyShareCustodyRecords { get; set; }
+    public DbSet<ElectionFinalizationSessionRecord> ElectionFinalizationSessions { get; set; }
+    public DbSet<ElectionFinalizationShareRecord> ElectionFinalizationShares { get; set; }
+    public DbSet<ElectionFinalizationReleaseEvidenceRecord> ElectionFinalizationReleaseEvidenceRecords { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -118,6 +118,21 @@ internal static class ElectionGrpcMappings
             response.CeremonyShareCustody = result.CeremonyShareCustody.ToProto();
         }
 
+        if (result.FinalizationSession is not null)
+        {
+            response.FinalizationSession = result.FinalizationSession.ToProto();
+        }
+
+        if (result.FinalizationShare is not null)
+        {
+            response.FinalizationShare = result.FinalizationShare.ToProto();
+        }
+
+        if (result.FinalizationReleaseEvidence is not null)
+        {
+            response.FinalizationReleaseEvidence = result.FinalizationReleaseEvidence.ToProto();
+        }
+
         return response;
     }
 
@@ -626,6 +641,111 @@ internal static class ElectionGrpcMappings
         return proto;
     }
 
+    public static ElectionFinalizationSession ToProto(this ElectionFinalizationSessionRecord session)
+    {
+        var proto = new ElectionFinalizationSession
+        {
+            Id = session.Id.ToString(),
+            ElectionId = session.ElectionId.ToString(),
+            GovernedProposalId = session.GovernedProposalId?.ToString() ?? string.Empty,
+            GovernanceMode = (ElectionGovernanceModeProto)(int)session.GovernanceMode,
+            CloseArtifactId = session.CloseArtifactId.ToString(),
+            AcceptedBallotSetHash = ToByteString(session.AcceptedBallotSetHash),
+            FinalEncryptedTallyHash = ToByteString(session.FinalEncryptedTallyHash),
+            TargetTallyId = session.TargetTallyId,
+            RequiredShareCount = session.RequiredShareCount,
+            Status = (ElectionFinalizationSessionStatusProto)(int)session.Status,
+            CreatedAt = ToTimestamp(session.CreatedAt),
+            CreatedByPublicAddress = session.CreatedByPublicAddress,
+            ReleaseEvidenceId = session.ReleaseEvidenceId?.ToString() ?? string.Empty,
+            LatestTransactionId = session.LatestTransactionId?.ToString() ?? string.Empty,
+            LatestBlockId = session.LatestBlockId?.ToString() ?? string.Empty,
+        };
+
+        proto.EligibleTrustees.AddRange(session.EligibleTrustees.Select(x => x.ToProto()));
+
+        if (session.CeremonySnapshot is not null)
+        {
+            proto.CeremonySnapshot = session.CeremonySnapshot.ToProto();
+        }
+
+        if (session.CompletedAt.HasValue)
+        {
+            proto.CompletedAt = ToTimestamp(session.CompletedAt.Value);
+        }
+
+        if (session.LatestBlockHeight.HasValue)
+        {
+            proto.LatestBlockHeight = session.LatestBlockHeight.Value;
+        }
+
+        return proto;
+    }
+
+    public static ElectionFinalizationShare ToProto(this ElectionFinalizationShareRecord share)
+    {
+        var proto = new ElectionFinalizationShare
+        {
+            Id = share.Id.ToString(),
+            FinalizationSessionId = share.FinalizationSessionId.ToString(),
+            ElectionId = share.ElectionId.ToString(),
+            TrusteeUserAddress = share.TrusteeUserAddress,
+            TrusteeDisplayName = share.TrusteeDisplayName ?? string.Empty,
+            SubmittedByPublicAddress = share.SubmittedByPublicAddress,
+            ShareIndex = share.ShareIndex,
+            ShareVersion = share.ShareVersion,
+            TargetType = (ElectionFinalizationTargetTypeProto)(int)share.TargetType,
+            ClaimedCloseArtifactId = share.ClaimedCloseArtifactId.ToString(),
+            ClaimedAcceptedBallotSetHash = ToByteString(share.ClaimedAcceptedBallotSetHash),
+            ClaimedFinalEncryptedTallyHash = ToByteString(share.ClaimedFinalEncryptedTallyHash),
+            ClaimedTargetTallyId = share.ClaimedTargetTallyId,
+            ClaimedCeremonyVersionId = share.ClaimedCeremonyVersionId?.ToString() ?? string.Empty,
+            ClaimedTallyPublicKeyFingerprint = share.ClaimedTallyPublicKeyFingerprint ?? string.Empty,
+            Status = (ElectionFinalizationShareStatusProto)(int)share.Status,
+            FailureCode = share.FailureCode ?? string.Empty,
+            FailureReason = share.FailureReason ?? string.Empty,
+            SubmittedAt = ToTimestamp(share.SubmittedAt),
+            SourceTransactionId = share.SourceTransactionId?.ToString() ?? string.Empty,
+            SourceBlockId = share.SourceBlockId?.ToString() ?? string.Empty,
+        };
+
+        if (share.SourceBlockHeight.HasValue)
+        {
+            proto.SourceBlockHeight = share.SourceBlockHeight.Value;
+        }
+
+        return proto;
+    }
+
+    public static ElectionFinalizationReleaseEvidence ToProto(this ElectionFinalizationReleaseEvidenceRecord releaseEvidence)
+    {
+        var proto = new ElectionFinalizationReleaseEvidence
+        {
+            Id = releaseEvidence.Id.ToString(),
+            FinalizationSessionId = releaseEvidence.FinalizationSessionId.ToString(),
+            ElectionId = releaseEvidence.ElectionId.ToString(),
+            ReleaseMode = (ElectionFinalizationReleaseModeProto)(int)releaseEvidence.ReleaseMode,
+            CloseArtifactId = releaseEvidence.CloseArtifactId.ToString(),
+            AcceptedBallotSetHash = ToByteString(releaseEvidence.AcceptedBallotSetHash),
+            FinalEncryptedTallyHash = ToByteString(releaseEvidence.FinalEncryptedTallyHash),
+            TargetTallyId = releaseEvidence.TargetTallyId,
+            AcceptedShareCount = releaseEvidence.AcceptedShareCount,
+            CompletedAt = ToTimestamp(releaseEvidence.CompletedAt),
+            CompletedByPublicAddress = releaseEvidence.CompletedByPublicAddress,
+            SourceTransactionId = releaseEvidence.SourceTransactionId?.ToString() ?? string.Empty,
+            SourceBlockId = releaseEvidence.SourceBlockId?.ToString() ?? string.Empty,
+        };
+
+        proto.AcceptedTrustees.AddRange(releaseEvidence.AcceptedTrustees.Select(x => x.ToProto()));
+
+        if (releaseEvidence.SourceBlockHeight.HasValue)
+        {
+            proto.SourceBlockHeight = releaseEvidence.SourceBlockHeight.Value;
+        }
+
+        return proto;
+    }
+
     public static OutcomeRule ToProto(this OutcomeRuleDefinition outcomeRule) =>
         new()
         {
@@ -654,6 +774,14 @@ internal static class ElectionGrpcMappings
             ShortDescription = option.ShortDescription ?? string.Empty,
             BallotOrder = option.BallotOrder,
             IsBlankOption = option.IsBlankOption,
+        };
+
+    public static HushNetwork.proto.ElectionTrusteeReference ToProto(
+        this HushShared.Elections.Model.ElectionTrusteeReference reference) =>
+        new()
+        {
+            TrusteeUserAddress = reference.TrusteeUserAddress,
+            TrusteeDisplayName = reference.TrusteeDisplayName ?? string.Empty,
         };
 
     public static ElectionId ParseElectionId(string electionId)

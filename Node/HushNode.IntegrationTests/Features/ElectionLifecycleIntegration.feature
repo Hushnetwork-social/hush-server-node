@@ -86,3 +86,24 @@ Feature: FEAT-094 election lifecycle integration
     When the integration test restores the election to the "Draft" state for governed retry
     And the owner retries the governed proposal execution through blockchain submission
     Then the governed proposal should execute and transition the election to "Open"
+
+  @FEAT-098 @AT-PROC-I03 @NON_E2E
+  Scenario: Governed finalize binds one exact session and finalizes only after threshold aggregate shares
+    Given FEAT-094 election integration services are available
+    And the owner has a closed trustee-threshold election through governed approval blockchain submission
+    When the owner starts a "finalize" governed proposal through blockchain submission
+    Then the governed proposal should remain pending for "finalize" while the election stays "Closed"
+    When trustee "Bob" approves the governed proposal through blockchain submission
+    And trustee "Charlie" approves the governed proposal through blockchain submission
+    And trustee "Delta" approves the governed proposal through blockchain submission
+    Then the governed finalize should open a bound finalization session while the election stays "Closed"
+    When trustee "Bob" submits a single-ballot finalization share through blockchain submission
+    Then the finalization share log should record rejection code "SINGLE_BALLOT_RELEASE_FORBIDDEN" for trustee "Bob"
+    And the election should remain in "Closed"
+    When trustee "Bob" submits a bound finalization share through blockchain submission
+    And trustee "Charlie" submits a bound finalization share through blockchain submission
+    Then the finalization session should remain waiting for 2 accepted shares
+    When trustee "Delta" submits a bound finalization share through blockchain submission
+    Then the finalization release evidence should record 3 accepted trustee shares
+    And the boundary artifacts should include open, close, and finalize records
+    And the election should remain in "Finalized"

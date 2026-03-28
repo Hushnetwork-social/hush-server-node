@@ -149,3 +149,26 @@ public enum ElectionCeremonyShareCustodyStatus
     Imported = 2,
     ImportFailed = 3,
 }
+
+public enum ElectionFinalizationSessionStatus
+{
+    AwaitingShares = 0,
+    Completed = 1,
+}
+
+public enum ElectionFinalizationShareStatus
+{
+    Accepted = 0,
+    Rejected = 1,
+}
+
+public enum ElectionFinalizationTargetType
+{
+    AggregateTally = 0,
+    SingleBallot = 1,
+}
+
+public enum ElectionFinalizationReleaseMode
+{
+    AggregateTallyOnly = 0,
+}

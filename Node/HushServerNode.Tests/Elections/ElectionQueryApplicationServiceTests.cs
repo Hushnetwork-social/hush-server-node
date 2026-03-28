@@ -110,6 +110,51 @@ public class ElectionQueryApplicationServiceTests
             .RecordSelfTestSuccess(DateTime.UtcNow)
             .RecordMaterialSubmitted(DateTime.UtcNow)
             .MarkCompleted(DateTime.UtcNow, "share-v1");
+        var finalizationSession = ElectionModelFactory.CreateFinalizationSession(
+            election,
+            closeArtifactId: Guid.NewGuid(),
+            acceptedBallotSetHash: [11, 12, 13],
+            finalEncryptedTallyHash: [21, 22, 23],
+            ceremonySnapshot: boundaryArtifact.CeremonySnapshot!,
+            requiredShareCount: 1,
+            eligibleTrustees:
+            [
+                new SharedTrusteeReference("trustee-a", "Alice"),
+            ],
+            createdByPublicAddress: "owner-address",
+            governedProposalId: proposal.Id,
+            latestTransactionId: Guid.NewGuid(),
+            latestBlockHeight: 77,
+            latestBlockId: Guid.NewGuid());
+        var finalizationReleaseEvidence = ElectionModelFactory.CreateFinalizationReleaseEvidence(
+            finalizationSession,
+            acceptedTrustees:
+            [
+                new SharedTrusteeReference("trustee-a", "Alice"),
+            ],
+            completedByPublicAddress: "owner-address");
+        var completedSession = finalizationSession.MarkCompleted(
+            finalizationReleaseEvidence.Id,
+            finalizationReleaseEvidence.CompletedAt,
+            finalizationReleaseEvidence.SourceTransactionId,
+            finalizationReleaseEvidence.SourceBlockHeight,
+            finalizationReleaseEvidence.SourceBlockId);
+        var finalizationShare = ElectionModelFactory.CreateAcceptedFinalizationShare(
+            finalizationSessionId: completedSession.Id,
+            electionId: election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            submittedByPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            claimedCloseArtifactId: completedSession.CloseArtifactId,
+            claimedAcceptedBallotSetHash: completedSession.AcceptedBallotSetHash,
+            claimedFinalEncryptedTallyHash: completedSession.FinalEncryptedTallyHash,
+            claimedTargetTallyId: completedSession.TargetTallyId,
+            claimedCeremonyVersionId: boundaryArtifact.CeremonySnapshot!.CeremonyVersionId,
+            claimedTallyPublicKeyFingerprint: boundaryArtifact.CeremonySnapshot.TallyPublicKeyFingerprint,
+            shareMaterial: "ciphertext-share-material");
 
         ConfigureReadOnlyRepository(mocker, repo =>
         {
@@ -125,6 +170,9 @@ public class ElectionQueryApplicationServiceTests
             repo.Setup(x => x.GetActiveCeremonyVersionAsync(election.ElectionId)).ReturnsAsync(ceremonyVersion);
             repo.Setup(x => x.GetCeremonyTranscriptEventsAsync(ceremonyVersion.Id)).ReturnsAsync([transcriptEvent]);
             repo.Setup(x => x.GetCeremonyTrusteeStatesAsync(ceremonyVersion.Id)).ReturnsAsync([activeTrusteeState]);
+            repo.Setup(x => x.GetFinalizationSessionsAsync(election.ElectionId)).ReturnsAsync([completedSession]);
+            repo.Setup(x => x.GetFinalizationSharesAsync(completedSession.Id)).ReturnsAsync([finalizationShare]);
+            repo.Setup(x => x.GetFinalizationReleaseEvidenceRecordsAsync(election.ElectionId)).ReturnsAsync([finalizationReleaseEvidence]);
         });
 
         var sut = CreateQueryService(mocker);
@@ -154,6 +202,14 @@ public class ElectionQueryApplicationServiceTests
         response.CeremonyTranscriptEvents.Should().ContainSingle();
         response.ActiveCeremonyTrusteeStates.Should().ContainSingle();
         response.ActiveCeremonyTrusteeStates[0].State.Should().Be(ElectionTrusteeCeremonyStateProto.CeremonyStateCompleted);
+        response.FinalizationSessions.Should().ContainSingle();
+        response.FinalizationSessions[0].Status.Should().Be(ElectionFinalizationSessionStatusProto.FinalizationSessionCompleted);
+        response.FinalizationSessions[0].RequiredShareCount.Should().Be(1);
+        response.FinalizationShares.Should().ContainSingle();
+        response.FinalizationShares[0].Status.Should().Be(ElectionFinalizationShareStatusProto.FinalizationShareAccepted);
+        response.FinalizationShares[0].FailureCode.Should().BeEmpty();
+        response.FinalizationReleaseEvidenceRecords.Should().ContainSingle();
+        response.FinalizationReleaseEvidenceRecords[0].AcceptedShareCount.Should().Be(1);
     }
 
     [Fact]
@@ -431,6 +487,12 @@ public class ElectionQueryApplicationServiceTests
             .ReturnsAsync(Array.Empty<ElectionCeremonyTranscriptEventRecord>());
         repository.Setup(x => x.GetCeremonyTrusteeStatesAsync(It.IsAny<Guid>()))
             .ReturnsAsync(Array.Empty<ElectionCeremonyTrusteeStateRecord>());
+        repository.Setup(x => x.GetFinalizationSessionsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionFinalizationSessionRecord>());
+        repository.Setup(x => x.GetFinalizationSharesAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(Array.Empty<ElectionFinalizationShareRecord>());
+        repository.Setup(x => x.GetFinalizationReleaseEvidenceRecordsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionFinalizationReleaseEvidenceRecord>());
         repository.Setup(x => x.GetCeremonyShareCustodyRecordAsync(It.IsAny<Guid>(), It.IsAny<string>()))
             .ReturnsAsync((ElectionCeremonyShareCustodyRecord?)null);
         repository.Setup(x => x.GetCeremonyMessageEnvelopesForRecipientAsync(It.IsAny<Guid>(), It.IsAny<string>()))

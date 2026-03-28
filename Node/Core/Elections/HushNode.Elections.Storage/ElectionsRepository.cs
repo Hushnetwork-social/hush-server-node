@@ -337,4 +337,81 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
             Context.Entry(existing).CurrentValues.SetValues(shareCustodyRecord);
         }
     }
+
+    public async Task<IReadOnlyList<ElectionFinalizationSessionRecord>> GetFinalizationSessionsAsync(ElectionId electionId) =>
+        await Context.ElectionFinalizationSessions
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync();
+
+    public async Task<ElectionFinalizationSessionRecord?> GetFinalizationSessionAsync(Guid finalizationSessionId) =>
+        await Context.ElectionFinalizationSessions
+            .FirstOrDefaultAsync(x => x.Id == finalizationSessionId);
+
+    public async Task<ElectionFinalizationSessionRecord?> GetActiveFinalizationSessionAsync(ElectionId electionId)
+    {
+        var activeSessions = await Context.ElectionFinalizationSessions
+            .Where(x =>
+                x.ElectionId == electionId &&
+                x.Status != ElectionFinalizationSessionStatus.Completed)
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync();
+
+        return activeSessions.Count switch
+        {
+            0 => null,
+            1 => activeSessions[0],
+            _ => throw new InvalidOperationException(
+                $"Election {electionId} has multiple active finalization sessions, which violates the FEAT-098 invariant."),
+        };
+    }
+
+    public async Task SaveFinalizationSessionAsync(ElectionFinalizationSessionRecord session) =>
+        await Context.ElectionFinalizationSessions.AddAsync(session);
+
+    public async Task UpdateFinalizationSessionAsync(ElectionFinalizationSessionRecord session)
+    {
+        var existing = await Context.ElectionFinalizationSessions
+            .FirstOrDefaultAsync(x => x.Id == session.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(session);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionFinalizationShareRecord>> GetFinalizationSharesAsync(Guid finalizationSessionId) =>
+        await Context.ElectionFinalizationShares
+            .Where(x => x.FinalizationSessionId == finalizationSessionId)
+            .OrderBy(x => x.SubmittedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<ElectionFinalizationShareRecord?> GetAcceptedFinalizationShareAsync(
+        Guid finalizationSessionId,
+        string trusteeUserAddress) =>
+        await Context.ElectionFinalizationShares
+            .Where(x =>
+                x.FinalizationSessionId == finalizationSessionId &&
+                x.TrusteeUserAddress == trusteeUserAddress &&
+                x.Status == ElectionFinalizationShareStatus.Accepted)
+            .OrderByDescending(x => x.SubmittedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+
+    public async Task SaveFinalizationShareAsync(ElectionFinalizationShareRecord shareRecord) =>
+        await Context.ElectionFinalizationShares.AddAsync(shareRecord);
+
+    public async Task<IReadOnlyList<ElectionFinalizationReleaseEvidenceRecord>> GetFinalizationReleaseEvidenceRecordsAsync(ElectionId electionId) =>
+        await Context.ElectionFinalizationReleaseEvidenceRecords
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.CompletedAt)
+            .ToListAsync();
+
+    public async Task<ElectionFinalizationReleaseEvidenceRecord?> GetFinalizationReleaseEvidenceRecordAsync(Guid finalizationSessionId) =>
+        await Context.ElectionFinalizationReleaseEvidenceRecords
+            .FirstOrDefaultAsync(x => x.FinalizationSessionId == finalizationSessionId);
+
+    public async Task SaveFinalizationReleaseEvidenceRecordAsync(ElectionFinalizationReleaseEvidenceRecord releaseEvidenceRecord) =>
+        await Context.ElectionFinalizationReleaseEvidenceRecords.AddAsync(releaseEvidenceRecord);
 }

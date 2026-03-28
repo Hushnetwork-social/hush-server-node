@@ -62,6 +62,14 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var activeCeremonyTrusteeStates = activeCeremonyVersion is null
             ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
             : await repository.GetCeremonyTrusteeStatesAsync(activeCeremonyVersion.Id);
+        var finalizationSessions = await repository.GetFinalizationSessionsAsync(electionId);
+        var finalizationShares = new List<ElectionFinalizationShareRecord>();
+        foreach (var finalizationSession in finalizationSessions)
+        {
+            finalizationShares.AddRange(await repository.GetFinalizationSharesAsync(finalizationSession.Id));
+        }
+
+        var finalizationReleaseEvidenceRecords = await repository.GetFinalizationReleaseEvidenceRecordsAsync(electionId);
 
         var response = new GetElectionResponse
         {
@@ -93,6 +101,9 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         response.ActiveCeremonyTrusteeStates.AddRange(activeCeremonyTrusteeStates
             .OrderBy(x => x.TrusteeDisplayName ?? x.TrusteeUserAddress)
             .Select(x => x.ToProto()));
+        response.FinalizationSessions.AddRange(finalizationSessions.Select(x => x.ToProto()));
+        response.FinalizationShares.AddRange(finalizationShares.Select(x => x.ToProto()));
+        response.FinalizationReleaseEvidenceRecords.AddRange(finalizationReleaseEvidenceRecords.Select(x => x.ToProto()));
 
         return response;
     }

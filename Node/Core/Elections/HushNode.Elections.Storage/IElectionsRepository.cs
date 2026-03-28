@@ -100,4 +100,26 @@ public interface IElectionsRepository : IRepository
     Task SaveCeremonyShareCustodyRecordAsync(ElectionCeremonyShareCustodyRecord shareCustodyRecord);
 
     Task UpdateCeremonyShareCustodyRecordAsync(ElectionCeremonyShareCustodyRecord shareCustodyRecord);
+
+    Task<IReadOnlyList<ElectionFinalizationSessionRecord>> GetFinalizationSessionsAsync(ElectionId electionId);
+
+    Task<ElectionFinalizationSessionRecord?> GetFinalizationSessionAsync(Guid finalizationSessionId);
+
+    Task<ElectionFinalizationSessionRecord?> GetActiveFinalizationSessionAsync(ElectionId electionId);
+
+    Task SaveFinalizationSessionAsync(ElectionFinalizationSessionRecord session);
+
+    Task UpdateFinalizationSessionAsync(ElectionFinalizationSessionRecord session);
+
+    Task<IReadOnlyList<ElectionFinalizationShareRecord>> GetFinalizationSharesAsync(Guid finalizationSessionId);
+
+    Task<ElectionFinalizationShareRecord?> GetAcceptedFinalizationShareAsync(Guid finalizationSessionId, string trusteeUserAddress);
+
+    Task SaveFinalizationShareAsync(ElectionFinalizationShareRecord shareRecord);
+
+    Task<IReadOnlyList<ElectionFinalizationReleaseEvidenceRecord>> GetFinalizationReleaseEvidenceRecordsAsync(ElectionId electionId);
+
+    Task<ElectionFinalizationReleaseEvidenceRecord?> GetFinalizationReleaseEvidenceRecordAsync(Guid finalizationSessionId);
+
+    Task SaveFinalizationReleaseEvidenceRecordAsync(ElectionFinalizationReleaseEvidenceRecord releaseEvidenceRecord);
 }

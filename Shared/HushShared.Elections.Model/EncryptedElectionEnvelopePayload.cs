@@ -73,6 +73,20 @@ public record FinalizeElectionActionPayload(
     byte[]? AcceptedBallotSetHash,
     byte[]? FinalEncryptedTallyHash);
 
+public record SubmitElectionFinalizationShareActionPayload(
+    Guid FinalizationSessionId,
+    string ActorPublicAddress,
+    int ShareIndex,
+    string ShareVersion,
+    ElectionFinalizationTargetType TargetType,
+    Guid ClaimedCloseArtifactId,
+    byte[]? ClaimedAcceptedBallotSetHash,
+    byte[]? ClaimedFinalEncryptedTallyHash,
+    string ClaimedTargetTallyId,
+    Guid? ClaimedCeremonyVersionId,
+    string? ClaimedTallyPublicKeyFingerprint,
+    string ShareMaterial);
+
 public record StartElectionCeremonyActionPayload(
     string ActorPublicAddress,
     string ProfileId);
@@ -145,6 +159,7 @@ public static class EncryptedElectionEnvelopeActionTypes
     public const string OpenElection = "open_election";
     public const string CloseElection = "close_election";
     public const string FinalizeElection = "finalize_election";
+    public const string SubmitFinalizationShare = "submit_finalization_share";
     public const string StartCeremony = "start_ceremony";
     public const string RestartCeremony = "restart_ceremony";
     public const string PublishCeremonyTransportKey = "publish_ceremony_transport_key";

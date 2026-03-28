@@ -28,6 +28,9 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionCeremonyMessageEnvelope(modelBuilder);
         ConfigureElectionCeremonyTrusteeState(modelBuilder);
         ConfigureElectionCeremonyShareCustody(modelBuilder);
+        ConfigureElectionFinalizationSession(modelBuilder);
+        ConfigureElectionFinalizationShare(modelBuilder);
+        ConfigureElectionFinalizationReleaseEvidence(modelBuilder);
     }
 
     private static void ConfigureElectionRecord(ModelBuilder modelBuilder)
@@ -471,6 +474,116 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
 
             entity.HasIndex(x => new { x.CeremonyVersionId, x.TrusteeUserAddress }).IsUnique();
             entity.HasIndex(x => new { x.ElectionId, x.Status });
+        });
+    }
+
+    private static void ConfigureElectionFinalizationSession(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionFinalizationSessionRecord>(entity =>
+        {
+            entity.ToTable("ElectionFinalizationSessionRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.GovernedProposalId).HasColumnType("uuid");
+            entity.Property(x => x.GovernanceMode).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.CloseArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.AcceptedBallotSetHash).HasColumnType("bytea");
+            entity.Property(x => x.FinalEncryptedTallyHash).HasColumnType("bytea");
+            entity.Property(x => x.TargetTallyId).HasColumnType("varchar(256)");
+            entity.Property(x => x.RequiredShareCount).HasColumnType("integer");
+            entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.CreatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.CreatedByPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.CompletedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ReleaseEvidenceId).HasColumnType("uuid");
+            entity.Property(x => x.LatestTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.LatestBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.LatestBlockId).HasColumnType("uuid");
+
+            ConfigureJsonProperty(entity.Property(x => x.CeremonySnapshot));
+            ConfigureJsonProperty(entity.Property(x => x.EligibleTrustees));
+
+            entity.HasIndex(x => new { x.ElectionId, x.CloseArtifactId }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.Status });
+        });
+    }
+
+    private static void ConfigureElectionFinalizationShare(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionFinalizationShareRecord>(entity =>
+        {
+            entity.ToTable("ElectionFinalizationShareRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.FinalizationSessionId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.TrusteeUserAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.TrusteeDisplayName).HasColumnType("varchar(200)");
+            entity.Property(x => x.SubmittedByPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.ShareIndex).HasColumnType("integer");
+            entity.Property(x => x.ShareVersion).HasColumnType("varchar(128)");
+            entity.Property(x => x.TargetType).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.ClaimedCloseArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.ClaimedAcceptedBallotSetHash).HasColumnType("bytea");
+            entity.Property(x => x.ClaimedFinalEncryptedTallyHash).HasColumnType("bytea");
+            entity.Property(x => x.ClaimedTargetTallyId).HasColumnType("varchar(256)");
+            entity.Property(x => x.ClaimedCeremonyVersionId).HasColumnType("uuid");
+            entity.Property(x => x.ClaimedTallyPublicKeyFingerprint).HasColumnType("varchar(256)");
+            entity.Property(x => x.ShareMaterial).HasColumnType("text");
+            entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.FailureCode).HasColumnType("varchar(128)");
+            entity.Property(x => x.FailureReason).HasColumnType("text");
+            entity.Property(x => x.SubmittedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            entity.HasIndex(x => new { x.FinalizationSessionId, x.SubmittedAt });
+            entity.HasIndex(x => new { x.FinalizationSessionId, x.TrusteeUserAddress, x.Status });
+        });
+    }
+
+    private static void ConfigureElectionFinalizationReleaseEvidence(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionFinalizationReleaseEvidenceRecord>(entity =>
+        {
+            entity.ToTable("ElectionFinalizationReleaseEvidenceRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.FinalizationSessionId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.ReleaseMode).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.CloseArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.AcceptedBallotSetHash).HasColumnType("bytea");
+            entity.Property(x => x.FinalEncryptedTallyHash).HasColumnType("bytea");
+            entity.Property(x => x.TargetTallyId).HasColumnType("varchar(256)");
+            entity.Property(x => x.AcceptedShareCount).HasColumnType("integer");
+            entity.Property(x => x.CompletedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.CompletedByPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            ConfigureJsonProperty(entity.Property(x => x.AcceptedTrustees));
+
+            entity.HasIndex(x => x.FinalizationSessionId).IsUnique();
+            entity.HasIndex(x => x.ElectionId);
         });
     }
 

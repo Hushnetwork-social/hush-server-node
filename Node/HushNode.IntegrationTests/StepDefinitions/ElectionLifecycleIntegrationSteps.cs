@@ -263,6 +263,17 @@ public sealed class ElectionLifecycleIntegrationSteps
         await WhenTheOwnerReloadsTheElectionThroughGrpc();
     }
 
+    [Given(@"the owner has a closed trustee-threshold election through governed approval blockchain submission")]
+    public async Task GivenTheOwnerHasAClosedTrusteeThresholdElectionThroughGovernedApprovalBlockchainSubmission()
+    {
+        await GivenTheOwnerHasAnOpenTrusteeThresholdElectionThroughGovernedApprovalBlockchainSubmission();
+        await WhenTheOwnerStartsAGovernedProposalThroughBlockchainSubmission("close");
+        await WhenTrusteeApprovesTheGovernedProposalThroughBlockchainSubmission("Bob");
+        await WhenTrusteeApprovesTheGovernedProposalThroughBlockchainSubmission("Charlie");
+        await WhenTrusteeApprovesTheGovernedProposalThroughBlockchainSubmission("Delta");
+        await WhenTheOwnerReloadsTheElectionThroughGrpc();
+    }
+
     [When(@"the owner prepares a ready trustee ceremony through blockchain submission")]
     public async Task WhenTheOwnerPreparesAReadyTrusteeCeremonyThroughBlockchainSubmission()
     {
@@ -371,6 +382,49 @@ public sealed class ElectionLifecycleIntegrationSteps
             GovernedProposal = proposal,
             GovernedProposalApproval = approval,
         };
+    }
+
+    [When(@"trustee ""(.*)"" submits a bound finalization share through blockchain submission")]
+    public async Task WhenTrusteeSubmitsABoundFinalizationShareThroughBlockchainSubmission(string trusteeAlias)
+    {
+        var trustee = ResolveIdentity(trusteeAlias);
+        var response = await SubmitFinalizationShareViaBlockchainAsync(
+            trustee,
+            ElectionFinalizationTargetType.AggregateTally);
+
+        _lastElectionResponse = response;
+        _lastCommandResponse = new ElectionCommandResponse
+        {
+            Success = true,
+            ErrorMessage = string.Empty,
+            Election = response.Election,
+            FinalizationSession = response.FinalizationSessions.LastOrDefault(),
+            FinalizationShare = response.FinalizationShares
+                .LastOrDefault(x => x.TrusteeUserAddress == trustee.PublicSigningAddress),
+            FinalizationReleaseEvidence = response.FinalizationReleaseEvidenceRecords.LastOrDefault(),
+        };
+        RecordState(response.Election.LifecycleState);
+    }
+
+    [When(@"trustee ""(.*)"" submits a single-ballot finalization share through blockchain submission")]
+    public async Task WhenTrusteeSubmitsASingleBallotFinalizationShareThroughBlockchainSubmission(string trusteeAlias)
+    {
+        var trustee = ResolveIdentity(trusteeAlias);
+        var response = await SubmitFinalizationShareViaBlockchainAsync(
+            trustee,
+            ElectionFinalizationTargetType.SingleBallot);
+
+        _lastElectionResponse = response;
+        _lastCommandResponse = new ElectionCommandResponse
+        {
+            Success = true,
+            ErrorMessage = string.Empty,
+            Election = response.Election,
+            FinalizationSession = response.FinalizationSessions.LastOrDefault(),
+            FinalizationShare = response.FinalizationShares
+                .LastOrDefault(x => x.TrusteeUserAddress == trustee.PublicSigningAddress),
+        };
+        RecordState(response.Election.LifecycleState);
     }
 
     [When(@"the owner retries the governed proposal execution through blockchain submission")]
@@ -621,6 +675,79 @@ public sealed class ElectionLifecycleIntegrationSteps
         proposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.ExecutionSucceeded);
         response.Election.LifecycleState.Should().Be(ParseProtoLifecycleState(lifecycleState));
         response.GovernedProposalApprovals.Should().Contain(x => x.ProposalId == proposal.Id);
+
+        _lastElectionResponse = response;
+    }
+
+    [Then(@"the governed finalize should open a bound finalization session while the election stays ""(.*)""")]
+    public async Task ThenTheGovernedFinalizeShouldOpenABoundFinalizationSessionWhileTheElectionStays(string lifecycleState)
+    {
+        var response = await ReloadElectionAsync();
+        var proposal = response.GovernedProposals.Single(x => x.Id == GetLastGovernedProposalId());
+        var session = GetAwaitingFinalizationSession(response);
+
+        proposal.ActionType.Should().Be(ElectionGovernedActionTypeProto.GovernedActionFinalize);
+        proposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.ExecutionSucceeded);
+        response.Election.LifecycleState.Should().Be(ParseProtoLifecycleState(lifecycleState));
+        response.Election.FinalizeArtifactId.Should().BeEmpty();
+        response.FinalizationSessions.Should().ContainSingle();
+        session.RequiredShareCount.Should().Be(3);
+        session.EligibleTrustees.Should().HaveCount(3);
+        session.CeremonySnapshot.Should().NotBeNull();
+        response.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+
+        _lastElectionResponse = response;
+    }
+
+    [Then(@"the finalization share log should record rejection code ""(.*)"" for trustee ""(.*)""")]
+    public async Task ThenTheFinalizationShareLogShouldRecordRejectionCodeForTrustee(
+        string failureCode,
+        string trusteeAlias)
+    {
+        var trustee = ResolveIdentity(trusteeAlias);
+        var response = _lastElectionResponse ?? await ReloadElectionAsync();
+
+        response.FinalizationShares.Should().Contain(x =>
+            x.TrusteeUserAddress == trustee.PublicSigningAddress &&
+            x.Status == ElectionFinalizationShareStatusProto.FinalizationShareRejected &&
+            x.FailureCode == failureCode);
+        response.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+
+        _lastElectionResponse = response;
+    }
+
+    [Then(@"the finalization session should remain waiting for (.*) accepted shares")]
+    public async Task ThenTheFinalizationSessionShouldRemainWaitingForAcceptedShares(int acceptedShareCount)
+    {
+        var response = _lastElectionResponse ?? await ReloadElectionAsync();
+        var session = GetAwaitingFinalizationSession(response);
+
+        response.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+        response.FinalizationShares.Count(x =>
+            x.Status == ElectionFinalizationShareStatusProto.FinalizationShareAccepted)
+            .Should()
+            .Be(acceptedShareCount);
+        response.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+        session.RequiredShareCount.Should().BeGreaterThan(acceptedShareCount);
+
+        _lastElectionResponse = response;
+    }
+
+    [Then(@"the finalization release evidence should record (.*) accepted trustee shares")]
+    public async Task ThenTheFinalizationReleaseEvidenceShouldRecordAcceptedTrusteeShares(int acceptedShareCount)
+    {
+        var response = _lastElectionResponse ?? await ReloadElectionAsync();
+        var releaseEvidence = response.FinalizationReleaseEvidenceRecords.Should().ContainSingle().Subject;
+        var completedSession = response.FinalizationSessions.Should().ContainSingle().Subject;
+
+        response.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Finalized);
+        completedSession.Status.Should().Be(ElectionFinalizationSessionStatusProto.FinalizationSessionCompleted);
+        releaseEvidence.AcceptedShareCount.Should().Be(acceptedShareCount);
+        releaseEvidence.AcceptedTrustees.Should().HaveCount(acceptedShareCount);
+        response.FinalizationShares.Count(x =>
+            x.Status == ElectionFinalizationShareStatusProto.FinalizationShareAccepted)
+            .Should()
+            .Be(acceptedShareCount);
 
         _lastElectionResponse = response;
     }
@@ -979,6 +1106,52 @@ public sealed class ElectionLifecycleIntegrationSteps
 
         return await ReloadElectionAsync();
     }
+
+    private async Task<GetElectionResponse> SubmitFinalizationShareViaBlockchainAsync(
+        TestIdentity trustee,
+        ElectionFinalizationTargetType targetType)
+    {
+        var currentResponse = _lastElectionResponse ?? await ReloadElectionAsync();
+        var session = GetAwaitingFinalizationSession(currentResponse);
+        var shareIndex = session.EligibleTrustees
+            .Select((trusteeReference, index) => new { trusteeReference.TrusteeUserAddress, ShareIndex = index + 1 })
+            .Single(x => x.TrusteeUserAddress == trustee.PublicSigningAddress)
+            .ShareIndex;
+        var ceremonyVersionId = string.IsNullOrWhiteSpace(session.CeremonySnapshot?.CeremonyVersionId)
+            ? (Guid?)null
+            : Guid.Parse(session.CeremonySnapshot.CeremonyVersionId);
+        var signedTransaction = TestTransactionFactory.SubmitElectionFinalizationShare(
+            trustee,
+            new ElectionId(Guid.Parse(GetElectionId())),
+            Guid.Parse(session.Id),
+            shareIndex,
+            $"feat098-share-v1-{trustee.DisplayName.ToLowerInvariant()}",
+            targetType,
+            Guid.Parse(session.CloseArtifactId),
+            session.AcceptedBallotSetHash.ToByteArray(),
+            session.FinalEncryptedTallyHash.ToByteArray(),
+            session.TargetTallyId,
+            ceremonyVersionId,
+            session.CeremonySnapshot?.TallyPublicKeyFingerprint,
+            $"feat098-share-material-{trustee.DisplayName.ToLowerInvariant()}-{targetType.ToString().ToLowerInvariant()}");
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"finalization share transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+
+        return await ReloadElectionAsync();
+    }
+
+    private static ElectionFinalizationSession GetAwaitingFinalizationSession(GetElectionResponse response) =>
+        response.FinalizationSessions
+            .Single(x => x.Status == ElectionFinalizationSessionStatusProto.FinalizationSessionAwaitingShares);
 
     private void RecordState(ElectionLifecycleStateProto lifecycleState)
     {

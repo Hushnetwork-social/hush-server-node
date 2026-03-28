@@ -60,6 +60,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleCloseElectionAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.FinalizeElection =>
                 await HandleFinalizeElectionAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.SubmitFinalizationShare =>
+                await HandleSubmitFinalizationShareAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.StartCeremony =>
                 await HandleStartCeremonyAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.RestartCeremony =>
@@ -369,6 +371,36 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             ActorPublicAddress: finalizeAction.ActorPublicAddress,
             AcceptedBallotSetHash: finalizeAction.AcceptedBallotSetHash,
             FinalEncryptedTallyHash: finalizeAction.FinalEncryptedTallyHash,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleSubmitFinalizationShareAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var shareAction = decryptedEnvelope.DeserializeAction<SubmitElectionFinalizationShareActionPayload>();
+        if (shareAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Submit finalization share action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            FinalizationSessionId: shareAction.FinalizationSessionId,
+            ActorPublicAddress: shareAction.ActorPublicAddress,
+            ShareIndex: shareAction.ShareIndex,
+            ShareVersion: shareAction.ShareVersion,
+            TargetType: shareAction.TargetType,
+            ClaimedCloseArtifactId: shareAction.ClaimedCloseArtifactId,
+            ClaimedAcceptedBallotSetHash: shareAction.ClaimedAcceptedBallotSetHash,
+            ClaimedFinalEncryptedTallyHash: shareAction.ClaimedFinalEncryptedTallyHash,
+            ClaimedTargetTallyId: shareAction.ClaimedTargetTallyId,
+            ClaimedCeremonyVersionId: shareAction.ClaimedCeremonyVersionId,
+            ClaimedTallyPublicKeyFingerprint: shareAction.ClaimedTallyPublicKeyFingerprint,
+            ShareMaterial: shareAction.ShareMaterial,
             SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
             SourceBlockId: _blockchainCache.CurrentBlockId.Value));

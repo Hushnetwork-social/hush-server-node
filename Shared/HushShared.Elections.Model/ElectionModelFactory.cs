@@ -661,6 +661,287 @@ public static class ElectionModelFactory
             LastUpdatedAt: timestamp);
     }
 
+    public static ElectionFinalizationSessionRecord CreateFinalizationSession(
+        ElectionRecord election,
+        Guid closeArtifactId,
+        byte[] acceptedBallotSetHash,
+        byte[] finalEncryptedTallyHash,
+        ElectionCeremonyBindingSnapshot? ceremonySnapshot,
+        int requiredShareCount,
+        IReadOnlyList<ElectionTrusteeReference> eligibleTrustees,
+        string createdByPublicAddress,
+        Guid? governedProposalId = null,
+        DateTime? createdAt = null,
+        Guid? latestTransactionId = null,
+        long? latestBlockHeight = null,
+        Guid? latestBlockId = null)
+    {
+        ArgumentNullException.ThrowIfNull(election);
+
+        if (acceptedBallotSetHash is null || acceptedBallotSetHash.Length == 0)
+        {
+            throw new ArgumentException("Accepted ballot set hash is required.", nameof(acceptedBallotSetHash));
+        }
+
+        if (finalEncryptedTallyHash is null || finalEncryptedTallyHash.Length == 0)
+        {
+            throw new ArgumentException("Final encrypted tally hash is required.", nameof(finalEncryptedTallyHash));
+        }
+
+        if (election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold)
+        {
+            if (ceremonySnapshot is null)
+            {
+                throw new ArgumentException("Ceremony snapshot is required for trustee-threshold finalization.", nameof(ceremonySnapshot));
+            }
+
+            if (requiredShareCount < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(requiredShareCount), "Required share count must be at least 1.");
+            }
+
+            if (eligibleTrustees is null || eligibleTrustees.Count == 0)
+            {
+                throw new ArgumentException("Eligible trustees are required for trustee-threshold finalization.", nameof(eligibleTrustees));
+            }
+        }
+
+        var timestamp = createdAt ?? DateTime.UtcNow;
+        var normalizedEligibleTrustees = eligibleTrustees is null || eligibleTrustees.Count == 0
+            ? Array.Empty<ElectionTrusteeReference>()
+            : eligibleTrustees
+                .Select(x => new ElectionTrusteeReference(
+                    NormalizeRequiredText(x.TrusteeUserAddress, nameof(eligibleTrustees)),
+                    NormalizeOptionalText(x.TrusteeDisplayName)))
+                .ToArray();
+
+        return new ElectionFinalizationSessionRecord(
+            Guid.NewGuid(),
+            election.ElectionId,
+            governedProposalId,
+            election.GovernanceMode,
+            closeArtifactId,
+            CloneBytes(acceptedBallotSetHash)!,
+            CloneBytes(finalEncryptedTallyHash)!,
+            Convert.ToHexString(finalEncryptedTallyHash),
+            CloneCeremonySnapshot(ceremonySnapshot),
+            requiredShareCount,
+            normalizedEligibleTrustees,
+            ElectionFinalizationSessionStatus.AwaitingShares,
+            timestamp,
+            NormalizeRequiredText(createdByPublicAddress, nameof(createdByPublicAddress)),
+            CompletedAt: null,
+            ReleaseEvidenceId: null,
+            latestTransactionId,
+            latestBlockHeight,
+            latestBlockId);
+    }
+
+    public static ElectionFinalizationShareRecord CreateAcceptedFinalizationShare(
+        Guid finalizationSessionId,
+        ElectionId electionId,
+        string trusteeUserAddress,
+        string? trusteeDisplayName,
+        string submittedByPublicAddress,
+        int shareIndex,
+        string shareVersion,
+        ElectionFinalizationTargetType targetType,
+        Guid claimedCloseArtifactId,
+        byte[] claimedAcceptedBallotSetHash,
+        byte[] claimedFinalEncryptedTallyHash,
+        string claimedTargetTallyId,
+        Guid? claimedCeremonyVersionId,
+        string? claimedTallyPublicKeyFingerprint,
+        string shareMaterial,
+        DateTime? submittedAt = null,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null) =>
+        CreateFinalizationShare(
+            finalizationSessionId,
+            electionId,
+            trusteeUserAddress,
+            trusteeDisplayName,
+            submittedByPublicAddress,
+            shareIndex,
+            shareVersion,
+            targetType,
+            claimedCloseArtifactId,
+            claimedAcceptedBallotSetHash,
+            claimedFinalEncryptedTallyHash,
+            claimedTargetTallyId,
+            claimedCeremonyVersionId,
+            claimedTallyPublicKeyFingerprint,
+            shareMaterial,
+            ElectionFinalizationShareStatus.Accepted,
+            failureCode: null,
+            failureReason: null,
+            submittedAt,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
+
+    public static ElectionFinalizationShareRecord CreateRejectedFinalizationShare(
+        Guid finalizationSessionId,
+        ElectionId electionId,
+        string trusteeUserAddress,
+        string? trusteeDisplayName,
+        string submittedByPublicAddress,
+        int shareIndex,
+        string shareVersion,
+        ElectionFinalizationTargetType targetType,
+        Guid claimedCloseArtifactId,
+        byte[] claimedAcceptedBallotSetHash,
+        byte[] claimedFinalEncryptedTallyHash,
+        string claimedTargetTallyId,
+        Guid? claimedCeremonyVersionId,
+        string? claimedTallyPublicKeyFingerprint,
+        string shareMaterial,
+        string failureCode,
+        string failureReason,
+        DateTime? submittedAt = null,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
+    {
+        if (string.IsNullOrWhiteSpace(failureCode))
+        {
+            throw new ArgumentException("Failure code is required.", nameof(failureCode));
+        }
+
+        if (string.IsNullOrWhiteSpace(failureReason))
+        {
+            throw new ArgumentException("Failure reason is required.", nameof(failureReason));
+        }
+
+        return CreateFinalizationShare(
+            finalizationSessionId,
+            electionId,
+            trusteeUserAddress,
+            trusteeDisplayName,
+            submittedByPublicAddress,
+            shareIndex,
+            shareVersion,
+            targetType,
+            claimedCloseArtifactId,
+            claimedAcceptedBallotSetHash,
+            claimedFinalEncryptedTallyHash,
+            claimedTargetTallyId,
+            claimedCeremonyVersionId,
+            claimedTallyPublicKeyFingerprint,
+            shareMaterial,
+            ElectionFinalizationShareStatus.Rejected,
+            failureCode.Trim(),
+            failureReason.Trim(),
+            submittedAt,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
+    }
+
+    public static ElectionFinalizationReleaseEvidenceRecord CreateFinalizationReleaseEvidence(
+        ElectionFinalizationSessionRecord session,
+        IReadOnlyList<ElectionTrusteeReference> acceptedTrustees,
+        string completedByPublicAddress,
+        DateTime? completedAt = null,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        var timestamp = completedAt ?? DateTime.UtcNow;
+        var normalizedTrustees = acceptedTrustees is null || acceptedTrustees.Count == 0
+            ? Array.Empty<ElectionTrusteeReference>()
+            : acceptedTrustees
+                .Select(x => new ElectionTrusteeReference(
+                    NormalizeRequiredText(x.TrusteeUserAddress, nameof(acceptedTrustees)),
+                    NormalizeOptionalText(x.TrusteeDisplayName)))
+                .ToArray();
+
+        return new ElectionFinalizationReleaseEvidenceRecord(
+            Guid.NewGuid(),
+            session.Id,
+            session.ElectionId,
+            ElectionFinalizationReleaseMode.AggregateTallyOnly,
+            session.CloseArtifactId,
+            CloneBytes(session.AcceptedBallotSetHash)!,
+            CloneBytes(session.FinalEncryptedTallyHash)!,
+            session.TargetTallyId,
+            normalizedTrustees.Length,
+            normalizedTrustees,
+            timestamp,
+            NormalizeRequiredText(completedByPublicAddress, nameof(completedByPublicAddress)),
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
+    }
+
+    private static ElectionFinalizationShareRecord CreateFinalizationShare(
+        Guid finalizationSessionId,
+        ElectionId electionId,
+        string trusteeUserAddress,
+        string? trusteeDisplayName,
+        string submittedByPublicAddress,
+        int shareIndex,
+        string shareVersion,
+        ElectionFinalizationTargetType targetType,
+        Guid claimedCloseArtifactId,
+        byte[] claimedAcceptedBallotSetHash,
+        byte[] claimedFinalEncryptedTallyHash,
+        string claimedTargetTallyId,
+        Guid? claimedCeremonyVersionId,
+        string? claimedTallyPublicKeyFingerprint,
+        string shareMaterial,
+        ElectionFinalizationShareStatus status,
+        string? failureCode,
+        string? failureReason,
+        DateTime? submittedAt,
+        Guid? sourceTransactionId,
+        long? sourceBlockHeight,
+        Guid? sourceBlockId)
+    {
+        if (shareIndex < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(shareIndex), "Share index must be at least 1.");
+        }
+
+        if (claimedAcceptedBallotSetHash is null)
+        {
+            throw new ArgumentNullException(nameof(claimedAcceptedBallotSetHash));
+        }
+
+        if (claimedFinalEncryptedTallyHash is null)
+        {
+            throw new ArgumentNullException(nameof(claimedFinalEncryptedTallyHash));
+        }
+
+        return new ElectionFinalizationShareRecord(
+            Guid.NewGuid(),
+            finalizationSessionId,
+            electionId,
+            NormalizeRequiredText(trusteeUserAddress, nameof(trusteeUserAddress)),
+            NormalizeOptionalText(trusteeDisplayName),
+            NormalizeRequiredText(submittedByPublicAddress, nameof(submittedByPublicAddress)),
+            shareIndex,
+            NormalizeOptionalText(shareVersion) ?? string.Empty,
+            targetType,
+            claimedCloseArtifactId,
+            CloneBytes(claimedAcceptedBallotSetHash) ?? Array.Empty<byte>(),
+            CloneBytes(claimedFinalEncryptedTallyHash) ?? Array.Empty<byte>(),
+            NormalizeOptionalText(claimedTargetTallyId) ?? string.Empty,
+            claimedCeremonyVersionId,
+            NormalizeOptionalText(claimedTallyPublicKeyFingerprint),
+            NormalizeOptionalText(shareMaterial) ?? string.Empty,
+            status,
+            NormalizeOptionalText(failureCode),
+            NormalizeOptionalText(failureReason),
+            submittedAt ?? DateTime.UtcNow,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
+    }
+
     private static int? NormalizeRequiredApprovalCount(
         ElectionGovernanceMode governanceMode,
         int? requiredApprovalCount)

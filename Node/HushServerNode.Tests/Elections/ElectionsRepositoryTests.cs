@@ -172,6 +172,106 @@ public class ElectionsRepositoryTests
             .WithMessage("*multiple pending governed proposals*");
     }
 
+    [Fact]
+    public async Task SaveFinalizationSessionSharesAndReleaseEvidence_ShouldRoundTrip()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            OpenArtifactId = Guid.NewGuid(),
+            CloseArtifactId = Guid.NewGuid(),
+            ClosedAt = DateTime.UtcNow.AddMinutes(-5),
+            TallyReadyAt = DateTime.UtcNow.AddMinutes(-4),
+            VoteAcceptanceLockedAt = DateTime.UtcNow.AddMinutes(-5),
+            LastUpdatedAt = DateTime.UtcNow.AddMinutes(-4),
+        };
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            ceremonyVersionId: Guid.NewGuid(),
+            ceremonyVersionNumber: 1,
+            profileId: "dkg-prod-2of2",
+            boundTrusteeCount: 2,
+            requiredApprovalCount: 1,
+            activeTrustees:
+            [
+                new ElectionTrusteeReference("trustee-a", "Alice"),
+                new ElectionTrusteeReference("trustee-b", "Bob"),
+            ],
+            tallyPublicKeyFingerprint: "tally-fingerprint-1");
+        var session = ElectionModelFactory.CreateFinalizationSession(
+            election,
+            closeArtifactId: election.CloseArtifactId!.Value,
+            acceptedBallotSetHash: [1, 2, 3],
+            finalEncryptedTallyHash: [4, 5, 6],
+            ceremonySnapshot: ceremonySnapshot,
+            requiredShareCount: 1,
+            eligibleTrustees:
+            [
+                new ElectionTrusteeReference("trustee-a", "Alice"),
+                new ElectionTrusteeReference("trustee-b", "Bob"),
+            ],
+            createdByPublicAddress: "owner-address");
+        var acceptedShare = ElectionModelFactory.CreateAcceptedFinalizationShare(
+            finalizationSessionId: session.Id,
+            electionId: election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            submittedByPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            claimedCloseArtifactId: session.CloseArtifactId,
+            claimedAcceptedBallotSetHash: session.AcceptedBallotSetHash,
+            claimedFinalEncryptedTallyHash: session.FinalEncryptedTallyHash,
+            claimedTargetTallyId: session.TargetTallyId,
+            claimedCeremonyVersionId: ceremonySnapshot.CeremonyVersionId,
+            claimedTallyPublicKeyFingerprint: ceremonySnapshot.TallyPublicKeyFingerprint,
+            shareMaterial: "ciphertext-share");
+        var releaseEvidence = ElectionModelFactory.CreateFinalizationReleaseEvidence(
+            session,
+            acceptedTrustees:
+            [
+                new ElectionTrusteeReference("trustee-a", "Alice"),
+            ],
+            completedByPublicAddress: "owner-address");
+        var completedSession = session.MarkCompleted(releaseEvidence.Id, releaseEvidence.CompletedAt);
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveFinalizationSessionAsync(session);
+        await repository.SaveFinalizationShareAsync(acceptedShare);
+        await repository.SaveFinalizationReleaseEvidenceRecordAsync(releaseEvidence);
+        await context.SaveChangesAsync();
+
+        await repository.UpdateFinalizationSessionAsync(completedSession);
+        await context.SaveChangesAsync();
+
+        var sessions = await repository.GetFinalizationSessionsAsync(election.ElectionId);
+        var storedSession = await repository.GetFinalizationSessionAsync(session.Id);
+        var activeSession = await repository.GetActiveFinalizationSessionAsync(election.ElectionId);
+        var shares = await repository.GetFinalizationSharesAsync(session.Id);
+        var accepted = await repository.GetAcceptedFinalizationShareAsync(session.Id, "trustee-a");
+        var releaseEvidenceRecords = await repository.GetFinalizationReleaseEvidenceRecordsAsync(election.ElectionId);
+        var storedReleaseEvidence = await repository.GetFinalizationReleaseEvidenceRecordAsync(session.Id);
+
+        sessions.Should().ContainSingle();
+        sessions[0].Status.Should().Be(ElectionFinalizationSessionStatus.Completed);
+        sessions[0].CeremonySnapshot.Should().NotBeNull();
+        sessions[0].CeremonySnapshot!.ProfileId.Should().Be("dkg-prod-2of2");
+        storedSession.Should().NotBeNull();
+        storedSession!.ReleaseEvidenceId.Should().Be(releaseEvidence.Id);
+        activeSession.Should().BeNull();
+        shares.Should().ContainSingle();
+        shares[0].Status.Should().Be(ElectionFinalizationShareStatus.Accepted);
+        shares[0].ClaimedTargetTallyId.Should().Be(session.TargetTallyId);
+        accepted.Should().NotBeNull();
+        accepted!.ShareVersion.Should().Be("share-v1");
+        releaseEvidenceRecords.Should().ContainSingle();
+        releaseEvidenceRecords[0].AcceptedShareCount.Should().Be(1);
+        storedReleaseEvidence.Should().NotBeNull();
+        storedReleaseEvidence!.ReleaseMode.Should().Be(ElectionFinalizationReleaseMode.AggregateTallyOnly);
+    }
+
     private static ElectionsRepository CreateRepository(ElectionsDbContext context)
     {
         var repository = new ElectionsRepository();
