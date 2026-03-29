@@ -1,3 +1,4 @@
+using HushNode.Caching;
 using HushNode.Elections.Storage;
 using HushNode.Indexing.Interfaces;
 using HushShared.Blockchain.TransactionModel;
@@ -75,7 +76,8 @@ public static class ElectionsHostBuild
             new ElectionLifecycleService(
                 sp.GetRequiredService<IUnitOfWorkProvider<ElectionsDbContext>>(),
                 sp.GetRequiredService<ILogger<ElectionLifecycleService>>(),
-                sp.GetRequiredService<ElectionCeremonyOptions>()));
+                sp.GetRequiredService<ElectionCeremonyOptions>(),
+                sp.GetRequiredService<IElectionCastIdempotencyCacheService>()));
     }
 
     private static ElectionCeremonyOptions CreateCeremonyOptions(IConfiguration configuration) =>

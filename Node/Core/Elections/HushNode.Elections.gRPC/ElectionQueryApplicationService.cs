@@ -1,6 +1,10 @@
 using HushNetwork.proto;
+using HushNode.Caching;
+using HushNode.MemPool;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
+using System.Security.Cryptography;
+using System.Text;
 using Olimpo.EntityFramework.Persistency;
 using Timestamp = Google.Protobuf.WellKnownTypes.Timestamp;
 
@@ -10,18 +14,34 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
 {
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider;
     private readonly ElectionCeremonyOptions _ceremonyOptions;
+    private readonly IMemPoolService? _memPoolService;
+    private readonly IElectionEnvelopeCryptoService? _electionEnvelopeCryptoService;
+    private readonly IElectionCastIdempotencyCacheService? _castIdempotencyCacheService;
 
     public ElectionQueryApplicationService(IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider)
-        : this(unitOfWorkProvider, new ElectionCeremonyOptions())
+        : this(unitOfWorkProvider, new ElectionCeremonyOptions(), null, null, null)
     {
     }
 
     public ElectionQueryApplicationService(
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ElectionCeremonyOptions ceremonyOptions)
+        : this(unitOfWorkProvider, ceremonyOptions, null, null, null)
+    {
+    }
+
+    public ElectionQueryApplicationService(
+        IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
+        ElectionCeremonyOptions ceremonyOptions,
+        IMemPoolService? memPoolService,
+        IElectionEnvelopeCryptoService? electionEnvelopeCryptoService,
+        IElectionCastIdempotencyCacheService? castIdempotencyCacheService)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _ceremonyOptions = ceremonyOptions;
+        _memPoolService = memPoolService;
+        _electionEnvelopeCryptoService = electionEnvelopeCryptoService;
+        _castIdempotencyCacheService = castIdempotencyCacheService;
     }
 
     public async Task<GetElectionResponse> GetElectionAsync(ElectionId electionId)
@@ -206,6 +226,94 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         return response;
     }
 
+    public async Task<GetElectionVotingViewResponse> GetElectionVotingViewAsync(
+        ElectionId electionId,
+        string actorPublicAddress,
+        string? submissionIdempotencyKey)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var normalizedActorPublicAddress = actorPublicAddress?.Trim() ?? string.Empty;
+
+        var election = await repository.GetElectionAsync(electionId);
+        if (election is null)
+        {
+            return new GetElectionVotingViewResponse
+            {
+                Success = false,
+                ErrorMessage = $"Election {electionId} was not found.",
+                ActorPublicAddress = normalizedActorPublicAddress,
+                PersonalParticipationStatus = ElectionParticipationStatusProto.ParticipationDidNotVote,
+                SubmissionStatus = ElectionVotingSubmissionStatusProto.VotingSubmissionStatusNone,
+            };
+        }
+
+        var selfRosterEntry = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
+            ? null
+            : await repository.GetRosterEntryByLinkedActorAsync(electionId, normalizedActorPublicAddress);
+        var participationRecord = selfRosterEntry is null
+            ? null
+            : await repository.GetParticipationRecordAsync(electionId, selfRosterEntry.OrganizationVoterId);
+        var commitmentRegistration = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
+            ? null
+            : await repository.GetCommitmentRegistrationByLinkedActorAsync(electionId, normalizedActorPublicAddress);
+        var checkoffConsumption = selfRosterEntry is null
+            ? null
+            : await repository.GetCheckoffConsumptionAsync(electionId, selfRosterEntry.OrganizationVoterId);
+        var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(electionId);
+        var openArtifact = ResolveOpenArtifact(election, boundaryArtifacts);
+
+        var response = new GetElectionVotingViewResponse
+        {
+            Success = true,
+            ErrorMessage = string.Empty,
+            ActorPublicAddress = normalizedActorPublicAddress,
+            Election = election.ToProto(),
+            PersonalParticipationStatus = (ElectionParticipationStatusProto)(int)(participationRecord?.ParticipationStatus
+                ?? ElectionParticipationStatus.DidNotVote),
+            SubmissionStatus = await ResolveSubmissionStatusAsync(repository, electionId, submissionIdempotencyKey),
+        };
+
+        if (selfRosterEntry is not null)
+        {
+            response.SelfRosterEntry = ToEligibilityRosterEntryView(
+                election,
+                selfRosterEntry,
+                participationRecord);
+        }
+
+        if (commitmentRegistration is not null)
+        {
+            response.CommitmentRegistered = true;
+            response.CommitmentRegisteredAt = ToProtoTimestamp(commitmentRegistration.RegisteredAt);
+            response.HasCommitmentRegisteredAt = true;
+        }
+
+        if (checkoffConsumption is not null)
+        {
+            response.AcceptedAt = ToProtoTimestamp(checkoffConsumption.ConsumedAt);
+            response.HasAcceptedAt = true;
+            response.AcceptanceId = checkoffConsumption.Id.ToString();
+            response.ReceiptId = BuildReceiptId(checkoffConsumption);
+            response.ServerProof = BuildReceiptProof(checkoffConsumption);
+        }
+
+        if (openArtifact is not null)
+        {
+            response.OpenArtifactId = openArtifact.Id.ToString();
+            response.EligibleSetHash = EncodeHash(openArtifact.FrozenEligibleVoterSetHash);
+
+            if (openArtifact.CeremonySnapshot is not null)
+            {
+                response.CeremonyVersionId = openArtifact.CeremonySnapshot.CeremonyVersionId.ToString();
+                response.DkgProfileId = openArtifact.CeremonySnapshot.ProfileId;
+                response.TallyPublicKeyFingerprint = openArtifact.CeremonySnapshot.TallyPublicKeyFingerprint;
+            }
+        }
+
+        return response;
+    }
+
     public async Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccessAsync(
         ElectionId electionId,
         string actorPublicAddress)
@@ -333,6 +441,100 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var response = new GetElectionsByOwnerResponse();
         response.Elections.AddRange(elections.Select(x => x.ToSummaryProto()));
         return response;
+    }
+
+    private async Task<ElectionVotingSubmissionStatusProto> ResolveSubmissionStatusAsync(
+        IElectionsRepository repository,
+        ElectionId electionId,
+        string? submissionIdempotencyKey)
+    {
+        var normalizedSubmissionIdempotencyKey = submissionIdempotencyKey?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalizedSubmissionIdempotencyKey))
+        {
+            return ElectionVotingSubmissionStatusProto.VotingSubmissionStatusNone;
+        }
+
+        if (HasPendingCastSubmission(electionId, normalizedSubmissionIdempotencyKey))
+        {
+            return ElectionVotingSubmissionStatusProto.VotingSubmissionStatusStillProcessing;
+        }
+
+        var scopedHash = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(normalizedSubmissionIdempotencyKey)));
+        if (_castIdempotencyCacheService is not null)
+        {
+            var cachedMarker = await _castIdempotencyCacheService.ExistsAsync(
+                electionId.ToString(),
+                scopedHash);
+            if (cachedMarker == true)
+            {
+                return ElectionVotingSubmissionStatusProto.VotingSubmissionStatusAlreadyUsed;
+            }
+        }
+
+        var committedMarker = await repository.GetCastIdempotencyRecordAsync(electionId, scopedHash);
+        if (committedMarker is not null && _castIdempotencyCacheService is not null)
+        {
+            await _castIdempotencyCacheService.SetAsync(
+                electionId.ToString(),
+                scopedHash);
+        }
+
+        return committedMarker is null
+            ? ElectionVotingSubmissionStatusProto.VotingSubmissionStatusNone
+            : ElectionVotingSubmissionStatusProto.VotingSubmissionStatusAlreadyUsed;
+    }
+
+    private bool HasPendingCastSubmission(
+        ElectionId electionId,
+        string submissionIdempotencyKey)
+    {
+        if (_memPoolService is null || _electionEnvelopeCryptoService is null)
+        {
+            return false;
+        }
+
+        foreach (var transaction in _memPoolService.PeekPendingValidatedTransactions())
+        {
+            var decryptedEnvelope = _electionEnvelopeCryptoService.TryDecryptValidated(transaction);
+            if (decryptedEnvelope is null ||
+                decryptedEnvelope.ActionType != EncryptedElectionEnvelopeActionTypes.AcceptBallotCast ||
+                decryptedEnvelope.Transaction.Payload.ElectionId != electionId)
+            {
+                continue;
+            }
+
+            var acceptCastAction = decryptedEnvelope.DeserializeAction<AcceptElectionBallotCastActionPayload>();
+            if (acceptCastAction is null)
+            {
+                continue;
+            }
+
+            if (string.Equals(
+                    acceptCastAction.IdempotencyKey?.Trim(),
+                    submissionIdempotencyKey,
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static ElectionBoundaryArtifactRecord? ResolveOpenArtifact(
+        ElectionRecord election,
+        IReadOnlyList<ElectionBoundaryArtifactRecord> boundaryArtifacts)
+    {
+        if (election.OpenArtifactId.HasValue)
+        {
+            return boundaryArtifacts.FirstOrDefault(x => x.Id == election.OpenArtifactId.Value);
+        }
+
+        return boundaryArtifacts
+            .Where(x => x.ArtifactType == ElectionBoundaryArtifactType.Open)
+            .OrderByDescending(x => x.RecordedAt)
+            .FirstOrDefault();
     }
 
     private static ElectionEligibilitySummaryView BuildEligibilitySummary(
@@ -560,6 +762,30 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         value is null || value.Length == 0
             ? string.Empty
             : Convert.ToBase64String(value);
+
+    private static string BuildReceiptId(ElectionCheckoffConsumptionRecord checkoffConsumption)
+    {
+        var receiptSeed = string.Join(
+            "|",
+            checkoffConsumption.ElectionId,
+            checkoffConsumption.Id,
+            checkoffConsumption.ConsumedAt.ToUniversalTime().ToString("O"),
+            checkoffConsumption.ParticipationStatus);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(receiptSeed));
+        return $"rcpt-{Convert.ToHexString(hash)[..24].ToLowerInvariant()}";
+    }
+
+    private static string BuildReceiptProof(ElectionCheckoffConsumptionRecord checkoffConsumption)
+    {
+        var proofSeed = string.Join(
+            "|",
+            BuildReceiptId(checkoffConsumption),
+            checkoffConsumption.ElectionId,
+            checkoffConsumption.Id,
+            checkoffConsumption.ConsumedAt.ToUniversalTime().ToString("O"),
+            checkoffConsumption.ParticipationStatus);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(proofSeed))).ToLowerInvariant();
+    }
 
     private static Timestamp ToProtoTimestamp(DateTime value) =>
         Timestamp.FromDateTime(DateTime.SpecifyKind(value, DateTimeKind.Utc));

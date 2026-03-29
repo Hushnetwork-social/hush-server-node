@@ -50,4 +50,5 @@ message SubmitSignedTransactionReply {
   bool Successfull = 1;
   string Message = 2;
   TransactionStatus status = 3;  // NEW: Idempotency status for FEAT-057
+  string ValidationCode = 4;
 }

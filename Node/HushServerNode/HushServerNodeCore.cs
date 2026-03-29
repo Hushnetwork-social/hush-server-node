@@ -592,6 +592,18 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                 return new UserFeedsCacheService(connectionMultiplexer, redisSettings.InstanceName, logger);
             });
 
+            // Register committed election cast idempotency cache service (FEAT-099)
+            services.AddSingleton<IElectionCastIdempotencyCacheService>(sp =>
+            {
+                var connectionMultiplexer = sp.GetRequiredService<IConnectionMultiplexer>();
+                var redisSettings = sp.GetRequiredService<IOptions<RedisSettings>>().Value;
+                var logger = sp.GetRequiredService<ILogger<ElectionCastIdempotencyCacheService>>();
+                return new ElectionCastIdempotencyCacheService(
+                    connectionMultiplexer,
+                    redisSettings.InstanceName,
+                    logger);
+            });
+
             // Register feed participants cache service (FEAT-050)
             services.AddSingleton<IFeedParticipantsCacheService>(sp =>
             {

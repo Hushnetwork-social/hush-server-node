@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Data;
 using System.Security.Cryptography;
 using System.Text;
+using HushNode.Caching;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
 using Microsoft.Extensions.Logging;
@@ -14,12 +15,13 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider;
     private readonly ILogger<ElectionLifecycleService> _logger;
     private readonly ElectionCeremonyOptions _ceremonyOptions;
+    private readonly IElectionCastIdempotencyCacheService? _castIdempotencyCacheService;
     private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
 
     public ElectionLifecycleService(
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ILogger<ElectionLifecycleService> logger)
-        : this(unitOfWorkProvider, logger, new ElectionCeremonyOptions())
+        : this(unitOfWorkProvider, logger, new ElectionCeremonyOptions(), null)
     {
     }
 
@@ -27,10 +29,20 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ILogger<ElectionLifecycleService> logger,
         ElectionCeremonyOptions ceremonyOptions)
+        : this(unitOfWorkProvider, logger, ceremonyOptions, null)
+    {
+    }
+
+    public ElectionLifecycleService(
+        IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
+        ILogger<ElectionLifecycleService> logger,
+        ElectionCeremonyOptions ceremonyOptions,
+        IElectionCastIdempotencyCacheService? castIdempotencyCacheService)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _logger = logger;
         _ceremonyOptions = ceremonyOptions;
+        _castIdempotencyCacheService = castIdempotencyCacheService;
     }
 
     public async Task<ElectionCommandResult> CreateDraftAsync(CreateElectionDraftRequest request)
@@ -807,6 +819,12 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 await repository.SaveCastIdempotencyRecordAsync(idempotencyRecord);
                 await repository.SaveElectionAsync(updatedElection);
                 await unitOfWork.CommitAsync();
+                if (_castIdempotencyCacheService is not null)
+                {
+                    await _castIdempotencyCacheService.SetAsync(
+                        request.ElectionId.ToString(),
+                        idempotencyKeyHash);
+                }
 
                 return ElectionCastAcceptanceResult.Success(
                     updatedElection,

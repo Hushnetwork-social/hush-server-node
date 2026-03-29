@@ -197,6 +197,50 @@ internal static class TestTransactionFactory
         return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
     }
 
+    public static string RegisterElectionVotingCommitment(
+        TestIdentity actor,
+        ElectionId electionId,
+        string commitmentHash)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RegisterVotingCommitment,
+            JsonSerializer.SerializeToElement(new RegisterElectionVotingCommitmentActionPayload(
+                actor.PublicSigningAddress,
+                commitmentHash)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(actor, electionId, actionEnvelope);
+    }
+
+    public static string AcceptElectionBallotCast(
+        TestIdentity actor,
+        ElectionId electionId,
+        string idempotencyKey,
+        string encryptedBallotPackage,
+        string proofBundle,
+        string ballotNullifier,
+        Guid openArtifactId,
+        byte[] eligibleSetHash,
+        Guid ceremonyVersionId,
+        string dkgProfileId,
+        string tallyPublicKeyFingerprint)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.AcceptBallotCast,
+            JsonSerializer.SerializeToElement(new AcceptElectionBallotCastActionPayload(
+                actor.PublicSigningAddress,
+                idempotencyKey,
+                encryptedBallotPackage,
+                proofBundle,
+                ballotNullifier,
+                openArtifactId,
+                eligibleSetHash,
+                ceremonyVersionId,
+                dkgProfileId,
+                tallyPublicKeyFingerprint)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(actor, electionId, actionEnvelope);
+    }
+
     public static string StartElectionCeremony(
         TestIdentity owner,
         ElectionId electionId,

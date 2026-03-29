@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using HushNode.Credentials;
 using HushNode.Elections.Storage;
+using HushNode.MemPool;
 using HushShared.Blockchain.Model;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
@@ -22,7 +24,8 @@ public class EncryptedElectionEnvelopeContentHandler(
     FinalizeElectionContentHandler finalizeElectionContentHandler,
     ICredentialsProvider credentialsProvider,
     IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
-    ElectionCeremonyOptions ceremonyOptions) : ITransactionContentHandler
+    IMemPoolService memPoolService,
+    ElectionCeremonyOptions ceremonyOptions) : ITransactionContentHandler, ITransactionValidationFailureReporter
 {
     private readonly IElectionEnvelopeCryptoService _envelopeCryptoService = envelopeCryptoService;
     private readonly ICreateElectionDraftValidationService _createElectionDraftValidationService =
@@ -44,22 +47,37 @@ public class EncryptedElectionEnvelopeContentHandler(
     private readonly FinalizeElectionContentHandler _finalizeElectionContentHandler = finalizeElectionContentHandler;
     private readonly ICredentialsProvider _credentialsProvider = credentialsProvider;
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider = unitOfWorkProvider;
+    private readonly IMemPoolService _memPoolService = memPoolService;
     private readonly ElectionCeremonyOptions _ceremonyOptions = ceremonyOptions;
+    private readonly ConcurrentDictionary<Guid, TransactionValidationFailure> _validationFailures = new();
 
     public bool CanValidate(Guid transactionKind) =>
         EncryptedElectionEnvelopePayloadHandler.EncryptedElectionEnvelopePayloadKind == transactionKind;
 
+    public bool TryTakeValidationFailure(Guid transactionId, out TransactionValidationFailure failure) =>
+        _validationFailures.TryRemove(transactionId, out failure!);
+
     public AbstractTransaction? ValidateAndSign(AbstractTransaction transaction)
     {
+        _validationFailures.TryRemove(transaction.TransactionId.Value, out _);
+
         var decryptedEnvelope = _envelopeCryptoService.TryDecryptSigned(transaction);
         if (decryptedEnvelope is null)
         {
+            RecordValidationFailure(
+                transaction.TransactionId.Value,
+                "election_envelope_decrypt_failed",
+                "Election envelope decryption failed during validation.");
             return null;
         }
 
         var signatory = decryptedEnvelope.Transaction.UserSignature?.Signatory;
         if (string.IsNullOrWhiteSpace(signatory))
         {
+            RecordValidationFailure(
+                decryptedEnvelope.Transaction.TransactionId.Value,
+                "election_envelope_missing_signatory",
+                "Election envelope validation requires a non-empty signatory.");
             return null;
         }
 
@@ -73,6 +91,12 @@ public class EncryptedElectionEnvelopeContentHandler(
             blockProducerCredentials.PublicSigningAddress,
             blockProducerCredentials.PrivateSigningKey);
     }
+
+    private void RecordValidationFailure(
+        Guid transactionId,
+        string code,
+        string message) =>
+        _validationFailures[transactionId] = new TransactionValidationFailure(code, message);
 
     private bool IsValidInnerAction(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
@@ -90,6 +114,10 @@ public class EncryptedElectionEnvelopeContentHandler(
                 IsValidClaimRosterEntryAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.ActivateRosterEntry =>
                 IsValidActivateRosterEntryAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.RegisterVotingCommitment =>
+                IsValidRegisterVotingCommitmentAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.AcceptBallotCast =>
+                IsValidAcceptBallotCastAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.InviteTrustee =>
                 IsValidInviteTrusteeAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.AcceptTrusteeInvitation =>
@@ -268,6 +296,348 @@ public class EncryptedElectionEnvelopeContentHandler(
         return election is not null
             && election.LifecycleState == ElectionLifecycleState.Open
             && string.Equals(election.OwnerPublicAddress, activateAction.ActorPublicAddress, StringComparison.Ordinal);
+    }
+
+    private bool IsValidRegisterVotingCommitmentAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
+        var registerAction = decryptedEnvelope.DeserializeAction<RegisterElectionVotingCommitmentActionPayload>();
+        if (registerAction is null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_commitment_validation_failed",
+                "Voting commitment payload could not be read.");
+            return false;
+        }
+
+        if (!HasMatchingActor(signatory, registerAction.ActorPublicAddress))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_commitment_actor_mismatch",
+                "Voting commitment validation requires the authenticated voter to match the signed actor.");
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(registerAction.CommitmentHash))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_commitment_validation_failed",
+                "A non-empty commitment hash is required.");
+            return false;
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
+        if (election is null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_commitment_not_found",
+                $"Election {decryptedEnvelope.Transaction.Payload.ElectionId} was not found.");
+            return false;
+        }
+
+        if (election.VoteAcceptanceLockedAt.HasValue ||
+            election.LifecycleState == ElectionLifecycleState.Closed ||
+            election.LifecycleState == ElectionLifecycleState.Finalized)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_commitment_close_persisted",
+                "Voting commitment registration is closed because the persisted close boundary has already been reached.");
+            return false;
+        }
+
+        if (election.LifecycleState != ElectionLifecycleState.Open)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_commitment_not_openable_for_registration",
+                "Voting commitment registration is only available while the election is open.");
+            return false;
+        }
+
+        var rosterEntry = repository
+            .GetRosterEntryByLinkedActorAsync(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                registerAction.ActorPublicAddress)
+            .GetAwaiter()
+            .GetResult();
+        if (rosterEntry is null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_commitment_not_linked",
+                "The authenticated Hush account is not linked to a roster entry for this election.");
+            return false;
+        }
+
+        if (!rosterEntry.WasPresentAtOpen)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_commitment_not_openable_for_registration",
+                "Only voters who were already rostered at open can register a voting commitment.");
+            return false;
+        }
+
+        if (!IsRosterEntryEligibleForCast(election, rosterEntry))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_commitment_not_active",
+                "This voter does not currently hold an active voting right for commitment registration.");
+            return false;
+        }
+
+        var existingRegistration = repository
+            .GetCommitmentRegistrationAsync(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                rosterEntry!.OrganizationVoterId)
+            .GetAwaiter()
+            .GetResult();
+        if (existingRegistration is not null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_commitment_already_registered",
+                "A voting commitment is already registered for this voter in this election.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool IsValidAcceptBallotCastAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
+        var acceptAction = decryptedEnvelope.DeserializeAction<AcceptElectionBallotCastActionPayload>();
+        if (acceptAction is null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_validation_failed",
+                "Ballot-cast payload could not be read.");
+            return false;
+        }
+
+        if (!HasMatchingActor(signatory, acceptAction.ActorPublicAddress))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_actor_mismatch",
+                "Ballot-cast validation requires the authenticated voter to match the signed actor.");
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(acceptAction.IdempotencyKey) ||
+            string.IsNullOrWhiteSpace(acceptAction.EncryptedBallotPackage) ||
+            string.IsNullOrWhiteSpace(acceptAction.ProofBundle) ||
+            string.IsNullOrWhiteSpace(acceptAction.BallotNullifier) ||
+            acceptAction.EligibleSetHash is not { Length: > 0 } ||
+            string.IsNullOrWhiteSpace(acceptAction.DkgProfileId) ||
+            string.IsNullOrWhiteSpace(acceptAction.TallyPublicKeyFingerprint))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_validation_failed",
+                "The final cast request is missing one or more required FEAT-099 acceptance fields.");
+            return false;
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
+        if (election is null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_not_found",
+                $"Election {decryptedEnvelope.Transaction.Payload.ElectionId} was not found.");
+            return false;
+        }
+
+        if (election.VoteAcceptanceLockedAt.HasValue ||
+            election.LifecycleState == ElectionLifecycleState.Closed ||
+            election.LifecycleState == ElectionLifecycleState.Finalized)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_close_persisted",
+                "Vote acceptance is closed because the persisted close boundary has already been reached.");
+            return false;
+        }
+
+        if (election.LifecycleState != ElectionLifecycleState.Open)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_wrong_election_context",
+                "Votes can only be accepted while the election is open.");
+            return false;
+        }
+
+        var scopedIdempotencyKey = ComputeScopedHash(acceptAction.IdempotencyKey);
+        var existingIdempotency = repository
+            .GetCastIdempotencyRecordAsync(decryptedEnvelope.Transaction.Payload.ElectionId, scopedIdempotencyKey)
+            .GetAwaiter()
+            .GetResult();
+        if (existingIdempotency is not null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_already_used",
+                "This election-scoped submission key has already been used.");
+            return false;
+        }
+
+        if (HasPendingAcceptBallotCastSubmission(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                acceptAction.IdempotencyKey))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_still_processing",
+                "This election-scoped submission key is already pending in the mempool.");
+            return false;
+        }
+
+        var rosterEntry = repository
+            .GetRosterEntryByLinkedActorAsync(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                acceptAction.ActorPublicAddress)
+            .GetAwaiter()
+            .GetResult();
+        if (rosterEntry is null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_not_linked",
+                "The authenticated Hush account is not linked to a roster entry for this election.");
+            return false;
+        }
+
+        if (!IsRosterEntryEligibleForCast(election, rosterEntry))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_not_active",
+                "This voter does not currently hold an active voting right for cast acceptance.");
+            return false;
+        }
+
+        var commitmentRegistration = repository
+            .GetCommitmentRegistrationAsync(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                rosterEntry!.OrganizationVoterId)
+            .GetAwaiter()
+            .GetResult();
+        if (commitmentRegistration is null
+            || !string.Equals(
+                commitmentRegistration.LinkedActorPublicAddress,
+                acceptAction.ActorPublicAddress,
+                StringComparison.Ordinal))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_commitment_missing",
+                "A voting commitment must be registered before the final cast can be accepted.");
+            return false;
+        }
+
+        var checkoffConsumption = repository
+            .GetCheckoffConsumptionAsync(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                rosterEntry.OrganizationVoterId)
+            .GetAwaiter()
+            .GetResult();
+        if (checkoffConsumption is not null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_already_voted",
+                "This voter has already consumed the voting right for this election.");
+            return false;
+        }
+
+        var participationRecord = repository
+            .GetParticipationRecordAsync(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                rosterEntry.OrganizationVoterId)
+            .GetAwaiter()
+            .GetResult();
+        if (participationRecord?.CountsAsParticipation == true)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_already_voted",
+                "This voter is already counted as voted for this election.");
+            return false;
+        }
+
+        var acceptedBallot = repository
+            .GetAcceptedBallotByNullifierAsync(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                acceptAction.BallotNullifier)
+            .GetAwaiter()
+            .GetResult();
+        if (acceptedBallot is not null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_duplicate_nullifier",
+                "This ballot nullifier has already been accepted for the election.");
+            return false;
+        }
+
+        if (HasPendingAcceptBallotNullifier(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                acceptAction.BallotNullifier))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_duplicate_nullifier",
+                "This ballot nullifier is already pending in the mempool for the election.");
+            return false;
+        }
+
+        var boundaryArtifacts = repository
+            .GetBoundaryArtifactsAsync(decryptedEnvelope.Transaction.Payload.ElectionId)
+            .GetAwaiter()
+            .GetResult();
+        var openArtifact = boundaryArtifacts.FirstOrDefault(x =>
+            x.Id == acceptAction.OpenArtifactId &&
+            x.ArtifactType == ElectionBoundaryArtifactType.Open);
+        var matchesBoundary =
+            openArtifact is not null &&
+            election.OpenArtifactId == openArtifact.Id &&
+            ByteArrayEquals(openArtifact.FrozenEligibleVoterSetHash, acceptAction.EligibleSetHash) &&
+            openArtifact.CeremonySnapshot is not null &&
+            openArtifact.CeremonySnapshot.CeremonyVersionId == acceptAction.CeremonyVersionId &&
+            string.Equals(openArtifact.CeremonySnapshot.ProfileId, acceptAction.DkgProfileId, StringComparison.Ordinal) &&
+            string.Equals(
+                openArtifact.CeremonySnapshot.TallyPublicKeyFingerprint,
+                acceptAction.TallyPublicKeyFingerprint,
+                StringComparison.Ordinal);
+
+        if (!matchesBoundary)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_wrong_election_context",
+                "The ballot package is bound to a different election boundary than the one currently open.");
+            return false;
+        }
+
+        return true;
     }
 
     private bool IsValidInviteTrusteeAction(
@@ -935,6 +1305,132 @@ public class EncryptedElectionEnvelopeContentHandler(
     private static bool HasMatchingActor(string signatory, string actorPublicAddress) =>
         !string.IsNullOrWhiteSpace(signatory)
         && string.Equals(signatory, actorPublicAddress, StringComparison.Ordinal);
+
+    private static bool IsRosterEntryEligibleForCast(
+        ElectionRecord election,
+        ElectionRosterEntryRecord? rosterEntry)
+    {
+        if (rosterEntry is null || !rosterEntry.WasPresentAtOpen)
+        {
+            return false;
+        }
+
+        return election.EligibilityMutationPolicy switch
+        {
+            EligibilityMutationPolicy.FrozenAtOpen => rosterEntry.WasActiveAtOpen,
+            EligibilityMutationPolicy.LateActivationForRosteredVotersOnly => rosterEntry.IsActive,
+            _ => false,
+        };
+    }
+
+    private static string ComputeScopedHash(string value) =>
+        Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(value.Trim())));
+
+    private bool HasPendingAcceptBallotCastSubmission(
+        ElectionId electionId,
+        string idempotencyKey)
+    {
+        var normalizedIdempotencyKey = idempotencyKey.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedIdempotencyKey))
+        {
+            return false;
+        }
+
+        foreach (var transaction in _memPoolService.PeekPendingValidatedTransactions())
+        {
+            var decryptedEnvelope = _envelopeCryptoService.TryDecryptValidated(transaction);
+            if (decryptedEnvelope is null ||
+                decryptedEnvelope.ActionType != EncryptedElectionEnvelopeActionTypes.AcceptBallotCast ||
+                decryptedEnvelope.Transaction.Payload.ElectionId != electionId)
+            {
+                continue;
+            }
+
+            var acceptAction = decryptedEnvelope.DeserializeAction<AcceptElectionBallotCastActionPayload>();
+            if (acceptAction is null)
+            {
+                continue;
+            }
+
+            if (string.Equals(
+                    acceptAction.IdempotencyKey?.Trim(),
+                    normalizedIdempotencyKey,
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool HasPendingAcceptBallotNullifier(
+        ElectionId electionId,
+        string ballotNullifier)
+    {
+        var normalizedBallotNullifier = ballotNullifier.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedBallotNullifier))
+        {
+            return false;
+        }
+
+        foreach (var transaction in _memPoolService.PeekPendingValidatedTransactions())
+        {
+            var decryptedEnvelope = _envelopeCryptoService.TryDecryptValidated(transaction);
+            if (decryptedEnvelope is null ||
+                decryptedEnvelope.ActionType != EncryptedElectionEnvelopeActionTypes.AcceptBallotCast ||
+                decryptedEnvelope.Transaction.Payload.ElectionId != electionId)
+            {
+                continue;
+            }
+
+            var acceptAction = decryptedEnvelope.DeserializeAction<AcceptElectionBallotCastActionPayload>();
+            if (acceptAction is null)
+            {
+                continue;
+            }
+
+            if (string.Equals(
+                    acceptAction.BallotNullifier?.Trim(),
+                    normalizedBallotNullifier,
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ByteArrayEquals(byte[]? left, byte[]? right)
+    {
+        if (left is null || right is null)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left.Length != right.Length)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < left.Length; index += 1)
+        {
+            if (left[index] != right[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static bool IsDraftTrusteeSetupOwnerActionValid(ElectionRecord? election, string actorPublicAddress) =>
         election is not null

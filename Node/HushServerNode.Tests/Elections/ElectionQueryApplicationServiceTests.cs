@@ -1,12 +1,16 @@
 using FluentAssertions;
 using HushNetwork.proto;
+using HushNode.Caching;
 using HushNode.Elections;
 using HushNode.Elections.gRPC;
+using HushNode.MemPool;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
 using Moq;
 using Moq.AutoMock;
 using Olimpo.EntityFramework.Persistency;
+using System.Security.Cryptography;
+using System.Text;
 using Xunit;
 
 namespace HushServerNode.Tests.Elections;
@@ -422,6 +426,238 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionVotingViewAsync_WithPendingSubmissionKey_ReturnsCurrentVotingReadModel()
+    {
+        var mocker = new AutoMocker();
+        var openedAt = DateTime.UtcNow.AddMinutes(-15);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+        };
+        var rosterEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "1001",
+                ElectionRosterContactType.Email,
+                "voter-1001@example.org")
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address", openedAt.AddMinutes(1));
+        var commitmentRegistration = ElectionModelFactory.CreateCommitmentRegistrationRecord(
+            election.ElectionId,
+            "1001",
+            "voter-address",
+            "commitment-hash-1",
+            openedAt.AddMinutes(2));
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            Guid.NewGuid(),
+            ceremonyVersionNumber: 1,
+            profileId: "dkg-prod-1of1",
+            boundTrusteeCount: 1,
+            requiredApprovalCount: 1,
+            activeTrustees:
+            [
+                new SharedTrusteeReference("trustee-a", "Alice"),
+            ],
+            tallyPublicKeyFingerprint: "tally-fingerprint");
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            election with { OpenArtifactId = Guid.NewGuid() },
+            recordedByPublicAddress: "owner-address",
+            recordedAt: openedAt,
+            frozenEligibleVoterSetHash: [1, 2, 3, 4],
+            ceremonySnapshot: ceremonySnapshot);
+        election = election with
+        {
+            OpenArtifactId = openArtifact.Id,
+        };
+
+        var signedPendingEnvelope = new HushShared.Blockchain.TransactionModel.States.SignedTransaction<EncryptedElectionEnvelopePayload>(
+            EncryptedElectionEnvelopePayloadHandler.CreateNew(
+                election.ElectionId,
+                EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+                "node-envelope",
+                "actor-envelope",
+                "encrypted-payload"),
+            new HushShared.Blockchain.Model.SignatureInfo("voter-address", "signature"));
+        var pendingTransaction = new HushShared.Blockchain.TransactionModel.States.ValidatedTransaction<EncryptedElectionEnvelopePayload>(
+            signedPendingEnvelope,
+            new HushShared.Blockchain.Model.SignatureInfo("validator-address", "signature"));
+        var pendingEnvelope = new DecryptedElectionEnvelope<
+            HushShared.Blockchain.TransactionModel.States.ValidatedTransaction<EncryptedElectionEnvelopePayload>>(
+            pendingTransaction,
+            EncryptedElectionEnvelopeActionTypes.AcceptBallotCast,
+            System.Text.Json.JsonSerializer.Serialize(new AcceptElectionBallotCastActionPayload(
+                "voter-address",
+                "same-election-key",
+                "ciphertext",
+                "proof",
+                "nullifier-1",
+                openArtifact.Id,
+                [1, 2, 3, 4],
+                ceremonySnapshot.CeremonyVersionId,
+                ceremonySnapshot.ProfileId,
+                ceremonySnapshot.TallyPublicKeyFingerprint)));
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetRosterEntryByLinkedActorAsync(election.ElectionId, "voter-address"))
+                .ReturnsAsync(rosterEntry);
+            repo.Setup(x => x.GetCommitmentRegistrationByLinkedActorAsync(election.ElectionId, "voter-address"))
+                .ReturnsAsync(commitmentRegistration);
+            repo.Setup(x => x.GetBoundaryArtifactsAsync(election.ElectionId)).ReturnsAsync([openArtifact]);
+        });
+
+        mocker.GetMock<IMemPoolService>()
+            .Setup(x => x.PeekPendingValidatedTransactions())
+            .Returns([pendingTransaction]);
+        mocker.GetMock<IElectionEnvelopeCryptoService>()
+            .Setup(x => x.TryDecryptValidated(pendingTransaction))
+            .Returns(pendingEnvelope);
+
+        var sut = CreateQueryService(
+            mocker,
+            memPoolService: mocker.GetMock<IMemPoolService>().Object,
+            electionEnvelopeCryptoService: mocker.GetMock<IElectionEnvelopeCryptoService>().Object);
+
+        var response = await sut.GetElectionVotingViewAsync(
+            election.ElectionId,
+            "voter-address",
+            "same-election-key");
+
+        response.Success.Should().BeTrue();
+        response.CommitmentRegistered.Should().BeTrue();
+        response.HasCommitmentRegisteredAt.Should().BeTrue();
+        response.SubmissionStatus.Should().Be(ElectionVotingSubmissionStatusProto.VotingSubmissionStatusStillProcessing);
+        response.OpenArtifactId.Should().Be(openArtifact.Id.ToString());
+        response.EligibleSetHash.Should().NotBeEmpty();
+        response.CeremonyVersionId.Should().Be(ceremonySnapshot.CeremonyVersionId.ToString());
+        response.DkgProfileId.Should().Be(ceremonySnapshot.ProfileId);
+        response.TallyPublicKeyFingerprint.Should().Be(ceremonySnapshot.TallyPublicKeyFingerprint);
+    }
+
+    [Fact]
+    public async Task GetElectionVotingViewAsync_WithCommittedSubmissionKey_ReturnsAlreadyUsedAndAcceptedAt()
+    {
+        var mocker = new AutoMocker();
+        var openedAt = DateTime.UtcNow.AddMinutes(-15);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+        };
+        var rosterEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "1001",
+                ElectionRosterContactType.Email,
+                "voter-1001@example.org")
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address", openedAt.AddMinutes(1));
+        var participation = ElectionModelFactory.CreateParticipationRecord(
+            election.ElectionId,
+            "1001",
+            ElectionParticipationStatus.CountedAsVoted,
+            openedAt.AddMinutes(4));
+        var checkoffConsumption = ElectionModelFactory.CreateCheckoffConsumptionRecord(
+            election.ElectionId,
+            "1001",
+            openedAt.AddMinutes(4));
+        var idempotencyRecord = ElectionModelFactory.CreateCastIdempotencyRecord(
+            election.ElectionId,
+            ComputeScopedHash("used-election-key"),
+            openedAt.AddMinutes(4));
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetRosterEntryByLinkedActorAsync(election.ElectionId, "voter-address"))
+                .ReturnsAsync(rosterEntry);
+            repo.Setup(x => x.GetParticipationRecordAsync(election.ElectionId, "1001"))
+                .ReturnsAsync(participation);
+            repo.Setup(x => x.GetCheckoffConsumptionAsync(election.ElectionId, "1001"))
+                .ReturnsAsync(checkoffConsumption);
+            repo.Setup(x => x.GetCastIdempotencyRecordAsync(election.ElectionId, idempotencyRecord.IdempotencyKeyHash))
+                .ReturnsAsync(idempotencyRecord);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionVotingViewAsync(
+            election.ElectionId,
+            "voter-address",
+            "used-election-key");
+
+        response.Success.Should().BeTrue();
+        response.PersonalParticipationStatus.Should().Be(ElectionParticipationStatusProto.ParticipationCountedAsVoted);
+        response.SubmissionStatus.Should().Be(ElectionVotingSubmissionStatusProto.VotingSubmissionStatusAlreadyUsed);
+        response.HasAcceptedAt.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetElectionVotingViewAsync_WithCommittedSubmissionKeyCacheHit_ReturnsAlreadyUsedWithoutRepositoryLookup()
+    {
+        var mocker = new AutoMocker();
+        var openedAt = DateTime.UtcNow.AddMinutes(-15);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+        };
+        var rosterEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "1001",
+                ElectionRosterContactType.Email,
+                "voter-1001@example.org")
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address", openedAt.AddMinutes(1));
+        var participation = ElectionModelFactory.CreateParticipationRecord(
+            election.ElectionId,
+            "1001",
+            ElectionParticipationStatus.CountedAsVoted,
+            openedAt.AddMinutes(4));
+        var checkoffConsumption = ElectionModelFactory.CreateCheckoffConsumptionRecord(
+            election.ElectionId,
+            "1001",
+            openedAt.AddMinutes(4));
+        var idempotencyKeyHash = ComputeScopedHash("cached-election-key");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetRosterEntryByLinkedActorAsync(election.ElectionId, "voter-address"))
+                .ReturnsAsync(rosterEntry);
+            repo.Setup(x => x.GetParticipationRecordAsync(election.ElectionId, "1001"))
+                .ReturnsAsync(participation);
+            repo.Setup(x => x.GetCheckoffConsumptionAsync(election.ElectionId, "1001"))
+                .ReturnsAsync(checkoffConsumption);
+        });
+
+        mocker.GetMock<IElectionCastIdempotencyCacheService>()
+            .Setup(x => x.ExistsAsync(election.ElectionId.ToString(), idempotencyKeyHash))
+            .ReturnsAsync(true);
+
+        var sut = CreateQueryService(
+            mocker,
+            castIdempotencyCacheService: mocker.GetMock<IElectionCastIdempotencyCacheService>().Object);
+
+        var response = await sut.GetElectionVotingViewAsync(
+            election.ElectionId,
+            "voter-address",
+            "cached-election-key");
+
+        response.Success.Should().BeTrue();
+        response.PersonalParticipationStatus.Should().Be(ElectionParticipationStatusProto.ParticipationCountedAsVoted);
+        response.SubmissionStatus.Should().Be(ElectionVotingSubmissionStatusProto.VotingSubmissionStatusAlreadyUsed);
+        response.HasAcceptedAt.Should().BeTrue();
+
+        mocker.GetMock<IElectionsRepository>()
+            .Verify(x => x.GetCastIdempotencyRecordAsync(It.IsAny<ElectionId>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
     public async Task GetElectionAsync_WithDevProfilesDisabled_FiltersDevOnlyCeremonyProfiles()
     {
         var mocker = new AutoMocker();
@@ -646,13 +882,16 @@ public class ElectionQueryApplicationServiceTests
 
     private static ElectionQueryApplicationService CreateQueryService(
         AutoMocker mocker,
-        ElectionCeremonyOptions? options = null) =>
-        options is null
-            ? new ElectionQueryApplicationService(
-                mocker.GetMock<IUnitOfWorkProvider<ElectionsDbContext>>().Object)
-            : new ElectionQueryApplicationService(
-                mocker.GetMock<IUnitOfWorkProvider<ElectionsDbContext>>().Object,
-                options);
+        ElectionCeremonyOptions? options = null,
+        IMemPoolService? memPoolService = null,
+        IElectionEnvelopeCryptoService? electionEnvelopeCryptoService = null,
+        IElectionCastIdempotencyCacheService? castIdempotencyCacheService = null) =>
+        new(
+            mocker.GetMock<IUnitOfWorkProvider<ElectionsDbContext>>().Object,
+            options ?? new ElectionCeremonyOptions(),
+            memPoolService,
+            electionEnvelopeCryptoService,
+            castIdempotencyCacheService);
 
     private static ElectionRecord CreateAdminElection(
         string title = "Board Election",
@@ -734,4 +973,7 @@ public class ElectionQueryApplicationServiceTests
             ],
             acknowledgedWarningCodes: acknowledgedWarningCodes,
             requiredApprovalCount: 1);
+
+    private static string ComputeScopedHash(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 }

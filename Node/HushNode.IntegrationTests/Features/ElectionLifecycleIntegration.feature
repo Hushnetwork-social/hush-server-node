@@ -109,6 +109,44 @@ Feature: FEAT-094 election lifecycle integration
     And the owner retries the governed proposal execution through blockchain submission
     Then the governed proposal should execute and transition the election to "Open"
 
+  @FEAT-099 @AT-PROC-U06 @AT-PROC-U08 @AT-PROC-U12 @AT-PROC-U13 @AT-PROC-I08 @NON_E2E
+  Scenario: Accepted cast moves from mempool pending to committed receipt state without durable extra artifacts
+    Given FEAT-094 election integration services are available
+    And the owner has an open trustee-threshold election through governed approval blockchain submission
+    When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
+    And voter "Alice" registers voting commitment "alice-commitment-v1" through blockchain submission
+    Then the voting view should show commitment as registered
+    And the voting view should show personal participation "ParticipationDidNotVote"
+    When voter "Alice" submits ballot cast with idempotency key "alice-cast-001" without block production
+    And the actor "Alice" requests the election voting view with submission idempotency key "alice-cast-001" through gRPC
+    Then the voting view should show submission status "VotingSubmissionStatusStillProcessing"
+    When voter "Alice" retries ballot cast with idempotency key "alice-cast-001" before block production
+    Then the last blockchain submission should be rejected with validation code "election_cast_still_processing"
+    When the pending cast block is produced
+    And the actor "Alice" requests the election voting view with submission idempotency key "alice-cast-001" through gRPC
+    Then the voting view should show submission status "VotingSubmissionStatusAlreadyUsed"
+    And the voting view should show personal participation "ParticipationCountedAsVoted"
+    And the voting view should expose acceptance receipt metadata
+    And only the committed FEAT-099 acceptance artifacts should remain for actor "Alice" and idempotency key "alice-cast-001"
+    When voter "Alice" retries ballot cast with idempotency key "alice-cast-001" after block production
+    Then the last blockchain submission should be rejected with validation code "election_cast_already_used"
+
+  @FEAT-099 @AT-PROC-U07 @NON_E2E
+  Scenario: Persisted close rejects later FEAT-099 cast attempts without committing vote artifacts
+    Given FEAT-094 election integration services are available
+    And the owner has an open trustee-threshold election through governed approval blockchain submission
+    When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
+    And voter "Alice" registers voting commitment "alice-commitment-close-v1" through blockchain submission
+    And the owner starts an "close" governed proposal through blockchain submission
+    And trustee "Bob" approves the governed proposal through blockchain submission
+    And trustee "Charlie" approves the governed proposal through blockchain submission
+    And trustee "Delta" approves the governed proposal through blockchain submission
+    When voter "Alice" submits ballot cast with idempotency key "alice-close-001" through blockchain submission
+    Then the last blockchain submission should be rejected with validation code "election_cast_close_persisted"
+    When the actor "Alice" requests the election voting view through gRPC
+    Then the voting view should show personal participation "ParticipationDidNotVote"
+    And the voting view should not expose acceptance receipt metadata
+
   @FEAT-098 @AT-PROC-I03 @NON_E2E
   Scenario: Governed finalize binds one exact session and finalizes only after threshold aggregate shares
     Given FEAT-094 election integration services are available

@@ -39,6 +39,22 @@ public record ActivateElectionRosterEntryActionPayload(
     string ActorPublicAddress,
     string OrganizationVoterId);
 
+public record RegisterElectionVotingCommitmentActionPayload(
+    string ActorPublicAddress,
+    string CommitmentHash);
+
+public record AcceptElectionBallotCastActionPayload(
+    string ActorPublicAddress,
+    string IdempotencyKey,
+    string EncryptedBallotPackage,
+    string ProofBundle,
+    string BallotNullifier,
+    Guid OpenArtifactId,
+    byte[] EligibleSetHash,
+    Guid CeremonyVersionId,
+    string DkgProfileId,
+    string TallyPublicKeyFingerprint);
+
 public record InviteElectionTrusteeActionPayload(
     Guid InvitationId,
     string ActorPublicAddress,
@@ -165,6 +181,8 @@ public static class EncryptedElectionEnvelopeActionTypes
     public const string ImportRoster = "import_roster";
     public const string ClaimRosterEntry = "claim_roster_entry";
     public const string ActivateRosterEntry = "activate_roster_entry";
+    public const string RegisterVotingCommitment = "register_voting_commitment";
+    public const string AcceptBallotCast = "accept_ballot_cast";
     public const string InviteTrustee = "invite_trustee";
     public const string AcceptTrusteeInvitation = "accept_trustee_invitation";
     public const string RejectTrusteeInvitation = "reject_trustee_invitation";

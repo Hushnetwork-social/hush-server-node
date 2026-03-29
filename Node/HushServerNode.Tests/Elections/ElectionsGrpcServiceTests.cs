@@ -148,6 +148,52 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task RegisterElectionVotingCommitment_RejectsDirectCommandPath()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new Proto.RegisterElectionVotingCommitmentRequest
+        {
+            ElectionId = ElectionId.NewElectionId.ToString(),
+            ActorPublicAddress = "voter-address",
+            CommitmentHash = "commitment-hash-1",
+        };
+
+        var act = async () => await sut.RegisterElectionVotingCommitment(request, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
+    }
+
+    [Fact]
+    public async Task AcceptElectionBallotCast_RejectsDirectCommandPath()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new Proto.AcceptElectionBallotCastRequest
+        {
+            ElectionId = ElectionId.NewElectionId.ToString(),
+            ActorPublicAddress = "voter-address",
+            IdempotencyKey = "cast-key-1",
+            EncryptedBallotPackage = "ciphertext",
+            ProofBundle = "proof-bundle",
+            BallotNullifier = "nullifier-1",
+            OpenArtifactId = Guid.NewGuid().ToString(),
+            EligibleSetHash = Google.Protobuf.ByteString.CopyFrom(new byte[] { 1, 2, 3, 4 }),
+            CeremonyVersionId = Guid.NewGuid().ToString(),
+            DkgProfileId = "dkg-prod-1of1",
+            TallyPublicKeyFingerprint = "tally-fingerprint",
+        };
+
+        var act = async () => await sut.AcceptElectionBallotCast(request, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
+    }
+
+    [Fact]
     public async Task StartElectionCeremony_RejectsDirectCommandPath()
     {
         var mocker = new AutoMocker();
@@ -289,6 +335,47 @@ public class ElectionsGrpcServiceTests
         response.SelfRosterEntry.Should().NotBeNull();
         response.SelfRosterEntry.OrganizationVoterId.Should().Be("1001");
         response.Summary.RosteredCount.Should().Be(12);
+    }
+
+    [Fact]
+    public async Task GetElectionVotingView_WithValidRequest_ReturnsVotingPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionVotingViewAsync(
+                electionId,
+                "voter-address",
+                "cast-key-1"))
+            .ReturnsAsync(new GetElectionVotingViewResponse
+            {
+                Success = true,
+                ActorPublicAddress = "voter-address",
+                CommitmentRegistered = true,
+                PersonalParticipationStatus = ElectionParticipationStatusProto.ParticipationCountedAsVoted,
+                SubmissionStatus = ElectionVotingSubmissionStatusProto.VotingSubmissionStatusAlreadyUsed,
+                OpenArtifactId = Guid.NewGuid().ToString(),
+                DkgProfileId = "dkg-prod-1of1",
+                TallyPublicKeyFingerprint = "tally-fingerprint",
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionVotingView(new GetElectionVotingViewRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = "voter-address",
+            SubmissionIdempotencyKey = "cast-key-1",
+        }, CreateMockServerCallContext());
+
+        response.Success.Should().BeTrue();
+        response.ActorPublicAddress.Should().Be("voter-address");
+        response.CommitmentRegistered.Should().BeTrue();
+        response.PersonalParticipationStatus.Should().Be(ElectionParticipationStatusProto.ParticipationCountedAsVoted);
+        response.SubmissionStatus.Should().Be(ElectionVotingSubmissionStatusProto.VotingSubmissionStatusAlreadyUsed);
+        response.DkgProfileId.Should().Be("dkg-prod-1of1");
+        response.TallyPublicKeyFingerprint.Should().Be("tally-fingerprint");
     }
 
     [Fact]

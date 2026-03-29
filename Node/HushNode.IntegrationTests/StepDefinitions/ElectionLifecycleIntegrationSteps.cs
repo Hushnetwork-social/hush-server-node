@@ -3,8 +3,11 @@ using System.Text;
 using FluentAssertions;
 using Google.Protobuf;
 using HushNetwork.proto;
+using HushNode.Caching;
+using HushNode.Elections;
 using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
+using HushNode.MemPool;
 using HushServerNode;
 using HushServerNode.Testing;
 using HushShared.Elections.Model;
@@ -43,6 +46,7 @@ public sealed class ElectionLifecycleIntegrationSteps
     private GetElectionOpenReadinessResponse? _lastReadinessResponse;
     private GetElectionResponse? _lastElectionResponse;
     private GetElectionEligibilityViewResponse? _lastEligibilityViewResponse;
+    private GetElectionVotingViewResponse? _lastVotingViewResponse;
 
     public ElectionLifecycleIntegrationSteps(ScenarioContext scenarioContext)
     {
@@ -62,6 +66,7 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastReadinessResponse = null;
         _lastElectionResponse = null;
         _lastEligibilityViewResponse = null;
+        _lastVotingViewResponse = null;
         _trusteeInvitationIds.Clear();
     }
 
@@ -259,6 +264,79 @@ public sealed class ElectionLifecycleIntegrationSteps
     public async Task WhenTheActorRequestsTheElectionEligibilityViewThroughGrpc(string actorAlias)
     {
         _lastEligibilityViewResponse = await GetElectionEligibilityViewAsync(ResolveIdentity(actorAlias));
+    }
+
+    [When(@"voter ""(.*)"" registers voting commitment ""(.*)"" through blockchain submission")]
+    public async Task WhenVoterRegistersVotingCommitmentThroughBlockchainSubmission(
+        string voterAlias,
+        string commitmentHash)
+    {
+        _lastVotingViewResponse = await RegisterVotingCommitmentViaBlockchainAsync(
+            ResolveIdentity(voterAlias),
+            commitmentHash);
+    }
+
+    [When(@"the actor ""(.*)"" requests the election voting view through gRPC")]
+    public async Task WhenTheActorRequestsTheElectionVotingViewThroughGrpc(string actorAlias)
+    {
+        _lastVotingViewResponse = await GetElectionVotingViewAsync(ResolveIdentity(actorAlias));
+    }
+
+    [When(@"the actor ""(.*)"" requests the election voting view with submission idempotency key ""(.*)"" through gRPC")]
+    public async Task WhenTheActorRequestsTheElectionVotingViewWithSubmissionIdempotencyKeyThroughGrpc(
+        string actorAlias,
+        string submissionIdempotencyKey)
+    {
+        _lastVotingViewResponse = await GetElectionVotingViewAsync(
+            ResolveIdentity(actorAlias),
+            submissionIdempotencyKey);
+    }
+
+    [When(@"voter ""(.*)"" submits ballot cast with idempotency key ""(.*)"" without block production")]
+    public async Task WhenVoterSubmitsBallotCastWithIdempotencyKeyWithoutBlockProduction(
+        string voterAlias,
+        string submissionIdempotencyKey)
+    {
+        _lastSubmitTransactionResponse = await SubmitAcceptedBallotCastWithoutBlockAsync(
+            ResolveIdentity(voterAlias),
+            submissionIdempotencyKey);
+    }
+
+    [When(@"voter ""(.*)"" retries ballot cast with idempotency key ""(.*)"" before block production")]
+    public async Task WhenVoterRetriesBallotCastWithIdempotencyKeyBeforeBlockProduction(
+        string voterAlias,
+        string submissionIdempotencyKey)
+    {
+        _lastSubmitTransactionResponse = await SubmitAcceptedBallotCastAttemptAsync(
+            ResolveIdentity(voterAlias),
+            submissionIdempotencyKey);
+    }
+
+    [When(@"voter ""(.*)"" retries ballot cast with idempotency key ""(.*)"" after block production")]
+    public async Task WhenVoterRetriesBallotCastWithIdempotencyKeyAfterBlockProduction(
+        string voterAlias,
+        string submissionIdempotencyKey)
+    {
+        _lastSubmitTransactionResponse = await SubmitAcceptedBallotCastAttemptAsync(
+            ResolveIdentity(voterAlias),
+            submissionIdempotencyKey);
+    }
+
+    [When(@"voter ""(.*)"" submits ballot cast with idempotency key ""(.*)"" through blockchain submission")]
+    public async Task WhenVoterSubmitsBallotCastWithIdempotencyKeyThroughBlockchainSubmission(
+        string voterAlias,
+        string submissionIdempotencyKey)
+    {
+        _lastSubmitTransactionResponse = await SubmitAcceptedBallotCastAttemptAsync(
+            ResolveIdentity(voterAlias),
+            submissionIdempotencyKey);
+    }
+
+    [When(@"the pending cast block is produced")]
+    public async Task WhenThePendingCastBlockIsProduced()
+    {
+        await GetBlockControl().ProduceBlockAsync();
+        _lastElectionResponse = await ReloadElectionAsync();
     }
 
     [When(@"the owner closes the election through blockchain submission")]
@@ -864,6 +942,108 @@ public sealed class ElectionLifecycleIntegrationSteps
             .HaveCount(expectedEntryCount);
     }
 
+    [Then(@"the voting view should show commitment as registered")]
+    public void ThenTheVotingViewShouldShowCommitmentAsRegistered()
+    {
+        var response = GetLastVotingView();
+        response.CommitmentRegistered.Should().BeTrue();
+        response.HasCommitmentRegisteredAt.Should().BeTrue();
+        response.SelfRosterEntry.Should().NotBeNull();
+    }
+
+    [Then(@"the voting view should show submission status ""(.*)""")]
+    public void ThenTheVotingViewShouldShowSubmissionStatus(string expectedSubmissionStatus)
+    {
+        GetLastVotingView()
+            .SubmissionStatus
+            .Should()
+            .Be(ParseVotingSubmissionStatus(expectedSubmissionStatus));
+    }
+
+    [Then(@"the voting view should show personal participation ""(.*)""")]
+    public void ThenTheVotingViewShouldShowPersonalParticipation(string expectedParticipationStatus)
+    {
+        GetLastVotingView()
+            .PersonalParticipationStatus
+            .Should()
+            .Be(ParseParticipationStatus(expectedParticipationStatus));
+    }
+
+    [Then(@"the voting view should expose acceptance receipt metadata")]
+    public void ThenTheVotingViewShouldExposeAcceptanceReceiptMetadata()
+    {
+        var response = GetLastVotingView();
+        response.HasAcceptedAt.Should().BeTrue();
+        response.AcceptedAt.Should().NotBeNull();
+        response.AcceptanceId.Should().NotBeNullOrWhiteSpace();
+        response.ReceiptId.Should().NotBeNullOrWhiteSpace();
+        response.ServerProof.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Then(@"the voting view should not expose acceptance receipt metadata")]
+    public void ThenTheVotingViewShouldNotExposeAcceptanceReceiptMetadata()
+    {
+        var response = GetLastVotingView();
+        response.HasAcceptedAt.Should().BeFalse();
+        response.AcceptanceId.Should().BeNullOrEmpty();
+        response.ReceiptId.Should().BeNullOrEmpty();
+        response.ServerProof.Should().BeNullOrEmpty();
+    }
+
+    [Then(@"the last blockchain submission should be rejected with validation code ""(.*)""")]
+    public void ThenTheLastBlockchainSubmissionShouldBeRejectedWithValidationCode(string expectedValidationCode)
+    {
+        _lastSubmitTransactionResponse.Should().NotBeNull();
+        _lastSubmitTransactionResponse!.Successfull.Should().BeFalse();
+        _lastSubmitTransactionResponse.Status.Should().Be(TransactionStatus.Rejected);
+        _lastSubmitTransactionResponse.ValidationCode.Should().Be(expectedValidationCode);
+    }
+
+    [Then(@"only the committed FEAT-099 acceptance artifacts should remain for actor ""(.*)"" and idempotency key ""(.*)""")]
+    public async Task ThenOnlyTheCommittedFeat099AcceptanceArtifactsShouldRemainForActorAndIdempotencyKey(
+        string actorAlias,
+        string submissionIdempotencyKey)
+    {
+        var actor = ResolveIdentity(actorAlias);
+        var electionId = GetCurrentElectionId();
+        var expectedNullifier = BuildBallotNullifier(actor, submissionIdempotencyKey);
+        CountPendingBallotCastSubmissions(actor, submissionIdempotencyKey)
+            .Should()
+            .Be(0, "the FEAT-099 cast should no longer remain in the mempool after block inclusion");
+
+        var votingView = await GetElectionVotingViewAsync(actor);
+        votingView.SelfRosterEntry.Should().NotBeNull();
+        var organizationVoterId = votingView.SelfRosterEntry!.OrganizationVoterId;
+        var expectedIdempotencyHash = ComputeElectionScopedIdempotencyHash(submissionIdempotencyKey);
+
+        await using var scope = GetNode().Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+
+        var checkoffConsumptions = await dbContext.Set<ElectionCheckoffConsumptionRecord>()
+            .Where(x => x.ElectionId == electionId && x.OrganizationVoterId == organizationVoterId)
+            .ToListAsync();
+        checkoffConsumptions.Should().ContainSingle();
+        checkoffConsumptions.Single().ParticipationStatus.Should().Be(ElectionParticipationStatus.CountedAsVoted);
+
+        var acceptedBallots = await dbContext.Set<ElectionAcceptedBallotRecord>()
+            .Where(x => x.ElectionId == electionId && x.BallotNullifier == expectedNullifier)
+            .ToListAsync();
+        acceptedBallots.Should().ContainSingle();
+        acceptedBallots.Single().ProofBundle.Should().NotBeNullOrWhiteSpace();
+
+        var idempotencyRecords = await dbContext.Set<ElectionCastIdempotencyRecord>()
+            .Where(x => x.ElectionId == electionId && x.IdempotencyKeyHash == expectedIdempotencyHash)
+            .ToListAsync();
+        idempotencyRecords.Should().ContainSingle();
+
+        var cacheService = scope.ServiceProvider.GetRequiredService<IElectionCastIdempotencyCacheService>();
+        var cachedMarker = await cacheService.ExistsAsync(
+            electionId.ToString(),
+            expectedIdempotencyHash);
+        cachedMarker.Should().BeTrue(
+            "the FEAT-099 committed idempotency marker should remain available in Redis for short-term same-election reuse detection");
+    }
+
     [Then(@"the governed proposal should record an execution failure for ""(.*)""")]
     public async Task ThenTheGovernedProposalShouldRecordAnExecutionFailureFor(string actionType)
     {
@@ -928,6 +1108,36 @@ public sealed class ElectionLifecycleIntegrationSteps
 
         response.Success.Should().BeTrue(
             $"GetElectionEligibilityView should succeed for {GetElectionId()} and actor {actor.PublicSigningAddress}: {response.ErrorMessage}");
+        return response;
+    }
+
+    private async Task<GetElectionVotingViewResponse> GetElectionVotingViewAsync(
+        TestIdentity actor,
+        string? submissionIdempotencyKey = null)
+    {
+        async Task<GetElectionVotingViewResponse> QueryAsync() =>
+            await GetClient().GetElectionVotingViewAsync(new GetElectionVotingViewRequest
+            {
+                ElectionId = GetElectionId(),
+                ActorPublicAddress = actor.PublicSigningAddress,
+                SubmissionIdempotencyKey = submissionIdempotencyKey ?? string.Empty,
+            });
+
+        var response = await QueryAsync();
+
+        if (!string.IsNullOrWhiteSpace(submissionIdempotencyKey))
+        {
+            for (var attempt = 0;
+                 attempt < 10 && response.SubmissionStatus == ElectionVotingSubmissionStatusProto.VotingSubmissionStatusNone;
+                 attempt++)
+            {
+                await Task.Delay(100);
+                response = await QueryAsync();
+            }
+        }
+
+        response.Success.Should().BeTrue(
+            $"GetElectionVotingView should succeed for {GetElectionId()} and actor {actor.PublicSigningAddress}: {response.ErrorMessage}");
         return response;
     }
 
@@ -1074,9 +1284,36 @@ public sealed class ElectionLifecycleIntegrationSteps
         await GetBlockControl().ProduceBlockAsync();
 
         var response = await GetElectionEligibilityViewAsync(actor);
-        response.ActorRole.Should().Be(ElectionEligibilityActorRoleProto.EligibilityActorLinkedVoter);
+        response.ActorRole.Should().BeOneOf(
+            ElectionEligibilityActorRoleProto.EligibilityActorLinkedVoter,
+            ElectionEligibilityActorRoleProto.EligibilityActorOwner);
         response.SelfRosterEntry.Should().NotBeNull();
         response.SelfRosterEntry.OrganizationVoterId.Should().Be(organizationVoterId);
+        return response;
+    }
+
+    private async Task<GetElectionVotingViewResponse> RegisterVotingCommitmentViaBlockchainAsync(
+        TestIdentity actor,
+        string commitmentHash)
+    {
+        var signedTransaction = TestTransactionFactory.RegisterElectionVotingCommitment(
+            actor,
+            GetCurrentElectionId(),
+            commitmentHash);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"voting commitment transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+
+        var response = await GetElectionVotingViewAsync(actor);
+        response.CommitmentRegistered.Should().BeTrue();
         return response;
     }
 
@@ -1371,6 +1608,82 @@ public sealed class ElectionLifecycleIntegrationSteps
         return await ReloadElectionAsync();
     }
 
+    private async Task<SubmitSignedTransactionReply> SubmitAcceptedBallotCastWithoutBlockAsync(
+        TestIdentity actor,
+        string submissionIdempotencyKey)
+    {
+        var signedTransaction = await BuildAcceptedBallotCastTransactionAsync(actor, submissionIdempotencyKey);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue($"ballot cast transaction should be accepted into the mempool: {submitResponse.Message}");
+        await waiter.WaitAsync();
+        return submitResponse;
+    }
+
+    private async Task<SubmitSignedTransactionReply> SubmitAcceptedBallotCastAttemptAsync(
+        TestIdentity actor,
+        string submissionIdempotencyKey)
+    {
+        var signedTransaction = await BuildAcceptedBallotCastTransactionAsync(actor, submissionIdempotencyKey);
+
+        return await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+    }
+
+    private async Task<string> BuildAcceptedBallotCastTransactionAsync(
+        TestIdentity actor,
+        string submissionIdempotencyKey)
+    {
+        var votingView = await GetElectionVotingViewAsync(actor);
+
+        votingView.CommitmentRegistered.Should().BeTrue("the FEAT-099 cast path requires a registered commitment before final cast");
+        votingView.OpenArtifactId.Should().NotBeNullOrWhiteSpace();
+        votingView.EligibleSetHash.Should().NotBeNullOrWhiteSpace();
+        votingView.CeremonyVersionId.Should().NotBeNullOrWhiteSpace();
+        votingView.DkgProfileId.Should().NotBeNullOrWhiteSpace();
+        votingView.TallyPublicKeyFingerprint.Should().NotBeNullOrWhiteSpace();
+
+        return TestTransactionFactory.AcceptElectionBallotCast(
+            actor,
+            GetCurrentElectionId(),
+            submissionIdempotencyKey,
+            BuildEncryptedBallotPackage(actor, submissionIdempotencyKey),
+            BuildProofBundle(actor, submissionIdempotencyKey),
+            BuildBallotNullifier(actor, submissionIdempotencyKey),
+            Guid.Parse(votingView.OpenArtifactId),
+            Convert.FromBase64String(votingView.EligibleSetHash),
+            Guid.Parse(votingView.CeremonyVersionId),
+            votingView.DkgProfileId,
+            votingView.TallyPublicKeyFingerprint);
+    }
+
+    private int CountPendingBallotCastSubmissions(TestIdentity actor, string submissionIdempotencyKey)
+    {
+        var memPoolService = GetNode().Services.GetRequiredService<IMemPoolService>();
+        var envelopeCryptoService = GetNode().Services.GetRequiredService<IElectionEnvelopeCryptoService>();
+        var electionId = GetCurrentElectionId();
+        var normalizedKey = submissionIdempotencyKey.Trim();
+
+        return memPoolService.PeekPendingValidatedTransactions()
+            .Select(envelopeCryptoService.TryDecryptValidated)
+            .Where(x => x is not null)
+            .Where(x =>
+                x!.ActionType == EncryptedElectionEnvelopeActionTypes.AcceptBallotCast &&
+                x.Transaction.Payload.ElectionId == electionId)
+            .Select(x => x!.DeserializeAction<AcceptElectionBallotCastActionPayload>())
+            .Count(x =>
+                x is not null &&
+                string.Equals(x.ActorPublicAddress, actor.PublicSigningAddress, StringComparison.Ordinal) &&
+                string.Equals(x.IdempotencyKey?.Trim(), normalizedKey, StringComparison.Ordinal));
+    }
+
     private static ElectionFinalizationSession GetAwaitingFinalizationSession(GetElectionResponse response) =>
         response.FinalizationSessions
             .Single(x => x.Status == ElectionFinalizationSessionStatusProto.FinalizationSessionAwaitingShares);
@@ -1422,6 +1735,11 @@ public sealed class ElectionLifecycleIntegrationSteps
             ? parsed
             : throw new ArgumentOutOfRangeException(nameof(participationStatus), participationStatus, "Unsupported participation status.");
 
+    private static ElectionVotingSubmissionStatusProto ParseVotingSubmissionStatus(string submissionStatus) =>
+        Enum.TryParse<ElectionVotingSubmissionStatusProto>(submissionStatus, ignoreCase: false, out var parsed)
+            ? parsed
+            : throw new ArgumentOutOfRangeException(nameof(submissionStatus), submissionStatus, "Unsupported voting submission status.");
+
     private static IReadOnlyList<ElectionRosterImportItem> BuildDefaultRosterImportItems() =>
     [
         new ElectionRosterImportItem("voter-alice", ElectionRosterContactType.Email, "alice.eligibility@hush.test"),
@@ -1442,8 +1760,31 @@ public sealed class ElectionLifecycleIntegrationSteps
             $"feat095:organization-voter-set:{string.Join("\n", normalizedIds)}"));
     }
 
+    private GetElectionVotingViewResponse GetLastVotingView() =>
+        _lastVotingViewResponse ?? throw new InvalidOperationException("No election voting view has been loaded for this scenario.");
+
     private GetElectionEligibilityViewResponse GetLastEligibilityView() =>
         _lastEligibilityViewResponse ?? throw new InvalidOperationException("No election eligibility view has been loaded for this scenario.");
+
+    private ElectionId GetCurrentElectionId() =>
+        new(Guid.Parse(GetElectionId()));
+
+    private string BuildEncryptedBallotPackage(TestIdentity actor, string submissionIdempotencyKey) =>
+        BuildEncodedCastArtifact("encrypted-ballot-package", actor, submissionIdempotencyKey);
+
+    private string BuildProofBundle(TestIdentity actor, string submissionIdempotencyKey) =>
+        BuildEncodedCastArtifact("proof-bundle", actor, submissionIdempotencyKey);
+
+    private string BuildBallotNullifier(TestIdentity actor, string submissionIdempotencyKey) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"feat099:ballot-nullifier:{GetElectionId()}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}")));
+
+    private string BuildEncodedCastArtifact(string artifactKind, TestIdentity actor, string submissionIdempotencyKey) =>
+        Convert.ToBase64String(Encoding.UTF8.GetBytes(
+            $"{artifactKind}:{GetElectionId()}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}"));
+
+    private static string ComputeElectionScopedIdempotencyHash(string submissionIdempotencyKey) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(submissionIdempotencyKey.Trim())));
 
     private static ElectionDraftSpecification BuildAdminDraftSpecification(
         string title,

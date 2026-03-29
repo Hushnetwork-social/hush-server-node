@@ -1,6 +1,8 @@
 using HushNetwork.proto;
+using HushNode.Caching;
 using HushNode.Elections.Storage;
 using HushNode.Interfaces;
+using HushNode.MemPool;
 using Microsoft.Extensions.DependencyInjection;
 using Olimpo.EntityFramework.Persistency;
 
@@ -13,7 +15,10 @@ public static class HushNodeElectionsgRPCHostBuild
         services.AddSingleton<IElectionQueryApplicationService>(sp =>
             new ElectionQueryApplicationService(
                 sp.GetRequiredService<IUnitOfWorkProvider<ElectionsDbContext>>(),
-                sp.GetRequiredService<ElectionCeremonyOptions>()));
+                sp.GetRequiredService<ElectionCeremonyOptions>(),
+                sp.GetRequiredService<IMemPoolService>(),
+                sp.GetRequiredService<IElectionEnvelopeCryptoService>(),
+                sp.GetRequiredService<IElectionCastIdempotencyCacheService>()));
         services.AddSingleton<IGrpcDefinition, ElectionsGrpcServiceDefinition>();
         services.AddSingleton<HushElections.HushElectionsBase, ElectionsGrpcService>();
     }

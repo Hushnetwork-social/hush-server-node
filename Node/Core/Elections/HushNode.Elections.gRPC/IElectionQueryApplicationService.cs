@@ -9,6 +9,11 @@ public interface IElectionQueryApplicationService
 
     Task<GetElectionEligibilityViewResponse> GetElectionEligibilityViewAsync(ElectionId electionId, string actorPublicAddress);
 
+    Task<GetElectionVotingViewResponse> GetElectionVotingViewAsync(
+        ElectionId electionId,
+        string actorPublicAddress,
+        string? submissionIdempotencyKey);
+
     Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccessAsync(ElectionId electionId, string actorPublicAddress);
 
     Task<GetElectionCeremonyActionViewResponse> GetElectionCeremonyActionViewAsync(ElectionId electionId, string actorPublicAddress);

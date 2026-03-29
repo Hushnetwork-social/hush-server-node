@@ -30,8 +30,11 @@ service HushElections {
   rpc OpenElection(OpenElectionRequest) returns (ElectionCommandResponse);
   rpc CloseElection(CloseElectionRequest) returns (ElectionCommandResponse);
   rpc FinalizeElection(FinalizeElectionRequest) returns (ElectionCommandResponse);
+  rpc RegisterElectionVotingCommitment(RegisterElectionVotingCommitmentRequest) returns (RegisterElectionVotingCommitmentResponse);
+  rpc AcceptElectionBallotCast(AcceptElectionBallotCastRequest) returns (AcceptElectionBallotCastResponse);
   rpc GetElection(GetElectionRequest) returns (GetElectionResponse);
   rpc GetElectionEligibilityView(GetElectionEligibilityViewRequest) returns (GetElectionEligibilityViewResponse);
+  rpc GetElectionVotingView(GetElectionVotingViewRequest) returns (GetElectionVotingViewResponse);
   rpc GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest) returns (GetElectionEnvelopeAccessResponse);
   rpc GetElectionCeremonyActionView(GetElectionCeremonyActionViewRequest) returns (GetElectionCeremonyActionViewResponse);
   rpc GetElectionsByOwner(GetElectionsByOwnerRequest) returns (GetElectionsByOwnerResponse);
@@ -113,6 +116,38 @@ enum ElectionEligibilityActivationBlockReasonProto {
   EligibilityActivationBlockReasonPolicyDisallowsLateActivation = 4;
   EligibilityActivationBlockReasonElectionNotOpen = 5;
   EligibilityActivationBlockReasonNotLinkedToHushAccount = 6;
+}
+
+enum ElectionCommitmentRegistrationFailureReasonProto {
+  CommitmentRegistrationFailureReasonNone = 0;
+  CommitmentRegistrationFailureReasonValidationFailed = 1;
+  CommitmentRegistrationFailureReasonNotFound = 2;
+  CommitmentRegistrationFailureReasonNotLinked = 3;
+  CommitmentRegistrationFailureReasonNotActive = 4;
+  CommitmentRegistrationFailureReasonAlreadyRegistered = 5;
+  CommitmentRegistrationFailureReasonElectionNotOpenableForRegistration = 6;
+  CommitmentRegistrationFailureReasonClosePersisted = 7;
+}
+
+enum ElectionCastAcceptanceFailureReasonProto {
+  CastAcceptanceFailureReasonNone = 0;
+  CastAcceptanceFailureReasonValidationFailed = 1;
+  CastAcceptanceFailureReasonNotFound = 2;
+  CastAcceptanceFailureReasonNotLinked = 3;
+  CastAcceptanceFailureReasonNotActive = 4;
+  CastAcceptanceFailureReasonCommitmentMissing = 5;
+  CastAcceptanceFailureReasonStillProcessing = 6;
+  CastAcceptanceFailureReasonAlreadyUsed = 7;
+  CastAcceptanceFailureReasonDuplicateNullifier = 8;
+  CastAcceptanceFailureReasonWrongElectionContext = 9;
+  CastAcceptanceFailureReasonClosePersisted = 10;
+  CastAcceptanceFailureReasonAlreadyVoted = 11;
+}
+
+enum ElectionVotingSubmissionStatusProto {
+  VotingSubmissionStatusNone = 0;
+  VotingSubmissionStatusStillProcessing = 1;
+  VotingSubmissionStatusAlreadyUsed = 2;
 }
 
 enum ElectionEligibilitySnapshotTypeProto {
@@ -802,6 +837,47 @@ message FinalizeElectionRequest {
   bytes FinalEncryptedTallyHash = 4;
 }
 
+message RegisterElectionVotingCommitmentRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string CommitmentHash = 3;
+}
+
+message RegisterElectionVotingCommitmentResponse {
+  bool Success = 1;
+  ElectionCommitmentRegistrationFailureReasonProto FailureReason = 2;
+  string ErrorMessage = 3;
+  ElectionRecordView Election = 4;
+  ElectionRosterEntryView SelfRosterEntry = 5;
+  google.protobuf.Timestamp CommitmentRegisteredAt = 6;
+  bool HasCommitmentRegisteredAt = 7;
+}
+
+message AcceptElectionBallotCastRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string IdempotencyKey = 3;
+  string EncryptedBallotPackage = 4;
+  string ProofBundle = 5;
+  string BallotNullifier = 6;
+  string OpenArtifactId = 7;
+  bytes EligibleSetHash = 8;
+  string CeremonyVersionId = 9;
+  string DkgProfileId = 10;
+  string TallyPublicKeyFingerprint = 11;
+}
+
+message AcceptElectionBallotCastResponse {
+  bool Success = 1;
+  ElectionCastAcceptanceFailureReasonProto FailureReason = 2;
+  string ErrorMessage = 3;
+  ElectionRecordView Election = 4;
+  ElectionRosterEntryView SelfRosterEntry = 5;
+  ElectionParticipationStatusProto PersonalParticipationStatus = 6;
+  google.protobuf.Timestamp AcceptedAt = 7;
+  bool HasAcceptedAt = 8;
+}
+
 message GetElectionRequest {
   string ElectionId = 1;
 }
@@ -809,6 +885,12 @@ message GetElectionRequest {
 message GetElectionEligibilityViewRequest {
   string ElectionId = 1;
   string ActorPublicAddress = 2;
+}
+
+message GetElectionVotingViewRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string SubmissionIdempotencyKey = 3;
 }
 
 message GetElectionEnvelopeAccessRequest {
@@ -901,6 +983,29 @@ message GetElectionEligibilityViewResponse {
   repeated ElectionRosterEntryView RestrictedRosterEntries = 13;
   repeated ElectionEligibilityActivationEventView ActivationEvents = 14;
   repeated ElectionEligibilitySnapshotView EligibilitySnapshots = 15;
+}
+
+message GetElectionVotingViewResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ActorPublicAddress = 3;
+  ElectionRecordView Election = 4;
+  ElectionRosterEntryView SelfRosterEntry = 5;
+  bool CommitmentRegistered = 6;
+  google.protobuf.Timestamp CommitmentRegisteredAt = 7;
+  bool HasCommitmentRegisteredAt = 8;
+  ElectionParticipationStatusProto PersonalParticipationStatus = 9;
+  google.protobuf.Timestamp AcceptedAt = 10;
+  bool HasAcceptedAt = 11;
+  ElectionVotingSubmissionStatusProto SubmissionStatus = 12;
+  string OpenArtifactId = 13;
+  string EligibleSetHash = 14;
+  string CeremonyVersionId = 15;
+  string DkgProfileId = 16;
+  string TallyPublicKeyFingerprint = 17;
+  string ReceiptId = 18;
+  string AcceptanceId = 19;
+  string ServerProof = 20;
 }
 
 message GetElectionCeremonyActionViewRequest {

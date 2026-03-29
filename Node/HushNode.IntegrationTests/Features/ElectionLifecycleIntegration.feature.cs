@@ -560,6 +560,190 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Accepted cast moves from mempool pending to committed receipt state without durab" +
+            "le extra artifacts")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
+        [Xunit.TraitAttribute("Description", "Accepted cast moves from mempool pending to committed receipt state without durab" +
+            "le extra artifacts")]
+        [Xunit.TraitAttribute("Category", "FEAT-099")]
+        [Xunit.TraitAttribute("Category", "AT-PROC-U06")]
+        [Xunit.TraitAttribute("Category", "AT-PROC-U08")]
+        [Xunit.TraitAttribute("Category", "AT-PROC-U12")]
+        [Xunit.TraitAttribute("Category", "AT-PROC-U13")]
+        [Xunit.TraitAttribute("Category", "AT-PROC-I08")]
+        [Xunit.TraitAttribute("Category", "NON_E2E")]
+        public void AcceptedCastMovesFromMempoolPendingToCommittedReceiptStateWithoutDurableExtraArtifacts()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-099",
+                    "AT-PROC-U06",
+                    "AT-PROC-U08",
+                    "AT-PROC-U12",
+                    "AT-PROC-U13",
+                    "AT-PROC-I08",
+                    "NON_E2E"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Accepted cast moves from mempool pending to committed receipt state without durab" +
+                    "le extra artifacts", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 113
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 114
+    testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 115
+    testRunner.And("the owner has an open trustee-threshold election through governed approval blockc" +
+                        "hain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 116
+    testRunner.When("voter \"Alice\" claims roster entry \"voter-alice\" with temporary verification code " +
+                        "through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 117
+    testRunner.And("voter \"Alice\" registers voting commitment \"alice-commitment-v1\" through blockchai" +
+                        "n submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 118
+    testRunner.Then("the voting view should show commitment as registered", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 119
+    testRunner.And("the voting view should show personal participation \"ParticipationDidNotVote\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 120
+    testRunner.When("voter \"Alice\" submits ballot cast with idempotency key \"alice-cast-001\" without b" +
+                        "lock production", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 121
+    testRunner.And("the actor \"Alice\" requests the election voting view with submission idempotency k" +
+                        "ey \"alice-cast-001\" through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 122
+    testRunner.Then("the voting view should show submission status \"VotingSubmissionStatusStillProcess" +
+                        "ing\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 123
+    testRunner.When("voter \"Alice\" retries ballot cast with idempotency key \"alice-cast-001\" before bl" +
+                        "ock production", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 124
+    testRunner.Then("the last blockchain submission should be rejected with validation code \"election_" +
+                        "cast_still_processing\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 125
+    testRunner.When("the pending cast block is produced", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 126
+    testRunner.And("the actor \"Alice\" requests the election voting view with submission idempotency k" +
+                        "ey \"alice-cast-001\" through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 127
+    testRunner.Then("the voting view should show submission status \"VotingSubmissionStatusAlreadyUsed\"" +
+                        "", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 128
+    testRunner.And("the voting view should show personal participation \"ParticipationCountedAsVoted\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 129
+    testRunner.And("the voting view should expose acceptance receipt metadata", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 130
+    testRunner.And("only the committed FEAT-099 acceptance artifacts should remain for actor \"Alice\" " +
+                        "and idempotency key \"alice-cast-001\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 131
+    testRunner.When("voter \"Alice\" retries ballot cast with idempotency key \"alice-cast-001\" after blo" +
+                        "ck production", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 132
+    testRunner.Then("the last blockchain submission should be rejected with validation code \"election_" +
+                        "cast_already_used\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Persisted close rejects later FEAT-099 cast attempts without committing vote arti" +
+            "facts")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
+        [Xunit.TraitAttribute("Description", "Persisted close rejects later FEAT-099 cast attempts without committing vote arti" +
+            "facts")]
+        [Xunit.TraitAttribute("Category", "FEAT-099")]
+        [Xunit.TraitAttribute("Category", "AT-PROC-U07")]
+        [Xunit.TraitAttribute("Category", "NON_E2E")]
+        public void PersistedCloseRejectsLaterFEAT_099CastAttemptsWithoutCommittingVoteArtifacts()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-099",
+                    "AT-PROC-U07",
+                    "NON_E2E"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Persisted close rejects later FEAT-099 cast attempts without committing vote arti" +
+                    "facts", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 135
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 136
+    testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 137
+    testRunner.And("the owner has an open trustee-threshold election through governed approval blockc" +
+                        "hain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 138
+    testRunner.When("voter \"Alice\" claims roster entry \"voter-alice\" with temporary verification code " +
+                        "through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 139
+    testRunner.And("voter \"Alice\" registers voting commitment \"alice-commitment-close-v1\" through blo" +
+                        "ckchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 140
+    testRunner.And("the owner starts an \"close\" governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 141
+    testRunner.And("trustee \"Bob\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 142
+    testRunner.And("trustee \"Charlie\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 143
+    testRunner.And("trustee \"Delta\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 144
+    testRunner.When("voter \"Alice\" submits ballot cast with idempotency key \"alice-close-001\" through " +
+                        "blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 145
+    testRunner.Then("the last blockchain submission should be rejected with validation code \"election_" +
+                        "cast_close_persisted\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 146
+    testRunner.When("the actor \"Alice\" requests the election voting view through gRPC", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 147
+    testRunner.Then("the voting view should show personal participation \"ParticipationDidNotVote\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 148
+    testRunner.And("the voting view should not expose acceptance receipt metadata", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [Xunit.SkippableFactAttribute(DisplayName="Governed finalize binds one exact session and finalizes only after threshold aggr" +
             "egate shares")]
         [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
@@ -577,7 +761,7 @@ namespace HushNode.IntegrationTests.Features
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
             TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Governed finalize binds one exact session and finalizes only after threshold aggr" +
                     "egate shares", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 113
+#line 151
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -587,64 +771,64 @@ namespace HushNode.IntegrationTests.Features
             else
             {
                 this.ScenarioStart();
-#line 114
+#line 152
     testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 115
+#line 153
     testRunner.And("the owner has a closed trustee-threshold election through governed approval block" +
                         "chain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 116
+#line 154
     testRunner.When("the owner starts a \"finalize\" governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 117
+#line 155
     testRunner.Then("the governed proposal should remain pending for \"finalize\" while the election sta" +
                         "ys \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 118
+#line 156
     testRunner.When("trustee \"Bob\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 119
+#line 157
     testRunner.And("trustee \"Charlie\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 120
+#line 158
     testRunner.And("trustee \"Delta\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 121
+#line 159
     testRunner.Then("the governed finalize should open a bound finalization session while the election" +
                         " stays \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 122
+#line 160
     testRunner.When("trustee \"Bob\" submits a single-ballot finalization share through blockchain submi" +
                         "ssion", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 123
+#line 161
     testRunner.Then("the finalization share log should record rejection code \"SINGLE_BALLOT_RELEASE_FO" +
                         "RBIDDEN\" for trustee \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 124
+#line 162
     testRunner.And("the election should remain in \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 125
+#line 163
     testRunner.When("trustee \"Bob\" submits a bound finalization share through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 126
+#line 164
     testRunner.And("trustee \"Charlie\" submits a bound finalization share through blockchain submissio" +
                         "n", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 127
+#line 165
     testRunner.Then("the finalization session should remain waiting for 2 accepted shares", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 128
+#line 166
     testRunner.When("trustee \"Delta\" submits a bound finalization share through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 129
+#line 167
     testRunner.Then("the finalization release evidence should record 3 accepted trustee shares", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 130
+#line 168
     testRunner.And("the boundary artifacts should include open, close, and finalize records", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 131
+#line 169
     testRunner.And("the election should remain in \"Finalized\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }

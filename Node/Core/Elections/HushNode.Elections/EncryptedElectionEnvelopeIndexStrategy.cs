@@ -46,6 +46,10 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleClaimRosterEntryAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.ActivateRosterEntry =>
                 await HandleActivateRosterEntryAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RegisterVotingCommitment =>
+                await HandleRegisterVotingCommitmentAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.AcceptBallotCast =>
+                await HandleAcceptBallotCastAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.InviteTrustee =>
                 await HandleInviteTrusteeAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.AcceptTrusteeInvitation =>
@@ -230,6 +234,87 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
             SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleRegisterVotingCommitmentAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var registerAction = decryptedEnvelope.DeserializeAction<RegisterElectionVotingCommitmentActionPayload>();
+        if (registerAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Register voting commitment action payload could not be deserialized.");
+        }
+
+        var result = await _electionLifecycleService.RegisterVotingCommitmentAsync(
+            new RegisterElectionVotingCommitmentRequest(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                registerAction.ActorPublicAddress,
+                registerAction.CommitmentHash));
+
+        return result.IsSuccess && result.Election is not null
+            ? ElectionCommandResult.Success(result.Election, rosterEntry: result.RosterEntry)
+            : ElectionCommandResult.Failure(
+                result.FailureReason switch
+                {
+                    ElectionCommitmentRegistrationFailureReason.NotFound => ElectionCommandErrorCode.NotFound,
+                    ElectionCommitmentRegistrationFailureReason.NotLinked => ElectionCommandErrorCode.Forbidden,
+                    ElectionCommitmentRegistrationFailureReason.NotActive => ElectionCommandErrorCode.DependencyBlocked,
+                    ElectionCommitmentRegistrationFailureReason.AlreadyRegistered => ElectionCommandErrorCode.Conflict,
+                    ElectionCommitmentRegistrationFailureReason.ElectionNotOpenableForRegistration => ElectionCommandErrorCode.InvalidState,
+                    ElectionCommitmentRegistrationFailureReason.ClosePersisted => ElectionCommandErrorCode.InvalidState,
+                    _ => ElectionCommandErrorCode.ValidationFailed,
+                },
+                result.ErrorMessage ?? "Voting commitment registration failed.");
+    }
+
+    private async Task<ElectionCommandResult> HandleAcceptBallotCastAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var acceptAction = decryptedEnvelope.DeserializeAction<AcceptElectionBallotCastActionPayload>();
+        if (acceptAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Accept ballot cast action payload could not be deserialized.");
+        }
+
+        var result = await _electionLifecycleService.AcceptBallotCastAsync(
+            new AcceptElectionBallotCastRequest(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                acceptAction.ActorPublicAddress,
+                acceptAction.IdempotencyKey,
+                acceptAction.EncryptedBallotPackage,
+                acceptAction.ProofBundle,
+                acceptAction.BallotNullifier,
+                acceptAction.OpenArtifactId,
+                acceptAction.EligibleSetHash,
+                acceptAction.CeremonyVersionId,
+                acceptAction.DkgProfileId,
+                acceptAction.TallyPublicKeyFingerprint));
+
+        return result.IsSuccess && result.Election is not null
+            ? ElectionCommandResult.Success(
+                result.Election,
+                rosterEntry: result.RosterEntry,
+                participationRecord: result.ParticipationRecord)
+            : ElectionCommandResult.Failure(
+                result.FailureReason switch
+                {
+                    ElectionCastAcceptanceFailureReason.NotFound => ElectionCommandErrorCode.NotFound,
+                    ElectionCastAcceptanceFailureReason.NotLinked => ElectionCommandErrorCode.Forbidden,
+                    ElectionCastAcceptanceFailureReason.NotActive => ElectionCommandErrorCode.DependencyBlocked,
+                    ElectionCastAcceptanceFailureReason.CommitmentMissing => ElectionCommandErrorCode.DependencyBlocked,
+                    ElectionCastAcceptanceFailureReason.StillProcessing => ElectionCommandErrorCode.Conflict,
+                    ElectionCastAcceptanceFailureReason.AlreadyUsed => ElectionCommandErrorCode.Conflict,
+                    ElectionCastAcceptanceFailureReason.DuplicateNullifier => ElectionCommandErrorCode.Conflict,
+                    ElectionCastAcceptanceFailureReason.WrongElectionContext => ElectionCommandErrorCode.ValidationFailed,
+                    ElectionCastAcceptanceFailureReason.ClosePersisted => ElectionCommandErrorCode.InvalidState,
+                    ElectionCastAcceptanceFailureReason.AlreadyVoted => ElectionCommandErrorCode.Conflict,
+                    _ => ElectionCommandErrorCode.ValidationFailed,
+                },
+                result.ErrorMessage ?? "Ballot acceptance failed.");
     }
 
     private async Task<ElectionCommandResult> HandleInviteTrusteeAsync(

@@ -74,6 +74,7 @@ public class BlockchainGrpcService(
         var message = string.Empty;
         var successful = false;
         var status = TransactionStatus.Unspecified;
+        var validationCode = string.Empty;
 
         var transaction = JsonSerializer.Deserialize<AbstractTransaction>(request.SignedTransaction)
             ?? throw new InvalidDataException("Transaction invalid or without handler");
@@ -104,7 +105,8 @@ public class BlockchainGrpcService(
                     {
                         Successfull = successful,
                         Message = message,
-                        Status = status
+                        Status = status,
+                        ValidationCode = validationCode,
                     };
                 }
             }
@@ -122,7 +124,8 @@ public class BlockchainGrpcService(
                     {
                         Successfull = false,
                         Message = validationError,
-                        Status = TransactionStatus.Rejected
+                        Status = TransactionStatus.Rejected,
+                        ValidationCode = string.Empty,
                     };
                 }
 
@@ -158,6 +161,13 @@ public class BlockchainGrpcService(
                         successful = false;
                         status = TransactionStatus.Rejected;
                         message = "Transaction is invalid and was not added to the MemPool";
+
+                        if (item is ITransactionValidationFailureReporter reporter &&
+                            reporter.TryTakeValidationFailure(transaction.TransactionId.Value, out var validationFailure))
+                        {
+                            validationCode = validationFailure.Code;
+                            message = validationFailure.Message;
+                        }
                     }
                     else
                     {
@@ -172,7 +182,8 @@ public class BlockchainGrpcService(
                                 {
                                     Successfull = true,
                                     Message = "Message is already pending in MemPool (concurrent submission)",
-                                    Status = TransactionStatus.Pending
+                                    Status = TransactionStatus.Pending,
+                                    ValidationCode = string.Empty,
                                 };
                             }
                         }
@@ -206,7 +217,8 @@ public class BlockchainGrpcService(
         {
             Successfull = successful,
             Message = message,
-            Status = status
+            Status = status,
+            ValidationCode = validationCode,
         };
     }
 

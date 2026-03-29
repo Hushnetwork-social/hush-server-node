@@ -147,6 +147,20 @@ public class ElectionsGrpcService(
             StatusCode.FailedPrecondition,
             "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for FinalizeElection."));
 
+    public override Task<Proto.RegisterElectionVotingCommitmentResponse> RegisterElectionVotingCommitment(
+        Proto.RegisterElectionVotingCommitmentRequest request,
+        ServerCallContext context) =>
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for RegisterElectionVotingCommitment."));
+
+    public override Task<Proto.AcceptElectionBallotCastResponse> AcceptElectionBallotCast(
+        Proto.AcceptElectionBallotCastRequest request,
+        ServerCallContext context) =>
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for AcceptElectionBallotCast."));
+
     public override async Task<GetElectionResponse> GetElection(GetElectionRequest request, ServerCallContext context)
     {
         try
@@ -182,6 +196,28 @@ public class ElectionsGrpcService(
         {
             _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionEligibilityView));
             throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch election eligibility view."));
+        }
+    }
+
+    public override async Task<GetElectionVotingViewResponse> GetElectionVotingView(
+        GetElectionVotingViewRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            return await _queryApplicationService.GetElectionVotingViewAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress,
+                request.SubmissionIdempotencyKey);
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionVotingView));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch election voting view."));
         }
     }
 

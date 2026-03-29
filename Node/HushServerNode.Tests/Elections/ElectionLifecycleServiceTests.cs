@@ -1,10 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
+using HushNode.Caching;
 using HushNode.Elections;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Olimpo.EntityFramework.Persistency;
 using Xunit;
 
@@ -545,6 +547,27 @@ public class ElectionLifecycleServiceTests
         result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.AlreadyUsed);
         store.CheckoffConsumptions.Should().BeEmpty();
         store.AcceptedBallots.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_OnSuccess_PopulatesCommittedIdempotencyCache()
+    {
+        var store = new ElectionStore();
+        var cacheService = new Mock<IElectionCastIdempotencyCacheService>();
+        var service = CreateService(store, castIdempotencyCacheService: cacheService.Object);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+
+        var result = await service.AcceptBallotCastAsync(CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-cache",
+            ballotNullifier: "nullifier-cache"));
+
+        result.IsSuccess.Should().BeTrue();
+        cacheService.Verify(
+            x => x.SetAsync(
+                scenario.Election.ElectionId.ToString(),
+                ComputeScopedHash("cast-key-cache")),
+            Times.Once);
     }
 
     [Fact]
@@ -2034,11 +2057,13 @@ public class ElectionLifecycleServiceTests
 
     private static ElectionLifecycleService CreateService(
         ElectionStore store,
-        ElectionCeremonyOptions? ceremonyOptions = null) =>
+        ElectionCeremonyOptions? ceremonyOptions = null,
+        IElectionCastIdempotencyCacheService? castIdempotencyCacheService = null) =>
         new(
             new FakeUnitOfWorkProvider(store),
             NullLogger<ElectionLifecycleService>.Instance,
-            ceremonyOptions ?? new ElectionCeremonyOptions());
+            ceremonyOptions ?? new ElectionCeremonyOptions(),
+            castIdempotencyCacheService);
 
     private static ElectionRecord CreateAdminElection(
         string title = "Board Election",
