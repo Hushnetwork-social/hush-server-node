@@ -87,6 +87,11 @@ public sealed class ElectionBallotPublicationCryptoService(
                     throw new InvalidOperationException("Published ballots must use the same selection count.");
                 }
 
+                if (!PointEquals(package.PublicKey, first.PublicKey))
+                {
+                    throw new InvalidOperationException("Published ballots must use the same election public key.");
+                }
+
                 for (var index = 0; index < package.SelectionCount; index++)
                 {
                     tallyC1[index] = _curve.Add(tallyC1[index], package.Ciphertext.C1[index]);
@@ -179,6 +184,9 @@ public sealed class ElectionBallotPublicationCryptoService(
 
     private static string ComputeHexSha256(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty)));
+
+    private static bool PointEquals(ReactionECPoint left, ReactionECPoint right) =>
+        left.X == right.X && left.Y == right.Y;
 
     private sealed record PublishedElectionBallotPackage(
         string? Version,

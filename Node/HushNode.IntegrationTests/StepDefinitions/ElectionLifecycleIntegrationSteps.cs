@@ -333,7 +333,7 @@ public sealed class ElectionLifecycleIntegrationSteps
         string voterAlias,
         string submissionIdempotencyKey)
     {
-        _lastSubmitTransactionResponse = await SubmitAcceptedBallotCastAttemptAsync(
+        _lastSubmitTransactionResponse = await SubmitAcceptedBallotCastViaBlockchainAsync(
             ResolveIdentity(voterAlias),
             submissionIdempotencyKey);
     }
@@ -1696,6 +1696,29 @@ public sealed class ElectionLifecycleIntegrationSteps
         {
             SignedTransaction = signedTransaction,
         });
+    }
+
+    private async Task<SubmitSignedTransactionReply> SubmitAcceptedBallotCastViaBlockchainAsync(
+        TestIdentity actor,
+        string submissionIdempotencyKey)
+    {
+        var signedTransaction = await BuildAcceptedBallotCastTransactionAsync(actor, submissionIdempotencyKey);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        if (!submitResponse.Successfull)
+        {
+            return submitResponse;
+        }
+
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+        _lastElectionResponse = await ReloadElectionAsync();
+        return submitResponse;
     }
 
     private async Task<string> BuildAcceptedBallotCastTransactionAsync(

@@ -69,6 +69,13 @@ public sealed class ElectionBallotPublicationService(
                 continue;
             }
 
+            _logger.LogInformation(
+                "[ElectionBallotPublicationService] Processing election {ElectionId} in state {LifecycleState} with {PendingCount} queued ballot(s); publishing {PublishCount}.",
+                electionId,
+                election.LifecycleState,
+                pendingEntries.Count,
+                publishCount);
+
             var selectedEntries = SelectEntriesForPublication(pendingEntries, publishCount);
             var existingPublishedBallots = election.LifecycleState == ElectionLifecycleState.Closed
                 ? await repository.GetPublishedBallotsAsync(electionId)
@@ -82,6 +89,10 @@ public sealed class ElectionBallotPublicationService(
                 var acceptedBallot = await repository.GetAcceptedBallotAsync(entry.AcceptedBallotId);
                 if (acceptedBallot is null)
                 {
+                    _logger.LogWarning(
+                        "[ElectionBallotPublicationService] Accepted ballot {AcceptedBallotId} was not found for election {ElectionId}; registering replay mismatch.",
+                        entry.AcceptedBallotId,
+                        electionId);
                     await RegisterIssueAsync(
                         repository,
                         electionId,
@@ -223,6 +234,11 @@ public sealed class ElectionBallotPublicationService(
         acceptedBallots ??= await repository.GetAcceptedBallotsAsync(election.ElectionId);
         if (acceptedBallots.Count != publishedBallots.Count)
         {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Tally-ready reconciliation failed for election {ElectionId}: accepted ballot count {AcceptedCount} does not match published ballot count {PublishedCount}.",
+                election.ElectionId,
+                acceptedBallots.Count,
+                publishedBallots.Count);
             await RegisterIssueAsync(
                 repository,
                 election.ElectionId,
@@ -237,6 +253,11 @@ public sealed class ElectionBallotPublicationService(
             publishedBallots.Select(x => x.EncryptedBallotPackage).ToArray());
         if (!replay.IsSuccessful)
         {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Tally-ready replay failed for election {ElectionId}: {FailureCode} {FailureReason}",
+                election.ElectionId,
+                replay.FailureCode,
+                replay.FailureReason);
             await RegisterIssueAsync(
                 repository,
                 election.ElectionId,
@@ -272,6 +293,11 @@ public sealed class ElectionBallotPublicationService(
 
         await repository.SaveBoundaryArtifactAsync(artifact);
         await repository.SaveElectionAsync(updatedElection);
+        _logger.LogInformation(
+            "[ElectionBallotPublicationService] Election {ElectionId} reached tally_ready with {AcceptedCount} accepted ballot(s) and {PublishedCount} published ballot(s).",
+            election.ElectionId,
+            acceptedBallots.Count,
+            publishedBallots.Count);
     }
 
     private async Task RegisterIssueAsync(

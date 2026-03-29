@@ -39,6 +39,7 @@ using HushNode.PushNotifications;
 using StackExchange.Redis;
 using HushNode.UrlMetadata.gRPC;
 using HushNode.Events;
+using HushNode.Indexing.Interfaces;
 using HushServerNode.Testing;
 
 namespace HushServerNode;
@@ -664,7 +665,8 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         // Must use ConfigureServices to ensure this runs after RegisterCoreModuleBlockchain's callback
         if (testConfig != null)
         {
-            var (observableFactory, onBlockFinalized) = testConfig.BlockProductionControl.GetSchedulerConfiguration();
+            var observableFactory = testConfig.BlockProductionControl.CreateObservableFactory();
+            var onBlockFinalized = testConfig.BlockProductionControl.OnBlockFinalized;
 
             builder.Host.ConfigureServices((_, services) =>
             {
@@ -679,8 +681,14 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                         sp.GetRequiredService<IOptions<BlockchainSettings>>(),
                         sp.GetRequiredService<ILogger<BlockProductionSchedulerService>>(),
                         observableFactory,
-                        onBlockFinalized);
+                        onBlockFinalized: null);
                 }));
+
+                services.Replace(ServiceDescriptor.Singleton<IIndexingDispatcherService>(sp =>
+                    new IndexingDispatcherService(
+                        sp.GetRequiredService<IEnumerable<IIndexStrategy>>(),
+                        sp.GetRequiredService<IEventAggregator>(),
+                        onBlockFinalized)));
             });
 
             // Add diagnostic logger provider if supplied
