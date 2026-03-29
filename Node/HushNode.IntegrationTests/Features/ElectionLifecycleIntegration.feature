@@ -148,7 +148,7 @@ Feature: FEAT-094 election lifecycle integration
     And the voting view should not expose acceptance receipt metadata
 
   @FEAT-100 @AT-PROC-I04 @AT-PROC-I05 @AT-PROC-I06 @NON_E2E
-  Scenario: Close drain publishes queued ballots and seals tally_ready without finalizing
+  Scenario: Close drain publishes queued ballots and seals tally_ready after close-counting shares
     Given FEAT-094 election integration services are available
     And the owner has an open trustee-threshold election through governed approval blockchain submission
     When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
@@ -159,19 +159,29 @@ Feature: FEAT-094 election lifecycle integration
     And trustee "Charlie" approves the governed proposal through blockchain submission
     And trustee "Delta" approves the governed proposal through blockchain submission
     Then the governed proposal should execute and transition the election to "Closed"
-    And the election should expose a tally-ready boundary after close drain
+    And the election closed progress status should be "ClosedProgressWaitingForTrusteeShares"
+    And the election should not expose a tally-ready boundary yet
+    And the close workflow should open a bound close-counting session while the election stays "Closed"
+    When trustee "Bob" submits a bound finalization share through blockchain submission
+    And trustee "Charlie" submits a bound finalization share through blockchain submission
+    And trustee "Delta" submits a bound finalization share through blockchain submission
+    Then the election should expose a tally-ready boundary after close drain
     And the tally-ready boundary should reconcile 1 accepted ballots and 1 published ballots
 
   @FEAT-098 @AT-PROC-I03 @NON_E2E
-  Scenario: Governed finalize binds one exact session and finalizes only after threshold aggregate shares
+  Scenario: Close-counting binds one exact aggregate target and rejects single-ballot release
     Given FEAT-094 election integration services are available
-    And the owner has a closed trustee-threshold election through governed approval blockchain submission
-    When the owner starts a "finalize" governed proposal through blockchain submission
-    Then the governed proposal should remain pending for "finalize" while the election stays "Closed"
-    When trustee "Bob" approves the governed proposal through blockchain submission
+    And the owner has an open trustee-threshold election through governed approval blockchain submission
+    When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
+    And voter "Alice" registers voting commitment "alice-commitment-feat098-v1" through blockchain submission
+    And voter "Alice" submits ballot cast with idempotency key "alice-feat098-001" through blockchain submission
+    And the owner starts an "close" governed proposal through blockchain submission
+    And trustee "Bob" approves the governed proposal through blockchain submission
     And trustee "Charlie" approves the governed proposal through blockchain submission
     And trustee "Delta" approves the governed proposal through blockchain submission
-    Then the governed finalize should open a bound finalization session while the election stays "Closed"
+    Then the governed proposal should execute and transition the election to "Closed"
+    And the election closed progress status should be "ClosedProgressWaitingForTrusteeShares"
+    And the close workflow should open a bound close-counting session while the election stays "Closed"
     When trustee "Bob" submits a single-ballot finalization share through blockchain submission
     Then the finalization share log should record rejection code "SINGLE_BALLOT_RELEASE_FORBIDDEN" for trustee "Bob"
     And the election should remain in "Closed"
@@ -179,6 +189,36 @@ Feature: FEAT-094 election lifecycle integration
     And trustee "Charlie" submits a bound finalization share through blockchain submission
     Then the finalization session should remain waiting for 2 accepted shares
     When trustee "Delta" submits a bound finalization share through blockchain submission
-    Then the finalization release evidence should record 3 accepted trustee shares
+    Then the close-counting release evidence should record 3 accepted trustee shares
+    And the election should expose a tally-ready boundary after close drain
+    And the election should remain in "Closed"
+
+  @FEAT-101 @AT-PROC-I04 @AT-PROC-I05 @NON_E2E
+  Scenario: Close counting publishes unofficial result and finalize copies the official result
+    Given FEAT-094 election integration services are available
+    And the owner has an open trustee-threshold election through governed approval blockchain submission
+    When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
+    And voter "Alice" registers voting commitment "alice-commitment-feat101-v1" through blockchain submission
+    And voter "Alice" submits ballot cast with idempotency key "alice-feat101-001" through blockchain submission
+    And the owner starts an "close" governed proposal through blockchain submission
+    And trustee "Bob" approves the governed proposal through blockchain submission
+    And trustee "Charlie" approves the governed proposal through blockchain submission
+    And trustee "Delta" approves the governed proposal through blockchain submission
+    Then the governed proposal should execute and transition the election to "Closed"
+    And the election closed progress status should be "ClosedProgressWaitingForTrusteeShares"
+    And the close workflow should open a bound close-counting session while the election stays "Closed"
+    When trustee "Bob" submits a bound finalization share through blockchain submission
+    And trustee "Charlie" submits a bound finalization share through blockchain submission
+    And trustee "Delta" submits a bound finalization share through blockchain submission
+    Then the election should expose a tally-ready boundary after close drain
+    And the election result view for actor "Alice" should expose participant-encrypted unofficial results
+    And the unofficial result should report 1 total voted, 2 eligible to vote, 1 did not vote, and 0 blank
+    And the unofficial result should include all named options
+    When the owner starts a "finalize" governed proposal through blockchain submission
+    Then the governed proposal should remain pending for "finalize" while the election stays "Closed"
+    When trustee "Bob" approves the governed proposal through blockchain submission
+    And trustee "Charlie" approves the governed proposal through blockchain submission
+    And trustee "Delta" approves the governed proposal through blockchain submission
+    Then the governed proposal should execute and transition the election to "Finalized"
+    And the official result should copy the unofficial result for actor "Alice"
     And the boundary artifacts should include open, close, and finalize records
-    And the election should remain in "Finalized"

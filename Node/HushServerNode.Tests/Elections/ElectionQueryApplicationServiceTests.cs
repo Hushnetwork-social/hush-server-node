@@ -16,6 +16,8 @@ using Xunit;
 namespace HushServerNode.Tests.Elections;
 
 using SharedTrusteeReference = HushShared.Elections.Model.ElectionTrusteeReference;
+using SharedResultOptionCount = HushShared.Elections.Model.ElectionResultOptionCount;
+using SharedResultDenominatorEvidence = HushShared.Elections.Model.ElectionResultDenominatorEvidence;
 
 public class ElectionQueryApplicationServiceTests
 {
@@ -119,6 +121,7 @@ public class ElectionQueryApplicationServiceTests
             closeArtifactId: Guid.NewGuid(),
             acceptedBallotSetHash: [11, 12, 13],
             finalEncryptedTallyHash: [21, 22, 23],
+            sessionPurpose: ElectionFinalizationSessionPurpose.Finalization,
             ceremonySnapshot: boundaryArtifact.CeremonySnapshot!,
             requiredShareCount: 1,
             eligibleTrustees:
@@ -272,6 +275,7 @@ public class ElectionQueryApplicationServiceTests
         var accessRecord = new ElectionEnvelopeAccessRecord(
             electionId,
             "trustee-address",
+            "node-wrapped-election-private-key",
             "wrapped-election-private-key",
             DateTime.UtcNow,
             Guid.NewGuid(),
@@ -697,6 +701,147 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionResultViewAsync_WithParticipantActor_ReturnsUnofficialAndOfficialArtifacts()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            TallyReadyAt = DateTime.UtcNow.AddMinutes(-2),
+            ClosedProgressStatus = ElectionClosedProgressStatus.None,
+            OfficialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly,
+        };
+        var rosterEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "5001",
+                ElectionRosterContactType.Email,
+                "participant@example.com",
+                ElectionVotingRightStatus.Active)
+            .LinkToActor("participant-address", DateTime.UtcNow);
+        var denominatorEvidence = new SharedResultDenominatorEvidence(
+            ElectionEligibilitySnapshotType.Close,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            [1, 2, 3]);
+        var unofficial = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Unofficial,
+            ElectionResultArtifactVisibility.ParticipantEncrypted,
+            election.Title,
+            [
+                new SharedResultOptionCount("alice", "Alice", null, 1, 1, 7),
+                new SharedResultOptionCount("bob", "Bob", null, 2, 2, 5),
+            ],
+            blankCount: 1,
+            totalVotedCount: 13,
+            eligibleToVoteCount: 20,
+            didNotVoteCount: 7,
+            denominatorEvidence,
+            "owner-address",
+            encryptedPayload: "enc::unofficial");
+        var official = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Official,
+            ElectionResultArtifactVisibility.ParticipantEncrypted,
+            election.Title,
+            unofficial.NamedOptionResults,
+            unofficial.BlankCount,
+            unofficial.TotalVotedCount,
+            unofficial.EligibleToVoteCount,
+            unofficial.DidNotVoteCount,
+            denominatorEvidence,
+            "owner-address",
+            sourceResultArtifactId: unofficial.Id,
+            encryptedPayload: "enc::official");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
+            repo.Setup(x => x.GetRosterEntryByLinkedActorAsync(election.ElectionId, "participant-address")).ReturnsAsync(rosterEntry);
+            repo.Setup(x => x.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Unofficial)).ReturnsAsync(unofficial);
+            repo.Setup(x => x.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Official)).ReturnsAsync(official);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionResultViewAsync(election.ElectionId, "participant-address");
+
+        response.Success.Should().BeTrue();
+        response.CanViewParticipantEncryptedResults.Should().BeTrue();
+        response.UnofficialResult.Should().NotBeNull();
+        response.OfficialResult.Should().NotBeNull();
+        response.UnofficialResult.EncryptedPayload.Should().Be("enc::unofficial");
+        response.OfficialResult.EncryptedPayload.Should().Be("enc::official");
+    }
+
+    [Fact]
+    public async Task GetElectionResultViewAsync_WithNonParticipantActor_HidesUnofficialButReturnsPublicOfficial()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            TallyReadyAt = DateTime.UtcNow.AddMinutes(-2),
+            ClosedProgressStatus = ElectionClosedProgressStatus.None,
+            OfficialResultVisibilityPolicy = OfficialResultVisibilityPolicy.PublicPlaintext,
+        };
+        var denominatorEvidence = new SharedResultDenominatorEvidence(
+            ElectionEligibilitySnapshotType.Close,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            [1, 2, 3]);
+        var unofficial = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Unofficial,
+            ElectionResultArtifactVisibility.ParticipantEncrypted,
+            election.Title,
+            [
+                new SharedResultOptionCount("alice", "Alice", null, 1, 1, 7),
+                new SharedResultOptionCount("bob", "Bob", null, 2, 2, 5),
+            ],
+            blankCount: 1,
+            totalVotedCount: 13,
+            eligibleToVoteCount: 20,
+            didNotVoteCount: 7,
+            denominatorEvidence,
+            "owner-address",
+            encryptedPayload: "enc::unofficial");
+        var official = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Official,
+            ElectionResultArtifactVisibility.PublicPlaintext,
+            election.Title,
+            unofficial.NamedOptionResults,
+            unofficial.BlankCount,
+            unofficial.TotalVotedCount,
+            unofficial.EligibleToVoteCount,
+            unofficial.DidNotVoteCount,
+            denominatorEvidence,
+            "owner-address",
+            sourceResultArtifactId: unofficial.Id,
+            publicPayload: "{\"title\":\"Board Election\"}");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
+            repo.Setup(x => x.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Unofficial)).ReturnsAsync(unofficial);
+            repo.Setup(x => x.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Official)).ReturnsAsync(official);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionResultViewAsync(election.ElectionId, "outsider-address");
+
+        response.Success.Should().BeTrue();
+        response.CanViewParticipantEncryptedResults.Should().BeFalse();
+        response.UnofficialResult.Should().BeNull();
+        response.OfficialResult.Should().NotBeNull();
+        response.OfficialResult.PublicPayload.Should().Contain("Board Election");
+    }
+
+    [Fact]
     public async Task GetElectionCeremonyActionViewAsync_WithOwnerRole_ReturnsStartAndRestartAvailability()
     {
         var mocker = new AutoMocker();
@@ -862,6 +1007,12 @@ public class ElectionQueryApplicationServiceTests
             .ReturnsAsync(Array.Empty<ElectionFinalizationShareRecord>());
         repository.Setup(x => x.GetFinalizationReleaseEvidenceRecordsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionFinalizationReleaseEvidenceRecord>());
+        repository.Setup(x => x.GetResultArtifactsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionResultArtifactRecord>());
+        repository.Setup(x => x.GetResultArtifactAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((ElectionResultArtifactRecord?)null);
+        repository.Setup(x => x.GetResultArtifactAsync(It.IsAny<ElectionId>(), It.IsAny<ElectionResultArtifactKind>()))
+            .ReturnsAsync((ElectionResultArtifactRecord?)null);
         repository.Setup(x => x.GetRosterEntriesAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionRosterEntryRecord>());
         repository.Setup(x => x.GetParticipationRecordsAsync(It.IsAny<ElectionId>()))

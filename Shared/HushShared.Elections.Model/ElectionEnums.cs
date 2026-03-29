@@ -122,6 +122,19 @@ public enum ReviewWindowPolicy
     GovernedReviewWindowReserved = 1,
 }
 
+public enum OfficialResultVisibilityPolicy
+{
+    ParticipantEncryptedOnly = 0,
+    PublicPlaintext = 1,
+}
+
+public enum ElectionClosedProgressStatus
+{
+    None = 0,
+    WaitingForTrusteeShares = 1,
+    TallyCalculationInProgress = 2,
+}
+
 public enum ElectionBoundaryArtifactType
 {
     Open = 0,
@@ -205,6 +218,12 @@ public enum ElectionFinalizationSessionStatus
     Completed = 1,
 }
 
+public enum ElectionFinalizationSessionPurpose
+{
+    CloseCounting = 0,
+    Finalization = 1,
+}
+
 public enum ElectionFinalizationShareStatus
 {
     Accepted = 0,
@@ -220,6 +239,18 @@ public enum ElectionFinalizationTargetType
 public enum ElectionFinalizationReleaseMode
 {
     AggregateTallyOnly = 0,
+}
+
+public enum ElectionResultArtifactKind
+{
+    Unofficial = 0,
+    Official = 1,
+}
+
+public enum ElectionResultArtifactVisibility
+{
+    ParticipantEncrypted = 0,
+    PublicPlaintext = 1,
 }
 
 public enum ElectionPublicationIssueCode

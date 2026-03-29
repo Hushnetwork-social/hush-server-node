@@ -5,6 +5,7 @@ namespace HushShared.Elections.Model;
 public record ElectionEnvelopeAccessRecord(
     ElectionId ElectionId,
     string ActorPublicAddress,
+    string NodeEncryptedElectionPrivateKey,
     string ActorEncryptedElectionPrivateKey,
     DateTime GrantedAt,
     Guid? SourceTransactionId,

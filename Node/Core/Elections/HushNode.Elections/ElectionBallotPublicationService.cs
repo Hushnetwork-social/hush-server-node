@@ -56,7 +56,7 @@ public sealed class ElectionBallotPublicationService(
             {
                 if (election.LifecycleState == ElectionLifecycleState.Closed && !election.TallyReadyAt.HasValue)
                 {
-                    await TryMarkTallyReadyAsync(repository, election, blockIndex.Value, _blockchainCache.CurrentBlockId.Value);
+                    await TryAdvanceClosedElectionAsync(repository, election, blockIndex.Value, _blockchainCache.CurrentBlockId.Value);
                     await unitOfWork.CommitAsync();
                 }
 
@@ -133,7 +133,7 @@ public sealed class ElectionBallotPublicationService(
             if (election.LifecycleState == ElectionLifecycleState.Closed &&
                 pendingEntries.Count == newlyPublishedBallots.Count)
             {
-                await TryMarkTallyReadyWithPublishedSnapshotAsync(
+                await TryAdvanceClosedElectionWithPublishedSnapshotAsync(
                     repository,
                     election,
                     existingPublishedBallots.Concat(newlyPublishedBallots).OrderBy(x => x.PublicationSequence).ToArray(),
@@ -190,7 +190,7 @@ public sealed class ElectionBallotPublicationService(
             acceptedBallot.ProofBundle);
     }
 
-    private async Task TryMarkTallyReadyAsync(
+    private async Task TryAdvanceClosedElectionAsync(
         IElectionsRepository repository,
         ElectionRecord election,
         long blockHeight,
@@ -209,7 +209,7 @@ public sealed class ElectionBallotPublicationService(
 
         var acceptedBallots = await repository.GetAcceptedBallotsAsync(election.ElectionId);
         var publishedBallots = await repository.GetPublishedBallotsAsync(election.ElectionId);
-        await TryMarkTallyReadyWithPublishedSnapshotAsync(
+        await TryAdvanceClosedElectionWithPublishedSnapshotAsync(
             repository,
             election,
             publishedBallots,
@@ -218,7 +218,7 @@ public sealed class ElectionBallotPublicationService(
             acceptedBallots);
     }
 
-    private async Task TryMarkTallyReadyWithPublishedSnapshotAsync(
+    private async Task TryAdvanceClosedElectionWithPublishedSnapshotAsync(
         IElectionsRepository repository,
         ElectionRecord election,
         IReadOnlyList<ElectionPublishedBallotRecord> publishedBallots,
@@ -268,36 +268,99 @@ public sealed class ElectionBallotPublicationService(
             return;
         }
 
-        var recordedAt = DateTime.UtcNow;
         var acceptedHash = ComputeAcceptedBallotInventoryHash(acceptedBallots);
         var publishedHash = ComputePublishedBallotStreamHash(publishedBallots);
-        var artifact = ElectionModelFactory.CreateBoundaryArtifact(
-            ElectionBoundaryArtifactType.TallyReady,
-            election,
-            election.OwnerPublicAddress,
-            recordedAt: recordedAt,
-            acceptedBallotCount: acceptedBallots.Count,
-            acceptedBallotSetHash: acceptedHash,
-            publishedBallotCount: publishedBallots.Count,
-            publishedBallotStreamHash: publishedHash,
-            finalEncryptedTallyHash: replay.FinalEncryptedTallyHash,
-            sourceBlockHeight: blockHeight,
-            sourceBlockId: blockId);
-
-        var updatedElection = election with
+        if (election.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold)
         {
-            LastUpdatedAt = recordedAt,
-            TallyReadyAt = recordedAt,
-            TallyReadyArtifactId = artifact.Id,
-        };
+            var recordedAt = DateTime.UtcNow;
+            var artifact = ElectionModelFactory.CreateBoundaryArtifact(
+                ElectionBoundaryArtifactType.TallyReady,
+                election,
+                election.OwnerPublicAddress,
+                recordedAt: recordedAt,
+                acceptedBallotCount: acceptedBallots.Count,
+                acceptedBallotSetHash: acceptedHash,
+                publishedBallotCount: publishedBallots.Count,
+                publishedBallotStreamHash: publishedHash,
+                finalEncryptedTallyHash: replay.FinalEncryptedTallyHash,
+                sourceBlockHeight: blockHeight,
+                sourceBlockId: blockId);
 
-        await repository.SaveBoundaryArtifactAsync(artifact);
-        await repository.SaveElectionAsync(updatedElection);
+            var updatedElection = election with
+            {
+                LastUpdatedAt = recordedAt,
+                TallyReadyAt = recordedAt,
+                TallyReadyArtifactId = artifact.Id,
+            };
+
+            await repository.SaveBoundaryArtifactAsync(artifact);
+            await repository.SaveElectionAsync(updatedElection);
+            _logger.LogInformation(
+                "[ElectionBallotPublicationService] Election {ElectionId} reached tally_ready with {AcceptedCount} accepted ballot(s) and {PublishedCount} published ballot(s).",
+                election.ElectionId,
+                acceptedBallots.Count,
+                publishedBallots.Count);
+            return;
+        }
+
+        var activeSession = await repository.GetActiveFinalizationSessionAsync(election.ElectionId);
+        if (activeSession is not null)
+        {
+            if (election.ClosedProgressStatus != ElectionClosedProgressStatus.WaitingForTrusteeShares)
+            {
+                await repository.SaveElectionAsync(election with
+                {
+                    LastUpdatedAt = DateTime.UtcNow,
+                    ClosedProgressStatus = ElectionClosedProgressStatus.WaitingForTrusteeShares,
+                });
+            }
+
+            return;
+        }
+
+        var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(election.ElectionId);
+        var openArtifact = boundaryArtifacts.FirstOrDefault(x =>
+            x.Id == election.OpenArtifactId &&
+            x.ArtifactType == ElectionBoundaryArtifactType.Open);
+        var closeArtifact = boundaryArtifacts.FirstOrDefault(x =>
+            x.Id == election.CloseArtifactId &&
+            x.ArtifactType == ElectionBoundaryArtifactType.Close);
+        if (openArtifact?.CeremonySnapshot is null || closeArtifact is null)
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Close-counting session could not be created for election {ElectionId} because the required open/close artifacts were not available.",
+                election.ElectionId);
+            return;
+        }
+
+        var createdAt = DateTime.UtcNow;
+        var session = ElectionModelFactory.CreateFinalizationSession(
+            election,
+            closeArtifact.Id,
+            acceptedHash,
+            replay.FinalEncryptedTallyHash!,
+            ElectionFinalizationSessionPurpose.CloseCounting,
+            openArtifact.CeremonySnapshot,
+            openArtifact.CeremonySnapshot.RequiredApprovalCount,
+            openArtifact.CeremonySnapshot.ActiveTrustees.ToArray(),
+            election.OwnerPublicAddress,
+            governedProposalId: null,
+            createdAt: createdAt,
+            latestBlockHeight: blockHeight,
+            latestBlockId: blockId);
+
+        await repository.SaveFinalizationSessionAsync(session);
+        await repository.SaveElectionAsync(election with
+        {
+            LastUpdatedAt = createdAt,
+            ClosedProgressStatus = ElectionClosedProgressStatus.WaitingForTrusteeShares,
+        });
+
         _logger.LogInformation(
-            "[ElectionBallotPublicationService] Election {ElectionId} reached tally_ready with {AcceptedCount} accepted ballot(s) and {PublishedCount} published ballot(s).",
+            "[ElectionBallotPublicationService] Election {ElectionId} drained BallotMemPool and created close-counting session {SessionId} for {AcceptedCount} accepted ballot(s).",
             election.ElectionId,
-            acceptedBallots.Count,
-            publishedBallots.Count);
+            session.Id,
+            acceptedBallots.Count);
     }
 
     private async Task RegisterIssueAsync(

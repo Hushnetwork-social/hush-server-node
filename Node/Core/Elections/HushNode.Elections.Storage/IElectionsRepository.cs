@@ -25,6 +25,19 @@ public interface IElectionsRepository : IRepository
 
     Task UpdateElectionEnvelopeAccessAsync(ElectionEnvelopeAccessRecord accessRecord);
 
+    Task<IReadOnlyList<ElectionResultArtifactRecord>> GetResultArtifactsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionResultArtifactRecord>>(Array.Empty<ElectionResultArtifactRecord>());
+
+    Task<ElectionResultArtifactRecord?> GetResultArtifactAsync(Guid resultArtifactId) =>
+        Task.FromResult<ElectionResultArtifactRecord?>(null);
+
+    Task<ElectionResultArtifactRecord?> GetResultArtifactAsync(ElectionId electionId, ElectionResultArtifactKind artifactKind) =>
+        Task.FromResult<ElectionResultArtifactRecord?>(null);
+
+    Task SaveResultArtifactAsync(ElectionResultArtifactRecord resultArtifact) => Task.CompletedTask;
+
+    Task UpdateResultArtifactAsync(ElectionResultArtifactRecord resultArtifact) => Task.CompletedTask;
+
     Task<IReadOnlyList<ElectionRosterEntryRecord>> GetRosterEntriesAsync(ElectionId electionId) =>
         Task.FromResult<IReadOnlyList<ElectionRosterEntryRecord>>(Array.Empty<ElectionRosterEntryRecord>());
 

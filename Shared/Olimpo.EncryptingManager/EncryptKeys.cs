@@ -166,6 +166,22 @@ public class EncryptKeys
     }
 
     /// <summary>
+    /// Derives the uncompressed secp256k1 public key from a hex-encoded private key.
+    /// </summary>
+    public static string DerivePublicKey(string privateKey)
+    {
+        var privateKeyBytes = FromHex(privateKey);
+        var privateKeyValue = new BigInteger(1, privateKeyBytes);
+        if (privateKeyValue.CompareTo(BigInteger.One) < 0 || privateKeyValue.CompareTo(Curve.N) >= 0)
+        {
+            throw new ArgumentException("Private key must be within the valid secp256k1 range.", nameof(privateKey));
+        }
+
+        var publicKeyPoint = Curve.G.Multiply(privateKeyValue).Normalize();
+        return ToHex(publicKeyPoint.GetEncoded(false));
+    }
+
+    /// <summary>
     /// Derives an AES-256 key from the ECDH shared secret using HKDF.
     /// </summary>
     private static byte[] DeriveAesKey(byte[] sharedSecret, byte[] ephemeralPublicKey)

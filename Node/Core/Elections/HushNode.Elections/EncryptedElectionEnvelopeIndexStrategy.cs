@@ -134,6 +134,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             await SaveElectionEnvelopeAccessAsync(
                 decryptedEnvelope.Transaction.Payload.ElectionId,
                 createDraftAction.OwnerPublicAddress,
+                decryptedEnvelope.Transaction.Payload.NodeEncryptedElectionPrivateKey,
                 decryptedEnvelope.Transaction.Payload.ActorEncryptedElectionPrivateKey,
                 decryptedEnvelope.Transaction.TransactionTimeStamp.Value,
                 decryptedEnvelope.Transaction.TransactionId.Value);
@@ -208,6 +209,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             await SaveElectionEnvelopeAccessAsync(
                 decryptedEnvelope.Transaction.Payload.ElectionId,
                 claimAction.ActorPublicAddress,
+                decryptedEnvelope.Transaction.Payload.NodeEncryptedElectionPrivateKey,
                 decryptedEnvelope.Transaction.Payload.ActorEncryptedElectionPrivateKey,
                 decryptedEnvelope.Transaction.TransactionTimeStamp.Value,
                 decryptedEnvelope.Transaction.TransactionId.Value);
@@ -343,6 +345,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             await SaveElectionEnvelopeAccessAsync(
                 decryptedEnvelope.Transaction.Payload.ElectionId,
                 inviteTrusteeAction.TrusteeUserAddress,
+                decryptedEnvelope.Transaction.Payload.NodeEncryptedElectionPrivateKey,
                 inviteTrusteeAction.TrusteeEncryptedElectionPrivateKey,
                 decryptedEnvelope.Transaction.TransactionTimeStamp.Value,
                 decryptedEnvelope.Transaction.TransactionId.Value);
@@ -769,6 +772,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
     private async Task SaveElectionEnvelopeAccessAsync(
         ElectionId electionId,
         string actorPublicAddress,
+        string nodeEncryptedElectionPrivateKey,
         string actorEncryptedElectionPrivateKey,
         DateTime grantedAt,
         Guid sourceTransactionId)
@@ -786,6 +790,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
         var accessRecord = new ElectionEnvelopeAccessRecord(
             electionId,
             actorPublicAddress,
+            nodeEncryptedElectionPrivateKey,
             actorEncryptedElectionPrivateKey,
             normalizedGrantedAt,
             sourceTransactionId,

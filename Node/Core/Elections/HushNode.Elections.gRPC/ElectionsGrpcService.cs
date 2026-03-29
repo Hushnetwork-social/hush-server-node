@@ -240,6 +240,25 @@ public class ElectionsGrpcService(
         }
     }
 
+    public override async Task<GetElectionResultViewResponse> GetElectionResultView(GetElectionResultViewRequest request, ServerCallContext context)
+    {
+        try
+        {
+            return await _queryApplicationService.GetElectionResultViewAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress);
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionResultView));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch election result view."));
+        }
+    }
+
     public override async Task<GetElectionCeremonyActionViewResponse> GetElectionCeremonyActionView(GetElectionCeremonyActionViewRequest request, ServerCallContext context)
     {
         try

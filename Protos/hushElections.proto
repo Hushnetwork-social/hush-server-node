@@ -36,6 +36,7 @@ service HushElections {
   rpc GetElectionEligibilityView(GetElectionEligibilityViewRequest) returns (GetElectionEligibilityViewResponse);
   rpc GetElectionVotingView(GetElectionVotingViewRequest) returns (GetElectionVotingViewResponse);
   rpc GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest) returns (GetElectionEnvelopeAccessResponse);
+  rpc GetElectionResultView(GetElectionResultViewRequest) returns (GetElectionResultViewResponse);
   rpc GetElectionCeremonyActionView(GetElectionCeremonyActionViewRequest) returns (GetElectionCeremonyActionViewResponse);
   rpc GetElectionsByOwner(GetElectionsByOwnerRequest) returns (GetElectionsByOwnerResponse);
 }
@@ -175,6 +176,17 @@ enum ReviewWindowPolicyProto {
   GovernedReviewWindowReserved = 1;
 }
 
+enum OfficialResultVisibilityPolicyProto {
+  ParticipantEncryptedOnly = 0;
+  PublicPlaintext = 1;
+}
+
+enum ElectionClosedProgressStatusProto {
+  ClosedProgressNone = 0;
+  ClosedProgressWaitingForTrusteeShares = 1;
+  ClosedProgressTallyCalculationInProgress = 2;
+}
+
 enum ElectionBoundaryArtifactTypeProto {
   OpenArtifact = 0;
   CloseArtifact = 1;
@@ -278,6 +290,11 @@ enum ElectionFinalizationSessionStatusProto {
   FinalizationSessionCompleted = 1;
 }
 
+enum ElectionFinalizationSessionPurposeProto {
+  FinalizationSessionPurposeCloseCounting = 0;
+  FinalizationSessionPurposeFinalize = 1;
+}
+
 enum ElectionFinalizationShareStatusProto {
   FinalizationShareAccepted = 0;
   FinalizationShareRejected = 1;
@@ -290,6 +307,16 @@ enum ElectionFinalizationTargetTypeProto {
 
 enum ElectionFinalizationReleaseModeProto {
   FinalizationReleaseAggregateTallyOnly = 0;
+}
+
+enum ElectionResultArtifactKindProto {
+  ElectionResultArtifactUnofficial = 0;
+  ElectionResultArtifactOfficial = 1;
+}
+
+enum ElectionResultArtifactVisibilityProto {
+  ElectionResultArtifactParticipantEncrypted = 0;
+  ElectionResultArtifactPublicPlaintext = 1;
 }
 
 message ApprovedClientApplication {
@@ -471,21 +498,22 @@ message ElectionFinalizationSession {
   string ElectionId = 2;
   string GovernedProposalId = 3;
   ElectionGovernanceModeProto GovernanceMode = 4;
-  string CloseArtifactId = 5;
-  bytes AcceptedBallotSetHash = 6;
-  bytes FinalEncryptedTallyHash = 7;
-  string TargetTallyId = 8;
-  ElectionCeremonyBindingSnapshot CeremonySnapshot = 9;
-  int32 RequiredShareCount = 10;
-  repeated ElectionTrusteeReference EligibleTrustees = 11;
-  ElectionFinalizationSessionStatusProto Status = 12;
-  google.protobuf.Timestamp CreatedAt = 13;
-  string CreatedByPublicAddress = 14;
-  google.protobuf.Timestamp CompletedAt = 15;
-  string ReleaseEvidenceId = 16;
-  string LatestTransactionId = 17;
-  optional int64 LatestBlockHeight = 18;
-  string LatestBlockId = 19;
+  ElectionFinalizationSessionPurposeProto SessionPurpose = 5;
+  string CloseArtifactId = 6;
+  bytes AcceptedBallotSetHash = 7;
+  bytes FinalEncryptedTallyHash = 8;
+  string TargetTallyId = 9;
+  ElectionCeremonyBindingSnapshot CeremonySnapshot = 10;
+  int32 RequiredShareCount = 11;
+  repeated ElectionTrusteeReference EligibleTrustees = 12;
+  ElectionFinalizationSessionStatusProto Status = 13;
+  google.protobuf.Timestamp CreatedAt = 14;
+  string CreatedByPublicAddress = 15;
+  google.protobuf.Timestamp CompletedAt = 16;
+  string ReleaseEvidenceId = 17;
+  string LatestTransactionId = 18;
+  optional int64 LatestBlockHeight = 19;
+  string LatestBlockId = 20;
 }
 
 message ElectionFinalizationShare {
@@ -517,18 +545,55 @@ message ElectionFinalizationReleaseEvidence {
   string Id = 1;
   string FinalizationSessionId = 2;
   string ElectionId = 3;
-  ElectionFinalizationReleaseModeProto ReleaseMode = 4;
-  string CloseArtifactId = 5;
-  bytes AcceptedBallotSetHash = 6;
-  bytes FinalEncryptedTallyHash = 7;
-  string TargetTallyId = 8;
-  int32 AcceptedShareCount = 9;
-  repeated ElectionTrusteeReference AcceptedTrustees = 10;
-  google.protobuf.Timestamp CompletedAt = 11;
-  string CompletedByPublicAddress = 12;
-  string SourceTransactionId = 13;
-  optional int64 SourceBlockHeight = 14;
-  string SourceBlockId = 15;
+  ElectionFinalizationSessionPurposeProto SessionPurpose = 4;
+  ElectionFinalizationReleaseModeProto ReleaseMode = 5;
+  string CloseArtifactId = 6;
+  bytes AcceptedBallotSetHash = 7;
+  bytes FinalEncryptedTallyHash = 8;
+  string TargetTallyId = 9;
+  int32 AcceptedShareCount = 10;
+  repeated ElectionTrusteeReference AcceptedTrustees = 11;
+  google.protobuf.Timestamp CompletedAt = 12;
+  string CompletedByPublicAddress = 13;
+  string SourceTransactionId = 14;
+  optional int64 SourceBlockHeight = 15;
+  string SourceBlockId = 16;
+}
+
+message ElectionResultOptionCount {
+  string OptionId = 1;
+  string DisplayLabel = 2;
+  string ShortDescription = 3;
+  int32 BallotOrder = 4;
+  int32 Rank = 5;
+  int32 VoteCount = 6;
+}
+
+message ElectionResultDenominatorEvidence {
+  ElectionEligibilitySnapshotTypeProto SnapshotType = 1;
+  string EligibilitySnapshotId = 2;
+  string BoundaryArtifactId = 3;
+  bytes ActiveDenominatorSetHash = 4;
+}
+
+message ElectionResultArtifact {
+  string Id = 1;
+  string ElectionId = 2;
+  ElectionResultArtifactKindProto ArtifactKind = 3;
+  ElectionResultArtifactVisibilityProto Visibility = 4;
+  string Title = 5;
+  repeated ElectionResultOptionCount NamedOptionResults = 6;
+  int32 BlankCount = 7;
+  int32 TotalVotedCount = 8;
+  int32 EligibleToVoteCount = 9;
+  int32 DidNotVoteCount = 10;
+  ElectionResultDenominatorEvidence DenominatorEvidence = 11;
+  string TallyReadyArtifactId = 12;
+  string SourceResultArtifactId = 13;
+  string EncryptedPayload = 14;
+  string PublicPayload = 15;
+  google.protobuf.Timestamp RecordedAt = 16;
+  string RecordedByPublicAddress = 17;
 }
 
 message ElectionRecordView {
@@ -566,6 +631,10 @@ message ElectionRecordView {
   google.protobuf.Timestamp TallyReadyAt = 32;
   google.protobuf.Timestamp VoteAcceptanceLockedAt = 33;
   string TallyReadyArtifactId = 34;
+  OfficialResultVisibilityPolicyProto OfficialResultVisibilityPolicy = 35;
+  ElectionClosedProgressStatusProto ClosedProgressStatus = 36;
+  string UnofficialResultArtifactId = 37;
+  string OfficialResultArtifactId = 38;
 }
 
 message ElectionSummary {
@@ -909,6 +978,22 @@ message GetElectionEnvelopeAccessResponse {
   string ActorEncryptedElectionPrivateKey = 3;
 }
 
+message GetElectionResultViewRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+}
+
+message GetElectionResultViewResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ActorPublicAddress = 3;
+  bool CanViewParticipantEncryptedResults = 4;
+  OfficialResultVisibilityPolicyProto OfficialResultVisibilityPolicy = 5;
+  ElectionClosedProgressStatusProto ClosedProgressStatus = 6;
+  ElectionResultArtifact UnofficialResult = 7;
+  ElectionResultArtifact OfficialResult = 8;
+}
+
 enum ElectionEligibilityActorRoleProto {
   EligibilityActorUnknown = 0;
   EligibilityActorOwner = 1;
@@ -1069,6 +1154,7 @@ message GetElectionResponse {
   repeated ElectionFinalizationSession FinalizationSessions = 14;
   repeated ElectionFinalizationShare FinalizationShares = 15;
   repeated ElectionFinalizationReleaseEvidence FinalizationReleaseEvidenceRecords = 16;
+  repeated ElectionResultArtifact ResultArtifacts = 17;
 }
 
 message GetElectionCeremonyActionViewResponse {

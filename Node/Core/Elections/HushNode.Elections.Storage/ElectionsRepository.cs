@@ -82,6 +82,39 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         }
     }
 
+    public async Task<IReadOnlyList<ElectionResultArtifactRecord>> GetResultArtifactsAsync(ElectionId electionId) =>
+        await Context.ElectionResultArtifacts
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.RecordedAt)
+            .ThenBy(x => x.ArtifactKind)
+            .ToListAsync();
+
+    public async Task<ElectionResultArtifactRecord?> GetResultArtifactAsync(Guid resultArtifactId) =>
+        await Context.ElectionResultArtifacts
+            .FirstOrDefaultAsync(x => x.Id == resultArtifactId);
+
+    public async Task<ElectionResultArtifactRecord?> GetResultArtifactAsync(
+        ElectionId electionId,
+        ElectionResultArtifactKind artifactKind) =>
+        await Context.ElectionResultArtifacts
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.ArtifactKind == artifactKind);
+
+    public async Task SaveResultArtifactAsync(ElectionResultArtifactRecord resultArtifact) =>
+        await Context.ElectionResultArtifacts.AddAsync(resultArtifact);
+
+    public async Task UpdateResultArtifactAsync(ElectionResultArtifactRecord resultArtifact)
+    {
+        var existing = await Context.ElectionResultArtifacts
+            .FirstOrDefaultAsync(x => x.Id == resultArtifact.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(resultArtifact);
+        }
+    }
+
     public async Task<IReadOnlyList<ElectionRosterEntryRecord>> GetRosterEntriesAsync(ElectionId electionId) =>
         await Context.ElectionRosterEntries
             .Where(x => x.ElectionId == electionId)

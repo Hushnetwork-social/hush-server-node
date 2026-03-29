@@ -19,4 +19,5 @@ public record ElectionDraftSpecification(
     ReviewWindowPolicy ReviewWindowPolicy,
     IReadOnlyList<ElectionOptionDefinition> OwnerOptions,
     IReadOnlyList<ElectionWarningCode>? AcknowledgedWarningCodes = null,
-    int? RequiredApprovalCount = null);
+    int? RequiredApprovalCount = null,
+    OfficialResultVisibilityPolicy OfficialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly);

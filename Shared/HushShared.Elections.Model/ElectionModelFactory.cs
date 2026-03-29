@@ -25,7 +25,8 @@ public static partial class ElectionModelFactory
         IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null,
         int currentDraftRevision = 1,
         int? requiredApprovalCount = null,
-        DateTime? createdAt = null)
+        DateTime? createdAt = null,
+        OfficialResultVisibilityPolicy officialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly)
     {
         if (string.IsNullOrWhiteSpace(title))
         {
@@ -73,6 +74,7 @@ public static partial class ElectionModelFactory
             protocolOmegaVersion.Trim(),
             reportingPolicy,
             reviewWindowPolicy,
+            officialResultVisibilityPolicy,
             currentDraftRevision,
             canonicalOptions,
             normalizedWarnings,
@@ -84,10 +86,13 @@ public static partial class ElectionModelFactory
             ClosedAt: null,
             FinalizedAt: null,
             TallyReadyAt: null,
+            ClosedProgressStatus: ElectionClosedProgressStatus.None,
             OpenArtifactId: null,
             CloseArtifactId: null,
             TallyReadyArtifactId: null,
-            FinalizeArtifactId: null);
+            FinalizeArtifactId: null,
+            UnofficialResultArtifactId: null,
+            OfficialResultArtifactId: null);
     }
 
     public static ElectionDraftSnapshotRecord CreateDraftSnapshot(
@@ -132,6 +137,7 @@ public static partial class ElectionModelFactory
                 election.ProtocolOmegaVersion,
                 election.ReportingPolicy,
                 election.ReviewWindowPolicy,
+                election.OfficialResultVisibilityPolicy,
                 election.RequiredApprovalCount),
             CloneOptions(election.Options),
             NormalizeWarningCodes(election.AcknowledgedWarningCodes),
@@ -193,6 +199,7 @@ public static partial class ElectionModelFactory
                 election.ProtocolOmegaVersion,
                 election.ReportingPolicy,
                 election.ReviewWindowPolicy,
+                election.OfficialResultVisibilityPolicy,
                 election.RequiredApprovalCount),
             CloneOptions(election.Options),
             NormalizeWarningCodes(election.AcknowledgedWarningCodes),
@@ -673,6 +680,7 @@ public static partial class ElectionModelFactory
         Guid closeArtifactId,
         byte[] acceptedBallotSetHash,
         byte[] finalEncryptedTallyHash,
+        ElectionFinalizationSessionPurpose sessionPurpose,
         ElectionCeremonyBindingSnapshot? ceremonySnapshot,
         int requiredShareCount,
         IReadOnlyList<ElectionTrusteeReference> eligibleTrustees,
@@ -727,6 +735,7 @@ public static partial class ElectionModelFactory
             election.ElectionId,
             governedProposalId,
             election.GovernanceMode,
+            sessionPurpose,
             closeArtifactId,
             CloneBytes(acceptedBallotSetHash)!,
             CloneBytes(finalEncryptedTallyHash)!,
@@ -870,6 +879,7 @@ public static partial class ElectionModelFactory
             Guid.NewGuid(),
             session.Id,
             session.ElectionId,
+            session.SessionPurpose,
             ElectionFinalizationReleaseMode.AggregateTallyOnly,
             session.CloseArtifactId,
             CloneBytes(session.AcceptedBallotSetHash)!,

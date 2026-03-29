@@ -67,7 +67,9 @@ public class StartElectionGovernedProposalContentHandler(
                 .IsReadyToOpen,
             ElectionGovernedActionType.Close => election.LifecycleState == ElectionLifecycleState.Open,
             ElectionGovernedActionType.Finalize =>
-                election.LifecycleState == ElectionLifecycleState.Closed && election.TallyReadyAt.HasValue,
+                election.LifecycleState == ElectionLifecycleState.Closed &&
+                election.TallyReadyAt.HasValue &&
+                election.UnofficialResultArtifactId.HasValue,
             _ => false,
         };
 
