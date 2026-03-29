@@ -18,6 +18,9 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionDraftSnapshot(modelBuilder);
         ConfigureElectionEnvelopeAccess(modelBuilder);
         ConfigureElectionResultArtifact(modelBuilder);
+        ConfigureElectionReportPackage(modelBuilder);
+        ConfigureElectionReportArtifact(modelBuilder);
+        ConfigureElectionReportAccessGrant(modelBuilder);
         ConfigureElectionRosterEntry(modelBuilder);
         ConfigureElectionEligibilityActivationEvent(modelBuilder);
         ConfigureElectionParticipation(modelBuilder);
@@ -193,6 +196,101 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
 
             entity.HasIndex(x => new { x.ElectionId, x.ArtifactKind }).IsUnique();
             entity.HasIndex(x => new { x.ElectionId, x.RecordedAt });
+        });
+    }
+
+    private static void ConfigureElectionReportPackage(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionReportPackageRecord>(entity =>
+        {
+            entity.ToTable("ElectionReportPackageRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.AttemptNumber).HasColumnType("integer");
+            entity.Property(x => x.PreviousAttemptId).HasColumnType("uuid");
+            entity.Property(x => x.FinalizationSessionId).HasColumnType("uuid");
+            entity.Property(x => x.TallyReadyArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.UnofficialResultArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.OfficialResultArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.FinalizeArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.CloseBoundaryArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.CloseEligibilitySnapshotId).HasColumnType("uuid");
+            entity.Property(x => x.FinalizationReleaseEvidenceId).HasColumnType("uuid");
+            entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.FrozenEvidenceHash).HasColumnType("bytea");
+            entity.Property(x => x.FrozenEvidenceFingerprint).HasColumnType("varchar(256)");
+            entity.Property(x => x.PackageHash).HasColumnType("bytea");
+            entity.Property(x => x.ArtifactCount).HasColumnType("integer");
+            entity.Property(x => x.FailureCode).HasColumnType("varchar(128)");
+            entity.Property(x => x.FailureReason).HasColumnType("text");
+            entity.Property(x => x.AttemptedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SealedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.AttemptedByPublicAddress).HasColumnType("varchar(160)");
+
+            entity.HasIndex(x => new { x.ElectionId, x.AttemptNumber }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.AttemptedAt });
+            entity.HasIndex(x => new { x.ElectionId, x.Status });
+        });
+    }
+
+    private static void ConfigureElectionReportArtifact(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionReportArtifactRecord>(entity =>
+        {
+            entity.ToTable("ElectionReportArtifactRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ReportPackageId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.ArtifactKind).HasConversion<string>().HasColumnType("varchar(64)");
+            entity.Property(x => x.Format).HasConversion<string>().HasColumnType("varchar(16)");
+            entity.Property(x => x.AccessScope).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.SortOrder).HasColumnType("integer");
+            entity.Property(x => x.Title).HasColumnType("text");
+            entity.Property(x => x.FileName).HasColumnType("varchar(256)");
+            entity.Property(x => x.MediaType).HasColumnType("varchar(128)");
+            entity.Property(x => x.ContentHash).HasColumnType("bytea");
+            entity.Property(x => x.Content).HasColumnType("text");
+            entity.Property(x => x.PairedArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.RecordedAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.ReportPackageId, x.ArtifactKind }).IsUnique();
+            entity.HasIndex(x => new { x.ReportPackageId, x.SortOrder });
+            entity.HasIndex(x => x.ElectionId);
+        });
+    }
+
+    private static void ConfigureElectionReportAccessGrant(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionReportAccessGrantRecord>(entity =>
+        {
+            entity.ToTable("ElectionReportAccessGrantRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.ActorPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.GrantRole).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.GrantedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.GrantedByPublicAddress).HasColumnType("varchar(160)");
+
+            entity.HasIndex(x => new { x.ElectionId, x.ActorPublicAddress, x.GrantRole }).IsUnique();
+            entity.HasIndex(x => x.ActorPublicAddress);
         });
     }
 

@@ -38,6 +38,35 @@ public interface IElectionsRepository : IRepository
 
     Task UpdateResultArtifactAsync(ElectionResultArtifactRecord resultArtifact) => Task.CompletedTask;
 
+    Task<IReadOnlyList<ElectionReportPackageRecord>> GetReportPackagesAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionReportPackageRecord>>(Array.Empty<ElectionReportPackageRecord>());
+
+    Task<ElectionReportPackageRecord?> GetLatestReportPackageAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionReportPackageRecord?>(null);
+
+    Task<ElectionReportPackageRecord?> GetSealedReportPackageAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionReportPackageRecord?>(null);
+
+    Task<ElectionReportPackageRecord?> GetReportPackageAsync(Guid reportPackageId) =>
+        Task.FromResult<ElectionReportPackageRecord?>(null);
+
+    Task SaveReportPackageAsync(ElectionReportPackageRecord reportPackage) => Task.CompletedTask;
+
+    Task UpdateReportPackageAsync(ElectionReportPackageRecord reportPackage) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionReportArtifactRecord>> GetReportArtifactsAsync(Guid reportPackageId) =>
+        Task.FromResult<IReadOnlyList<ElectionReportArtifactRecord>>(Array.Empty<ElectionReportArtifactRecord>());
+
+    Task SaveReportArtifactAsync(ElectionReportArtifactRecord reportArtifact) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionReportAccessGrantRecord>> GetReportAccessGrantsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionReportAccessGrantRecord>>(Array.Empty<ElectionReportAccessGrantRecord>());
+
+    Task<ElectionReportAccessGrantRecord?> GetReportAccessGrantAsync(ElectionId electionId, string actorPublicAddress) =>
+        Task.FromResult<ElectionReportAccessGrantRecord?>(null);
+
+    Task SaveReportAccessGrantAsync(ElectionReportAccessGrantRecord reportAccessGrant) => Task.CompletedTask;
+
     Task<IReadOnlyList<ElectionRosterEntryRecord>> GetRosterEntriesAsync(ElectionId electionId) =>
         Task.FromResult<IReadOnlyList<ElectionRosterEntryRecord>>(Array.Empty<ElectionRosterEntryRecord>());
 

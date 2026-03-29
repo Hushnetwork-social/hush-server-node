@@ -364,6 +364,60 @@ public class ElectionModelFactoryTests
             .WithMessage("*CountedAsVoted*");
     }
 
+    [Fact]
+    public void CreateSealedReportPackage_CapturesAttemptIdentityAndHashes()
+    {
+        var electionId = ElectionId.NewElectionId;
+        var package = ElectionModelFactory.CreateSealedReportPackage(
+            electionId: electionId,
+            attemptNumber: 2,
+            tallyReadyArtifactId: Guid.NewGuid(),
+            unofficialResultArtifactId: Guid.NewGuid(),
+            officialResultArtifactId: Guid.NewGuid(),
+            finalizeArtifactId: Guid.NewGuid(),
+            frozenEvidenceHash: [1, 2, 3, 4],
+            frozenEvidenceFingerprint: "freeze:abc123",
+            packageHash: [5, 6, 7, 8],
+            artifactCount: 13,
+            attemptedByPublicAddress: "owner-address",
+            previousAttemptId: Guid.NewGuid());
+
+        package.ElectionId.Should().Be(electionId);
+        package.Status.Should().Be(ElectionReportPackageStatus.Sealed);
+        package.AttemptNumber.Should().Be(2);
+        package.ArtifactCount.Should().Be(13);
+        package.FrozenEvidenceHash.Should().Equal([1, 2, 3, 4]);
+        package.PackageHash.Should().Equal([5, 6, 7, 8]);
+        package.AttemptedByPublicAddress.Should().Be("owner-address");
+        package.SealedAt.Should().NotBeNull();
+        package.FailureCode.Should().BeNull();
+    }
+
+    [Fact]
+    public void CreateReportArtifact_PreservesScopeFormatAndContent()
+    {
+        var artifact = ElectionModelFactory.CreateReportArtifact(
+            reportPackageId: Guid.NewGuid(),
+            electionId: ElectionId.NewElectionId,
+            artifactKind: ElectionReportArtifactKind.HumanManifest,
+            format: ElectionReportArtifactFormat.Markdown,
+            accessScope: ElectionReportArtifactAccessScope.OwnerAuditorTrustee,
+            sortOrder: 1,
+            title: "Final Manifest",
+            fileName: "final-manifest.md",
+            mediaType: "text/markdown",
+            contentHash: [9, 8, 7, 6],
+            content: "# Manifest");
+
+        artifact.ArtifactKind.Should().Be(ElectionReportArtifactKind.HumanManifest);
+        artifact.Format.Should().Be(ElectionReportArtifactFormat.Markdown);
+        artifact.AccessScope.Should().Be(ElectionReportArtifactAccessScope.OwnerAuditorTrustee);
+        artifact.SortOrder.Should().Be(1);
+        artifact.FileName.Should().Be("final-manifest.md");
+        artifact.ContentHash.Should().Equal([9, 8, 7, 6]);
+        artifact.Content.Should().Be("# Manifest");
+    }
+
     private static ElectionRecord CreateTrusteeElection() =>
         ElectionModelFactory.CreateDraftRecord(
             electionId: ElectionId.NewElectionId,

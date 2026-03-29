@@ -74,6 +74,7 @@ public static class ElectionsHostBuild
         services.AddTransient<IFinalizeElectionTransactionHandler, FinalizeElectionTransactionHandler>();
         services.AddTransient<ICreateElectionDraftValidationService, CreateElectionDraftValidationService>();
         services.AddTransient<IElectionEnvelopeCryptoService, ElectionEnvelopeCryptoService>();
+        services.AddSingleton<IElectionReportPackageService, ElectionReportPackageService>();
         services.AddSingleton<IElectionBallotPublicationCryptoService, ElectionBallotPublicationCryptoService>();
         services.AddSingleton<IElectionResultCryptoService, ElectionResultCryptoService>();
         services.AddSingleton<ElectionBallotPublicationService>();
@@ -84,7 +85,8 @@ public static class ElectionsHostBuild
                 sp.GetRequiredService<ILogger<ElectionLifecycleService>>(),
                 sp.GetRequiredService<ElectionCeremonyOptions>(),
                 sp.GetRequiredService<IElectionCastIdempotencyCacheService>(),
-                sp.GetRequiredService<IElectionResultCryptoService>()));
+                sp.GetRequiredService<IElectionResultCryptoService>(),
+                sp.GetRequiredService<IElectionReportPackageService>()));
     }
 
     private static ElectionCeremonyOptions CreateCeremonyOptions(IConfiguration configuration) =>

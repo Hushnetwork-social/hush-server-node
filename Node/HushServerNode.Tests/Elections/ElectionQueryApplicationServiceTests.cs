@@ -769,6 +769,7 @@ public class ElectionQueryApplicationServiceTests
 
         response.Success.Should().BeTrue();
         response.CanViewParticipantEncryptedResults.Should().BeTrue();
+        response.CanViewReportPackage.Should().BeFalse();
         response.UnofficialResult.Should().NotBeNull();
         response.OfficialResult.Should().NotBeNull();
         response.UnofficialResult.EncryptedPayload.Should().Be("enc::unofficial");
@@ -836,9 +837,139 @@ public class ElectionQueryApplicationServiceTests
 
         response.Success.Should().BeTrue();
         response.CanViewParticipantEncryptedResults.Should().BeFalse();
+        response.CanViewReportPackage.Should().BeFalse();
         response.UnofficialResult.Should().BeNull();
         response.OfficialResult.Should().NotBeNull();
         response.OfficialResult.PublicPayload.Should().Contain("Board Election");
+    }
+
+    [Fact]
+    public async Task GetElectionResultViewAsync_WithOwnerAndFailedPackageAttempt_ReturnsRetryablePackageSummary()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedAt = DateTime.UtcNow.AddMinutes(-5),
+            TallyReadyAt = DateTime.UtcNow.AddMinutes(-4),
+            TallyReadyArtifactId = Guid.NewGuid(),
+            UnofficialResultArtifactId = Guid.NewGuid(),
+        };
+        var reportPackage = ElectionModelFactory.CreateFailedReportPackageAttempt(
+            election.ElectionId,
+            attemptNumber: 1,
+            tallyReadyArtifactId: election.TallyReadyArtifactId!.Value,
+            unofficialResultArtifactId: election.UnofficialResultArtifactId!.Value,
+            frozenEvidenceHash: [1, 2, 3],
+            frozenEvidenceFingerprint: "fingerprint-1",
+            attemptedByPublicAddress: "owner-address",
+            failureCode: "CONSISTENCY_MISMATCH",
+            failureReason: "Human and machine artifacts diverged.",
+            closeBoundaryArtifactId: Guid.NewGuid(),
+            closeEligibilitySnapshotId: Guid.NewGuid(),
+            attemptedAt: DateTime.UtcNow.AddMinutes(-1));
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionResultViewAsync(election.ElectionId, "owner-address");
+
+        response.Success.Should().BeTrue();
+        response.CanViewReportPackage.Should().BeTrue();
+        response.CanRetryFailedPackageFinalization.Should().BeTrue();
+        response.LatestReportPackage.Should().NotBeNull();
+        response.LatestReportPackage.Status.Should().Be(ElectionReportPackageStatusProto.ReportPackageGenerationFailed);
+        response.LatestReportPackage.FailureCode.Should().Be("CONSISTENCY_MISMATCH");
+        response.VisibleReportArtifacts.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetElectionResultViewAsync_WithTrusteeRole_FiltersRosterOnlyPackageArtifacts()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = DateTime.UtcNow.AddMinutes(-1),
+            TallyReadyAt = DateTime.UtcNow.AddMinutes(-5),
+            TallyReadyArtifactId = Guid.NewGuid(),
+            UnofficialResultArtifactId = Guid.NewGuid(),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            FinalizeArtifactId = Guid.NewGuid(),
+        };
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                election.ElectionId,
+                trusteeUserAddress: "trustee-a",
+                trusteeDisplayName: "Alice",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: election.CurrentDraftRevision)
+            .Accept(
+                respondedAt: DateTime.UtcNow,
+                resolvedAtDraftRevision: election.CurrentDraftRevision,
+                lifecycleState: ElectionLifecycleState.Draft);
+        var reportPackage = ElectionModelFactory.CreateSealedReportPackage(
+            election.ElectionId,
+            attemptNumber: 1,
+            tallyReadyArtifactId: election.TallyReadyArtifactId!.Value,
+            unofficialResultArtifactId: election.UnofficialResultArtifactId!.Value,
+            officialResultArtifactId: election.OfficialResultArtifactId!.Value,
+            finalizeArtifactId: election.FinalizeArtifactId!.Value,
+            frozenEvidenceHash: [1, 2, 3],
+            frozenEvidenceFingerprint: "fingerprint-2",
+            packageHash: [4, 5, 6],
+            artifactCount: 2,
+            attemptedByPublicAddress: "owner-address",
+            attemptedAt: DateTime.UtcNow.AddMinutes(-1),
+            sealedAt: DateTime.UtcNow);
+        var trusteeVisibleArtifact = ElectionModelFactory.CreateReportArtifact(
+            reportPackage.Id,
+            election.ElectionId,
+            ElectionReportArtifactKind.HumanManifest,
+            ElectionReportArtifactFormat.Markdown,
+            ElectionReportArtifactAccessScope.OwnerAuditorTrustee,
+            1,
+            "Final manifest",
+            "final-manifest.md",
+            "text/markdown",
+            [9, 9, 9],
+            "# Manifest");
+        var ownerOnlyArtifact = ElectionModelFactory.CreateReportArtifact(
+            reportPackage.Id,
+            election.ElectionId,
+            ElectionReportArtifactKind.HumanNamedParticipationRoster,
+            ElectionReportArtifactFormat.Markdown,
+            ElectionReportArtifactAccessScope.OwnerAuditorOnly,
+            2,
+            "Named participation roster",
+            "named-participation-roster.md",
+            "text/markdown",
+            [8, 8, 8],
+            "# Roster");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync([acceptedInvitation]);
+            repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetReportArtifactsAsync(reportPackage.Id)).ReturnsAsync([trusteeVisibleArtifact, ownerOnlyArtifact]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionResultViewAsync(election.ElectionId, "trustee-a");
+
+        response.Success.Should().BeTrue();
+        response.CanViewReportPackage.Should().BeTrue();
+        response.CanRetryFailedPackageFinalization.Should().BeFalse();
+        response.LatestReportPackage.Should().NotBeNull();
+        response.LatestReportPackage.Status.Should().Be(ElectionReportPackageStatusProto.ReportPackageSealed);
+        response.VisibleReportArtifacts.Should().ContainSingle();
+        response.VisibleReportArtifacts[0].ArtifactKind.Should().Be(ElectionReportArtifactKindProto.ReportArtifactHumanManifest);
     }
 
     [Fact]
@@ -1013,6 +1144,12 @@ public class ElectionQueryApplicationServiceTests
             .ReturnsAsync((ElectionResultArtifactRecord?)null);
         repository.Setup(x => x.GetResultArtifactAsync(It.IsAny<ElectionId>(), It.IsAny<ElectionResultArtifactKind>()))
             .ReturnsAsync((ElectionResultArtifactRecord?)null);
+        repository.Setup(x => x.GetLatestReportPackageAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync((ElectionReportPackageRecord?)null);
+        repository.Setup(x => x.GetReportArtifactsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(Array.Empty<ElectionReportArtifactRecord>());
+        repository.Setup(x => x.GetReportAccessGrantAsync(It.IsAny<ElectionId>(), It.IsAny<string>()))
+            .ReturnsAsync((ElectionReportAccessGrantRecord?)null);
         repository.Setup(x => x.GetRosterEntriesAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionRosterEntryRecord>());
         repository.Setup(x => x.GetParticipationRecordsAsync(It.IsAny<ElectionId>()))

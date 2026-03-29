@@ -366,17 +366,27 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var selfRosterEntry = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
             ? null
             : await repository.GetRosterEntryByLinkedActorAsync(electionId, normalizedActorPublicAddress);
+        var reportAccessGrant = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
+            ? null
+            : await repository.GetReportAccessGrantAsync(electionId, normalizedActorPublicAddress);
+        var isOwner = !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
+            string.Equals(election.OwnerPublicAddress, normalizedActorPublicAddress, StringComparison.Ordinal);
         var acceptedTrustee = trusteeInvitations.Any(x =>
             x.Status == ElectionTrusteeInvitationStatus.Accepted &&
             string.Equals(x.TrusteeUserAddress, normalizedActorPublicAddress, StringComparison.OrdinalIgnoreCase));
         var canViewParticipantEncryptedResults =
             !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
-            (string.Equals(election.OwnerPublicAddress, normalizedActorPublicAddress, StringComparison.Ordinal) ||
+            (isOwner ||
              selfRosterEntry is not null ||
              acceptedTrustee);
+        var isDesignatedAuditor = reportAccessGrant?.GrantRole == ElectionReportAccessGrantRole.DesignatedAuditor;
+        var canViewReportPackage = !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
+            (isOwner || acceptedTrustee || isDesignatedAuditor);
+        var canViewRestrictedReportArtifacts = isOwner || isDesignatedAuditor;
 
         var unofficialResult = await repository.GetResultArtifactAsync(electionId, ElectionResultArtifactKind.Unofficial);
         var officialResult = await repository.GetResultArtifactAsync(electionId, ElectionResultArtifactKind.Official);
+        var latestReportPackage = await repository.GetLatestReportPackageAsync(electionId);
 
         var response = new GetElectionResultViewResponse
         {
@@ -386,6 +396,11 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             CanViewParticipantEncryptedResults = canViewParticipantEncryptedResults,
             OfficialResultVisibilityPolicy = (OfficialResultVisibilityPolicyProto)(int)election.OfficialResultVisibilityPolicy,
             ClosedProgressStatus = (ElectionClosedProgressStatusProto)(int)election.ClosedProgressStatus,
+            CanViewReportPackage = canViewReportPackage,
+            CanRetryFailedPackageFinalization =
+                isOwner &&
+                election.LifecycleState == ElectionLifecycleState.Closed &&
+                latestReportPackage?.Status == ElectionReportPackageStatus.GenerationFailed,
         };
 
         if (unofficialResult is not null && canViewParticipantEncryptedResults)
@@ -397,6 +412,23 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             (officialResult.Visibility == ElectionResultArtifactVisibility.PublicPlaintext || canViewParticipantEncryptedResults))
         {
             response.OfficialResult = officialResult.ToProto();
+        }
+
+        if (canViewReportPackage && latestReportPackage is not null)
+        {
+            response.LatestReportPackage = latestReportPackage.ToProto();
+
+            if (latestReportPackage.Status == ElectionReportPackageStatus.Sealed)
+            {
+                var reportArtifacts = await repository.GetReportArtifactsAsync(latestReportPackage.Id);
+                response.VisibleReportArtifacts.AddRange(reportArtifacts
+                    .Where(x =>
+                        x.AccessScope == ElectionReportArtifactAccessScope.OwnerAuditorTrustee ||
+                        canViewRestrictedReportArtifacts)
+                    .OrderBy(x => x.SortOrder)
+                    .ThenBy(x => x.ArtifactKind)
+                    .Select(x => x.ToProto()));
+            }
         }
 
         return response;

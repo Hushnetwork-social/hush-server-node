@@ -115,6 +115,75 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         }
     }
 
+    public async Task<IReadOnlyList<ElectionReportPackageRecord>> GetReportPackagesAsync(ElectionId electionId) =>
+        await Context.ElectionReportPackages
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.AttemptNumber)
+            .ThenBy(x => x.AttemptedAt)
+            .ToListAsync();
+
+    public async Task<ElectionReportPackageRecord?> GetLatestReportPackageAsync(ElectionId electionId) =>
+        await Context.ElectionReportPackages
+            .Where(x => x.ElectionId == electionId)
+            .OrderByDescending(x => x.AttemptNumber)
+            .ThenByDescending(x => x.AttemptedAt)
+            .FirstOrDefaultAsync();
+
+    public async Task<ElectionReportPackageRecord?> GetSealedReportPackageAsync(ElectionId electionId) =>
+        await Context.ElectionReportPackages
+            .Where(x =>
+                x.ElectionId == electionId &&
+                x.Status == ElectionReportPackageStatus.Sealed)
+            .OrderByDescending(x => x.SealedAt ?? x.AttemptedAt)
+            .ThenByDescending(x => x.AttemptNumber)
+            .FirstOrDefaultAsync();
+
+    public async Task<ElectionReportPackageRecord?> GetReportPackageAsync(Guid reportPackageId) =>
+        await Context.ElectionReportPackages
+            .FirstOrDefaultAsync(x => x.Id == reportPackageId);
+
+    public async Task SaveReportPackageAsync(ElectionReportPackageRecord reportPackage) =>
+        await Context.ElectionReportPackages.AddAsync(reportPackage);
+
+    public async Task UpdateReportPackageAsync(ElectionReportPackageRecord reportPackage)
+    {
+        var existing = await Context.ElectionReportPackages
+            .FirstOrDefaultAsync(x => x.Id == reportPackage.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(reportPackage);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionReportArtifactRecord>> GetReportArtifactsAsync(Guid reportPackageId) =>
+        await Context.ElectionReportArtifacts
+            .Where(x => x.ReportPackageId == reportPackageId)
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.ArtifactKind)
+            .ToListAsync();
+
+    public async Task SaveReportArtifactAsync(ElectionReportArtifactRecord reportArtifact) =>
+        await Context.ElectionReportArtifacts.AddAsync(reportArtifact);
+
+    public async Task<IReadOnlyList<ElectionReportAccessGrantRecord>> GetReportAccessGrantsAsync(ElectionId electionId) =>
+        await Context.ElectionReportAccessGrants
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.ActorPublicAddress)
+            .ThenBy(x => x.GrantRole)
+            .ToListAsync();
+
+    public async Task<ElectionReportAccessGrantRecord?> GetReportAccessGrantAsync(
+        ElectionId electionId,
+        string actorPublicAddress) =>
+        await Context.ElectionReportAccessGrants
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.ActorPublicAddress == actorPublicAddress);
+
+    public async Task SaveReportAccessGrantAsync(ElectionReportAccessGrantRecord reportAccessGrant) =>
+        await Context.ElectionReportAccessGrants.AddAsync(reportAccessGrant);
+
     public async Task<IReadOnlyList<ElectionRosterEntryRecord>> GetRosterEntriesAsync(ElectionId electionId) =>
         await Context.ElectionRosterEntries
             .Where(x => x.ElectionId == electionId)
