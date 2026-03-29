@@ -3,11 +3,14 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Blockchain\HushNode.Blockchain\HushNode.Blockchain.csproj" />
     <ProjectReference Include="..\..\Indexing\HushNode.Indexing.Interfaces\HushNode.Indexing.Interfaces.csproj" />
+    <ProjectReference Include="..\..\Reactions\HushNode.Reactions\HushNode.Reactions.csproj" />
     <ProjectReference Include="..\HushNode.Elections.Storage\HushNode.Elections.Storage.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Caching\HushNode.Caching.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Reactions.Model\HushShared.Reactions.Model.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.BlockModel\HushShared.Blockchain.BlockModel.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.EncryptingManager\EncryptingManager.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.BootstrapperManager\BootstrapperManager.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\Olimpo.EntityFramework.Persistency\Olimpo.EntityFramework.Persistency.csproj" />

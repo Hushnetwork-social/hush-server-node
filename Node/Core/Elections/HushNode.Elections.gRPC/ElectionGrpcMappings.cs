@@ -183,6 +183,7 @@ internal static class ElectionGrpcMappings
             OpenArtifactId = election.OpenArtifactId?.ToString() ?? string.Empty,
             CloseArtifactId = election.CloseArtifactId?.ToString() ?? string.Empty,
             FinalizeArtifactId = election.FinalizeArtifactId?.ToString() ?? string.Empty,
+            TallyReadyArtifactId = election.TallyReadyArtifactId?.ToString() ?? string.Empty,
         };
 
         view.ApprovedClientApplications.AddRange(election.ApprovedClientApplications.Select(x => x.ToProto()));
@@ -264,6 +265,7 @@ internal static class ElectionGrpcMappings
             {
                 ElectionBoundaryArtifactType.Open => ElectionBoundaryArtifactTypeProto.OpenArtifact,
                 ElectionBoundaryArtifactType.Close => ElectionBoundaryArtifactTypeProto.CloseArtifact,
+                ElectionBoundaryArtifactType.TallyReady => ElectionBoundaryArtifactTypeProto.TallyReadyArtifact,
                 ElectionBoundaryArtifactType.Finalize => ElectionBoundaryArtifactTypeProto.FinalizeArtifact,
                 _ => throw new ArgumentOutOfRangeException(nameof(artifact)),
             },
@@ -277,6 +279,7 @@ internal static class ElectionGrpcMappings
             ReviewWindowExecutionReference = artifact.ReviewWindowExecutionReference ?? string.Empty,
             AcceptedBallotSetHash = ToByteString(artifact.AcceptedBallotSetHash),
             FinalEncryptedTallyHash = ToByteString(artifact.FinalEncryptedTallyHash),
+            PublishedBallotStreamHash = ToByteString(artifact.PublishedBallotStreamHash),
             RecordedAt = ToTimestamp(artifact.RecordedAt),
             RecordedByPublicAddress = artifact.RecordedByPublicAddress,
         };
@@ -292,6 +295,16 @@ internal static class ElectionGrpcMappings
         if (artifact.CeremonySnapshot is not null)
         {
             proto.CeremonySnapshot = artifact.CeremonySnapshot.ToProto();
+        }
+
+        if (artifact.AcceptedBallotCount.HasValue)
+        {
+            proto.AcceptedBallotCount = artifact.AcceptedBallotCount.Value;
+        }
+
+        if (artifact.PublishedBallotCount.HasValue)
+        {
+            proto.PublishedBallotCount = artifact.PublishedBallotCount.Value;
         }
 
         return proto;

@@ -147,6 +147,21 @@ Feature: FEAT-094 election lifecycle integration
     Then the voting view should show personal participation "ParticipationDidNotVote"
     And the voting view should not expose acceptance receipt metadata
 
+  @FEAT-100 @AT-PROC-I04 @AT-PROC-I05 @AT-PROC-I06 @NON_E2E
+  Scenario: Close drain publishes queued ballots and seals tally_ready without finalizing
+    Given FEAT-094 election integration services are available
+    And the owner has an open trustee-threshold election through governed approval blockchain submission
+    When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
+    And voter "Alice" registers voting commitment "alice-commitment-feat100-v1" through blockchain submission
+    And voter "Alice" submits ballot cast with idempotency key "alice-feat100-001" through blockchain submission
+    And the owner starts an "close" governed proposal through blockchain submission
+    And trustee "Bob" approves the governed proposal through blockchain submission
+    And trustee "Charlie" approves the governed proposal through blockchain submission
+    And trustee "Delta" approves the governed proposal through blockchain submission
+    Then the governed proposal should execute and transition the election to "Closed"
+    And the election should expose a tally-ready boundary after close drain
+    And the tally-ready boundary should reconcile 1 accepted ballots and 1 published ballots
+
   @FEAT-098 @AT-PROC-I03 @NON_E2E
   Scenario: Governed finalize binds one exact session and finalizes only after threshold aggregate shares
     Given FEAT-094 election integration services are available

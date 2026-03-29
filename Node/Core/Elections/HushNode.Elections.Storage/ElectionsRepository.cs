@@ -263,6 +263,67 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
     public async Task SaveAcceptedBallotAsync(ElectionAcceptedBallotRecord acceptedBallot) =>
         await Context.ElectionAcceptedBallots.AddAsync(acceptedBallot);
 
+    public async Task<IReadOnlyList<ElectionBallotMemPoolRecord>> GetBallotMemPoolEntriesAsync(ElectionId electionId) =>
+        await Context.ElectionBallotMemPoolEntries
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.QueuedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<IReadOnlyList<ElectionId>> GetElectionIdsWithBallotMemPoolEntriesAsync() =>
+        await Context.ElectionBallotMemPoolEntries
+            .Select(x => x.ElectionId)
+            .Distinct()
+            .ToListAsync();
+
+    public async Task<IReadOnlyList<ElectionId>> GetClosedElectionIdsAwaitingTallyReadyAsync() =>
+        await Context.Elections
+            .Where(x =>
+                x.LifecycleState == ElectionLifecycleState.Closed &&
+                x.TallyReadyAt == null)
+            .Select(x => x.ElectionId)
+            .ToListAsync();
+
+    public async Task<ElectionBallotMemPoolRecord?> GetBallotMemPoolEntryByAcceptedBallotAsync(
+        ElectionId electionId,
+        Guid acceptedBallotId) =>
+        await Context.ElectionBallotMemPoolEntries
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.AcceptedBallotId == acceptedBallotId);
+
+    public async Task SaveBallotMemPoolEntryAsync(ElectionBallotMemPoolRecord ballotMemPoolEntry) =>
+        await Context.ElectionBallotMemPoolEntries.AddAsync(ballotMemPoolEntry);
+
+    public async Task DeleteBallotMemPoolEntryAsync(Guid ballotMemPoolEntryId)
+    {
+        var existing = await Context.ElectionBallotMemPoolEntries
+            .FirstOrDefaultAsync(x => x.Id == ballotMemPoolEntryId);
+        if (existing is not null)
+        {
+            Context.ElectionBallotMemPoolEntries.Remove(existing);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionPublishedBallotRecord>> GetPublishedBallotsAsync(ElectionId electionId) =>
+        await Context.ElectionPublishedBallots
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.PublicationSequence)
+            .ToListAsync();
+
+    public async Task<long> GetNextPublishedBallotSequenceAsync(ElectionId electionId)
+    {
+        var currentMax = await Context.ElectionPublishedBallots
+            .Where(x => x.ElectionId == electionId)
+            .Select(x => (long?)x.PublicationSequence)
+            .MaxAsync();
+
+        return (currentMax ?? 0) + 1;
+    }
+
+    public async Task SavePublishedBallotAsync(ElectionPublishedBallotRecord publishedBallot) =>
+        await Context.ElectionPublishedBallots.AddAsync(publishedBallot);
+
     public async Task<IReadOnlyList<ElectionCastIdempotencyRecord>> GetCastIdempotencyRecordsAsync(ElectionId electionId) =>
         await Context.ElectionCastIdempotencyRecords
             .Where(x => x.ElectionId == electionId)
@@ -279,6 +340,36 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task SaveCastIdempotencyRecordAsync(ElectionCastIdempotencyRecord idempotencyRecord) =>
         await Context.ElectionCastIdempotencyRecords.AddAsync(idempotencyRecord);
+
+    public async Task<IReadOnlyList<ElectionPublicationIssueRecord>> GetPublicationIssuesAsync(ElectionId electionId) =>
+        await Context.ElectionPublicationIssues
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.IssueCode)
+            .ToListAsync();
+
+    public async Task<ElectionPublicationIssueRecord?> GetPublicationIssueAsync(
+        ElectionId electionId,
+        ElectionPublicationIssueCode issueCode) =>
+        await Context.ElectionPublicationIssues
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.IssueCode == issueCode);
+
+    public async Task SavePublicationIssueAsync(ElectionPublicationIssueRecord publicationIssue) =>
+        await Context.ElectionPublicationIssues.AddAsync(publicationIssue);
+
+    public async Task UpdatePublicationIssueAsync(ElectionPublicationIssueRecord publicationIssue)
+    {
+        var existing = await Context.ElectionPublicationIssues
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == publicationIssue.ElectionId &&
+                x.IssueCode == publicationIssue.IssueCode);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(publicationIssue);
+        }
+    }
 
     public async Task<IReadOnlyList<ElectionBoundaryArtifactRecord>> GetBoundaryArtifactsAsync(ElectionId electionId) =>
         await Context.ElectionBoundaryArtifacts

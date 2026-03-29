@@ -178,7 +178,8 @@ enum ReviewWindowPolicyProto {
 enum ElectionBoundaryArtifactTypeProto {
   OpenArtifact = 0;
   CloseArtifact = 1;
-  FinalizeArtifact = 2;
+  TallyReadyArtifact = 2;
+  FinalizeArtifact = 3;
 }
 
 enum ElectionWarningCodeProto {
@@ -564,6 +565,7 @@ message ElectionRecordView {
   string FinalizeArtifactId = 31;
   google.protobuf.Timestamp TallyReadyAt = 32;
   google.protobuf.Timestamp VoteAcceptanceLockedAt = 33;
+  string TallyReadyArtifactId = 34;
 }
 
 message ElectionSummary {
@@ -610,6 +612,9 @@ message ElectionBoundaryArtifact {
   google.protobuf.Timestamp RecordedAt = 17;
   string RecordedByPublicAddress = 18;
   ElectionCeremonyBindingSnapshot CeremonySnapshot = 19;
+  optional int32 AcceptedBallotCount = 20;
+  optional int32 PublishedBallotCount = 21;
+  bytes PublishedBallotStreamHash = 22;
 }
 
 message ElectionWarningAcknowledgement {

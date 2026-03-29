@@ -25,7 +25,10 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionEligibilitySnapshot(modelBuilder);
         ConfigureElectionBoundaryArtifact(modelBuilder);
         ConfigureElectionAcceptedBallot(modelBuilder);
+        ConfigureElectionBallotMemPool(modelBuilder);
+        ConfigureElectionPublishedBallot(modelBuilder);
         ConfigureElectionCastIdempotency(modelBuilder);
+        ConfigureElectionPublicationIssue(modelBuilder);
         ConfigureElectionWarningAcknowledgement(modelBuilder);
         ConfigureElectionTrusteeInvitation(modelBuilder);
         ConfigureElectionGovernedProposal(modelBuilder);
@@ -81,6 +84,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.TallyReadyAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.OpenArtifactId).HasColumnType("uuid");
             entity.Property(x => x.CloseArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.TallyReadyArtifactId).HasColumnType("uuid");
             entity.Property(x => x.FinalizeArtifactId).HasColumnType("uuid");
 
             ConfigureJsonProperty(entity.Property(x => x.OutcomeRule));
@@ -168,7 +172,10 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.TrusteePolicyExecutionReference).HasColumnType("text");
             entity.Property(x => x.ReportingPolicyExecutionReference).HasColumnType("text");
             entity.Property(x => x.ReviewWindowExecutionReference).HasColumnType("text");
+            entity.Property(x => x.AcceptedBallotCount).HasColumnType("integer");
             entity.Property(x => x.AcceptedBallotSetHash).HasColumnType("bytea");
+            entity.Property(x => x.PublishedBallotCount).HasColumnType("integer");
+            entity.Property(x => x.PublishedBallotStreamHash).HasColumnType("bytea");
             entity.Property(x => x.FinalEncryptedTallyHash).HasColumnType("bytea");
             entity.Property(x => x.RecordedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.RecordedByPublicAddress).HasColumnType("varchar(160)");
@@ -380,6 +387,52 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         });
     }
 
+    private static void ConfigureElectionBallotMemPool(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionBallotMemPoolRecord>(entity =>
+        {
+            entity.ToTable("ElectionBallotMemPoolRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.AcceptedBallotId).HasColumnType("uuid");
+            entity.Property(x => x.QueuedAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.ElectionId, x.AcceptedBallotId }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.QueuedAt });
+        });
+    }
+
+    private static void ConfigureElectionPublishedBallot(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionPublishedBallotRecord>(entity =>
+        {
+            entity.ToTable("ElectionPublishedBallotRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.PublicationSequence).HasColumnType("bigint");
+            entity.Property(x => x.EncryptedBallotPackage).HasColumnType("text");
+            entity.Property(x => x.ProofBundle).HasColumnType("text");
+            entity.Property(x => x.PublishedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            entity.HasIndex(x => new { x.ElectionId, x.PublicationSequence }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.PublishedAt });
+        });
+    }
+
     private static void ConfigureElectionCastIdempotency(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ElectionCastIdempotencyRecord>(entity =>
@@ -396,6 +449,30 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.RecordedAt).HasColumnType("timestamp with time zone");
 
             entity.HasIndex(x => new { x.ElectionId, x.RecordedAt });
+        });
+    }
+
+    private static void ConfigureElectionPublicationIssue(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionPublicationIssueRecord>(entity =>
+        {
+            entity.ToTable("ElectionPublicationIssueRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.IssueCode).HasConversion<string>().HasColumnType("varchar(64)");
+            entity.Property(x => x.OccurrenceCount).HasColumnType("integer");
+            entity.Property(x => x.FirstObservedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LastObservedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LatestBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.LatestBlockId).HasColumnType("uuid");
+
+            entity.HasIndex(x => new { x.ElectionId, x.IssueCode }).IsUnique();
         });
     }
 

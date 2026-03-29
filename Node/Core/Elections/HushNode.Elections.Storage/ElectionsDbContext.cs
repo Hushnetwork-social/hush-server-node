@@ -20,7 +20,10 @@ public class ElectionsDbContext(
     public DbSet<ElectionEligibilitySnapshotRecord> ElectionEligibilitySnapshots { get; set; }
     public DbSet<ElectionBoundaryArtifactRecord> ElectionBoundaryArtifacts { get; set; }
     public DbSet<ElectionAcceptedBallotRecord> ElectionAcceptedBallots { get; set; }
+    public DbSet<ElectionBallotMemPoolRecord> ElectionBallotMemPoolEntries { get; set; }
+    public DbSet<ElectionPublishedBallotRecord> ElectionPublishedBallots { get; set; }
     public DbSet<ElectionCastIdempotencyRecord> ElectionCastIdempotencyRecords { get; set; }
+    public DbSet<ElectionPublicationIssueRecord> ElectionPublicationIssues { get; set; }
     public DbSet<ElectionWarningAcknowledgementRecord> ElectionWarningAcknowledgements { get; set; }
     public DbSet<ElectionTrusteeInvitationRecord> ElectionTrusteeInvitations { get; set; }
     public DbSet<ElectionGovernedProposalRecord> ElectionGovernedProposals { get; set; }

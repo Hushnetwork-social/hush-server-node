@@ -95,6 +95,30 @@ public interface IElectionsRepository : IRepository
 
     Task SaveAcceptedBallotAsync(ElectionAcceptedBallotRecord acceptedBallot) => Task.CompletedTask;
 
+    Task<IReadOnlyList<ElectionBallotMemPoolRecord>> GetBallotMemPoolEntriesAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionBallotMemPoolRecord>>(Array.Empty<ElectionBallotMemPoolRecord>());
+
+    Task<IReadOnlyList<ElectionId>> GetElectionIdsWithBallotMemPoolEntriesAsync() =>
+        Task.FromResult<IReadOnlyList<ElectionId>>(Array.Empty<ElectionId>());
+
+    Task<IReadOnlyList<ElectionId>> GetClosedElectionIdsAwaitingTallyReadyAsync() =>
+        Task.FromResult<IReadOnlyList<ElectionId>>(Array.Empty<ElectionId>());
+
+    Task<ElectionBallotMemPoolRecord?> GetBallotMemPoolEntryByAcceptedBallotAsync(ElectionId electionId, Guid acceptedBallotId) =>
+        Task.FromResult<ElectionBallotMemPoolRecord?>(null);
+
+    Task SaveBallotMemPoolEntryAsync(ElectionBallotMemPoolRecord ballotMemPoolEntry) => Task.CompletedTask;
+
+    Task DeleteBallotMemPoolEntryAsync(Guid ballotMemPoolEntryId) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionPublishedBallotRecord>> GetPublishedBallotsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionPublishedBallotRecord>>(Array.Empty<ElectionPublishedBallotRecord>());
+
+    Task<long> GetNextPublishedBallotSequenceAsync(ElectionId electionId) =>
+        Task.FromResult(1L);
+
+    Task SavePublishedBallotAsync(ElectionPublishedBallotRecord publishedBallot) => Task.CompletedTask;
+
     Task<IReadOnlyList<ElectionCastIdempotencyRecord>> GetCastIdempotencyRecordsAsync(ElectionId electionId) =>
         Task.FromResult<IReadOnlyList<ElectionCastIdempotencyRecord>>(Array.Empty<ElectionCastIdempotencyRecord>());
 
@@ -102,6 +126,16 @@ public interface IElectionsRepository : IRepository
         Task.FromResult<ElectionCastIdempotencyRecord?>(null);
 
     Task SaveCastIdempotencyRecordAsync(ElectionCastIdempotencyRecord idempotencyRecord) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionPublicationIssueRecord>> GetPublicationIssuesAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionPublicationIssueRecord>>(Array.Empty<ElectionPublicationIssueRecord>());
+
+    Task<ElectionPublicationIssueRecord?> GetPublicationIssueAsync(ElectionId electionId, ElectionPublicationIssueCode issueCode) =>
+        Task.FromResult<ElectionPublicationIssueRecord?>(null);
+
+    Task SavePublicationIssueAsync(ElectionPublicationIssueRecord publicationIssue) => Task.CompletedTask;
+
+    Task UpdatePublicationIssueAsync(ElectionPublicationIssueRecord publicationIssue) => Task.CompletedTask;
 
     Task<IReadOnlyList<ElectionBoundaryArtifactRecord>> GetBoundaryArtifactsAsync(ElectionId electionId);
 
