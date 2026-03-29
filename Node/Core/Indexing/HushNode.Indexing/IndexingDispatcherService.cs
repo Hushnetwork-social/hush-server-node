@@ -10,13 +10,16 @@ public class IndexingDispatcherService :
 {
     private readonly IEnumerable<IIndexStrategy> _indexStrategies;
     private readonly IEventAggregator _eventAggregator;
+    private readonly Action? _onBlockIndexCompleted;
 
     public IndexingDispatcherService(
         IEnumerable<IIndexStrategy> indexStrategies,
-        IEventAggregator eventAggregator)
+        IEventAggregator eventAggregator,
+        Action? onBlockIndexCompleted = null)
     {
         this._indexStrategies = indexStrategies;
         this._eventAggregator = eventAggregator;
+        this._onBlockIndexCompleted = onBlockIndexCompleted;
 
         this._eventAggregator.Subscribe(this);
     }
@@ -40,5 +43,6 @@ public class IndexingDispatcherService :
         // Signal that all indexing for this block is complete
         Console.WriteLine($"[E2E] IndexingDispatcherService: Publishing BlockIndexCompletedEvent for block {message.Block.BlockIndex.Value}");
         await this._eventAggregator.PublishAsync(new BlockIndexCompletedEvent(message.Block.BlockIndex));
+        this._onBlockIndexCompleted?.Invoke();
     }
 }

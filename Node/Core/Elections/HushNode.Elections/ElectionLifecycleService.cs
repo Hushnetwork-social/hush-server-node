@@ -808,6 +808,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     request.ProofBundle,
                     request.BallotNullifier,
                     acceptedAt);
+                var ballotMemPoolEntry = ElectionModelFactory.CreateBallotMemPoolEntry(
+                    request.ElectionId,
+                    acceptedBallot.Id,
+                    acceptedAt);
                 var idempotencyRecord = ElectionModelFactory.CreateCastIdempotencyRecord(
                     request.ElectionId,
                     idempotencyKeyHash,
@@ -816,6 +820,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 await repository.SaveParticipationRecordAsync(participationRecord);
                 await repository.SaveCheckoffConsumptionAsync(newCheckoffConsumption);
                 await repository.SaveAcceptedBallotAsync(acceptedBallot);
+                await repository.SaveBallotMemPoolEntryAsync(ballotMemPoolEntry);
                 await repository.SaveCastIdempotencyRecordAsync(idempotencyRecord);
                 await repository.SaveElectionAsync(updatedElection);
                 await unitOfWork.CommitAsync();
@@ -2032,8 +2037,13 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 LastUpdatedAt = transitionTime,
                 VoteAcceptanceLockedAt = election.VoteAcceptanceLockedAt ?? transitionTime,
                 ClosedAt = transitionTime,
-                TallyReadyAt = artifact.FinalEncryptedTallyHash is { Length: > 0 } ? transitionTime : null,
                 CloseArtifactId = artifact.Id,
+            },
+            ElectionBoundaryArtifactType.TallyReady => election with
+            {
+                LastUpdatedAt = transitionTime,
+                TallyReadyAt = transitionTime,
+                TallyReadyArtifactId = artifact.Id,
             },
             ElectionBoundaryArtifactType.Finalize => election with
             {
@@ -3453,19 +3463,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var transitionTime = DateTime.UtcNow;
-        var (resolvedAcceptedBallotSetHash, resolvedFinalEncryptedTallyHash) = ResolveTransitionBoundaryHashes(
-            election,
-            artifactType,
-            acceptedBallotSetHash,
-            finalEncryptedTallyHash,
-            allowTrusteeThresholdExecution);
         var artifact = ElectionModelFactory.CreateBoundaryArtifact(
             artifactType,
             election,
             actorPublicAddress,
             recordedAt: transitionTime,
-            acceptedBallotSetHash: resolvedAcceptedBallotSetHash,
-            finalEncryptedTallyHash: resolvedFinalEncryptedTallyHash,
+            acceptedBallotSetHash: artifactType == ElectionBoundaryArtifactType.Close
+                ? null
+                : acceptedBallotSetHash,
+            finalEncryptedTallyHash: artifactType == ElectionBoundaryArtifactType.Close
+                ? null
+                : finalEncryptedTallyHash,
             sourceTransactionId: sourceTransactionId,
             sourceBlockHeight: sourceBlockHeight,
             sourceBlockId: sourceBlockId);
@@ -3560,34 +3568,42 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Finalization requires the exact close boundary artifact to exist.");
         }
 
-        if (closeArtifact.AcceptedBallotSetHash is not { Length: > 0 })
+        var tallyReadyArtifact = ResolveTallyReadyArtifact(election, boundaryArtifacts);
+        if (tallyReadyArtifact is null)
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.DependencyBlocked,
-                "Finalization requires the close boundary accepted ballot set hash.");
+                "Finalization requires the exact tally-ready boundary artifact to exist.");
         }
 
-        if (closeArtifact.FinalEncryptedTallyHash is not { Length: > 0 })
+        if (tallyReadyArtifact.AcceptedBallotSetHash is not { Length: > 0 })
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.DependencyBlocked,
-                "Finalization requires the close boundary final encrypted tally hash.");
+                "Finalization requires the tally-ready accepted ballot set hash.");
+        }
+
+        if (tallyReadyArtifact.FinalEncryptedTallyHash is not { Length: > 0 })
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Finalization requires the tally-ready final encrypted tally hash.");
         }
 
         if (acceptedBallotSetHash is { Length: > 0 } &&
-            !ByteArrayEquals(acceptedBallotSetHash, closeArtifact.AcceptedBallotSetHash))
+            !ByteArrayEquals(acceptedBallotSetHash, tallyReadyArtifact.AcceptedBallotSetHash))
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.ValidationFailed,
-                "Finalization request accepted ballot set hash does not match the close boundary target.");
+                "Finalization request accepted ballot set hash does not match the tally-ready target.");
         }
 
         if (finalEncryptedTallyHash is { Length: > 0 } &&
-            !ByteArrayEquals(finalEncryptedTallyHash, closeArtifact.FinalEncryptedTallyHash))
+            !ByteArrayEquals(finalEncryptedTallyHash, tallyReadyArtifact.FinalEncryptedTallyHash))
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.ValidationFailed,
-                "Finalization request encrypted tally hash does not match the close boundary target.");
+                "Finalization request encrypted tally hash does not match the tally-ready target.");
         }
 
         ElectionCeremonyBindingSnapshot? ceremonySnapshot = null;
@@ -3615,8 +3631,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var session = ElectionModelFactory.CreateFinalizationSession(
             election,
             closeArtifact.Id,
-            closeArtifact.AcceptedBallotSetHash,
-            closeArtifact.FinalEncryptedTallyHash,
+            tallyReadyArtifact.AcceptedBallotSetHash,
+            tallyReadyArtifact.FinalEncryptedTallyHash,
             ceremonySnapshot,
             requiredShareCount,
             eligibleTrustees,
@@ -3724,34 +3740,21 @@ public class ElectionLifecycleService : IElectionLifecycleService
         return -1;
     }
 
-    private static (byte[]? AcceptedBallotSetHash, byte[]? FinalEncryptedTallyHash) ResolveTransitionBoundaryHashes(
+    private static ElectionBoundaryArtifactRecord? ResolveTallyReadyArtifact(
         ElectionRecord election,
-        ElectionBoundaryArtifactType artifactType,
-        byte[]? acceptedBallotSetHash,
-        byte[]? finalEncryptedTallyHash,
-        bool allowTrusteeThresholdExecution)
+        IReadOnlyList<ElectionBoundaryArtifactRecord> boundaryArtifacts)
     {
-        if (artifactType != ElectionBoundaryArtifactType.Close ||
-            election.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold ||
-            !allowTrusteeThresholdExecution)
+        if (election.TallyReadyArtifactId.HasValue)
         {
-            return (acceptedBallotSetHash, finalEncryptedTallyHash);
+            return boundaryArtifacts.FirstOrDefault(x =>
+                x.Id == election.TallyReadyArtifactId.Value &&
+                x.ArtifactType == ElectionBoundaryArtifactType.TallyReady);
         }
 
-        return (
-            acceptedBallotSetHash is { Length: > 0 }
-                ? acceptedBallotSetHash
-                : DeriveGovernedCloseBoundaryHash(election, "accepted-ballot-set"),
-            finalEncryptedTallyHash is { Length: > 0 }
-                ? finalEncryptedTallyHash
-                : DeriveGovernedCloseBoundaryHash(election, "final-encrypted-tally"));
-    }
-
-    private static byte[] DeriveGovernedCloseBoundaryHash(ElectionRecord election, string label)
-    {
-        var openArtifactId = election.OpenArtifactId?.ToString("D") ?? "no-open-artifact";
-        return SHA256.HashData(Encoding.UTF8.GetBytes(
-            $"feat098-governed-close:{election.ElectionId:D}:{openArtifactId}:{label}"));
+        return boundaryArtifacts
+            .Where(x => x.ArtifactType == ElectionBoundaryArtifactType.TallyReady)
+            .OrderByDescending(x => x.RecordedAt)
+            .FirstOrDefault();
     }
 
     private static FinalizationShareValidationOutcome ValidateFinalizationShareSubmission(

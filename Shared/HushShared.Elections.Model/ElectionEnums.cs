@@ -126,7 +126,8 @@ public enum ElectionBoundaryArtifactType
 {
     Open = 0,
     Close = 1,
-    Finalize = 2,
+    TallyReady = 2,
+    Finalize = 3,
 }
 
 public enum ElectionGovernedActionType
@@ -219,4 +220,11 @@ public enum ElectionFinalizationTargetType
 public enum ElectionFinalizationReleaseMode
 {
     AggregateTallyOnly = 0,
+}
+
+public enum ElectionPublicationIssueCode
+{
+    RerandomizationFallback = 0,
+    UnsupportedBallotPayload = 1,
+    ReplayMismatch = 2,
 }

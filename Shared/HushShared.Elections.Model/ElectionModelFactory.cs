@@ -86,6 +86,7 @@ public static partial class ElectionModelFactory
             TallyReadyAt: null,
             OpenArtifactId: null,
             CloseArtifactId: null,
+            TallyReadyArtifactId: null,
             FinalizeArtifactId: null);
     }
 
@@ -153,7 +154,10 @@ public static partial class ElectionModelFactory
         string? trusteePolicyExecutionReference = null,
         string? reportingPolicyExecutionReference = null,
         string? reviewWindowExecutionReference = null,
+        int? acceptedBallotCount = null,
         byte[]? acceptedBallotSetHash = null,
+        int? publishedBallotCount = null,
+        byte[]? publishedBallotStreamHash = null,
         byte[]? finalEncryptedTallyHash = null,
         Guid? sourceTransactionId = null,
         long? sourceBlockHeight = null,
@@ -198,7 +202,10 @@ public static partial class ElectionModelFactory
             NormalizeOptionalText(trusteePolicyExecutionReference),
             NormalizeOptionalText(reportingPolicyExecutionReference),
             NormalizeOptionalText(reviewWindowExecutionReference),
+            acceptedBallotCount,
             CloneBytes(acceptedBallotSetHash),
+            publishedBallotCount,
+            CloneBytes(publishedBallotStreamHash),
             CloneBytes(finalEncryptedTallyHash),
             recordedAt ?? DateTime.UtcNow,
             recordedByPublicAddress.Trim(),
@@ -1083,6 +1090,7 @@ public static partial class ElectionModelFactory
         {
             ElectionBoundaryArtifactType.Open => ElectionLifecycleState.Open,
             ElectionBoundaryArtifactType.Close => ElectionLifecycleState.Closed,
+            ElectionBoundaryArtifactType.TallyReady => ElectionLifecycleState.Closed,
             ElectionBoundaryArtifactType.Finalize => ElectionLifecycleState.Finalized,
             _ => throw new ArgumentOutOfRangeException(nameof(artifactType), artifactType, "Unsupported boundary artifact type."),
         };

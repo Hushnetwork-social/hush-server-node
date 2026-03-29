@@ -18,7 +18,9 @@ public static class ElectionsHostBuild
         builder.ConfigureServices((hostContext, services) =>
         {
             services.AddSingleton(CreateCeremonyOptions(hostContext.Configuration));
+            services.AddSingleton(CreateBallotPublicationOptions(hostContext.Configuration));
             services.AddSingleton<IBootstrapper, ElectionCeremonyProfileRegistryBootstrapper>();
+            services.AddSingleton<IBootstrapper, ElectionBallotPublicationBootstrapper>();
             services.RegisterElectionsStorageServices(hostContext);
             services.RegisterElectionsCoreServices();
         });
@@ -72,6 +74,9 @@ public static class ElectionsHostBuild
         services.AddTransient<IFinalizeElectionTransactionHandler, FinalizeElectionTransactionHandler>();
         services.AddTransient<ICreateElectionDraftValidationService, CreateElectionDraftValidationService>();
         services.AddTransient<IElectionEnvelopeCryptoService, ElectionEnvelopeCryptoService>();
+        services.AddSingleton<IElectionBallotPublicationCryptoService, ElectionBallotPublicationCryptoService>();
+        services.AddSingleton<ElectionBallotPublicationService>();
+        services.AddSingleton<IElectionBallotPublicationService>(sp => sp.GetRequiredService<ElectionBallotPublicationService>());
         services.AddSingleton<IElectionLifecycleService>(sp =>
             new ElectionLifecycleService(
                 sp.GetRequiredService<IUnitOfWorkProvider<ElectionsDbContext>>(),
@@ -91,4 +96,10 @@ public static class ElectionsHostBuild
             RequiredRolloutVersion: configuration.GetValue(
                 "Elections:Ceremony:RequiredRolloutVersion",
                 defaultValue: ElectionCeremonyProfileCatalog.ExpectedVersion)!);
+
+    private static ElectionBallotPublicationOptions CreateBallotPublicationOptions(IConfiguration configuration) =>
+        new(
+            HighWaterMark: configuration.GetValue("Elections:BallotPublication:HighWaterMark", 20),
+            LowWaterMark: configuration.GetValue("Elections:BallotPublication:LowWaterMark", 10),
+            MaxBatchPerBlock: configuration.GetValue("Elections:BallotPublication:MaxBatchPerBlock", 20));
 }

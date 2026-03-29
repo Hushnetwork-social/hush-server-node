@@ -33,6 +33,7 @@ public record ElectionRecord(
     DateTime? TallyReadyAt,
     Guid? OpenArtifactId,
     Guid? CloseArtifactId,
+    Guid? TallyReadyArtifactId,
     Guid? FinalizeArtifactId);
 
 public record ElectionDraftSnapshotRecord(
@@ -66,7 +67,10 @@ public record ElectionBoundaryArtifactRecord(
     string? TrusteePolicyExecutionReference,
     string? ReportingPolicyExecutionReference,
     string? ReviewWindowExecutionReference,
+    int? AcceptedBallotCount,
     byte[]? AcceptedBallotSetHash,
+    int? PublishedBallotCount,
+    byte[]? PublishedBallotStreamHash,
     byte[]? FinalEncryptedTallyHash,
     DateTime RecordedAt,
     string RecordedByPublicAddress,
@@ -98,6 +102,33 @@ public record ElectionAcceptedBallotRecord(
             nameof(BallotNullifier));
 }
 
+public record ElectionBallotMemPoolRecord(
+    Guid Id,
+    ElectionId ElectionId,
+    Guid AcceptedBallotId,
+    DateTime QueuedAt);
+
+public record ElectionPublishedBallotRecord(
+    Guid Id,
+    ElectionId ElectionId,
+    long PublicationSequence,
+    string EncryptedBallotPackage,
+    string ProofBundle,
+    DateTime PublishedAt,
+    long? SourceBlockHeight,
+    Guid? SourceBlockId)
+{
+    public string EncryptedBallotPackage { get; init; } =
+        ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
+            EncryptedBallotPackage,
+            nameof(EncryptedBallotPackage));
+
+    public string ProofBundle { get; init; } =
+        ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
+            ProofBundle,
+            nameof(ProofBundle));
+}
+
 public record ElectionCastIdempotencyRecord(
     ElectionId ElectionId,
     string IdempotencyKeyHash,
@@ -107,6 +138,29 @@ public record ElectionCastIdempotencyRecord(
         ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
             IdempotencyKeyHash,
             nameof(IdempotencyKeyHash));
+}
+
+public record ElectionPublicationIssueRecord(
+    Guid Id,
+    ElectionId ElectionId,
+    ElectionPublicationIssueCode IssueCode,
+    int OccurrenceCount,
+    DateTime FirstObservedAt,
+    DateTime LastObservedAt,
+    long? LatestBlockHeight,
+    Guid? LatestBlockId)
+{
+    public ElectionPublicationIssueRecord RegisterOccurrence(
+        DateTime observedAt,
+        long? latestBlockHeight,
+        Guid? latestBlockId) =>
+        this with
+        {
+            OccurrenceCount = OccurrenceCount + 1,
+            LastObservedAt = observedAt,
+            LatestBlockHeight = latestBlockHeight,
+            LatestBlockId = latestBlockId,
+        };
 }
 
 public record ElectionWarningAcknowledgementRecord(

@@ -1,5 +1,8 @@
+using System.Globalization;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using Google.Protobuf;
 using HushNetwork.proto;
@@ -8,9 +11,12 @@ using HushNode.Elections;
 using HushNode.IntegrationTests.Hooks;
 using HushNode.IntegrationTests.Infrastructure;
 using HushNode.MemPool;
+using HushNode.Reactions.Crypto;
 using HushServerNode;
 using HushServerNode.Testing;
+using HushServerNode.Testing.Elections;
 using HushShared.Elections.Model;
+using ReactionECPoint = HushShared.Reactions.Model.ECPoint;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TechTalk.SpecFlow;
@@ -327,7 +333,7 @@ public sealed class ElectionLifecycleIntegrationSteps
         string voterAlias,
         string submissionIdempotencyKey)
     {
-        _lastSubmitTransactionResponse = await SubmitAcceptedBallotCastAttemptAsync(
+        _lastSubmitTransactionResponse = await SubmitAcceptedBallotCastViaBlockchainAsync(
             ResolveIdentity(voterAlias),
             submissionIdempotencyKey);
     }
@@ -714,6 +720,43 @@ public sealed class ElectionLifecycleIntegrationSteps
         ]);
     }
 
+    [Then(@"the election should expose a tally-ready boundary after close drain")]
+    public async Task ThenTheElectionShouldExposeATallyReadyBoundaryAfterCloseDrain()
+    {
+        var response = await WaitForTallyReadyElectionAsync();
+
+        response.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+        response.Election.TallyReadyAt.Should().NotBeNull();
+        response.Election.TallyReadyArtifactId.Should().NotBeNullOrWhiteSpace();
+        response.BoundaryArtifacts.Select(artifact => artifact.ArtifactType).Should().Contain(
+        [
+            ElectionBoundaryArtifactTypeProto.OpenArtifact,
+            ElectionBoundaryArtifactTypeProto.CloseArtifact,
+            ElectionBoundaryArtifactTypeProto.TallyReadyArtifact,
+        ]);
+
+        _lastElectionResponse = response;
+    }
+
+    [Then(@"the tally-ready boundary should reconcile (\d+) accepted ballots and (\d+) published ballots")]
+    public async Task ThenTheTallyReadyBoundaryShouldReconcileAcceptedAndPublishedBallots(
+        int expectedAcceptedBallots,
+        int expectedPublishedBallots)
+    {
+        var response = await WaitForTallyReadyElectionAsync();
+        var tallyReadyArtifact = response.BoundaryArtifacts.Single(x =>
+            x.ArtifactType == ElectionBoundaryArtifactTypeProto.TallyReadyArtifact);
+
+        tallyReadyArtifact.AcceptedBallotCount.Should().Be(expectedAcceptedBallots);
+        tallyReadyArtifact.PublishedBallotCount.Should().Be(expectedPublishedBallots);
+        tallyReadyArtifact.AcceptedBallotSetHash.ToByteArray().Should().NotBeEmpty();
+        tallyReadyArtifact.PublishedBallotStreamHash.ToByteArray().Should().NotBeEmpty();
+        tallyReadyArtifact.FinalEncryptedTallyHash.ToByteArray().Should().NotBeEmpty();
+        response.Election.TallyReadyArtifactId.Should().Be(tallyReadyArtifact.Id);
+
+        _lastElectionResponse = response;
+    }
+
     [Then(@"the immutable update transaction should be rejected before indexing")]
     public void ThenTheImmutableUpdateTransactionShouldBeRejectedBeforeIndexing()
     {
@@ -1095,6 +1138,24 @@ public sealed class ElectionLifecycleIntegrationSteps
         });
 
         response.Success.Should().BeTrue($"GetElection should succeed for {GetElectionId()}: {response.ErrorMessage}");
+        return response;
+    }
+
+    private async Task<GetElectionResponse> WaitForTallyReadyElectionAsync()
+    {
+        GetElectionResponse response = _lastElectionResponse ?? await ReloadElectionAsync();
+
+        for (var attempt = 0;
+             attempt < 20 &&
+             (response.Election.TallyReadyAt is null ||
+              response.BoundaryArtifacts.All(x => x.ArtifactType != ElectionBoundaryArtifactTypeProto.TallyReadyArtifact));
+             attempt++)
+        {
+            await Task.Delay(100);
+            response = await ReloadElectionAsync();
+        }
+
+        _lastElectionResponse = response;
         return response;
     }
 
@@ -1637,6 +1698,29 @@ public sealed class ElectionLifecycleIntegrationSteps
         });
     }
 
+    private async Task<SubmitSignedTransactionReply> SubmitAcceptedBallotCastViaBlockchainAsync(
+        TestIdentity actor,
+        string submissionIdempotencyKey)
+    {
+        var signedTransaction = await BuildAcceptedBallotCastTransactionAsync(actor, submissionIdempotencyKey);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        if (!submitResponse.Successfull)
+        {
+            return submitResponse;
+        }
+
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+        _lastElectionResponse = await ReloadElectionAsync();
+        return submitResponse;
+    }
+
     private async Task<string> BuildAcceptedBallotCastTransactionAsync(
         TestIdentity actor,
         string submissionIdempotencyKey)
@@ -1769,11 +1853,42 @@ public sealed class ElectionLifecycleIntegrationSteps
     private ElectionId GetCurrentElectionId() =>
         new(Guid.Parse(GetElectionId()));
 
-    private string BuildEncryptedBallotPackage(TestIdentity actor, string submissionIdempotencyKey) =>
-        BuildEncodedCastArtifact("encrypted-ballot-package", actor, submissionIdempotencyKey);
+    private string BuildEncryptedBallotPackage(TestIdentity actor, string submissionIdempotencyKey)
+    {
+        var curve = new BabyJubJubCurve();
+        var publicKeySeed = ParseSeedToScalar($"feat100:public-key:{GetElectionId()}", curve.Order);
+        var nonceSeed = ParseSeedToScalar(
+            $"feat100:nonces:{GetElectionId()}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}",
+            curve.Order);
+        var keyPair = ControlledElectionHarness.CreateDeterministicKeyPair(publicKeySeed, curve);
+        var ballot = ControlledElectionHarness.EncryptOneHotBallot(
+            ballotId: $"feat100-ballot:{GetElectionId()}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}",
+            choiceIndex: ResolveChoiceIndex(actor, submissionIdempotencyKey),
+            publicKey: keyPair.PublicKey,
+            nonces: ControlledElectionHarness.CreateDeterministicNonceSequence(
+                nonceSeed,
+                ControlledElectionHarness.DefaultSelectionCount,
+                curve),
+            selectionCount: ControlledElectionHarness.DefaultSelectionCount,
+            curve: curve);
+
+        var payload = new PublishedElectionBallotPackage(
+            Version: "election-ballot.v1",
+            PublicKey: ToPublishedPoint(keyPair.PublicKey),
+            SelectionCount: ControlledElectionHarness.DefaultSelectionCount,
+            Ciphertext: new PublishedElectionCiphertext(
+                ballot.Slots.Select(slot => ToPublishedPoint(slot.C1)).ToArray(),
+                ballot.Slots.Select(slot => ToPublishedPoint(slot.C2)).ToArray()));
+
+        return JsonSerializer.Serialize(payload);
+    }
 
     private string BuildProofBundle(TestIdentity actor, string submissionIdempotencyKey) =>
-        BuildEncodedCastArtifact("proof-bundle", actor, submissionIdempotencyKey);
+        JsonSerializer.Serialize(new PublishedElectionProofBundle(
+            Version: "integration-proof-bundle.v1",
+            Actor: actor.PublicSigningAddress,
+            ElectionId: GetElectionId(),
+            SubmissionIdempotencyKey: submissionIdempotencyKey.Trim()));
 
     private string BuildBallotNullifier(TestIdentity actor, string submissionIdempotencyKey) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
@@ -1782,6 +1897,26 @@ public sealed class ElectionLifecycleIntegrationSteps
     private string BuildEncodedCastArtifact(string artifactKind, TestIdentity actor, string submissionIdempotencyKey) =>
         Convert.ToBase64String(Encoding.UTF8.GetBytes(
             $"{artifactKind}:{GetElectionId()}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}"));
+
+    private static int ResolveChoiceIndex(TestIdentity actor, string submissionIdempotencyKey)
+    {
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"feat100:choice-index:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}"));
+        var scalar = new BigInteger(digest, isUnsigned: true, isBigEndian: true);
+        return (int)(scalar % ControlledElectionHarness.DefaultSelectionCount);
+    }
+
+    private static BigInteger ParseSeedToScalar(string seed, BigInteger order)
+    {
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
+        var scalar = new BigInteger(digest, isUnsigned: true, isBigEndian: true) % order;
+        return scalar == BigInteger.Zero ? BigInteger.One : scalar;
+    }
+
+    private static PublishedElectionPointPayload ToPublishedPoint(ReactionECPoint point) =>
+        new(
+            point.X.ToString(CultureInfo.InvariantCulture),
+            point.Y.ToString(CultureInfo.InvariantCulture));
 
     private static string ComputeElectionScopedIdempotencyHash(string submissionIdempotencyKey) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(submissionIdempotencyKey.Trim())));
@@ -1827,6 +1962,26 @@ public sealed class ElectionLifecycleIntegrationSteps
             [
                 ElectionWarningCode.LowAnonymitySet,
             ]);
+
+    private sealed record PublishedElectionBallotPackage(
+        string Version,
+        PublishedElectionPointPayload PublicKey,
+        int SelectionCount,
+        PublishedElectionCiphertext Ciphertext);
+
+    private sealed record PublishedElectionCiphertext(
+        PublishedElectionPointPayload[] C1,
+        PublishedElectionPointPayload[] C2);
+
+    private sealed record PublishedElectionPointPayload(
+        string X,
+        string Y);
+
+    private sealed record PublishedElectionProofBundle(
+        string Version,
+        string Actor,
+        string ElectionId,
+        string SubmissionIdempotencyKey);
 
     private static ElectionDraftSpecification BuildTrusteeThresholdDraftSpecification(string title) =>
         new(
