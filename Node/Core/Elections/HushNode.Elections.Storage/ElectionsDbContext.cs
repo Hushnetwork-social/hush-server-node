@@ -12,6 +12,7 @@ public class ElectionsDbContext(
     public DbSet<ElectionRecord> Elections { get; set; }
     public DbSet<ElectionDraftSnapshotRecord> ElectionDraftSnapshots { get; set; }
     public DbSet<ElectionEnvelopeAccessRecord> ElectionEnvelopeAccessRecords { get; set; }
+    public DbSet<ElectionResultArtifactRecord> ElectionResultArtifacts { get; set; }
     public DbSet<ElectionRosterEntryRecord> ElectionRosterEntries { get; set; }
     public DbSet<ElectionEligibilityActivationEventRecord> ElectionEligibilityActivationEvents { get; set; }
     public DbSet<ElectionParticipationRecord> ElectionParticipationRecords { get; set; }

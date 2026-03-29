@@ -78,6 +78,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         {
             ceremonyTranscriptEvents.AddRange(await repository.GetCeremonyTranscriptEventsAsync(version.Id));
         }
+        var resultArtifacts = await repository.GetResultArtifactsAsync(electionId) ?? Array.Empty<ElectionResultArtifactRecord>();
 
         var activeCeremonyVersion = await repository.GetActiveCeremonyVersionAsync(electionId);
         var activeCeremonyTrusteeStates = activeCeremonyVersion is null
@@ -125,6 +126,9 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         response.FinalizationSessions.AddRange(finalizationSessions.Select(x => x.ToProto()));
         response.FinalizationShares.AddRange(finalizationShares.Select(x => x.ToProto()));
         response.FinalizationReleaseEvidenceRecords.AddRange(finalizationReleaseEvidenceRecords.Select(x => x.ToProto()));
+        response.ResultArtifacts.AddRange(resultArtifacts
+            .Where(x => x.Visibility == ElectionResultArtifactVisibility.PublicPlaintext)
+            .Select(x => x.ToProto()));
 
         return response;
     }
@@ -337,6 +341,65 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             ErrorMessage = string.Empty,
             ActorEncryptedElectionPrivateKey = accessRecord.ActorEncryptedElectionPrivateKey,
         };
+    }
+
+    public async Task<GetElectionResultViewResponse> GetElectionResultViewAsync(
+        ElectionId electionId,
+        string actorPublicAddress)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var normalizedActorPublicAddress = actorPublicAddress?.Trim() ?? string.Empty;
+
+        var election = await repository.GetElectionAsync(electionId);
+        if (election is null)
+        {
+            return new GetElectionResultViewResponse
+            {
+                Success = false,
+                ErrorMessage = $"Election {electionId} was not found.",
+                ActorPublicAddress = normalizedActorPublicAddress,
+            };
+        }
+
+        var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(electionId);
+        var selfRosterEntry = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
+            ? null
+            : await repository.GetRosterEntryByLinkedActorAsync(electionId, normalizedActorPublicAddress);
+        var acceptedTrustee = trusteeInvitations.Any(x =>
+            x.Status == ElectionTrusteeInvitationStatus.Accepted &&
+            string.Equals(x.TrusteeUserAddress, normalizedActorPublicAddress, StringComparison.OrdinalIgnoreCase));
+        var canViewParticipantEncryptedResults =
+            !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
+            (string.Equals(election.OwnerPublicAddress, normalizedActorPublicAddress, StringComparison.Ordinal) ||
+             selfRosterEntry is not null ||
+             acceptedTrustee);
+
+        var unofficialResult = await repository.GetResultArtifactAsync(electionId, ElectionResultArtifactKind.Unofficial);
+        var officialResult = await repository.GetResultArtifactAsync(electionId, ElectionResultArtifactKind.Official);
+
+        var response = new GetElectionResultViewResponse
+        {
+            Success = true,
+            ErrorMessage = string.Empty,
+            ActorPublicAddress = normalizedActorPublicAddress,
+            CanViewParticipantEncryptedResults = canViewParticipantEncryptedResults,
+            OfficialResultVisibilityPolicy = (OfficialResultVisibilityPolicyProto)(int)election.OfficialResultVisibilityPolicy,
+            ClosedProgressStatus = (ElectionClosedProgressStatusProto)(int)election.ClosedProgressStatus,
+        };
+
+        if (unofficialResult is not null && canViewParticipantEncryptedResults)
+        {
+            response.UnofficialResult = unofficialResult.ToProto();
+        }
+
+        if (officialResult is not null &&
+            (officialResult.Visibility == ElectionResultArtifactVisibility.PublicPlaintext || canViewParticipantEncryptedResults))
+        {
+            response.OfficialResult = officialResult.ToProto();
+        }
+
+        return response;
     }
 
     public async Task<GetElectionCeremonyActionViewResponse> GetElectionCeremonyActionViewAsync(

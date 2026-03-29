@@ -872,9 +872,7 @@ public class EncryptedElectionEnvelopeContentHandler(
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
         if (election is null ||
-            election.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold ||
-            election.LifecycleState != ElectionLifecycleState.Closed ||
-            !election.TallyReadyAt.HasValue)
+            election.LifecycleState != ElectionLifecycleState.Closed)
         {
             return false;
         }

@@ -123,6 +123,35 @@ public class ElectionBallotPublicationServiceTests
     }
 
     [Fact]
+    public async Task ProcessPendingPublicationAsync_ClosedTrusteeElectionDrainsPoolAndCreatesCloseCountingSession()
+    {
+        var store = new PublicationStore();
+        var election = CreateClosedTrusteeElection(store);
+        SeedAcceptedBallots(store, election, 3);
+        var expectedTallyHash = new byte[] { 9, 8, 7, 6 };
+        var crypto = new FakePublicationCryptoService
+        {
+            ReplayBehavior = packages => ElectionBallotReplayResult.Success(expectedTallyHash),
+        };
+        var service = CreateService(store, crypto, new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10));
+
+        await service.ProcessPendingPublicationAsync(new BlockIndex(27));
+
+        store.BallotMemPoolEntries.Should().BeEmpty();
+        store.PublishedBallots.Should().HaveCount(3);
+        store.FinalizationSessions.Should().ContainSingle();
+        store.FinalizationSessions[0].SessionPurpose.Should().Be(ElectionFinalizationSessionPurpose.CloseCounting);
+        store.FinalizationSessions[0].RequiredShareCount.Should().Be(1);
+        store.FinalizationSessions[0].FinalEncryptedTallyHash.Should().Equal(expectedTallyHash);
+        store.BoundaryArtifacts.Should().HaveCount(2);
+        store.BoundaryArtifacts.Should().OnlyContain(x =>
+            x.ArtifactType == ElectionBoundaryArtifactType.Open ||
+            x.ArtifactType == ElectionBoundaryArtifactType.Close);
+        store.Elections[election.ElectionId].TallyReadyAt.Should().BeNull();
+        store.Elections[election.ElectionId].ClosedProgressStatus.Should().Be(ElectionClosedProgressStatus.WaitingForTrusteeShares);
+    }
+
+    [Fact]
     public async Task ProcessPendingPublicationAsync_WhenRerandomizationFailsTwice_PublishesOriginalBallotAndRecordsIssue()
     {
         var store = new PublicationStore();
@@ -244,6 +273,30 @@ public class ElectionBallotPublicationServiceTests
                     .ToArray());
 
         repository
+            .Setup(x => x.GetBoundaryArtifactsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync((ElectionId electionId) =>
+                (IReadOnlyList<ElectionBoundaryArtifactRecord>)store.BoundaryArtifacts
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.RecordedAt)
+                    .ToArray());
+
+        repository
+            .Setup(x => x.GetActiveFinalizationSessionAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync((ElectionId electionId) =>
+                store.FinalizationSessions
+                    .Where(x => x.ElectionId == electionId && x.Status != ElectionFinalizationSessionStatus.Completed)
+                    .OrderBy(x => x.CreatedAt)
+                    .FirstOrDefault());
+
+        repository
+            .Setup(x => x.SaveFinalizationSessionAsync(It.IsAny<ElectionFinalizationSessionRecord>()))
+            .Returns((ElectionFinalizationSessionRecord session) =>
+            {
+                store.FinalizationSessions.Add(session);
+                return Task.CompletedTask;
+            });
+
+        repository
             .Setup(x => x.GetNextPublishedBallotSequenceAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync((ElectionId electionId) =>
                 store.PublishedBallots
@@ -322,6 +375,62 @@ public class ElectionBallotPublicationServiceTests
         };
     }
 
+    private static ElectionRecord CreateClosedTrusteeElection(PublicationStore store)
+    {
+        var openedAt = DateTime.UtcNow.AddMinutes(-15);
+        var closedAt = DateTime.UtcNow.AddMinutes(-5);
+        var draft = CreateDraftElection() with
+        {
+            GovernanceMode = ElectionGovernanceMode.TrusteeThreshold,
+            ReviewWindowPolicy = ReviewWindowPolicy.GovernedReviewWindowReserved,
+            RequiredApprovalCount = 1,
+        };
+        var openElection = draft with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+        };
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            Guid.NewGuid(),
+            ceremonyVersionNumber: 1,
+            profileId: "prod-1of1-v1",
+            boundTrusteeCount: 1,
+            requiredApprovalCount: 1,
+            activeTrustees:
+            [
+                new ElectionTrusteeReference("trustee-a", "Alice"),
+            ],
+            tallyPublicKeyFingerprint: "tally-fingerprint");
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            openElection,
+            recordedByPublicAddress: "owner-address",
+            recordedAt: openedAt,
+            ceremonySnapshot: ceremonySnapshot);
+        var closedElection = draft with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            OpenedAt = openedAt,
+            VoteAcceptanceLockedAt = closedAt,
+            ClosedAt = closedAt,
+            LastUpdatedAt = closedAt,
+            OpenArtifactId = openArtifact.Id,
+        };
+        var closeArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Close,
+            closedElection,
+            recordedByPublicAddress: "owner-address",
+            recordedAt: closedAt);
+        closedElection = closedElection with
+        {
+            CloseArtifactId = closeArtifact.Id,
+        };
+        store.BoundaryArtifacts.Add(openArtifact);
+        store.BoundaryArtifacts.Add(closeArtifact);
+        return closedElection;
+    }
+
     private static ElectionRecord CreateDraftElection() =>
         ElectionModelFactory.CreateDraftRecord(
             electionId: ElectionId.NewElectionId,
@@ -397,6 +506,7 @@ public class ElectionBallotPublicationServiceTests
         public List<ElectionAcceptedBallotRecord> AcceptedBallots { get; } = [];
         public List<ElectionBallotMemPoolRecord> BallotMemPoolEntries { get; } = [];
         public List<ElectionPublishedBallotRecord> PublishedBallots { get; } = [];
+        public List<ElectionFinalizationSessionRecord> FinalizationSessions { get; } = [];
         public List<ElectionPublicationIssueRecord> PublicationIssues { get; } = [];
         public List<ElectionBoundaryArtifactRecord> BoundaryArtifacts { get; } = [];
         public List<ElectionId> ClosedAwaitingTallyReadyElectionIds { get; } = [];

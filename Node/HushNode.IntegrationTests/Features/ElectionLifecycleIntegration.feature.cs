@@ -744,15 +744,17 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Close drain publishes queued ballots and seals tally_ready without finalizing")]
+        [Xunit.SkippableFactAttribute(DisplayName="Close drain publishes queued ballots and seals tally_ready after close-counting s" +
+            "hares")]
         [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
-        [Xunit.TraitAttribute("Description", "Close drain publishes queued ballots and seals tally_ready without finalizing")]
+        [Xunit.TraitAttribute("Description", "Close drain publishes queued ballots and seals tally_ready after close-counting s" +
+            "hares")]
         [Xunit.TraitAttribute("Category", "FEAT-100")]
         [Xunit.TraitAttribute("Category", "AT-PROC-I04")]
         [Xunit.TraitAttribute("Category", "AT-PROC-I05")]
         [Xunit.TraitAttribute("Category", "AT-PROC-I06")]
         [Xunit.TraitAttribute("Category", "NON_E2E")]
-        public void CloseDrainPublishesQueuedBallotsAndSealsTally_ReadyWithoutFinalizing()
+        public void CloseDrainPublishesQueuedBallotsAndSealsTally_ReadyAfterClose_CountingShares()
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-100",
@@ -761,7 +763,8 @@ namespace HushNode.IntegrationTests.Features
                     "AT-PROC-I06",
                     "NON_E2E"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Close drain publishes queued ballots and seals tally_ready without finalizing", null, tagsOfScenario, argumentsOfScenario, featureTags);
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Close drain publishes queued ballots and seals tally_ready after close-counting s" +
+                    "hares", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 151
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
@@ -807,9 +810,30 @@ namespace HushNode.IntegrationTests.Features
     testRunner.Then("the governed proposal should execute and transition the election to \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 162
-    testRunner.And("the election should expose a tally-ready boundary after close drain", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("the election closed progress status should be \"ClosedProgressWaitingForTrusteeSha" +
+                        "res\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 163
+    testRunner.And("the election should not expose a tally-ready boundary yet", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 164
+    testRunner.And("the close workflow should open a bound close-counting session while the election " +
+                        "stays \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 165
+    testRunner.When("trustee \"Bob\" submits a bound finalization share through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 166
+    testRunner.And("trustee \"Charlie\" submits a bound finalization share through blockchain submissio" +
+                        "n", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 167
+    testRunner.And("trustee \"Delta\" submits a bound finalization share through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 168
+    testRunner.Then("the election should expose a tally-ready boundary after close drain", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 169
     testRunner.And("the tally-ready boundary should reconcile 1 accepted ballots and 1 published ball" +
                         "ots", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
@@ -817,24 +841,24 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Governed finalize binds one exact session and finalizes only after threshold aggr" +
-            "egate shares")]
+        [Xunit.SkippableFactAttribute(DisplayName="Close-counting binds one exact aggregate target and rejects single-ballot release" +
+            "")]
         [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
-        [Xunit.TraitAttribute("Description", "Governed finalize binds one exact session and finalizes only after threshold aggr" +
-            "egate shares")]
+        [Xunit.TraitAttribute("Description", "Close-counting binds one exact aggregate target and rejects single-ballot release" +
+            "")]
         [Xunit.TraitAttribute("Category", "FEAT-098")]
         [Xunit.TraitAttribute("Category", "AT-PROC-I03")]
         [Xunit.TraitAttribute("Category", "NON_E2E")]
-        public void GovernedFinalizeBindsOneExactSessionAndFinalizesOnlyAfterThresholdAggregateShares()
+        public void Close_CountingBindsOneExactAggregateTargetAndRejectsSingle_BallotRelease()
         {
             string[] tagsOfScenario = new string[] {
                     "FEAT-098",
                     "AT-PROC-I03",
                     "NON_E2E"};
             System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
-            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Governed finalize binds one exact session and finalizes only after threshold aggr" +
-                    "egate shares", null, tagsOfScenario, argumentsOfScenario, featureTags);
-#line 166
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Close-counting binds one exact aggregate target and rejects single-ballot release" +
+                    "", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 172
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
             if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
@@ -844,65 +868,204 @@ namespace HushNode.IntegrationTests.Features
             else
             {
                 this.ScenarioStart();
-#line 167
+#line 173
     testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
-#line 168
-    testRunner.And("the owner has a closed trustee-threshold election through governed approval block" +
-                        "chain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 169
-    testRunner.When("the owner starts a \"finalize\" governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
-#line hidden
-#line 170
-    testRunner.Then("the governed proposal should remain pending for \"finalize\" while the election sta" +
-                        "ys \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
-#line hidden
-#line 171
-    testRunner.When("trustee \"Bob\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
-#line hidden
-#line 172
-    testRunner.And("trustee \"Charlie\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 173
-    testRunner.And("trustee \"Delta\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
 #line 174
-    testRunner.Then("the governed finalize should open a bound finalization session while the election" +
-                        " stays \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+    testRunner.And("the owner has an open trustee-threshold election through governed approval blockc" +
+                        "hain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 175
+    testRunner.When("voter \"Alice\" claims roster entry \"voter-alice\" with temporary verification code " +
+                        "through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 176
+    testRunner.And("voter \"Alice\" registers voting commitment \"alice-commitment-feat098-v1\" through b" +
+                        "lockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 177
+    testRunner.And("voter \"Alice\" submits ballot cast with idempotency key \"alice-feat098-001\" throug" +
+                        "h blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 178
+    testRunner.And("the owner starts an \"close\" governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 179
+    testRunner.And("trustee \"Bob\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 180
+    testRunner.And("trustee \"Charlie\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 181
+    testRunner.And("trustee \"Delta\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 182
+    testRunner.Then("the governed proposal should execute and transition the election to \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 183
+    testRunner.And("the election closed progress status should be \"ClosedProgressWaitingForTrusteeSha" +
+                        "res\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 184
+    testRunner.And("the close workflow should open a bound close-counting session while the election " +
+                        "stays \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 185
     testRunner.When("trustee \"Bob\" submits a single-ballot finalization share through blockchain submi" +
                         "ssion", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 176
+#line 186
     testRunner.Then("the finalization share log should record rejection code \"SINGLE_BALLOT_RELEASE_FO" +
                         "RBIDDEN\" for trustee \"Bob\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 177
+#line 187
     testRunner.And("the election should remain in \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 178
+#line 188
     testRunner.When("trustee \"Bob\" submits a bound finalization share through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 179
+#line 189
     testRunner.And("trustee \"Charlie\" submits a bound finalization share through blockchain submissio" +
                         "n", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
-#line 180
+#line 190
     testRunner.Then("the finalization session should remain waiting for 2 accepted shares", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 181
+#line 191
     testRunner.When("trustee \"Delta\" submits a bound finalization share through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
 #line hidden
-#line 182
-    testRunner.Then("the finalization release evidence should record 3 accepted trustee shares", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line 192
+    testRunner.Then("the close-counting release evidence should record 3 accepted trustee shares", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
-#line 183
+#line 193
+    testRunner.And("the election should expose a tally-ready boundary after close drain", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 194
+    testRunner.And("the election should remain in \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Close counting publishes unofficial result and finalize copies the official resul" +
+            "t")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
+        [Xunit.TraitAttribute("Description", "Close counting publishes unofficial result and finalize copies the official resul" +
+            "t")]
+        [Xunit.TraitAttribute("Category", "FEAT-101")]
+        [Xunit.TraitAttribute("Category", "AT-PROC-I04")]
+        [Xunit.TraitAttribute("Category", "AT-PROC-I05")]
+        [Xunit.TraitAttribute("Category", "NON_E2E")]
+        public void CloseCountingPublishesUnofficialResultAndFinalizeCopiesTheOfficialResult()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-101",
+                    "AT-PROC-I04",
+                    "AT-PROC-I05",
+                    "NON_E2E"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Close counting publishes unofficial result and finalize copies the official resul" +
+                    "t", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 197
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 198
+    testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 199
+    testRunner.And("the owner has an open trustee-threshold election through governed approval blockc" +
+                        "hain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 200
+    testRunner.When("voter \"Alice\" claims roster entry \"voter-alice\" with temporary verification code " +
+                        "through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 201
+    testRunner.And("voter \"Alice\" registers voting commitment \"alice-commitment-feat101-v1\" through b" +
+                        "lockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 202
+    testRunner.And("voter \"Alice\" submits ballot cast with idempotency key \"alice-feat101-001\" throug" +
+                        "h blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 203
+    testRunner.And("the owner starts an \"close\" governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 204
+    testRunner.And("trustee \"Bob\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 205
+    testRunner.And("trustee \"Charlie\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 206
+    testRunner.And("trustee \"Delta\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 207
+    testRunner.Then("the governed proposal should execute and transition the election to \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 208
+    testRunner.And("the election closed progress status should be \"ClosedProgressWaitingForTrusteeSha" +
+                        "res\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 209
+    testRunner.And("the close workflow should open a bound close-counting session while the election " +
+                        "stays \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 210
+    testRunner.When("trustee \"Bob\" submits a bound finalization share through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 211
+    testRunner.And("trustee \"Charlie\" submits a bound finalization share through blockchain submissio" +
+                        "n", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 212
+    testRunner.And("trustee \"Delta\" submits a bound finalization share through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 213
+    testRunner.Then("the election should expose a tally-ready boundary after close drain", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 214
+    testRunner.And("the election result view for actor \"Alice\" should expose participant-encrypted un" +
+                        "official results", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 215
+    testRunner.And("the unofficial result should report 1 total voted, 2 eligible to vote, 1 did not " +
+                        "vote, and 0 blank", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 216
+    testRunner.And("the unofficial result should include all named options", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 217
+    testRunner.When("the owner starts a \"finalize\" governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 218
+    testRunner.Then("the governed proposal should remain pending for \"finalize\" while the election sta" +
+                        "ys \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 219
+    testRunner.When("trustee \"Bob\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 220
+    testRunner.And("trustee \"Charlie\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 221
+    testRunner.And("trustee \"Delta\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 222
+    testRunner.Then("the governed proposal should execute and transition the election to \"Finalized\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 223
+    testRunner.And("the official result should copy the unofficial result for actor \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 224
     testRunner.And("the boundary artifacts should include open, close, and finalize records", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
-#line hidden
-#line 184
-    testRunner.And("the election should remain in \"Finalized\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
             }
             this.ScenarioCleanup();

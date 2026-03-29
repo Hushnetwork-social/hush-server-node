@@ -53,6 +53,7 @@ public sealed class ElectionLifecycleIntegrationSteps
     private GetElectionResponse? _lastElectionResponse;
     private GetElectionEligibilityViewResponse? _lastEligibilityViewResponse;
     private GetElectionVotingViewResponse? _lastVotingViewResponse;
+    private GetElectionResultViewResponse? _lastResultViewResponse;
 
     public ElectionLifecycleIntegrationSteps(ScenarioContext scenarioContext)
     {
@@ -73,6 +74,7 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastElectionResponse = null;
         _lastEligibilityViewResponse = null;
         _lastVotingViewResponse = null;
+        _lastResultViewResponse = null;
         _trusteeInvitationIds.Clear();
     }
 
@@ -880,6 +882,42 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastElectionResponse = response;
     }
 
+    [Then(@"the close workflow should open a bound close-counting session while the election stays ""(.*)""")]
+    public async Task ThenTheCloseWorkflowShouldOpenABoundCloseCountingSessionWhileTheElectionStays(string lifecycleState)
+    {
+        GetElectionResponse response = _lastElectionResponse ?? await ReloadElectionAsync();
+
+        for (var attempt = 0;
+             attempt < 20 &&
+             response.FinalizationSessions.All(x =>
+                 x.Status != ElectionFinalizationSessionStatusProto.FinalizationSessionAwaitingShares ||
+                 x.SessionPurpose != ElectionFinalizationSessionPurposeProto.FinalizationSessionPurposeCloseCounting);
+             attempt++)
+        {
+            await Task.Delay(100);
+            response = await ReloadElectionAsync();
+        }
+
+        var proposal = response.GovernedProposals.Single(x => x.Id == GetLastGovernedProposalId());
+        var session = response.FinalizationSessions.Single(x =>
+            x.Status == ElectionFinalizationSessionStatusProto.FinalizationSessionAwaitingShares &&
+            x.SessionPurpose == ElectionFinalizationSessionPurposeProto.FinalizationSessionPurposeCloseCounting);
+
+        proposal.ActionType.Should().Be(ElectionGovernedActionTypeProto.GovernedActionClose);
+        proposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.ExecutionSucceeded);
+        response.Election.LifecycleState.Should().Be(ParseProtoLifecycleState(lifecycleState));
+        response.Election.TallyReadyArtifactId.Should().BeNullOrEmpty();
+        response.Election.UnofficialResultArtifactId.Should().BeNullOrEmpty();
+        response.FinalizationSessions.Should().ContainSingle();
+        session.SessionPurpose.Should().Be(ElectionFinalizationSessionPurposeProto.FinalizationSessionPurposeCloseCounting);
+        session.RequiredShareCount.Should().Be(3);
+        session.EligibleTrustees.Should().HaveCount(3);
+        session.CeremonySnapshot.Should().NotBeNull();
+        response.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+
+        _lastElectionResponse = response;
+    }
+
     [Then(@"the finalization share log should record rejection code ""(.*)"" for trustee ""(.*)""")]
     public async Task ThenTheFinalizationShareLogShouldRecordRejectionCodeForTrustee(
         string failureCode,
@@ -929,6 +967,57 @@ public sealed class ElectionLifecycleIntegrationSteps
             x.Status == ElectionFinalizationShareStatusProto.FinalizationShareAccepted)
             .Should()
             .Be(acceptedShareCount);
+
+        _lastElectionResponse = response;
+    }
+
+    [Then(@"the close-counting release evidence should record (.*) accepted trustee shares")]
+    public async Task ThenTheCloseCountingReleaseEvidenceShouldRecordAcceptedTrusteeShares(int acceptedShareCount)
+    {
+        var response = await WaitForTallyReadyElectionAsync();
+        var releaseEvidence = response.FinalizationReleaseEvidenceRecords.Should().ContainSingle().Subject;
+        var completedSession = response.FinalizationSessions.Should().ContainSingle().Subject;
+
+        response.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+        response.Election.TallyReadyAt.Should().NotBeNull();
+        completedSession.Status.Should().Be(ElectionFinalizationSessionStatusProto.FinalizationSessionCompleted);
+        completedSession.SessionPurpose.Should().Be(ElectionFinalizationSessionPurposeProto.FinalizationSessionPurposeCloseCounting);
+        releaseEvidence.AcceptedShareCount.Should().Be(acceptedShareCount);
+        releaseEvidence.SessionPurpose.Should().Be(ElectionFinalizationSessionPurposeProto.FinalizationSessionPurposeCloseCounting);
+        releaseEvidence.AcceptedTrustees.Should().HaveCount(acceptedShareCount);
+        response.FinalizationShares.Count(x =>
+            x.Status == ElectionFinalizationShareStatusProto.FinalizationShareAccepted)
+            .Should()
+            .Be(acceptedShareCount);
+
+        _lastElectionResponse = response;
+    }
+
+    [Then(@"the election closed progress status should be ""(.*)""")]
+    public async Task ThenTheElectionClosedProgressStatusShouldBe(string expectedProgressStatus)
+    {
+        var expected = ParseClosedProgressStatus(expectedProgressStatus);
+        GetElectionResponse response = _lastElectionResponse ?? await ReloadElectionAsync();
+
+        for (var attempt = 0; attempt < 20 && response.Election.ClosedProgressStatus != expected; attempt++)
+        {
+            await Task.Delay(100);
+            response = await ReloadElectionAsync();
+        }
+
+        response.Election.ClosedProgressStatus.Should().Be(expected);
+        _lastElectionResponse = response;
+    }
+
+    [Then(@"the election should not expose a tally-ready boundary yet")]
+    public async Task ThenTheElectionShouldNotExposeATallyReadyBoundaryYet()
+    {
+        var response = _lastElectionResponse ?? await ReloadElectionAsync();
+
+        response.Election.TallyReadyAt.Should().BeNull();
+        response.Election.TallyReadyArtifactId.Should().BeNullOrEmpty();
+        response.BoundaryArtifacts.Should().NotContain(x =>
+            x.ArtifactType == ElectionBoundaryArtifactTypeProto.TallyReadyArtifact);
 
         _lastElectionResponse = response;
     }
@@ -1031,6 +1120,72 @@ public sealed class ElectionLifecycleIntegrationSteps
         response.AcceptanceId.Should().BeNullOrEmpty();
         response.ReceiptId.Should().BeNullOrEmpty();
         response.ServerProof.Should().BeNullOrEmpty();
+    }
+
+    [Then(@"the election result view for actor ""(.*)"" should expose participant-encrypted unofficial results")]
+    public async Task ThenTheElectionResultViewForActorShouldExposeParticipantEncryptedUnofficialResults(string actorAlias)
+    {
+        var response = await GetElectionResultViewAsync(ResolveIdentity(actorAlias), waitForUnofficialResult: true);
+        var unofficialResult = response.UnofficialResult;
+
+        response.CanViewParticipantEncryptedResults.Should().BeTrue();
+        unofficialResult.Should().NotBeNull();
+        unofficialResult!.Id.Should().NotBeNullOrWhiteSpace();
+        unofficialResult.Visibility.Should().Be(ElectionResultArtifactVisibilityProto.ElectionResultArtifactParticipantEncrypted);
+        unofficialResult.TallyReadyArtifactId.Should().NotBeNullOrWhiteSpace();
+        string.IsNullOrWhiteSpace(response.OfficialResult?.Id).Should().BeTrue();
+
+        _lastResultViewResponse = response;
+    }
+
+    [Then(@"the unofficial result should report (\d+) total voted, (\d+) eligible to vote, (\d+) did not vote, and (\d+) blank")]
+    public void ThenTheUnofficialResultShouldReportVoteTotals(
+        int expectedTotalVotedCount,
+        int expectedEligibleToVoteCount,
+        int expectedDidNotVoteCount,
+        int expectedBlankCount)
+    {
+        var unofficialResult = GetLastResultView().UnofficialResult;
+
+        unofficialResult.TotalVotedCount.Should().Be(expectedTotalVotedCount);
+        unofficialResult.EligibleToVoteCount.Should().Be(expectedEligibleToVoteCount);
+        unofficialResult.DidNotVoteCount.Should().Be(expectedDidNotVoteCount);
+        unofficialResult.BlankCount.Should().Be(expectedBlankCount);
+        unofficialResult.NamedOptionResults.Sum(x => x.VoteCount).Should().Be(
+            expectedTotalVotedCount - expectedBlankCount);
+    }
+
+    [Then(@"the unofficial result should include all named options")]
+    public async Task ThenTheUnofficialResultShouldIncludeAllNamedOptions()
+    {
+        var response = _lastElectionResponse ?? await ReloadElectionAsync();
+        var unofficialResult = GetLastResultView().UnofficialResult;
+
+        unofficialResult.NamedOptionResults.Should().HaveCount(response.Election.Options.Count(x => !x.IsBlankOption));
+        unofficialResult.NamedOptionResults.Select(x => x.OptionId).Should().OnlyHaveUniqueItems();
+    }
+
+    [Then(@"the official result should copy the unofficial result for actor ""(.*)""")]
+    public async Task ThenTheOfficialResultShouldCopyTheUnofficialResultForActor(string actorAlias)
+    {
+        var response = await GetElectionResultViewAsync(ResolveIdentity(actorAlias), waitForOfficialResult: true);
+        var unofficialResult = response.UnofficialResult;
+        var officialResult = response.OfficialResult;
+
+        unofficialResult.Should().NotBeNull();
+        officialResult.Should().NotBeNull();
+        officialResult!.Id.Should().NotBeNullOrWhiteSpace();
+        officialResult.SourceResultArtifactId.Should().Be(unofficialResult!.Id);
+        officialResult.Title.Should().Be(unofficialResult.Title);
+        officialResult.BlankCount.Should().Be(unofficialResult.BlankCount);
+        officialResult.TotalVotedCount.Should().Be(unofficialResult.TotalVotedCount);
+        officialResult.EligibleToVoteCount.Should().Be(unofficialResult.EligibleToVoteCount);
+        officialResult.DidNotVoteCount.Should().Be(unofficialResult.DidNotVoteCount);
+        officialResult.NamedOptionResults.Should().BeEquivalentTo(
+            unofficialResult.NamedOptionResults,
+            options => options.WithStrictOrdering());
+
+        _lastResultViewResponse = response;
     }
 
     [Then(@"the last blockchain submission should be rejected with validation code ""(.*)""")]
@@ -1199,6 +1354,35 @@ public sealed class ElectionLifecycleIntegrationSteps
 
         response.Success.Should().BeTrue(
             $"GetElectionVotingView should succeed for {GetElectionId()} and actor {actor.PublicSigningAddress}: {response.ErrorMessage}");
+        return response;
+    }
+
+    private async Task<GetElectionResultViewResponse> GetElectionResultViewAsync(
+        TestIdentity actor,
+        bool waitForUnofficialResult = false,
+        bool waitForOfficialResult = false)
+    {
+        async Task<GetElectionResultViewResponse> QueryAsync() =>
+            await GetClient().GetElectionResultViewAsync(new GetElectionResultViewRequest
+            {
+                ElectionId = GetElectionId(),
+                ActorPublicAddress = actor.PublicSigningAddress,
+            });
+
+        var response = await QueryAsync();
+
+        for (var attempt = 0;
+             attempt < 20 &&
+             ((waitForUnofficialResult && string.IsNullOrWhiteSpace(response.UnofficialResult?.Id)) ||
+              (waitForOfficialResult && string.IsNullOrWhiteSpace(response.OfficialResult?.Id)));
+             attempt++)
+        {
+            await Task.Delay(100);
+            response = await QueryAsync();
+        }
+
+        response.Success.Should().BeTrue(
+            $"GetElectionResultView should succeed for {GetElectionId()} and actor {actor.PublicSigningAddress}: {response.ErrorMessage}");
         return response;
     }
 
@@ -1640,6 +1824,7 @@ public sealed class ElectionLifecycleIntegrationSteps
         var ceremonyVersionId = string.IsNullOrWhiteSpace(session.CeremonySnapshot?.CeremonyVersionId)
             ? (Guid?)null
             : Guid.Parse(session.CeremonySnapshot.CeremonyVersionId);
+        var shareMaterial = BuildFinalizationShareMaterial(trustee, session);
         var signedTransaction = TestTransactionFactory.SubmitElectionFinalizationShare(
             trustee,
             new ElectionId(Guid.Parse(GetElectionId())),
@@ -1653,7 +1838,7 @@ public sealed class ElectionLifecycleIntegrationSteps
             session.TargetTallyId,
             ceremonyVersionId,
             session.CeremonySnapshot?.TallyPublicKeyFingerprint,
-            $"feat098-share-material-{trustee.DisplayName.ToLowerInvariant()}-{targetType.ToString().ToLowerInvariant()}");
+            shareMaterial);
         using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
 
         var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
@@ -1733,12 +1918,21 @@ public sealed class ElectionLifecycleIntegrationSteps
         votingView.CeremonyVersionId.Should().NotBeNullOrWhiteSpace();
         votingView.DkgProfileId.Should().NotBeNullOrWhiteSpace();
         votingView.TallyPublicKeyFingerprint.Should().NotBeNullOrWhiteSpace();
+        var selectionCount = votingView.Election.Options.Count;
+        selectionCount.Should().BeGreaterThan(0, "the election must expose at least one ballot option before ballot casting");
+        var nonBlankChoiceIndexes = votingView.Election.Options
+            .Select((option, index) => new { option, index })
+            .Where(x => !x.option.IsBlankOption)
+            .Select(x => x.index)
+            .ToArray();
+        nonBlankChoiceIndexes.Should().NotBeEmpty("the integration cast path should target a named option, not a blank vote");
+        var choiceIndex = ResolveChoiceIndex(actor, submissionIdempotencyKey, nonBlankChoiceIndexes);
 
         return TestTransactionFactory.AcceptElectionBallotCast(
             actor,
             GetCurrentElectionId(),
             submissionIdempotencyKey,
-            BuildEncryptedBallotPackage(actor, submissionIdempotencyKey),
+            BuildEncryptedBallotPackage(actor, submissionIdempotencyKey, selectionCount, choiceIndex),
             BuildProofBundle(actor, submissionIdempotencyKey),
             BuildBallotNullifier(actor, submissionIdempotencyKey),
             Guid.Parse(votingView.OpenArtifactId),
@@ -1824,6 +2018,11 @@ public sealed class ElectionLifecycleIntegrationSteps
             ? parsed
             : throw new ArgumentOutOfRangeException(nameof(submissionStatus), submissionStatus, "Unsupported voting submission status.");
 
+    private static ElectionClosedProgressStatusProto ParseClosedProgressStatus(string progressStatus) =>
+        Enum.TryParse<ElectionClosedProgressStatusProto>(progressStatus, ignoreCase: false, out var parsed)
+            ? parsed
+            : throw new ArgumentOutOfRangeException(nameof(progressStatus), progressStatus, "Unsupported closed progress status.");
+
     private static IReadOnlyList<ElectionRosterImportItem> BuildDefaultRosterImportItems() =>
     [
         new ElectionRosterImportItem("voter-alice", ElectionRosterContactType.Email, "alice.eligibility@hush.test"),
@@ -1847,13 +2046,20 @@ public sealed class ElectionLifecycleIntegrationSteps
     private GetElectionVotingViewResponse GetLastVotingView() =>
         _lastVotingViewResponse ?? throw new InvalidOperationException("No election voting view has been loaded for this scenario.");
 
+    private GetElectionResultViewResponse GetLastResultView() =>
+        _lastResultViewResponse ?? throw new InvalidOperationException("No election result view has been loaded for this scenario.");
+
     private GetElectionEligibilityViewResponse GetLastEligibilityView() =>
         _lastEligibilityViewResponse ?? throw new InvalidOperationException("No election eligibility view has been loaded for this scenario.");
 
     private ElectionId GetCurrentElectionId() =>
         new(Guid.Parse(GetElectionId()));
 
-    private string BuildEncryptedBallotPackage(TestIdentity actor, string submissionIdempotencyKey)
+    private string BuildEncryptedBallotPackage(
+        TestIdentity actor,
+        string submissionIdempotencyKey,
+        int selectionCount,
+        int choiceIndex)
     {
         var curve = new BabyJubJubCurve();
         var publicKeySeed = ParseSeedToScalar($"feat100:public-key:{GetElectionId()}", curve.Order);
@@ -1863,19 +2069,19 @@ public sealed class ElectionLifecycleIntegrationSteps
         var keyPair = ControlledElectionHarness.CreateDeterministicKeyPair(publicKeySeed, curve);
         var ballot = ControlledElectionHarness.EncryptOneHotBallot(
             ballotId: $"feat100-ballot:{GetElectionId()}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}",
-            choiceIndex: ResolveChoiceIndex(actor, submissionIdempotencyKey),
+            choiceIndex: choiceIndex,
             publicKey: keyPair.PublicKey,
             nonces: ControlledElectionHarness.CreateDeterministicNonceSequence(
                 nonceSeed,
-                ControlledElectionHarness.DefaultSelectionCount,
+                selectionCount,
                 curve),
-            selectionCount: ControlledElectionHarness.DefaultSelectionCount,
+            selectionCount: selectionCount,
             curve: curve);
 
         var payload = new PublishedElectionBallotPackage(
             Version: "election-ballot.v1",
             PublicKey: ToPublishedPoint(keyPair.PublicKey),
-            SelectionCount: ControlledElectionHarness.DefaultSelectionCount,
+            SelectionCount: selectionCount,
             Ciphertext: new PublishedElectionCiphertext(
                 ballot.Slots.Select(slot => ToPublishedPoint(slot.C1)).ToArray(),
                 ballot.Slots.Select(slot => ToPublishedPoint(slot.C2)).ToArray()));
@@ -1898,12 +2104,42 @@ public sealed class ElectionLifecycleIntegrationSteps
         Convert.ToBase64String(Encoding.UTF8.GetBytes(
             $"{artifactKind}:{GetElectionId()}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}"));
 
-    private static int ResolveChoiceIndex(TestIdentity actor, string submissionIdempotencyKey)
+    private static int ResolveChoiceIndex(
+        TestIdentity actor,
+        string submissionIdempotencyKey,
+        IReadOnlyList<int> availableChoiceIndexes)
     {
         var digest = SHA256.HashData(Encoding.UTF8.GetBytes(
             $"feat100:choice-index:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}"));
         var scalar = new BigInteger(digest, isUnsigned: true, isBigEndian: true);
-        return (int)(scalar % ControlledElectionHarness.DefaultSelectionCount);
+        return availableChoiceIndexes[(int)(scalar % availableChoiceIndexes.Count)];
+    }
+
+    private string BuildFinalizationShareMaterial(
+        TestIdentity trustee,
+        ElectionFinalizationSession session)
+    {
+        var curve = new BabyJubJubCurve();
+        var publicKeySeed = ParseSeedToScalar($"feat100:public-key:{GetElectionId()}", curve.Order);
+        var keyPair = ControlledElectionHarness.CreateDeterministicKeyPair(publicKeySeed, curve);
+        // ControlledElectionThresholdSetup derives coefficient[0] from seed + 7919 before normalization.
+        var thresholdSeed = keyPair.PrivateKey - 7920;
+        var trusteeIds = System.Collections.Immutable.ImmutableArray.CreateRange(
+            session.EligibleTrustees.Select(x => x.TrusteeUserAddress));
+        var thresholdDefinition = new ControlledElectionThresholdDefinition(
+            GetElectionId(),
+            trusteeIds,
+            session.RequiredShareCount);
+        var thresholdSetup = ControlledElectionHarness.CreateControlledThresholdSetup(
+            thresholdDefinition,
+            session.Id,
+            session.TargetTallyId,
+            thresholdSeed,
+            curve);
+
+        return thresholdSetup.Shares
+            .Single(x => string.Equals(x.TrusteeId, trustee.PublicSigningAddress, StringComparison.Ordinal))
+            .ShareMaterial;
     }
 
     private static BigInteger ParseSeedToScalar(string seed, BigInteger order)

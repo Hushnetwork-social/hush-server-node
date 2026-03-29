@@ -20,6 +20,7 @@ public record ElectionRecord(
     string ProtocolOmegaVersion,
     ReportingPolicy ReportingPolicy,
     ReviewWindowPolicy ReviewWindowPolicy,
+    OfficialResultVisibilityPolicy OfficialResultVisibilityPolicy,
     int CurrentDraftRevision,
     IReadOnlyList<ElectionOptionDefinition> Options,
     IReadOnlyList<ElectionWarningCode> AcknowledgedWarningCodes,
@@ -31,10 +32,13 @@ public record ElectionRecord(
     DateTime? ClosedAt,
     DateTime? FinalizedAt,
     DateTime? TallyReadyAt,
+    ElectionClosedProgressStatus ClosedProgressStatus,
     Guid? OpenArtifactId,
     Guid? CloseArtifactId,
     Guid? TallyReadyArtifactId,
-    Guid? FinalizeArtifactId);
+    Guid? FinalizeArtifactId,
+    Guid? UnofficialResultArtifactId,
+    Guid? OfficialResultArtifactId);
 
 public record ElectionDraftSnapshotRecord(
     Guid Id,

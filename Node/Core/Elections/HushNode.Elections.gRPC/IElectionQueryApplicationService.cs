@@ -16,6 +16,8 @@ public interface IElectionQueryApplicationService
 
     Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccessAsync(ElectionId electionId, string actorPublicAddress);
 
+    Task<GetElectionResultViewResponse> GetElectionResultViewAsync(ElectionId electionId, string actorPublicAddress);
+
     Task<GetElectionCeremonyActionViewResponse> GetElectionCeremonyActionViewAsync(ElectionId electionId, string actorPublicAddress);
 
     Task<GetElectionsByOwnerResponse> GetElectionsByOwnerAsync(string ownerPublicAddress);

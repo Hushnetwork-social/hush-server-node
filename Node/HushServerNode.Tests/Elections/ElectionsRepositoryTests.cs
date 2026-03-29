@@ -31,6 +31,102 @@ public class ElectionsRepositoryTests
         latestSnapshot.Should().NotBeNull();
         latestSnapshot!.SnapshotReason.Should().Be("initial draft");
         latestSnapshot.Policy.ProtocolOmegaVersion.Should().Be("omega-v1.0.0");
+        retrievedElection.OfficialResultVisibilityPolicy.Should().Be(OfficialResultVisibilityPolicy.ParticipantEncryptedOnly);
+    }
+
+    [Fact]
+    public async Task SaveEnvelopeAccessAndResultArtifacts_ShouldRoundTrip()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedAt = DateTime.UtcNow.AddMinutes(-5),
+            TallyReadyAt = DateTime.UtcNow.AddMinutes(-1),
+            CloseArtifactId = Guid.NewGuid(),
+            TallyReadyArtifactId = Guid.NewGuid(),
+            ClosedProgressStatus = ElectionClosedProgressStatus.WaitingForTrusteeShares,
+        };
+        var accessRecord = new ElectionEnvelopeAccessRecord(
+            election.ElectionId,
+            "voter-address",
+            "node-encrypted-election-key",
+            "actor-encrypted-election-key",
+            DateTime.UtcNow,
+            Guid.NewGuid(),
+            42,
+            Guid.NewGuid());
+        var denominatorEvidence = new ElectionResultDenominatorEvidence(
+            ElectionEligibilitySnapshotType.Close,
+            Guid.NewGuid(),
+            election.CloseArtifactId,
+            [9, 8, 7, 6]);
+        var unofficialResult = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Unofficial,
+            ElectionResultArtifactVisibility.ParticipantEncrypted,
+            title: election.Title,
+            namedOptionResults:
+            [
+                new ElectionResultOptionCount("alice", "Alice", null, 1, 1, 10),
+                new ElectionResultOptionCount("bob", "Bob", null, 2, 2, 7),
+            ],
+            blankCount: 2,
+            totalVotedCount: 19,
+            eligibleToVoteCount: 25,
+            didNotVoteCount: 6,
+            denominatorEvidence: denominatorEvidence,
+            recordedByPublicAddress: election.OwnerPublicAddress,
+            tallyReadyArtifactId: election.TallyReadyArtifactId,
+            encryptedPayload: "encrypted-unofficial-result");
+        var officialResult = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Official,
+            ElectionResultArtifactVisibility.ParticipantEncrypted,
+            title: election.Title,
+            namedOptionResults: unofficialResult.NamedOptionResults,
+            blankCount: unofficialResult.BlankCount,
+            totalVotedCount: unofficialResult.TotalVotedCount,
+            eligibleToVoteCount: unofficialResult.EligibleToVoteCount,
+            didNotVoteCount: unofficialResult.DidNotVoteCount,
+            denominatorEvidence: unofficialResult.DenominatorEvidence,
+            recordedByPublicAddress: election.OwnerPublicAddress,
+            sourceResultArtifactId: unofficialResult.Id,
+            encryptedPayload: "encrypted-official-result");
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveElectionEnvelopeAccessAsync(accessRecord);
+        await repository.SaveResultArtifactAsync(unofficialResult);
+        await repository.SaveResultArtifactAsync(officialResult);
+        await context.SaveChangesAsync();
+
+        var storedAccess = await repository.GetElectionEnvelopeAccessAsync(election.ElectionId, "voter-address");
+        var artifacts = await repository.GetResultArtifactsAsync(election.ElectionId);
+        var storedUnofficial = await repository.GetResultArtifactAsync(
+            election.ElectionId,
+            ElectionResultArtifactKind.Unofficial);
+        var storedOfficial = await repository.GetResultArtifactAsync(officialResult.Id);
+
+        storedAccess.Should().NotBeNull();
+        storedAccess!.NodeEncryptedElectionPrivateKey.Should().Be("node-encrypted-election-key");
+        storedAccess.ActorEncryptedElectionPrivateKey.Should().Be("actor-encrypted-election-key");
+
+        artifacts.Should().HaveCount(2);
+        artifacts.Select(x => x.ArtifactKind).Should().Equal(
+            ElectionResultArtifactKind.Unofficial,
+            ElectionResultArtifactKind.Official);
+
+        storedUnofficial.Should().NotBeNull();
+        storedUnofficial!.Visibility.Should().Be(ElectionResultArtifactVisibility.ParticipantEncrypted);
+        storedUnofficial.TallyReadyArtifactId.Should().Be(election.TallyReadyArtifactId);
+        storedUnofficial.NamedOptionResults.Should().HaveCount(2);
+        storedUnofficial.NamedOptionResults[0].VoteCount.Should().Be(10);
+
+        storedOfficial.Should().NotBeNull();
+        storedOfficial!.SourceResultArtifactId.Should().Be(unofficialResult.Id);
+        storedOfficial.DidNotVoteCount.Should().Be(6);
+        storedOfficial.DenominatorEvidence.ActiveDenominatorSetHash.Should().Equal([9, 8, 7, 6]);
     }
 
     [Fact]
@@ -429,6 +525,7 @@ public class ElectionsRepositoryTests
             closeArtifactId: election.CloseArtifactId!.Value,
             acceptedBallotSetHash: [1, 2, 3],
             finalEncryptedTallyHash: [4, 5, 6],
+            sessionPurpose: ElectionFinalizationSessionPurpose.Finalization,
             ceremonySnapshot: ceremonySnapshot,
             requiredShareCount: 1,
             eligibleTrustees:

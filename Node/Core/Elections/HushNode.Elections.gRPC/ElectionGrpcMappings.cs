@@ -177,13 +177,17 @@ internal static class ElectionGrpcMappings
             ProtocolOmegaVersion = election.ProtocolOmegaVersion,
             ReportingPolicy = (ReportingPolicyProto)(int)election.ReportingPolicy,
             ReviewWindowPolicy = (ReviewWindowPolicyProto)(int)election.ReviewWindowPolicy,
+            OfficialResultVisibilityPolicy = (OfficialResultVisibilityPolicyProto)(int)election.OfficialResultVisibilityPolicy,
             CurrentDraftRevision = election.CurrentDraftRevision,
             CreatedAt = ToTimestamp(election.CreatedAt),
             LastUpdatedAt = ToTimestamp(election.LastUpdatedAt),
+            ClosedProgressStatus = (ElectionClosedProgressStatusProto)(int)election.ClosedProgressStatus,
             OpenArtifactId = election.OpenArtifactId?.ToString() ?? string.Empty,
             CloseArtifactId = election.CloseArtifactId?.ToString() ?? string.Empty,
             FinalizeArtifactId = election.FinalizeArtifactId?.ToString() ?? string.Empty,
             TallyReadyArtifactId = election.TallyReadyArtifactId?.ToString() ?? string.Empty,
+            UnofficialResultArtifactId = election.UnofficialResultArtifactId?.ToString() ?? string.Empty,
+            OfficialResultArtifactId = election.OfficialResultArtifactId?.ToString() ?? string.Empty,
         };
 
         view.ApprovedClientApplications.AddRange(election.ApprovedClientApplications.Select(x => x.ToProto()));
@@ -662,6 +666,7 @@ internal static class ElectionGrpcMappings
             ElectionId = session.ElectionId.ToString(),
             GovernedProposalId = session.GovernedProposalId?.ToString() ?? string.Empty,
             GovernanceMode = (ElectionGovernanceModeProto)(int)session.GovernanceMode,
+            SessionPurpose = (ElectionFinalizationSessionPurposeProto)(int)session.SessionPurpose,
             CloseArtifactId = session.CloseArtifactId.ToString(),
             AcceptedBallotSetHash = ToByteString(session.AcceptedBallotSetHash),
             FinalEncryptedTallyHash = ToByteString(session.FinalEncryptedTallyHash),
@@ -737,6 +742,7 @@ internal static class ElectionGrpcMappings
             Id = releaseEvidence.Id.ToString(),
             FinalizationSessionId = releaseEvidence.FinalizationSessionId.ToString(),
             ElectionId = releaseEvidence.ElectionId.ToString(),
+            SessionPurpose = (ElectionFinalizationSessionPurposeProto)(int)releaseEvidence.SessionPurpose,
             ReleaseMode = (ElectionFinalizationReleaseModeProto)(int)releaseEvidence.ReleaseMode,
             CloseArtifactId = releaseEvidence.CloseArtifactId.ToString(),
             AcceptedBallotSetHash = ToByteString(releaseEvidence.AcceptedBallotSetHash),
@@ -756,6 +762,32 @@ internal static class ElectionGrpcMappings
             proto.SourceBlockHeight = releaseEvidence.SourceBlockHeight.Value;
         }
 
+        return proto;
+    }
+
+    public static ElectionResultArtifact ToProto(this ElectionResultArtifactRecord artifact)
+    {
+        var proto = new ElectionResultArtifact
+        {
+            Id = artifact.Id.ToString(),
+            ElectionId = artifact.ElectionId.ToString(),
+            ArtifactKind = (ElectionResultArtifactKindProto)(int)artifact.ArtifactKind,
+            Visibility = (ElectionResultArtifactVisibilityProto)(int)artifact.Visibility,
+            Title = artifact.Title,
+            BlankCount = artifact.BlankCount,
+            TotalVotedCount = artifact.TotalVotedCount,
+            EligibleToVoteCount = artifact.EligibleToVoteCount,
+            DidNotVoteCount = artifact.DidNotVoteCount,
+            TallyReadyArtifactId = artifact.TallyReadyArtifactId?.ToString() ?? string.Empty,
+            SourceResultArtifactId = artifact.SourceResultArtifactId?.ToString() ?? string.Empty,
+            EncryptedPayload = artifact.EncryptedPayload ?? string.Empty,
+            PublicPayload = artifact.PublicPayload ?? string.Empty,
+            RecordedAt = ToTimestamp(artifact.RecordedAt),
+            RecordedByPublicAddress = artifact.RecordedByPublicAddress,
+        };
+
+        proto.NamedOptionResults.AddRange(artifact.NamedOptionResults.Select(x => x.ToProto()));
+        proto.DenominatorEvidence = artifact.DenominatorEvidence.ToProto();
         return proto;
     }
 
@@ -787,6 +819,26 @@ internal static class ElectionGrpcMappings
             ShortDescription = option.ShortDescription ?? string.Empty,
             BallotOrder = option.BallotOrder,
             IsBlankOption = option.IsBlankOption,
+        };
+
+    public static HushNetwork.proto.ElectionResultOptionCount ToProto(this HushShared.Elections.Model.ElectionResultOptionCount optionCount) =>
+        new()
+        {
+            OptionId = optionCount.OptionId,
+            DisplayLabel = optionCount.DisplayLabel,
+            ShortDescription = optionCount.ShortDescription ?? string.Empty,
+            BallotOrder = optionCount.BallotOrder,
+            Rank = optionCount.Rank,
+            VoteCount = optionCount.VoteCount,
+        };
+
+    public static HushNetwork.proto.ElectionResultDenominatorEvidence ToProto(this HushShared.Elections.Model.ElectionResultDenominatorEvidence evidence) =>
+        new()
+        {
+            SnapshotType = (ElectionEligibilitySnapshotTypeProto)(int)evidence.SnapshotType,
+            EligibilitySnapshotId = evidence.EligibilitySnapshotId.ToString(),
+            BoundaryArtifactId = evidence.BoundaryArtifactId?.ToString() ?? string.Empty,
+            ActiveDenominatorSetHash = ToByteString(evidence.ActiveDenominatorSetHash),
         };
 
     public static HushNetwork.proto.ElectionTrusteeReference ToProto(

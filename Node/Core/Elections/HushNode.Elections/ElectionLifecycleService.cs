@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Data;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using HushNode.Caching;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
@@ -12,16 +13,18 @@ namespace HushNode.Elections;
 
 public class ElectionLifecycleService : IElectionLifecycleService
 {
+    private static readonly JsonSerializerOptions ResultPayloadJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider;
     private readonly ILogger<ElectionLifecycleService> _logger;
     private readonly ElectionCeremonyOptions _ceremonyOptions;
     private readonly IElectionCastIdempotencyCacheService? _castIdempotencyCacheService;
+    private readonly IElectionResultCryptoService? _electionResultCryptoService;
     private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
 
     public ElectionLifecycleService(
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ILogger<ElectionLifecycleService> logger)
-        : this(unitOfWorkProvider, logger, new ElectionCeremonyOptions(), null)
+        : this(unitOfWorkProvider, logger, new ElectionCeremonyOptions(), null, null)
     {
     }
 
@@ -29,7 +32,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ILogger<ElectionLifecycleService> logger,
         ElectionCeremonyOptions ceremonyOptions)
-        : this(unitOfWorkProvider, logger, ceremonyOptions, null)
+        : this(unitOfWorkProvider, logger, ceremonyOptions, null, null)
     {
     }
 
@@ -37,12 +40,14 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ILogger<ElectionLifecycleService> logger,
         ElectionCeremonyOptions ceremonyOptions,
-        IElectionCastIdempotencyCacheService? castIdempotencyCacheService)
+        IElectionCastIdempotencyCacheService? castIdempotencyCacheService,
+        IElectionResultCryptoService? electionResultCryptoService = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _logger = logger;
         _ceremonyOptions = ceremonyOptions;
         _castIdempotencyCacheService = castIdempotencyCacheService;
+        _electionResultCryptoService = electionResultCryptoService;
     }
 
     public async Task<ElectionCommandResult> CreateDraftAsync(CreateElectionDraftRequest request)
@@ -1777,13 +1782,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 $"Election {request.ElectionId} was not found.");
         }
 
-        var result = await StartFinalizationSessionInternalAsync(
+        var result = await FinalizeElectionInternalAsync(
             repository,
             election,
             request.ActorPublicAddress,
-            request.AcceptedBallotSetHash,
-            request.FinalEncryptedTallyHash,
-            governedProposalId: null,
+            allowTrusteeThresholdExecution: false,
             request.SourceTransactionId,
             request.SourceBlockHeight,
             request.SourceBlockId);
@@ -1807,13 +1810,6 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.NotFound,
                 $"Election {request.ElectionId} was not found.");
-        }
-
-        if (election.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold)
-        {
-            return ElectionCommandResult.Failure(
-                ElectionCommandErrorCode.NotSupported,
-                "Finalization share submission is only supported for trustee-threshold elections.");
         }
 
         if (election.LifecycleState != ElectionLifecycleState.Closed)
@@ -1959,6 +1955,16 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         if (acceptedShares.Count < session.RequiredShareCount)
         {
+            if (session.SessionPurpose == ElectionFinalizationSessionPurpose.CloseCounting &&
+                progressElection.ClosedProgressStatus != ElectionClosedProgressStatus.WaitingForTrusteeShares)
+            {
+                progressElection = progressElection with
+                {
+                    ClosedProgressStatus = ElectionClosedProgressStatus.WaitingForTrusteeShares,
+                };
+                await repository.SaveElectionAsync(progressElection);
+            }
+
             await unitOfWork.CommitAsync();
 
             return ElectionCommandResult.Success(
@@ -1967,22 +1973,55 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 finalizationShare: shareRecord);
         }
 
+        if (session.SessionPurpose == ElectionFinalizationSessionPurpose.CloseCounting)
+        {
+            progressElection = progressElection with
+            {
+                ClosedProgressStatus = ElectionClosedProgressStatus.TallyCalculationInProgress,
+            };
+            await repository.SaveElectionAsync(progressElection);
+        }
+
         var acceptedTrustees = session.EligibleTrustees
             .Where(x => acceptedShares.Any(share =>
                 string.Equals(share.TrusteeUserAddress, x.TrusteeUserAddress, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
 
-        var completionResult = await CompleteFinalizationSessionAsync(
-            repository,
-            progressElection,
-            session,
-            acceptedTrustees,
-            request.ActorPublicAddress,
-            submittedAt,
-            request.SourceTransactionId,
-            request.SourceBlockHeight,
-            request.SourceBlockId,
-            shareRecord);
+        var completionResult = session.SessionPurpose == ElectionFinalizationSessionPurpose.CloseCounting
+            ? await CompleteCloseCountingSessionAsync(
+                repository,
+                progressElection,
+                session,
+                acceptedShares,
+                acceptedTrustees,
+                request.ActorPublicAddress,
+                submittedAt,
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId,
+                shareRecord)
+            : await CompleteFinalizationSessionAsync(
+                repository,
+                progressElection,
+                session,
+                acceptedTrustees,
+                request.ActorPublicAddress,
+                submittedAt,
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId,
+                shareRecord);
+
+        if (!completionResult.IsSuccess &&
+            session.SessionPurpose == ElectionFinalizationSessionPurpose.CloseCounting)
+        {
+            var restoredElection = progressElection with
+            {
+                ClosedProgressStatus = ElectionClosedProgressStatus.WaitingForTrusteeShares,
+                LastUpdatedAt = submittedAt,
+            };
+            await repository.SaveElectionAsync(restoredElection);
+        }
 
         if (completionResult.IsSuccess)
         {
@@ -2122,7 +2161,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 }
 
                 return election.TallyReadyAt.HasValue
-                    ? null
+                    ? election.UnofficialResultArtifactId.HasValue
+                        ? null
+                        : ElectionCommandResult.Failure(
+                            ElectionCommandErrorCode.InvalidState,
+                            "Governed finalize proposals are only allowed when the unofficial result exists.")
                     : ElectionCommandResult.Failure(
                         ElectionCommandErrorCode.InvalidState,
                         "Governed finalize proposals are only allowed when the election is tally ready.");
@@ -2239,13 +2282,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 sourceTransactionId: sourceTransactionId,
                 sourceBlockHeight: sourceBlockHeight,
                 sourceBlockId: sourceBlockId),
-            ElectionGovernedActionType.Finalize => StartFinalizationSessionInternalAsync(
+            ElectionGovernedActionType.Finalize => FinalizeElectionInternalAsync(
                 repository,
                 election,
                 proposal.ProposedByPublicAddress,
-                acceptedBallotSetHash: null,
-                finalEncryptedTallyHash: null,
-                governedProposalId: proposal.Id,
+                allowTrusteeThresholdExecution: true,
                 sourceTransactionId: sourceTransactionId,
                 sourceBlockHeight: sourceBlockHeight,
                 sourceBlockId: sourceBlockId),
@@ -3510,6 +3551,172 @@ public class ElectionLifecycleService : IElectionLifecycleService
             eligibilitySnapshot: eligibilitySnapshot);
     }
 
+    private async Task<ElectionCommandResult> FinalizeElectionInternalAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        string actorPublicAddress,
+        bool allowTrusteeThresholdExecution,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
+    {
+        if (!string.Equals(election.OwnerPublicAddress, actorPublicAddress, StringComparison.Ordinal))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Forbidden,
+                "Only the owner can finalize the election.");
+        }
+
+        if (election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold && !allowTrusteeThresholdExecution)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotSupported,
+                "Trustee-threshold elections must use the governed proposal workflow to finalize.");
+        }
+
+        if (election.LifecycleState != ElectionLifecycleState.Closed)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.InvalidState,
+                "Election finalize is only allowed from the closed state.");
+        }
+
+        if (!election.TallyReadyAt.HasValue)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.InvalidState,
+                "Election finalize is only allowed when the election is tally ready.");
+        }
+
+        var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(election.ElectionId);
+        var tallyReadyArtifact = ResolveTallyReadyArtifact(election, boundaryArtifacts);
+        if (tallyReadyArtifact is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Finalization requires the exact tally-ready boundary artifact to exist.");
+        }
+
+        var unofficialResult = election.UnofficialResultArtifactId.HasValue
+            ? await repository.GetResultArtifactAsync(election.UnofficialResultArtifactId.Value)
+            : await repository.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Unofficial);
+        if (unofficialResult is null)
+        {
+            if (election.GovernanceMode == ElectionGovernanceMode.AdminOnly)
+            {
+                return await StartFinalizationSessionInternalAsync(
+                    repository,
+                    election,
+                    actorPublicAddress,
+                    acceptedBallotSetHash: tallyReadyArtifact.AcceptedBallotSetHash,
+                    finalEncryptedTallyHash: tallyReadyArtifact.FinalEncryptedTallyHash,
+                    governedProposalId: null,
+                    sourceTransactionId: sourceTransactionId,
+                    sourceBlockHeight: sourceBlockHeight,
+                    sourceBlockId: sourceBlockId);
+            }
+
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Finalization requires the exact unofficial result artifact to exist.");
+        }
+
+        if (unofficialResult.ArtifactKind != ElectionResultArtifactKind.Unofficial)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Finalization requires an unofficial result artifact as the source result.");
+        }
+
+        if (election.OfficialResultArtifactId.HasValue ||
+            await repository.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Official) is not null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "The official result artifact already exists for this election.");
+        }
+
+        var officialRecordedAt = DateTime.UtcNow;
+        var officialVisibility = election.OfficialResultVisibilityPolicy == OfficialResultVisibilityPolicy.PublicPlaintext
+            ? ElectionResultArtifactVisibility.PublicPlaintext
+            : ElectionResultArtifactVisibility.ParticipantEncrypted;
+        var officialPayload = SerializeResultArtifactPayload(unofficialResult);
+
+        string? encryptedPayload = null;
+        string? publicPayload = null;
+        if (officialVisibility == ElectionResultArtifactVisibility.PublicPlaintext)
+        {
+            publicPayload = officialPayload;
+        }
+        else
+        {
+            if (_electionResultCryptoService is null)
+            {
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.DependencyBlocked,
+                    "Official participant-encrypted result publication requires the FEAT-101 result crypto service.");
+            }
+
+            var ownerAccess = await repository.GetElectionEnvelopeAccessAsync(election.ElectionId, election.OwnerPublicAddress);
+            if (ownerAccess is null)
+            {
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.DependencyBlocked,
+                    "Official participant-encrypted result publication requires the owner election envelope access record.");
+            }
+
+            encryptedPayload = _electionResultCryptoService.EncryptForElectionParticipants(
+                officialPayload,
+                ownerAccess.NodeEncryptedElectionPrivateKey);
+        }
+
+        var officialResult = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Official,
+            officialVisibility,
+            unofficialResult.Title,
+            unofficialResult.NamedOptionResults,
+            unofficialResult.BlankCount,
+            unofficialResult.TotalVotedCount,
+            unofficialResult.EligibleToVoteCount,
+            unofficialResult.DidNotVoteCount,
+            unofficialResult.DenominatorEvidence,
+            actorPublicAddress,
+            tallyReadyArtifactId: null,
+            sourceResultArtifactId: unofficialResult.Id,
+            encryptedPayload: encryptedPayload,
+            publicPayload: publicPayload,
+            recordedAt: officialRecordedAt,
+            sourceTransactionId: sourceTransactionId,
+            sourceBlockHeight: sourceBlockHeight,
+            sourceBlockId: sourceBlockId);
+
+        var finalizeArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Finalize,
+            election,
+            actorPublicAddress,
+            recordedAt: officialRecordedAt,
+            acceptedBallotSetHash: tallyReadyArtifact.AcceptedBallotSetHash,
+            finalEncryptedTallyHash: tallyReadyArtifact.FinalEncryptedTallyHash,
+            sourceTransactionId: sourceTransactionId,
+            sourceBlockHeight: sourceBlockHeight,
+            sourceBlockId: sourceBlockId);
+        var finalizedElection = ApplyLifecycleTransition(election, finalizeArtifact, officialRecordedAt) with
+        {
+            LastUpdatedAt = officialRecordedAt,
+            ClosedProgressStatus = ElectionClosedProgressStatus.None,
+            OfficialResultArtifactId = officialResult.Id,
+        };
+
+        await repository.SaveResultArtifactAsync(officialResult);
+        await repository.SaveBoundaryArtifactAsync(finalizeArtifact);
+        await repository.SaveElectionAsync(finalizedElection);
+
+        return ElectionCommandResult.Success(
+            finalizedElection,
+            boundaryArtifact: finalizeArtifact);
+    }
+
     private async Task<ElectionCommandResult> StartFinalizationSessionInternalAsync(
         IElectionsRepository repository,
         ElectionRecord election,
@@ -3633,6 +3840,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             closeArtifact.Id,
             tallyReadyArtifact.AcceptedBallotSetHash,
             tallyReadyArtifact.FinalEncryptedTallyHash,
+            ElectionFinalizationSessionPurpose.Finalization,
             ceremonySnapshot,
             requiredShareCount,
             eligibleTrustees,
@@ -3722,6 +3930,244 @@ public class ElectionLifecycleService : IElectionLifecycleService
             finalizationReleaseEvidence: releaseEvidence);
     }
 
+    private async Task<ElectionCommandResult> CompleteCloseCountingSessionAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionFinalizationSessionRecord session,
+        IReadOnlyList<ElectionFinalizationShareRecord> acceptedShares,
+        IReadOnlyList<ElectionTrusteeReference> acceptedTrustees,
+        string completedByPublicAddress,
+        DateTime completedAt,
+        Guid? sourceTransactionId,
+        long? sourceBlockHeight,
+        Guid? sourceBlockId,
+        ElectionFinalizationShareRecord? finalizationShare)
+    {
+        if (_electionResultCryptoService is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Close-counting completion requires the FEAT-101 result crypto service.");
+        }
+
+        var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(election.ElectionId);
+        var closeArtifact = boundaryArtifacts.FirstOrDefault(x =>
+            x.Id == session.CloseArtifactId &&
+            x.ArtifactType == ElectionBoundaryArtifactType.Close);
+        if (closeArtifact is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Close-counting completion requires the exact close boundary artifact.");
+        }
+
+        if (ResolveTallyReadyArtifact(election, boundaryArtifacts) is not null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "Close-counting completion cannot run after tally_ready already exists.");
+        }
+
+        var existingUnofficial = election.UnofficialResultArtifactId.HasValue
+            ? await repository.GetResultArtifactAsync(election.UnofficialResultArtifactId.Value)
+            : await repository.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Unofficial);
+        if (existingUnofficial is not null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "Close-counting completion cannot run after an unofficial result already exists.");
+        }
+
+        var acceptedBallots = await repository.GetAcceptedBallotsAsync(election.ElectionId);
+        var publishedBallots = await repository.GetPublishedBallotsAsync(election.ElectionId);
+        if (acceptedBallots.Count != publishedBallots.Count)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Close-counting completion requires accepted and published ballot inventories to match.");
+        }
+
+        var closeSnapshot = await repository.GetEligibilitySnapshotAsync(
+            election.ElectionId,
+            ElectionEligibilitySnapshotType.Close);
+        if (closeSnapshot is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Close-counting completion requires the close eligibility snapshot.");
+        }
+
+        var ownerAccess = await repository.GetElectionEnvelopeAccessAsync(election.ElectionId, election.OwnerPublicAddress);
+        if (ownerAccess is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Close-counting completion requires the owner election envelope access record.");
+        }
+
+        var acceptedHash = ComputeAcceptedBallotInventoryHash(acceptedBallots);
+        if (!ByteArrayEquals(acceptedHash, session.AcceptedBallotSetHash))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Close-counting completion inventory does not match the bound accepted-ballot set hash.");
+        }
+
+        var publishedHash = ComputePublishedBallotStreamHash(publishedBallots);
+        var release = _electionResultCryptoService.TryReleaseAggregateTally(
+            publishedBallots.Select(x => x.EncryptedBallotPackage).ToArray(),
+            acceptedShares,
+            acceptedBallots.Count);
+        if (!release.IsSuccessful)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                $"Close-counting aggregate release failed: {release.FailureReason}");
+        }
+
+        if (!ByteArrayEquals(release.FinalEncryptedTallyHash, session.FinalEncryptedTallyHash))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Close-counting aggregate release hash does not match the bound tally target.");
+        }
+
+        var decodedCounts = release.DecodedCounts ?? Array.Empty<int>();
+        if (decodedCounts.Count != election.Options.Count)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                $"Close-counting aggregate release did not return a count for every ballot option. Expected {election.Options.Count} slots but received {decodedCounts.Count}.");
+        }
+
+        var optionCounts = election.Options
+            .Select((option, index) => new { Option = option, Count = decodedCounts[index] })
+            .ToArray();
+        var blankOption = optionCounts.FirstOrDefault(x => x.Option.IsBlankOption);
+        var namedOptionResults = optionCounts
+            .Where(x => !x.Option.IsBlankOption)
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.Option.BallotOrder)
+            .Select((x, index) => new ElectionResultOptionCount(
+                x.Option.OptionId,
+                x.Option.DisplayLabel,
+                x.Option.ShortDescription,
+                x.Option.BallotOrder,
+                index + 1,
+                x.Count))
+            .ToArray();
+
+        var blankCount = blankOption?.Count ?? 0;
+        var totalVotedCount = decodedCounts.Sum();
+        var eligibleToVoteCount = closeSnapshot.ActiveDenominatorCount;
+        var didNotVoteCount = closeSnapshot.DidNotVoteCount;
+        if (totalVotedCount != namedOptionResults.Sum(x => x.VoteCount) + blankCount)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Close-counting totals do not match the decoded named-option and blank counts.");
+        }
+
+        if (didNotVoteCount != eligibleToVoteCount - totalVotedCount)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Close-counting denominator totals do not reconcile with did-not-vote count.");
+        }
+
+        if (totalVotedCount != closeSnapshot.CountedParticipationCount)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Close-counting totals do not reconcile with the close participation snapshot.");
+        }
+
+        var tallyReadyArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.TallyReady,
+            election,
+            completedByPublicAddress,
+            recordedAt: completedAt,
+            acceptedBallotCount: acceptedBallots.Count,
+            acceptedBallotSetHash: acceptedHash,
+            publishedBallotCount: publishedBallots.Count,
+            publishedBallotStreamHash: publishedHash,
+            finalEncryptedTallyHash: release.FinalEncryptedTallyHash,
+            sourceTransactionId: sourceTransactionId,
+            sourceBlockHeight: sourceBlockHeight,
+            sourceBlockId: sourceBlockId);
+        var denominatorEvidence = new ElectionResultDenominatorEvidence(
+            closeSnapshot.SnapshotType,
+            closeSnapshot.Id,
+            closeSnapshot.BoundaryArtifactId,
+            closeSnapshot.ActiveDenominatorSetHash);
+        var unofficialPayload = SerializeResultArtifactPayload(
+            election.Title,
+            namedOptionResults,
+            blankCount,
+            totalVotedCount,
+            eligibleToVoteCount,
+            didNotVoteCount,
+            denominatorEvidence);
+        var encryptedUnofficialPayload = _electionResultCryptoService.EncryptForElectionParticipants(
+            unofficialPayload,
+            ownerAccess.NodeEncryptedElectionPrivateKey);
+        var unofficialResult = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Unofficial,
+            ElectionResultArtifactVisibility.ParticipantEncrypted,
+            election.Title,
+            namedOptionResults,
+            blankCount,
+            totalVotedCount,
+            eligibleToVoteCount,
+            didNotVoteCount,
+            denominatorEvidence,
+            completedByPublicAddress,
+            tallyReadyArtifactId: tallyReadyArtifact.Id,
+            encryptedPayload: encryptedUnofficialPayload,
+            publicPayload: null,
+            recordedAt: completedAt,
+            sourceTransactionId: sourceTransactionId,
+            sourceBlockHeight: sourceBlockHeight,
+            sourceBlockId: sourceBlockId);
+
+        var releaseEvidence = ElectionModelFactory.CreateFinalizationReleaseEvidence(
+            session,
+            acceptedTrustees,
+            completedByPublicAddress,
+            completedAt,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
+        var completedSession = session.MarkCompleted(
+            releaseEvidence.Id,
+            completedAt,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
+        var updatedElection = election with
+        {
+            LastUpdatedAt = completedAt,
+            TallyReadyAt = completedAt,
+            TallyReadyArtifactId = tallyReadyArtifact.Id,
+            UnofficialResultArtifactId = unofficialResult.Id,
+            ClosedProgressStatus = ElectionClosedProgressStatus.None,
+        };
+
+        await repository.SaveFinalizationReleaseEvidenceRecordAsync(releaseEvidence);
+        await repository.UpdateFinalizationSessionAsync(completedSession);
+        await repository.SaveBoundaryArtifactAsync(tallyReadyArtifact);
+        await repository.SaveResultArtifactAsync(unofficialResult);
+        await repository.SaveElectionAsync(updatedElection);
+
+        return ElectionCommandResult.Success(
+            updatedElection,
+            boundaryArtifact: tallyReadyArtifact,
+            finalizationSession: completedSession,
+            finalizationShare: finalizationShare,
+            finalizationReleaseEvidence: releaseEvidence);
+    }
+
     private static int ResolveExpectedFinalizationShareIndex(
         ElectionFinalizationSessionRecord session,
         string trusteeUserAddress)
@@ -3766,7 +4212,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         {
             return FinalizationShareValidationOutcome.Rejected(
                 "SINGLE_BALLOT_RELEASE_FORBIDDEN",
-                "FEAT-098 only allows aggregate-tally finalization targets.");
+                "Only aggregate-tally release targets are allowed.");
         }
 
         if (request.ShareIndex < 1 ||
@@ -3813,6 +4259,74 @@ public class ElectionLifecycleService : IElectionLifecycleService
         return FinalizationShareValidationOutcome.Accepted();
     }
 
+    private static byte[] ComputeAcceptedBallotInventoryHash(
+        IReadOnlyList<ElectionAcceptedBallotRecord> acceptedBallots)
+    {
+        var payload = string.Join(
+            '\n',
+            acceptedBallots
+                .OrderBy(x => x.BallotNullifier, StringComparer.Ordinal)
+                .Select(x => $"{x.BallotNullifier}|{ComputeHexSha256(x.EncryptedBallotPackage)}|{ComputeHexSha256(x.ProofBundle)}"));
+
+        return SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+    }
+
+    private static byte[] ComputePublishedBallotStreamHash(
+        IReadOnlyList<ElectionPublishedBallotRecord> publishedBallots)
+    {
+        var payload = string.Join(
+            '\n',
+            publishedBallots
+                .OrderBy(x => x.PublicationSequence)
+                .Select(x => $"{x.PublicationSequence}|{ComputeHexSha256(x.EncryptedBallotPackage)}|{ComputeHexSha256(x.ProofBundle)}"));
+
+        return SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+    }
+
+    private static string ComputeHexSha256(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty)));
+
+    private static string SerializeResultArtifactPayload(ElectionResultArtifactRecord resultArtifact) =>
+        SerializeResultArtifactPayload(
+            resultArtifact.Title,
+            resultArtifact.NamedOptionResults,
+            resultArtifact.BlankCount,
+            resultArtifact.TotalVotedCount,
+            resultArtifact.EligibleToVoteCount,
+            resultArtifact.DidNotVoteCount,
+            resultArtifact.DenominatorEvidence);
+
+    private static string SerializeResultArtifactPayload(
+        string title,
+        IReadOnlyList<ElectionResultOptionCount> namedOptionResults,
+        int blankCount,
+        int totalVotedCount,
+        int eligibleToVoteCount,
+        int didNotVoteCount,
+        ElectionResultDenominatorEvidence denominatorEvidence) =>
+        JsonSerializer.Serialize(
+            new ResultArtifactPayload(
+                title,
+                namedOptionResults
+                    .Select(x => new ResultOptionPayload(
+                        x.OptionId,
+                        x.DisplayLabel,
+                        x.ShortDescription,
+                        x.BallotOrder,
+                        x.Rank,
+                        x.VoteCount))
+                    .ToArray(),
+                blankCount,
+                totalVotedCount,
+                eligibleToVoteCount,
+                didNotVoteCount,
+                new ResultDenominatorEvidencePayload(
+                    denominatorEvidence.SnapshotType.ToString(),
+                    denominatorEvidence.EligibilitySnapshotId,
+                    denominatorEvidence.BoundaryArtifactId,
+                    Convert.ToHexString(denominatorEvidence.ActiveDenominatorSetHash))),
+            ResultPayloadJsonOptions);
+
     private static bool ByteArrayEquals(byte[]? left, byte[]? right)
     {
         if (ReferenceEquals(left, right))
@@ -3847,6 +4361,29 @@ public class ElectionLifecycleService : IElectionLifecycleService
         public static FinalizationShareValidationOutcome Rejected(string failureCode, string failureReason) =>
             new(false, failureCode, failureReason);
     }
+
+    private sealed record ResultArtifactPayload(
+        string Title,
+        IReadOnlyList<ResultOptionPayload> NamedOptionResults,
+        int BlankCount,
+        int TotalVotedCount,
+        int EligibleToVoteCount,
+        int DidNotVoteCount,
+        ResultDenominatorEvidencePayload DenominatorEvidence);
+
+    private sealed record ResultOptionPayload(
+        string OptionId,
+        string DisplayLabel,
+        string? ShortDescription,
+        int BallotOrder,
+        int Rank,
+        int VoteCount);
+
+    private sealed record ResultDenominatorEvidencePayload(
+        string SnapshotType,
+        Guid? EligibilitySnapshotId,
+        Guid? BoundaryArtifactId,
+        string ActiveDenominatorSetHashHex);
 
     private sealed record ActiveCeremonyTrusteeContext(
         ElectionRecord Election,
