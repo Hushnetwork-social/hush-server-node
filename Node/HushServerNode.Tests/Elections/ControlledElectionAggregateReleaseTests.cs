@@ -9,6 +9,80 @@ namespace HushServerNode.Tests.Elections;
 public sealed class ControlledElectionAggregateReleaseTests
 {
     [Fact]
+    public void AccumulateEncryptedBallots_ThenReleaseProtectedTally_ShouldNotRequireBallotPrivateKey()
+    {
+        // Arrange
+        var thresholdDefinition = CreateThresholdDefinition();
+        var thresholdSetup = ControlledElectionHarness.CreateControlledThresholdSetup(
+            thresholdDefinition,
+            sessionId: "session-aggregate-003",
+            targetTallyId: "tally-derived-from-ballots-001",
+            seed: 9501);
+        var ballots = ImmutableArray.Create(
+            ControlledElectionHarness.EncryptOneHotBallot(
+                ballotId: "ballot-derived-1",
+                choiceIndex: 0,
+                publicKey: thresholdSetup.PublicKey,
+                nonces: ControlledElectionHarness.CreateDeterministicNonceSequence(
+                    9601,
+                    ControlledElectionHarness.DefaultSelectionCount)),
+            ControlledElectionHarness.EncryptOneHotBallot(
+                ballotId: "ballot-derived-2",
+                choiceIndex: 2,
+                publicKey: thresholdSetup.PublicKey,
+                nonces: ControlledElectionHarness.CreateDeterministicNonceSequence(
+                    9701,
+                    ControlledElectionHarness.DefaultSelectionCount)),
+            ControlledElectionHarness.EncryptOneHotBallot(
+                ballotId: "ballot-derived-3",
+                choiceIndex: 2,
+                publicKey: thresholdSetup.PublicKey,
+                nonces: ControlledElectionHarness.CreateDeterministicNonceSequence(
+                    9801,
+                    ControlledElectionHarness.DefaultSelectionCount)));
+        var tally = ControlledElectionHarness.AccumulateBallots(
+            thresholdDefinition.ElectionId,
+            ballots);
+        var releaseAttempt = new ControlledElectionReleaseAttempt(
+            thresholdDefinition,
+            SessionId: "session-aggregate-003",
+            TargetTallyId: "tally-derived-from-ballots-001",
+            SubmittedShares: ImmutableArray.Create(
+                thresholdSetup.Shares[0],
+                thresholdSetup.Shares[2],
+                thresholdSetup.Shares[4]));
+        var ballotReleaseAttempt = new ControlledElectionReleaseAttempt(
+            thresholdDefinition,
+            SessionId: "session-aggregate-003",
+            TargetTallyId: ballots[1].BallotId,
+            SubmittedShares: releaseAttempt.SubmittedShares);
+
+        // Act
+        var aggregateOnlyValidation = ControlledElectionHarness.ValidateAggregateOnlyCountingPath(
+            requiresIndividualBallotDecryption: false);
+        var releaseResult = ControlledElectionHarness.TryReleaseProtectedTally(
+            thresholdSetup,
+            releaseAttempt,
+            tally);
+        var decodeResult = ControlledElectionHarness.TryDecodeReleasedSelections(
+            releaseResult.ReleasedSelections,
+            maxSupportedCount: 3);
+        var singleBallotRelease = ControlledElectionHarness.TryReleaseProtectedBallot(
+            thresholdSetup,
+            ballotReleaseAttempt,
+            ballots[1]);
+
+        // Assert
+        aggregateOnlyValidation.IsValid.Should().BeTrue();
+        releaseResult.IsSuccessful.Should().BeTrue();
+        decodeResult.IsSuccessful.Should().BeTrue();
+        decodeResult.DecodedCounts.Should().Equal(new BigInteger[] { 1, 0, 2, 0, 0, 0 });
+        singleBallotRelease.IsSuccessful.Should().BeFalse();
+        singleBallotRelease.FailureCode.Should().Be("SINGLE_BALLOT_RELEASE_FORBIDDEN");
+        singleBallotRelease.ReleasedSelections.Should().BeEmpty();
+    }
+
+    [Fact]
     public void TryReleaseProtectedTally_ShouldReleaseAndDecodeAggregateCountsWithoutSingleBallotPath()
     {
         // Arrange
