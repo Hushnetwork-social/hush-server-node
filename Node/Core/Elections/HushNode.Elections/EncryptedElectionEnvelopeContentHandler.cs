@@ -256,7 +256,9 @@ public class EncryptedElectionEnvelopeContentHandler(
         var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
         if (election is null
             || (election.LifecycleState != ElectionLifecycleState.Draft &&
-                election.LifecycleState != ElectionLifecycleState.Open))
+                election.LifecycleState != ElectionLifecycleState.Open &&
+                election.LifecycleState != ElectionLifecycleState.Closed &&
+                election.LifecycleState != ElectionLifecycleState.Finalized))
         {
             return false;
         }

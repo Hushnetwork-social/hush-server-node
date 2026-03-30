@@ -241,6 +241,20 @@ internal static class TestTransactionFactory
         return CreateEncryptedElectionEnvelopeTransaction(actor, electionId, actionEnvelope);
     }
 
+    public static string CreateElectionReportAccessGrant(
+        TestIdentity owner,
+        ElectionId electionId,
+        string designatedAuditorPublicAddress)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.CreateReportAccessGrant,
+            JsonSerializer.SerializeToElement(new CreateElectionReportAccessGrantActionPayload(
+                owner.PublicSigningAddress,
+                designatedAuditorPublicAddress)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
     public static string StartElectionCeremony(
         TestIdentity owner,
         ElectionId electionId,
