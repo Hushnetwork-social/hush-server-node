@@ -648,6 +648,94 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task CreateReportAccessGrantAsync_AfterFinalize_PersistsGrantAndUpdatesElection()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var finalizedAt = DateTime.UtcNow.AddMinutes(-5);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = finalizedAt,
+            OfficialResultArtifactId = Guid.NewGuid(),
+            LastUpdatedAt = finalizedAt,
+        };
+
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.CreateReportAccessGrantAsync(new CreateElectionReportAccessGrantRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            DesignatedAuditorPublicAddress: "auditor-address"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.ReportAccessGrant.Should().NotBeNull();
+        result.ReportAccessGrant!.ActorPublicAddress.Should().Be("auditor-address");
+        result.ReportAccessGrant.GrantedByPublicAddress.Should().Be("owner-address");
+        result.Election.Should().NotBeNull();
+        result.Election!.LastUpdatedAt.Should().Be(result.ReportAccessGrant.GrantedAt);
+        result.Election.LastUpdatedAt.Should().BeAfter(finalizedAt);
+        store.ReportAccessGrants.Should().ContainSingle();
+        store.ReportAccessGrants[0].GrantRole.Should().Be(ElectionReportAccessGrantRole.DesignatedAuditor);
+        store.Elections[election.ElectionId].LastUpdatedAt.Should().Be(result.ReportAccessGrant.GrantedAt);
+    }
+
+    [Fact]
+    public async Task CreateReportAccessGrantAsync_WithAcceptedTrusteeTarget_ReturnsConflict()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection();
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                election.ElectionId,
+                trusteeUserAddress: "trustee-a",
+                trusteeDisplayName: "Alice",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: election.CurrentDraftRevision)
+            .Accept(
+                respondedAt: DateTime.UtcNow.AddMinutes(-2),
+                resolvedAtDraftRevision: election.CurrentDraftRevision,
+                lifecycleState: ElectionLifecycleState.Draft);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedInvitation.Id] = acceptedInvitation;
+
+        var result = await service.CreateReportAccessGrantAsync(new CreateElectionReportAccessGrantRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            DesignatedAuditorPublicAddress: "trustee-a"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+        store.ReportAccessGrants.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateReportAccessGrantAsync_WithExistingGrant_ReturnsConflict()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection();
+        var existingGrant = ElectionModelFactory.CreateReportAccessGrant(
+            election.ElectionId,
+            actorPublicAddress: "auditor-address",
+            grantedByPublicAddress: "owner-address",
+            grantedAt: DateTime.UtcNow.AddMinutes(-3));
+
+        store.Elections[election.ElectionId] = election;
+        store.ReportAccessGrants.Add(existingGrant);
+
+        var result = await service.CreateReportAccessGrantAsync(new CreateElectionReportAccessGrantRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            DesignatedAuditorPublicAddress: "auditor-address"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+        store.ReportAccessGrants.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task InviteTrusteeAsync_WithActiveInvitation_ReturnsConflict()
     {
         var store = new ElectionStore();
@@ -798,6 +886,38 @@ public class ElectionLifecycleServiceTests
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+    }
+
+    [Fact]
+    public async Task AcceptTrusteeInvitation_WhenActorAlreadyHasDesignatedAuditorGrant_ReturnsConflict()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection();
+        var invitation = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision);
+        var existingGrant = ElectionModelFactory.CreateReportAccessGrant(
+            election.ElectionId,
+            actorPublicAddress: "trustee-a",
+            grantedByPublicAddress: "owner-address",
+            grantedAt: DateTime.UtcNow.AddMinutes(-1));
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[invitation.Id] = invitation;
+        store.ReportAccessGrants.Add(existingGrant);
+
+        var result = await service.AcceptTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest(
+            ElectionId: election.ElectionId,
+            InvitationId: invitation.Id,
+            ActorPublicAddress: "trustee-a"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+        store.TrusteeInvitations[invitation.Id].Status.Should().Be(ElectionTrusteeInvitationStatus.Pending);
     }
 
     [Fact]

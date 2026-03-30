@@ -52,6 +52,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleAcceptBallotCastAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.InviteTrustee =>
                 await HandleInviteTrusteeAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.CreateReportAccessGrant =>
+                await HandleCreateReportAccessGrantAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.AcceptTrusteeInvitation =>
                 await HandleAcceptTrusteeInvitationAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.RejectTrusteeInvitation =>
@@ -352,6 +354,26 @@ public class EncryptedElectionEnvelopeIndexStrategy(
         }
 
         return result;
+    }
+
+    private async Task<ElectionCommandResult> HandleCreateReportAccessGrantAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var createGrantAction = decryptedEnvelope.DeserializeAction<CreateElectionReportAccessGrantActionPayload>();
+        if (createGrantAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Create report access grant action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.CreateReportAccessGrantAsync(new CreateElectionReportAccessGrantRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ActorPublicAddress: createGrantAction.ActorPublicAddress,
+            DesignatedAuditorPublicAddress: createGrantAction.DesignatedAuditorPublicAddress,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
     }
 
     private async Task<ElectionCommandResult> HandleAcceptTrusteeInvitationAsync(

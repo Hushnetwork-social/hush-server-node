@@ -62,6 +62,10 @@ public record InviteElectionTrusteeActionPayload(
     string TrusteeEncryptedElectionPrivateKey,
     string? TrusteeDisplayName);
 
+public record CreateElectionReportAccessGrantActionPayload(
+    string ActorPublicAddress,
+    string DesignatedAuditorPublicAddress);
+
 public record ResolveElectionTrusteeInvitationActionPayload(
     Guid InvitationId,
     string ActorPublicAddress);
@@ -184,6 +188,7 @@ public static class EncryptedElectionEnvelopeActionTypes
     public const string RegisterVotingCommitment = "register_voting_commitment";
     public const string AcceptBallotCast = "accept_ballot_cast";
     public const string InviteTrustee = "invite_trustee";
+    public const string CreateReportAccessGrant = "create_report_access_grant";
     public const string AcceptTrusteeInvitation = "accept_trustee_invitation";
     public const string RejectTrusteeInvitation = "reject_trustee_invitation";
     public const string RevokeTrusteeInvitation = "revoke_trustee_invitation";

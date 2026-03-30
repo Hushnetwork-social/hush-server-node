@@ -918,6 +918,90 @@ public class ElectionLifecycleService : IElectionLifecycleService
         return ElectionCommandResult.Success(election, trusteeInvitation: invitation);
     }
 
+    public async Task<ElectionCommandResult> CreateReportAccessGrantAsync(CreateElectionReportAccessGrantRequest request)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+        if (election is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Election {request.ElectionId} was not found.");
+        }
+
+        if (!string.Equals(election.OwnerPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Forbidden,
+                "Only the election owner can manage designated-auditor grants.");
+        }
+
+        var designatedAuditorPublicAddress = request.DesignatedAuditorPublicAddress?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(designatedAuditorPublicAddress))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "A designated-auditor public address is required.");
+        }
+
+        if (string.Equals(
+                election.OwnerPublicAddress,
+                designatedAuditorPublicAddress,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "The election owner cannot also be added as a designated auditor.");
+        }
+
+        var invitations = await repository.GetTrusteeInvitationsAsync(request.ElectionId);
+        var acceptedTrustee = invitations.Any(x =>
+            x.Status == ElectionTrusteeInvitationStatus.Accepted &&
+            string.Equals(x.TrusteeUserAddress, designatedAuditorPublicAddress, StringComparison.OrdinalIgnoreCase));
+        if (acceptedTrustee)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "Accepted trustees cannot also be designated auditors for the same election.");
+        }
+
+        var existingGrant = await repository.GetReportAccessGrantAsync(request.ElectionId, designatedAuditorPublicAddress);
+        if (existingGrant is not null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "This Hush account is already a designated auditor for the election.");
+        }
+
+        try
+        {
+            var grantedAt = DateTime.UtcNow;
+            var accessGrant = ElectionModelFactory.CreateReportAccessGrant(
+                request.ElectionId,
+                designatedAuditorPublicAddress,
+                request.ActorPublicAddress,
+                grantedAt: grantedAt);
+            var updatedElection = election with
+            {
+                LastUpdatedAt = grantedAt,
+            };
+
+            await repository.SaveReportAccessGrantAsync(accessGrant);
+            await repository.SaveElectionAsync(updatedElection);
+            await unitOfWork.CommitAsync();
+
+            return ElectionCommandResult.Success(updatedElection, reportAccessGrant: accessGrant);
+        }
+        catch (ArgumentException ex)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                ex.Message);
+        }
+    }
+
     public Task<ElectionCommandResult> AcceptTrusteeInvitationAsync(ResolveElectionTrusteeInvitationRequest request) =>
         ResolveTrusteeInvitationAsync(
             request,
@@ -3374,6 +3458,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var updated = transition(invitation, election.CurrentDraftRevision, election.LifecycleState);
+        if (updated.Status == ElectionTrusteeInvitationStatus.Accepted)
+        {
+            var existingGrant = await repository.GetReportAccessGrantAsync(request.ElectionId, updated.TrusteeUserAddress);
+            if (existingGrant?.GrantRole == ElectionReportAccessGrantRole.DesignatedAuditor)
+            {
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.Conflict,
+                    "This Hush account is already a designated auditor for the election and cannot also accept a trustee invitation.");
+            }
+        }
+
         await repository.UpdateTrusteeInvitationAsync(updated);
         var ceremonyEvents = new List<ElectionCeremonyTranscriptEventRecord>();
 

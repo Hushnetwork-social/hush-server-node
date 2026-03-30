@@ -120,6 +120,8 @@ public class EncryptedElectionEnvelopeContentHandler(
                 IsValidAcceptBallotCastAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.InviteTrustee =>
                 IsValidInviteTrusteeAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.CreateReportAccessGrant =>
+                IsValidCreateReportAccessGrantAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.AcceptTrusteeInvitation =>
                 IsValidResolveTrusteeInvitationAction(decryptedEnvelope, signatory, ownerOnly: false),
             EncryptedElectionEnvelopeActionTypes.RejectTrusteeInvitation =>
@@ -661,6 +663,46 @@ public class EncryptedElectionEnvelopeContentHandler(
             new SignatureInfo(signatory, decryptedEnvelope.Transaction.UserSignature!.Signature));
 
         return _inviteElectionTrusteeContentHandler.ValidateAndSign(signedTransaction) is not null;
+    }
+
+    private bool IsValidCreateReportAccessGrantAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var createGrantAction = decryptedEnvelope.DeserializeAction<CreateElectionReportAccessGrantActionPayload>();
+        var designatedAuditorPublicAddress = createGrantAction?.DesignatedAuditorPublicAddress?.Trim() ?? string.Empty;
+        if (createGrantAction is null
+            || !HasMatchingActor(signatory, createGrantAction.ActorPublicAddress)
+            || string.IsNullOrWhiteSpace(designatedAuditorPublicAddress))
+        {
+            return false;
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
+        if (election is null
+            || !string.Equals(election.OwnerPublicAddress, createGrantAction.ActorPublicAddress, StringComparison.Ordinal)
+            || string.Equals(election.OwnerPublicAddress, designatedAuditorPublicAddress, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var invitations = repository.GetTrusteeInvitationsAsync(decryptedEnvelope.Transaction.Payload.ElectionId)
+            .GetAwaiter()
+            .GetResult();
+        if (invitations.Any(x =>
+                x.Status == ElectionTrusteeInvitationStatus.Accepted &&
+                string.Equals(x.TrusteeUserAddress, designatedAuditorPublicAddress, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        var existingGrant = repository
+            .GetReportAccessGrantAsync(decryptedEnvelope.Transaction.Payload.ElectionId, designatedAuditorPublicAddress)
+            .GetAwaiter()
+            .GetResult();
+        return existingGrant is null;
     }
 
     private bool IsValidResolveTrusteeInvitationAction(

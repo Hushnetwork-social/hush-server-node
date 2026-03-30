@@ -16,6 +16,8 @@ public interface IElectionLifecycleService
 
     Task<ElectionCommandResult> InviteTrusteeAsync(InviteElectionTrusteeRequest request);
 
+    Task<ElectionCommandResult> CreateReportAccessGrantAsync(CreateElectionReportAccessGrantRequest request);
+
     Task<ElectionCommandResult> AcceptTrusteeInvitationAsync(ResolveElectionTrusteeInvitationRequest request);
 
     Task<ElectionCommandResult> RejectTrusteeInvitationAsync(ResolveElectionTrusteeInvitationRequest request);
@@ -113,6 +115,14 @@ public record InviteElectionTrusteeRequest(
     string TrusteeUserAddress,
     string? TrusteeDisplayName,
     Guid? PreassignedInvitationId = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
+public record CreateElectionReportAccessGrantRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    string DesignatedAuditorPublicAddress,
     Guid? SourceTransactionId = null,
     long? SourceBlockHeight = null,
     Guid? SourceBlockId = null);
@@ -344,6 +354,7 @@ public record ElectionCommandResult
     public ElectionParticipationRecord? ParticipationRecord { get; init; }
     public ElectionEligibilitySnapshotRecord? EligibilitySnapshot { get; init; }
     public ElectionTrusteeInvitationRecord? TrusteeInvitation { get; init; }
+    public ElectionReportAccessGrantRecord? ReportAccessGrant { get; init; }
     public ElectionGovernedProposalRecord? GovernedProposal { get; init; }
     public ElectionGovernedProposalApprovalRecord? GovernedProposalApproval { get; init; }
     public ElectionCeremonyProfileRecord? CeremonyProfile { get; init; }
@@ -366,6 +377,7 @@ public record ElectionCommandResult
         ElectionParticipationRecord? participationRecord = null,
         ElectionEligibilitySnapshotRecord? eligibilitySnapshot = null,
         ElectionTrusteeInvitationRecord? trusteeInvitation = null,
+        ElectionReportAccessGrantRecord? reportAccessGrant = null,
         ElectionGovernedProposalRecord? governedProposal = null,
         ElectionGovernedProposalApprovalRecord? governedProposalApproval = null,
         ElectionCeremonyProfileRecord? ceremonyProfile = null,
@@ -390,6 +402,7 @@ public record ElectionCommandResult
             ParticipationRecord = participationRecord,
             EligibilitySnapshot = eligibilitySnapshot,
             TrusteeInvitation = trusteeInvitation,
+            ReportAccessGrant = reportAccessGrant,
             GovernedProposal = governedProposal,
             GovernedProposalApproval = governedProposalApproval,
             CeremonyProfile = ceremonyProfile,
