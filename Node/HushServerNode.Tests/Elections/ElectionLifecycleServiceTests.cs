@@ -2082,6 +2082,12 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId].OfficialResultArtifactId.Should().NotBeNull();
         store.ReportPackages.Should().ContainSingle();
         store.ReportArtifacts.Should().HaveCount(13);
+        store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport)
+            .Content.Should().Contain("LowAnonymitySet");
+        store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport)
+            .Content.Should().Contain("Official result hash");
+        store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineAuditProvenanceReportProjection)
+            .Content.Should().Contain("\"warningEvidence\"");
     }
 
     [Fact]

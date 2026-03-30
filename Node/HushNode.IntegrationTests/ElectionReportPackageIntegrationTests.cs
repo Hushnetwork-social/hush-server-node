@@ -93,6 +93,13 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanNamedParticipationRoster);
         ownerResult.VisibleReportArtifacts.Should().Contain(x =>
             x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactMachineNamedParticipationRosterProjection);
+        var ownerAuditArtifact = ownerResult.VisibleReportArtifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanAuditProvenanceReport);
+        ownerAuditArtifact.Content.Should().Contain("AllTrusteesRequiredFragility");
+        ownerAuditArtifact.Content.Should().Contain("Tally public key fingerprint");
+        ownerAuditArtifact.Content.Should().Contain("Governed Finalization Approvals");
+        ownerAuditArtifact.Content.Should().Contain("Finalization Share Evidence");
+        ownerAuditArtifact.Content.Should().Contain("Official result hash");
 
         var trusteeResult = await GetElectionResultViewAsync(
             client,

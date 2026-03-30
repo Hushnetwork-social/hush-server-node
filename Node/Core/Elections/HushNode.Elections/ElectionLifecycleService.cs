@@ -3731,6 +3731,22 @@ public class ElectionLifecycleService : IElectionLifecycleService
             repository,
             election.ElectionId,
             tallyReadyArtifact);
+        ElectionGovernedProposalRecord? finalizationGovernedProposal = null;
+        IReadOnlyList<ElectionGovernedProposalApprovalRecord> finalizationGovernedApprovals = Array.Empty<ElectionGovernedProposalApprovalRecord>();
+        IReadOnlyList<ElectionFinalizationShareRecord> finalizationShares = Array.Empty<ElectionFinalizationShareRecord>();
+        if (finalizationContext.Session is not null)
+        {
+            finalizationShares = await repository.GetFinalizationSharesAsync(finalizationContext.Session.Id);
+            if (finalizationContext.Session.GovernedProposalId.HasValue)
+            {
+                finalizationGovernedProposal = await repository.GetGovernedProposalAsync(finalizationContext.Session.GovernedProposalId.Value);
+                finalizationGovernedApprovals = finalizationGovernedProposal is null
+                    ? Array.Empty<ElectionGovernedProposalApprovalRecord>()
+                    : await repository.GetGovernedProposalApprovalsAsync(finalizationGovernedProposal.Id);
+            }
+        }
+
+        var warningAcknowledgements = await repository.GetWarningAcknowledgementsAsync(election.ElectionId);
         var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(election.ElectionId);
         var rosterEntries = await repository.GetRosterEntriesAsync(election.ElectionId);
         var participationRecords = await repository.GetParticipationRecordsAsync(election.ElectionId);
@@ -3744,6 +3760,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             closeEligibilitySnapshot,
             finalizationContext.Session,
             finalizationContext.ReleaseEvidence,
+            finalizationGovernedProposal,
+            finalizationGovernedApprovals,
+            finalizationShares,
+            warningAcknowledgements,
             trusteeInvitations,
             rosterEntries,
             participationRecords,

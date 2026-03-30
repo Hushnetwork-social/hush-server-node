@@ -49,6 +49,19 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 .OrderBy(x => x.OrganizationVoterId, StringComparer.OrdinalIgnoreCase)
                 .Select(x => BuildRosterEntryProjection(x, participationLookup.GetValueOrDefault(x.OrganizationVoterId)))
                 .ToArray();
+            var warningEvidence = BuildWarningEvidenceProjections(request);
+            var governedApprovalProjections = request.FinalizationGovernedApprovals
+                .OrderBy(x => x.ApprovedAt)
+                .ThenBy(x => x.TrusteeDisplayName ?? x.TrusteeUserAddress, StringComparer.OrdinalIgnoreCase)
+                .Select(BuildGovernedApprovalProjection)
+                .ToArray();
+            var finalizationShareProjections = request.FinalizationShares
+                .OrderBy(x => x.ShareIndex)
+                .ThenBy(x => x.SubmittedAt)
+                .Select(BuildFinalizationShareProjection)
+                .ToArray();
+            var officialResultProjection = BuildResultArtifactProjection(request.OfficialResult);
+            var officialResultHash = ComputeHashBytes(SerializeJson(officialResultProjection));
             var outcomeProjection = BuildOutcomeProjection(
                 request.Election,
                 request.OfficialResult,
@@ -60,18 +73,29 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             var auditProjection = BuildAuditProjection(
                 request,
                 frozenEvidenceFingerprint,
-                trustees);
+                trustees,
+                warningEvidence,
+                governedApprovalProjections,
+                finalizationShareProjections,
+                BuildHashHex(officialResultHash));
             var manifestProjection = BuildManifestProjection(
                 request,
                 packageId,
                 frozenEvidenceFingerprint,
                 trustees.Length,
                 rosterEntries.Length,
-                outcomeProjection);
+                outcomeProjection,
+                warningEvidence,
+                governedApprovalProjections,
+                finalizationShareProjections,
+                BuildHashHex(officialResultHash));
             var evidenceGraphProjection = BuildEvidenceGraphProjection(
                 request,
                 trustees,
-                rosterEntries.Length);
+                rosterEntries.Length,
+                warningEvidence.Length,
+                governedApprovalProjections.Length,
+                finalizationShareProjections.Length);
 
             var machineManifestId = Guid.NewGuid();
             var humanManifestId = Guid.NewGuid();
@@ -405,74 +429,47 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             return ("CONSISTENCY_MISMATCH", "Close eligibility snapshot must bind to the exact close artifact.");
         }
 
+        if (request.FinalizationSession?.GovernedProposalId is Guid governedProposalId &&
+            (request.FinalizationGovernedProposal is null ||
+             request.FinalizationGovernedProposal.Id != governedProposalId))
+        {
+            return ("CONSISTENCY_MISMATCH", "Finalization governed proposal evidence must match the session-bound proposal id.");
+        }
+
+        if (request.FinalizationGovernedProposal is not null &&
+            request.FinalizationGovernedProposal.ActionType != ElectionGovernedActionType.Finalize)
+        {
+            return ("CONSISTENCY_MISMATCH", "Report-package governance evidence must reference the finalize proposal.");
+        }
+
+        if (request.FinalizationGovernedApprovals.Any(x =>
+                request.FinalizationGovernedProposal is null ||
+                x.ProposalId != request.FinalizationGovernedProposal.Id))
+        {
+            return ("CONSISTENCY_MISMATCH", "Finalization governed approvals must bind to the selected finalize proposal.");
+        }
+
+        if (request.FinalizationShares.Any(x =>
+                request.FinalizationSession is null ||
+                x.FinalizationSessionId != request.FinalizationSession.Id))
+        {
+            return ("CONSISTENCY_MISMATCH", "Finalization share evidence must bind to the selected finalization session.");
+        }
+
         return null;
     }
 
     private static FrozenEvidenceProjection BuildFrozenEvidenceProjection(ElectionReportPackageBuildRequest request) =>
         new(
             request.Election.ElectionId.ToString(),
-            request.Election.Title,
-            request.Election.OwnerPublicAddress,
-            request.Election.GovernanceMode.ToString(),
-            request.Election.OfficialResultVisibilityPolicy.ToString(),
-            request.Election.OutcomeRule,
-            new BoundaryEvidenceProjection(
-                request.CloseArtifact.Id,
-                request.CloseArtifact.ArtifactType.ToString(),
-                request.CloseArtifact.RecordedAt,
-                BuildHashHex(request.CloseArtifact.FrozenEligibleVoterSetHash),
-                BuildHashHex(request.CloseArtifact.AcceptedBallotSetHash),
-                BuildHashHex(request.CloseArtifact.PublishedBallotStreamHash),
-                BuildHashHex(request.CloseArtifact.FinalEncryptedTallyHash),
-                request.CloseArtifact.SourceTransactionId,
-                request.CloseArtifact.SourceBlockHeight,
-                request.CloseArtifact.SourceBlockId),
+            BuildSetupProjection(request),
+            BuildBoundaryEvidenceProjection(request.CloseArtifact),
             request.CloseEligibilitySnapshot is null
                 ? null
-                : new EligibilitySnapshotProjection(
-                    request.CloseEligibilitySnapshot.Id,
-                    request.CloseEligibilitySnapshot.SnapshotType.ToString(),
-                    request.CloseEligibilitySnapshot.RecordedAt,
-                    request.CloseEligibilitySnapshot.RosteredCount,
-                    request.CloseEligibilitySnapshot.LinkedCount,
-                    request.CloseEligibilitySnapshot.ActiveDenominatorCount,
-                    request.CloseEligibilitySnapshot.CountedParticipationCount,
-                    request.CloseEligibilitySnapshot.BlankCount,
-                    request.CloseEligibilitySnapshot.DidNotVoteCount,
-                    BuildHashHex(request.CloseEligibilitySnapshot.RosteredVoterSetHash),
-                    BuildHashHex(request.CloseEligibilitySnapshot.ActiveDenominatorSetHash),
-                    BuildHashHex(request.CloseEligibilitySnapshot.CountedParticipationSetHash)),
-            new BoundaryEvidenceProjection(
-                request.TallyReadyArtifact.Id,
-                request.TallyReadyArtifact.ArtifactType.ToString(),
-                request.TallyReadyArtifact.RecordedAt,
-                BuildHashHex(request.TallyReadyArtifact.FrozenEligibleVoterSetHash),
-                BuildHashHex(request.TallyReadyArtifact.AcceptedBallotSetHash),
-                BuildHashHex(request.TallyReadyArtifact.PublishedBallotStreamHash),
-                BuildHashHex(request.TallyReadyArtifact.FinalEncryptedTallyHash),
-                request.TallyReadyArtifact.SourceTransactionId,
-                request.TallyReadyArtifact.SourceBlockHeight,
-                request.TallyReadyArtifact.SourceBlockId),
-            new ResultArtifactProjection(
-                request.UnofficialResult.Id,
-                request.UnofficialResult.ArtifactKind.ToString(),
-                request.UnofficialResult.Visibility.ToString(),
-                request.UnofficialResult.RecordedAt,
-                request.UnofficialResult.NamedOptionResults.Select(x => new ResultOptionProjection(
-                    x.OptionId,
-                    x.DisplayLabel,
-                    x.ShortDescription,
-                    x.BallotOrder,
-                    x.Rank,
-                    x.VoteCount)).ToArray(),
-                request.UnofficialResult.BlankCount,
-                request.UnofficialResult.TotalVotedCount,
-                request.UnofficialResult.EligibleToVoteCount,
-                request.UnofficialResult.DidNotVoteCount,
-                request.UnofficialResult.DenominatorEvidence.EligibilitySnapshotId,
-                request.UnofficialResult.DenominatorEvidence.BoundaryArtifactId,
-                BuildHashHex(request.UnofficialResult.DenominatorEvidence.ActiveDenominatorSetHash),
-                request.UnofficialResult.SourceResultArtifactId),
+                : BuildEligibilitySnapshotProjection(request.CloseEligibilitySnapshot),
+            BuildBoundaryEvidenceProjection(request.TallyReadyArtifact),
+            BuildResultArtifactProjection(request.UnofficialResult),
+            BuildResultArtifactProjection(request.OfficialResult),
             request.FinalizationSession is null
                 ? null
                 : new FinalizationSessionProjection(
@@ -494,7 +491,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                         .ToArray(),
                     request.FinalizationSession.CreatedAt,
                     request.FinalizationSession.CompletedAt,
-                    request.FinalizationSession.ReleaseEvidenceId),
+                    request.FinalizationSession.ReleaseEvidenceId,
+                    request.FinalizationSession.GovernedProposalId,
+                    request.FinalizationSession.CreatedByPublicAddress),
             request.FinalizationReleaseEvidence is null
                 ? null
                 : new FinalizationReleaseProjection(
@@ -514,7 +513,209 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                             "Accepted",
                             null,
                             null))
-                        .ToArray()));
+                        .ToArray()),
+            BuildWarningEvidenceProjections(request),
+            request.FinalizationGovernedProposal is null
+                ? null
+                : BuildGovernedProposalProjection(request.FinalizationGovernedProposal),
+            request.FinalizationGovernedApprovals
+                .OrderBy(x => x.ApprovedAt)
+                .ThenBy(x => x.TrusteeDisplayName ?? x.TrusteeUserAddress, StringComparer.OrdinalIgnoreCase)
+                .Select(BuildGovernedApprovalProjection)
+                .ToArray(),
+            request.FinalizationShares
+                .OrderBy(x => x.ShareIndex)
+                .ThenBy(x => x.SubmittedAt)
+                .Select(BuildFinalizationShareProjection)
+                .ToArray());
+
+    private static SetupProjection BuildSetupProjection(ElectionReportPackageBuildRequest request) =>
+        new(
+            request.CloseArtifact.Metadata.Title,
+            request.CloseArtifact.Metadata.ShortDescription,
+            request.CloseArtifact.Metadata.OwnerPublicAddress,
+            request.CloseArtifact.Metadata.ExternalReferenceCode,
+            request.CloseArtifact.SourceDraftRevision,
+            request.CloseArtifact.Policy.GovernanceMode.ToString(),
+            request.CloseArtifact.Policy.ParticipationPrivacyMode.ToString(),
+            request.CloseArtifact.Policy.ReportingPolicy.ToString(),
+            request.CloseArtifact.Policy.ReviewWindowPolicy.ToString(),
+            request.CloseArtifact.Policy.OfficialResultVisibilityPolicy.ToString(),
+            request.CloseArtifact.Policy.RequiredApprovalCount,
+            request.CloseArtifact.Policy.ApprovedClientApplications
+                .Select(x => new ApprovedClientProjection(x.ApplicationId, x.Version))
+                .ToArray(),
+            request.CloseArtifact.Options
+                .OrderBy(x => x.BallotOrder)
+                .Select(x => new ElectionOptionProjection(
+                    x.OptionId,
+                    x.DisplayLabel,
+                    x.ShortDescription,
+                    x.BallotOrder,
+                    x.IsBlankOption))
+                .ToArray(),
+            request.CloseArtifact.TrusteeSnapshot is null
+                ? null
+                : BuildTrusteeThresholdProjection(request.CloseArtifact.TrusteeSnapshot),
+            request.CloseArtifact.CeremonySnapshot is null
+                ? null
+                : BuildCeremonyPublicKeyProjection(request.CloseArtifact.CeremonySnapshot));
+
+    private static BoundaryEvidenceProjection BuildBoundaryEvidenceProjection(ElectionBoundaryArtifactRecord artifact) =>
+        new(
+            artifact.Id,
+            artifact.ArtifactType.ToString(),
+            artifact.RecordedAt,
+            BuildHashHex(artifact.FrozenEligibleVoterSetHash),
+            BuildHashHex(artifact.AcceptedBallotSetHash),
+            BuildHashHex(artifact.PublishedBallotStreamHash),
+            BuildHashHex(artifact.FinalEncryptedTallyHash),
+            artifact.SourceTransactionId,
+            artifact.SourceBlockHeight,
+            artifact.SourceBlockId);
+
+    private static EligibilitySnapshotProjection BuildEligibilitySnapshotProjection(
+        ElectionEligibilitySnapshotRecord snapshot) =>
+        new(
+            snapshot.Id,
+            snapshot.SnapshotType.ToString(),
+            snapshot.RecordedAt,
+            snapshot.RosteredCount,
+            snapshot.LinkedCount,
+            snapshot.ActiveDenominatorCount,
+            snapshot.CountedParticipationCount,
+            snapshot.BlankCount,
+            snapshot.DidNotVoteCount,
+            BuildHashHex(snapshot.RosteredVoterSetHash),
+            BuildHashHex(snapshot.ActiveDenominatorSetHash),
+            BuildHashHex(snapshot.CountedParticipationSetHash));
+
+    private static ResultArtifactProjection BuildResultArtifactProjection(ElectionResultArtifactRecord artifact) =>
+        new(
+            artifact.ArtifactKind.ToString(),
+            artifact.Visibility.ToString(),
+            artifact.NamedOptionResults.Select(x => new ResultOptionProjection(
+                x.OptionId,
+                x.DisplayLabel,
+                x.ShortDescription,
+                x.BallotOrder,
+                x.Rank,
+                x.VoteCount)).ToArray(),
+            artifact.BlankCount,
+            artifact.TotalVotedCount,
+            artifact.EligibleToVoteCount,
+            artifact.DidNotVoteCount,
+            artifact.DenominatorEvidence.EligibilitySnapshotId,
+            artifact.DenominatorEvidence.BoundaryArtifactId,
+            BuildHashHex(artifact.DenominatorEvidence.ActiveDenominatorSetHash),
+            artifact.SourceResultArtifactId);
+
+    private static WarningEvidenceProjection[] BuildWarningEvidenceProjections(ElectionReportPackageBuildRequest request)
+    {
+        var warningsByCode = request.WarningAcknowledgements
+            .GroupBy(x => x.WarningCode)
+            .ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.AcknowledgedAt).First());
+
+        var warningCodes = request.CloseArtifact.AcknowledgedWarningCodes
+            .Concat(request.WarningAcknowledgements.Select(x => x.WarningCode))
+            .Distinct()
+            .OrderBy(x => x.ToString(), StringComparer.Ordinal)
+            .ToArray();
+
+        return warningCodes
+            .Select(code =>
+            {
+                warningsByCode.TryGetValue(code, out var acknowledgement);
+                return new WarningEvidenceProjection(
+                    code.ToString(),
+                    acknowledgement?.DraftRevision ?? request.CloseArtifact.SourceDraftRevision,
+                    acknowledgement?.AcknowledgedByPublicAddress,
+                    acknowledgement?.AcknowledgedAt,
+                    acknowledgement?.SourceTransactionId,
+                    acknowledgement?.SourceBlockHeight,
+                    acknowledgement?.SourceBlockId);
+            })
+            .ToArray();
+    }
+
+    private static GovernedProposalProjection BuildGovernedProposalProjection(
+        ElectionGovernedProposalRecord proposal) =>
+        new(
+            proposal.Id,
+            proposal.ActionType.ToString(),
+            proposal.LifecycleStateAtCreation.ToString(),
+            proposal.ProposedByPublicAddress,
+            proposal.CreatedAt);
+
+    private static GovernedApprovalProjection BuildGovernedApprovalProjection(
+        ElectionGovernedProposalApprovalRecord approval) =>
+        new(
+            approval.Id,
+            approval.ProposalId,
+            approval.ActionType.ToString(),
+            approval.TrusteeUserAddress,
+            approval.TrusteeDisplayName,
+            approval.ApprovalNote,
+            approval.ApprovedAt,
+            approval.SourceTransactionId,
+            approval.SourceBlockHeight,
+            approval.SourceBlockId);
+
+    private static FinalizationShareProjection BuildFinalizationShareProjection(
+        ElectionFinalizationShareRecord share) =>
+        new(
+            share.Id,
+            share.FinalizationSessionId,
+            share.TrusteeUserAddress,
+            share.TrusteeDisplayName,
+            share.ShareIndex,
+            share.TargetType.ToString(),
+            share.Status.ToString(),
+            BuildHashHex(share.ClaimedAcceptedBallotSetHash),
+            BuildHashHex(share.ClaimedFinalEncryptedTallyHash),
+            share.ClaimedTargetTallyId,
+            share.ClaimedCeremonyVersionId,
+            share.ClaimedTallyPublicKeyFingerprint,
+            BuildHashHex(ComputeHashBytes(share.ShareMaterial)),
+            share.FailureCode,
+            share.FailureReason,
+            share.SubmittedAt,
+            share.SourceTransactionId,
+            share.SourceBlockHeight,
+            share.SourceBlockId);
+
+    private static TrusteeThresholdProjection BuildTrusteeThresholdProjection(
+        ElectionTrusteeBoundarySnapshot snapshot) =>
+        new(
+            snapshot.RequiredApprovalCount,
+            snapshot.EveryAcceptedTrusteeMustApprove,
+            snapshot.AcceptedTrustees
+                .OrderBy(x => x.TrusteeDisplayName ?? x.TrusteeUserAddress, StringComparer.OrdinalIgnoreCase)
+                .Select(x => new TrusteeProjection(
+                    x.TrusteeUserAddress,
+                    x.TrusteeDisplayName,
+                    "Accepted",
+                    null,
+                    null))
+                .ToArray());
+
+    private static CeremonyPublicKeyProjection BuildCeremonyPublicKeyProjection(
+        ElectionCeremonyBindingSnapshot snapshot) =>
+        new(
+            snapshot.CeremonyVersionId,
+            snapshot.CeremonyVersionNumber,
+            snapshot.ProfileId,
+            snapshot.BoundTrusteeCount,
+            snapshot.RequiredApprovalCount,
+            snapshot.EveryActiveTrusteeMustApprove,
+            snapshot.TallyPublicKeyFingerprint);
+
+    private static CeremonyPublicKeyProjection? ResolveCeremonyPublicKeyProjection(
+        ElectionReportPackageBuildRequest request)
+    {
+        var ceremonySnapshot = request.FinalizationSession?.CeremonySnapshot ?? request.CloseArtifact.CeremonySnapshot;
+        return ceremonySnapshot is null ? null : BuildCeremonyPublicKeyProjection(ceremonySnapshot);
+    }
 
     private static ManifestProjection BuildManifestProjection(
         ElectionReportPackageBuildRequest request,
@@ -522,7 +723,11 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         string frozenEvidenceFingerprint,
         int acceptedTrusteeCount,
         int rosterEntryCount,
-        OutcomeDeterminationProjection outcomeProjection) =>
+        OutcomeDeterminationProjection outcomeProjection,
+        IReadOnlyList<WarningEvidenceProjection> warningEvidence,
+        IReadOnlyList<GovernedApprovalProjection> governedApprovals,
+        IReadOnlyList<FinalizationShareProjection> finalizationShares,
+        string officialResultHash) =>
         new(
             PackageId: packageId,
             MachineArtifactId: Guid.Empty,
@@ -541,13 +746,20 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             RosterEntryCount: rosterEntryCount,
             FinalizeArtifactId: request.FinalizeArtifact.Id,
             OfficialResultArtifactId: request.OfficialResult.Id,
+            OfficialResultHash: officialResultHash,
+            WarningCount: warningEvidence.Count,
+            GovernedApprovalCount: governedApprovals.Count,
+            FinalizationShareCount: finalizationShares.Count,
             OutcomeLabel: outcomeProjection.ConclusionLabel,
             OutcomeSummary: outcomeProjection.ConclusionSummary);
 
     private static EvidenceGraphProjection BuildEvidenceGraphProjection(
         ElectionReportPackageBuildRequest request,
         IReadOnlyList<TrusteeProjection> trustees,
-        int rosterEntryCount) =>
+        int rosterEntryCount,
+        int warningCount,
+        int governedApprovalCount,
+        int finalizationShareCount) =>
         new(
             ArtifactId: Guid.Empty,
             ManifestArtifactId: Guid.Empty,
@@ -565,6 +777,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             FinalEncryptedTallyHash: BuildHashHex(request.TallyReadyArtifact.FinalEncryptedTallyHash),
             ActiveDenominatorSetHash: BuildHashHex(request.CloseEligibilitySnapshot?.ActiveDenominatorSetHash),
             RosterEntryCount: rosterEntryCount,
+            WarningCount: warningCount,
+            GovernedApprovalCount: governedApprovalCount,
+            FinalizationShareCount: finalizationShareCount,
             Trustees: trustees);
 
     private static ResultReportProjection BuildResultReportProjection(
@@ -618,16 +833,22 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
     private static AuditProvenanceProjection BuildAuditProjection(
         ElectionReportPackageBuildRequest request,
         string frozenEvidenceFingerprint,
-        IReadOnlyList<TrusteeProjection> trustees) =>
+        IReadOnlyList<TrusteeProjection> trustees,
+        IReadOnlyList<WarningEvidenceProjection> warningEvidence,
+        IReadOnlyList<GovernedApprovalProjection> governedApprovals,
+        IReadOnlyList<FinalizationShareProjection> finalizationShares,
+        string officialResultHash) =>
         new(
             MachineArtifactId: Guid.Empty,
             HumanArtifactId: Guid.Empty,
             ElectionId: request.Election.ElectionId.ToString(),
             FrozenEvidenceFingerprint: frozenEvidenceFingerprint,
+            Setup: BuildSetupProjection(request),
             CloseArtifactId: request.CloseArtifact.Id,
             TallyReadyArtifactId: request.TallyReadyArtifact.Id,
             UnofficialResultArtifactId: request.UnofficialResult.Id,
             OfficialResultArtifactId: request.OfficialResult.Id,
+            OfficialResultHash: officialResultHash,
             FinalizeArtifactId: request.FinalizeArtifact.Id,
             FinalizationSessionId: request.FinalizationSession?.Id,
             FinalizationReleaseEvidenceId: request.FinalizationReleaseEvidence?.Id,
@@ -636,6 +857,16 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             FinalEncryptedTallyHash: BuildHashHex(request.TallyReadyArtifact.FinalEncryptedTallyHash),
             DenominatorHash: BuildHashHex(request.CloseEligibilitySnapshot?.ActiveDenominatorSetHash),
             Trustees: trustees,
+            CeremonyPublicKey: ResolveCeremonyPublicKeyProjection(request),
+            TrusteeThreshold: request.CloseArtifact.TrusteeSnapshot is null
+                ? null
+                : BuildTrusteeThresholdProjection(request.CloseArtifact.TrusteeSnapshot),
+            FinalizationGovernedProposal: request.FinalizationGovernedProposal is null
+                ? null
+                : BuildGovernedProposalProjection(request.FinalizationGovernedProposal),
+            FinalizationApprovals: governedApprovals,
+            FinalizationShares: finalizationShares,
+            WarningEvidence: warningEvidence,
             SourceTransactionId: request.FinalizeArtifact.SourceTransactionId,
             SourceBlockHeight: request.FinalizeArtifact.SourceBlockHeight,
             SourceBlockId: request.FinalizeArtifact.SourceBlockId);
@@ -799,6 +1030,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         - Official visibility: `{manifest.OfficialVisibility}`
         - Accepted trustee count: `{manifest.AcceptedTrusteeCount}`
         - Roster entry count: `{manifest.RosterEntryCount}`
+        - Warning count: `{manifest.WarningCount}`
+        - Governed approval count: `{manifest.GovernedApprovalCount}`
+        - Finalization share count: `{manifest.FinalizationShareCount}`
         - Outcome label: `{manifest.OutcomeLabel}`
         - Outcome summary: {manifest.OutcomeSummary}
         - Machine manifest artifact id: `{machineManifestId}`
@@ -806,6 +1040,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         - Evidence graph artifact id: `{evidenceGraphArtifactId}`
         - Finalize artifact id: `{manifest.FinalizeArtifactId}`
         - Official result artifact id: `{manifest.OfficialResultArtifactId}`
+        - Official result hash: `{manifest.OfficialResultHash}`
         """;
 
     private static string BuildHumanResultReportContent(ResultReportProjection projection)
@@ -857,32 +1092,157 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         return builder.ToString().TrimEnd();
     }
 
-    private static string BuildHumanAuditContent(AuditProvenanceProjection projection) =>
-        $"""
-        # Audit And Provenance Report
+    private static string BuildHumanAuditContent(AuditProvenanceProjection projection)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("# Audit And Provenance Report");
+        builder.AppendLine();
+        builder.AppendLine($"- Election id: `{projection.ElectionId}`");
+        builder.AppendLine($"- Frozen evidence fingerprint: `{projection.FrozenEvidenceFingerprint}`");
+        builder.AppendLine($"- Close artifact id: `{projection.CloseArtifactId}`");
+        builder.AppendLine($"- Tally-ready artifact id: `{projection.TallyReadyArtifactId}`");
+        builder.AppendLine($"- Unofficial result artifact id: `{projection.UnofficialResultArtifactId}`");
+        builder.AppendLine($"- Official result artifact id: `{projection.OfficialResultArtifactId}`");
+        builder.AppendLine($"- Official result hash: `{projection.OfficialResultHash}`");
+        builder.AppendLine($"- Finalize artifact id: `{projection.FinalizeArtifactId}`");
+        builder.AppendLine($"- Finalization session id: `{projection.FinalizationSessionId?.ToString() ?? "none"}`");
+        builder.AppendLine($"- Finalization release evidence id: `{projection.FinalizationReleaseEvidenceId?.ToString() ?? "none"}`");
+        builder.AppendLine($"- Accepted ballot set hash: `{projection.AcceptedBallotSetHash}`");
+        builder.AppendLine($"- Published ballot stream hash: `{projection.PublishedBallotStreamHash}`");
+        builder.AppendLine($"- Final encrypted tally hash: `{projection.FinalEncryptedTallyHash}`");
+        builder.AppendLine($"- Denominator hash: `{projection.DenominatorHash}`");
+        builder.AppendLine($"- Source transaction id: `{projection.SourceTransactionId?.ToString() ?? "none"}`");
+        builder.AppendLine($"- Source block height: `{projection.SourceBlockHeight?.ToString() ?? "none"}`");
+        builder.AppendLine($"- Source block id: `{projection.SourceBlockId?.ToString() ?? "none"}`");
+        builder.AppendLine();
+        builder.AppendLine("## Setup Metadata");
+        builder.AppendLine();
+        builder.AppendLine($"- Title: {projection.Setup.Title}");
+        builder.AppendLine($"- Short description: {projection.Setup.ShortDescription ?? "none"}");
+        builder.AppendLine($"- Owner: `{projection.Setup.OwnerPublicAddress}`");
+        builder.AppendLine($"- External reference: `{projection.Setup.ExternalReferenceCode ?? "none"}`");
+        builder.AppendLine($"- Draft revision: `{projection.Setup.SourceDraftRevision}`");
+        builder.AppendLine($"- Governance mode: `{projection.Setup.GovernanceMode}`");
+        builder.AppendLine($"- Participation privacy mode: `{projection.Setup.ParticipationPrivacyMode}`");
+        builder.AppendLine($"- Reporting policy: `{projection.Setup.ReportingPolicy}`");
+        builder.AppendLine($"- Review window policy: `{projection.Setup.ReviewWindowPolicy}`");
+        builder.AppendLine($"- Official visibility: `{projection.Setup.OfficialVisibility}`");
+        builder.AppendLine($"- Required approval count: `{projection.Setup.RequiredApprovalCount?.ToString() ?? "none"}`");
+        builder.AppendLine();
+        builder.AppendLine("### Approved Clients");
+        builder.AppendLine();
+        foreach (var client in projection.Setup.ApprovedClients)
+        {
+            builder.AppendLine($"- `{client.ApplicationId}` version `{client.Version}`");
+        }
 
-        - Election id: `{projection.ElectionId}`
-        - Frozen evidence fingerprint: `{projection.FrozenEvidenceFingerprint}`
-        - Close artifact id: `{projection.CloseArtifactId}`
-        - Tally-ready artifact id: `{projection.TallyReadyArtifactId}`
-        - Unofficial result artifact id: `{projection.UnofficialResultArtifactId}`
-        - Official result artifact id: `{projection.OfficialResultArtifactId}`
-        - Finalize artifact id: `{projection.FinalizeArtifactId}`
-        - Finalization session id: `{projection.FinalizationSessionId?.ToString() ?? "none"}`
-        - Finalization release evidence id: `{projection.FinalizationReleaseEvidenceId?.ToString() ?? "none"}`
-        - Accepted ballot set hash: `{projection.AcceptedBallotSetHash}`
-        - Published ballot stream hash: `{projection.PublishedBallotStreamHash}`
-        - Final encrypted tally hash: `{projection.FinalEncryptedTallyHash}`
-        - Denominator hash: `{projection.DenominatorHash}`
-        - Source transaction id: `{projection.SourceTransactionId?.ToString() ?? "none"}`
-        - Source block height: `{projection.SourceBlockHeight?.ToString() ?? "none"}`
-        - Source block id: `{projection.SourceBlockId?.ToString() ?? "none"}`
+        builder.AppendLine();
+        builder.AppendLine("### Election Options");
+        builder.AppendLine();
+        foreach (var option in projection.Setup.Options)
+        {
+            builder.AppendLine($"- `{option.OptionId}` {option.DisplayLabel} (order `{option.BallotOrder}`, blank `{option.IsBlankOption}`)");
+        }
 
-        ## Accepted Trustees
+        builder.AppendLine();
+        builder.AppendLine("## Accepted Trustees");
+        builder.AppendLine();
+        foreach (var trustee in projection.Trustees)
+        {
+            builder.AppendLine($"- `{trustee.TrusteeUserAddress}` ({trustee.TrusteeDisplayName ?? "unnamed"})");
+        }
 
-        {string.Join(Environment.NewLine, projection.Trustees.Select(x =>
-            $"- `{x.TrusteeUserAddress}` ({x.TrusteeDisplayName ?? "unnamed"})"))}
-        """;
+        builder.AppendLine();
+        builder.AppendLine("## Trustee Threshold Rule");
+        builder.AppendLine();
+        if (projection.TrusteeThreshold is null)
+        {
+            builder.AppendLine("- No trustee-threshold rule applies to this package.");
+        }
+        else
+        {
+            builder.AppendLine($"- Required approval count: `{projection.TrusteeThreshold.RequiredApprovalCount}`");
+            builder.AppendLine($"- Every accepted trustee must approve: `{projection.TrusteeThreshold.EveryAcceptedTrusteeMustApprove}`");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Public Key Record");
+        builder.AppendLine();
+        if (projection.CeremonyPublicKey is null)
+        {
+            builder.AppendLine("- No ceremony-bound public key record is attached.");
+        }
+        else
+        {
+            builder.AppendLine($"- Ceremony version id: `{projection.CeremonyPublicKey.CeremonyVersionId}`");
+            builder.AppendLine($"- Ceremony version number: `{projection.CeremonyPublicKey.CeremonyVersionNumber}`");
+            builder.AppendLine($"- Ceremony profile id: `{projection.CeremonyPublicKey.ProfileId}`");
+            builder.AppendLine($"- Bound trustee count: `{projection.CeremonyPublicKey.BoundTrusteeCount}`");
+            builder.AppendLine($"- Required approval count: `{projection.CeremonyPublicKey.RequiredApprovalCount}`");
+            builder.AppendLine($"- Every active trustee must approve: `{projection.CeremonyPublicKey.EveryActiveTrusteeMustApprove}`");
+            builder.AppendLine($"- Tally public key fingerprint: `{projection.CeremonyPublicKey.TallyPublicKeyFingerprint}`");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Warning Evidence");
+        builder.AppendLine();
+        if (projection.WarningEvidence.Count == 0)
+        {
+            builder.AppendLine("- No warning evidence was recorded.");
+        }
+        else
+        {
+            foreach (var warning in projection.WarningEvidence)
+            {
+                builder.AppendLine($"- `{warning.WarningCode}` acknowledged by `{warning.AcknowledgedByPublicAddress ?? "not recorded"}` at `{warning.AcknowledgedAt?.ToString("O") ?? "not recorded"}`");
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Governed Finalization Approvals");
+        builder.AppendLine();
+        if (projection.FinalizationGovernedProposal is null)
+        {
+            builder.AppendLine("- No finalize proposal record is attached.");
+        }
+        else
+        {
+            builder.AppendLine($"- Proposal id: `{projection.FinalizationGovernedProposal.Id}`");
+            builder.AppendLine($"- Action: `{projection.FinalizationGovernedProposal.ActionType}`");
+            builder.AppendLine($"- Lifecycle state at creation: `{projection.FinalizationGovernedProposal.LifecycleStateAtCreation}`");
+            builder.AppendLine($"- Proposed by: `{projection.FinalizationGovernedProposal.ProposedByPublicAddress}`");
+            builder.AppendLine($"- Created at: `{projection.FinalizationGovernedProposal.CreatedAt:O}`");
+        }
+
+        if (projection.FinalizationApprovals.Count == 0)
+        {
+            builder.AppendLine("- No trustee approvals were recorded for this package.");
+        }
+        else
+        {
+            foreach (var approval in projection.FinalizationApprovals)
+            {
+                builder.AppendLine($"- `{approval.TrusteeUserAddress}` approved at `{approval.ApprovedAt:O}` note: {approval.ApprovalNote ?? "none"}");
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Finalization Share Evidence");
+        builder.AppendLine();
+        if (projection.FinalizationShares.Count == 0)
+        {
+            builder.AppendLine("- No finalization share evidence is attached.");
+        }
+        else
+        {
+            foreach (var share in projection.FinalizationShares)
+            {
+                builder.AppendLine($"- Share `{share.Id}` trustee `{share.TrusteeUserAddress}` index `{share.ShareIndex}` status `{share.Status}` material hash `{share.ShareMaterialHash}`");
+            }
+        }
+
+        return builder.ToString().TrimEnd();
+    }
 
     private static string BuildHumanOutcomeContent(
         ElectionRecord election,
@@ -971,17 +1331,60 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
 
     private sealed record FrozenEvidenceProjection(
         string ElectionId,
-        string ElectionTitle,
-        string OwnerPublicAddress,
-        string GovernanceMode,
-        string OfficialVisibility,
-        OutcomeRuleDefinition OutcomeRule,
+        SetupProjection Setup,
         BoundaryEvidenceProjection CloseBoundary,
         EligibilitySnapshotProjection? CloseEligibilitySnapshot,
         BoundaryEvidenceProjection TallyReadyBoundary,
         ResultArtifactProjection UnofficialResult,
+        ResultArtifactProjection OfficialResult,
         FinalizationSessionProjection? FinalizationSession,
-        FinalizationReleaseProjection? FinalizationReleaseEvidence);
+        FinalizationReleaseProjection? FinalizationReleaseEvidence,
+        IReadOnlyList<WarningEvidenceProjection> WarningEvidence,
+        GovernedProposalProjection? FinalizationGovernedProposal,
+        IReadOnlyList<GovernedApprovalProjection> FinalizationGovernedApprovals,
+        IReadOnlyList<FinalizationShareProjection> FinalizationShares);
+
+    private sealed record SetupProjection(
+        string Title,
+        string? ShortDescription,
+        string OwnerPublicAddress,
+        string? ExternalReferenceCode,
+        int SourceDraftRevision,
+        string GovernanceMode,
+        string ParticipationPrivacyMode,
+        string ReportingPolicy,
+        string ReviewWindowPolicy,
+        string OfficialVisibility,
+        int? RequiredApprovalCount,
+        IReadOnlyList<ApprovedClientProjection> ApprovedClients,
+        IReadOnlyList<ElectionOptionProjection> Options,
+        TrusteeThresholdProjection? TrusteeThreshold,
+        CeremonyPublicKeyProjection? CeremonyPublicKey);
+
+    private sealed record ApprovedClientProjection(
+        string ApplicationId,
+        string Version);
+
+    private sealed record ElectionOptionProjection(
+        string OptionId,
+        string DisplayLabel,
+        string? ShortDescription,
+        int BallotOrder,
+        bool IsBlankOption);
+
+    private sealed record TrusteeThresholdProjection(
+        int RequiredApprovalCount,
+        bool EveryAcceptedTrusteeMustApprove,
+        IReadOnlyList<TrusteeProjection> AcceptedTrustees);
+
+    private sealed record CeremonyPublicKeyProjection(
+        Guid CeremonyVersionId,
+        int CeremonyVersionNumber,
+        string ProfileId,
+        int BoundTrusteeCount,
+        int RequiredApprovalCount,
+        bool EveryActiveTrusteeMustApprove,
+        string TallyPublicKeyFingerprint);
 
     private sealed record BoundaryEvidenceProjection(
         Guid Id,
@@ -1010,10 +1413,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         string CountedParticipationSetHash);
 
     private sealed record ResultArtifactProjection(
-        Guid Id,
         string ArtifactKind,
         string Visibility,
-        DateTime RecordedAt,
         IReadOnlyList<ResultOptionProjection> NamedOptionResults,
         int BlankCount,
         int TotalVotedCount,
@@ -1044,7 +1445,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         IReadOnlyList<TrusteeProjection> EligibleTrustees,
         DateTime CreatedAt,
         DateTime? CompletedAt,
-        Guid? ReleaseEvidenceId);
+        Guid? ReleaseEvidenceId,
+        Guid? GovernedProposalId,
+        string CreatedByPublicAddress);
 
     private sealed record FinalizationReleaseProjection(
         Guid Id,
@@ -1065,6 +1468,55 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         DateTime? SentAt,
         DateTime? RespondedAt);
 
+    private sealed record WarningEvidenceProjection(
+        string WarningCode,
+        int DraftRevision,
+        string? AcknowledgedByPublicAddress,
+        DateTime? AcknowledgedAt,
+        Guid? SourceTransactionId,
+        long? SourceBlockHeight,
+        Guid? SourceBlockId);
+
+    private sealed record GovernedProposalProjection(
+        Guid Id,
+        string ActionType,
+        string LifecycleStateAtCreation,
+        string ProposedByPublicAddress,
+        DateTime CreatedAt);
+
+    private sealed record GovernedApprovalProjection(
+        Guid Id,
+        Guid ProposalId,
+        string ActionType,
+        string TrusteeUserAddress,
+        string? TrusteeDisplayName,
+        string? ApprovalNote,
+        DateTime ApprovedAt,
+        Guid? SourceTransactionId,
+        long? SourceBlockHeight,
+        Guid? SourceBlockId);
+
+    private sealed record FinalizationShareProjection(
+        Guid Id,
+        Guid FinalizationSessionId,
+        string TrusteeUserAddress,
+        string? TrusteeDisplayName,
+        int ShareIndex,
+        string TargetType,
+        string Status,
+        string ClaimedAcceptedBallotSetHash,
+        string ClaimedFinalEncryptedTallyHash,
+        string ClaimedTargetTallyId,
+        Guid? ClaimedCeremonyVersionId,
+        string? ClaimedTallyPublicKeyFingerprint,
+        string ShareMaterialHash,
+        string? FailureCode,
+        string? FailureReason,
+        DateTime SubmittedAt,
+        Guid? SourceTransactionId,
+        long? SourceBlockHeight,
+        Guid? SourceBlockId);
+
     private sealed record ManifestProjection(
         Guid PackageId,
         Guid MachineArtifactId,
@@ -1083,6 +1535,10 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         int RosterEntryCount,
         Guid FinalizeArtifactId,
         Guid OfficialResultArtifactId,
+        string OfficialResultHash,
+        int WarningCount,
+        int GovernedApprovalCount,
+        int FinalizationShareCount,
         string OutcomeLabel,
         string OutcomeSummary);
 
@@ -1103,6 +1559,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         string FinalEncryptedTallyHash,
         string ActiveDenominatorSetHash,
         int RosterEntryCount,
+        int WarningCount,
+        int GovernedApprovalCount,
+        int FinalizationShareCount,
         IReadOnlyList<TrusteeProjection> Trustees);
 
     private sealed record ResultReportProjection(
@@ -1154,10 +1613,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         Guid HumanArtifactId,
         string ElectionId,
         string FrozenEvidenceFingerprint,
+        SetupProjection Setup,
         Guid CloseArtifactId,
         Guid TallyReadyArtifactId,
         Guid UnofficialResultArtifactId,
         Guid OfficialResultArtifactId,
+        string OfficialResultHash,
         Guid FinalizeArtifactId,
         Guid? FinalizationSessionId,
         Guid? FinalizationReleaseEvidenceId,
@@ -1166,6 +1627,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         string FinalEncryptedTallyHash,
         string DenominatorHash,
         IReadOnlyList<TrusteeProjection> Trustees,
+        CeremonyPublicKeyProjection? CeremonyPublicKey,
+        TrusteeThresholdProjection? TrusteeThreshold,
+        GovernedProposalProjection? FinalizationGovernedProposal,
+        IReadOnlyList<GovernedApprovalProjection> FinalizationApprovals,
+        IReadOnlyList<FinalizationShareProjection> FinalizationShares,
+        IReadOnlyList<WarningEvidenceProjection> WarningEvidence,
         Guid? SourceTransactionId,
         long? SourceBlockHeight,
         Guid? SourceBlockId);
