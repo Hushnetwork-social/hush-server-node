@@ -283,6 +283,34 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task ClaimRosterEntryAsync_AfterElectionFinalized_StillLinksRosterEntry()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var finalizedAt = DateTime.UtcNow.AddMinutes(-2);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            ClosedAt = finalizedAt.AddMinutes(-3),
+            FinalizedAt = finalizedAt,
+            LastUpdatedAt = finalizedAt,
+        };
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, CreateRosterEntry(election, "2001"));
+
+        var result = await service.ClaimRosterEntryAsync(new ClaimElectionRosterEntryRequest(
+            election.ElectionId,
+            "voter-address",
+            "2001",
+            "1111"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.RosterEntry.Should().NotBeNull();
+        result.RosterEntry!.LinkedActorPublicAddress.Should().Be("voter-address");
+    }
+
+    [Fact]
     public async Task ClaimRosterEntryAsync_WithWrongVerificationCode_ReturnsValidationFailed()
     {
         var store = new ElectionStore();

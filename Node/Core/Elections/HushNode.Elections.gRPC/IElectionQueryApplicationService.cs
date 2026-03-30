@@ -7,6 +7,8 @@ public interface IElectionQueryApplicationService
 {
     Task<GetElectionResponse> GetElectionAsync(ElectionId electionId);
 
+    Task<GetElectionHubViewResponse> GetElectionHubViewAsync(string actorPublicAddress);
+
     Task<GetElectionEligibilityViewResponse> GetElectionEligibilityViewAsync(ElectionId electionId, string actorPublicAddress);
 
     Task<GetElectionVotingViewResponse> GetElectionVotingViewAsync(
@@ -17,6 +19,8 @@ public interface IElectionQueryApplicationService
     Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccessAsync(ElectionId electionId, string actorPublicAddress);
 
     Task<GetElectionResultViewResponse> GetElectionResultViewAsync(ElectionId electionId, string actorPublicAddress);
+
+    Task<GetElectionReportAccessGrantsResponse> GetElectionReportAccessGrantsAsync(ElectionId electionId, string actorPublicAddress);
 
     Task<GetElectionCeremonyActionViewResponse> GetElectionCeremonyActionViewAsync(ElectionId electionId, string actorPublicAddress);
 

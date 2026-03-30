@@ -133,6 +133,145 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         return response;
     }
 
+    public async Task<GetElectionHubViewResponse> GetElectionHubViewAsync(string actorPublicAddress)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var normalizedActorPublicAddress = actorPublicAddress?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(normalizedActorPublicAddress))
+        {
+            return new GetElectionHubViewResponse
+            {
+                Success = true,
+                ErrorMessage = string.Empty,
+                ActorPublicAddress = normalizedActorPublicAddress,
+                HasAnyElectionRoles = false,
+                EmptyStateReason = "Sign in to view election roles in HushVoting!.",
+            };
+        }
+
+        var ownerElections = await repository.GetElectionsByOwnerAsync(normalizedActorPublicAddress);
+        var reportAccessGrants = await repository.GetReportAccessGrantsByActorAsync(normalizedActorPublicAddress);
+        var linkedRosterEntries = await repository.GetRosterEntriesByLinkedActorAsync(normalizedActorPublicAddress);
+        var acceptedTrusteeInvitations = await repository.GetAcceptedTrusteeInvitationsByActorAsync(normalizedActorPublicAddress);
+
+        var electionIds = ownerElections
+            .Select(x => x.ElectionId)
+            .Concat(reportAccessGrants.Select(x => x.ElectionId))
+            .Concat(linkedRosterEntries.Select(x => x.ElectionId))
+            .Concat(acceptedTrusteeInvitations.Select(x => x.ElectionId))
+            .Distinct()
+            .ToArray();
+
+        if (electionIds.Length == 0)
+        {
+            return new GetElectionHubViewResponse
+            {
+                Success = true,
+                ErrorMessage = string.Empty,
+                ActorPublicAddress = normalizedActorPublicAddress,
+                HasAnyElectionRoles = false,
+                EmptyStateReason = "No election roles were found for this actor.",
+            };
+        }
+
+        var elections = await repository.GetElectionsByIdsAsync(electionIds);
+        var selfRosterEntryByElectionId = linkedRosterEntries
+            .GroupBy(x => x.ElectionId)
+            .ToDictionary(
+                x => x.Key,
+                x => x
+                    .OrderByDescending(y => y.LastUpdatedAt)
+                    .First());
+        var designatedAuditorGrantByElectionId = reportAccessGrants
+            .Where(x => x.GrantRole == ElectionReportAccessGrantRole.DesignatedAuditor)
+            .GroupBy(x => x.ElectionId)
+            .ToDictionary(
+                x => x.Key,
+                x => x
+                    .OrderByDescending(y => y.GrantedAt)
+                    .First());
+        var acceptedTrusteeElectionIds = acceptedTrusteeInvitations
+            .Select(x => x.ElectionId)
+            .ToHashSet();
+
+        var electionEntries = new List<ElectionHubEntryView>();
+        foreach (var election in elections
+                     .OrderBy(ResolveElectionHubSortOrder)
+                     .ThenByDescending(x => x.LastUpdatedAt))
+        {
+            selfRosterEntryByElectionId.TryGetValue(election.ElectionId, out var selfRosterEntry);
+            designatedAuditorGrantByElectionId.TryGetValue(election.ElectionId, out var reportAccessGrant);
+
+            var isOwnerAdmin = string.Equals(
+                election.OwnerPublicAddress,
+                normalizedActorPublicAddress,
+                StringComparison.OrdinalIgnoreCase);
+            var isTrustee = acceptedTrusteeElectionIds.Contains(election.ElectionId);
+            var isVoter = selfRosterEntry is not null;
+            var isDesignatedAuditor = reportAccessGrant is not null;
+            var participationRecord = selfRosterEntry is null
+                ? null
+                : await repository.GetParticipationRecordAsync(
+                    election.ElectionId,
+                    selfRosterEntry.OrganizationVoterId);
+            var pendingProposal = isTrustee
+                ? await repository.GetPendingGovernedProposalAsync(election.ElectionId)
+                : null;
+            var pendingApprovals =
+                pendingProposal is not null &&
+                pendingProposal.ExecutionStatus == ElectionGovernedProposalExecutionStatus.WaitingForApprovals
+                    ? await repository.GetGovernedProposalApprovalsAsync(pendingProposal.Id)
+                    : Array.Empty<ElectionGovernedProposalApprovalRecord>();
+            var suggestedAction = ResolveSuggestedHubAction(
+                election,
+                normalizedActorPublicAddress,
+                selfRosterEntry,
+                participationRecord,
+                isOwnerAdmin,
+                isTrustee,
+                isDesignatedAuditor,
+                pendingProposal,
+                pendingApprovals);
+
+            electionEntries.Add(new ElectionHubEntryView
+            {
+                Election = election.ToSummaryProto(),
+                ActorRoles = new ElectionApplicationRoleFlagsView
+                {
+                    IsOwnerAdmin = isOwnerAdmin,
+                    IsTrustee = isTrustee,
+                    IsVoter = isVoter,
+                    IsDesignatedAuditor = isDesignatedAuditor,
+                },
+                SuggestedAction = suggestedAction.Action,
+                SuggestedActionReason = suggestedAction.Reason,
+                // Pre-link voter discovery still needs a product-level identity-to-roster seam.
+                CanClaimIdentity = false,
+                CanViewNamedParticipationRoster = isOwnerAdmin || isDesignatedAuditor,
+                CanViewReportPackage = isOwnerAdmin || isTrustee || isDesignatedAuditor,
+                CanViewParticipantResults = isOwnerAdmin || isTrustee || isVoter || isDesignatedAuditor,
+                ClosedProgressStatus = (ElectionClosedProgressStatusProto)(int)election.ClosedProgressStatus,
+                HasUnofficialResult = election.UnofficialResultArtifactId.HasValue,
+                HasOfficialResult = election.OfficialResultArtifactId.HasValue,
+            });
+        }
+
+        var response = new GetElectionHubViewResponse
+        {
+            Success = true,
+            ErrorMessage = string.Empty,
+            ActorPublicAddress = normalizedActorPublicAddress,
+            HasAnyElectionRoles = electionEntries.Count > 0,
+            EmptyStateReason = electionEntries.Count == 0
+                ? "No election roles were found for this actor."
+                : string.Empty,
+        };
+        response.Elections.AddRange(electionEntries);
+        return response;
+    }
+
     public async Task<GetElectionEligibilityViewResponse> GetElectionEligibilityViewAsync(
         ElectionId electionId,
         string actorPublicAddress)
@@ -152,7 +291,6 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             };
         }
 
-        var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(electionId);
         var rosterEntries = await repository.GetRosterEntriesAsync(electionId);
         var participationRecords = await repository.GetParticipationRecordsAsync(electionId);
         var activationEvents = await repository.GetEligibilityActivationEventsAsync(electionId);
@@ -160,10 +298,13 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var selfRosterEntry = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
             ? null
             : await repository.GetRosterEntryByLinkedActorAsync(electionId, normalizedActorPublicAddress);
+        var reportAccessGrant = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
+            ? null
+            : await repository.GetReportAccessGrantAsync(electionId, normalizedActorPublicAddress);
         var actorRole = ResolveEligibilityActorRole(
             election,
-            trusteeInvitations,
             selfRosterEntry,
+            reportAccessGrant,
             normalizedActorPublicAddress);
         var participationLookup = participationRecords.ToDictionary(
             x => x.OrganizationVoterId,
@@ -186,12 +327,10 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 election.LifecycleState == ElectionLifecycleState.Open &&
                 election.EligibilityMutationPolicy == EligibilityMutationPolicy.LateActivationForRosteredVotersOnly,
             CanReviewRestrictedRoster = canReviewRestrictedRoster,
-            CanClaimIdentity =
-                !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
-                actorRole != ElectionEligibilityActorRoleProto.EligibilityActorOwner &&
-                selfRosterEntry is null &&
-                (election.LifecycleState == ElectionLifecycleState.Draft ||
-                 election.LifecycleState == ElectionLifecycleState.Open),
+            CanClaimIdentity = CanClaimElectionIdentity(
+                normalizedActorPublicAddress,
+                actorRole == ElectionEligibilityActorRoleProto.EligibilityActorOwner,
+                selfRosterEntry),
             UsesTemporaryVerificationCode = true,
             TemporaryVerificationCode = ElectionEligibilityContracts.TemporaryVerificationCode,
             Summary = BuildEligibilitySummary(
@@ -370,16 +509,17 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             ? null
             : await repository.GetReportAccessGrantAsync(electionId, normalizedActorPublicAddress);
         var isOwner = !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
-            string.Equals(election.OwnerPublicAddress, normalizedActorPublicAddress, StringComparison.Ordinal);
+            string.Equals(election.OwnerPublicAddress, normalizedActorPublicAddress, StringComparison.OrdinalIgnoreCase);
         var acceptedTrustee = trusteeInvitations.Any(x =>
             x.Status == ElectionTrusteeInvitationStatus.Accepted &&
             string.Equals(x.TrusteeUserAddress, normalizedActorPublicAddress, StringComparison.OrdinalIgnoreCase));
+        var isDesignatedAuditor = reportAccessGrant?.GrantRole == ElectionReportAccessGrantRole.DesignatedAuditor;
         var canViewParticipantEncryptedResults =
             !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
             (isOwner ||
              selfRosterEntry is not null ||
-             acceptedTrustee);
-        var isDesignatedAuditor = reportAccessGrant?.GrantRole == ElectionReportAccessGrantRole.DesignatedAuditor;
+             acceptedTrustee ||
+             isDesignatedAuditor);
         var canViewReportPackage = !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
             (isOwner || acceptedTrustee || isDesignatedAuditor);
         var canViewRestrictedReportArtifacts = isOwner || isDesignatedAuditor;
@@ -430,6 +570,52 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                     .Select(x => x.ToProto()));
             }
         }
+
+        return response;
+    }
+
+    public async Task<GetElectionReportAccessGrantsResponse> GetElectionReportAccessGrantsAsync(
+        ElectionId electionId,
+        string actorPublicAddress)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var normalizedActorPublicAddress = actorPublicAddress?.Trim() ?? string.Empty;
+
+        var election = await repository.GetElectionAsync(electionId);
+        if (election is null)
+        {
+            return new GetElectionReportAccessGrantsResponse
+            {
+                Success = false,
+                ErrorMessage = $"Election {electionId} was not found.",
+                ActorPublicAddress = normalizedActorPublicAddress,
+            };
+        }
+
+        var canManageGrants = !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
+            string.Equals(election.OwnerPublicAddress, normalizedActorPublicAddress, StringComparison.OrdinalIgnoreCase);
+        var response = new GetElectionReportAccessGrantsResponse
+        {
+            Success = true,
+            ErrorMessage = string.Empty,
+            ActorPublicAddress = normalizedActorPublicAddress,
+            CanManageGrants = canManageGrants,
+            DeniedReason = canManageGrants
+                ? string.Empty
+                : "Only the election owner can manage designated-auditor grants.",
+        };
+
+        if (!canManageGrants)
+        {
+            return response;
+        }
+
+        var grants = await repository.GetReportAccessGrantsAsync(electionId);
+        response.Grants.AddRange(grants
+            .OrderByDescending(x => x.GrantedAt)
+            .ThenBy(x => x.ActorPublicAddress, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.ToProto()));
 
         return response;
     }
@@ -537,6 +723,118 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         response.Elections.AddRange(elections.Select(x => x.ToSummaryProto()));
         return response;
     }
+
+    private static int ResolveElectionHubSortOrder(ElectionRecord election) =>
+        election.LifecycleState switch
+        {
+            ElectionLifecycleState.Open => 0,
+            ElectionLifecycleState.Draft => 1,
+            ElectionLifecycleState.Closed => 2,
+            ElectionLifecycleState.Finalized => 3,
+            _ => 4,
+        };
+
+    private static bool CanClaimElectionIdentity(
+        string actorPublicAddress,
+        bool isOwner,
+        ElectionRosterEntryRecord? selfRosterEntry) =>
+        !string.IsNullOrWhiteSpace(actorPublicAddress) &&
+        !isOwner &&
+        selfRosterEntry is null;
+
+    private static (ElectionHubNextActionHintProto Action, string Reason) ResolveSuggestedHubAction(
+        ElectionRecord election,
+        string actorPublicAddress,
+        ElectionRosterEntryRecord? selfRosterEntry,
+        ElectionParticipationRecord? participationRecord,
+        bool isOwnerAdmin,
+        bool isTrustee,
+        bool isDesignatedAuditor,
+        ElectionGovernedProposalRecord? pendingProposal,
+        IReadOnlyList<ElectionGovernedProposalApprovalRecord> pendingApprovals)
+    {
+        if (CanLinkedVoterCastBallot(election, selfRosterEntry, participationRecord))
+        {
+            return (
+                ElectionHubNextActionHintProto.ElectionHubActionVoterCastBallot,
+                "Cast your ballot while the election remains open.");
+        }
+
+        if (CanTrusteeApproveGovernedAction(actorPublicAddress, pendingProposal, pendingApprovals))
+        {
+            return (
+                ElectionHubNextActionHintProto.ElectionHubActionTrusteeApproveGovernedAction,
+                pendingProposal!.ActionType switch
+                {
+                    ElectionGovernedActionType.Open => "A governed open request is awaiting your approval.",
+                    ElectionGovernedActionType.Close => "A governed close request is awaiting your approval.",
+                    ElectionGovernedActionType.Finalize => "A governed finalization request is awaiting your approval.",
+                    _ => "A governed election action is awaiting your approval.",
+                });
+        }
+
+        if (isOwnerAdmin && election.LifecycleState == ElectionLifecycleState.Draft)
+        {
+            return (
+                ElectionHubNextActionHintProto.ElectionHubActionOwnerManageDraft,
+                "Finish the draft details and open the election when ready.");
+        }
+
+        if (isOwnerAdmin &&
+            election.LifecycleState == ElectionLifecycleState.Closed &&
+            !election.OfficialResultArtifactId.HasValue)
+        {
+            return (
+                ElectionHubNextActionHintProto.ElectionHubActionOwnerMonitorClosedProgress,
+                "Monitor closed-progress work until the final result is ready.");
+        }
+
+        if (isOwnerAdmin &&
+            (election.LifecycleState == ElectionLifecycleState.Finalized || election.OfficialResultArtifactId.HasValue))
+        {
+            return (
+                ElectionHubNextActionHintProto.ElectionHubActionOwnerReviewFinalResult,
+                "Review the finalized result and published evidence package.");
+        }
+
+        if ((selfRosterEntry is not null || isTrustee) &&
+            (election.UnofficialResultArtifactId.HasValue || election.OfficialResultArtifactId.HasValue))
+        {
+            return (
+                ElectionHubNextActionHintProto.ElectionHubActionVoterReviewResult,
+                "Review the available election result artifacts.");
+        }
+
+        if (isDesignatedAuditor)
+        {
+            return (
+                ElectionHubNextActionHintProto.ElectionHubActionAuditorReviewPackage,
+                "Review the election evidence package and auditor-visible artifacts.");
+        }
+
+        return (
+            ElectionHubNextActionHintProto.ElectionHubActionNone,
+            "No immediate action is required for this election.");
+    }
+
+    private static bool CanLinkedVoterCastBallot(
+        ElectionRecord election,
+        ElectionRosterEntryRecord? selfRosterEntry,
+        ElectionParticipationRecord? participationRecord) =>
+        election.LifecycleState == ElectionLifecycleState.Open &&
+        selfRosterEntry is not null &&
+        participationRecord is null &&
+        IsInCurrentDenominator(election, selfRosterEntry);
+
+    private static bool CanTrusteeApproveGovernedAction(
+        string actorPublicAddress,
+        ElectionGovernedProposalRecord? pendingProposal,
+        IReadOnlyList<ElectionGovernedProposalApprovalRecord> pendingApprovals) =>
+        !string.IsNullOrWhiteSpace(actorPublicAddress) &&
+        pendingProposal is not null &&
+        pendingProposal.ExecutionStatus == ElectionGovernedProposalExecutionStatus.WaitingForApprovals &&
+        pendingApprovals.All(x =>
+            !string.Equals(x.TrusteeUserAddress, actorPublicAddress, StringComparison.OrdinalIgnoreCase));
 
     private async Task<ElectionVotingSubmissionStatusProto> ResolveSubmissionStatusAsync(
         IElectionsRepository repository,
@@ -671,8 +969,8 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
 
     private static ElectionEligibilityActorRoleProto ResolveEligibilityActorRole(
         ElectionRecord election,
-        IReadOnlyList<ElectionTrusteeInvitationRecord> trusteeInvitations,
         ElectionRosterEntryRecord? selfRosterEntry,
+        ElectionReportAccessGrantRecord? reportAccessGrant,
         string actorPublicAddress)
     {
         if (!string.IsNullOrWhiteSpace(actorPublicAddress) &&
@@ -681,11 +979,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             return ElectionEligibilityActorRoleProto.EligibilityActorOwner;
         }
 
-        var hasAcceptedTrusteeInvitation = !string.IsNullOrWhiteSpace(actorPublicAddress) &&
-            trusteeInvitations.Any(x =>
-                x.Status == ElectionTrusteeInvitationStatus.Accepted &&
-                string.Equals(x.TrusteeUserAddress, actorPublicAddress, StringComparison.OrdinalIgnoreCase));
-        if (hasAcceptedTrusteeInvitation)
+        if (reportAccessGrant?.GrantRole == ElectionReportAccessGrantRole.DesignatedAuditor)
         {
             return ElectionEligibilityActorRoleProto.EligibilityActorRestrictedReviewer;
         }

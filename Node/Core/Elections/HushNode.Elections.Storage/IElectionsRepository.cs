@@ -11,6 +11,9 @@ public interface IElectionsRepository : IRepository
 
     Task<IReadOnlyList<ElectionRecord>> GetElectionsByOwnerAsync(string ownerPublicAddress);
 
+    Task<IReadOnlyList<ElectionRecord>> GetElectionsByIdsAsync(IReadOnlyCollection<ElectionId> electionIds) =>
+        Task.FromResult<IReadOnlyList<ElectionRecord>>(Array.Empty<ElectionRecord>());
+
     Task SaveElectionAsync(ElectionRecord election);
 
     Task<IReadOnlyList<ElectionDraftSnapshotRecord>> GetDraftSnapshotsAsync(ElectionId electionId);
@@ -62,12 +65,18 @@ public interface IElectionsRepository : IRepository
     Task<IReadOnlyList<ElectionReportAccessGrantRecord>> GetReportAccessGrantsAsync(ElectionId electionId) =>
         Task.FromResult<IReadOnlyList<ElectionReportAccessGrantRecord>>(Array.Empty<ElectionReportAccessGrantRecord>());
 
+    Task<IReadOnlyList<ElectionReportAccessGrantRecord>> GetReportAccessGrantsByActorAsync(string actorPublicAddress) =>
+        Task.FromResult<IReadOnlyList<ElectionReportAccessGrantRecord>>(Array.Empty<ElectionReportAccessGrantRecord>());
+
     Task<ElectionReportAccessGrantRecord?> GetReportAccessGrantAsync(ElectionId electionId, string actorPublicAddress) =>
         Task.FromResult<ElectionReportAccessGrantRecord?>(null);
 
     Task SaveReportAccessGrantAsync(ElectionReportAccessGrantRecord reportAccessGrant) => Task.CompletedTask;
 
     Task<IReadOnlyList<ElectionRosterEntryRecord>> GetRosterEntriesAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionRosterEntryRecord>>(Array.Empty<ElectionRosterEntryRecord>());
+
+    Task<IReadOnlyList<ElectionRosterEntryRecord>> GetRosterEntriesByLinkedActorAsync(string actorPublicAddress) =>
         Task.FromResult<IReadOnlyList<ElectionRosterEntryRecord>>(Array.Empty<ElectionRosterEntryRecord>());
 
     Task<ElectionRosterEntryRecord?> GetRosterEntryAsync(ElectionId electionId, string organizationVoterId) =>
@@ -188,6 +197,9 @@ public interface IElectionsRepository : IRepository
     Task SaveWarningAcknowledgementAsync(ElectionWarningAcknowledgementRecord acknowledgement);
 
     Task<IReadOnlyList<ElectionTrusteeInvitationRecord>> GetTrusteeInvitationsAsync(ElectionId electionId);
+
+    Task<IReadOnlyList<ElectionTrusteeInvitationRecord>> GetAcceptedTrusteeInvitationsByActorAsync(string actorPublicAddress) =>
+        Task.FromResult<IReadOnlyList<ElectionTrusteeInvitationRecord>>(Array.Empty<ElectionTrusteeInvitationRecord>());
 
     Task<ElectionTrusteeInvitationRecord?> GetTrusteeInvitationAsync(Guid invitationId);
 

@@ -55,6 +55,25 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task CreateElectionReportAccessGrant_RejectsDirectCommandPath()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new CreateElectionReportAccessGrantRequest
+        {
+            ElectionId = ElectionId.NewElectionId.ToString(),
+            ActorPublicAddress = "owner-address",
+            DesignatedAuditorPublicAddress = "auditor-address",
+        };
+
+        var act = async () => await sut.CreateElectionReportAccessGrant(request, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
+    }
+
+    [Fact]
     public async Task UpdateElectionDraft_RejectsDirectCommandPath()
     {
         var mocker = new AutoMocker();
@@ -338,6 +357,52 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task GetElectionHubView_WithValidRequest_ReturnsActorScopedHubPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionHubViewAsync("actor-address"))
+            .ReturnsAsync(new GetElectionHubViewResponse
+            {
+                Success = true,
+                ActorPublicAddress = "actor-address",
+                HasAnyElectionRoles = true,
+                Elections =
+                {
+                    new ElectionHubEntryView
+                    {
+                        Election = new ElectionSummary
+                        {
+                            ElectionId = electionId.ToString(),
+                            Title = "Board Election",
+                        },
+                        ActorRoles = new ElectionApplicationRoleFlagsView
+                        {
+                            IsOwnerAdmin = true,
+                        },
+                        SuggestedAction = ElectionHubNextActionHintProto.ElectionHubActionOwnerManageDraft,
+                    },
+                },
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionHubView(new GetElectionHubViewRequest
+        {
+            ActorPublicAddress = "actor-address",
+        }, CreateMockServerCallContext());
+
+        response.Success.Should().BeTrue();
+        response.ActorPublicAddress.Should().Be("actor-address");
+        response.HasAnyElectionRoles.Should().BeTrue();
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].Election.Title.Should().Be("Board Election");
+        response.Elections[0].SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionOwnerManageDraft);
+    }
+
+    [Fact]
     public async Task GetElectionVotingView_WithValidRequest_ReturnsVotingPayload()
     {
         var mocker = new AutoMocker();
@@ -376,6 +441,45 @@ public class ElectionsGrpcServiceTests
         response.SubmissionStatus.Should().Be(ElectionVotingSubmissionStatusProto.VotingSubmissionStatusAlreadyUsed);
         response.DkgProfileId.Should().Be("dkg-prod-1of1");
         response.TallyPublicKeyFingerprint.Should().Be("tally-fingerprint");
+    }
+
+    [Fact]
+    public async Task GetElectionReportAccessGrants_WithValidRequest_ReturnsGrantPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionReportAccessGrantsAsync(electionId, "owner-address"))
+            .ReturnsAsync(new GetElectionReportAccessGrantsResponse
+            {
+                Success = true,
+                ActorPublicAddress = "owner-address",
+                CanManageGrants = true,
+                Grants =
+                {
+                    new ElectionReportAccessGrantView
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        ElectionId = electionId.ToString(),
+                        ActorPublicAddress = "auditor-address",
+                        GrantRole = ElectionReportAccessGrantRoleProto.ReportAccessGrantDesignatedAuditor,
+                    },
+                },
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionReportAccessGrants(new GetElectionReportAccessGrantsRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = "owner-address",
+        }, CreateMockServerCallContext());
+
+        response.Success.Should().BeTrue();
+        response.CanManageGrants.Should().BeTrue();
+        response.Grants.Should().ContainSingle();
+        response.Grants[0].ActorPublicAddress.Should().Be("auditor-address");
     }
 
     [Fact]

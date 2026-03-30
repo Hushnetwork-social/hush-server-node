@@ -221,6 +221,84 @@ public class ElectionsRepositoryTests
     }
 
     [Fact]
+    public async Task ActorScopedElectionQueries_ShouldRoundTripOwnedLinkedTrusteeAndAuditorLookups()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var now = DateTime.UtcNow;
+        var ownedElection = CreateAdminElection() with
+        {
+            Title = "Owned Election",
+            OwnerPublicAddress = "actor-address",
+            LastUpdatedAt = now.AddMinutes(-4),
+        };
+        var linkedElection = CreateAdminElection() with
+        {
+            Title = "Linked Election",
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = now.AddMinutes(-10),
+            LastUpdatedAt = now.AddMinutes(-3),
+        };
+        var trusteeElection = CreateTrusteeElection() with
+        {
+            Title = "Trustee Election",
+            LastUpdatedAt = now.AddMinutes(-2),
+        };
+        var auditorElection = CreateAdminElection() with
+        {
+            Title = "Auditor Election",
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = now.AddMinutes(-1),
+            LastUpdatedAt = now.AddMinutes(-1),
+        };
+        var linkedRosterEntry = ElectionModelFactory.CreateRosterEntry(
+                linkedElection.ElectionId,
+                "1001",
+                ElectionRosterContactType.Email,
+                "linked@example.org")
+            .FreezeAtOpen(linkedElection.OpenedAt!.Value)
+            .LinkToActor("actor-address", now.AddMinutes(-9));
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                trusteeElection.ElectionId,
+                trusteeUserAddress: "actor-address",
+                trusteeDisplayName: "Actor Trustee",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: trusteeElection.CurrentDraftRevision)
+            .Accept(
+                respondedAt: now.AddMinutes(-8),
+                resolvedAtDraftRevision: trusteeElection.CurrentDraftRevision,
+                lifecycleState: ElectionLifecycleState.Draft);
+        var auditorGrant = ElectionModelFactory.CreateReportAccessGrant(
+            auditorElection.ElectionId,
+            actorPublicAddress: "actor-address",
+            grantedByPublicAddress: "owner-address",
+            grantedAt: now.AddMinutes(-7));
+
+        await repository.SaveElectionAsync(ownedElection);
+        await repository.SaveElectionAsync(linkedElection);
+        await repository.SaveElectionAsync(trusteeElection);
+        await repository.SaveElectionAsync(auditorElection);
+        await repository.SaveRosterEntryAsync(linkedRosterEntry);
+        await repository.SaveTrusteeInvitationAsync(acceptedInvitation);
+        await repository.SaveReportAccessGrantAsync(auditorGrant);
+        await context.SaveChangesAsync();
+
+        var selectedElections = await repository.GetElectionsByIdsAsync([ownedElection.ElectionId, linkedElection.ElectionId]);
+        var linkedEntries = await repository.GetRosterEntriesByLinkedActorAsync("actor-address");
+        var acceptedInvitations = await repository.GetAcceptedTrusteeInvitationsByActorAsync("actor-address");
+        var actorGrants = await repository.GetReportAccessGrantsByActorAsync("actor-address");
+
+        selectedElections.Select(x => x.ElectionId).Should().BeEquivalentTo([ownedElection.ElectionId, linkedElection.ElectionId]);
+        linkedEntries.Should().ContainSingle();
+        linkedEntries[0].ElectionId.Should().Be(linkedElection.ElectionId);
+        acceptedInvitations.Should().ContainSingle();
+        acceptedInvitations[0].ElectionId.Should().Be(trusteeElection.ElectionId);
+        actorGrants.Should().ContainSingle();
+        actorGrants[0].ElectionId.Should().Be(auditorElection.ElectionId);
+        actorGrants[0].GrantRole.Should().Be(ElectionReportAccessGrantRole.DesignatedAuditor);
+    }
+
+    [Fact]
     public async Task SaveArtifactsWarningsAndInvitations_ShouldRoundTrip()
     {
         using var context = CreateContext();

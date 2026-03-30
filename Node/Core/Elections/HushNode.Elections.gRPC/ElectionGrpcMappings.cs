@@ -839,6 +839,17 @@ internal static class ElectionGrpcMappings
             RecordedAt = ToTimestamp(reportArtifact.RecordedAt),
         };
 
+    public static ElectionReportAccessGrantView ToProto(this ElectionReportAccessGrantRecord reportAccessGrant) =>
+        new()
+        {
+            Id = reportAccessGrant.Id.ToString(),
+            ElectionId = reportAccessGrant.ElectionId.ToString(),
+            ActorPublicAddress = reportAccessGrant.ActorPublicAddress,
+            GrantRole = (ElectionReportAccessGrantRoleProto)(int)reportAccessGrant.GrantRole,
+            GrantedAt = ToTimestamp(reportAccessGrant.GrantedAt),
+            GrantedByPublicAddress = reportAccessGrant.GrantedByPublicAddress,
+        };
+
     public static OutcomeRule ToProto(this OutcomeRuleDefinition outcomeRule) =>
         new()
         {

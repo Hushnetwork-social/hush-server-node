@@ -345,11 +345,13 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         if (election.LifecycleState != ElectionLifecycleState.Draft &&
-            election.LifecycleState != ElectionLifecycleState.Open)
+            election.LifecycleState != ElectionLifecycleState.Open &&
+            election.LifecycleState != ElectionLifecycleState.Closed &&
+            election.LifecycleState != ElectionLifecycleState.Finalized)
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.InvalidState,
-                "Identity claim-linking is only allowed while the election is draft or open.");
+                "Identity claim-linking is only allowed while the election is draft, open, closed, or finalized.");
         }
 
         var rosterEntry = await repository.GetRosterEntryAsync(request.ElectionId, request.OrganizationVoterId);

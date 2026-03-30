@@ -31,6 +31,11 @@ public class ElectionsGrpcService(
             StatusCode.FailedPrecondition,
             "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for InviteElectionTrustee."));
 
+    public override Task<ElectionCommandResponse> CreateElectionReportAccessGrant(Proto.CreateElectionReportAccessGrantRequest request, ServerCallContext context) =>
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for CreateElectionReportAccessGrant."));
+
     public override Task<ElectionCommandResponse> AcceptElectionTrusteeInvitation(Proto.ResolveElectionTrusteeInvitationRequest request, ServerCallContext context) =>
         throw new RpcException(new Status(
             StatusCode.FailedPrecondition,
@@ -178,6 +183,19 @@ public class ElectionsGrpcService(
         }
     }
 
+    public override async Task<GetElectionHubViewResponse> GetElectionHubView(GetElectionHubViewRequest request, ServerCallContext context)
+    {
+        try
+        {
+            return await _queryApplicationService.GetElectionHubViewAsync(request.ActorPublicAddress);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionHubView));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch election hub view."));
+        }
+    }
+
     public override async Task<GetElectionEligibilityViewResponse> GetElectionEligibilityView(
         GetElectionEligibilityViewRequest request,
         ServerCallContext context)
@@ -256,6 +274,27 @@ public class ElectionsGrpcService(
         {
             _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionResultView));
             throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch election result view."));
+        }
+    }
+
+    public override async Task<GetElectionReportAccessGrantsResponse> GetElectionReportAccessGrants(
+        GetElectionReportAccessGrantsRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            return await _queryApplicationService.GetElectionReportAccessGrantsAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress);
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionReportAccessGrants));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch election report access grants."));
         }
     }
 

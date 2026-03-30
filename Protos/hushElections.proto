@@ -10,6 +10,7 @@ service HushElections {
   rpc CreateElectionDraft(CreateElectionDraftRequest) returns (ElectionCommandResponse);
   rpc UpdateElectionDraft(UpdateElectionDraftRequest) returns (ElectionCommandResponse);
   rpc InviteElectionTrustee(InviteElectionTrusteeRequest) returns (ElectionCommandResponse);
+  rpc CreateElectionReportAccessGrant(CreateElectionReportAccessGrantRequest) returns (ElectionCommandResponse);
   rpc AcceptElectionTrusteeInvitation(ResolveElectionTrusteeInvitationRequest) returns (ElectionCommandResponse);
   rpc RejectElectionTrusteeInvitation(ResolveElectionTrusteeInvitationRequest) returns (ElectionCommandResponse);
   rpc RevokeElectionTrusteeInvitation(ResolveElectionTrusteeInvitationRequest) returns (ElectionCommandResponse);
@@ -33,10 +34,12 @@ service HushElections {
   rpc RegisterElectionVotingCommitment(RegisterElectionVotingCommitmentRequest) returns (RegisterElectionVotingCommitmentResponse);
   rpc AcceptElectionBallotCast(AcceptElectionBallotCastRequest) returns (AcceptElectionBallotCastResponse);
   rpc GetElection(GetElectionRequest) returns (GetElectionResponse);
+  rpc GetElectionHubView(GetElectionHubViewRequest) returns (GetElectionHubViewResponse);
   rpc GetElectionEligibilityView(GetElectionEligibilityViewRequest) returns (GetElectionEligibilityViewResponse);
   rpc GetElectionVotingView(GetElectionVotingViewRequest) returns (GetElectionVotingViewResponse);
   rpc GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest) returns (GetElectionEnvelopeAccessResponse);
   rpc GetElectionResultView(GetElectionResultViewRequest) returns (GetElectionResultViewResponse);
+  rpc GetElectionReportAccessGrants(GetElectionReportAccessGrantsRequest) returns (GetElectionReportAccessGrantsResponse);
   rpc GetElectionCeremonyActionView(GetElectionCeremonyActionViewRequest) returns (GetElectionCeremonyActionViewResponse);
   rpc GetElectionsByOwner(GetElectionsByOwnerRequest) returns (GetElectionsByOwnerResponse);
 }
@@ -210,6 +213,10 @@ enum ElectionReportArtifactFormatProto {
 enum ElectionReportArtifactAccessScopeProto {
   ReportArtifactOwnerAuditorOnly = 0;
   ReportArtifactOwnerAuditorTrustee = 1;
+}
+
+enum ElectionReportAccessGrantRoleProto {
+  ReportAccessGrantDesignatedAuditor = 0;
 }
 
 enum ElectionClosedProgressStatusProto {
@@ -852,6 +859,12 @@ message InviteElectionTrusteeRequest {
   string TrusteeDisplayName = 4;
 }
 
+message CreateElectionReportAccessGrantRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string DesignatedAuditorPublicAddress = 3;
+}
+
 message ResolveElectionTrusteeInvitationRequest {
   string ElectionId = 1;
   string InvitationId = 2;
@@ -1029,6 +1042,10 @@ message GetElectionRequest {
   string ElectionId = 1;
 }
 
+message GetElectionHubViewRequest {
+  string ActorPublicAddress = 1;
+}
+
 message GetElectionEligibilityViewRequest {
   string ElectionId = 1;
   string ActorPublicAddress = 2;
@@ -1056,6 +1073,11 @@ message GetElectionResultViewRequest {
   string ActorPublicAddress = 2;
 }
 
+message GetElectionReportAccessGrantsRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+}
+
 message GetElectionResultViewResponse {
   bool Success = 1;
   string ErrorMessage = 2;
@@ -1071,12 +1093,74 @@ message GetElectionResultViewResponse {
   repeated ElectionReportArtifactView VisibleReportArtifacts = 12;
 }
 
+message ElectionApplicationRoleFlagsView {
+  bool IsOwnerAdmin = 1;
+  bool IsTrustee = 2;
+  bool IsVoter = 3;
+  bool IsDesignatedAuditor = 4;
+}
+
+message ElectionHubEntryView {
+  ElectionSummary Election = 1;
+  ElectionApplicationRoleFlagsView ActorRoles = 2;
+  ElectionHubNextActionHintProto SuggestedAction = 3;
+  string SuggestedActionReason = 4;
+  bool CanClaimIdentity = 5;
+  bool CanViewNamedParticipationRoster = 6;
+  bool CanViewReportPackage = 7;
+  bool CanViewParticipantResults = 8;
+  ElectionClosedProgressStatusProto ClosedProgressStatus = 9;
+  bool HasUnofficialResult = 10;
+  bool HasOfficialResult = 11;
+}
+
+message GetElectionHubViewResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ActorPublicAddress = 3;
+  repeated ElectionHubEntryView Elections = 4;
+  bool HasAnyElectionRoles = 5;
+  string EmptyStateReason = 6;
+}
+
+message ElectionReportAccessGrantView {
+  string Id = 1;
+  string ElectionId = 2;
+  string ActorPublicAddress = 3;
+  ElectionReportAccessGrantRoleProto GrantRole = 4;
+  google.protobuf.Timestamp GrantedAt = 5;
+  string GrantedByPublicAddress = 6;
+}
+
+message GetElectionReportAccessGrantsResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ActorPublicAddress = 3;
+  bool CanManageGrants = 4;
+  string DeniedReason = 5;
+  repeated ElectionReportAccessGrantView Grants = 6;
+}
+
 enum ElectionEligibilityActorRoleProto {
   EligibilityActorUnknown = 0;
   EligibilityActorOwner = 1;
   EligibilityActorRestrictedReviewer = 2;
   EligibilityActorLinkedVoter = 3;
   EligibilityActorReadOnly = 4;
+}
+
+enum ElectionHubNextActionHintProto {
+  ElectionHubActionNone = 0;
+  ElectionHubActionOwnerManageDraft = 1;
+  ElectionHubActionOwnerOpenElection = 2;
+  ElectionHubActionOwnerMonitorClosedProgress = 3;
+  ElectionHubActionOwnerReviewFinalResult = 4;
+  ElectionHubActionVoterClaimIdentity = 5;
+  ElectionHubActionVoterCastBallot = 6;
+  ElectionHubActionVoterReviewResult = 7;
+  ElectionHubActionTrusteeApproveGovernedAction = 8;
+  ElectionHubActionTrusteeReviewResult = 9;
+  ElectionHubActionAuditorReviewPackage = 10;
 }
 
 message ElectionEligibilitySummaryView {

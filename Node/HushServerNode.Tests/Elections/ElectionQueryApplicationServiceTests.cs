@@ -268,6 +268,118 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionHubViewAsync_WithResolvedActorRoles_ReturnsLifecycleSortedRoleAwareEntries()
+    {
+        var mocker = new AutoMocker();
+        var now = DateTime.UtcNow;
+        var voterElection = CreateAdminElection("Open Voter Election") with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = now.AddMinutes(-20),
+            LastUpdatedAt = now.AddMinutes(-20),
+        };
+        var voterRosterEntry = ElectionModelFactory.CreateRosterEntry(
+                voterElection.ElectionId,
+                "5001",
+                ElectionRosterContactType.Email,
+                "voter@example.org",
+                ElectionVotingRightStatus.Active,
+                importedAt: now.AddHours(-1))
+            .FreezeAtOpen(voterElection.OpenedAt!.Value)
+            .LinkToActor("actor-address", now.AddMinutes(-19));
+        var ownerElection = CreateAdminElection("Draft Owner Election") with
+        {
+            OwnerPublicAddress = "actor-address",
+            LastUpdatedAt = now.AddMinutes(-15),
+        };
+        var trusteeElection = CreateTrusteeElection("Closed Trustee Election") with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedAt = now.AddMinutes(-10),
+            ClosedProgressStatus = ElectionClosedProgressStatus.WaitingForTrusteeShares,
+            LastUpdatedAt = now.AddMinutes(-10),
+        };
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                trusteeElection.ElectionId,
+                trusteeUserAddress: "actor-address",
+                trusteeDisplayName: "Actor Trustee",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: trusteeElection.CurrentDraftRevision)
+            .Accept(
+                respondedAt: now.AddDays(-1),
+                resolvedAtDraftRevision: trusteeElection.CurrentDraftRevision,
+                lifecycleState: ElectionLifecycleState.Draft);
+        var pendingProposal = ElectionModelFactory.CreateGovernedProposal(
+            trusteeElection,
+            ElectionGovernedActionType.Finalize,
+            proposedByPublicAddress: "owner-address");
+        var auditorElection = CreateAdminElection("Finalized Auditor Election") with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = now.AddMinutes(-5),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            LastUpdatedAt = now.AddMinutes(-5),
+        };
+        var auditorGrant = ElectionModelFactory.CreateReportAccessGrant(
+            auditorElection.ElectionId,
+            actorPublicAddress: "actor-address",
+            grantedByPublicAddress: "owner-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionsByOwnerAsync("actor-address"))
+                .ReturnsAsync([ownerElection]);
+            repo.Setup(x => x.GetReportAccessGrantsByActorAsync("actor-address"))
+                .ReturnsAsync([auditorGrant]);
+            repo.Setup(x => x.GetRosterEntriesByLinkedActorAsync("actor-address"))
+                .ReturnsAsync([voterRosterEntry]);
+            repo.Setup(x => x.GetAcceptedTrusteeInvitationsByActorAsync("actor-address"))
+                .ReturnsAsync([acceptedInvitation]);
+            repo.Setup(x => x.GetElectionsByIdsAsync(It.IsAny<IReadOnlyCollection<ElectionId>>()))
+                .ReturnsAsync([trusteeElection, auditorElection, ownerElection, voterElection]);
+            repo.Setup(x => x.GetParticipationRecordAsync(voterElection.ElectionId, "5001"))
+                .ReturnsAsync((ElectionParticipationRecord?)null);
+            repo.Setup(x => x.GetPendingGovernedProposalAsync(trusteeElection.ElectionId))
+                .ReturnsAsync(pendingProposal);
+            repo.Setup(x => x.GetGovernedProposalApprovalsAsync(pendingProposal.Id))
+                .ReturnsAsync(Array.Empty<ElectionGovernedProposalApprovalRecord>());
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionHubViewAsync("actor-address");
+
+        response.Success.Should().BeTrue();
+        response.HasAnyElectionRoles.Should().BeTrue();
+        response.EmptyStateReason.Should().BeEmpty();
+        response.Elections.Select(x => x.Election.Title).Should().Equal(
+            "Open Voter Election",
+            "Draft Owner Election",
+            "Closed Trustee Election",
+            "Finalized Auditor Election");
+
+        var voterEntry = response.Elections.Single(x => x.Election.Title == "Open Voter Election");
+        voterEntry.ActorRoles.IsVoter.Should().BeTrue();
+        voterEntry.SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionVoterCastBallot);
+        voterEntry.CanViewParticipantResults.Should().BeTrue();
+
+        var ownerEntry = response.Elections.Single(x => x.Election.Title == "Draft Owner Election");
+        ownerEntry.ActorRoles.IsOwnerAdmin.Should().BeTrue();
+        ownerEntry.SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionOwnerManageDraft);
+
+        var trusteeEntry = response.Elections.Single(x => x.Election.Title == "Closed Trustee Election");
+        trusteeEntry.ActorRoles.IsTrustee.Should().BeTrue();
+        trusteeEntry.SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionTrusteeApproveGovernedAction);
+
+        var auditorEntry = response.Elections.Single(x => x.Election.Title == "Finalized Auditor Election");
+        auditorEntry.ActorRoles.IsDesignatedAuditor.Should().BeTrue();
+        auditorEntry.SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionAuditorReviewPackage);
+        auditorEntry.CanViewNamedParticipationRoster.Should().BeTrue();
+        auditorEntry.CanViewReportPackage.Should().BeTrue();
+        auditorEntry.CanViewParticipantResults.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task GetElectionEnvelopeAccessAsync_WithStoredAccess_ReturnsWrappedElectionKey()
     {
         var mocker = new AutoMocker();
@@ -427,6 +539,108 @@ public class ElectionQueryApplicationServiceTests
         response.RestrictedRosterEntries.Should().BeEmpty();
         response.ActivationEvents.Should().BeEmpty();
         response.EligibilitySnapshots.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetElectionEligibilityViewAsync_WithDesignatedAuditorRole_ReturnsRestrictedRosterData()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedAt = DateTime.UtcNow.AddMinutes(-5),
+        };
+        var linkedEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "1001",
+                ElectionRosterContactType.Email,
+                "voter-1001@example.org")
+            .LinkToActor("voter-address", DateTime.UtcNow);
+        var participation = ElectionModelFactory.CreateParticipationRecord(
+            election.ElectionId,
+            "1001",
+            ElectionParticipationStatus.Blank);
+        var auditorGrant = ElectionModelFactory.CreateReportAccessGrant(
+            election.ElectionId,
+            actorPublicAddress: "auditor-address",
+            grantedByPublicAddress: "owner-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetRosterEntriesAsync(election.ElectionId)).ReturnsAsync([linkedEntry]);
+            repo.Setup(x => x.GetParticipationRecordsAsync(election.ElectionId)).ReturnsAsync([participation]);
+            repo.Setup(x => x.GetReportAccessGrantAsync(election.ElectionId, "auditor-address"))
+                .ReturnsAsync(auditorGrant);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionEligibilityViewAsync(election.ElectionId, "auditor-address");
+
+        response.Success.Should().BeTrue();
+        response.ActorRole.Should().Be(ElectionEligibilityActorRoleProto.EligibilityActorRestrictedReviewer);
+        response.CanReviewRestrictedRoster.Should().BeTrue();
+        response.RestrictedRosterEntries.Should().ContainSingle();
+        response.RestrictedRosterEntries[0].OrganizationVoterId.Should().Be("1001");
+    }
+
+    [Fact]
+    public async Task GetElectionEligibilityViewAsync_WithAcceptedTrusteeRole_RemainsReadOnly()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection();
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                election.ElectionId,
+                trusteeUserAddress: "trustee-address",
+                trusteeDisplayName: "Trustee",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: election.CurrentDraftRevision)
+            .Accept(
+                respondedAt: DateTime.UtcNow,
+                resolvedAtDraftRevision: election.CurrentDraftRevision,
+                lifecycleState: ElectionLifecycleState.Draft);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync([acceptedInvitation]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionEligibilityViewAsync(election.ElectionId, "trustee-address");
+
+        response.Success.Should().BeTrue();
+        response.ActorRole.Should().Be(ElectionEligibilityActorRoleProto.EligibilityActorReadOnly);
+        response.CanReviewRestrictedRoster.Should().BeFalse();
+        response.RestrictedRosterEntries.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetElectionEligibilityViewAsync_WithClosedElectionUnlinkedActor_AllowsClaimIdentity()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedAt = DateTime.UtcNow.AddMinutes(-5),
+            ClosedProgressStatus = ElectionClosedProgressStatus.WaitingForTrusteeShares,
+        };
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionEligibilityViewAsync(election.ElectionId, "unlinked-voter");
+
+        response.Success.Should().BeTrue();
+        response.ActorRole.Should().Be(ElectionEligibilityActorRoleProto.EligibilityActorReadOnly);
+        response.CanClaimIdentity.Should().BeTrue();
+        response.CanReviewRestrictedRoster.Should().BeFalse();
     }
 
     [Fact]
@@ -973,6 +1187,179 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionResultViewAsync_WithDesignatedAuditorRole_ReturnsParticipantResultsAndRestrictedArtifacts()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = DateTime.UtcNow.AddMinutes(-1),
+            TallyReadyAt = DateTime.UtcNow.AddMinutes(-5),
+            TallyReadyArtifactId = Guid.NewGuid(),
+            UnofficialResultArtifactId = Guid.NewGuid(),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            FinalizeArtifactId = Guid.NewGuid(),
+            OfficialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly,
+        };
+        var denominatorEvidence = new SharedResultDenominatorEvidence(
+            ElectionEligibilitySnapshotType.Close,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            [1, 2, 3]);
+        var unofficial = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Unofficial,
+            ElectionResultArtifactVisibility.ParticipantEncrypted,
+            election.Title,
+            [
+                new SharedResultOptionCount("alice", "Alice", null, 1, 1, 7),
+                new SharedResultOptionCount("bob", "Bob", null, 2, 2, 5),
+            ],
+            blankCount: 1,
+            totalVotedCount: 13,
+            eligibleToVoteCount: 20,
+            didNotVoteCount: 7,
+            denominatorEvidence,
+            "owner-address",
+            encryptedPayload: "enc::unofficial");
+        var official = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Official,
+            ElectionResultArtifactVisibility.ParticipantEncrypted,
+            election.Title,
+            unofficial.NamedOptionResults,
+            unofficial.BlankCount,
+            unofficial.TotalVotedCount,
+            unofficial.EligibleToVoteCount,
+            unofficial.DidNotVoteCount,
+            denominatorEvidence,
+            "owner-address",
+            sourceResultArtifactId: unofficial.Id,
+            encryptedPayload: "enc::official");
+        var reportPackage = ElectionModelFactory.CreateSealedReportPackage(
+            election.ElectionId,
+            attemptNumber: 1,
+            tallyReadyArtifactId: election.TallyReadyArtifactId!.Value,
+            unofficialResultArtifactId: election.UnofficialResultArtifactId!.Value,
+            officialResultArtifactId: election.OfficialResultArtifactId!.Value,
+            finalizeArtifactId: election.FinalizeArtifactId!.Value,
+            frozenEvidenceHash: [1, 2, 3],
+            frozenEvidenceFingerprint: "fingerprint-2",
+            packageHash: [4, 5, 6],
+            artifactCount: 2,
+            attemptedByPublicAddress: "owner-address",
+            attemptedAt: DateTime.UtcNow.AddMinutes(-1),
+            sealedAt: DateTime.UtcNow);
+        var trusteeVisibleArtifact = ElectionModelFactory.CreateReportArtifact(
+            reportPackage.Id,
+            election.ElectionId,
+            ElectionReportArtifactKind.HumanManifest,
+            ElectionReportArtifactFormat.Markdown,
+            ElectionReportArtifactAccessScope.OwnerAuditorTrustee,
+            1,
+            "Final manifest",
+            "final-manifest.md",
+            "text/markdown",
+            [9, 9, 9],
+            "# Manifest");
+        var ownerAuditorArtifact = ElectionModelFactory.CreateReportArtifact(
+            reportPackage.Id,
+            election.ElectionId,
+            ElectionReportArtifactKind.HumanNamedParticipationRoster,
+            ElectionReportArtifactFormat.Markdown,
+            ElectionReportArtifactAccessScope.OwnerAuditorOnly,
+            2,
+            "Named participation roster",
+            "named-participation-roster.md",
+            "text/markdown",
+            [8, 8, 8],
+            "# Roster");
+        var auditorGrant = ElectionModelFactory.CreateReportAccessGrant(
+            election.ElectionId,
+            actorPublicAddress: "auditor-address",
+            grantedByPublicAddress: "owner-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetReportAccessGrantAsync(election.ElectionId, "auditor-address"))
+                .ReturnsAsync(auditorGrant);
+            repo.Setup(x => x.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Unofficial))
+                .ReturnsAsync(unofficial);
+            repo.Setup(x => x.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Official))
+                .ReturnsAsync(official);
+            repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetReportArtifactsAsync(reportPackage.Id)).ReturnsAsync([trusteeVisibleArtifact, ownerAuditorArtifact]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionResultViewAsync(election.ElectionId, "auditor-address");
+
+        response.Success.Should().BeTrue();
+        response.CanViewParticipantEncryptedResults.Should().BeTrue();
+        response.CanViewReportPackage.Should().BeTrue();
+        response.UnofficialResult.Should().NotBeNull();
+        response.OfficialResult.Should().NotBeNull();
+        response.VisibleReportArtifacts.Should().HaveCount(2);
+        response.VisibleReportArtifacts.Select(x => x.ArtifactKind).Should().Contain(
+            ElectionReportArtifactKindProto.ReportArtifactHumanNamedParticipationRoster);
+    }
+
+    [Fact]
+    public async Task GetElectionReportAccessGrantsAsync_WithOwnerRole_ReturnsSortedGrantList()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection();
+        var olderGrant = ElectionModelFactory.CreateReportAccessGrant(
+            election.ElectionId,
+            actorPublicAddress: "auditor-b",
+            grantedByPublicAddress: "owner-address",
+            grantedAt: DateTime.UtcNow.AddMinutes(-5));
+        var newerGrant = ElectionModelFactory.CreateReportAccessGrant(
+            election.ElectionId,
+            actorPublicAddress: "auditor-a",
+            grantedByPublicAddress: "owner-address",
+            grantedAt: DateTime.UtcNow.AddMinutes(-1));
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetReportAccessGrantsAsync(election.ElectionId)).ReturnsAsync([olderGrant, newerGrant]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionReportAccessGrantsAsync(election.ElectionId, "owner-address");
+
+        response.Success.Should().BeTrue();
+        response.CanManageGrants.Should().BeTrue();
+        response.DeniedReason.Should().BeEmpty();
+        response.Grants.Select(x => x.ActorPublicAddress).Should().Equal("auditor-a", "auditor-b");
+    }
+
+    [Fact]
+    public async Task GetElectionReportAccessGrantsAsync_WithNonOwnerRole_ReturnsDeniedResponse()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection();
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionReportAccessGrantsAsync(election.ElectionId, "auditor-address");
+
+        response.Success.Should().BeTrue();
+        response.CanManageGrants.Should().BeFalse();
+        response.DeniedReason.Should().Contain("Only the election owner");
+        response.Grants.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task GetElectionCeremonyActionViewAsync_WithOwnerRole_ReturnsStartAndRestartAvailability()
     {
         var mocker = new AutoMocker();
@@ -1114,14 +1501,24 @@ public class ElectionQueryApplicationServiceTests
             .Setup(x => x.GetRepository<IElectionsRepository>())
             .Returns(repository.Object);
 
+        repository.Setup(x => x.GetElectionsByOwnerAsync(It.IsAny<string>()))
+            .ReturnsAsync(Array.Empty<ElectionRecord>());
+        repository.Setup(x => x.GetElectionsByIdsAsync(It.IsAny<IReadOnlyCollection<ElectionId>>()))
+            .ReturnsAsync(Array.Empty<ElectionRecord>());
         repository.Setup(x => x.GetWarningAcknowledgementsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionWarningAcknowledgementRecord>());
         repository.Setup(x => x.GetTrusteeInvitationsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
+        repository.Setup(x => x.GetAcceptedTrusteeInvitationsByActorAsync(It.IsAny<string>()))
             .ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
         repository.Setup(x => x.GetBoundaryArtifactsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionBoundaryArtifactRecord>());
         repository.Setup(x => x.GetGovernedProposalsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionGovernedProposalRecord>());
+        repository.Setup(x => x.GetPendingGovernedProposalAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync((ElectionGovernedProposalRecord?)null);
+        repository.Setup(x => x.GetGovernedProposalApprovalsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(Array.Empty<ElectionGovernedProposalApprovalRecord>());
         repository.Setup(x => x.GetCeremonyProfilesAsync())
             .ReturnsAsync(Array.Empty<ElectionCeremonyProfileRecord>());
         repository.Setup(x => x.GetCeremonyVersionsAsync(It.IsAny<ElectionId>()))
@@ -1148,12 +1545,20 @@ public class ElectionQueryApplicationServiceTests
             .ReturnsAsync((ElectionReportPackageRecord?)null);
         repository.Setup(x => x.GetReportArtifactsAsync(It.IsAny<Guid>()))
             .ReturnsAsync(Array.Empty<ElectionReportArtifactRecord>());
+        repository.Setup(x => x.GetReportAccessGrantsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionReportAccessGrantRecord>());
+        repository.Setup(x => x.GetReportAccessGrantsByActorAsync(It.IsAny<string>()))
+            .ReturnsAsync(Array.Empty<ElectionReportAccessGrantRecord>());
         repository.Setup(x => x.GetReportAccessGrantAsync(It.IsAny<ElectionId>(), It.IsAny<string>()))
             .ReturnsAsync((ElectionReportAccessGrantRecord?)null);
         repository.Setup(x => x.GetRosterEntriesAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionRosterEntryRecord>());
+        repository.Setup(x => x.GetRosterEntriesByLinkedActorAsync(It.IsAny<string>()))
+            .ReturnsAsync(Array.Empty<ElectionRosterEntryRecord>());
         repository.Setup(x => x.GetParticipationRecordsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionParticipationRecord>());
+        repository.Setup(x => x.GetParticipationRecordAsync(It.IsAny<ElectionId>(), It.IsAny<string>()))
+            .ReturnsAsync((ElectionParticipationRecord?)null);
         repository.Setup(x => x.GetEligibilityActivationEventsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionEligibilityActivationEventRecord>());
         repository.Setup(x => x.GetEligibilitySnapshotsAsync(It.IsAny<ElectionId>()))

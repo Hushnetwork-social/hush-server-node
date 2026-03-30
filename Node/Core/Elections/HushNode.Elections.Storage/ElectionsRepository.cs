@@ -26,6 +26,19 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
             .OrderByDescending(x => x.LastUpdatedAt)
             .ToListAsync();
 
+    public async Task<IReadOnlyList<ElectionRecord>> GetElectionsByIdsAsync(IReadOnlyCollection<ElectionId> electionIds)
+    {
+        if (electionIds.Count == 0)
+        {
+            return Array.Empty<ElectionRecord>();
+        }
+
+        return await Context.Elections
+            .Where(x => electionIds.Contains(x.ElectionId))
+            .OrderByDescending(x => x.LastUpdatedAt)
+            .ToListAsync();
+    }
+
     public async Task SaveElectionAsync(ElectionRecord election)
     {
         var existing = await Context.Elections
@@ -173,6 +186,13 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
             .ThenBy(x => x.GrantRole)
             .ToListAsync();
 
+    public async Task<IReadOnlyList<ElectionReportAccessGrantRecord>> GetReportAccessGrantsByActorAsync(string actorPublicAddress) =>
+        await Context.ElectionReportAccessGrants
+            .Where(x => x.ActorPublicAddress == actorPublicAddress)
+            .OrderByDescending(x => x.GrantedAt)
+            .ThenBy(x => x.ElectionId)
+            .ToListAsync();
+
     public async Task<ElectionReportAccessGrantRecord?> GetReportAccessGrantAsync(
         ElectionId electionId,
         string actorPublicAddress) =>
@@ -188,6 +208,13 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         await Context.ElectionRosterEntries
             .Where(x => x.ElectionId == electionId)
             .OrderBy(x => x.OrganizationVoterId)
+            .ToListAsync();
+
+    public async Task<IReadOnlyList<ElectionRosterEntryRecord>> GetRosterEntriesByLinkedActorAsync(string actorPublicAddress) =>
+        await Context.ElectionRosterEntries
+            .Where(x => x.LinkedActorPublicAddress == actorPublicAddress)
+            .OrderByDescending(x => x.LastUpdatedAt)
+            .ThenBy(x => x.ElectionId)
             .ToListAsync();
 
     public async Task<ElectionRosterEntryRecord?> GetRosterEntryAsync(
@@ -496,6 +523,15 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         await Context.ElectionTrusteeInvitations
             .Where(x => x.ElectionId == electionId)
             .OrderBy(x => x.SentAt)
+            .ToListAsync();
+
+    public async Task<IReadOnlyList<ElectionTrusteeInvitationRecord>> GetAcceptedTrusteeInvitationsByActorAsync(string actorPublicAddress) =>
+        await Context.ElectionTrusteeInvitations
+            .Where(x =>
+                x.TrusteeUserAddress == actorPublicAddress &&
+                x.Status == ElectionTrusteeInvitationStatus.Accepted)
+            .OrderByDescending(x => x.RespondedAt ?? x.SentAt)
+            .ThenBy(x => x.ElectionId)
             .ToListAsync();
 
     public async Task<ElectionTrusteeInvitationRecord?> GetTrusteeInvitationAsync(Guid invitationId) =>
