@@ -299,6 +299,46 @@ public class ElectionsRepositoryTests
     }
 
     [Fact]
+    public async Task SearchElectionsAsync_WithOwnerAddressFilter_ReturnsNewestMatchesWithinLimit()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var now = DateTime.UtcNow;
+        var olderOwnedElection = CreateAdminElection() with
+        {
+            Title = "Older Owned Election",
+            OwnerPublicAddress = "actor-address",
+            LastUpdatedAt = now.AddMinutes(-3),
+        };
+        var newerOwnedElection = CreateAdminElection() with
+        {
+            Title = "Newest Owned Election",
+            OwnerPublicAddress = "actor-address",
+            LastUpdatedAt = now.AddMinutes(-1),
+        };
+        var unrelatedElection = CreateAdminElection() with
+        {
+            Title = "Unrelated Election",
+            OwnerPublicAddress = "other-address",
+            LastUpdatedAt = now,
+        };
+
+        await repository.SaveElectionAsync(olderOwnedElection);
+        await repository.SaveElectionAsync(newerOwnedElection);
+        await repository.SaveElectionAsync(unrelatedElection);
+        await context.SaveChangesAsync();
+
+        var results = await repository.SearchElectionsAsync(
+            searchTerm: string.Empty,
+            ownerPublicAddresses: [" actor-address ", "ACTOR-ADDRESS", " "],
+            limit: 1);
+
+        results.Should().ContainSingle();
+        results[0].ElectionId.Should().Be(newerOwnedElection.ElectionId);
+        results[0].Title.Should().Be("Newest Owned Election");
+    }
+
+    [Fact]
     public async Task SaveArtifactsWarningsAndInvitations_ShouldRoundTrip()
     {
         using var context = CreateContext();

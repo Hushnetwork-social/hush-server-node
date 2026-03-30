@@ -196,6 +196,24 @@ public class ElectionsGrpcService(
         }
     }
 
+    public override async Task<SearchElectionDirectoryResponse> SearchElectionDirectory(
+        SearchElectionDirectoryRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            return await _queryApplicationService.SearchElectionDirectoryAsync(
+                request.SearchTerm,
+                request.OwnerPublicAddresses,
+                request.Limit);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(SearchElectionDirectory));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to search election directory."));
+        }
+    }
+
     public override async Task<GetElectionEligibilityViewResponse> GetElectionEligibilityView(
         GetElectionEligibilityViewRequest request,
         ServerCallContext context)

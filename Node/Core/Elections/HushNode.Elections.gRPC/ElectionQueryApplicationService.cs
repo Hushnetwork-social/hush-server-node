@@ -133,6 +133,46 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         return response;
     }
 
+    public async Task<SearchElectionDirectoryResponse> SearchElectionDirectoryAsync(
+        string searchTerm,
+        IReadOnlyCollection<string>? ownerPublicAddresses,
+        int limit)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var normalizedSearchTerm = searchTerm?.Trim() ?? string.Empty;
+        var normalizedOwnerAddresses = (ownerPublicAddresses ?? Array.Empty<string>())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var clampedLimit = Math.Clamp(limit, 1, 25);
+
+        if (string.IsNullOrWhiteSpace(normalizedSearchTerm) && normalizedOwnerAddresses.Length == 0)
+        {
+            return new SearchElectionDirectoryResponse
+            {
+                Success = true,
+                ErrorMessage = string.Empty,
+                SearchTerm = normalizedSearchTerm,
+            };
+        }
+
+        var elections = await repository.SearchElectionsAsync(
+            normalizedSearchTerm,
+            normalizedOwnerAddresses,
+            clampedLimit);
+
+        var response = new SearchElectionDirectoryResponse
+        {
+            Success = true,
+            ErrorMessage = string.Empty,
+            SearchTerm = normalizedSearchTerm,
+        };
+        response.Elections.AddRange(elections.Select(x => x.ToSummaryProto()));
+        return response;
+    }
+
     public async Task<GetElectionHubViewResponse> GetElectionHubViewAsync(string actorPublicAddress)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -247,7 +287,8 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 },
                 SuggestedAction = suggestedAction.Action,
                 SuggestedActionReason = suggestedAction.Reason,
-                // Pre-link voter discovery still needs a product-level identity-to-roster seam.
+                // The hub is intentionally linked-only in v1. Discovery happens through search,
+                // then the voter completes claim-linking on the eligibility route.
                 CanClaimIdentity = false,
                 CanViewNamedParticipationRoster = isOwnerAdmin || isDesignatedAuditor,
                 CanViewReportPackage = isOwnerAdmin || isTrustee || isDesignatedAuditor,

@@ -7,6 +7,11 @@ public interface IElectionQueryApplicationService
 {
     Task<GetElectionResponse> GetElectionAsync(ElectionId electionId);
 
+    Task<SearchElectionDirectoryResponse> SearchElectionDirectoryAsync(
+        string searchTerm,
+        IReadOnlyCollection<string>? ownerPublicAddresses,
+        int limit);
+
     Task<GetElectionHubViewResponse> GetElectionHubViewAsync(string actorPublicAddress);
 
     Task<GetElectionEligibilityViewResponse> GetElectionEligibilityViewAsync(ElectionId electionId, string actorPublicAddress);

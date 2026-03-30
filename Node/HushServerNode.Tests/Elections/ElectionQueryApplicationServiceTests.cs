@@ -268,6 +268,58 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task SearchElectionDirectoryAsync_WithSearchInputs_ReturnsElectionSummaries()
+    {
+        var mocker = new AutoMocker();
+        var elections = new[]
+        {
+            CreateAdminElection(title: "Board Election"),
+            CreateAdminElection(title: "Budget Election"),
+        };
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.SearchElectionsAsync(
+                    "board",
+                    It.Is<IReadOnlyCollection<string>>(addresses =>
+                        addresses.Count == 1 && addresses.Contains("owner-address")),
+                    12))
+                .ReturnsAsync(elections);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.SearchElectionDirectoryAsync(
+            "  board  ",
+            ["owner-address", "owner-address", " "],
+            12);
+
+        response.Success.Should().BeTrue();
+        response.ErrorMessage.Should().BeEmpty();
+        response.SearchTerm.Should().Be("board");
+        response.Elections.Select(x => x.Title).Should().Equal("Board Election", "Budget Election");
+    }
+
+    [Fact]
+    public async Task SearchElectionDirectoryAsync_WithEmptyInputs_ReturnsEmptyResponseWithoutQueryingRepository()
+    {
+        var mocker = new AutoMocker();
+
+        ConfigureReadOnlyRepository(mocker, _ => { });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.SearchElectionDirectoryAsync("   ", [" ", ""], 20);
+
+        response.Success.Should().BeTrue();
+        response.ErrorMessage.Should().BeEmpty();
+        response.SearchTerm.Should().BeEmpty();
+        response.Elections.Should().BeEmpty();
+        mocker.GetMock<IElectionsRepository>()
+            .Verify(x => x.SearchElectionsAsync(It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
     public async Task GetElectionHubViewAsync_WithResolvedActorRoles_ReturnsLifecycleSortedRoleAwareEntries()
     {
         var mocker = new AutoMocker();

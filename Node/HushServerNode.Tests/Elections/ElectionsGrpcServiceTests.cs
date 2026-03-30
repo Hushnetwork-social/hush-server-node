@@ -403,6 +403,49 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task SearchElectionDirectory_WithValidRequest_ReturnsSearchPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.SearchElectionDirectoryAsync(
+                "alice",
+                It.Is<IReadOnlyCollection<string>>(addresses =>
+                    addresses.Count == 1 && addresses.Contains("owner-address")),
+                12))
+            .ReturnsAsync(new SearchElectionDirectoryResponse
+            {
+                Success = true,
+                SearchTerm = "alice",
+                Elections =
+                {
+                    new ElectionSummary
+                    {
+                        ElectionId = electionId.ToString(),
+                        Title = "Board Election",
+                        OwnerPublicAddress = "owner-address",
+                    },
+                },
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.SearchElectionDirectory(new SearchElectionDirectoryRequest
+        {
+            SearchTerm = "alice",
+            Limit = 12,
+            OwnerPublicAddresses = { "owner-address" },
+        }, CreateMockServerCallContext());
+
+        response.Success.Should().BeTrue();
+        response.SearchTerm.Should().Be("alice");
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].ElectionId.Should().Be(electionId.ToString());
+        response.Elections[0].Title.Should().Be("Board Election");
+    }
+
+    [Fact]
     public async Task GetElectionVotingView_WithValidRequest_ReturnsVotingPayload()
     {
         var mocker = new AutoMocker();

@@ -39,6 +39,49 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
             .ToListAsync();
     }
 
+    public async Task<IReadOnlyList<ElectionRecord>> SearchElectionsAsync(
+        string? searchTerm,
+        IReadOnlyCollection<string>? ownerPublicAddresses,
+        int limit = 20)
+    {
+        var normalizedSearchTerm = searchTerm?.Trim() ?? string.Empty;
+        var normalizedOwnerAddresses = (ownerPublicAddresses ?? Array.Empty<string>())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (string.IsNullOrWhiteSpace(normalizedSearchTerm) && normalizedOwnerAddresses.Length == 0)
+        {
+            return Array.Empty<ElectionRecord>();
+        }
+
+        var clampedLimit = Math.Clamp(limit, 1, 25);
+        var query = Context.Elections.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(normalizedSearchTerm) && normalizedOwnerAddresses.Length > 0)
+        {
+            var titlePattern = $"%{normalizedSearchTerm}%";
+            query = query.Where(x =>
+                EF.Functions.ILike(x.Title, titlePattern) ||
+                normalizedOwnerAddresses.Contains(x.OwnerPublicAddress));
+        }
+        else if (!string.IsNullOrWhiteSpace(normalizedSearchTerm))
+        {
+            var titlePattern = $"%{normalizedSearchTerm}%";
+            query = query.Where(x => EF.Functions.ILike(x.Title, titlePattern));
+        }
+        else
+        {
+            query = query.Where(x => normalizedOwnerAddresses.Contains(x.OwnerPublicAddress));
+        }
+
+        return await query
+            .OrderByDescending(x => x.LastUpdatedAt)
+            .Take(clampedLimit)
+            .ToListAsync();
+    }
+
     public async Task SaveElectionAsync(ElectionRecord election)
     {
         var existing = await Context.Elections

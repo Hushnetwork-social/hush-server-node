@@ -14,6 +14,12 @@ public interface IElectionsRepository : IRepository
     Task<IReadOnlyList<ElectionRecord>> GetElectionsByIdsAsync(IReadOnlyCollection<ElectionId> electionIds) =>
         Task.FromResult<IReadOnlyList<ElectionRecord>>(Array.Empty<ElectionRecord>());
 
+    Task<IReadOnlyList<ElectionRecord>> SearchElectionsAsync(
+        string? searchTerm,
+        IReadOnlyCollection<string>? ownerPublicAddresses,
+        int limit = 20) =>
+        Task.FromResult<IReadOnlyList<ElectionRecord>>(Array.Empty<ElectionRecord>());
+
     Task SaveElectionAsync(ElectionRecord election);
 
     Task<IReadOnlyList<ElectionDraftSnapshotRecord>> GetDraftSnapshotsAsync(ElectionId electionId);

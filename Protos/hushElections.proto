@@ -34,6 +34,7 @@ service HushElections {
   rpc RegisterElectionVotingCommitment(RegisterElectionVotingCommitmentRequest) returns (RegisterElectionVotingCommitmentResponse);
   rpc AcceptElectionBallotCast(AcceptElectionBallotCastRequest) returns (AcceptElectionBallotCastResponse);
   rpc GetElection(GetElectionRequest) returns (GetElectionResponse);
+  rpc SearchElectionDirectory(SearchElectionDirectoryRequest) returns (SearchElectionDirectoryResponse);
   rpc GetElectionHubView(GetElectionHubViewRequest) returns (GetElectionHubViewResponse);
   rpc GetElectionEligibilityView(GetElectionEligibilityViewRequest) returns (GetElectionEligibilityViewResponse);
   rpc GetElectionVotingView(GetElectionVotingViewRequest) returns (GetElectionVotingViewResponse);
@@ -1042,6 +1043,12 @@ message GetElectionRequest {
   string ElectionId = 1;
 }
 
+message SearchElectionDirectoryRequest {
+  string SearchTerm = 1;
+  repeated string OwnerPublicAddresses = 2;
+  int32 Limit = 3;
+}
+
 message GetElectionHubViewRequest {
   string ActorPublicAddress = 1;
 }
@@ -1316,6 +1323,13 @@ message GetElectionResponse {
   repeated ElectionFinalizationShare FinalizationShares = 15;
   repeated ElectionFinalizationReleaseEvidence FinalizationReleaseEvidenceRecords = 16;
   repeated ElectionResultArtifact ResultArtifacts = 17;
+}
+
+message SearchElectionDirectoryResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string SearchTerm = 3;
+  repeated ElectionSummary Elections = 4;
 }
 
 message GetElectionCeremonyActionViewResponse {
