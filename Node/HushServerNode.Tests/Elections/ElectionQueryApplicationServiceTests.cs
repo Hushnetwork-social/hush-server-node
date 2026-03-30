@@ -380,6 +380,47 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionHubViewAsync_WithTrusteeResultVisibility_ReturnsTrusteeReviewAction()
+    {
+        var mocker = new AutoMocker();
+        var finalizedTrusteeElection = CreateTrusteeElection("Finalized Trustee Election") with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = DateTime.UtcNow.AddMinutes(-2),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            LastUpdatedAt = DateTime.UtcNow.AddMinutes(-2),
+        };
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                finalizedTrusteeElection.ElectionId,
+                trusteeUserAddress: "trustee-address",
+                trusteeDisplayName: "Trustee",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: finalizedTrusteeElection.CurrentDraftRevision)
+            .Accept(
+                respondedAt: DateTime.UtcNow.AddMinutes(-10),
+                resolvedAtDraftRevision: finalizedTrusteeElection.CurrentDraftRevision,
+                lifecycleState: ElectionLifecycleState.Draft);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetAcceptedTrusteeInvitationsByActorAsync("trustee-address"))
+                .ReturnsAsync([acceptedInvitation]);
+            repo.Setup(x => x.GetElectionsByIdsAsync(It.IsAny<IReadOnlyCollection<ElectionId>>()))
+                .ReturnsAsync([finalizedTrusteeElection]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionHubViewAsync("trustee-address");
+
+        response.Success.Should().BeTrue();
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].ActorRoles.IsTrustee.Should().BeTrue();
+        response.Elections[0].SuggestedAction.Should().Be(
+            ElectionHubNextActionHintProto.ElectionHubActionTrusteeReviewResult);
+    }
+
+    [Fact]
     public async Task GetElectionEnvelopeAccessAsync_WithStoredAccess_ReturnsWrappedElectionKey()
     {
         var mocker = new AutoMocker();

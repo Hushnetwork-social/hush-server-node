@@ -797,11 +797,19 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 "Review the finalized result and published evidence package.");
         }
 
-        if ((selfRosterEntry is not null || isTrustee) &&
+        if (selfRosterEntry is not null &&
             (election.UnofficialResultArtifactId.HasValue || election.OfficialResultArtifactId.HasValue))
         {
             return (
                 ElectionHubNextActionHintProto.ElectionHubActionVoterReviewResult,
+                "Review the available election result artifacts.");
+        }
+
+        if (isTrustee &&
+            (election.UnofficialResultArtifactId.HasValue || election.OfficialResultArtifactId.HasValue))
+        {
+            return (
+                ElectionHubNextActionHintProto.ElectionHubActionTrusteeReviewResult,
                 "Review the available election result artifacts.");
         }
 
