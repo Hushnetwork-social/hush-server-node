@@ -253,6 +253,46 @@ public enum ElectionResultArtifactVisibility
     PublicPlaintext = 1,
 }
 
+public enum ElectionReportPackageStatus
+{
+    GenerationFailed = 0,
+    Sealed = 1,
+}
+
+public enum ElectionReportArtifactKind
+{
+    HumanManifest = 0,
+    HumanResultReport = 1,
+    HumanNamedParticipationRoster = 2,
+    HumanAuditProvenanceReport = 3,
+    HumanOutcomeDetermination = 4,
+    HumanDisputeReviewIndex = 5,
+    MachineManifest = 6,
+    MachineEvidenceGraph = 7,
+    MachineResultReportProjection = 8,
+    MachineNamedParticipationRosterProjection = 9,
+    MachineAuditProvenanceReportProjection = 10,
+    MachineOutcomeDeterminationProjection = 11,
+    MachineDisputeReviewIndexProjection = 12,
+}
+
+public enum ElectionReportArtifactFormat
+{
+    Markdown = 0,
+    Json = 1,
+}
+
+public enum ElectionReportArtifactAccessScope
+{
+    OwnerAuditorOnly = 0,
+    OwnerAuditorTrustee = 1,
+}
+
+public enum ElectionReportAccessGrantRole
+{
+    DesignatedAuditor = 0,
+}
+
 public enum ElectionPublicationIssueCode
 {
     RerandomizationFallback = 0,

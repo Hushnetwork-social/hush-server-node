@@ -181,6 +181,37 @@ enum OfficialResultVisibilityPolicyProto {
   PublicPlaintext = 1;
 }
 
+enum ElectionReportPackageStatusProto {
+  ReportPackageGenerationFailed = 0;
+  ReportPackageSealed = 1;
+}
+
+enum ElectionReportArtifactKindProto {
+  ReportArtifactHumanManifest = 0;
+  ReportArtifactHumanResultReport = 1;
+  ReportArtifactHumanNamedParticipationRoster = 2;
+  ReportArtifactHumanAuditProvenanceReport = 3;
+  ReportArtifactHumanOutcomeDetermination = 4;
+  ReportArtifactHumanDisputeReviewIndex = 5;
+  ReportArtifactMachineManifest = 6;
+  ReportArtifactMachineEvidenceGraph = 7;
+  ReportArtifactMachineResultReportProjection = 8;
+  ReportArtifactMachineNamedParticipationRosterProjection = 9;
+  ReportArtifactMachineAuditProvenanceReportProjection = 10;
+  ReportArtifactMachineOutcomeDeterminationProjection = 11;
+  ReportArtifactMachineDisputeReviewIndexProjection = 12;
+}
+
+enum ElectionReportArtifactFormatProto {
+  ReportArtifactMarkdown = 0;
+  ReportArtifactJson = 1;
+}
+
+enum ElectionReportArtifactAccessScopeProto {
+  ReportArtifactOwnerAuditorOnly = 0;
+  ReportArtifactOwnerAuditorTrustee = 1;
+}
+
 enum ElectionClosedProgressStatusProto {
   ClosedProgressNone = 0;
   ClosedProgressWaitingForTrusteeShares = 1;
@@ -596,6 +627,48 @@ message ElectionResultArtifact {
   string RecordedByPublicAddress = 17;
 }
 
+message ElectionReportPackageSummaryView {
+  string Id = 1;
+  ElectionReportPackageStatusProto Status = 2;
+  int32 AttemptNumber = 3;
+  string PreviousAttemptId = 4;
+  string FinalizationSessionId = 5;
+  string TallyReadyArtifactId = 6;
+  string UnofficialResultArtifactId = 7;
+  string OfficialResultArtifactId = 8;
+  string FinalizeArtifactId = 9;
+  string CloseBoundaryArtifactId = 10;
+  string CloseEligibilitySnapshotId = 11;
+  string FinalizationReleaseEvidenceId = 12;
+  bytes FrozenEvidenceHash = 13;
+  string FrozenEvidenceFingerprint = 14;
+  bytes PackageHash = 15;
+  int32 ArtifactCount = 16;
+  string FailureCode = 17;
+  string FailureReason = 18;
+  google.protobuf.Timestamp AttemptedAt = 19;
+  google.protobuf.Timestamp SealedAt = 20;
+  bool HasSealedAt = 21;
+  string AttemptedByPublicAddress = 22;
+}
+
+message ElectionReportArtifactView {
+  string Id = 1;
+  string ReportPackageId = 2;
+  string ElectionId = 3;
+  ElectionReportArtifactKindProto ArtifactKind = 4;
+  ElectionReportArtifactFormatProto Format = 5;
+  ElectionReportArtifactAccessScopeProto AccessScope = 6;
+  int32 SortOrder = 7;
+  string Title = 8;
+  string FileName = 9;
+  string MediaType = 10;
+  bytes ContentHash = 11;
+  string Content = 12;
+  string PairedArtifactId = 13;
+  google.protobuf.Timestamp RecordedAt = 14;
+}
+
 message ElectionRecordView {
   string ElectionId = 1;
   string Title = 2;
@@ -992,6 +1065,10 @@ message GetElectionResultViewResponse {
   ElectionClosedProgressStatusProto ClosedProgressStatus = 6;
   ElectionResultArtifact UnofficialResult = 7;
   ElectionResultArtifact OfficialResult = 8;
+  bool CanViewReportPackage = 9;
+  bool CanRetryFailedPackageFinalization = 10;
+  ElectionReportPackageSummaryView LatestReportPackage = 11;
+  repeated ElectionReportArtifactView VisibleReportArtifacts = 12;
 }
 
 enum ElectionEligibilityActorRoleProto {

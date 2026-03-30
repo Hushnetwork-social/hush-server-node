@@ -791,6 +791,54 @@ internal static class ElectionGrpcMappings
         return proto;
     }
 
+    public static ElectionReportPackageSummaryView ToProto(this ElectionReportPackageRecord reportPackage) =>
+        new()
+        {
+            Id = reportPackage.Id.ToString(),
+            Status = (ElectionReportPackageStatusProto)(int)reportPackage.Status,
+            AttemptNumber = reportPackage.AttemptNumber,
+            PreviousAttemptId = reportPackage.PreviousAttemptId?.ToString() ?? string.Empty,
+            FinalizationSessionId = reportPackage.FinalizationSessionId?.ToString() ?? string.Empty,
+            TallyReadyArtifactId = reportPackage.TallyReadyArtifactId.ToString(),
+            UnofficialResultArtifactId = reportPackage.UnofficialResultArtifactId.ToString(),
+            OfficialResultArtifactId = reportPackage.OfficialResultArtifactId?.ToString() ?? string.Empty,
+            FinalizeArtifactId = reportPackage.FinalizeArtifactId?.ToString() ?? string.Empty,
+            CloseBoundaryArtifactId = reportPackage.CloseBoundaryArtifactId?.ToString() ?? string.Empty,
+            CloseEligibilitySnapshotId = reportPackage.CloseEligibilitySnapshotId?.ToString() ?? string.Empty,
+            FinalizationReleaseEvidenceId = reportPackage.FinalizationReleaseEvidenceId?.ToString() ?? string.Empty,
+            FrozenEvidenceHash = ToByteString(reportPackage.FrozenEvidenceHash),
+            FrozenEvidenceFingerprint = reportPackage.FrozenEvidenceFingerprint,
+            PackageHash = ToByteString(reportPackage.PackageHash),
+            ArtifactCount = reportPackage.ArtifactCount,
+            FailureCode = reportPackage.FailureCode ?? string.Empty,
+            FailureReason = reportPackage.FailureReason ?? string.Empty,
+            AttemptedAt = ToTimestamp(reportPackage.AttemptedAt),
+            SealedAt = reportPackage.SealedAt.HasValue
+                ? ToTimestamp(reportPackage.SealedAt.Value)
+                : new Timestamp(),
+            HasSealedAt = reportPackage.SealedAt.HasValue,
+            AttemptedByPublicAddress = reportPackage.AttemptedByPublicAddress,
+        };
+
+    public static ElectionReportArtifactView ToProto(this ElectionReportArtifactRecord reportArtifact) =>
+        new()
+        {
+            Id = reportArtifact.Id.ToString(),
+            ReportPackageId = reportArtifact.ReportPackageId.ToString(),
+            ElectionId = reportArtifact.ElectionId.ToString(),
+            ArtifactKind = (ElectionReportArtifactKindProto)(int)reportArtifact.ArtifactKind,
+            Format = (ElectionReportArtifactFormatProto)(int)reportArtifact.Format,
+            AccessScope = (ElectionReportArtifactAccessScopeProto)(int)reportArtifact.AccessScope,
+            SortOrder = reportArtifact.SortOrder,
+            Title = reportArtifact.Title,
+            FileName = reportArtifact.FileName,
+            MediaType = reportArtifact.MediaType,
+            ContentHash = ToByteString(reportArtifact.ContentHash),
+            Content = reportArtifact.Content,
+            PairedArtifactId = reportArtifact.PairedArtifactId?.ToString() ?? string.Empty,
+            RecordedAt = ToTimestamp(reportArtifact.RecordedAt),
+        };
+
     public static OutcomeRule ToProto(this OutcomeRuleDefinition outcomeRule) =>
         new()
         {

@@ -19,12 +19,13 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly ElectionCeremonyOptions _ceremonyOptions;
     private readonly IElectionCastIdempotencyCacheService? _castIdempotencyCacheService;
     private readonly IElectionResultCryptoService? _electionResultCryptoService;
+    private readonly IElectionReportPackageService _electionReportPackageService;
     private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
 
     public ElectionLifecycleService(
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ILogger<ElectionLifecycleService> logger)
-        : this(unitOfWorkProvider, logger, new ElectionCeremonyOptions(), null, null)
+        : this(unitOfWorkProvider, logger, new ElectionCeremonyOptions(), null, null, null)
     {
     }
 
@@ -32,7 +33,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ILogger<ElectionLifecycleService> logger,
         ElectionCeremonyOptions ceremonyOptions)
-        : this(unitOfWorkProvider, logger, ceremonyOptions, null, null)
+        : this(unitOfWorkProvider, logger, ceremonyOptions, null, null, null)
     {
     }
 
@@ -41,13 +42,15 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ILogger<ElectionLifecycleService> logger,
         ElectionCeremonyOptions ceremonyOptions,
         IElectionCastIdempotencyCacheService? castIdempotencyCacheService,
-        IElectionResultCryptoService? electionResultCryptoService = null)
+        IElectionResultCryptoService? electionResultCryptoService = null,
+        IElectionReportPackageService? electionReportPackageService = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _logger = logger;
         _ceremonyOptions = ceremonyOptions;
         _castIdempotencyCacheService = castIdempotencyCacheService;
         _electionResultCryptoService = electionResultCryptoService;
+        _electionReportPackageService = electionReportPackageService ?? new ElectionReportPackageService();
     }
 
     public async Task<ElectionCommandResult> CreateDraftAsync(CreateElectionDraftRequest request)
@@ -3602,20 +3605,6 @@ public class ElectionLifecycleService : IElectionLifecycleService
             : await repository.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Unofficial);
         if (unofficialResult is null)
         {
-            if (election.GovernanceMode == ElectionGovernanceMode.AdminOnly)
-            {
-                return await StartFinalizationSessionInternalAsync(
-                    repository,
-                    election,
-                    actorPublicAddress,
-                    acceptedBallotSetHash: tallyReadyArtifact.AcceptedBallotSetHash,
-                    finalEncryptedTallyHash: tallyReadyArtifact.FinalEncryptedTallyHash,
-                    governedProposalId: null,
-                    sourceTransactionId: sourceTransactionId,
-                    sourceBlockHeight: sourceBlockHeight,
-                    sourceBlockId: sourceBlockId);
-            }
-
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.DependencyBlocked,
                 "Finalization requires the exact unofficial result artifact to exist.");
@@ -3670,6 +3659,37 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ownerAccess.NodeEncryptedElectionPrivateKey);
         }
 
+        var closeArtifact = boundaryArtifacts.FirstOrDefault(x =>
+            x.Id == election.CloseArtifactId &&
+            x.ArtifactType == ElectionBoundaryArtifactType.Close);
+        if (closeArtifact is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Finalization requires the exact close boundary artifact to exist.");
+        }
+
+        var closeEligibilitySnapshot = await repository.GetEligibilitySnapshotAsync(
+            election.ElectionId,
+            ElectionEligibilitySnapshotType.Close);
+        if (closeEligibilitySnapshot is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Finalization requires the close eligibility snapshot.");
+        }
+
+        var priorReportAttempt = await repository.GetLatestReportPackageAsync(election.ElectionId);
+        if (priorReportAttempt is not null &&
+            priorReportAttempt.Status == ElectionReportPackageStatus.Sealed)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "A sealed FEAT-102 report package already exists for this election.");
+        }
+
+        var reportAttemptNumber = (priorReportAttempt?.AttemptNumber ?? 0) + 1;
+
         var officialResult = ElectionModelFactory.CreateResultArtifact(
             election.ElectionId,
             ElectionResultArtifactKind.Official,
@@ -3707,9 +3727,65 @@ public class ElectionLifecycleService : IElectionLifecycleService
             ClosedProgressStatus = ElectionClosedProgressStatus.None,
             OfficialResultArtifactId = officialResult.Id,
         };
+        var finalizationContext = await ResolveReportPackageFinalizationContextAsync(
+            repository,
+            election.ElectionId,
+            tallyReadyArtifact);
+        var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(election.ElectionId);
+        var rosterEntries = await repository.GetRosterEntriesAsync(election.ElectionId);
+        var participationRecords = await repository.GetParticipationRecordsAsync(election.ElectionId);
+        var reportBuildResult = _electionReportPackageService.Build(new ElectionReportPackageBuildRequest(
+            finalizedElection,
+            closeArtifact,
+            tallyReadyArtifact,
+            finalizeArtifact,
+            unofficialResult,
+            officialResult,
+            closeEligibilitySnapshot,
+            finalizationContext.Session,
+            finalizationContext.ReleaseEvidence,
+            trusteeInvitations,
+            rosterEntries,
+            participationRecords,
+            reportAttemptNumber,
+            priorReportAttempt?.Id,
+            actorPublicAddress,
+            officialRecordedAt));
+
+        if (priorReportAttempt is not null &&
+            priorReportAttempt.Status == ElectionReportPackageStatus.GenerationFailed &&
+            !ByteArrayEquals(priorReportAttempt.FrozenEvidenceHash, reportBuildResult.Package.FrozenEvidenceHash))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Finalization retry evidence no longer matches the frozen evidence from the last failed report-package attempt.");
+        }
+
+        if (!reportBuildResult.IsSuccess)
+        {
+            await repository.SaveReportPackageAsync(reportBuildResult.Package);
+            await repository.SaveElectionAsync(election with
+            {
+                LastUpdatedAt = officialRecordedAt,
+            });
+
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                $"Finalization package generation failed: {reportBuildResult.Package.FailureReason ?? reportBuildResult.Package.FailureCode ?? "unknown error"}");
+        }
 
         await repository.SaveResultArtifactAsync(officialResult);
         await repository.SaveBoundaryArtifactAsync(finalizeArtifact);
+        await repository.SaveReportPackageAsync(reportBuildResult.Package);
+        foreach (var reportArtifact in reportBuildResult.Artifacts)
+        {
+            await repository.SaveReportArtifactAsync(reportArtifact);
+        }
+        foreach (var accessGrant in reportBuildResult.AccessGrants)
+        {
+            await repository.SaveReportAccessGrantAsync(accessGrant);
+        }
+
         await repository.SaveElectionAsync(finalizedElection);
 
         return ElectionCommandResult.Success(
@@ -4168,6 +4244,31 @@ public class ElectionLifecycleService : IElectionLifecycleService
             finalizationReleaseEvidence: releaseEvidence);
     }
 
+    private async Task<ReportPackageFinalizationContext> ResolveReportPackageFinalizationContextAsync(
+        IElectionsRepository repository,
+        ElectionId electionId,
+        ElectionBoundaryArtifactRecord tallyReadyArtifact)
+    {
+        var finalizationSessions = await repository.GetFinalizationSessionsAsync(electionId);
+        var finalizationReleaseEvidenceRecords = await repository.GetFinalizationReleaseEvidenceRecordsAsync(electionId);
+
+        var releaseEvidence = finalizationReleaseEvidenceRecords
+            .Where(x =>
+                x.CloseArtifactId == tallyReadyArtifact.Id ||
+                ByteArrayEquals(x.AcceptedBallotSetHash, tallyReadyArtifact.AcceptedBallotSetHash) ||
+                ByteArrayEquals(x.FinalEncryptedTallyHash, tallyReadyArtifact.FinalEncryptedTallyHash))
+            .OrderByDescending(x => x.CompletedAt)
+            .FirstOrDefault();
+
+        if (releaseEvidence is null)
+        {
+            return new ReportPackageFinalizationContext(null, null);
+        }
+
+        var session = finalizationSessions.FirstOrDefault(x => x.Id == releaseEvidence.FinalizationSessionId);
+        return new ReportPackageFinalizationContext(session, releaseEvidence);
+    }
+
     private static int ResolveExpectedFinalizationShareIndex(
         ElectionFinalizationSessionRecord session,
         string trusteeUserAddress)
@@ -4349,6 +4450,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         return true;
     }
+
+    private sealed record ReportPackageFinalizationContext(
+        ElectionFinalizationSessionRecord? Session,
+        ElectionFinalizationReleaseEvidenceRecord? ReleaseEvidence);
 
     private sealed record FinalizationShareValidationOutcome(
         bool IsAccepted,

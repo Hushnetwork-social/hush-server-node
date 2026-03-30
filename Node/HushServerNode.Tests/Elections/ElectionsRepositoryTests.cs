@@ -130,6 +130,97 @@ public class ElectionsRepositoryTests
     }
 
     [Fact]
+    public async Task SaveReportPackageArtifactsAndAccessGrant_ShouldRoundTrip()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            ClosedAt = DateTime.UtcNow.AddMinutes(-10),
+            TallyReadyAt = DateTime.UtcNow.AddMinutes(-7),
+            FinalizedAt = DateTime.UtcNow.AddMinutes(-5),
+            TallyReadyArtifactId = Guid.NewGuid(),
+            UnofficialResultArtifactId = Guid.NewGuid(),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            FinalizeArtifactId = Guid.NewGuid(),
+        };
+        var reportPackage = ElectionModelFactory.CreateSealedReportPackage(
+            electionId: election.ElectionId,
+            attemptNumber: 1,
+            tallyReadyArtifactId: election.TallyReadyArtifactId!.Value,
+            unofficialResultArtifactId: election.UnofficialResultArtifactId!.Value,
+            officialResultArtifactId: election.OfficialResultArtifactId!.Value,
+            finalizeArtifactId: election.FinalizeArtifactId!.Value,
+            frozenEvidenceHash: [1, 2, 3, 4],
+            frozenEvidenceFingerprint: "freeze:abc123",
+            packageHash: [5, 6, 7, 8],
+            artifactCount: 2,
+            attemptedByPublicAddress: "owner-address");
+        var humanManifest = ElectionModelFactory.CreateReportArtifact(
+            reportPackageId: reportPackage.Id,
+            electionId: election.ElectionId,
+            artifactKind: ElectionReportArtifactKind.HumanManifest,
+            format: ElectionReportArtifactFormat.Markdown,
+            accessScope: ElectionReportArtifactAccessScope.OwnerAuditorTrustee,
+            sortOrder: 1,
+            title: "Final manifest",
+            fileName: "final-manifest.md",
+            mediaType: "text/markdown",
+            contentHash: [9, 9, 9, 9],
+            content: "# Final Manifest");
+        var machineManifest = ElectionModelFactory.CreateReportArtifact(
+            reportPackageId: reportPackage.Id,
+            electionId: election.ElectionId,
+            artifactKind: ElectionReportArtifactKind.MachineManifest,
+            format: ElectionReportArtifactFormat.Json,
+            accessScope: ElectionReportArtifactAccessScope.OwnerAuditorTrustee,
+            sortOrder: 2,
+            title: "Machine manifest",
+            fileName: "machine-manifest.json",
+            mediaType: "application/json",
+            contentHash: [8, 8, 8, 8],
+            content: "{\"packageId\":\"pkg-1\"}",
+            pairedArtifactId: humanManifest.Id);
+        var auditorGrant = ElectionModelFactory.CreateReportAccessGrant(
+            election.ElectionId,
+            actorPublicAddress: "auditor-address",
+            grantedByPublicAddress: "owner-address");
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveReportPackageAsync(reportPackage);
+        await repository.SaveReportArtifactAsync(humanManifest);
+        await repository.SaveReportArtifactAsync(machineManifest);
+        await repository.SaveReportAccessGrantAsync(auditorGrant);
+        await context.SaveChangesAsync();
+
+        var latestPackage = await repository.GetLatestReportPackageAsync(election.ElectionId);
+        var sealedPackage = await repository.GetSealedReportPackageAsync(election.ElectionId);
+        var storedPackage = await repository.GetReportPackageAsync(reportPackage.Id);
+        var artifacts = await repository.GetReportArtifactsAsync(reportPackage.Id);
+        var grants = await repository.GetReportAccessGrantsAsync(election.ElectionId);
+        var grant = await repository.GetReportAccessGrantAsync(election.ElectionId, "auditor-address");
+
+        latestPackage.Should().NotBeNull();
+        latestPackage!.Id.Should().Be(reportPackage.Id);
+        latestPackage.Status.Should().Be(ElectionReportPackageStatus.Sealed);
+        latestPackage.PackageHash.Should().Equal([5, 6, 7, 8]);
+        sealedPackage.Should().NotBeNull();
+        sealedPackage!.ArtifactCount.Should().Be(2);
+        storedPackage.Should().NotBeNull();
+        storedPackage!.FrozenEvidenceFingerprint.Should().Be("freeze:abc123");
+        artifacts.Should().HaveCount(2);
+        artifacts.Select(x => x.ArtifactKind).Should().Equal(
+            ElectionReportArtifactKind.HumanManifest,
+            ElectionReportArtifactKind.MachineManifest);
+        artifacts[1].PairedArtifactId.Should().Be(humanManifest.Id);
+        grants.Should().ContainSingle();
+        grants[0].GrantRole.Should().Be(ElectionReportAccessGrantRole.DesignatedAuditor);
+        grant.Should().NotBeNull();
+        grant!.GrantedByPublicAddress.Should().Be("owner-address");
+    }
+
+    [Fact]
     public async Task SaveArtifactsWarningsAndInvitations_ShouldRoundTrip()
     {
         using var context = CreateContext();
