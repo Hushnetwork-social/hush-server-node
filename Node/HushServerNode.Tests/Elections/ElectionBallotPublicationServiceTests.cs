@@ -7,6 +7,7 @@ using HushShared.Elections.Model;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Olimpo.EntityFramework.Persistency;
+using System.Security.Cryptography;
 using Xunit;
 
 namespace HushServerNode.Tests.Elections;
@@ -98,14 +99,20 @@ public class ElectionBallotPublicationServiceTests
     }
 
     [Fact]
-    public async Task ProcessPendingPublicationAsync_ClosedElectionWithoutQueuedBallots_MarksTallyReady()
+    public async Task ProcessPendingPublicationAsync_ClosedElectionWithoutQueuedBallots_MarksTallyReadyAndPublishesUnofficialResult()
     {
         var store = new PublicationStore();
         var election = CreateClosedElection();
+        SeedZeroBallotResultContext(store, election, activeDenominatorCount: 3);
         store.Elections[election.ElectionId] = election;
         store.ClosedAwaitingTallyReadyElectionIds.Add(election.ElectionId);
         var crypto = new FakePublicationCryptoService();
-        var service = CreateService(store, crypto, new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10));
+        var resultCrypto = new FakeElectionResultCryptoService();
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10),
+            resultCrypto);
 
         await service.ProcessPendingPublicationAsync(new BlockIndex(26));
 
@@ -118,6 +125,16 @@ public class ElectionBallotPublicationServiceTests
         store.BoundaryArtifacts[0].PublishedBallotCount.Should().Be(0);
         store.BoundaryArtifacts[0].FinalEncryptedTallyHash.Should().NotBeNull().And.NotBeEmpty();
         store.Elections[election.ElectionId].TallyReadyAt.Should().NotBeNull();
+        store.Elections[election.ElectionId].UnofficialResultArtifactId.Should().NotBeNull();
+        store.ResultArtifacts.Should().ContainSingle();
+        store.ResultArtifacts[0].ArtifactKind.Should().Be(ElectionResultArtifactKind.Unofficial);
+        store.ResultArtifacts[0].Visibility.Should().Be(ElectionResultArtifactVisibility.ParticipantEncrypted);
+        store.ResultArtifacts[0].TallyReadyArtifactId.Should().Be(store.BoundaryArtifacts[0].Id);
+        store.ResultArtifacts[0].EligibleToVoteCount.Should().Be(3);
+        store.ResultArtifacts[0].DidNotVoteCount.Should().Be(3);
+        store.ResultArtifacts[0].TotalVotedCount.Should().Be(0);
+        store.ResultArtifacts[0].EncryptedPayload.Should().StartWith("enc::");
+        resultCrypto.EncryptCallCount.Should().Be(1);
         crypto.ReplayCallCount.Should().Be(1);
         crypto.LastReplayPackages.Should().NotBeNull().And.BeEmpty();
     }
@@ -181,7 +198,8 @@ public class ElectionBallotPublicationServiceTests
     private static ElectionBallotPublicationService CreateService(
         PublicationStore store,
         FakePublicationCryptoService crypto,
-        ElectionBallotPublicationOptions options)
+        ElectionBallotPublicationOptions options,
+        FakeElectionResultCryptoService? resultCrypto = null)
     {
         var repository = CreateRepository(store);
         var provider = new FakeUnitOfWorkProvider(repository.Object);
@@ -191,7 +209,8 @@ public class ElectionBallotPublicationServiceTests
             crypto,
             new FakeBlockchainCache(store.CurrentBlockId),
             options,
-            NullLogger<ElectionBallotPublicationService>.Instance);
+            NullLogger<ElectionBallotPublicationService>.Instance,
+            resultCrypto);
     }
 
     private static Mock<IElectionsRepository> CreateRepository(PublicationStore store)
@@ -281,6 +300,18 @@ public class ElectionBallotPublicationServiceTests
                     .ToArray());
 
         repository
+            .Setup(x => x.GetEligibilitySnapshotAsync(It.IsAny<ElectionId>(), It.IsAny<ElectionEligibilitySnapshotType>()))
+            .ReturnsAsync((ElectionId electionId, ElectionEligibilitySnapshotType snapshotType) =>
+                store.EligibilitySnapshots.FirstOrDefault(x => x.ElectionId == electionId && x.SnapshotType == snapshotType));
+
+        repository
+            .Setup(x => x.GetElectionEnvelopeAccessAsync(It.IsAny<ElectionId>(), It.IsAny<string>()))
+            .ReturnsAsync((ElectionId electionId, string actorPublicAddress) =>
+                store.EnvelopeAccessRecords.FirstOrDefault(x =>
+                    x.ElectionId == electionId &&
+                    string.Equals(x.ActorPublicAddress, actorPublicAddress, StringComparison.Ordinal)));
+
+        repository
             .Setup(x => x.GetActiveFinalizationSessionAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync((ElectionId electionId) =>
                 store.FinalizationSessions
@@ -340,6 +371,14 @@ public class ElectionBallotPublicationServiceTests
             .Returns((ElectionBoundaryArtifactRecord artifact) =>
             {
                 store.BoundaryArtifacts.Add(artifact);
+                return Task.CompletedTask;
+            });
+
+        repository
+            .Setup(x => x.SaveResultArtifactAsync(It.IsAny<ElectionResultArtifactRecord>()))
+            .Returns((ElectionResultArtifactRecord resultArtifact) =>
+            {
+                store.ResultArtifacts.Add(resultArtifact);
                 return Task.CompletedTask;
             });
 
@@ -500,12 +539,48 @@ public class ElectionBallotPublicationServiceTests
         return acceptedBallots;
     }
 
+    private static ElectionEligibilitySnapshotRecord SeedZeroBallotResultContext(
+        PublicationStore store,
+        ElectionRecord election,
+        int activeDenominatorCount)
+    {
+        var snapshot = ElectionModelFactory.CreateEligibilitySnapshot(
+            election.ElectionId,
+            ElectionEligibilitySnapshotType.Close,
+            election.EligibilityMutationPolicy,
+            rosteredCount: activeDenominatorCount,
+            linkedCount: activeDenominatorCount,
+            activeDenominatorCount: activeDenominatorCount,
+            countedParticipationCount: 0,
+            blankCount: 0,
+            didNotVoteCount: activeDenominatorCount,
+            rosteredVoterSetHash: [1, 2, 3],
+            activeDenominatorSetHash: [4, 5, 6],
+            countedParticipationSetHash: [7, 8, 9],
+            recordedByPublicAddress: election.OwnerPublicAddress,
+            boundaryArtifactId: election.CloseArtifactId);
+        store.EligibilitySnapshots.Add(snapshot);
+        store.EnvelopeAccessRecords.Add(new ElectionEnvelopeAccessRecord(
+            election.ElectionId,
+            election.OwnerPublicAddress,
+            NodeEncryptedElectionPrivateKey: "node-enc-election-private-key",
+            ActorEncryptedElectionPrivateKey: "actor-enc-election-private-key",
+            GrantedAt: DateTime.UtcNow,
+            SourceTransactionId: null,
+            SourceBlockHeight: null,
+            SourceBlockId: null));
+        return snapshot;
+    }
+
     private sealed class PublicationStore
     {
         public Dictionary<ElectionId, ElectionRecord> Elections { get; } = [];
         public List<ElectionAcceptedBallotRecord> AcceptedBallots { get; } = [];
         public List<ElectionBallotMemPoolRecord> BallotMemPoolEntries { get; } = [];
         public List<ElectionPublishedBallotRecord> PublishedBallots { get; } = [];
+        public List<ElectionEnvelopeAccessRecord> EnvelopeAccessRecords { get; } = [];
+        public List<ElectionEligibilitySnapshotRecord> EligibilitySnapshots { get; } = [];
+        public List<ElectionResultArtifactRecord> ResultArtifacts { get; } = [];
         public List<ElectionFinalizationSessionRecord> FinalizationSessions { get; } = [];
         public List<ElectionPublicationIssueRecord> PublicationIssues { get; } = [];
         public List<ElectionBoundaryArtifactRecord> BoundaryArtifacts { get; } = [];
@@ -633,5 +708,22 @@ public class ElectionBallotPublicationServiceTests
             _prepareAttempts.TryGetValue(encryptedBallotPackage, out var attempts)
                 ? attempts
                 : 0;
+    }
+
+    private sealed class FakeElectionResultCryptoService : IElectionResultCryptoService
+    {
+        public int EncryptCallCount { get; private set; }
+
+        public ElectionAggregateReleaseResult TryReleaseAggregateTally(
+            IReadOnlyList<string> encryptedBallotPackages,
+            IReadOnlyList<ElectionFinalizationShareRecord> acceptedShares,
+            int maxSupportedCount) =>
+            ElectionAggregateReleaseResult.Success(SHA256.HashData(Array.Empty<byte>()), Array.Empty<int>());
+
+        public string EncryptForElectionParticipants(string plaintextPayload, string nodeEncryptedElectionPrivateKey)
+        {
+            EncryptCallCount++;
+            return $"enc::{plaintextPayload}";
+        }
     }
 }

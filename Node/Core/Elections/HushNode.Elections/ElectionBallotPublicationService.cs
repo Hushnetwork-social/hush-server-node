@@ -1,6 +1,7 @@
 using System.Data;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using HushNode.Caching;
 using HushNode.Elections.Storage;
 using HushNode.Events;
@@ -17,15 +18,18 @@ public sealed class ElectionBallotPublicationService(
     IElectionBallotPublicationCryptoService publicationCryptoService,
     IBlockchainCache blockchainCache,
     ElectionBallotPublicationOptions options,
-    ILogger<ElectionBallotPublicationService> logger) :
+    ILogger<ElectionBallotPublicationService> logger,
+    IElectionResultCryptoService? electionResultCryptoService = null) :
     IElectionBallotPublicationService,
     IHandleAsync<BlockIndexCompletedEvent>
 {
+    private static readonly JsonSerializerOptions ResultPayloadJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider = unitOfWorkProvider;
     private readonly IElectionBallotPublicationCryptoService _publicationCryptoService = publicationCryptoService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
     private readonly ElectionBallotPublicationOptions _options = options;
     private readonly ILogger<ElectionBallotPublicationService> _logger = logger;
+    private readonly IElectionResultCryptoService? _electionResultCryptoService = electionResultCryptoService;
 
     public Task HandleAsync(BlockIndexCompletedEvent message) =>
         ProcessPendingPublicationAsync(message.BlockIndex);
@@ -286,14 +290,28 @@ public sealed class ElectionBallotPublicationService(
                 sourceBlockHeight: blockHeight,
                 sourceBlockId: blockId);
 
+            var unofficialResult = await TryCreateZeroBallotUnofficialResultAsync(
+                repository,
+                election,
+                acceptedBallots,
+                artifact,
+                recordedAt,
+                blockHeight,
+                blockId);
             var updatedElection = election with
             {
                 LastUpdatedAt = recordedAt,
                 TallyReadyAt = recordedAt,
                 TallyReadyArtifactId = artifact.Id,
+                UnofficialResultArtifactId = unofficialResult?.Id,
             };
 
             await repository.SaveBoundaryArtifactAsync(artifact);
+            if (unofficialResult is not null)
+            {
+                await repository.SaveResultArtifactAsync(unofficialResult);
+            }
+
             await repository.SaveElectionAsync(updatedElection);
             _logger.LogInformation(
                 "[ElectionBallotPublicationService] Election {ElectionId} reached tally_ready with {AcceptedCount} accepted ballot(s) and {PublishedCount} published ballot(s).",
@@ -361,6 +379,103 @@ public sealed class ElectionBallotPublicationService(
             election.ElectionId,
             session.Id,
             acceptedBallots.Count);
+    }
+
+    private async Task<ElectionResultArtifactRecord?> TryCreateZeroBallotUnofficialResultAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        IReadOnlyList<ElectionAcceptedBallotRecord> acceptedBallots,
+        ElectionBoundaryArtifactRecord tallyReadyArtifact,
+        DateTime recordedAt,
+        long blockHeight,
+        Guid blockId)
+    {
+        if (acceptedBallots.Count > 0)
+        {
+            return null;
+        }
+
+        if (_electionResultCryptoService is null)
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Zero-ballot unofficial result could not be published for election {ElectionId} because the result crypto service is unavailable.",
+                election.ElectionId);
+            return null;
+        }
+
+        var closeSnapshot = await repository.GetEligibilitySnapshotAsync(
+            election.ElectionId,
+            ElectionEligibilitySnapshotType.Close);
+        if (closeSnapshot is null)
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Zero-ballot unofficial result could not be published for election {ElectionId} because the close eligibility snapshot is unavailable.",
+                election.ElectionId);
+            return null;
+        }
+
+        if (closeSnapshot.CountedParticipationCount != 0 || closeSnapshot.BlankCount != 0)
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Zero-ballot unofficial result could not be published for election {ElectionId} because the close eligibility snapshot reports counted participation.",
+                election.ElectionId);
+            return null;
+        }
+
+        var ownerAccess = await repository.GetElectionEnvelopeAccessAsync(election.ElectionId, election.OwnerPublicAddress);
+        if (ownerAccess is null)
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Zero-ballot unofficial result could not be published for election {ElectionId} because the owner election envelope access record is unavailable.",
+                election.ElectionId);
+            return null;
+        }
+
+        var namedOptionResults = election.Options
+            .Where(x => !x.IsBlankOption)
+            .OrderBy(x => x.BallotOrder)
+            .Select((option, index) => new ElectionResultOptionCount(
+                option.OptionId,
+                option.DisplayLabel,
+                option.ShortDescription,
+                option.BallotOrder,
+                index + 1,
+                VoteCount: 0))
+            .ToArray();
+        var denominatorEvidence = new ElectionResultDenominatorEvidence(
+            closeSnapshot.SnapshotType,
+            closeSnapshot.Id,
+            closeSnapshot.BoundaryArtifactId,
+            closeSnapshot.ActiveDenominatorSetHash);
+        var payload = SerializeResultArtifactPayload(
+            election.Title,
+            namedOptionResults,
+            blankCount: 0,
+            totalVotedCount: 0,
+            eligibleToVoteCount: closeSnapshot.ActiveDenominatorCount,
+            didNotVoteCount: closeSnapshot.DidNotVoteCount,
+            denominatorEvidence);
+        var encryptedPayload = _electionResultCryptoService.EncryptForElectionParticipants(
+            payload,
+            ownerAccess.NodeEncryptedElectionPrivateKey);
+
+        return ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Unofficial,
+            ElectionResultArtifactVisibility.ParticipantEncrypted,
+            election.Title,
+            namedOptionResults,
+            blankCount: 0,
+            totalVotedCount: 0,
+            eligibleToVoteCount: closeSnapshot.ActiveDenominatorCount,
+            didNotVoteCount: closeSnapshot.DidNotVoteCount,
+            denominatorEvidence,
+            election.OwnerPublicAddress,
+            tallyReadyArtifactId: tallyReadyArtifact.Id,
+            encryptedPayload: encryptedPayload,
+            recordedAt: recordedAt,
+            sourceBlockHeight: blockHeight,
+            sourceBlockId: blockId);
     }
 
     private async Task RegisterIssueAsync(
@@ -449,7 +564,61 @@ public sealed class ElectionBallotPublicationService(
     private static string ComputeHexSha256(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty)));
 
+    private static string SerializeResultArtifactPayload(
+        string title,
+        IReadOnlyList<ElectionResultOptionCount> namedOptionResults,
+        int blankCount,
+        int totalVotedCount,
+        int eligibleToVoteCount,
+        int didNotVoteCount,
+        ElectionResultDenominatorEvidence denominatorEvidence) =>
+        JsonSerializer.Serialize(
+            new ResultArtifactPayload(
+                title,
+                namedOptionResults
+                    .Select(x => new ResultOptionPayload(
+                        x.OptionId,
+                        x.DisplayLabel,
+                        x.ShortDescription,
+                        x.BallotOrder,
+                        x.Rank,
+                        x.VoteCount))
+                    .ToArray(),
+                blankCount,
+                totalVotedCount,
+                eligibleToVoteCount,
+                didNotVoteCount,
+                new ResultDenominatorEvidencePayload(
+                    denominatorEvidence.SnapshotType.ToString(),
+                    denominatorEvidence.EligibilitySnapshotId,
+                    denominatorEvidence.BoundaryArtifactId,
+                    Convert.ToHexString(denominatorEvidence.ActiveDenominatorSetHash))),
+            ResultPayloadJsonOptions);
+
     private sealed record PublicationPayload(
         string EncryptedBallotPackage,
         string ProofBundle);
+
+    private sealed record ResultArtifactPayload(
+        string Title,
+        IReadOnlyList<ResultOptionPayload> NamedOptionResults,
+        int BlankCount,
+        int TotalVotedCount,
+        int EligibleToVoteCount,
+        int DidNotVoteCount,
+        ResultDenominatorEvidencePayload DenominatorEvidence);
+
+    private sealed record ResultOptionPayload(
+        string OptionId,
+        string DisplayLabel,
+        string? ShortDescription,
+        int BallotOrder,
+        int Rank,
+        int VoteCount);
+
+    private sealed record ResultDenominatorEvidencePayload(
+        string SnapshotType,
+        Guid? EligibilitySnapshotId,
+        Guid? BoundaryArtifactId,
+        string ActiveDenominatorSetHashHex);
 }
