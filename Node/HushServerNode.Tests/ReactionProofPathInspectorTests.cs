@@ -67,6 +67,16 @@ public sealed class ReactionProofPathInspectorTests
         {
             RootPath = Path.Combine(Path.GetTempPath(), $"feat087-readiness-{Guid.NewGuid():N}");
             Directory.CreateDirectory(RootPath);
+
+            var serverNodeRoot = Path.Combine(RootPath, "hush-server-node", "Node");
+            var webScriptsRoot = Path.Combine(RootPath, "hush-web-client", "scripts");
+
+            Directory.CreateDirectory(serverNodeRoot);
+            Directory.CreateDirectory(webScriptsRoot);
+
+            File.WriteAllText(Path.Combine(serverNodeRoot, "HushServerNode.sln"), string.Empty);
+            File.WriteAllText(Path.Combine(RootPath, "hush-web-client", "package.json"), """{ "name": "hush-web-client" }""");
+            File.WriteAllText(Path.Combine(webScriptsRoot, "generate-reaction-proof.mjs"), "export {};");
         }
 
         public string RootPath { get; }

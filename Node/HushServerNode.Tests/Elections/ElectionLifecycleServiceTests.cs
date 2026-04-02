@@ -223,7 +223,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
-    public async Task ImportRosterAsync_WithDraftElection_ReplacesExistingRosterEntries()
+    public async Task ImportRosterAsync_WithDraftElection_AppendsNewRosterEntries()
     {
         var store = new ElectionStore();
         var service = CreateService(store);
@@ -249,7 +249,7 @@ public class ElectionLifecycleServiceTests
             .Where(x => x.ElectionId == election.ElectionId)
             .Select(x => x.OrganizationVoterId)
             .Should()
-            .BeEquivalentTo("2001", "2002");
+            .BeEquivalentTo("1001", "1002", "2001", "2002");
         store.RosterEntries
             .Single(x =>
                 x.ElectionId == election.ElectionId &&
@@ -257,6 +257,42 @@ public class ElectionLifecycleServiceTests
             .VotingRightStatus
             .Should()
             .Be(ElectionVotingRightStatus.Inactive);
+    }
+
+    [Fact]
+    public async Task ImportRosterAsync_WithExistingOrganizationVoterIds_KeepsExistingRowsAndSkipsDuplicates()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection();
+        var linkedExistingEntry = CreateRosterEntry(election, "1001")
+            .LinkToActor("linked-voter-address", DateTime.UtcNow.AddMinutes(-5));
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, linkedExistingEntry);
+
+        var result = await service.ImportRosterAsync(new ImportElectionRosterRequest(
+            election.ElectionId,
+            "owner-address",
+            [
+                CreateRosterImportItem("1001", contactValue: "changed@example.org"),
+                CreateRosterImportItem("2001"),
+            ]));
+
+        result.IsSuccess.Should().BeTrue();
+        result.RosterEntries.Should().ContainSingle();
+        result.RosterEntries[0].OrganizationVoterId.Should().Be("2001");
+        store.RosterEntries
+            .Where(x => x.ElectionId == election.ElectionId)
+            .Select(x => x.OrganizationVoterId)
+            .Should()
+            .BeEquivalentTo("1001", "2001");
+
+        var preservedEntry = store.RosterEntries.Single(x =>
+            x.ElectionId == election.ElectionId &&
+            string.Equals(x.OrganizationVoterId, "1001", StringComparison.OrdinalIgnoreCase));
+        preservedEntry.LinkedActorPublicAddress.Should().Be("linked-voter-address");
+        preservedEntry.ContactValue.Should().Be(linkedExistingEntry.ContactValue);
     }
 
     [Fact]

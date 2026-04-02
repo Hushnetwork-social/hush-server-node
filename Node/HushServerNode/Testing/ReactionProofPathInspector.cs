@@ -6,20 +6,28 @@ public static class ReactionProofPathInspector
 {
     public static ReactionProofPathReadiness InspectFromCurrentRuntime(bool testHostDevModeEnabled)
     {
-        var workspaceRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
-        return InspectFromWorkspaceRoot(workspaceRoot, testHostDevModeEnabled);
+        var repositoryPaths = ReactionProofRepositoryPathResolver.ResolveFromRuntimeBase(AppContext.BaseDirectory);
+        return InspectFromRepositoryRoots(repositoryPaths.ServerRepositoryRoot, repositoryPaths.WebClientRoot, testHostDevModeEnabled);
     }
 
     public static ReactionProofPathReadiness InspectFromWorkspaceRoot(string workspaceRoot, bool testHostDevModeEnabled)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
 
-        var normalizedRoot = Path.GetFullPath(workspaceRoot);
-        var clientWasmPath = Path.Combine(normalizedRoot, "hush-web-client", "public", "circuits", "omega-v1.0.0", "reaction.wasm");
-        var clientZkeyPath = Path.Combine(normalizedRoot, "hush-web-client", "public", "circuits", "omega-v1.0.0", "reaction.zkey");
-        var clientPackageJsonPath = Path.Combine(normalizedRoot, "hush-web-client", "package.json");
-        var clientInstalledSnarkJsPath = Path.Combine(normalizedRoot, "hush-web-client", "node_modules", "snarkjs", "package.json");
-        var serverVerificationKeyPath = Path.Combine(normalizedRoot, "hush-server-node", "Node", "HushServerNode", "circuits", "omega-v1.0.0", "verification_key.json");
+        var repositoryPaths = ReactionProofRepositoryPathResolver.ResolveFromWorkspaceRoot(workspaceRoot);
+        return InspectFromRepositoryRoots(repositoryPaths.ServerRepositoryRoot, repositoryPaths.WebClientRoot, testHostDevModeEnabled);
+    }
+
+    private static ReactionProofPathReadiness InspectFromRepositoryRoots(
+        string serverRepositoryRoot,
+        string webClientRoot,
+        bool testHostDevModeEnabled)
+    {
+        var clientWasmPath = Path.Combine(webClientRoot, "public", "circuits", "omega-v1.0.0", "reaction.wasm");
+        var clientZkeyPath = Path.Combine(webClientRoot, "public", "circuits", "omega-v1.0.0", "reaction.zkey");
+        var clientPackageJsonPath = Path.Combine(webClientRoot, "package.json");
+        var clientInstalledSnarkJsPath = Path.Combine(webClientRoot, "node_modules", "snarkjs", "package.json");
+        var serverVerificationKeyPath = Path.Combine(serverRepositoryRoot, "Node", "HushServerNode", "circuits", "omega-v1.0.0", "verification_key.json");
 
         var clientArtifactsAvailable = File.Exists(clientWasmPath) && File.Exists(clientZkeyPath);
         var clientHeadlessProverDependencyAvailable = HasSnarkJsDependency(clientPackageJsonPath, clientInstalledSnarkJsPath);

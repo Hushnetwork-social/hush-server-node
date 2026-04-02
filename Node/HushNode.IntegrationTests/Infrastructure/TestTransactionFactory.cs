@@ -981,7 +981,8 @@ internal static class TestTransactionFactory
         string content,
         SocialPostVisibility visibility,
         IReadOnlyCollection<FeedId>? circleFeedIds = null,
-        IReadOnlyCollection<SocialPostAttachment>? attachments = null)
+        IReadOnlyCollection<SocialPostAttachment>? attachments = null,
+        byte[]? authorCommitment = null)
     {
         var postId = Guid.NewGuid();
         var audience = new SocialPostAudience(
@@ -992,7 +993,7 @@ internal static class TestTransactionFactory
             postId,
             postId,
             author.PublicSigningAddress,
-            null,
+            authorCommitment,
             content,
             audience,
             (attachments ?? Array.Empty<SocialPostAttachment>()).ToArray(),

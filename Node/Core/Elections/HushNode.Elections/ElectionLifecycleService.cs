@@ -286,8 +286,13 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionRosterEntryRecord[] rosterEntries;
         try
         {
+            var existingRosterEntries = await repository.GetRosterEntriesAsync(request.ElectionId);
+            var existingOrganizationVoterIds = new HashSet<string>(
+                existingRosterEntries.Select(x => x.OrganizationVoterId.Trim()),
+                StringComparer.OrdinalIgnoreCase);
             var importedAt = DateTime.UtcNow;
             rosterEntries = request.RosterEntries
+                .Where(entry => existingOrganizationVoterIds.Add(entry.OrganizationVoterId.Trim()))
                 .Select(entry => ElectionModelFactory.CreateRosterEntry(
                     request.ElectionId,
                     entry.OrganizationVoterId,
@@ -302,16 +307,21 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     request.SourceBlockId))
                 .ToArray();
 
-            await repository.DeleteRosterEntriesAsync(request.ElectionId);
             foreach (var rosterEntry in rosterEntries)
             {
                 await repository.SaveRosterEntryAsync(rosterEntry);
             }
 
-            await repository.SaveElectionAsync(election with
-            {
-                LastUpdatedAt = importedAt,
-            });
+            var updatedElection = rosterEntries.Length > 0
+                ? election with
+                {
+                    LastUpdatedAt = importedAt,
+                }
+                : election;
+
+            await repository.SaveElectionAsync(updatedElection);
+
+            election = updatedElection;
         }
         catch (ArgumentException ex)
         {
@@ -324,10 +334,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         await unitOfWork.CommitAsync();
 
         return ElectionCommandResult.Success(
-            election with
-            {
-                LastUpdatedAt = rosterEntries[0].ImportedAt,
-            },
+            election,
             rosterEntries: rosterEntries);
     }
 

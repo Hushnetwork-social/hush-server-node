@@ -12,6 +12,7 @@ using HushNode.Reactions;
 using HushNode.Reactions.Crypto;
 using HushNode.Reactions.Storage;
 using HushShared.Feeds.Model;
+using HushShared.Reactions.Model;
 using ReactionEcPoint = HushShared.Reactions.Model.ECPoint;
 using HushServerNode;
 using HushServerNode.Testing;
@@ -119,20 +120,12 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Sequential_PublicPost_ReactionVisibility_1Voter_OneVotePerBlock_NonDevMode_FailsFastWithReadinessDetails()
+    public async Task Sequential_PublicPost_ReactionVisibility_1Voter_OneVotePerBlock_NonDevMode_Smoke()
     {
-        var action = async () => await RunSequentialBenchmarkAsync(
+        await RunSequentialBenchmarkAsync(
             CreateWorkload(1),
-            "feat087-reaction-benchmark-non-dev-readiness",
+            "feat087-reaction-benchmark-non-dev-1-voter",
             Feat087ReactionProofMode.NonDev);
-
-        var assertion = await FluentActions.Invoking(action)
-            .Should()
-            .ThrowAsync<InvalidOperationException>();
-
-        assertion.Which.Message.Should().Contain("True non-dev benchmark proof path is not ready");
-        assertion.Which.Message.Should().Contain("Client prover artifacts missing");
-        assertion.Which.Message.Should().Contain("Server verification key missing");
     }
 
     [Fact]
@@ -318,10 +311,13 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
     private async Task<Guid> CreateOpenPostAsync(TestIdentity author, string content)
     {
         var blockchainClient = _grpcFactory!.CreateClient<HushBlockchain.HushBlockchainClient>();
+        var poseidon = _node!.Services.GetRequiredService<IPoseidonHash>();
+        var authorCommitment = ToBytes32(poseidon.Hash(DeriveUserSecret(author.PrivateSigningKey)));
         var (signedTransaction, postId) = TestTransactionFactory.CreateSocialPost(
             author,
             content,
-            SocialPostVisibility.Open);
+            SocialPostVisibility.Open,
+            authorCommitment: authorCommitment);
 
         var response = await blockchainClient.SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
         {
@@ -447,6 +443,62 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
         return sortedSamples[index];
     }
 
+    private static readonly BigInteger UserSecretOrder = BigInteger.Parse(
+        "21888242871839275222246405745257275088614511777268538073601725287587578984328",
+        CultureInfo.InvariantCulture);
+
+    private static BigInteger DeriveUserSecret(string privateSigningKeyHex)
+    {
+        var privateKeyBytes = Convert.FromHexString(privateSigningKeyHex);
+        var salt = Encoding.UTF8.GetBytes("hush-network-reactions");
+        var info = Encoding.UTF8.GetBytes("user-secret-v1");
+        var derivedBytes = HKDF.DeriveKey(
+            HashAlgorithmName.SHA256,
+            privateKeyBytes,
+            32,
+            salt,
+            info);
+
+        var secret = new BigInteger(derivedBytes, isUnsigned: true, isBigEndian: true);
+        var reduced = secret % UserSecretOrder;
+        return reduced == BigInteger.Zero ? BigInteger.One : reduced;
+    }
+
+    private static BigInteger DeriveAddressMembershipSecret(string publicSigningAddress)
+    {
+        var addressBytes = Encoding.UTF8.GetBytes(publicSigningAddress);
+        var salt = Encoding.UTF8.GetBytes("hush-network-address-commitment");
+        var info = Encoding.UTF8.GetBytes("address-secret-v1");
+        var derivedBytes = HKDF.DeriveKey(
+            HashAlgorithmName.SHA256,
+            addressBytes,
+            32,
+            salt,
+            info);
+
+        var secret = new BigInteger(derivedBytes, isUnsigned: true, isBigEndian: true);
+        var reduced = secret % UserSecretOrder;
+        return reduced == BigInteger.Zero ? BigInteger.One : reduced;
+    }
+
+    private static byte[] ToBytes32(BigInteger value)
+    {
+        var bytes = value.ToByteArray(isUnsigned: true, isBigEndian: true);
+        if (bytes.Length == 32)
+        {
+            return bytes;
+        }
+
+        if (bytes.Length < 32)
+        {
+            var padded = new byte[32];
+            Array.Copy(bytes, 0, padded, 32 - bytes.Length, bytes.Length);
+            return padded;
+        }
+
+        return bytes[^32..];
+    }
+
     private interface IReactionSubmitter
     {
         string Kind { get; }
@@ -488,11 +540,8 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
 
     private sealed class NonDevReactionSubmitter : IReactionSubmitter
     {
-        private static readonly BigInteger NullifierDomain = ParseHexBigInteger("48555348");
+        private static readonly BigInteger NullifierDomain = new(1213481800);
         private static readonly BigInteger BackupDomain = ParseHexBigInteger("4241434B5550");
-        private static readonly BigInteger UserSecretOrder = BigInteger.Parse(
-            "21888242871839275222246405745257275088548364400416034343698204186575808495617",
-            CultureInfo.InvariantCulture);
         private const string CircuitVersion = "omega-v1.0.0";
 
         private readonly GrpcClientFactory _grpcFactory;
@@ -537,8 +586,10 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
             var membershipScopeId = await feedInfoProvider.GetMembershipScopeIdAsync(reactionScopeId)
                 ?? throw new InvalidOperationException($"Membership scope unavailable for reaction scope '{reactionScopeId}'.");
 
-            var userSecret = DeriveUserSecret(reactor.PrivateSigningKey);
-            var userCommitment = ToBytes32(poseidon.Hash(userSecret));
+            var userSecret = membershipScopeId == PublicReactionScopes.GlobalHushMembers
+                ? Feat087ReactionBenchmarkDryRunTests.DeriveAddressMembershipSecret(reactor.PublicSigningAddress)
+                : Feat087ReactionBenchmarkDryRunTests.DeriveUserSecret(reactor.PrivateSigningKey);
+            var userCommitment = Feat087ReactionBenchmarkDryRunTests.ToBytes32(poseidon.Hash(userSecret));
             var membershipProof = await membershipService.GetMembershipProofAsync(membershipScopeId, userCommitment);
             if (!membershipProof.IsMember ||
                 membershipProof.MerkleRoot == null ||
@@ -567,7 +618,7 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
                 author_commitment: ToUnsignedDecimal(authorCommitmentBytes),
                 user_secret: userSecret.ToString(CultureInfo.InvariantCulture),
                 emoji_index: emojiIndex.ToString(CultureInfo.InvariantCulture),
-                encryption_nonces: nonces.Select(x => x.ToString(CultureInfo.InvariantCulture)).ToArray(),
+                encryption_nonce: nonces.Select(x => x.ToString(CultureInfo.InvariantCulture)).ToArray(),
                 merkle_path: membershipProof.PathElements.Select(ToUnsignedDecimal).ToArray(),
                 merkle_indices: membershipProof.PathIndices.ToArray());
 
@@ -577,10 +628,10 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
                 reactionScopeId,
                 messageId,
                 nullifier,
-                ciphertextC1.Select(x => ToBytes32(x.X)).ToArray(),
-                ciphertextC1.Select(x => ToBytes32(x.Y)).ToArray(),
-                ciphertextC2.Select(x => ToBytes32(x.X)).ToArray(),
-                ciphertextC2.Select(x => ToBytes32(x.Y)).ToArray(),
+                ciphertextC1.Select(x => Feat087ReactionBenchmarkDryRunTests.ToBytes32(x.X)).ToArray(),
+                ciphertextC1.Select(x => Feat087ReactionBenchmarkDryRunTests.ToBytes32(x.Y)).ToArray(),
+                ciphertextC2.Select(x => Feat087ReactionBenchmarkDryRunTests.ToBytes32(x.X)).ToArray(),
+                ciphertextC2.Select(x => Feat087ReactionBenchmarkDryRunTests.ToBytes32(x.Y)).ToArray(),
                 proofResult.ProofBytes,
                 proofResult.circuitVersion,
                 encryptedBackup);
@@ -596,10 +647,13 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
 
         private async Task<ProofCliOutput> GenerateProofAsync(CircuitInputsDto inputs)
         {
-            var workspaceRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
-            var scriptPath = Path.Combine(workspaceRoot, "hush-web-client", "scripts", "generate-reaction-proof.mjs");
+            var webClientRoot = Path.GetDirectoryName(_readiness.ClientPackageJsonPath)
+                ?? throw new InvalidOperationException("Unable to derive hush-web-client root from the resolved package.json path.");
+            var scriptPath = Path.Combine(webClientRoot, "scripts", "generate-reaction-proof.mjs");
             var inputPath = Path.Combine(Path.GetTempPath(), $"feat087-proof-input-{Guid.NewGuid():N}.json");
             var outputPath = Path.Combine(Path.GetTempPath(), $"feat087-proof-output-{Guid.NewGuid():N}.json");
+            var proofTimeout = ResolveProofTimeout();
+            var deleteTempFiles = false;
 
             try
             {
@@ -610,7 +664,7 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = "node",
-                    WorkingDirectory = Path.Combine(workspaceRoot, "hush-web-client"),
+                    WorkingDirectory = webClientRoot,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -626,7 +680,7 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
 
                 var stdoutTask = process.StandardOutput.ReadToEndAsync();
                 var stderrTask = process.StandardError.ReadToEndAsync();
-                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+                using var cts = new CancellationTokenSource(proofTimeout);
                 try
                 {
                     await process.WaitForExitAsync(cts.Token);
@@ -642,7 +696,9 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
                         // Ignore cleanup failures for timed-out prover processes.
                     }
 
-                    throw new TimeoutException("Headless snarkjs proof generation exceeded the 2 minute timeout.");
+                    throw new TimeoutException(
+                        $"Headless snarkjs proof generation exceeded the configured timeout of {proofTimeout.TotalMinutes:F1} minutes. " +
+                        $"Input payload preserved at '{inputPath}'. Expected output path: '{outputPath}'.");
                 }
 
                 var stdout = await stdoutTask;
@@ -651,7 +707,8 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
                 {
                     throw new InvalidOperationException(
                         $"Headless proof generation failed with exit code {process.ExitCode}. " +
-                        $"stdout: {stdout} stderr: {stderr}");
+                        $"stdout: {stdout} stderr: {stderr} " +
+                        $"Input payload preserved at '{inputPath}'. Expected output path: '{outputPath}'.");
                 }
 
                 var outputJson = await File.ReadAllTextAsync(outputPath);
@@ -665,6 +722,7 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
                     throw new InvalidOperationException("Headless proof generation returned an empty proof payload.");
                 }
 
+                deleteTempFiles = true;
                 return output with
                 {
                     ProofBytes = Convert.FromBase64String(output.proof)
@@ -672,8 +730,11 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
             }
             finally
             {
-                TryDelete(inputPath);
-                TryDelete(outputPath);
+                if (deleteTempFiles)
+                {
+                    TryDelete(inputPath);
+                    TryDelete(outputPath);
+                }
             }
         }
 
@@ -719,23 +780,6 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
             }
         }
 
-        private static BigInteger DeriveUserSecret(string privateSigningKeyHex)
-        {
-            var privateKeyBytes = Convert.FromHexString(privateSigningKeyHex);
-            var salt = Encoding.UTF8.GetBytes("hush-network-reactions");
-            var info = Encoding.UTF8.GetBytes("user-secret-v1");
-            var derivedBytes = HKDF.DeriveKey(
-                HashAlgorithmName.SHA256,
-                privateKeyBytes,
-                32,
-                salt,
-                info);
-
-            var secret = new BigInteger(derivedBytes, isUnsigned: true, isBigEndian: true);
-            var reduced = secret % UserSecretOrder;
-            return reduced == BigInteger.Zero ? BigInteger.One : reduced;
-        }
-
         private static byte[] EncryptEmojiBackup(int emojiIndex, BigInteger backupKey)
         {
             var normalizedEmoji = NormalizeEmojiIndex(emojiIndex);
@@ -776,29 +820,22 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
 
         private static BigInteger ParseGuidBigInteger(Guid value)
         {
-            var hex = value.ToString("N");
-            return ParseHexBigInteger(hex);
+            return new BigInteger(value.ToByteArray(), isUnsigned: true, isBigEndian: true);
         }
 
         private static BigInteger ParseHexBigInteger(string hex) =>
             BigInteger.Parse($"0{hex}", NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture);
 
-        private static byte[] ToBytes32(BigInteger value)
+        private static TimeSpan ResolveProofTimeout()
         {
-            var bytes = value.ToByteArray(isUnsigned: true, isBigEndian: true);
-            if (bytes.Length == 32)
+            const int defaultTimeoutSeconds = 600;
+            var configuredValue = Environment.GetEnvironmentVariable("FEAT087_HEADLESS_PROOF_TIMEOUT_SECONDS");
+            if (int.TryParse(configuredValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) && seconds > 0)
             {
-                return bytes;
+                return TimeSpan.FromSeconds(seconds);
             }
 
-            if (bytes.Length < 32)
-            {
-                var padded = new byte[32];
-                Array.Copy(bytes, 0, padded, 32 - bytes.Length, bytes.Length);
-                return padded;
-            }
-
-            return bytes[^32..];
+            return TimeSpan.FromSeconds(defaultTimeoutSeconds);
         }
 
         private static void TryDelete(string path)
@@ -828,7 +865,7 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
         string author_commitment,
         string user_secret,
         string emoji_index,
-        string[] encryption_nonces,
+        string[] encryption_nonce,
         string[] merkle_path,
         int[] merkle_indices);
 
