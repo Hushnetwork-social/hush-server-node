@@ -487,6 +487,56 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task VerifyElectionReceipt_WithValidRequest_ReturnsVerificationPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.VerifyElectionReceiptAsync(
+                electionId,
+                "voter-address",
+                "receipt-1",
+                "acceptance-1",
+                "proof-1"))
+            .ReturnsAsync(new VerifyElectionReceiptResponse
+            {
+                Success = true,
+                ActorPublicAddress = "voter-address",
+                ElectionId = electionId.ToString(),
+                LifecycleState = ElectionLifecycleStateProto.Open,
+                HasAcceptedCheckoff = true,
+                ReceiptMatchesAcceptedCheckoff = true,
+                ParticipationCountedAsVoted = true,
+                TallyVerificationAvailable = false,
+                VerifiedReceiptId = "receipt-1",
+                VerifiedAcceptanceId = "acceptance-1",
+                VerifiedServerProof = "proof-1",
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.VerifyElectionReceipt(new VerifyElectionReceiptRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = "voter-address",
+            ReceiptId = "receipt-1",
+            AcceptanceId = "acceptance-1",
+            ServerProof = "proof-1",
+        }, CreateMockServerCallContext());
+
+        response.Success.Should().BeTrue();
+        response.ActorPublicAddress.Should().Be("voter-address");
+        response.ElectionId.Should().Be(electionId.ToString());
+        response.HasAcceptedCheckoff.Should().BeTrue();
+        response.ReceiptMatchesAcceptedCheckoff.Should().BeTrue();
+        response.ParticipationCountedAsVoted.Should().BeTrue();
+        response.VerifiedReceiptId.Should().Be("receipt-1");
+        response.VerifiedAcceptanceId.Should().Be("acceptance-1");
+        response.VerifiedServerProof.Should().Be("proof-1");
+    }
+
+    [Fact]
     public async Task GetElectionReportAccessGrants_WithValidRequest_ReturnsGrantPayload()
     {
         var mocker = new AutoMocker();

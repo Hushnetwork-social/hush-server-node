@@ -552,6 +552,17 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
     public async Task SaveBoundaryArtifactAsync(ElectionBoundaryArtifactRecord artifact) =>
         await Context.ElectionBoundaryArtifacts.AddAsync(artifact);
 
+    public async Task UpdateBoundaryArtifactAsync(ElectionBoundaryArtifactRecord artifact)
+    {
+        var existing = await Context.ElectionBoundaryArtifacts
+            .FirstOrDefaultAsync(x => x.Id == artifact.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(artifact);
+        }
+    }
+
     public async Task<IReadOnlyList<ElectionWarningAcknowledgementRecord>> GetWarningAcknowledgementsAsync(ElectionId electionId) =>
         await Context.ElectionWarningAcknowledgements
             .Where(x => x.ElectionId == electionId)

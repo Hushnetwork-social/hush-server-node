@@ -99,6 +99,44 @@ public class ElectionBallotPublicationServiceTests
     }
 
     [Fact]
+    public async Task ProcessPendingPublicationAsync_ClosedLegacyAdminOnlyElection_ProjectsSyntheticProtectedTallyBinding()
+    {
+        var store = new PublicationStore();
+        var election = CreateClosedElection();
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            election with
+            {
+                LifecycleState = ElectionLifecycleState.Open,
+                CloseArtifactId = null,
+            },
+            recordedByPublicAddress: "owner-address",
+            recordedAt: election.OpenedAt ?? DateTime.UtcNow.AddMinutes(-15),
+            frozenEligibleVoterSetHash: [1, 2, 3, 4]) with
+        {
+            Id = election.OpenArtifactId!.Value,
+        };
+        store.BoundaryArtifacts.Add(openArtifact);
+        SeedAcceptedBallots(store, election, 2);
+        var expectedTallyHash = new byte[] { 4, 3, 2, 1 };
+        var expectedBinding = ElectionProtectedTallyBinding.BuildAdminOnlyProtectedTallyBindingSnapshot(election);
+        var crypto = new FakePublicationCryptoService
+        {
+            ReplayBehavior = _ => ElectionBallotReplayResult.Success(expectedTallyHash),
+        };
+        var service = CreateService(store, crypto, new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10));
+
+        await service.ProcessPendingPublicationAsync(new BlockIndex(26));
+
+        store.BoundaryArtifacts.Should().Contain(x => x.ArtifactType == ElectionBoundaryArtifactType.TallyReady);
+        var tallyReadyArtifact = store.BoundaryArtifacts.Single(x => x.ArtifactType == ElectionBoundaryArtifactType.TallyReady);
+        tallyReadyArtifact.CeremonySnapshot.Should().NotBeNull();
+        tallyReadyArtifact.CeremonySnapshot!.ProfileId.Should().Be(expectedBinding.ProfileId);
+        tallyReadyArtifact.CeremonySnapshot.CeremonyVersionId.Should().Be(expectedBinding.CeremonyVersionId);
+        tallyReadyArtifact.CeremonySnapshot.TallyPublicKeyFingerprint.Should().Be(expectedBinding.TallyPublicKeyFingerprint);
+    }
+
+    [Fact]
     public async Task ProcessPendingPublicationAsync_ClosedElectionWithoutQueuedBallots_MarksTallyReadyAndPublishesUnofficialResult()
     {
         var store = new PublicationStore();

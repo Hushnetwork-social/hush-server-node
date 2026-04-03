@@ -257,6 +257,30 @@ public class ElectionsGrpcService(
         }
     }
 
+    public override async Task<VerifyElectionReceiptResponse> VerifyElectionReceipt(
+        VerifyElectionReceiptRequest request,
+        ServerCallContext context)
+    {
+        try
+        {
+            return await _queryApplicationService.VerifyElectionReceiptAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress,
+                request.ReceiptId,
+                request.AcceptanceId,
+                request.ServerProof);
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(VerifyElectionReceipt));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to verify election receipt."));
+        }
+    }
+
     public override async Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest request, ServerCallContext context)
     {
         try

@@ -2601,7 +2601,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "The cast request is bound to a different eligible-set hash than the active election.");
         }
 
-        var ceremonySnapshot = openArtifact.CeremonySnapshot;
+        var ceremonySnapshot = ElectionProtectedTallyBinding.ResolveOpenBoundaryBinding(election, openArtifact);
         if (ceremonySnapshot is null)
         {
             return ElectionCastAcceptanceResult.Failure(
@@ -2862,7 +2862,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var errors = new List<string>();
         var requiredWarnings = NormalizeWarningCodes(requestedWarnings).ToList();
         var nonBlankOptions = election.Options.Where(x => !x.IsBlankOption).ToArray();
-        ElectionCeremonyBindingSnapshot? ceremonySnapshot = null;
+        ElectionCeremonyBindingSnapshot? ceremonySnapshot =
+            election.GovernanceMode == ElectionGovernanceMode.AdminOnly
+                ? ElectionProtectedTallyBinding.BuildAdminOnlyProtectedTallyBindingSnapshot(election)
+                : null;
 
         if (election.LifecycleState != ElectionLifecycleState.Draft)
         {
@@ -3610,11 +3613,22 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Election finalize is only allowed when the election is tally ready.");
         }
 
+        ElectionCeremonyBindingSnapshot? carriedForwardCeremonySnapshot = null;
+        if (artifactType != ElectionBoundaryArtifactType.Open && election.OpenArtifactId.HasValue)
+        {
+            var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(election.ElectionId);
+            var openArtifact = boundaryArtifacts.FirstOrDefault(x =>
+                x.Id == election.OpenArtifactId.Value &&
+                x.ArtifactType == ElectionBoundaryArtifactType.Open);
+            carriedForwardCeremonySnapshot = ElectionProtectedTallyBinding.ResolveOpenBoundaryBinding(election, openArtifact);
+        }
+
         var transitionTime = DateTime.UtcNow;
         var artifact = ElectionModelFactory.CreateBoundaryArtifact(
             artifactType,
             election,
             actorPublicAddress,
+            ceremonySnapshot: carriedForwardCeremonySnapshot,
             recordedAt: transitionTime,
             acceptedBallotSetHash: artifactType == ElectionBoundaryArtifactType.Close
                 ? null
@@ -3819,6 +3833,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             ElectionBoundaryArtifactType.Finalize,
             election,
             actorPublicAddress,
+            ceremonySnapshot: ElectionProtectedTallyBinding.ResolveBoundaryBinding(election, closeArtifact),
             recordedAt: officialRecordedAt,
             acceptedBallotSetHash: tallyReadyArtifact.AcceptedBallotSetHash,
             finalEncryptedTallyHash: tallyReadyArtifact.FinalEncryptedTallyHash,
@@ -4109,6 +4124,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             ElectionBoundaryArtifactType.Finalize,
             election,
             completedByPublicAddress,
+            ceremonySnapshot: session.CeremonySnapshot,
             recordedAt: completedAt,
             acceptedBallotSetHash: session.AcceptedBallotSetHash,
             finalEncryptedTallyHash: session.FinalEncryptedTallyHash,
@@ -4286,6 +4302,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             ElectionBoundaryArtifactType.TallyReady,
             election,
             completedByPublicAddress,
+            ceremonySnapshot: session.CeremonySnapshot,
             recordedAt: completedAt,
             acceptedBallotCount: acceptedBallots.Count,
             acceptedBallotSetHash: acceptedHash,

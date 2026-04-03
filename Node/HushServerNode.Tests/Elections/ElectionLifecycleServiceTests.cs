@@ -568,6 +568,34 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task AcceptBallotCastAsync_WithLegacyAdminOnlyOpenBoundaryWithoutStoredSnapshot_UsesSyntheticProtectedTallyBinding()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        var legacyOpenArtifact = scenario.OpenArtifact with
+        {
+            CeremonySnapshot = null,
+        };
+        store.BoundaryArtifacts[0] = legacyOpenArtifact;
+
+        var syntheticBinding = ElectionProtectedTallyBinding.BuildAdminOnlyProtectedTallyBindingSnapshot(scenario.Election);
+        var request = CreateCastRequest(scenario) with
+        {
+            CeremonyVersionId = syntheticBinding.CeremonyVersionId,
+            DkgProfileId = syntheticBinding.ProfileId,
+            TallyPublicKeyFingerprint = syntheticBinding.TallyPublicKeyFingerprint,
+        };
+
+        var result = await service.AcceptBallotCastAsync(request);
+
+        result.IsSuccess.Should().BeTrue();
+        result.AcceptedBallot.Should().NotBeNull();
+        store.AcceptedBallots.Should().ContainSingle();
+        store.CheckoffConsumptions.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task AcceptBallotCastAsync_WithDuplicateNullifier_ReturnsDuplicateNullifier()
     {
         var store = new ElectionStore();
@@ -1443,6 +1471,11 @@ public class ElectionLifecycleServiceTests
         result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Open);
         result.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.Open);
         result.BoundaryArtifact.FrozenEligibleVoterSetHash.Should().NotBeNull().And.NotBeEmpty();
+        result.BoundaryArtifact.CeremonySnapshot.Should().NotBeNull();
+        result.BoundaryArtifact.CeremonySnapshot!.ProfileId.Should().Be("admin-only-protected-custody-v1");
+        result.BoundaryArtifact.CeremonySnapshot.RequiredApprovalCount.Should().Be(1);
+        result.BoundaryArtifact.CeremonySnapshot.ActiveTrustees.Should().ContainSingle();
+        result.BoundaryArtifact.CeremonySnapshot.ActiveTrustees[0].TrusteeUserAddress.Should().Be("owner-address");
         result.EligibilitySnapshot.Should().NotBeNull();
         result.EligibilitySnapshot!.SnapshotType.Should().Be(ElectionEligibilitySnapshotType.Open);
         result.EligibilitySnapshot.ActiveDenominatorCount.Should().Be(1);
@@ -1456,6 +1489,51 @@ public class ElectionLifecycleServiceTests
         store.BoundaryArtifacts.Should().ContainSingle();
         store.EligibilitySnapshots.Should().ContainSingle();
         store.Elections[election.ElectionId].OpenArtifactId.Should().Be(result.BoundaryArtifact.Id);
+    }
+
+    [Fact]
+    public async Task CloseElectionAsync_WithAdminOnlyProtectedTallyBinding_CarriesItIntoCloseBoundary()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection(
+            acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]);
+        var warning = ElectionModelFactory.CreateWarningAcknowledgement(
+            election.ElectionId,
+            ElectionWarningCode.LowAnonymitySet,
+            election.CurrentDraftRevision,
+            acknowledgedByPublicAddress: "owner-address");
+        var rosterEntry = CreateRosterEntry(election, "4001");
+
+        store.Elections[election.ElectionId] = election;
+        store.WarningAcknowledgements.Add(warning);
+        AddRosterEntries(store, rosterEntry);
+
+        var openResult = await service.OpenElectionAsync(new OpenElectionRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet],
+            TrusteePolicyExecutionReference: "n/a",
+            ReportingPolicyExecutionReference: "reporting-v1",
+            ReviewWindowExecutionReference: "no-review"));
+
+        openResult.IsSuccess.Should().BeTrue();
+        openResult.BoundaryArtifact.Should().NotBeNull();
+
+        var closeResult = await service.CloseElectionAsync(new CloseElectionRequest(
+            election.ElectionId,
+            "owner-address"));
+
+        closeResult.IsSuccess.Should().BeTrue();
+        closeResult.BoundaryArtifact.Should().NotBeNull();
+        closeResult.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.Close);
+        closeResult.BoundaryArtifact.CeremonySnapshot.Should().NotBeNull();
+        closeResult.BoundaryArtifact.CeremonySnapshot!.TallyPublicKeyFingerprint
+            .Should()
+            .Be(openResult.BoundaryArtifact!.CeremonySnapshot!.TallyPublicKeyFingerprint);
+        closeResult.BoundaryArtifact.CeremonySnapshot.CeremonyVersionId
+            .Should()
+            .Be(openResult.BoundaryArtifact.CeremonySnapshot.CeremonyVersionId);
     }
 
     [Fact]
@@ -3419,6 +3497,13 @@ public class ElectionLifecycleServiceTests
 
         public Task SaveBoundaryArtifactAsync(ElectionBoundaryArtifactRecord artifact)
         {
+            store.BoundaryArtifacts.Add(artifact);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateBoundaryArtifactAsync(ElectionBoundaryArtifactRecord artifact)
+        {
+            store.BoundaryArtifacts.RemoveAll(x => x.Id == artifact.Id);
             store.BoundaryArtifacts.Add(artifact);
             return Task.CompletedTask;
         }

@@ -9,6 +9,7 @@ using HushShared.Elections.Model;
 using Moq;
 using Moq.AutoMock;
 using Olimpo.EntityFramework.Persistency;
+using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using Xunit;
@@ -239,6 +240,58 @@ public class ElectionQueryApplicationServiceTests
         // Assert
         response.Success.Should().BeFalse();
         response.ErrorMessage.Should().Contain(electionId.ToString());
+    }
+
+    [Fact]
+    public async Task GetElectionAsync_WithLegacyAdminOnlyOpenBoundary_PersistsSyntheticProtectedTallyBinding()
+    {
+        var mocker = new AutoMocker();
+        var openedAt = DateTime.UtcNow.AddMinutes(-10);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+            OpenArtifactId = Guid.NewGuid(),
+        };
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            election,
+            recordedByPublicAddress: "owner-address",
+            recordedAt: openedAt,
+            frozenEligibleVoterSetHash: [1, 2, 3, 4]) with
+        {
+            Id = election.OpenArtifactId!.Value,
+        };
+        var expectedBinding = ElectionProtectedTallyBinding.BuildAdminOnlyProtectedTallyBindingSnapshot(election);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetBoundaryArtifactsAsync(election.ElectionId)).ReturnsAsync([openArtifact]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionAsync(election.ElectionId);
+
+        response.Success.Should().BeTrue();
+        response.BoundaryArtifacts.Should().ContainSingle();
+        response.BoundaryArtifacts[0].CeremonySnapshot.Should().NotBeNull();
+        response.BoundaryArtifacts[0].CeremonySnapshot!.ProfileId.Should().Be(expectedBinding.ProfileId);
+        response.BoundaryArtifacts[0].CeremonySnapshot!.CeremonyVersionId.Should().Be(expectedBinding.CeremonyVersionId.ToString());
+        response.BoundaryArtifacts[0].CeremonySnapshot!.TallyPublicKeyFingerprint.Should().Be(expectedBinding.TallyPublicKeyFingerprint);
+
+        mocker.GetMock<IElectionsRepository>()
+            .Verify(
+                x => x.UpdateBoundaryArtifactAsync(It.Is<ElectionBoundaryArtifactRecord>(artifact =>
+                    artifact.Id == openArtifact.Id &&
+                    artifact.CeremonySnapshot != null &&
+                    artifact.CeremonySnapshot.ProfileId == expectedBinding.ProfileId &&
+                    artifact.CeremonySnapshot.TallyPublicKeyFingerprint == expectedBinding.TallyPublicKeyFingerprint)),
+                Times.Once);
+        mocker.GetMock<IWritableUnitOfWork<ElectionsDbContext>>()
+            .Verify(x => x.CommitAsync(), Times.Once);
     }
 
     [Fact]
@@ -849,6 +902,61 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionVotingViewAsync_WithLegacyAdminOnlyOpenBoundaryWithoutStoredSnapshot_ReturnsSyntheticProtectedTallyBinding()
+    {
+        var mocker = new AutoMocker();
+        var openedAt = DateTime.UtcNow.AddMinutes(-15);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+        };
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            election with { OpenArtifactId = Guid.NewGuid() },
+            recordedByPublicAddress: "owner-address",
+            recordedAt: openedAt,
+            frozenEligibleVoterSetHash: [1, 2, 3, 4]);
+        election = election with
+        {
+            OpenArtifactId = openArtifact.Id,
+        };
+        var expectedBinding = ElectionProtectedTallyBinding.BuildAdminOnlyProtectedTallyBindingSnapshot(election);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetBoundaryArtifactsAsync(election.ElectionId)).ReturnsAsync([openArtifact]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionVotingViewAsync(
+            election.ElectionId,
+            "voter-address",
+            submissionIdempotencyKey: null);
+
+        response.Success.Should().BeTrue();
+        response.OpenArtifactId.Should().Be(openArtifact.Id.ToString());
+        response.EligibleSetHash.Should().NotBeEmpty();
+        response.CeremonyVersionId.Should().Be(expectedBinding.CeremonyVersionId.ToString());
+        response.DkgProfileId.Should().Be(expectedBinding.ProfileId);
+        response.TallyPublicKeyFingerprint.Should().Be(expectedBinding.TallyPublicKeyFingerprint);
+
+        mocker.GetMock<IElectionsRepository>()
+            .Verify(
+                x => x.UpdateBoundaryArtifactAsync(It.Is<ElectionBoundaryArtifactRecord>(artifact =>
+                    artifact.Id == openArtifact.Id &&
+                    artifact.CeremonySnapshot != null &&
+                    artifact.CeremonySnapshot.ProfileId == expectedBinding.ProfileId &&
+                    artifact.CeremonySnapshot.TallyPublicKeyFingerprint == expectedBinding.TallyPublicKeyFingerprint)),
+                Times.Once);
+        mocker.GetMock<IWritableUnitOfWork<ElectionsDbContext>>()
+            .Verify(x => x.CommitAsync(), Times.Once);
+    }
+
+    [Fact]
     public async Task GetElectionVotingViewAsync_WithCommittedSubmissionKey_ReturnsAlreadyUsedAndAcceptedAt()
     {
         var mocker = new AutoMocker();
@@ -966,6 +1074,120 @@ public class ElectionQueryApplicationServiceTests
 
         mocker.GetMock<IElectionsRepository>()
             .Verify(x => x.GetCastIdempotencyRecordAsync(It.IsAny<ElectionId>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task VerifyElectionReceiptAsync_WithMatchingAcceptedCheckoff_ReturnsConfirmedCheckoffState()
+    {
+        var mocker = new AutoMocker();
+        var openedAt = DateTime.UtcNow.AddMinutes(-15);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+        };
+        var rosterEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "1001",
+                ElectionRosterContactType.Email,
+                "voter-1001@example.org")
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address", openedAt.AddMinutes(1));
+        var participation = ElectionModelFactory.CreateParticipationRecord(
+            election.ElectionId,
+            "1001",
+            ElectionParticipationStatus.CountedAsVoted,
+            openedAt.AddMinutes(4));
+        var checkoffConsumption = ElectionModelFactory.CreateCheckoffConsumptionRecord(
+            election.ElectionId,
+            "1001",
+            openedAt.AddMinutes(4));
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetRosterEntryByLinkedActorAsync(election.ElectionId, "voter-address"))
+                .ReturnsAsync(rosterEntry);
+            repo.Setup(x => x.GetParticipationRecordAsync(election.ElectionId, "1001"))
+                .ReturnsAsync(participation);
+            repo.Setup(x => x.GetCheckoffConsumptionAsync(election.ElectionId, "1001"))
+                .ReturnsAsync(checkoffConsumption);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.VerifyElectionReceiptAsync(
+            election.ElectionId,
+            "voter-address",
+            BuildExpectedReceiptId(checkoffConsumption),
+            checkoffConsumption.Id.ToString(),
+            BuildExpectedReceiptProof(checkoffConsumption));
+
+        response.Success.Should().BeTrue();
+        response.ElectionId.Should().Be(election.ElectionId.ToString());
+        response.LifecycleState.Should().Be(ElectionLifecycleStateProto.Open);
+        response.HasAcceptedCheckoff.Should().BeTrue();
+        response.ReceiptMatchesAcceptedCheckoff.Should().BeTrue();
+        response.ParticipationCountedAsVoted.Should().BeTrue();
+        response.TallyVerificationAvailable.Should().BeFalse();
+        response.VerifiedReceiptId.Should().Be(BuildExpectedReceiptId(checkoffConsumption));
+        response.VerifiedAcceptanceId.Should().Be(checkoffConsumption.Id.ToString());
+        response.VerifiedServerProof.Should().Be(BuildExpectedReceiptProof(checkoffConsumption));
+    }
+
+    [Fact]
+    public async Task VerifyElectionReceiptAsync_WithMismatchedReceipt_ReturnsMismatchWithoutFailingRequest()
+    {
+        var mocker = new AutoMocker();
+        var openedAt = DateTime.UtcNow.AddMinutes(-15);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+        };
+        var rosterEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "1001",
+                ElectionRosterContactType.Email,
+                "voter-1001@example.org")
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address", openedAt.AddMinutes(1));
+        var participation = ElectionModelFactory.CreateParticipationRecord(
+            election.ElectionId,
+            "1001",
+            ElectionParticipationStatus.CountedAsVoted,
+            openedAt.AddMinutes(4));
+        var checkoffConsumption = ElectionModelFactory.CreateCheckoffConsumptionRecord(
+            election.ElectionId,
+            "1001",
+            openedAt.AddMinutes(4));
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetRosterEntryByLinkedActorAsync(election.ElectionId, "voter-address"))
+                .ReturnsAsync(rosterEntry);
+            repo.Setup(x => x.GetParticipationRecordAsync(election.ElectionId, "1001"))
+                .ReturnsAsync(participation);
+            repo.Setup(x => x.GetCheckoffConsumptionAsync(election.ElectionId, "1001"))
+                .ReturnsAsync(checkoffConsumption);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.VerifyElectionReceiptAsync(
+            election.ElectionId,
+            "voter-address",
+            "receipt-does-not-match",
+            checkoffConsumption.Id.ToString(),
+            BuildExpectedReceiptProof(checkoffConsumption));
+
+        response.Success.Should().BeTrue();
+        response.HasAcceptedCheckoff.Should().BeTrue();
+        response.ReceiptMatchesAcceptedCheckoff.Should().BeFalse();
+        response.ParticipationCountedAsVoted.Should().BeTrue();
     }
 
     [Fact]
@@ -1585,14 +1807,24 @@ public class ElectionQueryApplicationServiceTests
     private static void ConfigureReadOnlyRepository(AutoMocker mocker, Action<Mock<IElectionsRepository>> configureRepository)
     {
         var unitOfWork = mocker.GetMock<IReadOnlyUnitOfWork<ElectionsDbContext>>();
+        var writableUnitOfWork = mocker.GetMock<IWritableUnitOfWork<ElectionsDbContext>>();
         var repository = mocker.GetMock<IElectionsRepository>();
 
         mocker.GetMock<IUnitOfWorkProvider<ElectionsDbContext>>()
             .Setup(x => x.CreateReadOnly())
             .Returns(unitOfWork.Object);
+        mocker.GetMock<IUnitOfWorkProvider<ElectionsDbContext>>()
+            .Setup(x => x.CreateWritable(It.IsAny<IsolationLevel>()))
+            .Returns(writableUnitOfWork.Object);
         unitOfWork
             .Setup(x => x.GetRepository<IElectionsRepository>())
             .Returns(repository.Object);
+        writableUnitOfWork
+            .Setup(x => x.GetRepository<IElectionsRepository>())
+            .Returns(repository.Object);
+        writableUnitOfWork
+            .Setup(x => x.CommitAsync())
+            .Returns(Task.CompletedTask);
 
         repository.Setup(x => x.GetElectionsByOwnerAsync(It.IsAny<string>()))
             .ReturnsAsync(Array.Empty<ElectionRecord>());
@@ -1606,6 +1838,8 @@ public class ElectionQueryApplicationServiceTests
             .ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
         repository.Setup(x => x.GetBoundaryArtifactsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionBoundaryArtifactRecord>());
+        repository.Setup(x => x.UpdateBoundaryArtifactAsync(It.IsAny<ElectionBoundaryArtifactRecord>()))
+            .Returns(Task.CompletedTask);
         repository.Setup(x => x.GetGovernedProposalsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionGovernedProposalRecord>());
         repository.Setup(x => x.GetPendingGovernedProposalAsync(It.IsAny<ElectionId>()))
@@ -1762,4 +1996,28 @@ public class ElectionQueryApplicationServiceTests
 
     private static string ComputeScopedHash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+
+    private static string BuildExpectedReceiptId(ElectionCheckoffConsumptionRecord checkoffConsumption)
+    {
+        var receiptSeed = string.Join(
+            "|",
+            checkoffConsumption.ElectionId,
+            checkoffConsumption.Id,
+            checkoffConsumption.ConsumedAt.ToUniversalTime().ToString("O"),
+            checkoffConsumption.ParticipationStatus);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(receiptSeed));
+        return $"rcpt-{Convert.ToHexString(hash)[..24].ToLowerInvariant()}";
+    }
+
+    private static string BuildExpectedReceiptProof(ElectionCheckoffConsumptionRecord checkoffConsumption)
+    {
+        var proofSeed = string.Join(
+            "|",
+            BuildExpectedReceiptId(checkoffConsumption),
+            checkoffConsumption.ElectionId,
+            checkoffConsumption.Id,
+            checkoffConsumption.ConsumedAt.ToUniversalTime().ToString("O"),
+            checkoffConsumption.ParticipationStatus);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(proofSeed))).ToLowerInvariant();
+    }
 }

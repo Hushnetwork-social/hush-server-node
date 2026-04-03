@@ -620,15 +620,16 @@ public class EncryptedElectionEnvelopeContentHandler(
         var openArtifact = boundaryArtifacts.FirstOrDefault(x =>
             x.Id == acceptAction.OpenArtifactId &&
             x.ArtifactType == ElectionBoundaryArtifactType.Open);
+        var ceremonySnapshot = ElectionProtectedTallyBinding.ResolveOpenBoundaryBinding(election, openArtifact);
         var matchesBoundary =
             openArtifact is not null &&
             election.OpenArtifactId == openArtifact.Id &&
             ByteArrayEquals(openArtifact.FrozenEligibleVoterSetHash, acceptAction.EligibleSetHash) &&
-            openArtifact.CeremonySnapshot is not null &&
-            openArtifact.CeremonySnapshot.CeremonyVersionId == acceptAction.CeremonyVersionId &&
-            string.Equals(openArtifact.CeremonySnapshot.ProfileId, acceptAction.DkgProfileId, StringComparison.Ordinal) &&
+            ceremonySnapshot is not null &&
+            ceremonySnapshot.CeremonyVersionId == acceptAction.CeremonyVersionId &&
+            string.Equals(ceremonySnapshot.ProfileId, acceptAction.DkgProfileId, StringComparison.Ordinal) &&
             string.Equals(
-                openArtifact.CeremonySnapshot.TallyPublicKeyFingerprint,
+                ceremonySnapshot.TallyPublicKeyFingerprint,
                 acceptAction.TallyPublicKeyFingerprint,
                 StringComparison.Ordinal);
 

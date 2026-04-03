@@ -557,9 +557,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             request.CloseArtifact.TrusteeSnapshot is null
                 ? null
                 : BuildTrusteeThresholdProjection(request.CloseArtifact.TrusteeSnapshot),
-            request.CloseArtifact.CeremonySnapshot is null
-                ? null
-                : BuildCeremonyPublicKeyProjection(request.CloseArtifact.CeremonySnapshot));
+            ResolveCeremonyPublicKeyProjection(request));
 
     private static BoundaryEvidenceProjection BuildBoundaryEvidenceProjection(ElectionBoundaryArtifactRecord artifact) =>
         new(
@@ -713,7 +711,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
     private static CeremonyPublicKeyProjection? ResolveCeremonyPublicKeyProjection(
         ElectionReportPackageBuildRequest request)
     {
-        var ceremonySnapshot = request.FinalizationSession?.CeremonySnapshot ?? request.CloseArtifact.CeremonySnapshot;
+        var ceremonySnapshot = request.FinalizationSession?.CeremonySnapshot
+            ?? ElectionProtectedTallyBinding.ResolveBoundaryBinding(request.Election, request.CloseArtifact);
         return ceremonySnapshot is null ? null : BuildCeremonyPublicKeyProjection(ceremonySnapshot);
     }
 

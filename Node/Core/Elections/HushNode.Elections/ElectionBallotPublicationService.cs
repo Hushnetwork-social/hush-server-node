@@ -274,6 +274,11 @@ public sealed class ElectionBallotPublicationService(
 
         var acceptedHash = ComputeAcceptedBallotInventoryHash(acceptedBallots);
         var publishedHash = ComputePublishedBallotStreamHash(publishedBallots);
+        var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(election.ElectionId);
+        var openArtifact = boundaryArtifacts.FirstOrDefault(x =>
+            x.Id == election.OpenArtifactId &&
+            x.ArtifactType == ElectionBoundaryArtifactType.Open);
+        var ceremonySnapshot = ElectionProtectedTallyBinding.ResolveOpenBoundaryBinding(election, openArtifact);
         if (election.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold)
         {
             var recordedAt = DateTime.UtcNow;
@@ -281,6 +286,7 @@ public sealed class ElectionBallotPublicationService(
                 ElectionBoundaryArtifactType.TallyReady,
                 election,
                 election.OwnerPublicAddress,
+                ceremonySnapshot: ceremonySnapshot,
                 recordedAt: recordedAt,
                 acceptedBallotCount: acceptedBallots.Count,
                 acceptedBallotSetHash: acceptedHash,
@@ -336,14 +342,10 @@ public sealed class ElectionBallotPublicationService(
             return;
         }
 
-        var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(election.ElectionId);
-        var openArtifact = boundaryArtifacts.FirstOrDefault(x =>
-            x.Id == election.OpenArtifactId &&
-            x.ArtifactType == ElectionBoundaryArtifactType.Open);
         var closeArtifact = boundaryArtifacts.FirstOrDefault(x =>
             x.Id == election.CloseArtifactId &&
             x.ArtifactType == ElectionBoundaryArtifactType.Close);
-        if (openArtifact?.CeremonySnapshot is null || closeArtifact is null)
+        if (ceremonySnapshot is null || closeArtifact is null)
         {
             _logger.LogWarning(
                 "[ElectionBallotPublicationService] Close-counting session could not be created for election {ElectionId} because the required open/close artifacts were not available.",
@@ -358,9 +360,9 @@ public sealed class ElectionBallotPublicationService(
             acceptedHash,
             replay.FinalEncryptedTallyHash!,
             ElectionFinalizationSessionPurpose.CloseCounting,
-            openArtifact.CeremonySnapshot,
-            openArtifact.CeremonySnapshot.RequiredApprovalCount,
-            openArtifact.CeremonySnapshot.ActiveTrustees.ToArray(),
+            ceremonySnapshot,
+            ceremonySnapshot.RequiredApprovalCount,
+            ceremonySnapshot.ActiveTrustees.ToArray(),
             election.OwnerPublicAddress,
             governedProposalId: null,
             createdAt: createdAt,

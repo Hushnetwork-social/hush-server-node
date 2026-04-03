@@ -198,6 +198,8 @@ public interface IElectionsRepository : IRepository
 
     Task SaveBoundaryArtifactAsync(ElectionBoundaryArtifactRecord artifact);
 
+    Task UpdateBoundaryArtifactAsync(ElectionBoundaryArtifactRecord artifact);
+
     Task<IReadOnlyList<ElectionWarningAcknowledgementRecord>> GetWarningAcknowledgementsAsync(ElectionId electionId);
 
     Task SaveWarningAcknowledgementAsync(ElectionWarningAcknowledgementRecord acknowledgement);

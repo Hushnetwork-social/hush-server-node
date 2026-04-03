@@ -3,6 +3,7 @@ using HushNode.Caching;
 using HushNode.MemPool;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
+using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using Olimpo.EntityFramework.Persistency;
@@ -63,6 +64,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var warningAcknowledgements = await repository.GetWarningAcknowledgementsAsync(electionId);
         var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(electionId);
         var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(electionId);
+        boundaryArtifacts = await EnsureAdminOnlyProtectedTallyBindingPersistedAsync(election, boundaryArtifacts);
         var governedProposals = await repository.GetGovernedProposalsAsync(electionId);
         var governedProposalApprovals = new List<ElectionGovernedProposalApprovalRecord>();
         foreach (var proposal in governedProposals)
@@ -132,6 +134,52 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
 
         return response;
     }
+
+    private async Task<IReadOnlyList<ElectionBoundaryArtifactRecord>> EnsureAdminOnlyProtectedTallyBindingPersistedAsync(
+        ElectionRecord election,
+        IReadOnlyList<ElectionBoundaryArtifactRecord> boundaryArtifacts)
+    {
+        if (election.GovernanceMode != ElectionGovernanceMode.AdminOnly || !election.OpenArtifactId.HasValue)
+        {
+            return boundaryArtifacts;
+        }
+
+        var openArtifact = boundaryArtifacts.FirstOrDefault(x =>
+            x.Id == election.OpenArtifactId.Value &&
+            x.ArtifactType == ElectionBoundaryArtifactType.Open);
+        var ceremonySnapshot = ElectionProtectedTallyBinding.ResolveOpenBoundaryBinding(election, openArtifact);
+        if (ceremonySnapshot is null || !boundaryArtifacts.Any(x => ShouldBackfillProtectedTallyBindingSnapshot(x)))
+        {
+            return boundaryArtifacts;
+        }
+
+        using var writableUnitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.ReadCommitted);
+        var writableRepository = writableUnitOfWork.GetRepository<IElectionsRepository>();
+        var writableArtifacts = await writableRepository.GetBoundaryArtifactsAsync(election.ElectionId);
+
+        foreach (var artifact in writableArtifacts.Where(ShouldBackfillProtectedTallyBindingSnapshot))
+        {
+            await writableRepository.UpdateBoundaryArtifactAsync(artifact with
+            {
+                CeremonySnapshot = ceremonySnapshot,
+            });
+        }
+
+        await writableUnitOfWork.CommitAsync();
+
+        return boundaryArtifacts
+            .Select(x => ShouldBackfillProtectedTallyBindingSnapshot(x)
+                ? x with { CeremonySnapshot = ceremonySnapshot }
+                : x)
+            .ToArray();
+    }
+
+    private static bool ShouldBackfillProtectedTallyBindingSnapshot(ElectionBoundaryArtifactRecord artifact) =>
+        artifact.CeremonySnapshot is null &&
+        (artifact.ArtifactType == ElectionBoundaryArtifactType.Open ||
+         artifact.ArtifactType == ElectionBoundaryArtifactType.Close ||
+         artifact.ArtifactType == ElectionBoundaryArtifactType.TallyReady ||
+         artifact.ArtifactType == ElectionBoundaryArtifactType.Finalize);
 
     public async Task<SearchElectionDirectoryResponse> SearchElectionDirectoryAsync(
         string searchTerm,
@@ -445,6 +493,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             ? null
             : await repository.GetCheckoffConsumptionAsync(electionId, selfRosterEntry.OrganizationVoterId);
         var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(electionId);
+        boundaryArtifacts = await EnsureAdminOnlyProtectedTallyBindingPersistedAsync(election, boundaryArtifacts);
         var openArtifact = ResolveOpenArtifact(election, boundaryArtifacts);
 
         var response = new GetElectionVotingViewResponse
@@ -487,15 +536,85 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             response.OpenArtifactId = openArtifact.Id.ToString();
             response.EligibleSetHash = EncodeHash(openArtifact.FrozenEligibleVoterSetHash);
 
-            if (openArtifact.CeremonySnapshot is not null)
+            var ceremonySnapshot = ElectionProtectedTallyBinding.ResolveOpenBoundaryBinding(election, openArtifact);
+            if (ceremonySnapshot is not null)
             {
-                response.CeremonyVersionId = openArtifact.CeremonySnapshot.CeremonyVersionId.ToString();
-                response.DkgProfileId = openArtifact.CeremonySnapshot.ProfileId;
-                response.TallyPublicKeyFingerprint = openArtifact.CeremonySnapshot.TallyPublicKeyFingerprint;
+                response.CeremonyVersionId = ceremonySnapshot.CeremonyVersionId.ToString();
+                response.DkgProfileId = ceremonySnapshot.ProfileId;
+                response.TallyPublicKeyFingerprint = ceremonySnapshot.TallyPublicKeyFingerprint;
             }
         }
 
         return response;
+    }
+
+    public async Task<VerifyElectionReceiptResponse> VerifyElectionReceiptAsync(
+        ElectionId electionId,
+        string actorPublicAddress,
+        string receiptId,
+        string acceptanceId,
+        string serverProof)
+    {
+        var normalizedActorPublicAddress = actorPublicAddress?.Trim() ?? string.Empty;
+        var normalizedReceiptId = receiptId?.Trim() ?? string.Empty;
+        var normalizedAcceptanceId = acceptanceId?.Trim() ?? string.Empty;
+        var normalizedServerProof = serverProof?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(normalizedReceiptId) ||
+            string.IsNullOrWhiteSpace(normalizedAcceptanceId) ||
+            string.IsNullOrWhiteSpace(normalizedServerProof))
+        {
+            return new VerifyElectionReceiptResponse
+            {
+                Success = false,
+                ErrorMessage = "ReceiptId, AcceptanceId, and ServerProof are required to verify the receipt.",
+                ActorPublicAddress = normalizedActorPublicAddress,
+                ElectionId = electionId.ToString(),
+            };
+        }
+
+        var votingView = await GetElectionVotingViewAsync(
+            electionId,
+            normalizedActorPublicAddress,
+            submissionIdempotencyKey: null);
+
+        if (!votingView.Success)
+        {
+            return new VerifyElectionReceiptResponse
+            {
+                Success = false,
+                ErrorMessage = votingView.ErrorMessage,
+                ActorPublicAddress = normalizedActorPublicAddress,
+                ElectionId = electionId.ToString(),
+            };
+        }
+
+        var lifecycleState = votingView.Election?.LifecycleState ?? ElectionLifecycleStateProto.Draft;
+        var hasAcceptedCheckoff = votingView.HasAcceptedAt;
+        var receiptMatchesAcceptedCheckoff =
+            hasAcceptedCheckoff &&
+            string.Equals(votingView.ReceiptId, normalizedReceiptId, StringComparison.Ordinal) &&
+            string.Equals(votingView.AcceptanceId, normalizedAcceptanceId, StringComparison.Ordinal) &&
+            string.Equals(votingView.ServerProof, normalizedServerProof, StringComparison.Ordinal);
+
+        return new VerifyElectionReceiptResponse
+        {
+            Success = true,
+            ErrorMessage = string.Empty,
+            ActorPublicAddress = normalizedActorPublicAddress,
+            ElectionId = electionId.ToString(),
+            LifecycleState = lifecycleState,
+            HasAcceptedCheckoff = hasAcceptedCheckoff,
+            ReceiptMatchesAcceptedCheckoff = receiptMatchesAcceptedCheckoff,
+            ParticipationCountedAsVoted =
+                votingView.PersonalParticipationStatus == ElectionParticipationStatusProto.ParticipationCountedAsVoted,
+            TallyVerificationAvailable =
+                lifecycleState == ElectionLifecycleStateProto.Closed ||
+                lifecycleState == ElectionLifecycleStateProto.Finalized,
+            VerifiedReceiptId = votingView.ReceiptId ?? string.Empty,
+            VerifiedAcceptanceId = votingView.AcceptanceId ?? string.Empty,
+            VerifiedServerProof = votingView.ServerProof ?? string.Empty,
+        };
     }
 
     public async Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccessAsync(

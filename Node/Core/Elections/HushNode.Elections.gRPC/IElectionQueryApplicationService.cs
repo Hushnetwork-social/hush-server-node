@@ -21,6 +21,13 @@ public interface IElectionQueryApplicationService
         string actorPublicAddress,
         string? submissionIdempotencyKey);
 
+    Task<VerifyElectionReceiptResponse> VerifyElectionReceiptAsync(
+        ElectionId electionId,
+        string actorPublicAddress,
+        string receiptId,
+        string acceptanceId,
+        string serverProof);
+
     Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccessAsync(ElectionId electionId, string actorPublicAddress);
 
     Task<GetElectionResultViewResponse> GetElectionResultViewAsync(ElectionId electionId, string actorPublicAddress);

@@ -38,6 +38,7 @@ service HushElections {
   rpc GetElectionHubView(GetElectionHubViewRequest) returns (GetElectionHubViewResponse);
   rpc GetElectionEligibilityView(GetElectionEligibilityViewRequest) returns (GetElectionEligibilityViewResponse);
   rpc GetElectionVotingView(GetElectionVotingViewRequest) returns (GetElectionVotingViewResponse);
+  rpc VerifyElectionReceipt(VerifyElectionReceiptRequest) returns (VerifyElectionReceiptResponse);
   rpc GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest) returns (GetElectionEnvelopeAccessResponse);
   rpc GetElectionResultView(GetElectionResultViewRequest) returns (GetElectionResultViewResponse);
   rpc GetElectionReportAccessGrants(GetElectionReportAccessGrantsRequest) returns (GetElectionReportAccessGrantsResponse);
@@ -1062,6 +1063,29 @@ message GetElectionVotingViewRequest {
   string ElectionId = 1;
   string ActorPublicAddress = 2;
   string SubmissionIdempotencyKey = 3;
+}
+
+message VerifyElectionReceiptRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string ReceiptId = 3;
+  string AcceptanceId = 4;
+  string ServerProof = 5;
+}
+
+message VerifyElectionReceiptResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ActorPublicAddress = 3;
+  string ElectionId = 4;
+  ElectionLifecycleStateProto LifecycleState = 5;
+  bool HasAcceptedCheckoff = 6;
+  bool ReceiptMatchesAcceptedCheckoff = 7;
+  bool ParticipationCountedAsVoted = 8;
+  bool TallyVerificationAvailable = 9;
+  string VerifiedReceiptId = 10;
+  string VerifiedAcceptanceId = 11;
+  string VerifiedServerProof = 12;
 }
 
 message GetElectionEnvelopeAccessRequest {
