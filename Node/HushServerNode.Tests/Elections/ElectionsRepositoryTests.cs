@@ -675,6 +675,60 @@ public class ElectionsRepositoryTests
     }
 
     [Fact]
+    public async Task GetPublicationIssueAsync_ShouldReturnTrackedUnsavedIssue()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection();
+        var issue = ElectionModelFactory.CreatePublicationIssue(
+            election.ElectionId,
+            ElectionPublicationIssueCode.ReplayMismatch,
+            observedAt: DateTime.UtcNow,
+            latestBlockHeight: 42,
+            latestBlockId: Guid.NewGuid());
+
+        await repository.SaveElectionAsync(election);
+        await repository.SavePublicationIssueAsync(issue);
+
+        var storedIssue = await repository.GetPublicationIssueAsync(
+            election.ElectionId,
+            ElectionPublicationIssueCode.ReplayMismatch);
+
+        storedIssue.Should().NotBeNull();
+        storedIssue!.Id.Should().Be(issue.Id);
+    }
+
+    [Fact]
+    public async Task UpdatePublicationIssueAsync_ShouldUpdateTrackedUnsavedIssue()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection();
+        var blockId = Guid.NewGuid();
+        var issue = ElectionModelFactory.CreatePublicationIssue(
+            election.ElectionId,
+            ElectionPublicationIssueCode.ReplayMismatch,
+            observedAt: DateTime.UtcNow.AddMinutes(-2),
+            latestBlockHeight: 42,
+            latestBlockId: blockId);
+
+        await repository.SaveElectionAsync(election);
+        await repository.SavePublicationIssueAsync(issue);
+        await repository.UpdatePublicationIssueAsync(issue.RegisterOccurrence(
+            DateTime.UtcNow,
+            latestBlockHeight: 43,
+            latestBlockId: blockId));
+
+        var storedIssue = await repository.GetPublicationIssueAsync(
+            election.ElectionId,
+            ElectionPublicationIssueCode.ReplayMismatch);
+
+        storedIssue.Should().NotBeNull();
+        storedIssue!.OccurrenceCount.Should().Be(2);
+        storedIssue.LatestBlockHeight.Should().Be(43);
+    }
+
+    [Fact]
     public async Task DeleteRosterEntriesAsync_ShouldRemovePriorImportRows()
     {
         using var context = CreateContext();

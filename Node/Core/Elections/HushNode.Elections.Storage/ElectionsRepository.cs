@@ -521,18 +521,35 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task<ElectionPublicationIssueRecord?> GetPublicationIssueAsync(
         ElectionId electionId,
-        ElectionPublicationIssueCode issueCode) =>
-        await Context.ElectionPublicationIssues
+        ElectionPublicationIssueCode issueCode)
+    {
+        var tracked = Context.ElectionPublicationIssues.Local
+            .FirstOrDefault(x =>
+                x.ElectionId == electionId &&
+                x.IssueCode == issueCode);
+
+        if (tracked is not null)
+        {
+            return tracked;
+        }
+
+        return await Context.ElectionPublicationIssues
             .FirstOrDefaultAsync(x =>
                 x.ElectionId == electionId &&
                 x.IssueCode == issueCode);
+    }
 
     public async Task SavePublicationIssueAsync(ElectionPublicationIssueRecord publicationIssue) =>
         await Context.ElectionPublicationIssues.AddAsync(publicationIssue);
 
     public async Task UpdatePublicationIssueAsync(ElectionPublicationIssueRecord publicationIssue)
     {
-        var existing = await Context.ElectionPublicationIssues
+        var existing = Context.ElectionPublicationIssues.Local
+            .FirstOrDefault(x =>
+                x.ElectionId == publicationIssue.ElectionId &&
+                x.IssueCode == publicationIssue.IssueCode);
+
+        existing ??= await Context.ElectionPublicationIssues
             .FirstOrDefaultAsync(x =>
                 x.ElectionId == publicationIssue.ElectionId &&
                 x.IssueCode == publicationIssue.IssueCode);
