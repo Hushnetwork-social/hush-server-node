@@ -340,6 +340,16 @@ public sealed class ElectionLifecycleIntegrationSteps
             submissionIdempotencyKey);
     }
 
+    [When(@"voter ""(.*)"" submits FEAT-103 dev ballot cast with idempotency key ""(.*)"" through blockchain submission")]
+    public async Task WhenVoterSubmitsFeat103DevBallotCastWithIdempotencyKeyThroughBlockchainSubmission(
+        string voterAlias,
+        string submissionIdempotencyKey)
+    {
+        _lastSubmitTransactionResponse = await SubmitAcceptedDevModeBallotCastViaBlockchainAsync(
+            ResolveIdentity(voterAlias),
+            submissionIdempotencyKey);
+    }
+
     [When(@"the pending cast block is produced")]
     public async Task WhenThePendingCastBlockIsProduced()
     {
@@ -664,6 +674,70 @@ public sealed class ElectionLifecycleIntegrationSteps
         }
     }
 
+    [When(@"the integration test deletes accepted ballot records while leaving (\d+) queued publication entries")]
+    public async Task WhenTheIntegrationTestDeletesAcceptedBallotRecordsWhileLeavingQueuedPublicationEntries(int expectedQueuedEntries)
+    {
+        await using var scope = GetNode().Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        var electionId = GetCurrentElectionId();
+
+        var queuedEntries = await dbContext.Set<ElectionBallotMemPoolRecord>()
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.QueuedAt)
+            .ToListAsync();
+        queuedEntries.Should().HaveCount(expectedQueuedEntries);
+
+        var acceptedBallotIds = queuedEntries
+            .Select(x => x.AcceptedBallotId)
+            .ToHashSet();
+        var acceptedBallots = await dbContext.Set<ElectionAcceptedBallotRecord>()
+            .Where(x => acceptedBallotIds.Contains(x.Id))
+            .ToListAsync();
+        acceptedBallots.Should().HaveCount(expectedQueuedEntries);
+
+        dbContext.RemoveRange(acceptedBallots);
+        await dbContext.SaveChangesAsync();
+    }
+
+    [When(@"the integration test removes tally-ready and unofficial result artifacts for the closed election")]
+    public async Task WhenTheIntegrationTestRemovesTallyReadyAndUnofficialResultArtifactsForTheClosedElection()
+    {
+        await using var scope = GetNode().Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        var electionId = GetCurrentElectionId();
+
+        var tallyReadyArtifacts = await dbContext.Set<ElectionBoundaryArtifactRecord>()
+            .Where(x =>
+                x.ElectionId == electionId &&
+                x.ArtifactType == ElectionBoundaryArtifactType.TallyReady)
+            .ToListAsync();
+        tallyReadyArtifacts.Should().NotBeEmpty();
+
+        var unofficialResults = await dbContext.Set<ElectionResultArtifactRecord>()
+            .Where(x =>
+                x.ElectionId == electionId &&
+                x.ArtifactKind == ElectionResultArtifactKind.Unofficial)
+            .ToListAsync();
+        unofficialResults.Should().NotBeEmpty();
+
+        dbContext.RemoveRange(unofficialResults);
+        dbContext.RemoveRange(tallyReadyArtifacts);
+
+        var election = await dbContext.Set<ElectionRecord>()
+            .SingleAsync(x => x.ElectionId == electionId);
+        var updatedElection = election with
+        {
+            LastUpdatedAt = DateTime.UtcNow,
+            TallyReadyAt = null,
+            TallyReadyArtifactId = null,
+            UnofficialResultArtifactId = null,
+            ClosedProgressStatus = ElectionClosedProgressStatus.None,
+        };
+        dbContext.Entry(election).CurrentValues.SetValues(updatedElection);
+
+        await dbContext.SaveChangesAsync();
+    }
+
     [Then(@"the election lifecycle should progress through ""(.*)""")]
     public void ThenTheElectionLifecycleShouldProgressThrough(string expectedStates)
     {
@@ -816,6 +890,35 @@ public sealed class ElectionLifecycleIntegrationSteps
         var response = await ReloadElectionAsync();
         response.Election.LifecycleState.Should().Be(ParseProtoLifecycleState(lifecycleState));
         _lastElectionResponse = response;
+    }
+
+    [Then(@"the publication issue log should contain (\d+) ""(.*)"" issue with occurrence count (\d+)")]
+    public async Task ThenThePublicationIssueLogShouldContainIssueWithOccurrenceCount(
+        int expectedRecordCount,
+        string issueCode,
+        int expectedOccurrenceCount)
+    {
+        await using var scope = GetNode().Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        var parsedIssueCode = ParsePublicationIssueCode(issueCode);
+        var issues = await dbContext.Set<ElectionPublicationIssueRecord>()
+            .Where(x => x.ElectionId == GetCurrentElectionId() && x.IssueCode == parsedIssueCode)
+            .ToListAsync();
+
+        issues.Should().HaveCount(expectedRecordCount);
+        issues.Should().OnlyContain(x => x.OccurrenceCount == expectedOccurrenceCount);
+    }
+
+    [Then(@"(\d+) ballot mempool entries should remain queued for the election")]
+    public async Task ThenBallotMempoolEntriesShouldRemainQueuedForTheElection(int expectedCount)
+    {
+        await using var scope = GetNode().Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        var entries = await dbContext.Set<ElectionBallotMemPoolRecord>()
+            .Where(x => x.ElectionId == GetCurrentElectionId())
+            .ToListAsync();
+
+        entries.Should().HaveCount(expectedCount);
     }
 
     [Then(@"the pending governed open should block further draft changes")]
@@ -1906,9 +2009,36 @@ public sealed class ElectionLifecycleIntegrationSteps
         return submitResponse;
     }
 
-    private async Task<string> BuildAcceptedBallotCastTransactionAsync(
+    private async Task<SubmitSignedTransactionReply> SubmitAcceptedDevModeBallotCastViaBlockchainAsync(
         TestIdentity actor,
         string submissionIdempotencyKey)
+    {
+        var signedTransaction = await BuildAcceptedBallotCastTransactionAsync(
+            actor,
+            submissionIdempotencyKey,
+            useDevModePayload: true);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        if (!submitResponse.Successfull)
+        {
+            return submitResponse;
+        }
+
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
+        _lastElectionResponse = await ReloadElectionAsync();
+        return submitResponse;
+    }
+
+    private async Task<string> BuildAcceptedBallotCastTransactionAsync(
+        TestIdentity actor,
+        string submissionIdempotencyKey,
+        bool useDevModePayload = false)
     {
         var votingView = await GetElectionVotingViewAsync(actor);
 
@@ -1927,14 +2057,35 @@ public sealed class ElectionLifecycleIntegrationSteps
             .ToArray();
         nonBlankChoiceIndexes.Should().NotBeEmpty("the integration cast path should target a named option, not a blank vote");
         var choiceIndex = ResolveChoiceIndex(actor, submissionIdempotencyKey, nonBlankChoiceIndexes);
+        var selectedOption = votingView.Election.Options[choiceIndex];
+
+        var encryptedBallotPackage = useDevModePayload
+            ? BuildDevModeEncryptedBallotPackage(
+                actor,
+                votingView.Election.ElectionId,
+                selectedOption.OptionId,
+                selectedOption.DisplayLabel,
+                selectedOption.ShortDescription,
+                selectedOption.BallotOrder,
+                selectedOption.IsBlankOption)
+            : BuildEncryptedBallotPackage(actor, submissionIdempotencyKey, selectionCount, choiceIndex);
+        var proofBundle = useDevModePayload
+            ? BuildDevModeProofBundle(
+                actor,
+                votingView,
+                selectedOption.OptionId)
+            : BuildProofBundle(actor, submissionIdempotencyKey);
+        var ballotNullifier = useDevModePayload
+            ? BuildDevModeBallotNullifier(actor, votingView.Election.ElectionId)
+            : BuildBallotNullifier(actor, submissionIdempotencyKey);
 
         return TestTransactionFactory.AcceptElectionBallotCast(
             actor,
             GetCurrentElectionId(),
             submissionIdempotencyKey,
-            BuildEncryptedBallotPackage(actor, submissionIdempotencyKey, selectionCount, choiceIndex),
-            BuildProofBundle(actor, submissionIdempotencyKey),
-            BuildBallotNullifier(actor, submissionIdempotencyKey),
+            encryptedBallotPackage,
+            proofBundle,
+            ballotNullifier,
             Guid.Parse(votingView.OpenArtifactId),
             Convert.FromBase64String(votingView.EligibleSetHash),
             Guid.Parse(votingView.CeremonyVersionId),
@@ -2096,9 +2247,73 @@ public sealed class ElectionLifecycleIntegrationSteps
             ElectionId: GetElectionId(),
             SubmissionIdempotencyKey: submissionIdempotencyKey.Trim()));
 
+    private static string BuildDevModeEncryptedBallotPackage(
+        TestIdentity actor,
+        string electionId,
+        string optionId,
+        string optionLabel,
+        string? optionDescription,
+        int ballotOrder,
+        bool isBlankOption)
+    {
+        var generatedAt = DateTime.UtcNow.ToString("O");
+        var selectionFingerprint = ComputeLowerHexSha256(
+            $"election-dev-selection:v1:{electionId}:{optionId}:{optionLabel}");
+
+        return JsonSerializer.Serialize(new
+        {
+            mode = "election-dev-mode-v1",
+            packageType = "dev-protected-ballot",
+            electionId,
+            actorPublicAddress = actor.PublicSigningAddress,
+            optionId,
+            optionLabel,
+            optionDescription = optionDescription ?? string.Empty,
+            ballotOrder,
+            isBlankOption,
+            selectionFingerprint,
+            generatedAt,
+        });
+    }
+
+    private static string BuildDevModeProofBundle(
+        TestIdentity actor,
+        GetElectionVotingViewResponse votingView,
+        string optionId)
+    {
+        var electionId = votingView.Election.ElectionId;
+        var generatedAt = DateTime.UtcNow.ToString("O");
+        var commitmentHash = ComputeLowerHexSha256(
+            $"election-dev-commitment:v1:{electionId}:{actor.PublicSigningAddress}");
+        var ballotNullifier = BuildDevModeBallotNullifier(actor, electionId);
+
+        return JsonSerializer.Serialize(new
+        {
+            mode = "election-dev-mode-v1",
+            proofType = "dev-election-proof",
+            electionId,
+            actorPublicAddress = actor.PublicSigningAddress,
+            optionId,
+            commitmentHash,
+            ballotNullifier,
+            openArtifactId = votingView.OpenArtifactId,
+            eligibleSetHash = votingView.EligibleSetHash,
+            ceremonyVersionId = votingView.CeremonyVersionId,
+            dkgProfileId = votingView.DkgProfileId,
+            tallyPublicKeyFingerprint = votingView.TallyPublicKeyFingerprint,
+            generatedAt,
+        });
+    }
+
+    private static string BuildDevModeBallotNullifier(TestIdentity actor, string electionId) =>
+        ComputeLowerHexSha256($"election-dev-nullifier:v1:{electionId}:{actor.PublicSigningAddress}");
+
     private string BuildBallotNullifier(TestIdentity actor, string submissionIdempotencyKey) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             $"feat099:ballot-nullifier:{GetElectionId()}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}")));
+
+    private static string ComputeLowerHexSha256(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty))).ToLowerInvariant();
 
     private string BuildEncodedCastArtifact(string artifactKind, TestIdentity actor, string submissionIdempotencyKey) =>
         Convert.ToBase64String(Encoding.UTF8.GetBytes(
@@ -2286,6 +2501,11 @@ public sealed class ElectionLifecycleIntegrationSteps
             "finalized" => ElectionLifecycleStateProto.Finalized,
             _ => throw new ArgumentOutOfRangeException(nameof(lifecycleState), lifecycleState, "Unsupported lifecycle state."),
         };
+
+    private static ElectionPublicationIssueCode ParsePublicationIssueCode(string issueCode) =>
+        Enum.TryParse<ElectionPublicationIssueCode>(issueCode.Trim(), ignoreCase: true, out var parsed)
+            ? parsed
+            : throw new ArgumentOutOfRangeException(nameof(issueCode), issueCode, "Unsupported publication issue code.");
 
     private static ElectionDraftInput BuildDraftInput(
         string title,

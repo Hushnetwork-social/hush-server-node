@@ -18,7 +18,8 @@ public static class HushNodeElectionsgRPCHostBuild
                 sp.GetRequiredService<ElectionCeremonyOptions>(),
                 sp.GetRequiredService<IMemPoolService>(),
                 sp.GetRequiredService<IElectionEnvelopeCryptoService>(),
-                sp.GetRequiredService<IElectionCastIdempotencyCacheService>()));
+                sp.GetRequiredService<IElectionCastIdempotencyCacheService>(),
+                sp.GetRequiredService<IElectionBallotPublicationService>()));
         services.AddSingleton<IGrpcDefinition, ElectionsGrpcServiceDefinition>();
         services.AddSingleton<HushElections.HushElectionsBase, ElectionsGrpcService>();
     }

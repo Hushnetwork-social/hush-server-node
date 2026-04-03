@@ -168,6 +168,39 @@ Feature: FEAT-094 election lifecycle integration
     Then the election should expose a tally-ready boundary after close drain
     And the tally-ready boundary should reconcile 1 accepted ballots and 1 published ballots
 
+  @FEAT-100 @AT-PROC-I05 @FEAT-100-ISSUE-COALESCE @NON_E2E
+  Scenario: Close drain coalesces repeated replay mismatch issues into one record
+    Given FEAT-094 election integration services are available
+    And the owner has an open admin-only election through blockchain submission
+    When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
+    And voter "Alice" registers voting commitment "alice-commitment-feat100-replay-a" through blockchain submission
+    And voter "Alice" submits ballot cast with idempotency key "alice-feat100-replay-001" through blockchain submission
+    And voter "Charlie" claims roster entry "voter-charlie" with temporary verification code through blockchain submission
+    And voter "Charlie" registers voting commitment "charlie-commitment-feat100-replay-b" through blockchain submission
+    And voter "Charlie" submits ballot cast with idempotency key "charlie-feat100-replay-001" through blockchain submission
+    And the integration test deletes accepted ballot records while leaving 2 queued publication entries
+    And the owner closes the election through blockchain submission
+    Then the election should remain in "Closed"
+    And the election should not expose a tally-ready boundary yet
+    And the publication issue log should contain 1 "ReplayMismatch" issue with occurrence count 2
+    And 2 ballot mempool entries should remain queued for the election
+
+  @FEAT-103 @AT-SURFACE-I02 @NON_E2E
+  Scenario: Opening a closed admin-only election repairs missing unofficial result artifacts
+    Given FEAT-094 election integration services are available
+    And the owner has an open admin-only election through blockchain submission
+    When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
+    And voter "Alice" registers voting commitment "alice-commitment-feat103-repair-v1" through blockchain submission
+    And voter "Alice" submits FEAT-103 dev ballot cast with idempotency key "alice-feat103-repair-001" through blockchain submission
+    And the owner closes the election through blockchain submission
+    Then the election should expose a tally-ready boundary after close drain
+    And the election result view for actor "Alice" should expose participant-encrypted unofficial results
+    When the integration test removes tally-ready and unofficial result artifacts for the closed election
+    Then the election result view for actor "Alice" should expose participant-encrypted unofficial results
+    And the unofficial result should report 1 total voted, 2 eligible to vote, 1 did not vote, and 0 blank
+    And the unofficial result should include all named options
+    And the election should expose a tally-ready boundary after close drain
+
   @FEAT-098 @AT-PROC-I03 @NON_E2E
   Scenario: Close-counting binds one exact aggregate target and rejects single-ballot release
     Given FEAT-094 election integration services are available

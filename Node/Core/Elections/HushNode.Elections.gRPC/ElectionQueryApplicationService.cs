@@ -18,16 +18,17 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
     private readonly IMemPoolService? _memPoolService;
     private readonly IElectionEnvelopeCryptoService? _electionEnvelopeCryptoService;
     private readonly IElectionCastIdempotencyCacheService? _castIdempotencyCacheService;
+    private readonly IElectionBallotPublicationService? _electionBallotPublicationService;
 
     public ElectionQueryApplicationService(IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider)
-        : this(unitOfWorkProvider, new ElectionCeremonyOptions(), null, null, null)
+        : this(unitOfWorkProvider, new ElectionCeremonyOptions(), null, null, null, null)
     {
     }
 
     public ElectionQueryApplicationService(
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ElectionCeremonyOptions ceremonyOptions)
-        : this(unitOfWorkProvider, ceremonyOptions, null, null, null)
+        : this(unitOfWorkProvider, ceremonyOptions, null, null, null, null)
     {
     }
 
@@ -36,14 +37,19 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         ElectionCeremonyOptions ceremonyOptions,
         IMemPoolService? memPoolService,
         IElectionEnvelopeCryptoService? electionEnvelopeCryptoService,
-        IElectionCastIdempotencyCacheService? castIdempotencyCacheService)
+        IElectionCastIdempotencyCacheService? castIdempotencyCacheService,
+        IElectionBallotPublicationService? electionBallotPublicationService)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _ceremonyOptions = ceremonyOptions;
         _memPoolService = memPoolService;
         _electionEnvelopeCryptoService = electionEnvelopeCryptoService;
         _castIdempotencyCacheService = castIdempotencyCacheService;
+        _electionBallotPublicationService = electionBallotPublicationService;
     }
+
+    private Task TryRepairClosedElectionResultsAsync(ElectionId electionId) =>
+        _electionBallotPublicationService?.RepairClosedElectionResultsAsync(electionId) ?? Task.CompletedTask;
 
     public async Task<GetElectionResponse> GetElectionAsync(ElectionId electionId)
     {
@@ -646,6 +652,8 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         ElectionId electionId,
         string actorPublicAddress)
     {
+        await TryRepairClosedElectionResultsAsync(electionId);
+
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var normalizedActorPublicAddress = actorPublicAddress?.Trim() ?? string.Empty;

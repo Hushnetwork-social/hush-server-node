@@ -1306,6 +1306,71 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionResultViewAsync_WithClosedElection_TriggersClosedResultRepairBeforeReading()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedAt = DateTime.UtcNow.AddMinutes(-2),
+            VoteAcceptanceLockedAt = DateTime.UtcNow.AddMinutes(-2),
+        };
+        var rosterEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "5001",
+                ElectionRosterContactType.Email,
+                "participant@example.com",
+                ElectionVotingRightStatus.Active)
+            .LinkToActor("participant-address", DateTime.UtcNow);
+        var denominatorEvidence = new SharedResultDenominatorEvidence(
+            ElectionEligibilitySnapshotType.Close,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            [1, 2, 3]);
+        var unofficial = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Unofficial,
+            ElectionResultArtifactVisibility.ParticipantEncrypted,
+            election.Title,
+            [
+                new SharedResultOptionCount("alice", "Alice", null, 1, 1, 1),
+                new SharedResultOptionCount("bob", "Bob", null, 2, 2, 0),
+            ],
+            blankCount: 0,
+            totalVotedCount: 1,
+            eligibleToVoteCount: 2,
+            didNotVoteCount: 1,
+            denominatorEvidence,
+            "owner-address",
+            encryptedPayload: "enc::repaired");
+        var publicationService = new Mock<IElectionBallotPublicationService>(MockBehavior.Strict);
+        publicationService
+            .Setup(x => x.RepairClosedElectionResultsAsync(election.ElectionId))
+            .Returns(Task.CompletedTask);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
+            repo.Setup(x => x.GetRosterEntryByLinkedActorAsync(election.ElectionId, "participant-address")).ReturnsAsync(rosterEntry);
+            repo.Setup(x => x.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Unofficial)).ReturnsAsync(unofficial);
+            repo.Setup(x => x.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Official))
+                .ReturnsAsync((ElectionResultArtifactRecord?)null);
+        });
+
+        var sut = CreateQueryService(
+            mocker,
+            electionBallotPublicationService: publicationService.Object);
+
+        var response = await sut.GetElectionResultViewAsync(election.ElectionId, "participant-address");
+
+        response.Success.Should().BeTrue();
+        response.UnofficialResult.Should().NotBeNull();
+        response.UnofficialResult.EncryptedPayload.Should().Be("enc::repaired");
+        publicationService.Verify(x => x.RepairClosedElectionResultsAsync(election.ElectionId), Times.Once);
+    }
+
+    [Fact]
     public async Task GetElectionResultViewAsync_WithNonParticipantActor_HidesUnofficialButReturnsPublicOfficial()
     {
         var mocker = new AutoMocker();
@@ -1905,13 +1970,15 @@ public class ElectionQueryApplicationServiceTests
         ElectionCeremonyOptions? options = null,
         IMemPoolService? memPoolService = null,
         IElectionEnvelopeCryptoService? electionEnvelopeCryptoService = null,
-        IElectionCastIdempotencyCacheService? castIdempotencyCacheService = null) =>
+        IElectionCastIdempotencyCacheService? castIdempotencyCacheService = null,
+        IElectionBallotPublicationService? electionBallotPublicationService = null) =>
         new(
             mocker.GetMock<IUnitOfWorkProvider<ElectionsDbContext>>().Object,
             options ?? new ElectionCeremonyOptions(),
             memPoolService,
             electionEnvelopeCryptoService,
-            castIdempotencyCacheService);
+            castIdempotencyCacheService,
+            electionBallotPublicationService);
 
     private static ElectionRecord CreateAdminElection(
         string title = "Board Election",

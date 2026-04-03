@@ -178,6 +178,69 @@ public class ElectionBallotPublicationServiceTests
     }
 
     [Fact]
+    public async Task RepairClosedElectionResultsAsync_AdminOnlyDevModePublishedBallots_PublishesTallyReadyAndUnofficialResult()
+    {
+        var store = new PublicationStore();
+        var election = CreateClosedElection();
+        SeedAcceptedBallots(store, election, 2);
+        store.BallotMemPoolEntries.Clear();
+        store.ClosedAwaitingTallyReadyElectionIds.Add(election.ElectionId);
+        store.PublishedBallots.Add(ElectionModelFactory.CreatePublishedBallotRecord(
+            election.ElectionId,
+            publicationSequence: 1,
+            encryptedBallotPackage: CreateDevModePublishedBallotPackage(election, "yes", ballotOrder: 1, actorPublicAddress: "alice-address"),
+            proofBundle: "proof-1",
+            sourceBlockHeight: 33,
+            sourceBlockId: store.CurrentBlockId.Value));
+        store.PublishedBallots.Add(ElectionModelFactory.CreatePublishedBallotRecord(
+            election.ElectionId,
+            publicationSequence: 2,
+            encryptedBallotPackage: CreateDevModePublishedBallotPackage(election, "no", ballotOrder: 2, actorPublicAddress: "bob-address"),
+            proofBundle: "proof-2",
+            sourceBlockHeight: 33,
+            sourceBlockId: store.CurrentBlockId.Value));
+        SeedCloseResultContext(
+            store,
+            election,
+            activeDenominatorCount: 3,
+            countedParticipationCount: 2,
+            blankCount: 0,
+            didNotVoteCount: 1);
+
+        var crypto = new FakePublicationCryptoService
+        {
+            ReplayBehavior = _ => ElectionBallotReplayResult.Failure("UNSUPPORTED_BALLOT_PAYLOAD", "dev ballots require fallback recovery"),
+        };
+        var resultCrypto = new FakeElectionResultCryptoService();
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10),
+            resultCrypto);
+
+        await service.RepairClosedElectionResultsAsync(election.ElectionId);
+
+        store.BoundaryArtifacts.Should().ContainSingle();
+        store.BoundaryArtifacts[0].ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
+        store.BoundaryArtifacts[0].AcceptedBallotCount.Should().Be(2);
+        store.BoundaryArtifacts[0].PublishedBallotCount.Should().Be(2);
+        store.BoundaryArtifacts[0].FinalEncryptedTallyHash.Should().NotBeNull().And.NotBeEmpty();
+
+        store.ResultArtifacts.Should().ContainSingle();
+        store.ResultArtifacts[0].ArtifactKind.Should().Be(ElectionResultArtifactKind.Unofficial);
+        store.ResultArtifacts[0].TotalVotedCount.Should().Be(2);
+        store.ResultArtifacts[0].EligibleToVoteCount.Should().Be(3);
+        store.ResultArtifacts[0].DidNotVoteCount.Should().Be(1);
+        store.ResultArtifacts[0].NamedOptionResults.Select(x => (x.OptionId, x.VoteCount))
+            .Should().Equal(("yes", 1), ("no", 1));
+
+        store.Elections[election.ElectionId].TallyReadyAt.Should().NotBeNull();
+        store.Elections[election.ElectionId].UnofficialResultArtifactId.Should().Be(store.ResultArtifacts[0].Id);
+        resultCrypto.EncryptCallCount.Should().Be(1);
+        crypto.ReplayCallCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task ProcessPendingPublicationAsync_ClosedTrusteeElectionDrainsPoolAndCreatesCloseCountingSession()
     {
         var store = new PublicationStore();
@@ -420,6 +483,18 @@ public class ElectionBallotPublicationServiceTests
                 return Task.CompletedTask;
             });
 
+        repository
+            .Setup(x => x.GetResultArtifactAsync(It.IsAny<ElectionId>(), It.IsAny<ElectionResultArtifactKind>()))
+            .ReturnsAsync((ElectionId electionId, ElectionResultArtifactKind artifactKind) =>
+                store.ResultArtifacts.FirstOrDefault(x =>
+                    x.ElectionId == electionId &&
+                    x.ArtifactKind == artifactKind));
+
+        repository
+            .Setup(x => x.GetResultArtifactAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((Guid artifactId) =>
+                store.ResultArtifacts.FirstOrDefault(x => x.Id == artifactId));
+
         return repository;
     }
 
@@ -580,7 +655,22 @@ public class ElectionBallotPublicationServiceTests
     private static ElectionEligibilitySnapshotRecord SeedZeroBallotResultContext(
         PublicationStore store,
         ElectionRecord election,
-        int activeDenominatorCount)
+        int activeDenominatorCount) =>
+        SeedCloseResultContext(
+            store,
+            election,
+            activeDenominatorCount,
+            countedParticipationCount: 0,
+            blankCount: 0,
+            didNotVoteCount: activeDenominatorCount);
+
+    private static ElectionEligibilitySnapshotRecord SeedCloseResultContext(
+        PublicationStore store,
+        ElectionRecord election,
+        int activeDenominatorCount,
+        int countedParticipationCount,
+        int blankCount,
+        int didNotVoteCount)
     {
         var snapshot = ElectionModelFactory.CreateEligibilitySnapshot(
             election.ElectionId,
@@ -589,9 +679,9 @@ public class ElectionBallotPublicationServiceTests
             rosteredCount: activeDenominatorCount,
             linkedCount: activeDenominatorCount,
             activeDenominatorCount: activeDenominatorCount,
-            countedParticipationCount: 0,
-            blankCount: 0,
-            didNotVoteCount: activeDenominatorCount,
+            countedParticipationCount: countedParticipationCount,
+            blankCount: blankCount,
+            didNotVoteCount: didNotVoteCount,
             rosteredVoterSetHash: [1, 2, 3],
             activeDenominatorSetHash: [4, 5, 6],
             countedParticipationSetHash: [7, 8, 9],
@@ -609,6 +699,15 @@ public class ElectionBallotPublicationServiceTests
             SourceBlockId: null));
         return snapshot;
     }
+
+    private static string CreateDevModePublishedBallotPackage(
+        ElectionRecord election,
+        string optionId,
+        int ballotOrder,
+        string actorPublicAddress) =>
+        $$"""
+        {"mode":"election-dev-mode-v1","packageType":"dev-protected-ballot","electionId":"{{election.ElectionId}}","actorPublicAddress":"{{actorPublicAddress}}","optionId":"{{optionId}}","optionLabel":"{{optionId}}","optionDescription":"","ballotOrder":{{ballotOrder}},"isBlankOption":false,"selectionFingerprint":"selection-{{optionId}}","generatedAt":"2026-04-03T12:00:00.000Z"}
+        """;
 
     private sealed class PublicationStore
     {
