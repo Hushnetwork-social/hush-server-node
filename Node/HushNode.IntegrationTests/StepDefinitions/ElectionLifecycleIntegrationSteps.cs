@@ -30,6 +30,7 @@ public sealed class ElectionLifecycleIntegrationSteps
     private static readonly TestIdentity Delta = TestIdentities.GenerateFromSeed("TEST_DELTA_V1", "Delta");
     private static readonly TestIdentity Echo = TestIdentities.GenerateFromSeed("TEST_ECHO_V1", "Echo");
     private static readonly TestIdentity Foxtrot = TestIdentities.GenerateFromSeed("TEST_FOXTROT_V1", "Foxtrot");
+    private static readonly TestIdentity Guest = TestIdentities.GenerateFromSeed("TEST_GUEST_V1", "Guest");
     private static readonly IReadOnlyList<TestIdentity> RolloutTrustees =
     [
         TestIdentities.Bob,
@@ -394,6 +395,13 @@ public sealed class ElectionLifecycleIntegrationSteps
     public async Task WhenTheOwnerActivatesRosterEntryThroughBlockchainSubmission(string organizationVoterId)
     {
         _lastEligibilityViewResponse = await ActivateRosterEntryViaBlockchainAsync(organizationVoterId);
+    }
+
+    [When(@"the owner grants designated auditor access to actor ""(.*)"" through blockchain submission")]
+    public async Task WhenTheOwnerGrantsDesignatedAuditorAccessToActorThroughBlockchainSubmission(string actorAlias)
+    {
+        await CreateReportAccessGrantViaBlockchainAsync(ResolveIdentity(actorAlias));
+        _lastElectionResponse = await ReloadElectionAsync();
     }
 
     [Given(@"the owner has an open admin-only election through blockchain submission")]
@@ -1291,6 +1299,54 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastResultViewResponse = response;
     }
 
+    [Then(@"the election result view for actor ""(.*)"" should expose a sealed report package with (\d+) downloadable artifacts")]
+    public async Task ThenTheElectionResultViewForActorShouldExposeASealedReportPackageWithDownloadableArtifacts(
+        string actorAlias,
+        int expectedArtifactCount)
+    {
+        var response = await GetElectionResultViewAsync(ResolveIdentity(actorAlias), waitForOfficialResult: true);
+
+        response.CanViewReportPackage.Should().BeTrue();
+        response.LatestReportPackage.Should().NotBeNull();
+        response.LatestReportPackage!.Status.Should().Be(ElectionReportPackageStatusProto.ReportPackageSealed);
+        response.VisibleReportArtifacts.Should().HaveCount(expectedArtifactCount);
+        response.VisibleReportArtifacts.Should().OnlyContain(x =>
+            !string.IsNullOrWhiteSpace(x.Id) &&
+            !string.IsNullOrWhiteSpace(x.Title) &&
+            !string.IsNullOrWhiteSpace(x.FileName) &&
+            x.ContentHash.Length > 0 &&
+            !string.IsNullOrWhiteSpace(x.Content));
+
+        _lastResultViewResponse = response;
+    }
+
+    [Then(@"the visible report artifacts should include the named participation roster artifacts")]
+    public void ThenTheVisibleReportArtifactsShouldIncludeTheNamedParticipationRosterArtifacts()
+    {
+        var artifacts = GetLastResultView().VisibleReportArtifacts;
+        artifacts.Should().Contain(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanNamedParticipationRoster);
+        artifacts.Should().Contain(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactMachineNamedParticipationRosterProjection);
+    }
+
+    [Then(@"the visible report artifacts should include the audit provenance artifact")]
+    public void ThenTheVisibleReportArtifactsShouldIncludeTheAuditProvenanceArtifact()
+    {
+        GetLastResultView().VisibleReportArtifacts.Should().Contain(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanAuditProvenanceReport);
+    }
+
+    [Then(@"the visible report artifacts should all include downloadable content")]
+    public void ThenTheVisibleReportArtifactsShouldAllIncludeDownloadableContent()
+    {
+        GetLastResultView().VisibleReportArtifacts.Should().OnlyContain(x =>
+            !string.IsNullOrWhiteSpace(x.FileName) &&
+            !string.IsNullOrWhiteSpace(x.MediaType) &&
+            x.ContentHash.Length > 0 &&
+            !string.IsNullOrWhiteSpace(x.Content));
+    }
+
     [Then(@"the last blockchain submission should be rejected with validation code ""(.*)""")]
     public void ThenTheLastBlockchainSubmissionShouldBeRejectedWithValidationCode(string expectedValidationCode)
     {
@@ -1487,6 +1543,26 @@ public sealed class ElectionLifecycleIntegrationSteps
         response.Success.Should().BeTrue(
             $"GetElectionResultView should succeed for {GetElectionId()} and actor {actor.PublicSigningAddress}: {response.ErrorMessage}");
         return response;
+    }
+
+    private async Task CreateReportAccessGrantViaBlockchainAsync(TestIdentity designatedAuditor)
+    {
+        var signedTransaction = TestTransactionFactory.CreateElectionReportAccessGrant(
+            GetOwner(),
+            new ElectionId(Guid.Parse(GetElectionId())),
+            designatedAuditor.PublicSigningAddress);
+        using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
+
+        var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
+        {
+            SignedTransaction = signedTransaction,
+        });
+
+        submitResponse.Successfull.Should().BeTrue(
+            $"designated auditor grant transaction should be accepted: {submitResponse.Message}");
+        _lastSubmitTransactionResponse = submitResponse;
+        await waiter.WaitAsync();
+        await GetBlockControl().ProduceBlockAsync();
     }
 
     private async Task<byte[]> BuildExpectedFrozenEligibleVoterSetHashAsync()
@@ -2141,6 +2217,7 @@ public sealed class ElectionLifecycleIntegrationSteps
             "delta" => Delta,
             "echo" => Echo,
             "foxtrot" => Foxtrot,
+            "guest" => Guest,
             _ => throw new ArgumentOutOfRangeException(nameof(alias), alias, "Unsupported test identity alias."),
         };
 

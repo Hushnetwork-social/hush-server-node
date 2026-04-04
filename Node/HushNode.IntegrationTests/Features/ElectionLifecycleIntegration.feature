@@ -255,3 +255,39 @@ Feature: FEAT-094 election lifecycle integration
     Then the governed proposal should execute and transition the election to "Finalized"
     And the official result should copy the unofficial result for actor "Alice"
     And the boundary artifacts should include open, close, and finalize records
+
+  @FEAT-102 @FEAT-103 @AT-SURFACE-I03 @NON_E2E
+  Scenario: Finalization seals downloadable owner documents and exposes the audit package to designated auditors
+    Given FEAT-094 election integration services are available
+    And the owner has an open trustee-threshold election through governed approval blockchain submission
+    When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
+    And voter "Alice" registers voting commitment "alice-commitment-feat102-package-v1" through blockchain submission
+    And voter "Alice" submits ballot cast with idempotency key "alice-feat102-package-001" through blockchain submission
+    And the owner starts an "close" governed proposal through blockchain submission
+    And trustee "Bob" approves the governed proposal through blockchain submission
+    And trustee "Charlie" approves the governed proposal through blockchain submission
+    And trustee "Delta" approves the governed proposal through blockchain submission
+    Then the governed proposal should execute and transition the election to "Closed"
+    And the election closed progress status should be "ClosedProgressWaitingForTrusteeShares"
+    And the close workflow should open a bound close-counting session while the election stays "Closed"
+    When trustee "Bob" submits a bound finalization share through blockchain submission
+    And trustee "Charlie" submits a bound finalization share through blockchain submission
+    And trustee "Delta" submits a bound finalization share through blockchain submission
+    Then the election should expose a tally-ready boundary after close drain
+    And the election result view for actor "Alice" should expose participant-encrypted unofficial results
+    When the owner starts an "finalize" governed proposal through blockchain submission
+    Then the governed proposal should remain pending for "finalize" while the election stays "Closed"
+    When trustee "Bob" approves the governed proposal through blockchain submission
+    And trustee "Charlie" approves the governed proposal through blockchain submission
+    And trustee "Delta" approves the governed proposal through blockchain submission
+    Then the governed proposal should execute and transition the election to "Finalized"
+    And the official result should copy the unofficial result for actor "Alice"
+    When the owner grants designated auditor access to actor "Guest" through blockchain submission
+    Then the election result view for actor "Alice" should expose a sealed report package with 13 downloadable artifacts
+    And the visible report artifacts should include the named participation roster artifacts
+    And the visible report artifacts should include the audit provenance artifact
+    And the visible report artifacts should all include downloadable content
+    And the election result view for actor "Guest" should expose a sealed report package with 13 downloadable artifacts
+    And the visible report artifacts should include the named participation roster artifacts
+    And the visible report artifacts should include the audit provenance artifact
+    And the visible report artifacts should all include downloadable content

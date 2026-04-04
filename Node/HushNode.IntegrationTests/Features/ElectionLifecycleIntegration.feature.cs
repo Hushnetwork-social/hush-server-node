@@ -15,7 +15,7 @@ namespace HushNode.IntegrationTests.Features
     using TechTalk.SpecFlow;
     using System;
     using System.Linq;
-    
+
     
     [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
     [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
@@ -1225,6 +1225,152 @@ namespace HushNode.IntegrationTests.Features
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Finalization seals downloadable owner documents and exposes the audit package to " +
+            "designated auditors")]
+        [Xunit.TraitAttribute("FeatureTitle", "FEAT-094 election lifecycle integration")]
+        [Xunit.TraitAttribute("Description", "Finalization seals downloadable owner documents and exposes the audit package to " +
+            "designated auditors")]
+        [Xunit.TraitAttribute("Category", "FEAT-102")]
+        [Xunit.TraitAttribute("Category", "FEAT-103")]
+        [Xunit.TraitAttribute("Category", "AT-SURFACE-I03")]
+        [Xunit.TraitAttribute("Category", "NON_E2E")]
+        public void FinalizationSealsDownloadableOwnerDocumentsAndExposesTheAuditPackageToDesignatedAuditors()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "FEAT-102",
+                    "FEAT-103",
+                    "AT-SURFACE-I03",
+                    "NON_E2E"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Finalization seals downloadable owner documents and exposes the audit package to " +
+                    "designated auditors", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 260
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 261
+    testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 262
+    testRunner.And("the owner has an open trustee-threshold election through governed approval blockc" +
+                        "hain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 263
+    testRunner.When("voter \"Alice\" claims roster entry \"voter-alice\" with temporary verification code " +
+                        "through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 264
+    testRunner.And("voter \"Alice\" registers voting commitment \"alice-commitment-feat102-package-v1\" t" +
+                        "hrough blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 265
+    testRunner.And("voter \"Alice\" submits ballot cast with idempotency key \"alice-feat102-package-001" +
+                        "\" through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 266
+    testRunner.And("the owner starts an \"close\" governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 267
+    testRunner.And("trustee \"Bob\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 268
+    testRunner.And("trustee \"Charlie\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 269
+    testRunner.And("trustee \"Delta\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 270
+    testRunner.Then("the governed proposal should execute and transition the election to \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 271
+    testRunner.And("the election closed progress status should be \"ClosedProgressWaitingForTrusteeSha" +
+                        "res\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 272
+    testRunner.And("the close workflow should open a bound close-counting session while the election " +
+                        "stays \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 273
+    testRunner.When("trustee \"Bob\" submits a bound finalization share through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 274
+    testRunner.And("trustee \"Charlie\" submits a bound finalization share through blockchain submissio" +
+                        "n", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 275
+    testRunner.And("trustee \"Delta\" submits a bound finalization share through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 276
+    testRunner.Then("the election should expose a tally-ready boundary after close drain", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 277
+    testRunner.And("the election result view for actor \"Alice\" should expose participant-encrypted un" +
+                        "official results", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 278
+    testRunner.When("the owner starts an \"finalize\" governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 279
+    testRunner.Then("the governed proposal should remain pending for \"finalize\" while the election sta" +
+                        "ys \"Closed\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 280
+    testRunner.When("trustee \"Bob\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 281
+    testRunner.And("trustee \"Charlie\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 282
+    testRunner.And("trustee \"Delta\" approves the governed proposal through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 283
+    testRunner.Then("the governed proposal should execute and transition the election to \"Finalized\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 284
+    testRunner.And("the official result should copy the unofficial result for actor \"Alice\"", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 285
+    testRunner.When("the owner grants designated auditor access to actor \"Guest\" through blockchain su" +
+                        "bmission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 286
+    testRunner.Then("the election result view for actor \"Alice\" should expose a sealed report package " +
+                        "with 13 downloadable artifacts", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 287
+    testRunner.And("the visible report artifacts should include the named participation roster artifa" +
+                        "cts", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 288
+    testRunner.And("the visible report artifacts should include the audit provenance artifact", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 289
+    testRunner.And("the visible report artifacts should all include downloadable content", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 290
+    testRunner.And("the election result view for actor \"Guest\" should expose a sealed report package " +
+                        "with 13 downloadable artifacts", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 291
+    testRunner.And("the visible report artifacts should include the named participation roster artifa" +
+                        "cts", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 292
+    testRunner.And("the visible report artifacts should include the audit provenance artifact", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 293
+    testRunner.And("the visible report artifacts should all include downloadable content", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable
