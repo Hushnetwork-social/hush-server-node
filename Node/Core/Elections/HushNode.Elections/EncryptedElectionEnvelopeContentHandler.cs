@@ -335,6 +335,19 @@ public class EncryptedElectionEnvelopeContentHandler(
             return false;
         }
 
+        if (!ElectionDevModePrivacyGuard.TryValidateCommitmentRegistration(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                registerAction.ActorPublicAddress,
+                registerAction.CommitmentHash,
+                out var commitmentValidationError))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_commitment_validation_failed",
+                commitmentValidationError);
+            return false;
+        }
+
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
@@ -454,6 +467,21 @@ public class EncryptedElectionEnvelopeContentHandler(
                 transactionId,
                 "election_cast_validation_failed",
                 "The final cast request is missing one or more required FEAT-099 acceptance fields.");
+            return false;
+        }
+
+        if (!ElectionDevModePrivacyGuard.TryValidateAcceptedBallotArtifacts(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                acceptAction.ActorPublicAddress,
+                acceptAction.EncryptedBallotPackage,
+                acceptAction.ProofBundle,
+                acceptAction.BallotNullifier,
+                out var castPrivacyValidationError))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_validation_failed",
+                castPrivacyValidationError);
             return false;
         }
 

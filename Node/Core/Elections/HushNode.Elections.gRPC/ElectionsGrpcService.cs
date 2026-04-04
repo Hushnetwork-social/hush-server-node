@@ -1,6 +1,7 @@
 using Grpc.Core;
 using HushNetwork.proto;
 using Microsoft.Extensions.Logging;
+using System.Collections.Generic;
 using Domain = HushNode.Elections;
 using Proto = HushNetwork.proto;
 
@@ -185,6 +186,15 @@ public class ElectionsGrpcService(
 
     public override async Task<GetElectionHubViewResponse> GetElectionHubView(GetElectionHubViewRequest request, ServerCallContext context)
     {
+        ValidateSignedQuery(
+            nameof(GetElectionHubView),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+            },
+            context);
+
         try
         {
             return await _queryApplicationService.GetElectionHubViewAsync(request.ActorPublicAddress);
@@ -200,12 +210,25 @@ public class ElectionsGrpcService(
         SearchElectionDirectoryRequest request,
         ServerCallContext context)
     {
+        ValidateSignedQuery(
+            nameof(SearchElectionDirectory),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["SearchTerm"] = request.SearchTerm,
+                ["OwnerPublicAddresses"] = request.OwnerPublicAddresses,
+                ["Limit"] = request.Limit,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+            },
+            context);
+
         try
         {
             return await _queryApplicationService.SearchElectionDirectoryAsync(
                 request.SearchTerm,
                 request.OwnerPublicAddresses,
-                request.Limit);
+                request.Limit,
+                request.ActorPublicAddress);
         }
         catch (Exception ex)
         {
@@ -218,6 +241,16 @@ public class ElectionsGrpcService(
         GetElectionEligibilityViewRequest request,
         ServerCallContext context)
     {
+        ValidateSignedQuery(
+            nameof(GetElectionEligibilityView),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+            },
+            context);
+
         try
         {
             return await _queryApplicationService.GetElectionEligibilityViewAsync(
@@ -239,6 +272,17 @@ public class ElectionsGrpcService(
         GetElectionVotingViewRequest request,
         ServerCallContext context)
     {
+        ValidateSignedQuery(
+            nameof(GetElectionVotingView),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+                ["SubmissionIdempotencyKey"] = request.SubmissionIdempotencyKey,
+            },
+            context);
+
         try
         {
             return await _queryApplicationService.GetElectionVotingViewAsync(
@@ -261,6 +305,19 @@ public class ElectionsGrpcService(
         VerifyElectionReceiptRequest request,
         ServerCallContext context)
     {
+        ValidateSignedQuery(
+            nameof(VerifyElectionReceipt),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+                ["ReceiptId"] = request.ReceiptId,
+                ["AcceptanceId"] = request.AcceptanceId,
+                ["ServerProof"] = request.ServerProof,
+            },
+            context);
+
         try
         {
             return await _queryApplicationService.VerifyElectionReceiptAsync(
@@ -283,6 +340,16 @@ public class ElectionsGrpcService(
 
     public override async Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest request, ServerCallContext context)
     {
+        ValidateSignedQuery(
+            nameof(GetElectionEnvelopeAccess),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+            },
+            context);
+
         try
         {
             return await _queryApplicationService.GetElectionEnvelopeAccessAsync(
@@ -302,6 +369,16 @@ public class ElectionsGrpcService(
 
     public override async Task<GetElectionResultViewResponse> GetElectionResultView(GetElectionResultViewRequest request, ServerCallContext context)
     {
+        ValidateSignedQuery(
+            nameof(GetElectionResultView),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+            },
+            context);
+
         try
         {
             return await _queryApplicationService.GetElectionResultViewAsync(
@@ -323,6 +400,16 @@ public class ElectionsGrpcService(
         GetElectionReportAccessGrantsRequest request,
         ServerCallContext context)
     {
+        ValidateSignedQuery(
+            nameof(GetElectionReportAccessGrants),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+            },
+            context);
+
         try
         {
             return await _queryApplicationService.GetElectionReportAccessGrantsAsync(
@@ -342,6 +429,16 @@ public class ElectionsGrpcService(
 
     public override async Task<GetElectionCeremonyActionViewResponse> GetElectionCeremonyActionView(GetElectionCeremonyActionViewRequest request, ServerCallContext context)
     {
+        ValidateSignedQuery(
+            nameof(GetElectionCeremonyActionView),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+            },
+            context);
+
         try
         {
             return await _queryApplicationService.GetElectionCeremonyActionViewAsync(
@@ -361,6 +458,15 @@ public class ElectionsGrpcService(
 
     public override async Task<GetElectionsByOwnerResponse> GetElectionsByOwner(GetElectionsByOwnerRequest request, ServerCallContext context)
     {
+        ValidateSignedQuery(
+            nameof(GetElectionsByOwner),
+            request.OwnerPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["OwnerPublicAddress"] = request.OwnerPublicAddress,
+            },
+            context);
+
         try
         {
             return await _queryApplicationService.GetElectionsByOwnerAsync(request.OwnerPublicAddress);
@@ -371,5 +477,12 @@ public class ElectionsGrpcService(
             throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch elections by owner."));
         }
     }
+
+    private static void ValidateSignedQuery(
+        string method,
+        string actorAddress,
+        IReadOnlyDictionary<string, object?> request,
+        ServerCallContext context) =>
+        ElectionQueryRequestAuthValidator.ValidateOrThrow(method, actorAddress, request, context);
 
 }

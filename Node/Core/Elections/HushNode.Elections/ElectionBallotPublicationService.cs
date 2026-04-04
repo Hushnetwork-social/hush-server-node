@@ -2,6 +2,7 @@ using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using HushNode.Caching;
 using HushNode.Elections.Storage;
 using HushNode.Events;
@@ -24,6 +25,11 @@ public sealed class ElectionBallotPublicationService(
     IHandleAsync<BlockIndexCompletedEvent>
 {
     private static readonly JsonSerializerOptions ResultPayloadJsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions DevPublishedPayloadJsonOptions =
+        new(JsonSerializerDefaults.Web)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        };
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider = unitOfWorkProvider;
     private readonly IElectionBallotPublicationCryptoService _publicationCryptoService = publicationCryptoService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
@@ -87,6 +93,7 @@ public sealed class ElectionBallotPublicationService(
             var newlyPublishedBallots = new List<ElectionPublishedBallotRecord>(selectedEntries.Count);
             var nextSequence = await repository.GetNextPublishedBallotSequenceAsync(electionId);
             var publishedAt = DateTime.UtcNow;
+            var selectedAcceptedBallots = new List<(ElectionBallotMemPoolRecord Entry, ElectionAcceptedBallotRecord AcceptedBallot)>(selectedEntries.Count);
 
             foreach (var entry in selectedEntries)
             {
@@ -106,6 +113,14 @@ public sealed class ElectionBallotPublicationService(
                         _blockchainCache.CurrentBlockId.Value);
                     continue;
                 }
+
+                selectedAcceptedBallots.Add((entry, acceptedBallot));
+            }
+
+            foreach (var selection in ReorderSelectionsForPrivacy(selectedAcceptedBallots))
+            {
+                var entry = selection.Entry;
+                var acceptedBallot = selection.AcceptedBallot;
 
                 var publicationPayload = await PreparePublicationPayloadAsync(
                     repository,
@@ -203,6 +218,12 @@ public sealed class ElectionBallotPublicationService(
         long blockHeight,
         Guid blockId)
     {
+        var devModePayload = TryPrepareDevModePublicationPayload(acceptedBallot);
+        if (devModePayload is not null)
+        {
+            return devModePayload;
+        }
+
         var attempt = _publicationCryptoService.PrepareForPublication(
             acceptedBallot.EncryptedBallotPackage,
             acceptedBallot.ProofBundle);
@@ -238,6 +259,51 @@ public sealed class ElectionBallotPublicationService(
         return new PublicationPayload(
             acceptedBallot.EncryptedBallotPackage,
             acceptedBallot.ProofBundle);
+    }
+
+    private static PublicationPayload? TryPrepareDevModePublicationPayload(ElectionAcceptedBallotRecord acceptedBallot)
+    {
+        AdminOnlyDevModeBallotPackage? payload;
+        try
+        {
+            payload = JsonSerializer.Deserialize<AdminOnlyDevModeBallotPackage>(
+                acceptedBallot.EncryptedBallotPackage,
+                ResultPayloadJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        if (payload is null ||
+            !string.Equals(payload.Mode, "election-dev-mode-v1", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(payload.PackageType, "dev-protected-ballot", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(payload.ElectionId) ||
+            string.IsNullOrWhiteSpace(payload.OptionId) ||
+            string.IsNullOrWhiteSpace(payload.OptionLabel))
+        {
+            return null;
+        }
+
+        var publishedPackage = JsonSerializer.Serialize(
+            payload with
+            {
+                PackageType = "dev-published-ballot",
+                ActorPublicAddress = null,
+                SelectionFingerprint = null,
+                GeneratedAt = null,
+                PublicationNonce = Guid.NewGuid().ToString("N"),
+            },
+            DevPublishedPayloadJsonOptions);
+        var publishedProofBundle = JsonSerializer.Serialize(
+            new PublishedDevModeProofBundle(
+                Mode: "election-dev-mode-v1",
+                ProofType: "dev-publication-proof",
+                PublicationVariant: "plaintext-choice-projection",
+                PublishedBallotHash: ComputeHexSha256(publishedPackage)),
+            DevPublishedPayloadJsonOptions);
+
+        return new PublicationPayload(publishedPackage, publishedProofBundle);
     }
 
     private async Task TryAdvanceClosedElectionAsync(
@@ -361,20 +427,41 @@ public sealed class ElectionBallotPublicationService(
                 sourceBlockHeight: blockHeight,
                 sourceBlockId: blockId);
 
-            var unofficialResult = await TryCreateZeroBallotUnofficialResultAsync(
-                repository,
-                election,
-                acceptedBallots,
-                artifact,
-                recordedAt,
-                blockHeight,
-                blockId);
+            ElectionResultArtifactRecord? unofficialResult;
+            if (acceptedBallots.Count == 0)
+            {
+                unofficialResult = await TryCreateZeroBallotUnofficialResultAsync(
+                    repository,
+                    election,
+                    acceptedBallots,
+                    artifact,
+                    recordedAt,
+                    blockHeight,
+                    blockId);
+            }
+            else
+            {
+                unofficialResult = await TryCreateAdminOnlyDevModeUnofficialResultAsync(
+                    repository,
+                    election,
+                    artifact,
+                    publishedBallots,
+                    recordedAt,
+                    blockHeight,
+                    blockId);
+            }
+
             var updatedElection = election with
             {
                 LastUpdatedAt = recordedAt,
                 TallyReadyAt = recordedAt,
                 TallyReadyArtifactId = artifact.Id,
                 UnofficialResultArtifactId = unofficialResult?.Id,
+                ClosedProgressStatus = unofficialResult is null
+                    ? election.ClosedProgressStatus == ElectionClosedProgressStatus.None
+                        ? ElectionClosedProgressStatus.TallyCalculationInProgress
+                        : election.ClosedProgressStatus
+                    : ElectionClosedProgressStatus.None,
             };
 
             await repository.SaveBoundaryArtifactAsync(artifact);
@@ -538,7 +625,8 @@ public sealed class ElectionBallotPublicationService(
             return false;
         }
 
-        if (!TryBuildAdminOnlyDevModeResult(election, publishedBallots, out var devModeResult))
+        if (!TryBuildAdminOnlyDevModeResult(election, publishedBallots, out var devModeResult) ||
+            devModeResult is null)
         {
             return false;
         }
@@ -554,14 +642,10 @@ public sealed class ElectionBallotPublicationService(
             return false;
         }
 
-        var expectedDidNotVoteCount = closeSnapshot.ActiveDenominatorCount - devModeResult.TotalVotedCount;
-        if (expectedDidNotVoteCount < 0 ||
-            closeSnapshot.CountedParticipationCount != devModeResult.TotalVotedCount ||
-            closeSnapshot.BlankCount != devModeResult.BlankCount ||
-            closeSnapshot.DidNotVoteCount != expectedDidNotVoteCount)
+        if (!DoesCloseSnapshotReconcileWithAdminOnlyDevTurnout(closeSnapshot, devModeResult))
         {
             _logger.LogWarning(
-                "[ElectionBallotPublicationService] Admin-only dev result recovery could not run for election {ElectionId} because the close eligibility snapshot does not reconcile with the published ballots.",
+                "[ElectionBallotPublicationService] Admin-only dev result recovery could not run for election {ElectionId} because the close eligibility snapshot turnout totals do not reconcile with the published ballots.",
                 election.ElectionId);
             return false;
         }
@@ -634,6 +718,53 @@ public sealed class ElectionBallotPublicationService(
             ClosedProgressStatus = ElectionClosedProgressStatus.None,
         });
         return true;
+    }
+
+    private async Task<ElectionResultArtifactRecord?> TryCreateAdminOnlyDevModeUnofficialResultAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionBoundaryArtifactRecord tallyReadyArtifact,
+        IReadOnlyList<ElectionPublishedBallotRecord> publishedBallots,
+        DateTime recordedAt,
+        long? blockHeight,
+        Guid? blockId)
+    {
+        if (!TryBuildAdminOnlyDevModeResult(election, publishedBallots, out var devModeResult) ||
+            devModeResult is null)
+        {
+            return null;
+        }
+
+        var closeSnapshot = await repository.GetEligibilitySnapshotAsync(
+            election.ElectionId,
+            ElectionEligibilitySnapshotType.Close);
+        if (closeSnapshot is null)
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Admin-only close result publication could not run for election {ElectionId} because the close eligibility snapshot is unavailable.",
+                election.ElectionId);
+            return null;
+        }
+
+        if (!DoesCloseSnapshotReconcileWithAdminOnlyDevTurnout(closeSnapshot, devModeResult))
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Admin-only close result publication could not run for election {ElectionId} because the close eligibility snapshot turnout totals do not reconcile with the published ballots.",
+                election.ElectionId);
+            return null;
+        }
+
+        return await TryCreateParticipantEncryptedUnofficialResultAsync(
+            repository,
+            election,
+            tallyReadyArtifact,
+            devModeResult.NamedOptionResults,
+            devModeResult.BlankCount,
+            devModeResult.TotalVotedCount,
+            closeSnapshot,
+            recordedAt,
+            blockHeight,
+            blockId);
     }
 
     private async Task<ElectionResultArtifactRecord?> TryCreateParticipantEncryptedUnofficialResultAsync(
@@ -856,7 +987,7 @@ public sealed class ElectionBallotPublicationService(
 
             if (payload is null ||
                 !string.Equals(payload.Mode, "election-dev-mode-v1", StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(payload.PackageType, "dev-protected-ballot", StringComparison.OrdinalIgnoreCase) ||
+                !IsSupportedDevModeBallotPackageType(payload.PackageType) ||
                 string.IsNullOrWhiteSpace(payload.OptionId) ||
                 !string.Equals(payload.ElectionId, election.ElectionId.ToString(), StringComparison.OrdinalIgnoreCase) ||
                 !optionById.TryGetValue(payload.OptionId, out var option) ||
@@ -906,6 +1037,18 @@ public sealed class ElectionBallotPublicationService(
         return true;
     }
 
+    // Close snapshots bind turnout denominator evidence, not per-voter ballot choice.
+    // Blank-vote count must come from the anonymous tally/published ballot set instead.
+    private static bool DoesCloseSnapshotReconcileWithAdminOnlyDevTurnout(
+        ElectionEligibilitySnapshotRecord closeSnapshot,
+        AdminOnlyDevModeResult devModeResult)
+    {
+        var expectedDidNotVoteCount = closeSnapshot.ActiveDenominatorCount - devModeResult.TotalVotedCount;
+        return expectedDidNotVoteCount >= 0 &&
+               closeSnapshot.CountedParticipationCount == devModeResult.TotalVotedCount &&
+               closeSnapshot.DidNotVoteCount == expectedDidNotVoteCount;
+    }
+
     private int ResolvePublishCount(ElectionLifecycleState lifecycleState, int pendingCount)
     {
         if (lifecycleState == ElectionLifecycleState.Closed)
@@ -926,6 +1069,11 @@ public sealed class ElectionBallotPublicationService(
         IReadOnlyList<ElectionBallotMemPoolRecord> entries,
         int publishCount)
     {
+        if (publishCount >= entries.Count)
+        {
+            return entries.ToArray();
+        }
+
         var working = entries.ToList();
         var selected = new List<ElectionBallotMemPoolRecord>(publishCount);
         for (var index = 0; index < publishCount && working.Count > 0; index++)
@@ -937,6 +1085,38 @@ public sealed class ElectionBallotPublicationService(
 
         return selected;
     }
+
+    private static IReadOnlyList<(ElectionBallotMemPoolRecord Entry, ElectionAcceptedBallotRecord AcceptedBallot)> ReorderSelectionsForPrivacy(
+        IReadOnlyList<(ElectionBallotMemPoolRecord Entry, ElectionAcceptedBallotRecord AcceptedBallot)> selections)
+    {
+        if (selections.Count < 2)
+        {
+            return selections;
+        }
+
+        var acceptedOrderIds = selections
+            .OrderBy(x => x.AcceptedBallot.AcceptedAt)
+            .ThenBy(x => x.AcceptedBallot.Id)
+            .Select(x => x.AcceptedBallot.Id)
+            .ToArray();
+        var currentOrderIds = selections
+            .Select(x => x.AcceptedBallot.Id)
+            .ToArray();
+
+        if (!currentOrderIds.SequenceEqual(acceptedOrderIds))
+        {
+            return selections;
+        }
+
+        return selections
+            .Skip(1)
+            .Concat(selections.Take(1))
+            .ToArray();
+    }
+
+    private static bool IsSupportedDevModeBallotPackageType(string? packageType) =>
+        string.Equals(packageType, "dev-protected-ballot", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(packageType, "dev-published-ballot", StringComparison.OrdinalIgnoreCase);
 
     private static byte[] ComputeAcceptedBallotInventoryHash(
         IReadOnlyList<ElectionAcceptedBallotRecord> acceptedBallots)
@@ -1034,7 +1214,14 @@ public sealed class ElectionBallotPublicationService(
         int BallotOrder,
         bool IsBlankOption,
         string? SelectionFingerprint,
-        string? GeneratedAt);
+        string? GeneratedAt,
+        string? PublicationNonce);
+
+    private sealed record PublishedDevModeProofBundle(
+        string Mode,
+        string ProofType,
+        string PublicationVariant,
+        string PublishedBallotHash);
 
     private sealed record AdminOnlyDevModeResult(
         IReadOnlyList<ElectionResultOptionCount> NamedOptionResults,

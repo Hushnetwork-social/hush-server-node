@@ -6,6 +6,8 @@ using HushShared.Elections.Model;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.AutoMock;
+using Olimpo;
+using System.Text.Json;
 using Xunit;
 using Domain = HushNode.Elections;
 using Proto = HushNetwork.proto;
@@ -14,6 +16,11 @@ namespace HushServerNode.Tests.Elections;
 
 public class ElectionsGrpcServiceTests
 {
+    private const string TestSigningPrivateKey =
+        "1111111111111111111111111111111111111111111111111111111111111111";
+    private static readonly string TestActorPublicAddress =
+        DigitalSignature.GetCompressedPublicAddress(TestSigningPrivateKey);
+
     [Fact]
     public async Task CreateElectionDraft_RejectsDirectCommandPath()
     {
@@ -272,12 +279,12 @@ public class ElectionsGrpcServiceTests
         mocker.GetMock<IElectionQueryApplicationService>()
             .Setup(x => x.GetElectionCeremonyActionViewAsync(
                 electionId,
-                "trustee-a"))
+                TestActorPublicAddress))
             .ReturnsAsync(new GetElectionCeremonyActionViewResponse
             {
                 Success = true,
                 ActorRole = ElectionCeremonyActorRoleProto.CeremonyActorTrustee,
-                ActorPublicAddress = "trustee-a",
+                ActorPublicAddress = TestActorPublicAddress,
                 PendingIncomingMessageCount = 1,
                 ActiveCeremonyVersion = new ElectionCeremonyVersion
                 {
@@ -299,8 +306,15 @@ public class ElectionsGrpcServiceTests
         var response = await sut.GetElectionCeremonyActionView(new GetElectionCeremonyActionViewRequest
         {
             ElectionId = electionId.ToString(),
-            ActorPublicAddress = "trustee-a",
-        }, CreateMockServerCallContext());
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionCeremonyActionView),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+            }));
 
         // Assert
         response.Success.Should().BeTrue();
@@ -319,12 +333,12 @@ public class ElectionsGrpcServiceTests
         mocker.GetMock<IElectionQueryApplicationService>()
             .Setup(x => x.GetElectionEligibilityViewAsync(
                 electionId,
-                "voter-address"))
+                TestActorPublicAddress))
             .ReturnsAsync(new GetElectionEligibilityViewResponse
             {
                 Success = true,
                 ActorRole = ElectionEligibilityActorRoleProto.EligibilityActorLinkedVoter,
-                ActorPublicAddress = "voter-address",
+                ActorPublicAddress = TestActorPublicAddress,
                 UsesTemporaryVerificationCode = true,
                 TemporaryVerificationCode = "1111",
                 Summary = new ElectionEligibilitySummaryView
@@ -345,8 +359,15 @@ public class ElectionsGrpcServiceTests
         var response = await sut.GetElectionEligibilityView(new GetElectionEligibilityViewRequest
         {
             ElectionId = electionId.ToString(),
-            ActorPublicAddress = "voter-address",
-        }, CreateMockServerCallContext());
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionEligibilityView),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+            }));
 
         response.Success.Should().BeTrue();
         response.ActorRole.Should().Be(ElectionEligibilityActorRoleProto.EligibilityActorLinkedVoter);
@@ -363,11 +384,11 @@ public class ElectionsGrpcServiceTests
         var electionId = ElectionId.NewElectionId;
 
         mocker.GetMock<IElectionQueryApplicationService>()
-            .Setup(x => x.GetElectionHubViewAsync("actor-address"))
+            .Setup(x => x.GetElectionHubViewAsync(TestActorPublicAddress))
             .ReturnsAsync(new GetElectionHubViewResponse
             {
                 Success = true,
-                ActorPublicAddress = "actor-address",
+                ActorPublicAddress = TestActorPublicAddress,
                 HasAnyElectionRoles = true,
                 Elections =
                 {
@@ -391,15 +412,39 @@ public class ElectionsGrpcServiceTests
 
         var response = await sut.GetElectionHubView(new GetElectionHubViewRequest
         {
-            ActorPublicAddress = "actor-address",
-        }, CreateMockServerCallContext());
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionHubView),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+            }));
 
         response.Success.Should().BeTrue();
-        response.ActorPublicAddress.Should().Be("actor-address");
+        response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
         response.HasAnyElectionRoles.Should().BeTrue();
         response.Elections.Should().ContainSingle();
         response.Elections[0].Election.Title.Should().Be("Board Election");
         response.Elections[0].SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionOwnerManageDraft);
+    }
+
+    [Fact]
+    public async Task SearchElectionDirectory_WithoutSignedHeaders_RejectsQuery()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var act = async () => await sut.SearchElectionDirectory(new SearchElectionDirectoryRequest
+        {
+            SearchTerm = "alice",
+            Limit = 12,
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.Unauthenticated);
+        exception.Which.Status.Detail.Should().Contain("requires signed actor-bound headers");
     }
 
     [Fact]
@@ -413,11 +458,13 @@ public class ElectionsGrpcServiceTests
                 "alice",
                 It.Is<IReadOnlyCollection<string>>(addresses =>
                     addresses.Count == 1 && addresses.Contains("owner-address")),
-                12))
+                12,
+                TestActorPublicAddress))
             .ReturnsAsync(new SearchElectionDirectoryResponse
             {
                 Success = true,
                 SearchTerm = "alice",
+                ActorPublicAddress = TestActorPublicAddress,
                 Elections =
                 {
                     new ElectionSummary
@@ -425,6 +472,24 @@ public class ElectionsGrpcServiceTests
                         ElectionId = electionId.ToString(),
                         Title = "Board Election",
                         OwnerPublicAddress = "owner-address",
+                    },
+                },
+                Entries =
+                {
+                    new SearchElectionDirectoryEntryView
+                    {
+                        Election = new ElectionSummary
+                        {
+                            ElectionId = electionId.ToString(),
+                            Title = "Board Election",
+                            OwnerPublicAddress = "owner-address",
+                        },
+                        ActorRoles = new ElectionApplicationRoleFlagsView
+                        {
+                            IsVoter = true,
+                        },
+                        CanOpenEligibility = false,
+                        EligibilityDisabledReason = "This election is already linked to this Hush account.",
                     },
                 },
             });
@@ -436,13 +501,27 @@ public class ElectionsGrpcServiceTests
             SearchTerm = "alice",
             Limit = 12,
             OwnerPublicAddresses = { "owner-address" },
-        }, CreateMockServerCallContext());
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.SearchElectionDirectory),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["SearchTerm"] = "alice",
+                ["OwnerPublicAddresses"] = new[] { "owner-address" },
+                ["Limit"] = 12,
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+            }));
 
         response.Success.Should().BeTrue();
         response.SearchTerm.Should().Be("alice");
+        response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
         response.Elections.Should().ContainSingle();
         response.Elections[0].ElectionId.Should().Be(electionId.ToString());
         response.Elections[0].Title.Should().Be("Board Election");
+        response.Entries.Should().ContainSingle();
+        response.Entries[0].ActorRoles.IsVoter.Should().BeTrue();
+        response.Entries[0].CanOpenEligibility.Should().BeFalse();
     }
 
     [Fact]
@@ -454,12 +533,12 @@ public class ElectionsGrpcServiceTests
         mocker.GetMock<IElectionQueryApplicationService>()
             .Setup(x => x.GetElectionVotingViewAsync(
                 electionId,
-                "voter-address",
+                TestActorPublicAddress,
                 "cast-key-1"))
             .ReturnsAsync(new GetElectionVotingViewResponse
             {
                 Success = true,
-                ActorPublicAddress = "voter-address",
+                ActorPublicAddress = TestActorPublicAddress,
                 CommitmentRegistered = true,
                 PersonalParticipationStatus = ElectionParticipationStatusProto.ParticipationCountedAsVoted,
                 SubmissionStatus = ElectionVotingSubmissionStatusProto.VotingSubmissionStatusAlreadyUsed,
@@ -473,12 +552,20 @@ public class ElectionsGrpcServiceTests
         var response = await sut.GetElectionVotingView(new GetElectionVotingViewRequest
         {
             ElectionId = electionId.ToString(),
-            ActorPublicAddress = "voter-address",
+            ActorPublicAddress = TestActorPublicAddress,
             SubmissionIdempotencyKey = "cast-key-1",
-        }, CreateMockServerCallContext());
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionVotingView),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+                ["SubmissionIdempotencyKey"] = "cast-key-1",
+            }));
 
         response.Success.Should().BeTrue();
-        response.ActorPublicAddress.Should().Be("voter-address");
+        response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
         response.CommitmentRegistered.Should().BeTrue();
         response.PersonalParticipationStatus.Should().Be(ElectionParticipationStatusProto.ParticipationCountedAsVoted);
         response.SubmissionStatus.Should().Be(ElectionVotingSubmissionStatusProto.VotingSubmissionStatusAlreadyUsed);
@@ -495,14 +582,14 @@ public class ElectionsGrpcServiceTests
         mocker.GetMock<IElectionQueryApplicationService>()
             .Setup(x => x.VerifyElectionReceiptAsync(
                 electionId,
-                "voter-address",
+                TestActorPublicAddress,
                 "receipt-1",
                 "acceptance-1",
                 "proof-1"))
             .ReturnsAsync(new VerifyElectionReceiptResponse
             {
                 Success = true,
-                ActorPublicAddress = "voter-address",
+                ActorPublicAddress = TestActorPublicAddress,
                 ElectionId = electionId.ToString(),
                 LifecycleState = ElectionLifecycleStateProto.Open,
                 HasAcceptedCheckoff = true,
@@ -519,14 +606,24 @@ public class ElectionsGrpcServiceTests
         var response = await sut.VerifyElectionReceipt(new VerifyElectionReceiptRequest
         {
             ElectionId = electionId.ToString(),
-            ActorPublicAddress = "voter-address",
+            ActorPublicAddress = TestActorPublicAddress,
             ReceiptId = "receipt-1",
             AcceptanceId = "acceptance-1",
             ServerProof = "proof-1",
-        }, CreateMockServerCallContext());
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.VerifyElectionReceipt),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+                ["ReceiptId"] = "receipt-1",
+                ["AcceptanceId"] = "acceptance-1",
+                ["ServerProof"] = "proof-1",
+            }));
 
         response.Success.Should().BeTrue();
-        response.ActorPublicAddress.Should().Be("voter-address");
+        response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
         response.ElectionId.Should().Be(electionId.ToString());
         response.HasAcceptedCheckoff.Should().BeTrue();
         response.ReceiptMatchesAcceptedCheckoff.Should().BeTrue();
@@ -537,17 +634,105 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task GetElectionEnvelopeAccess_WithoutSignedHeaders_RejectsQuery()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var electionId = ElectionId.NewElectionId;
+
+        var act = async () => await sut.GetElectionEnvelopeAccess(new GetElectionEnvelopeAccessRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.Unauthenticated);
+        exception.Which.Status.Detail.Should().Contain("requires signed actor-bound headers");
+    }
+
+    [Fact]
+    public async Task GetElectionEnvelopeAccess_WithValidRequest_ReturnsEnvelopeAccessPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionEnvelopeAccessAsync(electionId, TestActorPublicAddress))
+            .ReturnsAsync(new GetElectionEnvelopeAccessResponse
+            {
+                Success = true,
+                ActorEncryptedElectionPrivateKey = "actor-private-key-wrap",
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionEnvelopeAccess(new GetElectionEnvelopeAccessRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionEnvelopeAccess),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+            }));
+
+        response.Success.Should().BeTrue();
+        response.ActorEncryptedElectionPrivateKey.Should().Be("actor-private-key-wrap");
+    }
+
+    [Fact]
+    public async Task GetElectionResultView_WithValidRequest_ReturnsResultPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionResultViewAsync(electionId, TestActorPublicAddress))
+            .ReturnsAsync(new GetElectionResultViewResponse
+            {
+                Success = true,
+                ActorPublicAddress = TestActorPublicAddress,
+                CanViewParticipantEncryptedResults = true,
+                CanViewReportPackage = false,
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionResultView(new GetElectionResultViewRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionResultView),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+            }));
+
+        response.Success.Should().BeTrue();
+        response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
+        response.CanViewParticipantEncryptedResults.Should().BeTrue();
+        response.CanViewReportPackage.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task GetElectionReportAccessGrants_WithValidRequest_ReturnsGrantPayload()
     {
         var mocker = new AutoMocker();
         var electionId = ElectionId.NewElectionId;
 
         mocker.GetMock<IElectionQueryApplicationService>()
-            .Setup(x => x.GetElectionReportAccessGrantsAsync(electionId, "owner-address"))
+            .Setup(x => x.GetElectionReportAccessGrantsAsync(electionId, TestActorPublicAddress))
             .ReturnsAsync(new GetElectionReportAccessGrantsResponse
             {
                 Success = true,
-                ActorPublicAddress = "owner-address",
+                ActorPublicAddress = TestActorPublicAddress,
                 CanManageGrants = true,
                 Grants =
                 {
@@ -566,13 +751,57 @@ public class ElectionsGrpcServiceTests
         var response = await sut.GetElectionReportAccessGrants(new GetElectionReportAccessGrantsRequest
         {
             ElectionId = electionId.ToString(),
-            ActorPublicAddress = "owner-address",
-        }, CreateMockServerCallContext());
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionReportAccessGrants),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+            }));
 
         response.Success.Should().BeTrue();
         response.CanManageGrants.Should().BeTrue();
         response.Grants.Should().ContainSingle();
         response.Grants[0].ActorPublicAddress.Should().Be("auditor-address");
+    }
+
+    [Fact]
+    public async Task GetElectionsByOwner_WithValidRequest_ReturnsOwnerScopedPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionsByOwnerAsync(TestActorPublicAddress))
+            .ReturnsAsync(new GetElectionsByOwnerResponse
+            {
+                Elections =
+                {
+                    new ElectionSummary
+                    {
+                        ElectionId = electionId.ToString(),
+                        Title = "Owned Election",
+                    },
+                },
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionsByOwner(new GetElectionsByOwnerRequest
+        {
+            OwnerPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionsByOwner),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["OwnerPublicAddress"] = TestActorPublicAddress,
+            }));
+
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].Title.Should().Be("Owned Election");
     }
 
     [Fact]
@@ -784,15 +1013,57 @@ public class ElectionsGrpcServiceTests
             requiredApprovalCount: 2);
 
     private static ServerCallContext CreateMockServerCallContext() => new TestServerCallContext();
+
+    private static ServerCallContext CreateSignedServerCallContext(
+        string method,
+        string actorAddress,
+        IReadOnlyDictionary<string, object?> request)
+    {
+        var signedAt = DateTimeOffset.UtcNow.ToString("O");
+        var payload = BuildSignedPayload(method, actorAddress, signedAt, request);
+        var requestHeaders = new Metadata
+        {
+            { "x-hush-election-query-signatory", actorAddress },
+            { "x-hush-election-query-signed-at", signedAt },
+            { "x-hush-election-query-signature", DigitalSignature.SignMessageCompactBase64(payload, TestSigningPrivateKey) },
+        };
+
+        return new TestServerCallContext(requestHeaders);
+    }
+
+    private static string BuildSignedPayload(
+        string method,
+        string actorAddress,
+        string signedAt,
+        IReadOnlyDictionary<string, object?> request)
+    {
+        var payload = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["actorAddress"] = actorAddress,
+            ["method"] = method,
+            ["request"] = request.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .ToDictionary(x => x.Key, x => x.Value),
+            ["signedAt"] = signedAt,
+        };
+
+        return JsonSerializer.Serialize(payload);
+    }
 }
 
 public class TestServerCallContext : ServerCallContext
 {
+    private readonly Metadata _requestHeaders;
+
+    public TestServerCallContext(Metadata? requestHeaders = null)
+    {
+        _requestHeaders = requestHeaders ?? new Metadata();
+    }
+
     protected override string MethodCore => "TestMethod";
     protected override string HostCore => "TestHost";
     protected override string PeerCore => "TestPeer";
     protected override DateTime DeadlineCore => DateTime.MaxValue;
-    protected override Metadata RequestHeadersCore => new();
+    protected override Metadata RequestHeadersCore => _requestHeaders;
     protected override CancellationToken CancellationTokenCore => CancellationToken.None;
     protected override Metadata ResponseTrailersCore => new();
     protected override Status StatusCore { get; set; }

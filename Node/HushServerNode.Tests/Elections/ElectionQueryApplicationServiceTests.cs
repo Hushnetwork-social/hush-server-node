@@ -338,6 +338,12 @@ public class ElectionQueryApplicationServiceTests
                         addresses.Count == 1 && addresses.Contains("owner-address")),
                     12))
                 .ReturnsAsync(elections);
+            repo.Setup(x => x.GetRosterEntriesByLinkedActorAsync("search-actor"))
+                .ReturnsAsync(Array.Empty<ElectionRosterEntryRecord>());
+            repo.Setup(x => x.GetReportAccessGrantsByActorAsync("search-actor"))
+                .ReturnsAsync(Array.Empty<ElectionReportAccessGrantRecord>());
+            repo.Setup(x => x.GetAcceptedTrusteeInvitationsByActorAsync("search-actor"))
+                .ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
         });
 
         var sut = CreateQueryService(mocker);
@@ -345,12 +351,16 @@ public class ElectionQueryApplicationServiceTests
         var response = await sut.SearchElectionDirectoryAsync(
             "  board  ",
             ["owner-address", "owner-address", " "],
-            12);
+            12,
+            "search-actor");
 
         response.Success.Should().BeTrue();
         response.ErrorMessage.Should().BeEmpty();
         response.SearchTerm.Should().Be("board");
+        response.ActorPublicAddress.Should().Be("search-actor");
         response.Elections.Select(x => x.Title).Should().Equal("Board Election", "Budget Election");
+        response.Entries.Should().HaveCount(2);
+        response.Entries.Should().OnlyContain(x => x.CanOpenEligibility);
     }
 
     [Fact]
@@ -362,14 +372,95 @@ public class ElectionQueryApplicationServiceTests
 
         var sut = CreateQueryService(mocker);
 
-        var response = await sut.SearchElectionDirectoryAsync("   ", [" ", ""], 20);
+        var response = await sut.SearchElectionDirectoryAsync("   ", [" ", ""], 20, "search-actor");
 
         response.Success.Should().BeTrue();
         response.ErrorMessage.Should().BeEmpty();
         response.SearchTerm.Should().BeEmpty();
+        response.ActorPublicAddress.Should().Be("search-actor");
         response.Elections.Should().BeEmpty();
         mocker.GetMock<IElectionsRepository>()
             .Verify(x => x.SearchElectionsAsync(It.IsAny<string>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SearchElectionDirectoryAsync_WithActorRolesAndFinalizedElection_ReturnsRoleBadgesAndExpectedEligibilityRules()
+    {
+        var mocker = new AutoMocker();
+        var linkedFinalizedElection = CreateAdminElection(title: "Linked Finalized Election") with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+        };
+        var ownerClaimableElection = CreateAdminElection(title: "Owner Claimable Election") with
+        {
+            OwnerPublicAddress = "actor-address",
+        };
+        var unlinkedFinalizedElection = CreateAdminElection(title: "Unlinked Finalized Election") with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+        };
+        var auditorElection = CreateAdminElection(title: "Auditor Election");
+        var claimableElection = CreateAdminElection(title: "Claimable Election");
+        var voterRosterEntry = ElectionModelFactory.CreateRosterEntry(
+                linkedFinalizedElection.ElectionId,
+                "1001",
+                ElectionRosterContactType.Email,
+                "voter@example.org",
+                ElectionVotingRightStatus.Active)
+            .LinkToActor("actor-address", DateTime.UtcNow);
+        var auditorGrant = ElectionModelFactory.CreateReportAccessGrant(
+            auditorElection.ElectionId,
+            "owner-address",
+            "actor-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.SearchElectionsAsync(
+                    "admin",
+                    It.IsAny<IReadOnlyCollection<string>>(),
+                    12))
+                .ReturnsAsync([linkedFinalizedElection, ownerClaimableElection, unlinkedFinalizedElection, auditorElection, claimableElection]);
+            repo.Setup(x => x.GetRosterEntriesByLinkedActorAsync("actor-address"))
+                .ReturnsAsync([voterRosterEntry]);
+            repo.Setup(x => x.GetReportAccessGrantsByActorAsync("actor-address"))
+                .ReturnsAsync([auditorGrant]);
+            repo.Setup(x => x.GetAcceptedTrusteeInvitationsByActorAsync("actor-address"))
+                .ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.SearchElectionDirectoryAsync("admin", Array.Empty<string>(), 12, "actor-address");
+
+        response.Entries.Should().HaveCount(5);
+
+        var linkedFinalizedEntry = response.Entries.Single(x => x.Election.Title == "Linked Finalized Election");
+        linkedFinalizedEntry.ActorRoles.IsVoter.Should().BeTrue();
+        linkedFinalizedEntry.CanOpenEligibility.Should().BeFalse();
+        linkedFinalizedEntry.EligibilityDisabledReason.Should().Be("This election is already linked to this Hush account.");
+
+        var ownerClaimableEntry = response.Entries.Single(x => x.Election.Title == "Owner Claimable Election");
+        ownerClaimableEntry.ActorRoles.IsOwnerAdmin.Should().BeTrue();
+        ownerClaimableEntry.ActorRoles.IsVoter.Should().BeFalse();
+        ownerClaimableEntry.CanOpenEligibility.Should().BeTrue();
+        ownerClaimableEntry.EligibilityDisabledReason.Should().BeEmpty();
+
+        var unlinkedFinalizedEntry = response.Entries.Single(x => x.Election.Title == "Unlinked Finalized Election");
+        unlinkedFinalizedEntry.ActorRoles.IsVoter.Should().BeFalse();
+        unlinkedFinalizedEntry.ActorRoles.IsDesignatedAuditor.Should().BeFalse();
+        unlinkedFinalizedEntry.CanOpenEligibility.Should().BeFalse();
+        unlinkedFinalizedEntry.EligibilityDisabledReason.Should().Be("Claim-link discovery is unavailable after finalization.");
+
+        var auditorEntry = response.Entries.Single(x => x.Election.Title == "Auditor Election");
+        auditorEntry.ActorRoles.IsDesignatedAuditor.Should().BeTrue();
+        auditorEntry.CanOpenEligibility.Should().BeFalse();
+        auditorEntry.EligibilityDisabledReason.Should().Be("This election is already linked to this Hush account.");
+
+        var claimableEntry = response.Entries.Single(x => x.Election.Title == "Claimable Election");
+        claimableEntry.ActorRoles.IsVoter.Should().BeFalse();
+        claimableEntry.ActorRoles.IsDesignatedAuditor.Should().BeFalse();
+        claimableEntry.CanOpenEligibility.Should().BeTrue();
+        claimableEntry.EligibilityDisabledReason.Should().BeEmpty();
     }
 
     [Fact]
@@ -1368,6 +1459,48 @@ public class ElectionQueryApplicationServiceTests
         response.UnofficialResult.Should().NotBeNull();
         response.UnofficialResult.EncryptedPayload.Should().Be("enc::repaired");
         publicationService.Verify(x => x.RepairClosedElectionResultsAsync(election.ElectionId), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetElectionAsync_WithClosedElectionMissingUnofficialResult_RepairsBeforeReturningDetail()
+    {
+        var mocker = new AutoMocker();
+        var unrepairedElection = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            OpenedAt = DateTime.UtcNow.AddMinutes(-15),
+            ClosedAt = DateTime.UtcNow.AddMinutes(-1),
+            VoteAcceptanceLockedAt = DateTime.UtcNow.AddMinutes(-1),
+            OpenArtifactId = Guid.NewGuid(),
+            CloseArtifactId = Guid.NewGuid(),
+            ClosedProgressStatus = ElectionClosedProgressStatus.TallyCalculationInProgress,
+        };
+        var repairedElection = unrepairedElection with
+        {
+            UnofficialResultArtifactId = Guid.NewGuid(),
+        };
+        var publicationService = new Mock<IElectionBallotPublicationService>(MockBehavior.Strict);
+        publicationService
+            .Setup(x => x.RepairClosedElectionResultsAsync(unrepairedElection.ElectionId))
+            .Returns(Task.CompletedTask);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.SetupSequence(x => x.GetElectionAsync(unrepairedElection.ElectionId))
+                .ReturnsAsync(unrepairedElection)
+                .ReturnsAsync(repairedElection);
+        });
+
+        var sut = CreateQueryService(
+            mocker,
+            electionBallotPublicationService: publicationService.Object);
+
+        var response = await sut.GetElectionAsync(unrepairedElection.ElectionId);
+
+        response.Success.Should().BeTrue();
+        response.Election.Should().NotBeNull();
+        response.Election!.UnofficialResultArtifactId.Should().Be(repairedElection.UnofficialResultArtifactId!.Value.ToString());
+        publicationService.Verify(x => x.RepairClosedElectionResultsAsync(unrepairedElection.ElectionId), Times.Once);
     }
 
     [Fact]

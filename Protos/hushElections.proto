@@ -1048,6 +1048,7 @@ message SearchElectionDirectoryRequest {
   string SearchTerm = 1;
   repeated string OwnerPublicAddresses = 2;
   int32 Limit = 3;
+  string ActorPublicAddress = 4;
 }
 
 message GetElectionHubViewRequest {
@@ -1349,11 +1350,20 @@ message GetElectionResponse {
   repeated ElectionResultArtifact ResultArtifacts = 17;
 }
 
+message SearchElectionDirectoryEntryView {
+  ElectionSummary Election = 1;
+  ElectionApplicationRoleFlagsView ActorRoles = 2;
+  bool CanOpenEligibility = 3;
+  string EligibilityDisabledReason = 4;
+}
+
 message SearchElectionDirectoryResponse {
   bool Success = 1;
   string ErrorMessage = 2;
   string SearchTerm = 3;
   repeated ElectionSummary Elections = 4;
+  string ActorPublicAddress = 5;
+  repeated SearchElectionDirectoryEntryView Entries = 6;
 }
 
 message GetElectionCeremonyActionViewResponse {

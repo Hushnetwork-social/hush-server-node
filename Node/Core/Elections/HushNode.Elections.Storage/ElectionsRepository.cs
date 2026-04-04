@@ -418,6 +418,7 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         await Context.ElectionAcceptedBallots
             .Where(x => x.ElectionId == electionId)
             .OrderBy(x => x.AcceptedAt)
+            .ThenBy(x => x.Id)
             .ToListAsync();
 
     public async Task<ElectionAcceptedBallotRecord?> GetAcceptedBallotAsync(Guid acceptedBallotId) =>

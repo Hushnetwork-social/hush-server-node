@@ -10,7 +10,8 @@ public interface IElectionQueryApplicationService
     Task<SearchElectionDirectoryResponse> SearchElectionDirectoryAsync(
         string searchTerm,
         IReadOnlyCollection<string>? ownerPublicAddresses,
-        int limit);
+        int limit,
+        string actorPublicAddress);
 
     Task<GetElectionHubViewResponse> GetElectionHubViewAsync(string actorPublicAddress);
 

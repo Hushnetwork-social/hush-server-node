@@ -585,6 +585,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
     public async Task<ElectionCommitmentRegistrationResult> RegisterVotingCommitmentAsync(
         RegisterElectionVotingCommitmentRequest request)
     {
+        if (!ElectionDevModePrivacyGuard.TryValidateCommitmentRegistration(
+                request.ElectionId,
+                request.ActorPublicAddress,
+                request.CommitmentHash,
+                out var commitmentValidationError))
+        {
+            return ElectionCommitmentRegistrationResult.Failure(
+                ElectionCommitmentRegistrationFailureReason.ValidationFailed,
+                commitmentValidationError);
+        }
+
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
@@ -688,6 +699,19 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return ElectionCastAcceptanceResult.Failure(
                 ElectionCastAcceptanceFailureReason.ValidationFailed,
                 "A non-empty eligible-set hash is required.");
+        }
+
+        if (!ElectionDevModePrivacyGuard.TryValidateAcceptedBallotArtifacts(
+                request.ElectionId,
+                request.ActorPublicAddress,
+                request.EncryptedBallotPackage,
+                request.ProofBundle,
+                request.BallotNullifier,
+                out var castPrivacyValidationError))
+        {
+            return ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.ValidationFailed,
+                castPrivacyValidationError);
         }
 
         var idempotencyKeyHash = ComputeScopedHash(request.IdempotencyKey);
@@ -799,6 +823,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             }
 
             var acceptedAt = DateTime.UtcNow;
+            var protectedAcceptedAt = CreateProtectedAcceptedBallotTimestamp(election);
 
             try
             {
@@ -824,11 +849,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     request.EncryptedBallotPackage,
                     request.ProofBundle,
                     request.BallotNullifier,
-                    acceptedAt);
+                    protectedAcceptedAt);
                 var ballotMemPoolEntry = ElectionModelFactory.CreateBallotMemPoolEntry(
                     request.ElectionId,
                     acceptedBallot.Id,
-                    acceptedAt);
+                    protectedAcceptedAt);
                 var idempotencyRecord = ElectionModelFactory.CreateCastIdempotencyRecord(
                     request.ElectionId,
                     idempotencyKeyHash,
@@ -2624,6 +2649,12 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private static string BuildPendingCastTrackingKey(ElectionId electionId, string idempotencyKeyHash) =>
         $"{electionId}:{idempotencyKeyHash}";
 
+    private static DateTime CreateProtectedAcceptedBallotTimestamp(ElectionRecord election)
+    {
+        var anchor = (election.OpenedAt ?? election.CreatedAt).ToUniversalTime();
+        return new DateTime(anchor.Year, anchor.Month, anchor.Day, anchor.Hour, anchor.Minute, 0, DateTimeKind.Utc);
+    }
+
     private static string ComputeScopedHash(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -3657,6 +3688,13 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var updatedElection = ApplyLifecycleTransition(election, artifact, transitionTime);
+        if (artifactType == ElectionBoundaryArtifactType.Close)
+        {
+            updatedElection = updatedElection with
+            {
+                ClosedProgressStatus = ElectionClosedProgressStatus.TallyCalculationInProgress,
+            };
+        }
 
         await repository.SaveBoundaryArtifactAsync(artifact);
         if (eligibilitySnapshot is not null)

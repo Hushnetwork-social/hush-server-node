@@ -15,7 +15,7 @@ namespace HushNode.IntegrationTests.Features
     using TechTalk.SpecFlow;
     using System;
     using System.Linq;
-
+    
     
     [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
     [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
@@ -1370,7 +1370,7 @@ namespace HushNode.IntegrationTests.Features
             }
             this.ScenarioCleanup();
         }
-
+        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable

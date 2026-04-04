@@ -74,7 +74,10 @@ public class ElectionBallotPublicationServiceTests
         store.BallotMemPoolEntries.Should().BeEmpty();
         store.PublishedBallots.Should().HaveCount(3);
         store.PublishedBallots.Select(x => x.PublicationSequence).Should().Equal(1, 2, 3);
-        store.PublishedBallots.Should().OnlyContain(x => x.EncryptedBallotPackage.EndsWith("|published", StringComparison.Ordinal));
+        store.PublishedBallots.Select(x => x.EncryptedBallotPackage).Should().Equal(
+            "ballot-2|published",
+            "ballot-3|published",
+            "ballot-1|published");
         store.PublicationIssues.Should().BeEmpty();
 
         store.BoundaryArtifacts.Should().ContainSingle();
@@ -95,7 +98,38 @@ public class ElectionBallotPublicationServiceTests
         crypto.ReplayCallCount.Should().Be(1);
         crypto.LastReplayPackages.Should().NotBeNull();
         crypto.LastReplayPackages.Should().HaveCount(3);
-        crypto.LastReplayPackages.Should().OnlyContain(x => x.EndsWith("|published", StringComparison.Ordinal));
+        crypto.LastReplayPackages.Should().Equal(
+            "ballot-2|published",
+            "ballot-3|published",
+            "ballot-1|published");
+    }
+
+    [Fact]
+    public async Task ProcessPendingPublicationAsync_OpenElectionWithDevBallots_ProjectsNonJoinablePublishedPayload()
+    {
+        var store = new PublicationStore();
+        var election = CreateOpenElection();
+        SeedDevModeAcceptedBallots(store, election);
+        var crypto = new FakePublicationCryptoService();
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 1, LowWaterMark: 0, MaxBatchPerBlock: 10));
+
+        await service.ProcessPendingPublicationAsync(new BlockIndex(18));
+
+        store.PublishedBallots.Should().HaveCount(2);
+        crypto.PrepareCallCount.Should().Be(0);
+        store.PublishedBallots.Should().OnlyContain(x =>
+            x.EncryptedBallotPackage.Contains("\"packageType\":\"dev-published-ballot\"", StringComparison.Ordinal) &&
+            x.EncryptedBallotPackage.Contains("\"publicationNonce\":", StringComparison.Ordinal) &&
+            !x.EncryptedBallotPackage.Contains("actorPublicAddress", StringComparison.Ordinal) &&
+            !x.EncryptedBallotPackage.Contains("selectionFingerprint", StringComparison.Ordinal) &&
+            !x.EncryptedBallotPackage.Contains("generatedAt", StringComparison.Ordinal));
+        store.PublishedBallots.Should().OnlyContain(x =>
+            x.ProofBundle.Contains("\"proofType\":\"dev-publication-proof\"", StringComparison.Ordinal) &&
+            x.ProofBundle.Contains("\"publicationVariant\":\"plaintext-choice-projection\"", StringComparison.Ordinal) &&
+            !x.ProofBundle.Contains("SourceProofBundleHash", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -178,6 +212,107 @@ public class ElectionBallotPublicationServiceTests
     }
 
     [Fact]
+    public async Task ProcessPendingPublicationAsync_ClosedAdminOnlyDevBallots_PublishesUnofficialResultImmediately()
+    {
+        var store = new PublicationStore();
+        var election = CreateClosedElection();
+        SeedAcceptedBallots(store, election, 2);
+        SeedCloseResultContext(
+            store,
+            election,
+            activeDenominatorCount: 3,
+            countedParticipationCount: 2,
+            blankCount: 0,
+            didNotVoteCount: 1);
+
+        var crypto = new FakePublicationCryptoService
+        {
+            PrepareBehavior = (encryptedBallotPackage, proofBundle, _) =>
+            {
+                var publishedPayload = encryptedBallotPackage.EndsWith("1", StringComparison.Ordinal)
+                    ? CreateDevModePublishedBallotPackage(election, "yes", ballotOrder: 1, actorPublicAddress: "alice-address")
+                    : CreateDevModePublishedBallotPackage(election, "no", ballotOrder: 2, actorPublicAddress: "bob-address");
+                return ElectionBallotPublicationPreparationResult.Success(
+                    publishedPayload,
+                    $"{proofBundle}|proof-published");
+            },
+            ReplayBehavior = _ => ElectionBallotReplayResult.Success([9, 8, 7, 6]),
+        };
+        var resultCrypto = new FakeElectionResultCryptoService();
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10),
+            resultCrypto);
+
+        await service.ProcessPendingPublicationAsync(new BlockIndex(27));
+
+        store.BallotMemPoolEntries.Should().BeEmpty();
+        store.PublishedBallots.Should().HaveCount(2);
+        store.BoundaryArtifacts.Should().ContainSingle();
+        store.BoundaryArtifacts[0].ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
+        store.ResultArtifacts.Should().ContainSingle();
+        store.ResultArtifacts[0].ArtifactKind.Should().Be(ElectionResultArtifactKind.Unofficial);
+        store.ResultArtifacts[0].TotalVotedCount.Should().Be(2);
+        store.ResultArtifacts[0].EligibleToVoteCount.Should().Be(3);
+        store.ResultArtifacts[0].DidNotVoteCount.Should().Be(1);
+        store.ResultArtifacts[0].NamedOptionResults.Select(x => (x.OptionId, x.VoteCount))
+            .Should().Equal(("yes", 1), ("no", 1));
+        store.Elections[election.ElectionId].UnofficialResultArtifactId.Should().Be(store.ResultArtifacts[0].Id);
+        store.Elections[election.ElectionId].ClosedProgressStatus.Should().Be(ElectionClosedProgressStatus.None);
+        resultCrypto.EncryptCallCount.Should().Be(1);
+        crypto.ReplayCallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ProcessPendingPublicationAsync_ClosedAdminOnlyDevBallotsWithBlankVote_PublishesUnofficialResultUsingTurnoutSnapshotOnly()
+    {
+        var store = new PublicationStore();
+        var election = CreateClosedElection();
+        SeedAcceptedBallots(store, election, 2);
+        SeedCloseResultContext(
+            store,
+            election,
+            activeDenominatorCount: 2,
+            countedParticipationCount: 2,
+            blankCount: 0,
+            didNotVoteCount: 0);
+
+        var crypto = new FakePublicationCryptoService
+        {
+            PrepareBehavior = (encryptedBallotPackage, proofBundle, _) =>
+            {
+                var publishedPayload = encryptedBallotPackage.EndsWith("1", StringComparison.Ordinal)
+                    ? CreateDevModePublishedBallotPackage(election, "yes", ballotOrder: 1, actorPublicAddress: "alice-address")
+                    : CreateDevModePublishedBallotPackage(election, "blank", ballotOrder: 3, actorPublicAddress: "bob-address", isBlankOption: true, optionLabel: "Blank Vote");
+                return ElectionBallotPublicationPreparationResult.Success(
+                    publishedPayload,
+                    $"{proofBundle}|proof-published");
+            },
+            ReplayBehavior = _ => ElectionBallotReplayResult.Success([9, 8, 7, 6]),
+        };
+        var resultCrypto = new FakeElectionResultCryptoService();
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10),
+            resultCrypto);
+
+        await service.ProcessPendingPublicationAsync(new BlockIndex(27));
+
+        store.ResultArtifacts.Should().ContainSingle();
+        store.ResultArtifacts[0].TotalVotedCount.Should().Be(2);
+        store.ResultArtifacts[0].BlankCount.Should().Be(1);
+        store.ResultArtifacts[0].DidNotVoteCount.Should().Be(0);
+        store.ResultArtifacts[0].NamedOptionResults.Select(x => (x.OptionId, x.VoteCount))
+            .Should().Equal(("yes", 1), ("no", 0));
+        store.Elections[election.ElectionId].UnofficialResultArtifactId.Should().Be(store.ResultArtifacts[0].Id);
+        store.Elections[election.ElectionId].ClosedProgressStatus.Should().Be(ElectionClosedProgressStatus.None);
+        resultCrypto.EncryptCallCount.Should().Be(1);
+        crypto.ReplayCallCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task RepairClosedElectionResultsAsync_AdminOnlyDevModePublishedBallots_PublishesTallyReadyAndUnofficialResult()
     {
         var store = new PublicationStore();
@@ -234,6 +369,61 @@ public class ElectionBallotPublicationServiceTests
         store.ResultArtifacts[0].NamedOptionResults.Select(x => (x.OptionId, x.VoteCount))
             .Should().Equal(("yes", 1), ("no", 1));
 
+        store.Elections[election.ElectionId].TallyReadyAt.Should().NotBeNull();
+        store.Elections[election.ElectionId].UnofficialResultArtifactId.Should().Be(store.ResultArtifacts[0].Id);
+        resultCrypto.EncryptCallCount.Should().Be(1);
+        crypto.ReplayCallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RepairClosedElectionResultsAsync_AdminOnlyDevModePublishedBallotsWithBlankVote_PublishesUnofficialResultUsingTurnoutSnapshotOnly()
+    {
+        var store = new PublicationStore();
+        var election = CreateClosedElection();
+        SeedAcceptedBallots(store, election, 2);
+        store.BallotMemPoolEntries.Clear();
+        store.ClosedAwaitingTallyReadyElectionIds.Add(election.ElectionId);
+        store.PublishedBallots.Add(ElectionModelFactory.CreatePublishedBallotRecord(
+            election.ElectionId,
+            publicationSequence: 1,
+            encryptedBallotPackage: CreateDevModePublishedBallotPackage(election, "yes", ballotOrder: 1, actorPublicAddress: "alice-address"),
+            proofBundle: "proof-1",
+            sourceBlockHeight: 33,
+            sourceBlockId: store.CurrentBlockId.Value));
+        store.PublishedBallots.Add(ElectionModelFactory.CreatePublishedBallotRecord(
+            election.ElectionId,
+            publicationSequence: 2,
+            encryptedBallotPackage: CreateDevModePublishedBallotPackage(election, "blank", ballotOrder: 3, actorPublicAddress: "bob-address", isBlankOption: true, optionLabel: "Blank Vote"),
+            proofBundle: "proof-2",
+            sourceBlockHeight: 33,
+            sourceBlockId: store.CurrentBlockId.Value));
+        SeedCloseResultContext(
+            store,
+            election,
+            activeDenominatorCount: 2,
+            countedParticipationCount: 2,
+            blankCount: 0,
+            didNotVoteCount: 0);
+
+        var crypto = new FakePublicationCryptoService
+        {
+            ReplayBehavior = _ => ElectionBallotReplayResult.Failure("UNSUPPORTED_BALLOT_PAYLOAD", "dev ballots require fallback recovery"),
+        };
+        var resultCrypto = new FakeElectionResultCryptoService();
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10),
+            resultCrypto);
+
+        await service.RepairClosedElectionResultsAsync(election.ElectionId);
+
+        store.ResultArtifacts.Should().ContainSingle();
+        store.ResultArtifacts[0].TotalVotedCount.Should().Be(2);
+        store.ResultArtifacts[0].BlankCount.Should().Be(1);
+        store.ResultArtifacts[0].DidNotVoteCount.Should().Be(0);
+        store.ResultArtifacts[0].NamedOptionResults.Select(x => (x.OptionId, x.VoteCount))
+            .Should().Equal(("yes", 1), ("no", 0));
         store.Elections[election.ElectionId].TallyReadyAt.Should().NotBeNull();
         store.Elections[election.ElectionId].UnofficialResultArtifactId.Should().Be(store.ResultArtifacts[0].Id);
         resultCrypto.EncryptCallCount.Should().Be(1);
@@ -652,6 +842,40 @@ public class ElectionBallotPublicationServiceTests
         return acceptedBallots;
     }
 
+    private static IReadOnlyList<ElectionAcceptedBallotRecord> SeedDevModeAcceptedBallots(
+        PublicationStore store,
+        ElectionRecord election)
+    {
+        store.Elections[election.ElectionId] = election;
+
+        var acceptedBallots = new[]
+        {
+            ElectionModelFactory.CreateAcceptedBallotRecord(
+                election.ElectionId,
+                CreateDevModeAcceptedBallotPackage(election, "yes", ballotOrder: 1, actorPublicAddress: "alice-address"),
+                CreateDevModeAcceptedProofBundle(election, "yes"),
+                "nullifier-dev-1",
+                DateTime.UtcNow.AddMinutes(-2)),
+            ElectionModelFactory.CreateAcceptedBallotRecord(
+                election.ElectionId,
+                CreateDevModeAcceptedBallotPackage(election, "no", ballotOrder: 2, actorPublicAddress: "bob-address"),
+                CreateDevModeAcceptedProofBundle(election, "no"),
+                "nullifier-dev-2",
+                DateTime.UtcNow.AddMinutes(-2).AddSeconds(1)),
+        };
+
+        store.AcceptedBallots.AddRange(acceptedBallots);
+        foreach (var acceptedBallot in acceptedBallots)
+        {
+            store.BallotMemPoolEntries.Add(ElectionModelFactory.CreateBallotMemPoolEntry(
+                election.ElectionId,
+                acceptedBallot.Id,
+                queuedAt: acceptedBallot.AcceptedAt.AddMilliseconds(50)));
+        }
+
+        return acceptedBallots;
+    }
+
     private static ElectionEligibilitySnapshotRecord SeedZeroBallotResultContext(
         PublicationStore store,
         ElectionRecord election,
@@ -700,13 +924,33 @@ public class ElectionBallotPublicationServiceTests
         return snapshot;
     }
 
+    private static string CreateDevModeAcceptedBallotPackage(
+        ElectionRecord election,
+        string optionId,
+        int ballotOrder,
+        string actorPublicAddress,
+        bool isBlankOption = false,
+        string? optionLabel = null) =>
+        $$"""
+        {"mode":"election-dev-mode-v1","packageType":"dev-protected-ballot","electionId":"{{election.ElectionId}}","actorPublicAddress":"{{actorPublicAddress}}","optionId":"{{optionId}}","optionLabel":"{{optionLabel ?? optionId}}","optionDescription":"","ballotOrder":{{ballotOrder}},"isBlankOption":{{isBlankOption.ToString().ToLowerInvariant()}},"selectionFingerprint":"selection-{{optionId}}","generatedAt":"2026-04-03T12:00:00.000Z"}
+        """;
+
+    private static string CreateDevModeAcceptedProofBundle(
+        ElectionRecord election,
+        string optionId) =>
+        $$"""
+        {"mode":"election-dev-mode-v1","proofType":"dev-election-proof","electionId":"{{election.ElectionId}}","optionId":"{{optionId}}","ballotPackageHash":"hash-{{optionId}}","generatedAt":"2026-04-03T12:00:00.000Z"}
+        """;
+
     private static string CreateDevModePublishedBallotPackage(
         ElectionRecord election,
         string optionId,
         int ballotOrder,
-        string actorPublicAddress) =>
+        string actorPublicAddress,
+        bool isBlankOption = false,
+        string? optionLabel = null) =>
         $$"""
-        {"mode":"election-dev-mode-v1","packageType":"dev-protected-ballot","electionId":"{{election.ElectionId}}","actorPublicAddress":"{{actorPublicAddress}}","optionId":"{{optionId}}","optionLabel":"{{optionId}}","optionDescription":"","ballotOrder":{{ballotOrder}},"isBlankOption":false,"selectionFingerprint":"selection-{{optionId}}","generatedAt":"2026-04-03T12:00:00.000Z"}
+        {"mode":"election-dev-mode-v1","packageType":"dev-published-ballot","electionId":"{{election.ElectionId}}","optionId":"{{optionId}}","optionLabel":"{{optionLabel ?? optionId}}","optionDescription":"","ballotOrder":{{ballotOrder}},"isBlankOption":{{isBlankOption.ToString().ToLowerInvariant()}},"publicationNonce":"published-{{optionId}}"}
         """;
 
     private sealed class PublicationStore

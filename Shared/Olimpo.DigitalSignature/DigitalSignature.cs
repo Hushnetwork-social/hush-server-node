@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Text;
+using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.X9;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Generators;
@@ -18,7 +19,7 @@ public class DigitalSignature
 
     public DigitalSignature()
     {
-        (this.PrivateKey, this.PublicAddress) = this.GenerateKeyPair();
+        (PrivateKey, PublicAddress) = GenerateKeyPair();
     }
 
     public static string SignMessage(string message, string privateKeyString)
@@ -31,6 +32,13 @@ public class DigitalSignature
         return ToHex(signer.GenerateSignature());
     }
 
+    public static string SignMessageCompactBase64(string message, string privateKeyString)
+    {
+        var derSignature = HexStringToByteArray(SignMessage(message, privateKeyString));
+        var compactSignature = ConvertDerSignatureToCompact(derSignature);
+        return Convert.ToBase64String(compactSignature);
+    }
+
     public static bool VerifySignature(string message, string signature, string publicKeyString)
     {
         byte[] messageBytes = Encoding.UTF8.GetBytes(message);
@@ -39,6 +47,46 @@ public class DigitalSignature
         signer.Init(false, publicKey);
         signer.BlockUpdate(messageBytes, 0, messageBytes.Length);
         return signer.VerifySignature(HexStringToByteArray(signature));
+    }
+
+    public static bool VerifyCompactSignature(string message, byte[] compactSignature, string publicKeyString)
+    {
+        try
+        {
+            return VerifySignature(
+                message,
+                ToHex(ConvertCompactSignatureToDer(compactSignature)),
+                publicKeyString);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static bool VerifyCompactSignatureBase64(string message, string base64Signature, string publicKeyString)
+    {
+        if (string.IsNullOrWhiteSpace(base64Signature))
+        {
+            return false;
+        }
+
+        try
+        {
+            return VerifyCompactSignature(message, Convert.FromBase64String(base64Signature), publicKeyString);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static string GetCompressedPublicAddress(string privateKeyString)
+    {
+        var privateKey = (ECPrivateKeyParameters)GetPrivateKeyFromHex(privateKeyString);
+        var curve = ECNamedCurveTable.GetByName("secp256k1");
+        var publicKey = curve.G.Multiply(privateKey.D).Normalize();
+        return ToHex(publicKey.GetEncoded(true));
     }
 
     private (string privateKey, string publicKey) GenerateKeyPair()
@@ -101,5 +149,56 @@ public class DigitalSignature
         return bytes;
     }
 
-    static string ToHex(byte[] data) => String.Concat(data.Select(x => x.ToString("x2")));
+    private static byte[] ConvertCompactSignatureToDer(byte[] compactSignature)
+    {
+        if (compactSignature is null || compactSignature.Length != 64)
+        {
+            throw new ArgumentException("Compact secp256k1 signature must be 64 bytes.", nameof(compactSignature));
+        }
+
+        var rBytes = new byte[32];
+        var sBytes = new byte[32];
+        Array.Copy(compactSignature, 0, rBytes, 0, 32);
+        Array.Copy(compactSignature, 32, sBytes, 0, 32);
+
+        var sequence = new DerSequence(
+            new DerInteger(new BigInteger(1, rBytes)),
+            new DerInteger(new BigInteger(1, sBytes)));
+        return sequence.GetDerEncoded();
+    }
+
+    private static byte[] ConvertDerSignatureToCompact(byte[] derSignature)
+    {
+        if (derSignature is null || derSignature.Length == 0)
+        {
+            throw new ArgumentException("DER signature is required.", nameof(derSignature));
+        }
+
+        if (Asn1Object.FromByteArray(derSignature) is not Asn1Sequence sequence || sequence.Count != 2)
+        {
+            throw new ArgumentException("DER signature must contain exactly two integers.", nameof(derSignature));
+        }
+
+        var r = ((DerInteger)sequence[0]).PositiveValue.ToByteArrayUnsigned();
+        var s = ((DerInteger)sequence[1]).PositiveValue.ToByteArrayUnsigned();
+        var compactSignature = new byte[64];
+
+        CopyPadded(r, compactSignature, 0);
+        CopyPadded(s, compactSignature, 32);
+
+        return compactSignature;
+    }
+
+    private static void CopyPadded(byte[] source, byte[] destination, int destinationOffset)
+    {
+        if (source.Length > 32)
+        {
+            throw new ArgumentException("Signature integer component exceeds 32 bytes.", nameof(source));
+        }
+
+        var padding = 32 - source.Length;
+        Array.Copy(source, 0, destination, destinationOffset + padding, source.Length);
+    }
+
+    private static string ToHex(byte[] data) => string.Concat(data.Select(x => x.ToString("x2")));
 }

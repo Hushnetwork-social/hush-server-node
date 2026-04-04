@@ -540,11 +540,64 @@ public class ElectionLifecycleServiceTests
         result.CheckoffConsumption!.OrganizationVoterId.Should().Be(scenario.RosterEntry.OrganizationVoterId);
         result.AcceptedBallot.Should().NotBeNull();
         result.AcceptedBallot!.BallotNullifier.Should().Be("nullifier-1");
+        result.AcceptedBallot.AcceptedAt.Should().NotBe(result.CheckoffConsumption.ConsumedAt);
+        result.AcceptedBallot.AcceptedAt.Should().Be(GetProtectedAcceptedBallotTimestamp(scenario.Election));
         result.CastIdempotencyRecord.Should().NotBeNull();
         store.ParticipationRecords.Should().ContainSingle();
         store.CheckoffConsumptions.Should().ContainSingle();
         store.AcceptedBallots.Should().ContainSingle();
+        store.BallotMemPoolEntries.Should().ContainSingle();
+        store.BallotMemPoolEntries[0].QueuedAt.Should().Be(result.AcceptedBallot.AcceptedAt);
         store.CastIdempotencyRecords.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WithMultipleVoters_UsesSharedPrivacyBucketForAcceptedAndQueuedArtifacts()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        var protectedTimestamp = GetProtectedAcceptedBallotTimestamp(scenario.Election);
+        var openedAt = scenario.Election.OpenedAt!.Value;
+        var secondRosterEntry = CreateRosterEntry(
+                scenario.Election,
+                organizationVoterId: "4002",
+                votingRightStatus: ElectionVotingRightStatus.Active)
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address-2", openedAt.AddMinutes(1));
+        AddRosterEntries(store, secondRosterEntry);
+        store.CommitmentRegistrations.Add(ElectionModelFactory.CreateCommitmentRegistrationRecord(
+            scenario.Election.ElectionId,
+            secondRosterEntry.OrganizationVoterId,
+            "voter-address-2",
+            "commitment-hash-seeded-2",
+            openedAt.AddMinutes(3)));
+
+        var firstResult = await service.AcceptBallotCastAsync(CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-1",
+            ballotNullifier: "nullifier-1"));
+        var secondResult = await service.AcceptBallotCastAsync(new AcceptElectionBallotCastRequest(
+            scenario.Election.ElectionId,
+            "voter-address-2",
+            "cast-key-2",
+            EncryptedBallotPackage: "ciphertext-payload-2",
+            ProofBundle: "proof-bundle-2",
+            BallotNullifier: "nullifier-2",
+            OpenArtifactId: scenario.OpenArtifact.Id,
+            EligibleSetHash: scenario.EligibleSetHash.ToArray(),
+            CeremonyVersionId: scenario.CeremonySnapshot.CeremonyVersionId,
+            DkgProfileId: scenario.CeremonySnapshot.ProfileId,
+            TallyPublicKeyFingerprint: scenario.CeremonySnapshot.TallyPublicKeyFingerprint));
+
+        firstResult.IsSuccess.Should().BeTrue();
+        secondResult.IsSuccess.Should().BeTrue();
+        store.CheckoffConsumptions.Should().HaveCount(2);
+        store.CheckoffConsumptions.Select(x => x.ConsumedAt).Distinct().Should().HaveCount(2);
+        store.AcceptedBallots.Should().HaveCount(2);
+        store.AcceptedBallots.Select(x => x.AcceptedAt).Distinct().Should().ContainSingle().Which.Should().Be(protectedTimestamp);
+        store.BallotMemPoolEntries.Should().HaveCount(2);
+        store.BallotMemPoolEntries.Select(x => x.QueuedAt).Distinct().Should().ContainSingle().Which.Should().Be(protectedTimestamp);
     }
 
     [Fact]
@@ -2751,6 +2804,12 @@ public class ElectionLifecycleServiceTests
     private static string ComputeScopedHash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.Trim())));
 
+    private static DateTime GetProtectedAcceptedBallotTimestamp(ElectionRecord election)
+    {
+        var anchor = (election.OpenedAt ?? election.CreatedAt).ToUniversalTime();
+        return new DateTime(anchor.Year, anchor.Month, anchor.Day, anchor.Hour, anchor.Minute, 0, DateTimeKind.Utc);
+    }
+
     private static TrusteeFinalizationScenario SeedClosedTrusteeElectionForFinalization(
         ElectionStore store,
         int requiredApprovalCount)
@@ -3313,6 +3372,7 @@ public class ElectionLifecycleServiceTests
         public List<ElectionEligibilitySnapshotRecord> EligibilitySnapshots { get; } = [];
         public List<ElectionBoundaryArtifactRecord> BoundaryArtifacts { get; } = [];
         public List<ElectionAcceptedBallotRecord> AcceptedBallots { get; } = [];
+        public List<ElectionBallotMemPoolRecord> BallotMemPoolEntries { get; } = [];
         public List<ElectionPublishedBallotRecord> PublishedBallots { get; } = [];
         public List<ElectionCastIdempotencyRecord> CastIdempotencyRecords { get; } = [];
         public List<ElectionWarningAcknowledgementRecord> WarningAcknowledgements { get; } = [];
@@ -3720,6 +3780,7 @@ public class ElectionLifecycleServiceTests
                 store.AcceptedBallots
                     .Where(x => x.ElectionId == electionId)
                     .OrderBy(x => x.AcceptedAt)
+                    .ThenBy(x => x.Id)
                     .ToArray());
 
         public Task<ElectionAcceptedBallotRecord?> GetAcceptedBallotAsync(Guid acceptedBallotId) =>
@@ -3737,6 +3798,42 @@ public class ElectionLifecycleServiceTests
         {
             store.AcceptedBallots.RemoveAll(x => x.Id == acceptedBallot.Id);
             store.AcceptedBallots.Add(acceptedBallot);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionBallotMemPoolRecord>> GetBallotMemPoolEntriesAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionBallotMemPoolRecord>>(
+                store.BallotMemPoolEntries
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.QueuedAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
+
+        public Task<IReadOnlyList<ElectionId>> GetElectionIdsWithBallotMemPoolEntriesAsync() =>
+            Task.FromResult<IReadOnlyList<ElectionId>>(
+                store.BallotMemPoolEntries
+                    .Select(x => x.ElectionId)
+                    .Distinct()
+                    .ToArray());
+
+        public Task<ElectionBallotMemPoolRecord?> GetBallotMemPoolEntryByAcceptedBallotAsync(
+            ElectionId electionId,
+            Guid acceptedBallotId) =>
+            Task.FromResult(
+                store.BallotMemPoolEntries.FirstOrDefault(x =>
+                    x.ElectionId == electionId &&
+                    x.AcceptedBallotId == acceptedBallotId));
+
+        public Task SaveBallotMemPoolEntryAsync(ElectionBallotMemPoolRecord ballotMemPoolEntry)
+        {
+            store.BallotMemPoolEntries.RemoveAll(x => x.Id == ballotMemPoolEntry.Id);
+            store.BallotMemPoolEntries.Add(ballotMemPoolEntry);
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteBallotMemPoolEntryAsync(Guid ballotMemPoolEntryId)
+        {
+            store.BallotMemPoolEntries.RemoveAll(x => x.Id == ballotMemPoolEntryId);
             return Task.CompletedTask;
         }
 

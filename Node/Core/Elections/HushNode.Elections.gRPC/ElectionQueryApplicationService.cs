@@ -51,6 +51,10 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
     private Task TryRepairClosedElectionResultsAsync(ElectionId electionId) =>
         _electionBallotPublicationService?.RepairClosedElectionResultsAsync(electionId) ?? Task.CompletedTask;
 
+    private static bool ShouldAttemptClosedResultRepair(ElectionRecord election) =>
+        election.LifecycleState == ElectionLifecycleState.Closed &&
+        !election.UnofficialResultArtifactId.HasValue;
+
     public async Task<GetElectionResponse> GetElectionAsync(ElectionId electionId)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -64,6 +68,20 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 Success = false,
                 ErrorMessage = $"Election {electionId} was not found.",
             };
+        }
+
+        if (ShouldAttemptClosedResultRepair(election))
+        {
+            await TryRepairClosedElectionResultsAsync(electionId);
+            election = await repository.GetElectionAsync(electionId);
+            if (election is null)
+            {
+                return new GetElectionResponse
+                {
+                    Success = false,
+                    ErrorMessage = $"Election {electionId} was not found.",
+                };
+            }
         }
 
         var latestDraftSnapshot = await repository.GetLatestDraftSnapshotAsync(electionId);
@@ -190,11 +208,13 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
     public async Task<SearchElectionDirectoryResponse> SearchElectionDirectoryAsync(
         string searchTerm,
         IReadOnlyCollection<string>? ownerPublicAddresses,
-        int limit)
+        int limit,
+        string actorPublicAddress)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var normalizedSearchTerm = searchTerm?.Trim() ?? string.Empty;
+        var normalizedActorPublicAddress = actorPublicAddress?.Trim() ?? string.Empty;
         var normalizedOwnerAddresses = (ownerPublicAddresses ?? Array.Empty<string>())
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Select(x => x.Trim())
@@ -209,6 +229,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 Success = true,
                 ErrorMessage = string.Empty,
                 SearchTerm = normalizedSearchTerm,
+                ActorPublicAddress = normalizedActorPublicAddress,
             };
         }
 
@@ -222,8 +243,76 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             Success = true,
             ErrorMessage = string.Empty,
             SearchTerm = normalizedSearchTerm,
+            ActorPublicAddress = normalizedActorPublicAddress,
         };
         response.Elections.AddRange(elections.Select(x => x.ToSummaryProto()));
+
+        var linkedRosterEntries = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
+            ? Array.Empty<ElectionRosterEntryRecord>()
+            : await repository.GetRosterEntriesByLinkedActorAsync(normalizedActorPublicAddress);
+        var reportAccessGrants = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
+            ? Array.Empty<ElectionReportAccessGrantRecord>()
+            : await repository.GetReportAccessGrantsByActorAsync(normalizedActorPublicAddress);
+        var acceptedTrusteeInvitations = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
+            ? Array.Empty<ElectionTrusteeInvitationRecord>()
+            : await repository.GetAcceptedTrusteeInvitationsByActorAsync(normalizedActorPublicAddress);
+
+        var selfRosterEntryByElectionId = linkedRosterEntries
+            .GroupBy(x => x.ElectionId)
+            .ToDictionary(
+                x => x.Key,
+                x => x
+                    .OrderByDescending(y => y.LastUpdatedAt)
+                    .First());
+        var designatedAuditorGrantByElectionId = reportAccessGrants
+            .Where(x => x.GrantRole == ElectionReportAccessGrantRole.DesignatedAuditor)
+            .GroupBy(x => x.ElectionId)
+            .ToDictionary(
+                x => x.Key,
+                x => x
+                    .OrderByDescending(y => y.GrantedAt)
+                    .First());
+        var acceptedTrusteeElectionIds = acceptedTrusteeInvitations
+            .Select(x => x.ElectionId)
+            .ToHashSet();
+
+        foreach (var election in elections)
+        {
+            var isOwnerAdmin = string.Equals(
+                election.OwnerPublicAddress,
+                normalizedActorPublicAddress,
+                StringComparison.OrdinalIgnoreCase);
+            var isTrustee = acceptedTrusteeElectionIds.Contains(election.ElectionId);
+            var isVoter = selfRosterEntryByElectionId.ContainsKey(election.ElectionId);
+            var isDesignatedAuditor = designatedAuditorGrantByElectionId.ContainsKey(election.ElectionId);
+            var alreadyLinked = isTrustee || isVoter || isDesignatedAuditor;
+            var isFinalized = election.LifecycleState == ElectionLifecycleState.Finalized;
+            var canOpenEligibility =
+                !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
+                !alreadyLinked &&
+                !isFinalized;
+
+            var eligibilityDisabledReason = alreadyLinked
+                ? "This election is already linked to this Hush account."
+                : isFinalized
+                    ? "Claim-link discovery is unavailable after finalization."
+                    : string.Empty;
+
+            response.Entries.Add(new SearchElectionDirectoryEntryView
+            {
+                Election = election.ToSummaryProto(),
+                ActorRoles = new ElectionApplicationRoleFlagsView
+                {
+                    IsOwnerAdmin = isOwnerAdmin,
+                    IsTrustee = isTrustee,
+                    IsVoter = isVoter,
+                    IsDesignatedAuditor = isDesignatedAuditor,
+                },
+                CanOpenEligibility = canOpenEligibility,
+                EligibilityDisabledReason = eligibilityDisabledReason,
+            });
+        }
+
         return response;
     }
 
@@ -271,6 +360,21 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         }
 
         var elections = await repository.GetElectionsByIdsAsync(electionIds);
+        var repairIds = elections
+            .Where(ShouldAttemptClosedResultRepair)
+            .Select(x => x.ElectionId)
+            .Distinct()
+            .ToArray();
+        if (repairIds.Length > 0)
+        {
+            foreach (var repairId in repairIds)
+            {
+                await TryRepairClosedElectionResultsAsync(repairId);
+            }
+
+            elections = await repository.GetElectionsByIdsAsync(electionIds);
+        }
+
         var selfRosterEntryByElectionId = linkedRosterEntries
             .GroupBy(x => x.ElectionId)
             .ToDictionary(

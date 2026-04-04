@@ -21,6 +21,7 @@
     <ProjectReference Include="..\HushNode.Elections\HushNode.Elections.csproj" />
     <ProjectReference Include="..\HushNode.Elections.Storage\HushNode.Elections.Storage.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Interfaces\HushNode.Interfaces.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\Olimpo.DigitalSignature\SigningManager.csproj" />
   </ItemGroup>
 
 </Project>
