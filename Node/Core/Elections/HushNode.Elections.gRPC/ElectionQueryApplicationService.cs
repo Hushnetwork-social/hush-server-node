@@ -337,13 +337,13 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var ownerElections = await repository.GetElectionsByOwnerAsync(normalizedActorPublicAddress);
         var reportAccessGrants = await repository.GetReportAccessGrantsByActorAsync(normalizedActorPublicAddress);
         var linkedRosterEntries = await repository.GetRosterEntriesByLinkedActorAsync(normalizedActorPublicAddress);
-        var acceptedTrusteeInvitations = await repository.GetAcceptedTrusteeInvitationsByActorAsync(normalizedActorPublicAddress);
+        var activeTrusteeInvitations = await repository.GetActiveTrusteeInvitationsByActorAsync(normalizedActorPublicAddress);
 
         var electionIds = ownerElections
             .Select(x => x.ElectionId)
             .Concat(reportAccessGrants.Select(x => x.ElectionId))
             .Concat(linkedRosterEntries.Select(x => x.ElectionId))
-            .Concat(acceptedTrusteeInvitations.Select(x => x.ElectionId))
+            .Concat(activeTrusteeInvitations.Select(x => x.ElectionId))
             .Distinct()
             .ToArray();
 
@@ -390,7 +390,12 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 x => x
                     .OrderByDescending(y => y.GrantedAt)
                     .First());
-        var acceptedTrusteeElectionIds = acceptedTrusteeInvitations
+        var acceptedTrusteeElectionIds = activeTrusteeInvitations
+            .Where(x => x.Status == ElectionTrusteeInvitationStatus.Accepted)
+            .Select(x => x.ElectionId)
+            .ToHashSet();
+        var pendingTrusteeElectionIds = activeTrusteeInvitations
+            .Where(x => x.Status == ElectionTrusteeInvitationStatus.Pending)
             .Select(x => x.ElectionId)
             .ToHashSet();
 
@@ -407,6 +412,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 normalizedActorPublicAddress,
                 StringComparison.OrdinalIgnoreCase);
             var isTrustee = acceptedTrusteeElectionIds.Contains(election.ElectionId);
+            var hasPendingTrusteeInvitation = pendingTrusteeElectionIds.Contains(election.ElectionId);
             var isVoter = selfRosterEntry is not null;
             var isDesignatedAuditor = reportAccessGrant is not null;
             var participationRecord = selfRosterEntry is null
@@ -429,6 +435,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 participationRecord,
                 isOwnerAdmin,
                 isTrustee,
+                hasPendingTrusteeInvitation,
                 isDesignatedAuditor,
                 pendingProposal,
                 pendingApprovals);
@@ -445,8 +452,8 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 },
                 SuggestedAction = suggestedAction.Action,
                 SuggestedActionReason = suggestedAction.Reason,
-                // The hub is intentionally linked-only in v1. Discovery happens through search,
-                // then the voter completes claim-linking on the eligibility route.
+                // The hub stays actor-scoped. Accepted roles and pending trustee invitations
+                // appear here so the actor can continue into the right election surface.
                 CanClaimIdentity = false,
                 CanViewNamedParticipationRoster = isOwnerAdmin || isDesignatedAuditor,
                 CanViewReportPackage = isOwnerAdmin || isTrustee || isDesignatedAuditor,
@@ -1021,6 +1028,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         ElectionParticipationRecord? participationRecord,
         bool isOwnerAdmin,
         bool isTrustee,
+        bool hasPendingTrusteeInvitation,
         bool isDesignatedAuditor,
         ElectionGovernedProposalRecord? pendingProposal,
         IReadOnlyList<ElectionGovernedProposalApprovalRecord> pendingApprovals)
@@ -1090,6 +1098,13 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             return (
                 ElectionHubNextActionHintProto.ElectionHubActionAuditorReviewPackage,
                 "Review the election evidence package and auditor-visible artifacts.");
+        }
+
+        if (hasPendingTrusteeInvitation)
+        {
+            return (
+                ElectionHubNextActionHintProto.ElectionHubActionNone,
+                "A trustee invitation is waiting for your response.");
         }
 
         return (

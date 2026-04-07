@@ -285,12 +285,15 @@ public class ElectionsRepositoryTests
 
         var selectedElections = await repository.GetElectionsByIdsAsync([ownedElection.ElectionId, linkedElection.ElectionId]);
         var linkedEntries = await repository.GetRosterEntriesByLinkedActorAsync("actor-address");
+        var activeInvitations = await repository.GetActiveTrusteeInvitationsByActorAsync("actor-address");
         var acceptedInvitations = await repository.GetAcceptedTrusteeInvitationsByActorAsync("actor-address");
         var actorGrants = await repository.GetReportAccessGrantsByActorAsync("actor-address");
 
         selectedElections.Select(x => x.ElectionId).Should().BeEquivalentTo([ownedElection.ElectionId, linkedElection.ElectionId]);
         linkedEntries.Should().ContainSingle();
         linkedEntries[0].ElectionId.Should().Be(linkedElection.ElectionId);
+        activeInvitations.Should().ContainSingle();
+        activeInvitations[0].ElectionId.Should().Be(trusteeElection.ElectionId);
         acceptedInvitations.Should().ContainSingle();
         acceptedInvitations[0].ElectionId.Should().Be(trusteeElection.ElectionId);
         actorGrants.Should().ContainSingle();

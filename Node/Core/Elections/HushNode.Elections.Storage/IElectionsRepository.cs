@@ -206,6 +206,9 @@ public interface IElectionsRepository : IRepository
 
     Task<IReadOnlyList<ElectionTrusteeInvitationRecord>> GetTrusteeInvitationsAsync(ElectionId electionId);
 
+    Task<IReadOnlyList<ElectionTrusteeInvitationRecord>> GetActiveTrusteeInvitationsByActorAsync(string actorPublicAddress) =>
+        Task.FromResult<IReadOnlyList<ElectionTrusteeInvitationRecord>>(Array.Empty<ElectionTrusteeInvitationRecord>());
+
     Task<IReadOnlyList<ElectionTrusteeInvitationRecord>> GetAcceptedTrusteeInvitationsByActorAsync(string actorPublicAddress) =>
         Task.FromResult<IReadOnlyList<ElectionTrusteeInvitationRecord>>(Array.Empty<ElectionTrusteeInvitationRecord>());
 

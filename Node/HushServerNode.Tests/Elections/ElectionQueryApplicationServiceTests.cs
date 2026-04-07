@@ -529,7 +529,7 @@ public class ElectionQueryApplicationServiceTests
                 .ReturnsAsync([auditorGrant]);
             repo.Setup(x => x.GetRosterEntriesByLinkedActorAsync("actor-address"))
                 .ReturnsAsync([voterRosterEntry]);
-            repo.Setup(x => x.GetAcceptedTrusteeInvitationsByActorAsync("actor-address"))
+            repo.Setup(x => x.GetActiveTrusteeInvitationsByActorAsync("actor-address"))
                 .ReturnsAsync([acceptedInvitation]);
             repo.Setup(x => x.GetElectionsByIdsAsync(It.IsAny<IReadOnlyCollection<ElectionId>>()))
                 .ReturnsAsync([trusteeElection, auditorElection, ownerElection, voterElection]);
@@ -599,7 +599,7 @@ public class ElectionQueryApplicationServiceTests
 
         ConfigureReadOnlyRepository(mocker, repo =>
         {
-            repo.Setup(x => x.GetAcceptedTrusteeInvitationsByActorAsync("trustee-address"))
+            repo.Setup(x => x.GetActiveTrusteeInvitationsByActorAsync("trustee-address"))
                 .ReturnsAsync([acceptedInvitation]);
             repo.Setup(x => x.GetElectionsByIdsAsync(It.IsAny<IReadOnlyCollection<ElectionId>>()))
                 .ReturnsAsync([finalizedTrusteeElection]);
@@ -614,6 +614,43 @@ public class ElectionQueryApplicationServiceTests
         response.Elections[0].ActorRoles.IsTrustee.Should().BeTrue();
         response.Elections[0].SuggestedAction.Should().Be(
             ElectionHubNextActionHintProto.ElectionHubActionTrusteeReviewResult);
+    }
+
+    [Fact]
+    public async Task GetElectionHubViewAsync_WithPendingTrusteeInvitation_ReturnsInvitationEntryWithoutTrusteePermissions()
+    {
+        var mocker = new AutoMocker();
+        var pendingTrusteeElection = CreateTrusteeElection("Pending Trustee Election") with
+        {
+            LastUpdatedAt = DateTime.UtcNow.AddMinutes(-3),
+        };
+        var pendingInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+            pendingTrusteeElection.ElectionId,
+            trusteeUserAddress: "trustee-address",
+            trusteeDisplayName: "Pending Trustee",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: pendingTrusteeElection.CurrentDraftRevision);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetActiveTrusteeInvitationsByActorAsync("trustee-address"))
+                .ReturnsAsync([pendingInvitation]);
+            repo.Setup(x => x.GetElectionsByIdsAsync(It.IsAny<IReadOnlyCollection<ElectionId>>()))
+                .ReturnsAsync([pendingTrusteeElection]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionHubViewAsync("trustee-address");
+
+        response.Success.Should().BeTrue();
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].Election.Title.Should().Be("Pending Trustee Election");
+        response.Elections[0].ActorRoles.IsTrustee.Should().BeFalse();
+        response.Elections[0].SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionNone);
+        response.Elections[0].SuggestedActionReason.Should().Be("A trustee invitation is waiting for your response.");
+        response.Elections[0].CanViewReportPackage.Should().BeFalse();
+        response.Elections[0].CanViewParticipantResults.Should().BeFalse();
     }
 
     [Fact]
@@ -2031,6 +2068,8 @@ public class ElectionQueryApplicationServiceTests
         repository.Setup(x => x.GetWarningAcknowledgementsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionWarningAcknowledgementRecord>());
         repository.Setup(x => x.GetTrusteeInvitationsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
+        repository.Setup(x => x.GetActiveTrusteeInvitationsByActorAsync(It.IsAny<string>()))
             .ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
         repository.Setup(x => x.GetAcceptedTrusteeInvitationsByActorAsync(It.IsAny<string>()))
             .ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());

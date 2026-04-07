@@ -597,6 +597,16 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
             .OrderBy(x => x.SentAt)
             .ToListAsync();
 
+    public async Task<IReadOnlyList<ElectionTrusteeInvitationRecord>> GetActiveTrusteeInvitationsByActorAsync(string actorPublicAddress) =>
+        await Context.ElectionTrusteeInvitations
+            .Where(x =>
+                x.TrusteeUserAddress == actorPublicAddress &&
+                (x.Status == ElectionTrusteeInvitationStatus.Pending ||
+                 x.Status == ElectionTrusteeInvitationStatus.Accepted))
+            .OrderByDescending(x => x.RespondedAt ?? x.SentAt)
+            .ThenBy(x => x.ElectionId)
+            .ToListAsync();
+
     public async Task<IReadOnlyList<ElectionTrusteeInvitationRecord>> GetAcceptedTrusteeInvitationsByActorAsync(string actorPublicAddress) =>
         await Context.ElectionTrusteeInvitations
             .Where(x =>
