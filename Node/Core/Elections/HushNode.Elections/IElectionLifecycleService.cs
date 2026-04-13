@@ -170,7 +170,8 @@ public record SubmitElectionCeremonyMaterialRequest(
     string MessageType,
     string PayloadVersion,
     byte[] EncryptedPayload,
-    string PayloadFingerprint);
+    string PayloadFingerprint,
+    string ShareVersion);
 
 public record RecordElectionCeremonyValidationFailureRequest(
     ElectionId ElectionId,

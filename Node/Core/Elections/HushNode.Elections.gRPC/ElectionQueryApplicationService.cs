@@ -285,14 +285,13 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             var isTrustee = acceptedTrusteeElectionIds.Contains(election.ElectionId);
             var isVoter = selfRosterEntryByElectionId.ContainsKey(election.ElectionId);
             var isDesignatedAuditor = designatedAuditorGrantByElectionId.ContainsKey(election.ElectionId);
-            var alreadyLinked = isTrustee || isVoter || isDesignatedAuditor;
             var isFinalized = election.LifecycleState == ElectionLifecycleState.Finalized;
             var canOpenEligibility =
                 !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
-                !alreadyLinked &&
+                !isVoter &&
                 !isFinalized;
 
-            var eligibilityDisabledReason = alreadyLinked
+            var eligibilityDisabledReason = isVoter
                 ? "This election is already linked to this Hush account."
                 : isFinalized
                     ? "Claim-link discovery is unavailable after finalization."
@@ -428,6 +427,24 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 pendingProposal.ExecutionStatus == ElectionGovernedProposalExecutionStatus.WaitingForApprovals
                     ? await repository.GetGovernedProposalApprovalsAsync(pendingProposal.Id)
                     : Array.Empty<ElectionGovernedProposalApprovalRecord>();
+            var activeCeremonyVersion = isTrustee || isOwnerAdmin
+                ? await repository.GetActiveCeremonyVersionAsync(election.ElectionId)
+                : null;
+            var activeCeremonyTrusteeStates = activeCeremonyVersion is null
+                ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
+                : await repository.GetCeremonyTrusteeStatesAsync(activeCeremonyVersion.Id);
+            var selfTrusteeState = !isTrustee || activeCeremonyVersion is null
+                ? null
+                : activeCeremonyTrusteeStates.FirstOrDefault(x =>
+                    string.Equals(
+                        x.TrusteeUserAddress,
+                        normalizedActorPublicAddress,
+                        StringComparison.OrdinalIgnoreCase));
+            var selfShareCustody = !isTrustee || activeCeremonyVersion is null
+                ? null
+                : await repository.GetCeremonyShareCustodyRecordAsync(
+                    activeCeremonyVersion.Id,
+                    normalizedActorPublicAddress);
             var suggestedAction = ResolveSuggestedHubAction(
                 election,
                 normalizedActorPublicAddress,
@@ -438,7 +455,11 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 hasPendingTrusteeInvitation,
                 isDesignatedAuditor,
                 pendingProposal,
-                pendingApprovals);
+                pendingApprovals,
+                activeCeremonyVersion,
+                activeCeremonyTrusteeStates,
+                selfTrusteeState,
+                selfShareCustody);
 
             electionEntries.Add(new ElectionHubEntryView
             {
@@ -1031,7 +1052,11 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         bool hasPendingTrusteeInvitation,
         bool isDesignatedAuditor,
         ElectionGovernedProposalRecord? pendingProposal,
-        IReadOnlyList<ElectionGovernedProposalApprovalRecord> pendingApprovals)
+        IReadOnlyList<ElectionGovernedProposalApprovalRecord> pendingApprovals,
+        ElectionCeremonyVersionRecord? activeCeremonyVersion,
+        IReadOnlyList<ElectionCeremonyTrusteeStateRecord> activeCeremonyTrusteeStates,
+        ElectionCeremonyTrusteeStateRecord? selfTrusteeState,
+        ElectionCeremonyShareCustodyRecord? selfShareCustody)
     {
         if (CanLinkedVoterCastBallot(election, selfRosterEntry, participationRecord))
         {
@@ -1057,7 +1082,19 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         {
             return (
                 ElectionHubNextActionHintProto.ElectionHubActionOwnerManageDraft,
-                "Finish the draft details and open the election when ready.");
+                ResolveOwnerDraftHubReason(election, activeCeremonyVersion, activeCeremonyTrusteeStates));
+        }
+
+        var trusteeCeremonyFollowUpReason = ResolveTrusteeCeremonyHubReason(
+            election,
+            activeCeremonyVersion,
+            selfTrusteeState,
+            selfShareCustody);
+        if (isTrustee && !string.IsNullOrWhiteSpace(trusteeCeremonyFollowUpReason))
+        {
+            return (
+                ElectionHubNextActionHintProto.ElectionHubActionNone,
+                trusteeCeremonyFollowUpReason);
         }
 
         if (isOwnerAdmin &&
@@ -1110,6 +1147,59 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         return (
             ElectionHubNextActionHintProto.ElectionHubActionNone,
             "No immediate action is required for this election.");
+    }
+
+    private static string? ResolveTrusteeCeremonyHubReason(
+        ElectionRecord election,
+        ElectionCeremonyVersionRecord? activeCeremonyVersion,
+        ElectionCeremonyTrusteeStateRecord? selfTrusteeState,
+        ElectionCeremonyShareCustodyRecord? selfShareCustody)
+    {
+        if (election.LifecycleState != ElectionLifecycleState.Draft)
+        {
+            return null;
+        }
+
+        var nextRequiredAction = BuildTrusteeActions(
+                activeCeremonyVersion,
+                selfTrusteeState,
+                selfShareCustody)
+            .FirstOrDefault(action =>
+                action.IsAvailable &&
+                !action.IsCompleted &&
+                action.ActionType != ElectionCeremonyActionTypeProto.CeremonyActionImportShare);
+
+        return nextRequiredAction is null
+            ? null
+            : $"Continue the trustee ceremony. {nextRequiredAction.Reason}";
+    }
+
+    private static string ResolveOwnerDraftHubReason(
+        ElectionRecord election,
+        ElectionCeremonyVersionRecord? activeCeremonyVersion,
+        IReadOnlyList<ElectionCeremonyTrusteeStateRecord> activeCeremonyTrusteeStates)
+    {
+        if (election.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold)
+        {
+            return "Finish the draft details and open the election when ready.";
+        }
+
+        if (activeCeremonyVersion is null)
+        {
+            return "This trustee-threshold draft still needs a successful key ceremony before open can proceed.";
+        }
+
+        return activeCeremonyVersion.Status switch
+        {
+            ElectionCeremonyVersionStatus.InProgress =>
+                activeCeremonyTrusteeStates.Any(x => x.State == ElectionTrusteeCeremonyState.CeremonyMaterialSubmitted)
+                    ? "The election remains in draft while the key ceremony awaits owner validation of submitted trustee packages. You can still edit ballot content, but trustee changes require a new key ceremony version."
+                    : "The election remains in draft while the key ceremony is in progress. You can still edit ballot content, but trustee changes require a new key ceremony version.",
+            ElectionCeremonyVersionStatus.Ready =>
+                "The key ceremony is ready. You can still edit ballot content, but trustee changes require a new key ceremony version before open.",
+            _ =>
+                "This trustee-threshold draft still needs a successful key ceremony before open can proceed.",
+        };
     }
 
     private static bool CanLinkedVoterCastBallot(
@@ -1631,7 +1721,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 exportCompleted
                     ? "Encrypted share backup already exported."
                     : selfTrusteeState.State == ElectionTrusteeCeremonyState.CeremonyCompleted
-                        ? "Export the encrypted share backup and store it safely."
+                        ? "The election owner accepted your key ceremony participation. Export the encrypted share backup and store it safely."
                         : "Share export becomes available after ceremony completion."),
             CreateAction(
                 ElectionCeremonyActionTypeProto.CeremonyActionImportShare,

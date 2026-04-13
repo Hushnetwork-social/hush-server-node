@@ -98,6 +98,35 @@ public class EncryptedElectionEnvelopeContentHandler(
         string message) =>
         _validationFailures[transactionId] = new TransactionValidationFailure(code, message);
 
+    private bool RejectWithValidationFailure(
+        Guid transactionId,
+        string code,
+        string message)
+    {
+        RecordValidationFailure(transactionId, code, message);
+        return false;
+    }
+
+    private bool TryValidateCeremonyTransition(
+        Guid transactionId,
+        string failureCode,
+        Action transition)
+    {
+        try
+        {
+            transition();
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            return RejectWithValidationFailure(transactionId, failureCode, ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return RejectWithValidationFailure(transactionId, failureCode, ex.Message);
+        }
+    }
+
     private bool IsValidInnerAction(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
         string signatory)
@@ -1014,11 +1043,22 @@ public class EncryptedElectionEnvelopeContentHandler(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
         string signatory)
     {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
         var publishAction = decryptedEnvelope.DeserializeAction<PublishElectionCeremonyTransportKeyActionPayload>();
-        if (publishAction is null
-            || !HasMatchingActor(signatory, publishAction.ActorPublicAddress))
+        if (publishAction is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_publish_invalid_payload",
+                "Publish ceremony transport key action payload could not be read.");
+        }
+
+        if (!HasMatchingActor(signatory, publishAction.ActorPublicAddress))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_publish_actor_mismatch",
+                "The authenticated trustee must match the signed publish transport key actor.");
         }
 
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -1031,31 +1071,40 @@ public class EncryptedElectionEnvelopeContentHandler(
             requireOwnerActor: false);
         if (!context.IsSuccess || context.TrusteeState is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                context.FailureCode ?? "election_ceremony_publish_invalid_context",
+                context.FailureMessage ?? "Publish ceremony transport key action is not available in the current ceremony context.");
         }
 
-        try
-        {
-            context.TrusteeState.PublishTransportKey(
+        return TryValidateCeremonyTransition(
+            transactionId,
+            "election_ceremony_publish_invalid_state",
+            () => context.TrusteeState.PublishTransportKey(
                 publishAction.TransportPublicKeyFingerprint,
-                DateTime.UtcNow);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+                DateTime.UtcNow));
     }
 
     private bool IsValidJoinCeremonyAction(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
         string signatory)
     {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
         var joinAction = decryptedEnvelope.DeserializeAction<JoinElectionCeremonyActionPayload>();
-        if (joinAction is null
-            || !HasMatchingActor(signatory, joinAction.ActorPublicAddress))
+        if (joinAction is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_join_invalid_payload",
+                "Join ceremony action payload could not be read.");
+        }
+
+        if (!HasMatchingActor(signatory, joinAction.ActorPublicAddress))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_join_actor_mismatch",
+                "The authenticated trustee must match the signed join ceremony actor.");
         }
 
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -1068,29 +1117,38 @@ public class EncryptedElectionEnvelopeContentHandler(
             requireOwnerActor: false);
         if (!context.IsSuccess || context.TrusteeState is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                context.FailureCode ?? "election_ceremony_join_invalid_context",
+                context.FailureMessage ?? "Join ceremony action is not available in the current ceremony context.");
         }
 
-        try
-        {
-            context.TrusteeState.MarkJoined(DateTime.UtcNow);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+        return TryValidateCeremonyTransition(
+            transactionId,
+            "election_ceremony_join_invalid_state",
+            () => context.TrusteeState.MarkJoined(DateTime.UtcNow));
     }
 
     private bool IsValidRecordCeremonySelfTestAction(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
         string signatory)
     {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
         var selfTestAction = decryptedEnvelope.DeserializeAction<RecordElectionCeremonySelfTestActionPayload>();
-        if (selfTestAction is null
-            || !HasMatchingActor(signatory, selfTestAction.ActorPublicAddress))
+        if (selfTestAction is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_self_test_invalid_payload",
+                "Record ceremony self-test action payload could not be read.");
+        }
+
+        if (!HasMatchingActor(signatory, selfTestAction.ActorPublicAddress))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_self_test_actor_mismatch",
+                "The authenticated trustee must match the signed self-test actor.");
         }
 
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -1103,30 +1161,54 @@ public class EncryptedElectionEnvelopeContentHandler(
             requireOwnerActor: false);
         if (!context.IsSuccess || context.TrusteeState is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                context.FailureCode ?? "election_ceremony_self_test_invalid_context",
+                context.FailureMessage ?? "Record ceremony self-test action is not available in the current ceremony context.");
         }
 
-        try
-        {
-            context.TrusteeState.RecordSelfTestSuccess(DateTime.UtcNow);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+        return TryValidateCeremonyTransition(
+            transactionId,
+            "election_ceremony_self_test_invalid_state",
+            () => context.TrusteeState.RecordSelfTestSuccess(DateTime.UtcNow));
     }
 
     private bool IsValidSubmitCeremonyMaterialAction(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
         string signatory)
     {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
         var submitAction = decryptedEnvelope.DeserializeAction<SubmitElectionCeremonyMaterialActionPayload>();
-        if (submitAction is null
-            || !HasMatchingActor(signatory, submitAction.ActorPublicAddress)
-            || string.IsNullOrWhiteSpace(submitAction.EncryptedPayload))
+        if (submitAction is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_submit_invalid_payload",
+                "Submit ceremony material action payload could not be read.");
+        }
+
+        if (!HasMatchingActor(signatory, submitAction.ActorPublicAddress))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_submit_actor_mismatch",
+                "The authenticated trustee must match the signed submit ceremony material actor.");
+        }
+
+        if (string.IsNullOrWhiteSpace(submitAction.EncryptedPayload))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_submit_invalid_payload",
+                "Encrypted ceremony payload is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(submitAction.ShareVersion))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_submit_invalid_payload",
+                "Share version is required.");
         }
 
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -1139,37 +1221,49 @@ public class EncryptedElectionEnvelopeContentHandler(
             requireOwnerActor: false);
         if (!context.IsSuccess || context.Version is null || context.TrusteeState is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                context.FailureCode ?? "election_ceremony_submit_invalid_context",
+                context.FailureMessage ?? "Submit ceremony material action is not available in the current ceremony context.");
         }
 
         if (submitAction.RecipientTrusteeUserAddress is not null
             && !context.Version.BoundTrustees.Any(x =>
                 string.Equals(x.TrusteeUserAddress, submitAction.RecipientTrusteeUserAddress, StringComparison.OrdinalIgnoreCase)))
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_submit_invalid_recipient",
+                "Recipient trustee is not bound to the active ceremony version.");
         }
 
-        try
-        {
-            context.TrusteeState.RecordMaterialSubmitted(DateTime.UtcNow);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+        return TryValidateCeremonyTransition(
+            transactionId,
+            "election_ceremony_submit_invalid_state",
+            () => context.TrusteeState.RecordMaterialSubmitted(DateTime.UtcNow, submitAction.ShareVersion));
     }
 
     private bool IsValidRecordCeremonyValidationFailureAction(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
         string signatory)
     {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
         var validationFailureAction =
             decryptedEnvelope.DeserializeAction<RecordElectionCeremonyValidationFailureActionPayload>();
-        if (validationFailureAction is null
-            || !HasMatchingActor(signatory, validationFailureAction.ActorPublicAddress))
+        if (validationFailureAction is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_validation_failure_invalid_payload",
+                "Record ceremony validation failure action payload could not be read.");
+        }
+
+        if (!HasMatchingActor(signatory, validationFailureAction.ActorPublicAddress))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_validation_failure_actor_mismatch",
+                "The authenticated owner must match the signed validation failure actor.");
         }
 
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -1182,7 +1276,10 @@ public class EncryptedElectionEnvelopeContentHandler(
             requireOwnerActor: true);
         if (!ownerContext.IsSuccess)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                ownerContext.FailureCode ?? "election_ceremony_validation_failure_invalid_context",
+                ownerContext.FailureMessage ?? "Record ceremony validation failure action is not available in the current ceremony context.");
         }
 
         var trusteeState = repository
@@ -1191,31 +1288,40 @@ public class EncryptedElectionEnvelopeContentHandler(
             .GetResult();
         if (trusteeState is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_validation_failure_unknown_trustee",
+                $"Trustee {validationFailureAction.TrusteeUserAddress} is not bound to ceremony version {validationFailureAction.CeremonyVersionId}.");
         }
 
-        try
-        {
-            trusteeState.RecordValidationFailure(
+        return TryValidateCeremonyTransition(
+            transactionId,
+            "election_ceremony_validation_failure_invalid_state",
+            () => trusteeState.RecordValidationFailure(
                 validationFailureAction.ValidationFailureReason,
-                DateTime.UtcNow);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+                DateTime.UtcNow));
     }
 
     private bool IsValidCompleteCeremonyTrusteeAction(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
         string signatory)
     {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
         var completeAction = decryptedEnvelope.DeserializeAction<CompleteElectionCeremonyTrusteeActionPayload>();
-        if (completeAction is null
-            || !HasMatchingActor(signatory, completeAction.ActorPublicAddress))
+        if (completeAction is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_complete_invalid_payload",
+                "Complete ceremony trustee action payload could not be read.");
+        }
+
+        if (!HasMatchingActor(signatory, completeAction.ActorPublicAddress))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_complete_actor_mismatch",
+                "The authenticated owner must match the signed complete ceremony actor.");
         }
 
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -1228,7 +1334,10 @@ public class EncryptedElectionEnvelopeContentHandler(
             requireOwnerActor: true);
         if (!ownerContext.IsSuccess || ownerContext.Version is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                ownerContext.FailureCode ?? "election_ceremony_complete_invalid_context",
+                ownerContext.FailureMessage ?? "Complete ceremony trustee action is not available in the current ceremony context.");
         }
 
         var trusteeState = repository
@@ -1237,14 +1346,16 @@ public class EncryptedElectionEnvelopeContentHandler(
             .GetResult();
         if (trusteeState is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_complete_unknown_trustee",
+                $"Trustee {completeAction.TrusteeUserAddress} is not bound to ceremony version {completeAction.CeremonyVersionId}.");
         }
 
-        try
-        {
-            trusteeState.MarkCompleted(DateTime.UtcNow, completeAction.ShareVersion);
-        }
-        catch
+        if (!TryValidateCeremonyTransition(
+                transactionId,
+                "election_ceremony_complete_invalid_state",
+                () => trusteeState.MarkCompleted(DateTime.UtcNow, completeAction.ShareVersion)))
         {
             return false;
         }
@@ -1258,7 +1369,10 @@ public class EncryptedElectionEnvelopeContentHandler(
             && completedTrustees >= ownerContext.Version.RequiredApprovalCount
             && string.IsNullOrWhiteSpace(completeAction.TallyPublicKeyFingerprint))
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_complete_missing_tally_fingerprint",
+                "Tally public key fingerprint is required when the ceremony reaches readiness.");
         }
 
         return true;
@@ -1268,11 +1382,22 @@ public class EncryptedElectionEnvelopeContentHandler(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
         string signatory)
     {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
         var exportAction = decryptedEnvelope.DeserializeAction<RecordElectionCeremonyShareExportActionPayload>();
-        if (exportAction is null
-            || !HasMatchingActor(signatory, exportAction.ActorPublicAddress))
+        if (exportAction is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_export_invalid_payload",
+                "Record ceremony share export action payload could not be read.");
+        }
+
+        if (!HasMatchingActor(signatory, exportAction.ActorPublicAddress))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_export_actor_mismatch",
+                "The authenticated trustee must match the signed share export actor.");
         }
 
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -1287,29 +1412,38 @@ public class EncryptedElectionEnvelopeContentHandler(
             requireOwnerActor: false);
         if (!custodyContext.IsSuccess || custodyContext.CustodyRecord is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                custodyContext.FailureCode ?? "election_ceremony_export_invalid_context",
+                custodyContext.FailureMessage ?? "Record ceremony share export action is not available in the current ceremony context.");
         }
 
-        try
-        {
-            custodyContext.CustodyRecord.RecordExport(DateTime.UtcNow);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+        return TryValidateCeremonyTransition(
+            transactionId,
+            "election_ceremony_export_invalid_state",
+            () => custodyContext.CustodyRecord.RecordExport(DateTime.UtcNow));
     }
 
     private bool IsValidRecordCeremonyShareImportAction(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
         string signatory)
     {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
         var importAction = decryptedEnvelope.DeserializeAction<RecordElectionCeremonyShareImportActionPayload>();
-        if (importAction is null
-            || !HasMatchingActor(signatory, importAction.ActorPublicAddress))
+        if (importAction is null)
         {
-            return false;
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_import_invalid_payload",
+                "Record ceremony share import action payload could not be read.");
+        }
+
+        if (!HasMatchingActor(signatory, importAction.ActorPublicAddress))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_import_actor_mismatch",
+                "The authenticated trustee must match the signed share import actor.");
         }
 
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -1322,13 +1456,27 @@ public class EncryptedElectionEnvelopeContentHandler(
             importAction.ActorPublicAddress,
             shareVersion: null,
             requireOwnerActor: false);
-        return custodyContext.IsSuccess
-            && custodyContext.CustodyRecord is not null
-            && custodyContext.CustodyRecord.MatchesImportBinding(
+        if (!custodyContext.IsSuccess || custodyContext.CustodyRecord is null)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                custodyContext.FailureCode ?? "election_ceremony_import_invalid_context",
+                custodyContext.FailureMessage ?? "Record ceremony share import action is not available in the current ceremony context.");
+        }
+
+        if (!custodyContext.CustodyRecord.MatchesImportBinding(
                 importAction.ImportedElectionId,
                 importAction.ImportedCeremonyVersionId,
                 importAction.ImportedTrusteeUserAddress,
-                importAction.ImportedShareVersion);
+                importAction.ImportedShareVersion))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_import_binding_mismatch",
+                "Imported share package does not match the exact ceremony binding.");
+        }
+
+        return true;
     }
 
     private bool IsValidCeremonyBootstrap(
@@ -1522,33 +1670,50 @@ public class EncryptedElectionEnvelopeContentHandler(
         bool requireOwnerActor)
     {
         var election = repository.GetElectionAsync(electionId).GetAwaiter().GetResult();
-        if (election is null || election.LifecycleState != ElectionLifecycleState.Draft)
+        if (election is null)
         {
-            return CeremonyTrusteeContextValidationResult.Failure();
+            return CeremonyTrusteeContextValidationResult.Failure(
+                "election_ceremony_not_found",
+                $"Election {electionId} was not found.");
+        }
+
+        if (election.LifecycleState != ElectionLifecycleState.Draft)
+        {
+            return CeremonyTrusteeContextValidationResult.Failure(
+                "election_ceremony_not_draft",
+                "Election ceremony actions are only allowed while the election remains in draft.");
         }
 
         var version = repository.GetCeremonyVersionAsync(ceremonyVersionId).GetAwaiter().GetResult();
         if (version is null || version.ElectionId != electionId || !version.IsActive)
         {
-            return CeremonyTrusteeContextValidationResult.Failure();
+            return CeremonyTrusteeContextValidationResult.Failure(
+                "election_ceremony_version_not_found",
+                $"Ceremony version {ceremonyVersionId} was not found for election {electionId}.");
         }
 
         var activeVersion = repository.GetActiveCeremonyVersionAsync(electionId).GetAwaiter().GetResult();
         if (activeVersion is null || activeVersion.Id != ceremonyVersionId)
         {
-            return CeremonyTrusteeContextValidationResult.Failure();
+            return CeremonyTrusteeContextValidationResult.Failure(
+                "election_ceremony_inactive_version",
+                "Only the active ceremony version may receive new trustee actions.");
         }
 
         if (requireOwnerActor)
         {
             return string.Equals(election.OwnerPublicAddress, actorPublicAddress, StringComparison.Ordinal)
                 ? CeremonyTrusteeContextValidationResult.Success(election, version, null)
-                : CeremonyTrusteeContextValidationResult.Failure();
+                : CeremonyTrusteeContextValidationResult.Failure(
+                    "election_ceremony_owner_required",
+                    "Only the election owner can perform this ceremony action.");
         }
 
         var trusteeState = repository.GetCeremonyTrusteeStateAsync(ceremonyVersionId, actorPublicAddress).GetAwaiter().GetResult();
         return trusteeState is null
-            ? CeremonyTrusteeContextValidationResult.Failure()
+            ? CeremonyTrusteeContextValidationResult.Failure(
+                "election_ceremony_trustee_not_bound",
+                "Only trustees bound to the active ceremony version can perform this action.")
             : CeremonyTrusteeContextValidationResult.Success(election, version, trusteeState);
     }
 
@@ -1564,37 +1729,49 @@ public class EncryptedElectionEnvelopeContentHandler(
         var election = repository.GetElectionAsync(electionId).GetAwaiter().GetResult();
         if (election is null)
         {
-            return ShareCustodyContextValidationResult.Failure();
+            return ShareCustodyContextValidationResult.Failure(
+                "election_ceremony_not_found",
+                $"Election {electionId} was not found.");
         }
 
         if (!requireOwnerActor
             && !string.Equals(actorPublicAddress, trusteeUserAddress, StringComparison.Ordinal))
         {
-            return ShareCustodyContextValidationResult.Failure();
+            return ShareCustodyContextValidationResult.Failure(
+                "election_ceremony_share_forbidden",
+                "Trustees can only manage their own share-custody records.");
         }
 
         var version = repository.GetCeremonyVersionAsync(ceremonyVersionId).GetAwaiter().GetResult();
         if (version is null || version.ElectionId != electionId || !version.IsActive)
         {
-            return ShareCustodyContextValidationResult.Failure();
+            return ShareCustodyContextValidationResult.Failure(
+                "election_ceremony_version_not_found",
+                $"Ceremony version {ceremonyVersionId} was not found for election {electionId}.");
         }
 
         var trusteeState = repository.GetCeremonyTrusteeStateAsync(ceremonyVersionId, trusteeUserAddress).GetAwaiter().GetResult();
         if (trusteeState is null || trusteeState.State != ElectionTrusteeCeremonyState.CeremonyCompleted)
         {
-            return ShareCustodyContextValidationResult.Failure();
+            return ShareCustodyContextValidationResult.Failure(
+                "election_ceremony_share_not_ready",
+                "Share-custody actions require a ceremony-complete trustee state.");
         }
 
         var custodyRecord = repository.GetCeremonyShareCustodyRecordAsync(ceremonyVersionId, trusteeUserAddress).GetAwaiter().GetResult();
         if (custodyRecord is null)
         {
-            return ShareCustodyContextValidationResult.Failure();
+            return ShareCustodyContextValidationResult.Failure(
+                "election_ceremony_share_not_found",
+                $"Share-custody record for trustee {trusteeUserAddress} was not found.");
         }
 
         if (shareVersion is not null
             && !string.Equals(custodyRecord.ShareVersion, shareVersion, StringComparison.Ordinal))
         {
-            return ShareCustodyContextValidationResult.Failure();
+            return ShareCustodyContextValidationResult.Failure(
+                "election_ceremony_share_version_mismatch",
+                "Share version does not match the active ceremony binding.");
         }
 
         return ShareCustodyContextValidationResult.Success(election, version, custodyRecord);
@@ -1616,31 +1793,39 @@ public class EncryptedElectionEnvelopeContentHandler(
         bool IsSuccess,
         ElectionRecord? Election,
         ElectionCeremonyVersionRecord? Version,
-        ElectionCeremonyTrusteeStateRecord? TrusteeState)
+        ElectionCeremonyTrusteeStateRecord? TrusteeState,
+        string? FailureCode,
+        string? FailureMessage)
     {
         public static CeremonyTrusteeContextValidationResult Success(
             ElectionRecord election,
             ElectionCeremonyVersionRecord version,
             ElectionCeremonyTrusteeStateRecord? trusteeState) =>
-            new(true, election, version, trusteeState);
+            new(true, election, version, trusteeState, null, null);
 
-        public static CeremonyTrusteeContextValidationResult Failure() =>
-            new(false, null, null, null);
+        public static CeremonyTrusteeContextValidationResult Failure(
+            string failureCode,
+            string failureMessage) =>
+            new(false, null, null, null, failureCode, failureMessage);
     }
 
     private sealed record ShareCustodyContextValidationResult(
         bool IsSuccess,
         ElectionRecord? Election,
         ElectionCeremonyVersionRecord? Version,
-        ElectionCeremonyShareCustodyRecord? CustodyRecord)
+        ElectionCeremonyShareCustodyRecord? CustodyRecord,
+        string? FailureCode,
+        string? FailureMessage)
     {
         public static ShareCustodyContextValidationResult Success(
             ElectionRecord election,
             ElectionCeremonyVersionRecord version,
             ElectionCeremonyShareCustodyRecord custodyRecord) =>
-            new(true, election, version, custodyRecord);
+            new(true, election, version, custodyRecord, null, null);
 
-        public static ShareCustodyContextValidationResult Failure() =>
-            new(false, null, null, null);
+        public static ShareCustodyContextValidationResult Failure(
+            string failureCode,
+            string failureMessage) =>
+            new(false, null, null, null, failureCode, failureMessage);
     }
 }

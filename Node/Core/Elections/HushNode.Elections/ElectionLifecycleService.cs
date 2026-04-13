@@ -1210,6 +1210,13 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Encrypted ceremony payload is required.");
         }
 
+        if (string.IsNullOrWhiteSpace(request.ShareVersion))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Share version is required.");
+        }
+
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var activeVersion = await LoadActiveCeremonyTrusteeContextAsync(
@@ -1239,7 +1246,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         try
         {
             var submittedAt = DateTime.UtcNow;
-            updatedState = ceremonyContext.TrusteeState!.RecordMaterialSubmitted(submittedAt);
+            updatedState = ceremonyContext.TrusteeState!.RecordMaterialSubmitted(submittedAt, request.ShareVersion);
             messageEnvelope = ElectionModelFactory.CreateCeremonyMessageEnvelope(
                 request.ElectionId,
                 request.CeremonyVersionId,

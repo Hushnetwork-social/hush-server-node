@@ -537,6 +537,13 @@ public record ElectionCeremonyTrusteeStateRecord(
     {
         EnsureMutable();
 
+        if (HasPublishedTransportKey)
+        {
+            throw new InvalidOperationException("Trustee has already published a transport key for this ceremony version.");
+        }
+
+        EnsureStateIn(ElectionTrusteeCeremonyState.AcceptedTrustee, ElectionTrusteeCeremonyState.CeremonyNotStarted);
+
         if (string.IsNullOrWhiteSpace(transportPublicKeyFingerprint))
         {
             throw new ArgumentException("Transport public key fingerprint is required.", nameof(transportPublicKeyFingerprint));
@@ -553,6 +560,12 @@ public record ElectionCeremonyTrusteeStateRecord(
     public ElectionCeremonyTrusteeStateRecord MarkJoined(DateTime joinedAt)
     {
         EnsureMutable();
+
+        if (JoinedAt.HasValue)
+        {
+            throw new InvalidOperationException("Trustee has already joined this ceremony version.");
+        }
+
         EnsureTransportKeyPublished();
         EnsureStateIn(ElectionTrusteeCeremonyState.AcceptedTrustee, ElectionTrusteeCeremonyState.CeremonyNotStarted);
 
@@ -567,20 +580,45 @@ public record ElectionCeremonyTrusteeStateRecord(
     public ElectionCeremonyTrusteeStateRecord RecordSelfTestSuccess(DateTime succeededAt)
     {
         EnsureMutable();
+
+        if (SelfTestSucceededAt.HasValue && State != ElectionTrusteeCeremonyState.CeremonyValidationFailed)
+        {
+            throw new InvalidOperationException("Trustee self-test has already been recorded for this ceremony version.");
+        }
+
+        if (!JoinedAt.HasValue)
+        {
+            throw new InvalidOperationException("Trustee must join the ceremony before recording a successful self-test.");
+        }
+
         EnsureStateIn(ElectionTrusteeCeremonyState.CeremonyJoined, ElectionTrusteeCeremonyState.CeremonyValidationFailed);
 
         return this with
         {
+            State = ElectionTrusteeCeremonyState.CeremonyJoined,
             SelfTestSucceededAt = succeededAt,
+            MaterialSubmittedAt = null,
+            ShareVersion = null,
             ValidationFailedAt = null,
             ValidationFailureReason = null,
             LastUpdatedAt = succeededAt,
         };
     }
 
-    public ElectionCeremonyTrusteeStateRecord RecordMaterialSubmitted(DateTime submittedAt)
+    public ElectionCeremonyTrusteeStateRecord RecordMaterialSubmitted(DateTime submittedAt, string shareVersion)
     {
         EnsureMutable();
+
+        if (MaterialSubmittedAt.HasValue && State != ElectionTrusteeCeremonyState.CeremonyValidationFailed)
+        {
+            throw new InvalidOperationException("Trustee ceremony material has already been submitted for this version.");
+        }
+
+        if (!JoinedAt.HasValue)
+        {
+            throw new InvalidOperationException("Trustee must join the ceremony before submitting material.");
+        }
+
         EnsureStateIn(ElectionTrusteeCeremonyState.CeremonyJoined, ElectionTrusteeCeremonyState.CeremonyValidationFailed);
 
         if (!SelfTestSucceededAt.HasValue)
@@ -588,10 +626,16 @@ public record ElectionCeremonyTrusteeStateRecord(
             throw new InvalidOperationException("Trustee material cannot be submitted before a successful self-test.");
         }
 
+        if (string.IsNullOrWhiteSpace(shareVersion))
+        {
+            throw new ArgumentException("Share version is required.", nameof(shareVersion));
+        }
+
         return this with
         {
             State = ElectionTrusteeCeremonyState.CeremonyMaterialSubmitted,
             MaterialSubmittedAt = submittedAt,
+            ShareVersion = shareVersion.Trim(),
             LastUpdatedAt = submittedAt,
         };
     }
@@ -611,6 +655,9 @@ public record ElectionCeremonyTrusteeStateRecord(
         return this with
         {
             State = ElectionTrusteeCeremonyState.CeremonyValidationFailed,
+            SelfTestSucceededAt = null,
+            MaterialSubmittedAt = null,
+            ShareVersion = null,
             ValidationFailedAt = failedAt,
             ValidationFailureReason = validationFailureReason.Trim(),
             LastUpdatedAt = failedAt,
@@ -622,7 +669,16 @@ public record ElectionCeremonyTrusteeStateRecord(
         string shareVersion)
     {
         EnsureMutable();
-        EnsureStateIn(ElectionTrusteeCeremonyState.CeremonyMaterialSubmitted);
+
+        if (CompletedAt.HasValue)
+        {
+            throw new InvalidOperationException("Trustee ceremony completion has already been recorded for this version.");
+        }
+
+        if (State != ElectionTrusteeCeremonyState.CeremonyMaterialSubmitted)
+        {
+            throw new InvalidOperationException("Trustee material must be submitted before ceremony completion.");
+        }
 
         if (string.IsNullOrWhiteSpace(shareVersion))
         {

@@ -94,7 +94,7 @@ public class ElectionCeremonyRepositoryTests
             .PublishTransportKey("transport-fingerprint", DateTime.UtcNow)
             .MarkJoined(DateTime.UtcNow)
             .RecordSelfTestSuccess(DateTime.UtcNow)
-            .RecordMaterialSubmitted(DateTime.UtcNow)
+            .RecordMaterialSubmitted(DateTime.UtcNow, "share-v1")
             .MarkCompleted(DateTime.UtcNow, "share-v1");
         var shareCustody = ElectionModelFactory.CreateCeremonyShareCustodyRecord(
             electionId: election.ElectionId,

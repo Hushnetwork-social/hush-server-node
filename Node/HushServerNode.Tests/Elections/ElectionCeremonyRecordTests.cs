@@ -76,11 +76,11 @@ public class ElectionCeremonyRecordTests
         var published = state.PublishTransportKey("transport-fingerprint", DateTime.UtcNow);
         var joined = published.MarkJoined(DateTime.UtcNow);
         var selfTested = joined.RecordSelfTestSuccess(DateTime.UtcNow);
-        var submitted = selfTested.RecordMaterialSubmitted(DateTime.UtcNow);
+        var submitted = selfTested.RecordMaterialSubmitted(DateTime.UtcNow, "share-v1");
         var failed = submitted.RecordValidationFailure("wrong recipient binding", DateTime.UtcNow);
         var reselfTested = failed.RecordSelfTestSuccess(DateTime.UtcNow);
-        var resubmitted = reselfTested.RecordMaterialSubmitted(DateTime.UtcNow);
-        var completed = resubmitted.MarkCompleted(DateTime.UtcNow, "share-v1");
+        var resubmitted = reselfTested.RecordMaterialSubmitted(DateTime.UtcNow, "share-v2");
+        var completed = resubmitted.MarkCompleted(DateTime.UtcNow, "share-v2");
 
         published.HasPublishedTransportKey.Should().BeTrue();
         joined.State.Should().Be(ElectionTrusteeCeremonyState.CeremonyJoined);
@@ -88,9 +88,14 @@ public class ElectionCeremonyRecordTests
         submitted.State.Should().Be(ElectionTrusteeCeremonyState.CeremonyMaterialSubmitted);
         failed.State.Should().Be(ElectionTrusteeCeremonyState.CeremonyValidationFailed);
         failed.ValidationFailureReason.Should().Be("wrong recipient binding");
+        failed.SelfTestSucceededAt.Should().BeNull();
+        failed.MaterialSubmittedAt.Should().BeNull();
+        failed.ShareVersion.Should().BeNull();
+        reselfTested.State.Should().Be(ElectionTrusteeCeremonyState.CeremonyJoined);
+        reselfTested.ValidationFailureReason.Should().BeNull();
         resubmitted.State.Should().Be(ElectionTrusteeCeremonyState.CeremonyMaterialSubmitted);
         completed.State.Should().Be(ElectionTrusteeCeremonyState.CeremonyCompleted);
-        completed.ShareVersion.Should().Be("share-v1");
+        completed.ShareVersion.Should().Be("share-v2");
     }
 
     [Fact]
@@ -106,6 +111,56 @@ public class ElectionCeremonyRecordTests
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*publish a transport key before joining*");
+    }
+
+    [Fact]
+    public void CeremonyTrusteeState_PublishTransportKeyTwice_ShouldThrow()
+    {
+        var state = ElectionModelFactory.CreateCeremonyTrusteeState(
+            electionId: ElectionId.NewElectionId,
+            ceremonyVersionId: Guid.NewGuid(),
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice");
+        var published = state.PublishTransportKey("transport-fingerprint", DateTime.UtcNow);
+
+        var act = () => published.PublishTransportKey("transport-fingerprint-2", DateTime.UtcNow);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*already published a transport key*");
+    }
+
+    [Fact]
+    public void CeremonyTrusteeState_RecordSelfTestTwiceWithoutValidationFailure_ShouldThrow()
+    {
+        var state = ElectionModelFactory.CreateCeremonyTrusteeState(
+                electionId: ElectionId.NewElectionId,
+                ceremonyVersionId: Guid.NewGuid(),
+                trusteeUserAddress: "trustee-a",
+                trusteeDisplayName: "Alice")
+            .PublishTransportKey("transport-fingerprint", DateTime.UtcNow)
+            .MarkJoined(DateTime.UtcNow)
+            .RecordSelfTestSuccess(DateTime.UtcNow);
+
+        var act = () => state.RecordSelfTestSuccess(DateTime.UtcNow);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*self-test has already been recorded*");
+    }
+
+    [Fact]
+    public void CeremonyTrusteeState_SubmitWithoutJoin_ShouldThrow()
+    {
+        var state = ElectionModelFactory.CreateCeremonyTrusteeState(
+                electionId: ElectionId.NewElectionId,
+                ceremonyVersionId: Guid.NewGuid(),
+                trusteeUserAddress: "trustee-a",
+                trusteeDisplayName: "Alice")
+            .PublishTransportKey("transport-fingerprint", DateTime.UtcNow);
+
+        var act = () => state.RecordMaterialSubmitted(DateTime.UtcNow, "share-v1");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*join the ceremony before submitting material*");
     }
 
     [Fact]

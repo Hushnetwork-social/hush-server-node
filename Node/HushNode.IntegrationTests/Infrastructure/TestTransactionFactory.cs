@@ -337,7 +337,8 @@ internal static class TestTransactionFactory
         string messageType,
         string payloadVersion,
         string encryptedPayload,
-        string payloadFingerprint)
+        string payloadFingerprint,
+        string? shareVersion = null)
     {
         var actionEnvelope = new EncryptedElectionActionEnvelope(
             EncryptedElectionEnvelopeActionTypes.SubmitCeremonyMaterial,
@@ -348,7 +349,8 @@ internal static class TestTransactionFactory
                 messageType,
                 payloadVersion,
                 encryptedPayload,
-                payloadFingerprint)));
+                payloadFingerprint,
+                shareVersion ?? $"share-{payloadFingerprint}")));
 
         return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
     }

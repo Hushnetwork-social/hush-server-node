@@ -704,7 +704,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 submitAction.MessageType,
                 submitAction.PayloadVersion,
                 Encoding.UTF8.GetBytes(submitAction.EncryptedPayload),
-                submitAction.PayloadFingerprint));
+                submitAction.PayloadFingerprint,
+                submitAction.ShareVersion));
     }
 
     private async Task<ElectionCommandResult> HandleRecordCeremonyValidationFailureAsync(

@@ -149,7 +149,8 @@ public record SubmitElectionCeremonyMaterialActionPayload(
     string MessageType,
     string PayloadVersion,
     string EncryptedPayload,
-    string PayloadFingerprint);
+    string PayloadFingerprint,
+    string ShareVersion);
 
 public record RecordElectionCeremonyValidationFailureActionPayload(
     Guid CeremonyVersionId,

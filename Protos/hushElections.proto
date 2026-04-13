@@ -914,6 +914,7 @@ message SubmitElectionCeremonyMaterialRequest {
   string PayloadVersion = 6;
   bytes EncryptedPayload = 7;
   string PayloadFingerprint = 8;
+  string ShareVersion = 9;
 }
 
 message RecordElectionCeremonyValidationFailureRequest {

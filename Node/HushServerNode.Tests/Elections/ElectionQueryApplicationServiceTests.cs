@@ -115,7 +115,7 @@ public class ElectionQueryApplicationServiceTests
             .PublishTransportKey("transport-a", DateTime.UtcNow)
             .MarkJoined(DateTime.UtcNow)
             .RecordSelfTestSuccess(DateTime.UtcNow)
-            .RecordMaterialSubmitted(DateTime.UtcNow)
+            .RecordMaterialSubmitted(DateTime.UtcNow, "share-v1")
             .MarkCompleted(DateTime.UtcNow, "share-v1");
         var finalizationSession = ElectionModelFactory.CreateFinalizationSession(
             election,
@@ -400,6 +400,7 @@ public class ElectionQueryApplicationServiceTests
             LifecycleState = ElectionLifecycleState.Finalized,
         };
         var auditorElection = CreateAdminElection(title: "Auditor Election");
+        var trusteeElection = CreateAdminElection(title: "Trustee Election");
         var claimableElection = CreateAdminElection(title: "Claimable Election");
         var voterRosterEntry = ElectionModelFactory.CreateRosterEntry(
                 linkedFinalizedElection.ElectionId,
@@ -412,6 +413,16 @@ public class ElectionQueryApplicationServiceTests
             auditorElection.ElectionId,
             "owner-address",
             "actor-address");
+        var acceptedTrusteeInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+            trusteeElection.ElectionId,
+            "actor-address",
+            "Trustee Actor",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: trusteeElection.CurrentDraftRevision)
+            .Accept(
+                respondedAt: DateTime.UtcNow,
+                resolvedAtDraftRevision: trusteeElection.CurrentDraftRevision,
+                lifecycleState: trusteeElection.LifecycleState);
 
         ConfigureReadOnlyRepository(mocker, repo =>
         {
@@ -419,20 +430,20 @@ public class ElectionQueryApplicationServiceTests
                     "admin",
                     It.IsAny<IReadOnlyCollection<string>>(),
                     12))
-                .ReturnsAsync([linkedFinalizedElection, ownerClaimableElection, unlinkedFinalizedElection, auditorElection, claimableElection]);
+                .ReturnsAsync([linkedFinalizedElection, ownerClaimableElection, unlinkedFinalizedElection, auditorElection, trusteeElection, claimableElection]);
             repo.Setup(x => x.GetRosterEntriesByLinkedActorAsync("actor-address"))
                 .ReturnsAsync([voterRosterEntry]);
             repo.Setup(x => x.GetReportAccessGrantsByActorAsync("actor-address"))
                 .ReturnsAsync([auditorGrant]);
             repo.Setup(x => x.GetAcceptedTrusteeInvitationsByActorAsync("actor-address"))
-                .ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
+                .ReturnsAsync([acceptedTrusteeInvitation]);
         });
 
         var sut = CreateQueryService(mocker);
 
         var response = await sut.SearchElectionDirectoryAsync("admin", Array.Empty<string>(), 12, "actor-address");
 
-        response.Entries.Should().HaveCount(5);
+        response.Entries.Should().HaveCount(6);
 
         var linkedFinalizedEntry = response.Entries.Single(x => x.Election.Title == "Linked Finalized Election");
         linkedFinalizedEntry.ActorRoles.IsVoter.Should().BeTrue();
@@ -453,8 +464,15 @@ public class ElectionQueryApplicationServiceTests
 
         var auditorEntry = response.Entries.Single(x => x.Election.Title == "Auditor Election");
         auditorEntry.ActorRoles.IsDesignatedAuditor.Should().BeTrue();
-        auditorEntry.CanOpenEligibility.Should().BeFalse();
-        auditorEntry.EligibilityDisabledReason.Should().Be("This election is already linked to this Hush account.");
+        auditorEntry.ActorRoles.IsVoter.Should().BeFalse();
+        auditorEntry.CanOpenEligibility.Should().BeTrue();
+        auditorEntry.EligibilityDisabledReason.Should().BeEmpty();
+
+        var trusteeEntry = response.Entries.Single(x => x.Election.Title == "Trustee Election");
+        trusteeEntry.ActorRoles.IsTrustee.Should().BeTrue();
+        trusteeEntry.ActorRoles.IsVoter.Should().BeFalse();
+        trusteeEntry.CanOpenEligibility.Should().BeTrue();
+        trusteeEntry.EligibilityDisabledReason.Should().BeEmpty();
 
         var claimableEntry = response.Entries.Single(x => x.Election.Title == "Claimable Election");
         claimableEntry.ActorRoles.IsVoter.Should().BeFalse();
@@ -651,6 +669,265 @@ public class ElectionQueryApplicationServiceTests
         response.Elections[0].SuggestedActionReason.Should().Be("A trustee invitation is waiting for your response.");
         response.Elections[0].CanViewReportPackage.Should().BeFalse();
         response.Elections[0].CanViewParticipantResults.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetElectionHubViewAsync_WithDraftTrusteeCeremonyFollowUp_ReturnsCeremonyPrompt()
+    {
+        var mocker = new AutoMocker();
+        var draftTrusteeElection = CreateTrusteeElection("Draft Trustee Ceremony Election");
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                draftTrusteeElection.ElectionId,
+                trusteeUserAddress: "trustee-address",
+                trusteeDisplayName: "Trustee Five",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: draftTrusteeElection.CurrentDraftRevision)
+            .Accept(
+                respondedAt: DateTime.UtcNow.AddMinutes(-10),
+                resolvedAtDraftRevision: draftTrusteeElection.CurrentDraftRevision,
+                lifecycleState: draftTrusteeElection.LifecycleState);
+        var version = ElectionModelFactory.CreateCeremonyVersion(
+            draftTrusteeElection.ElectionId,
+            versionNumber: 1,
+            profileId: "prod-1of1-v1",
+            requiredApprovalCount: 1,
+            boundTrustees:
+            [
+                new SharedTrusteeReference("trustee-address", "Trustee Five"),
+            ],
+            startedByPublicAddress: "owner-address");
+        var trusteeState = ElectionModelFactory.CreateCeremonyTrusteeState(
+            draftTrusteeElection.ElectionId,
+            version.Id,
+            "trustee-address",
+            "Trustee Five",
+            ElectionTrusteeCeremonyState.AcceptedTrustee);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetActiveTrusteeInvitationsByActorAsync("trustee-address"))
+                .ReturnsAsync([acceptedInvitation]);
+            repo.Setup(x => x.GetElectionsByIdsAsync(It.IsAny<IReadOnlyCollection<ElectionId>>()))
+                .ReturnsAsync([draftTrusteeElection]);
+            repo.Setup(x => x.GetPendingGovernedProposalAsync(draftTrusteeElection.ElectionId))
+                .ReturnsAsync((ElectionGovernedProposalRecord?)null);
+            repo.Setup(x => x.GetActiveCeremonyVersionAsync(draftTrusteeElection.ElectionId))
+                .ReturnsAsync(version);
+            repo.Setup(x => x.GetCeremonyTrusteeStatesAsync(version.Id))
+                .ReturnsAsync([trusteeState]);
+            repo.Setup(x => x.GetCeremonyShareCustodyRecordAsync(version.Id, "trustee-address"))
+                .ReturnsAsync((ElectionCeremonyShareCustodyRecord?)null);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionHubViewAsync("trustee-address");
+
+        response.Success.Should().BeTrue();
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].ActorRoles.IsTrustee.Should().BeTrue();
+        response.Elections[0].SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionNone);
+        response.Elections[0].SuggestedActionReason.Should().Be(
+            "Continue the trustee ceremony. Publish your ceremony transport key first.");
+    }
+
+    [Fact]
+    public async Task GetElectionHubViewAsync_WithCompletedTrusteeAwaitingShareExport_ReturnsOwnerAcceptedReason()
+    {
+        var mocker = new AutoMocker();
+        var draftTrusteeElection = CreateTrusteeElection("Draft Trustee Ceremony Election");
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                draftTrusteeElection.ElectionId,
+                trusteeUserAddress: "trustee-address",
+                trusteeDisplayName: "Trustee Five",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: draftTrusteeElection.CurrentDraftRevision)
+            .Accept(
+                respondedAt: DateTime.UtcNow.AddMinutes(-10),
+                resolvedAtDraftRevision: draftTrusteeElection.CurrentDraftRevision,
+                lifecycleState: draftTrusteeElection.LifecycleState);
+        var version = ElectionModelFactory.CreateCeremonyVersion(
+                draftTrusteeElection.ElectionId,
+                versionNumber: 1,
+                profileId: "prod-1of1-v1",
+                requiredApprovalCount: 1,
+                boundTrustees:
+                [
+                    new SharedTrusteeReference("trustee-address", "Trustee Five"),
+                ],
+                startedByPublicAddress: "owner-address")
+            .MarkReady(DateTime.UtcNow.AddMinutes(-1), "tally-kc-001");
+        var trusteeState = ElectionModelFactory.CreateCeremonyTrusteeState(
+                draftTrusteeElection.ElectionId,
+                version.Id,
+                "trustee-address",
+                "Trustee Five",
+                ElectionTrusteeCeremonyState.AcceptedTrustee)
+            .PublishTransportKey("transport-a", DateTime.UtcNow.AddMinutes(-5))
+            .MarkJoined(DateTime.UtcNow.AddMinutes(-4))
+            .RecordSelfTestSuccess(DateTime.UtcNow.AddMinutes(-3))
+            .RecordMaterialSubmitted(DateTime.UtcNow.AddMinutes(-2), "share-v1")
+            .MarkCompleted(DateTime.UtcNow.AddMinutes(-1), "share-v1");
+        var shareCustody = ElectionModelFactory.CreateCeremonyShareCustodyRecord(
+            draftTrusteeElection.ElectionId,
+            version.Id,
+            "trustee-address",
+            "share-v1");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetActiveTrusteeInvitationsByActorAsync("trustee-address"))
+                .ReturnsAsync([acceptedInvitation]);
+            repo.Setup(x => x.GetElectionsByIdsAsync(It.IsAny<IReadOnlyCollection<ElectionId>>()))
+                .ReturnsAsync([draftTrusteeElection]);
+            repo.Setup(x => x.GetPendingGovernedProposalAsync(draftTrusteeElection.ElectionId))
+                .ReturnsAsync((ElectionGovernedProposalRecord?)null);
+            repo.Setup(x => x.GetActiveCeremonyVersionAsync(draftTrusteeElection.ElectionId))
+                .ReturnsAsync(version);
+            repo.Setup(x => x.GetCeremonyTrusteeStatesAsync(version.Id))
+                .ReturnsAsync([trusteeState]);
+            repo.Setup(x => x.GetCeremonyShareCustodyRecordAsync(version.Id, "trustee-address"))
+                .ReturnsAsync(shareCustody);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionHubViewAsync("trustee-address");
+
+        response.Success.Should().BeTrue();
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].ActorRoles.IsTrustee.Should().BeTrue();
+        response.Elections[0].SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionNone);
+        response.Elections[0].SuggestedActionReason.Should().Be(
+            "Continue the trustee ceremony. The election owner accepted your key ceremony participation. Export the encrypted share backup and store it safely.");
+    }
+
+    [Fact]
+    public async Task GetElectionHubViewAsync_WithOwnerDraftAndCeremonyInProgress_ReturnsCeremonyAwareDraftReason()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection("Owner Draft Ceremony In Progress");
+        var version = ElectionModelFactory.CreateCeremonyVersion(
+            election.ElectionId,
+            versionNumber: 1,
+            profileId: "dkg-prod-3of5",
+            requiredApprovalCount: 3,
+            boundTrustees:
+            [
+                new SharedTrusteeReference("trustee-a", "Trustee A"),
+                new SharedTrusteeReference("trustee-b", "Trustee B"),
+                new SharedTrusteeReference("trustee-c", "Trustee C"),
+                new SharedTrusteeReference("trustee-d", "Trustee D"),
+                new SharedTrusteeReference("trustee-e", "Trustee E"),
+            ],
+            startedByPublicAddress: "owner-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionsByOwnerAsync("owner-address"))
+                .ReturnsAsync([election]);
+            repo.Setup(x => x.GetElectionsByIdsAsync(It.Is<IReadOnlyCollection<ElectionId>>(ids =>
+                    ids.Count == 1 &&
+                    ids.Contains(election.ElectionId))))
+                .ReturnsAsync([election]);
+            repo.Setup(x => x.GetActiveCeremonyVersionAsync(election.ElectionId))
+                .ReturnsAsync(version);
+            repo.Setup(x => x.GetCeremonyTrusteeStatesAsync(version.Id))
+                .ReturnsAsync(Array.Empty<ElectionCeremonyTrusteeStateRecord>());
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionHubViewAsync("owner-address");
+
+        response.Success.Should().BeTrue();
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].ActorRoles.IsOwnerAdmin.Should().BeTrue();
+        response.Elections[0].SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionOwnerManageDraft);
+        response.Elections[0].SuggestedActionReason.Should().Be(
+            "The election remains in draft while the key ceremony is in progress. You can still edit ballot content, but trustee changes require a new key ceremony version.");
+    }
+
+    [Fact]
+    public async Task GetElectionHubViewAsync_WithOwnerDraftAwaitingCeremonyValidation_ReturnsOwnerValidationReason()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection("Owner Draft Awaiting Validation");
+        var version = ElectionModelFactory.CreateCeremonyVersion(
+            election.ElectionId,
+            versionNumber: 1,
+            profileId: "dkg-prod-3of5",
+            requiredApprovalCount: 3,
+            boundTrustees:
+            [
+                new SharedTrusteeReference("trustee-a", "Trustee A"),
+                new SharedTrusteeReference("trustee-b", "Trustee B"),
+                new SharedTrusteeReference("trustee-c", "Trustee C"),
+                new SharedTrusteeReference("trustee-d", "Trustee D"),
+                new SharedTrusteeReference("trustee-e", "Trustee E"),
+            ],
+            startedByPublicAddress: "owner-address");
+        var submittedTrusteeState = ElectionModelFactory.CreateCeremonyTrusteeState(
+                election.ElectionId,
+                version.Id,
+                "trustee-a",
+                "Trustee A",
+                ElectionTrusteeCeremonyState.AcceptedTrustee)
+            .PublishTransportKey("transport-a", DateTime.UtcNow.AddMinutes(-4))
+            .MarkJoined(DateTime.UtcNow.AddMinutes(-3))
+            .RecordSelfTestSuccess(DateTime.UtcNow.AddMinutes(-2))
+            .RecordMaterialSubmitted(DateTime.UtcNow.AddMinutes(-1), "share-v1");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionsByOwnerAsync("owner-address"))
+                .ReturnsAsync([election]);
+            repo.Setup(x => x.GetElectionsByIdsAsync(It.Is<IReadOnlyCollection<ElectionId>>(ids =>
+                    ids.Count == 1 &&
+                    ids.Contains(election.ElectionId))))
+                .ReturnsAsync([election]);
+            repo.Setup(x => x.GetActiveCeremonyVersionAsync(election.ElectionId))
+                .ReturnsAsync(version);
+            repo.Setup(x => x.GetCeremonyTrusteeStatesAsync(version.Id))
+                .ReturnsAsync([submittedTrusteeState]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionHubViewAsync("owner-address");
+
+        response.Success.Should().BeTrue();
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionOwnerManageDraft);
+        response.Elections[0].SuggestedActionReason.Should().Be(
+            "The election remains in draft while the key ceremony awaits owner validation of submitted trustee packages. You can still edit ballot content, but trustee changes require a new key ceremony version.");
+    }
+
+    [Fact]
+    public async Task GetElectionHubViewAsync_WithOwnerTrusteeThresholdDraftAndNoActiveCeremony_ReturnsCeremonyRequirementReason()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection("Owner Draft Ceremony Required");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionsByOwnerAsync("owner-address"))
+                .ReturnsAsync([election]);
+            repo.Setup(x => x.GetElectionsByIdsAsync(It.Is<IReadOnlyCollection<ElectionId>>(ids =>
+                    ids.Count == 1 &&
+                    ids.Contains(election.ElectionId))))
+                .ReturnsAsync([election]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionHubViewAsync("owner-address");
+
+        response.Success.Should().BeTrue();
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionOwnerManageDraft);
+        response.Elections[0].SuggestedActionReason.Should().Be(
+            "This trustee-threshold draft still needs a successful key ceremony before open can proceed.");
     }
 
     [Fact]
@@ -1995,7 +2272,7 @@ public class ElectionQueryApplicationServiceTests
             .PublishTransportKey("transport-a", DateTime.UtcNow)
             .MarkJoined(DateTime.UtcNow)
             .RecordSelfTestSuccess(DateTime.UtcNow)
-            .RecordMaterialSubmitted(DateTime.UtcNow)
+            .RecordMaterialSubmitted(DateTime.UtcNow, "share-v1")
             .RecordValidationFailure("Wrong version payload.", DateTime.UtcNow);
 
         ConfigureReadOnlyRepository(mocker, repo =>

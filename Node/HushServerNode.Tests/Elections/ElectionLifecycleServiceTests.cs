@@ -1197,12 +1197,55 @@ public class ElectionLifecycleServiceTests
             MessageType: "share-package",
             PayloadVersion: "v1",
             EncryptedPayload: [1, 2, 3],
-            PayloadFingerprint: "payload-fingerprint"));
+            PayloadFingerprint: "payload-fingerprint",
+            ShareVersion: "share-v1"));
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
         store.CeremonyMessageEnvelopes.Should().BeEmpty();
         store.CeremonyTrusteeStates[joinedState.Id].State.Should().Be(ElectionTrusteeCeremonyState.CeremonyJoined);
+    }
+
+    [Fact]
+    public async Task SubmitElectionCeremonyMaterialAsync_WithShareVersion_PersistsSubmittedShareVersion()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection(requiredApprovalCount: 1);
+        var acceptedTrustee = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
+        var profile = RegisterCeremonyProfile(store, "dkg-prod-1of1-submit-success", trusteeCount: 1, requiredApprovalCount: 1);
+        var version = RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            [acceptedTrustee],
+            completedTrustees: [],
+            ready: false);
+        var readyToSubmitState = store.CeremonyTrusteeStates.Values.Single()
+            .PublishTransportKey("transport-a", DateTime.UtcNow)
+            .MarkJoined(DateTime.UtcNow)
+            .RecordSelfTestSuccess(DateTime.UtcNow);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedTrustee.Id] = acceptedTrustee;
+        store.CeremonyTrusteeStates[readyToSubmitState.Id] = readyToSubmitState;
+
+        var result = await service.SubmitElectionCeremonyMaterialAsync(new SubmitElectionCeremonyMaterialRequest(
+            election.ElectionId,
+            version.Id,
+            "trustee-a",
+            RecipientTrusteeUserAddress: null,
+            MessageType: "share-package",
+            PayloadVersion: "v1",
+            EncryptedPayload: [1, 2, 3],
+            PayloadFingerprint: "payload-fingerprint",
+            ShareVersion: "share-v1"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.CeremonyTrusteeState.Should().NotBeNull();
+        result.CeremonyTrusteeState!.State.Should().Be(ElectionTrusteeCeremonyState.CeremonyMaterialSubmitted);
+        result.CeremonyTrusteeState.ShareVersion.Should().Be("share-v1");
+        store.CeremonyTrusteeStates[readyToSubmitState.Id].ShareVersion.Should().Be("share-v1");
     }
 
     [Fact]
@@ -1224,7 +1267,7 @@ public class ElectionLifecycleServiceTests
             .PublishTransportKey("transport-a", DateTime.UtcNow)
             .MarkJoined(DateTime.UtcNow)
             .RecordSelfTestSuccess(DateTime.UtcNow)
-            .RecordMaterialSubmitted(DateTime.UtcNow);
+            .RecordMaterialSubmitted(DateTime.UtcNow, "share-v1");
 
         store.Elections[election.ElectionId] = election;
         store.TrusteeInvitations[acceptedTrustee.Id] = acceptedTrustee;
@@ -3203,7 +3246,7 @@ public class ElectionLifecycleServiceTests
                     .PublishTransportKey($"transport-{invitation.TrusteeUserAddress}", DateTime.UtcNow)
                     .MarkJoined(DateTime.UtcNow)
                     .RecordSelfTestSuccess(DateTime.UtcNow)
-                    .RecordMaterialSubmitted(DateTime.UtcNow)
+                    .RecordMaterialSubmitted(DateTime.UtcNow, "share-v1")
                     .MarkCompleted(DateTime.UtcNow, "share-v1");
 
                 var custodyRecord = ElectionModelFactory.CreateCeremonyShareCustodyRecord(
