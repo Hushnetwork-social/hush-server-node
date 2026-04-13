@@ -672,6 +672,51 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionHubViewAsync_WithPendingGovernedOpenApproval_ReturnsTrusteeApprovalReason()
+    {
+        var mocker = new AutoMocker();
+        var pendingOpenElection = CreateTrusteeElection("Pending Governed Open Election");
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                pendingOpenElection.ElectionId,
+                trusteeUserAddress: "trustee-address",
+                trusteeDisplayName: "Trustee Five",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: pendingOpenElection.CurrentDraftRevision)
+            .Accept(
+                respondedAt: DateTime.UtcNow.AddMinutes(-10),
+                resolvedAtDraftRevision: pendingOpenElection.CurrentDraftRevision,
+                lifecycleState: pendingOpenElection.LifecycleState);
+        var pendingProposal = ElectionModelFactory.CreateGovernedProposal(
+            pendingOpenElection,
+            ElectionGovernedActionType.Open,
+            proposedByPublicAddress: "owner-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetActiveTrusteeInvitationsByActorAsync("trustee-address"))
+                .ReturnsAsync([acceptedInvitation]);
+            repo.Setup(x => x.GetElectionsByIdsAsync(It.IsAny<IReadOnlyCollection<ElectionId>>()))
+                .ReturnsAsync([pendingOpenElection]);
+            repo.Setup(x => x.GetPendingGovernedProposalAsync(pendingOpenElection.ElectionId))
+                .ReturnsAsync(pendingProposal);
+            repo.Setup(x => x.GetGovernedProposalApprovalsAsync(pendingProposal.Id))
+                .ReturnsAsync(Array.Empty<ElectionGovernedProposalApprovalRecord>());
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionHubViewAsync("trustee-address");
+
+        response.Success.Should().BeTrue();
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].ActorRoles.IsTrustee.Should().BeTrue();
+        response.Elections[0].SuggestedAction.Should().Be(
+            ElectionHubNextActionHintProto.ElectionHubActionTrusteeApproveGovernedAction);
+        response.Elections[0].SuggestedActionReason.Should().Be(
+            "A governed open request is awaiting your approval.");
+    }
+
+    [Fact]
     public async Task GetElectionHubViewAsync_WithDraftTrusteeCeremonyFollowUp_ReturnsCeremonyPrompt()
     {
         var mocker = new AutoMocker();

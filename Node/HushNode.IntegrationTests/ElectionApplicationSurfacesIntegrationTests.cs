@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Grpc.Core;
 using HushNetwork.proto;
 using HushNode.IntegrationTests.Infrastructure;
 using HushNode.Reactions.Crypto;
@@ -12,6 +13,7 @@ using HushServerNode;
 using HushServerNode.Testing;
 using HushServerNode.Testing.Elections;
 using HushShared.Elections.Model;
+using Olimpo;
 using ReactionECPoint = HushShared.Reactions.Model.ECPoint;
 using Xunit;
 
@@ -205,6 +207,101 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
             x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanManifest);
         resultView.VisibleReportArtifacts.Should().Contain(x =>
             x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanNamedParticipationRoster);
+    }
+
+    [Fact]
+    public async Task GovernedOpenApproval_BelowThreshold_StaysPendingAndExposesTrusteeHubPrompt()
+    {
+        var client = await StartClientAsync();
+        var createResponse = await CreateTrusteeThresholdDraftAsync(client, "FEAT-096 Pending Governed Open");
+        var electionId = createResponse.Election.ElectionId;
+
+        await InviteAndAcceptRolloutTrusteesAsync(electionId);
+        var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+
+        var readiness = await client.GetElectionOpenReadinessAsync(new GetElectionOpenReadinessRequest
+        {
+            ElectionId = electionId,
+        });
+        readiness.IsReadyToOpen.Should().BeTrue(string.Join(" | ", readiness.ValidationErrors));
+
+        var proposalId = await StartGovernedProposalAsync(
+            client,
+            electionId,
+            ElectionGovernedActionType.Open);
+
+        var afterStart = await ReloadElectionAsync(client, electionId);
+        var pendingProposal = afterStart.GovernedProposals.Single(x => x.Id == proposalId.ToString());
+        afterStart.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Draft);
+        pendingProposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.WaitingForApprovals);
+        afterStart.GovernedProposalApprovals.Should().BeEmpty();
+
+        var trusteeHub = await GetElectionHubViewAsync(client, TestIdentities.Bob);
+        var trusteeEntry = trusteeHub.Elections.Single(x => x.Election.ElectionId == electionId);
+        trusteeEntry.ActorRoles.IsTrustee.Should().BeTrue();
+        trusteeEntry.SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionTrusteeApproveGovernedAction);
+        trusteeEntry.SuggestedActionReason.Should().Be("A governed open request is awaiting your approval.");
+
+        await ApproveProposalAsync(electionId, proposalId, TestIdentities.Bob);
+
+        var afterFirstApproval = await ReloadElectionAsync(client, electionId);
+        pendingProposal = afterFirstApproval.GovernedProposals.Single(x => x.Id == proposalId.ToString());
+        afterFirstApproval.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Draft);
+        pendingProposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.WaitingForApprovals);
+        afterFirstApproval.GovernedProposalApprovals
+            .Where(x => x.ProposalId == proposalId.ToString())
+            .Select(x => x.TrusteeUserAddress)
+            .Should()
+            .Equal(TestIdentities.Bob.PublicSigningAddress);
+    }
+
+    [Fact]
+    public async Task GovernedOpenApproval_AtThreshold_AutoOpensElectionWithoutSecondOwnerTransaction()
+    {
+        var client = await StartClientAsync();
+        var createResponse = await CreateTrusteeThresholdDraftAsync(client, "FEAT-096 Threshold Governed Open");
+        var electionId = createResponse.Election.ElectionId;
+
+        await InviteAndAcceptRolloutTrusteesAsync(electionId);
+        var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+
+        var readiness = await client.GetElectionOpenReadinessAsync(new GetElectionOpenReadinessRequest
+        {
+            ElectionId = electionId,
+        });
+        readiness.IsReadyToOpen.Should().BeTrue(string.Join(" | ", readiness.ValidationErrors));
+
+        var proposalId = await StartGovernedProposalAsync(
+            client,
+            electionId,
+            ElectionGovernedActionType.Open);
+
+        await ApproveProposalAsync(electionId, proposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(electionId, proposalId, TestIdentities.Charlie);
+
+        var beforeThreshold = await ReloadElectionAsync(client, electionId);
+        var pendingProposal = beforeThreshold.GovernedProposals.Single(x => x.Id == proposalId.ToString());
+        beforeThreshold.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Draft);
+        pendingProposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.WaitingForApprovals);
+        beforeThreshold.GovernedProposalApprovals.Should().HaveCount(2);
+
+        await ApproveProposalAsync(electionId, proposalId, Delta);
+
+        var afterThreshold = await ReloadElectionAsync(client, electionId);
+        var executedProposal = afterThreshold.GovernedProposals.Single(x => x.Id == proposalId.ToString());
+        afterThreshold.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Open);
+        afterThreshold.Election.OpenArtifactId.Should().NotBeNullOrWhiteSpace();
+        executedProposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.ExecutionSucceeded);
+        afterThreshold.GovernedProposalApprovals
+            .Where(x => x.ProposalId == proposalId.ToString())
+            .Select(x => x.TrusteeUserAddress)
+            .Should()
+            .Equal(
+                TestIdentities.Bob.PublicSigningAddress,
+                TestIdentities.Charlie.PublicSigningAddress,
+                Delta.PublicSigningAddress);
     }
 
     private async Task<HushElections.HushElectionsClient> StartClientAsync()
@@ -629,10 +726,19 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         HushElections.HushElectionsClient client,
         TestIdentity actor)
     {
-        var response = await client.GetElectionHubViewAsync(new GetElectionHubViewRequest
+        var request = new GetElectionHubViewRequest
         {
             ActorPublicAddress = actor.PublicSigningAddress,
-        });
+        };
+        var response = await client.GetElectionHubViewAsync(
+            request,
+            headers: CreateSignedElectionQueryHeaders(
+                nameof(HushElections.HushElectionsClient.GetElectionHubView),
+                actor,
+                new Dictionary<string, object?>
+                {
+                    ["ActorPublicAddress"] = request.ActorPublicAddress,
+                }));
 
         response.Success.Should().BeTrue(response.ErrorMessage);
         return response;
@@ -643,11 +749,21 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         string electionId,
         TestIdentity actor)
     {
-        var response = await client.GetElectionEligibilityViewAsync(new GetElectionEligibilityViewRequest
+        var request = new GetElectionEligibilityViewRequest
         {
             ElectionId = electionId,
             ActorPublicAddress = actor.PublicSigningAddress,
-        });
+        };
+        var response = await client.GetElectionEligibilityViewAsync(
+            request,
+            headers: CreateSignedElectionQueryHeaders(
+                nameof(HushElections.HushElectionsClient.GetElectionEligibilityView),
+                actor,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = request.ElectionId,
+                    ["ActorPublicAddress"] = request.ActorPublicAddress,
+                }));
 
         response.Success.Should().BeTrue(response.ErrorMessage);
         return response;
@@ -658,11 +774,21 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         string electionId,
         TestIdentity actor)
     {
-        var response = await client.GetElectionReportAccessGrantsAsync(new GetElectionReportAccessGrantsRequest
+        var request = new GetElectionReportAccessGrantsRequest
         {
             ElectionId = electionId,
             ActorPublicAddress = actor.PublicSigningAddress,
-        });
+        };
+        var response = await client.GetElectionReportAccessGrantsAsync(
+            request,
+            headers: CreateSignedElectionQueryHeaders(
+                nameof(HushElections.HushElectionsClient.GetElectionReportAccessGrants),
+                actor,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = request.ElectionId,
+                    ["ActorPublicAddress"] = request.ActorPublicAddress,
+                }));
 
         response.Success.Should().BeTrue(response.ErrorMessage);
         return response;
@@ -674,13 +800,27 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         TestIdentity actor,
         string submissionIdempotencyKey = "")
     {
-        async Task<GetElectionVotingViewResponse> QueryAsync() =>
-            await client.GetElectionVotingViewAsync(new GetElectionVotingViewRequest
+        async Task<GetElectionVotingViewResponse> QueryAsync()
+        {
+            var request = new GetElectionVotingViewRequest
             {
                 ElectionId = electionId,
                 ActorPublicAddress = actor.PublicSigningAddress,
                 SubmissionIdempotencyKey = submissionIdempotencyKey,
-            });
+            };
+
+            return await client.GetElectionVotingViewAsync(
+                request,
+                headers: CreateSignedElectionQueryHeaders(
+                    nameof(HushElections.HushElectionsClient.GetElectionVotingView),
+                    actor,
+                    new Dictionary<string, object?>
+                    {
+                        ["ElectionId"] = request.ElectionId,
+                        ["ActorPublicAddress"] = request.ActorPublicAddress,
+                        ["SubmissionIdempotencyKey"] = request.SubmissionIdempotencyKey,
+                    }));
+        }
 
         var response = await QueryAsync();
         for (var attempt = 0; attempt < 20 && !response.Success; attempt++)
@@ -699,12 +839,25 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         TestIdentity actor,
         bool waitForOfficialResult = false)
     {
-        async Task<GetElectionResultViewResponse> QueryAsync() =>
-            await client.GetElectionResultViewAsync(new GetElectionResultViewRequest
+        async Task<GetElectionResultViewResponse> QueryAsync()
+        {
+            var request = new GetElectionResultViewRequest
             {
                 ElectionId = electionId,
                 ActorPublicAddress = actor.PublicSigningAddress,
-            });
+            };
+
+            return await client.GetElectionResultViewAsync(
+                request,
+                headers: CreateSignedElectionQueryHeaders(
+                    nameof(HushElections.HushElectionsClient.GetElectionResultView),
+                    actor,
+                    new Dictionary<string, object?>
+                    {
+                        ["ElectionId"] = request.ElectionId,
+                        ["ActorPublicAddress"] = request.ActorPublicAddress,
+                    }));
+        }
 
         var response = await QueryAsync();
         for (var attempt = 0;
@@ -750,6 +903,80 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         }
 
         return submitResponse;
+    }
+
+    private static Metadata CreateSignedElectionQueryHeaders(
+        string method,
+        TestIdentity actor,
+        IReadOnlyDictionary<string, object?> request)
+    {
+        var signedAt = DateTimeOffset.UtcNow.ToString("O");
+        var payload = BuildSignedElectionQueryPayload(
+            method,
+            actor.PublicSigningAddress,
+            signedAt,
+            request);
+
+        return new Metadata
+        {
+            { "x-hush-election-query-signatory", actor.PublicSigningAddress },
+            { "x-hush-election-query-signed-at", signedAt },
+            { "x-hush-election-query-signature", DigitalSignature.SignMessageCompactBase64(payload, actor.PrivateSigningKey) },
+        };
+    }
+
+    private static string BuildSignedElectionQueryPayload(
+        string method,
+        string actorAddress,
+        string signedAt,
+        IReadOnlyDictionary<string, object?> request)
+    {
+        var payload = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["actorAddress"] = actorAddress,
+            ["method"] = method,
+            ["request"] = DeepSortElectionQueryValue(request),
+            ["signedAt"] = signedAt,
+        };
+
+        return JsonSerializer.Serialize(payload);
+    }
+
+    private static object? DeepSortElectionQueryValue(object? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (value is IReadOnlyDictionary<string, object?> readOnlyDictionary)
+        {
+            var sortedDictionary = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var entry in readOnlyDictionary)
+            {
+                sortedDictionary[entry.Key] = DeepSortElectionQueryValue(entry.Value);
+            }
+
+            return sortedDictionary;
+        }
+
+        if (value is IDictionary<string, object?> dictionary)
+        {
+            var sortedDictionary = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var entry in dictionary)
+            {
+                sortedDictionary[entry.Key] = DeepSortElectionQueryValue(entry.Value);
+            }
+
+            return sortedDictionary;
+        }
+
+        if (value is IEnumerable<object?> sequence && value is not string)
+        {
+            return sequence.Select(DeepSortElectionQueryValue).ToArray();
+        }
+
+        return value;
     }
 
     private static string BuildEncryptedBallotPackage(
