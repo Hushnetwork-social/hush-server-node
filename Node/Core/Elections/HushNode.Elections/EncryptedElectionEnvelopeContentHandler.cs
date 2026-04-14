@@ -964,6 +964,7 @@ public class EncryptedElectionEnvelopeContentHandler(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
         string signatory)
     {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
         var shareAction = decryptedEnvelope.DeserializeAction<SubmitElectionFinalizationShareActionPayload>();
         if (shareAction is null || !HasMatchingActor(signatory, shareAction.ActorPublicAddress))
         {
@@ -984,6 +985,15 @@ public class EncryptedElectionEnvelopeContentHandler(
             session.ElectionId != decryptedEnvelope.Transaction.Payload.ElectionId ||
             session.Status == ElectionFinalizationSessionStatus.Completed)
         {
+            return false;
+        }
+
+        if (session.SessionPurpose != ElectionFinalizationSessionPurpose.CloseCounting)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_finalization_share_wrong_session_purpose",
+                "Trustee shares are only accepted for close-counting release sessions.");
             return false;
         }
 

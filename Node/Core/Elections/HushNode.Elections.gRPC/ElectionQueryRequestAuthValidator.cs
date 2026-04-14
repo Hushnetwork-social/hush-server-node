@@ -73,6 +73,28 @@ internal static class ElectionQueryRequestAuthValidator
         }
     }
 
+    public static string? ValidateOptionalOrResolveActor(
+        string method,
+        IReadOnlyDictionary<string, object?> request,
+        ServerCallContext context)
+    {
+        var signatory = NormalizeAddress(context.RequestHeaders.GetValue(SignatoryHeader));
+        var signedAt = context.RequestHeaders.GetValue(SignedAtHeader)?.Trim() ?? string.Empty;
+        var signature = context.RequestHeaders.GetValue(SignatureHeader)?.Trim() ?? string.Empty;
+        var hasAnyAuthHeader =
+            !string.IsNullOrWhiteSpace(signatory) ||
+            !string.IsNullOrWhiteSpace(signedAt) ||
+            !string.IsNullOrWhiteSpace(signature);
+
+        if (!hasAnyAuthHeader)
+        {
+            return null;
+        }
+
+        ValidateOrThrow(method, signatory, request, context);
+        return signatory;
+    }
+
     private static string BuildSignedPayload(
         string method,
         string actorAddress,

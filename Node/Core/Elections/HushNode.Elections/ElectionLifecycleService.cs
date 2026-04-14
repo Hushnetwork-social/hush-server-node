@@ -1962,6 +1962,13 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Finalization session is already completed.");
         }
 
+        if (session.SessionPurpose != ElectionFinalizationSessionPurpose.CloseCounting)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.InvalidState,
+                "Trustee shares are only accepted for close-counting release sessions.");
+        }
+
         var trusteeReference = session.EligibleTrustees.FirstOrDefault(x =>
             string.Equals(x.TrusteeUserAddress, request.ActorPublicAddress, StringComparison.OrdinalIgnoreCase));
         if (trusteeReference is null)
@@ -2115,30 +2122,18 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 string.Equals(share.TrusteeUserAddress, x.TrusteeUserAddress, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
 
-        var completionResult = session.SessionPurpose == ElectionFinalizationSessionPurpose.CloseCounting
-            ? await CompleteCloseCountingSessionAsync(
-                repository,
-                progressElection,
-                session,
-                acceptedShares,
-                acceptedTrustees,
-                request.ActorPublicAddress,
-                submittedAt,
-                request.SourceTransactionId,
-                request.SourceBlockHeight,
-                request.SourceBlockId,
-                shareRecord)
-            : await CompleteFinalizationSessionAsync(
-                repository,
-                progressElection,
-                session,
-                acceptedTrustees,
-                request.ActorPublicAddress,
-                submittedAt,
-                request.SourceTransactionId,
-                request.SourceBlockHeight,
-                request.SourceBlockId,
-                shareRecord);
+        var completionResult = await CompleteCloseCountingSessionAsync(
+            repository,
+            progressElection,
+            session,
+            acceptedShares,
+            acceptedTrustees,
+            request.ActorPublicAddress,
+            submittedAt,
+            request.SourceTransactionId,
+            request.SourceBlockHeight,
+            request.SourceBlockId,
+            shareRecord);
 
         if (!completionResult.IsSuccess &&
             session.SessionPurpose == ElectionFinalizationSessionPurpose.CloseCounting)
@@ -3518,6 +3513,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         await repository.UpdateTrusteeInvitationAsync(updated);
+        if (updated.Status is ElectionTrusteeInvitationStatus.Rejected or ElectionTrusteeInvitationStatus.Revoked)
+        {
+            await repository.DeleteElectionEnvelopeAccessAsync(request.ElectionId, updated.TrusteeUserAddress);
+        }
+
         var ceremonyEvents = new List<ElectionCeremonyTranscriptEventRecord>();
 
         if (updated.Status == ElectionTrusteeInvitationStatus.Accepted)

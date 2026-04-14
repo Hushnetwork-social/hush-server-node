@@ -186,7 +186,7 @@ public class ElectionQueryApplicationServiceTests
         var sut = CreateQueryService(mocker);
 
         // Act
-        var response = await sut.GetElectionAsync(election.ElectionId);
+        var response = await sut.GetElectionAsync(election.ElectionId, "owner-address");
 
         // Assert
         response.Success.Should().BeTrue();
@@ -218,6 +218,130 @@ public class ElectionQueryApplicationServiceTests
         response.FinalizationShares[0].FailureCode.Should().BeEmpty();
         response.FinalizationReleaseEvidenceRecords.Should().ContainSingle();
         response.FinalizationReleaseEvidenceRecords[0].AcceptedShareCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetElectionAsync_WithoutSignedActor_HidesOpenCloseAndFinalizeOperationalMetadata()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection();
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                election.ElectionId,
+                trusteeUserAddress: "trustee-a",
+                trusteeDisplayName: "Alice",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: election.CurrentDraftRevision)
+            .Accept(
+                DateTime.UtcNow,
+                election.CurrentDraftRevision,
+                ElectionLifecycleState.Draft);
+        var trustees = new HushShared.Elections.Model.ElectionTrusteeReference[]
+        {
+            new("trustee-a", "Alice"),
+        };
+        var openProposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Open,
+            "owner-address");
+        var closeProposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Close,
+            "owner-address");
+        var finalizeProposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Finalize,
+            "owner-address");
+        var openApproval = ElectionModelFactory.CreateGovernedProposalApproval(
+            openProposal,
+            "trustee-a",
+            "Alice",
+            "Ready.");
+        var closeApproval = ElectionModelFactory.CreateGovernedProposalApproval(
+            closeProposal,
+            "trustee-a",
+            "Alice",
+            "Close ready.");
+        var finalizeApproval = ElectionModelFactory.CreateGovernedProposalApproval(
+            finalizeProposal,
+            "trustee-a",
+            "Alice",
+            "Finalize ready.");
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            Guid.NewGuid(),
+            1,
+            "dkg-prod-1of1",
+            boundTrusteeCount: 1,
+            requiredApprovalCount: 1,
+            activeTrustees: trustees,
+            tallyPublicKeyFingerprint: "tally-fingerprint");
+        var completedSession = ElectionModelFactory.CreateFinalizationSession(
+            election,
+            Guid.NewGuid(),
+            acceptedBallotSetHash: [1, 2, 3],
+            finalEncryptedTallyHash: [4, 5, 6],
+            sessionPurpose: ElectionFinalizationSessionPurpose.CloseCounting,
+            ceremonySnapshot: ceremonySnapshot,
+            requiredShareCount: 1,
+            eligibleTrustees: trustees,
+            createdByPublicAddress: "owner-address");
+        var finalizationShare = ElectionModelFactory.CreateAcceptedFinalizationShare(
+            completedSession.Id,
+            election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            submittedByPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            claimedCloseArtifactId: completedSession.CloseArtifactId,
+            claimedAcceptedBallotSetHash: completedSession.AcceptedBallotSetHash,
+            claimedFinalEncryptedTallyHash: completedSession.FinalEncryptedTallyHash,
+            claimedTargetTallyId: completedSession.TargetTallyId,
+            claimedCeremonyVersionId: null,
+            claimedTallyPublicKeyFingerprint: null,
+            shareMaterial: "ciphertext-share-material");
+        var releaseEvidence = ElectionModelFactory.CreateFinalizationReleaseEvidence(
+            completedSession,
+            trustees,
+            "owner-address",
+            DateTime.UtcNow);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetLatestDraftSnapshotAsync(election.ElectionId))
+                .ReturnsAsync((ElectionDraftSnapshotRecord?)null);
+            repo.Setup(x => x.GetWarningAcknowledgementsAsync(election.ElectionId))
+                .ReturnsAsync(Array.Empty<ElectionWarningAcknowledgementRecord>());
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync([acceptedInvitation]);
+            repo.Setup(x => x.GetBoundaryArtifactsAsync(election.ElectionId))
+                .ReturnsAsync(Array.Empty<ElectionBoundaryArtifactRecord>());
+            repo.Setup(x => x.GetCeremonyProfilesAsync())
+                .ReturnsAsync(Array.Empty<ElectionCeremonyProfileRecord>());
+            repo.Setup(x => x.GetCeremonyVersionsAsync(election.ElectionId))
+                .ReturnsAsync(Array.Empty<ElectionCeremonyVersionRecord>());
+            repo.Setup(x => x.GetResultArtifactsAsync(election.ElectionId))
+                .ReturnsAsync(Array.Empty<ElectionResultArtifactRecord>());
+            repo.Setup(x => x.GetGovernedProposalsAsync(election.ElectionId))
+                .ReturnsAsync([openProposal, closeProposal, finalizeProposal]);
+            repo.Setup(x => x.GetGovernedProposalApprovalsAsync(openProposal.Id)).ReturnsAsync([openApproval]);
+            repo.Setup(x => x.GetGovernedProposalApprovalsAsync(closeProposal.Id)).ReturnsAsync([closeApproval]);
+            repo.Setup(x => x.GetGovernedProposalApprovalsAsync(finalizeProposal.Id)).ReturnsAsync([finalizeApproval]);
+            repo.Setup(x => x.GetFinalizationSessionsAsync(election.ElectionId)).ReturnsAsync([completedSession]);
+            repo.Setup(x => x.GetFinalizationSharesAsync(completedSession.Id)).ReturnsAsync([finalizationShare]);
+            repo.Setup(x => x.GetFinalizationReleaseEvidenceRecordsAsync(election.ElectionId)).ReturnsAsync([releaseEvidence]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionAsync(election.ElectionId);
+
+        response.Success.Should().BeTrue();
+        response.GovernedProposals.Should().BeEmpty();
+        response.GovernedProposalApprovals.Should().BeEmpty();
+        response.FinalizationSessions.Should().BeEmpty();
+        response.FinalizationShares.Should().BeEmpty();
+        response.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
     }
 
     [Fact]
@@ -979,9 +1103,19 @@ public class ElectionQueryApplicationServiceTests
     public async Task GetElectionEnvelopeAccessAsync_WithStoredAccess_ReturnsWrappedElectionKey()
     {
         var mocker = new AutoMocker();
-        var electionId = ElectionId.NewElectionId;
+        var election = CreateTrusteeElection();
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                election.ElectionId,
+                trusteeUserAddress: "trustee-address",
+                trusteeDisplayName: "Trustee",
+                invitedByPublicAddress: election.OwnerPublicAddress,
+                sentAtDraftRevision: election.CurrentDraftRevision)
+            .Accept(
+                DateTime.UtcNow,
+                election.CurrentDraftRevision,
+                election.LifecycleState);
         var accessRecord = new ElectionEnvelopeAccessRecord(
-            electionId,
+            election.ElectionId,
             "trustee-address",
             "node-wrapped-election-private-key",
             "wrapped-election-private-key",
@@ -992,16 +1126,54 @@ public class ElectionQueryApplicationServiceTests
 
         ConfigureReadOnlyRepository(mocker, repo =>
         {
-            repo.Setup(x => x.GetElectionEnvelopeAccessAsync(electionId, "trustee-address"))
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync([acceptedInvitation]);
+            repo.Setup(x => x.GetReportAccessGrantAsync(election.ElectionId, "trustee-address"))
+                .ReturnsAsync((ElectionReportAccessGrantRecord?)null);
+            repo.Setup(x => x.GetElectionEnvelopeAccessAsync(election.ElectionId, "trustee-address"))
                 .ReturnsAsync(accessRecord);
         });
 
         var sut = CreateQueryService(mocker);
 
-        var response = await sut.GetElectionEnvelopeAccessAsync(electionId, "trustee-address");
+        var response = await sut.GetElectionEnvelopeAccessAsync(election.ElectionId, "trustee-address");
 
         response.Success.Should().BeTrue();
         response.ActorEncryptedElectionPrivateKey.Should().Be("wrapped-election-private-key");
+    }
+
+    [Fact]
+    public async Task GetElectionEnvelopeAccessAsync_WithLinkedVoterRole_DeniesAccessEvenWhenRecordExists()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection();
+        var accessRecord = new ElectionEnvelopeAccessRecord(
+            election.ElectionId,
+            "voter-address",
+            "node-wrapped-election-private-key",
+            "wrapped-election-private-key",
+            DateTime.UtcNow,
+            Guid.NewGuid(),
+            12,
+            Guid.NewGuid());
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId))
+                .ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
+            repo.Setup(x => x.GetReportAccessGrantAsync(election.ElectionId, "voter-address"))
+                .ReturnsAsync((ElectionReportAccessGrantRecord?)null);
+            repo.Setup(x => x.GetElectionEnvelopeAccessAsync(election.ElectionId, "voter-address"))
+                .ReturnsAsync(accessRecord);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionEnvelopeAccessAsync(election.ElectionId, "voter-address");
+
+        response.Success.Should().BeFalse();
+        response.ErrorMessage.Should().Contain("not available for actor");
     }
 
     [Fact]

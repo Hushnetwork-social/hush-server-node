@@ -138,6 +138,19 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         }
     }
 
+    public async Task DeleteElectionEnvelopeAccessAsync(ElectionId electionId, string actorPublicAddress)
+    {
+        var existing = await Context.ElectionEnvelopeAccessRecords
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.ActorPublicAddress == actorPublicAddress);
+
+        if (existing is not null)
+        {
+            Context.ElectionEnvelopeAccessRecords.Remove(existing);
+        }
+    }
+
     public async Task<IReadOnlyList<ElectionResultArtifactRecord>> GetResultArtifactsAsync(ElectionId electionId) =>
         await Context.ElectionResultArtifacts
             .Where(x => x.ElectionId == electionId)

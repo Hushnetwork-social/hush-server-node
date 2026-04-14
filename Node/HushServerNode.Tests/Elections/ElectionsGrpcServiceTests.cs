@@ -525,6 +525,79 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task GetElection_WithoutSignedHeaders_AllowsUnsignedRead()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionAsync(electionId, null))
+            .ReturnsAsync(new GetElectionResponse
+            {
+                Success = true,
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElection(new GetElectionRequest
+        {
+            ElectionId = electionId.ToString(),
+        }, CreateMockServerCallContext());
+
+        response.Success.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetElection_WithValidSignedHeaders_PassesResolvedActorToQueryService()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionAsync(electionId, TestActorPublicAddress))
+            .ReturnsAsync(new GetElectionResponse
+            {
+                Success = true,
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElection(new GetElectionRequest
+        {
+            ElectionId = electionId.ToString(),
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElection),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+            }));
+
+        response.Success.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetElection_WithPartialSignedHeaders_RejectsQuery()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var electionId = ElectionId.NewElectionId;
+        var requestHeaders = new Metadata
+        {
+            { "x-hush-election-query-signatory", TestActorPublicAddress },
+        };
+
+        var act = async () => await sut.GetElection(new GetElectionRequest
+        {
+            ElectionId = electionId.ToString(),
+        }, new TestServerCallContext(requestHeaders));
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.Unauthenticated);
+        exception.Which.Status.Detail.Should().Contain("requires signed actor-bound headers");
+    }
+
+    [Fact]
     public async Task GetElectionVotingView_WithValidRequest_ReturnsVotingPayload()
     {
         var mocker = new AutoMocker();

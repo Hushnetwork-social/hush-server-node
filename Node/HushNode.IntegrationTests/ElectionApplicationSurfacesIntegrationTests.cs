@@ -160,6 +160,21 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task LinkedVoter_CannotReadElectionEnvelopeAccess_AfterClaimLinking()
+    {
+        var client = await StartClientAsync();
+        var createResponse = await CreateTrusteeThresholdDraftAsync(client, "FEAT-103 Voter Envelope Denial");
+        var electionId = createResponse.Election.ElectionId;
+
+        await ClaimRosterEntryAsync(electionId, Guest, "voter-guest");
+
+        var envelopeAccess = await GetElectionEnvelopeAccessAsync(client, electionId, Guest);
+
+        envelopeAccess.Success.Should().BeFalse();
+        envelopeAccess.ErrorMessage.Should().Contain("not available for actor");
+    }
+
+    [Fact]
     public async Task CreateReportAccessGrant_AfterFinalize_GrantsAuditorHubAndRestrictedArtifactAccessOnNextRead()
     {
         var client = await StartClientAsync();
@@ -231,7 +246,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
             electionId,
             ElectionGovernedActionType.Open);
 
-        var afterStart = await ReloadElectionAsync(client, electionId);
+        var afterStart = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         var pendingProposal = afterStart.GovernedProposals.Single(x => x.Id == proposalId.ToString());
         afterStart.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Draft);
         pendingProposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.WaitingForApprovals);
@@ -245,7 +260,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
 
         await ApproveProposalAsync(electionId, proposalId, TestIdentities.Bob);
 
-        var afterFirstApproval = await ReloadElectionAsync(client, electionId);
+        var afterFirstApproval = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         pendingProposal = afterFirstApproval.GovernedProposals.Single(x => x.Id == proposalId.ToString());
         afterFirstApproval.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Draft);
         pendingProposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.WaitingForApprovals);
@@ -281,7 +296,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         await ApproveProposalAsync(electionId, proposalId, TestIdentities.Bob);
         await ApproveProposalAsync(electionId, proposalId, TestIdentities.Charlie);
 
-        var beforeThreshold = await ReloadElectionAsync(client, electionId);
+        var beforeThreshold = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         var pendingProposal = beforeThreshold.GovernedProposals.Single(x => x.Id == proposalId.ToString());
         beforeThreshold.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Draft);
         pendingProposal.ExecutionStatus.Should().Be(ElectionGovernedProposalExecutionStatusProto.WaitingForApprovals);
@@ -289,7 +304,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
 
         await ApproveProposalAsync(electionId, proposalId, Delta);
 
-        var afterThreshold = await ReloadElectionAsync(client, electionId);
+        var afterThreshold = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         var executedProposal = afterThreshold.GovernedProposals.Single(x => x.Id == proposalId.ToString());
         afterThreshold.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Open);
         afterThreshold.Election.OpenArtifactId.Should().NotBeNullOrWhiteSpace();
@@ -302,6 +317,94 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
                 TestIdentities.Bob.PublicSigningAddress,
                 TestIdentities.Charlie.PublicSigningAddress,
                 Delta.PublicSigningAddress);
+    }
+
+    [Fact]
+    public async Task RevokedPendingTrusteeInvitation_CannotReadElectionEnvelopeAccess_BeforeOrAfterRevocation()
+    {
+        var client = await StartClientAsync();
+        var createResponse = await CreateTrusteeThresholdDraftAsync(client, "FEAT-096 Revoke Envelope Access");
+        var electionId = createResponse.Election.ElectionId;
+        var parsedElectionId = new ElectionId(Guid.Parse(electionId));
+
+        var (inviteTransaction, invitationId) = TestTransactionFactory.CreateElectionTrusteeInvitation(
+            TestIdentities.Alice,
+            parsedElectionId,
+            Guest);
+        (await SubmitBlockchainTransactionAsync(inviteTransaction)).Successfull.Should().BeTrue();
+
+        var accessBeforeRevoke = await GetElectionEnvelopeAccessAsync(client, electionId, Guest);
+        accessBeforeRevoke.Success.Should().BeFalse();
+        accessBeforeRevoke.ErrorMessage.Should().Contain("not available for actor");
+
+        var revokeResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.RevokeElectionTrusteeInvitation(
+                TestIdentities.Alice,
+                parsedElectionId,
+                invitationId));
+        revokeResponse.Successfull.Should().BeTrue(revokeResponse.Message);
+
+        var accessAfterRevoke = await GetElectionEnvelopeAccessAsync(client, electionId, Guest);
+        accessAfterRevoke.Success.Should().BeFalse();
+        accessAfterRevoke.ErrorMessage.Should().Contain("not available for actor");
+    }
+
+    [Fact]
+    public async Task RejectedPendingTrusteeInvitation_CannotReadElectionEnvelopeAccess_BeforeOrAfterRejection()
+    {
+        var client = await StartClientAsync();
+        var createResponse = await CreateTrusteeThresholdDraftAsync(client, "FEAT-096 Reject Envelope Access");
+        var electionId = createResponse.Election.ElectionId;
+        var parsedElectionId = new ElectionId(Guid.Parse(electionId));
+
+        var (inviteTransaction, invitationId) = TestTransactionFactory.CreateElectionTrusteeInvitation(
+            TestIdentities.Alice,
+            parsedElectionId,
+            Guest);
+        (await SubmitBlockchainTransactionAsync(inviteTransaction)).Successfull.Should().BeTrue();
+
+        var accessBeforeReject = await GetElectionEnvelopeAccessAsync(client, electionId, Guest);
+        accessBeforeReject.Success.Should().BeFalse();
+        accessBeforeReject.ErrorMessage.Should().Contain("not available for actor");
+
+        var rejectResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.RejectElectionTrusteeInvitation(
+                Guest,
+                parsedElectionId,
+                invitationId));
+        rejectResponse.Successfull.Should().BeTrue(rejectResponse.Message);
+
+        var accessAfterReject = await GetElectionEnvelopeAccessAsync(client, electionId, Guest);
+        accessAfterReject.Success.Should().BeFalse();
+        accessAfterReject.ErrorMessage.Should().Contain("not available for actor");
+    }
+
+    [Fact]
+    public async Task GetElection_UnsignedRead_HidesGovernedAndFinalizationMetadata_WhileSignedOwnerReadKeepsIt()
+    {
+        var client = await StartClientAsync();
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "FEAT-096 Signed Operational Metadata",
+            castWithAlice: true);
+
+        var publicDetail = await client.GetElectionAsync(new GetElectionRequest
+        {
+            ElectionId = context.ElectionId,
+        });
+
+        publicDetail.Success.Should().BeTrue(publicDetail.ErrorMessage);
+        publicDetail.GovernedProposals.Should().BeEmpty();
+        publicDetail.GovernedProposalApprovals.Should().BeEmpty();
+        publicDetail.FinalizationSessions.Should().BeEmpty();
+        publicDetail.FinalizationShares.Should().BeEmpty();
+        publicDetail.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+
+        var signedOwnerDetail = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        signedOwnerDetail.GovernedProposals.Should().NotBeEmpty();
+        signedOwnerDetail.FinalizationSessions.Should().ContainSingle(x =>
+            x.SessionPurpose == ElectionFinalizationSessionPurposeProto.FinalizationSessionPurposeCloseCounting);
+        signedOwnerDetail.FinalizationShares.Should().HaveCountGreaterThanOrEqualTo(3);
     }
 
     private async Task<HushElections.HushElectionsClient> StartClientAsync()
@@ -360,7 +463,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         await ApproveProposalAsync(electionId, openProposalId, TestIdentities.Charlie);
         await ApproveProposalAsync(electionId, openProposalId, Delta);
 
-        var openElection = await ReloadElectionAsync(client, electionId);
+        var openElection = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         openElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Open);
 
         if (castWithAlice)
@@ -383,7 +486,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         await ApproveProposalAsync(electionId, closeProposalId, TestIdentities.Charlie);
         await ApproveProposalAsync(electionId, closeProposalId, Delta);
 
-        var closedElection = await ReloadElectionAsync(client, electionId);
+        var closedElection = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         closedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
         closedElection.Election.TallyReadyArtifactId.Should().BeNullOrWhiteSpace();
         closedElection.FinalizationSessions.Should().ContainSingle(x =>
@@ -394,7 +497,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         await SubmitFinalizationShareViaBlockchainAsync(client, electionId, TestIdentities.Charlie);
         await SubmitFinalizationShareViaBlockchainAsync(client, electionId, Delta);
 
-        var tallyReadyElection = await ReloadElectionAsync(client, electionId);
+        var tallyReadyElection = await WaitForTallyReadyElectionAsync(client, electionId, TestIdentities.Alice);
         tallyReadyElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
         tallyReadyElection.Election.TallyReadyArtifactId.Should().NotBeNullOrWhiteSpace();
         tallyReadyElection.Election.UnofficialResultArtifactId.Should().NotBeNullOrWhiteSpace();
@@ -414,10 +517,12 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         await ApproveProposalAsync(electionId, finalizeProposalId, TestIdentities.Charlie);
         await ApproveProposalAsync(electionId, finalizeProposalId, Delta);
 
-        var finalizedElection = await ReloadElectionAsync(client, electionId);
+        var finalizedElection = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         finalizedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Finalized);
         finalizedElection.Election.FinalizeArtifactId.Should().NotBeNullOrWhiteSpace();
         finalizedElection.Election.OfficialResultArtifactId.Should().NotBeNullOrWhiteSpace();
+        finalizedElection.FinalizationSessions.Should().NotContain(x =>
+            x.Status == ElectionFinalizationSessionStatusProto.FinalizationSessionAwaitingShares);
     }
 
     private async Task CreateReportAccessGrantAsync(string electionId, TestIdentity designatedAuditor)
@@ -496,7 +601,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
                 profileId));
         submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
 
-        var response = await ReloadElectionAsync(client, electionId);
+        var response = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         response.Success.Should().BeTrue(response.ErrorMessage);
         return response.CeremonyVersions
             .Where(x => x.ProfileId == profileId)
@@ -582,7 +687,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         var submitResponse = await SubmitBlockchainTransactionAsync(signedTransaction);
         submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
 
-        var response = await ReloadElectionAsync(client, electionId);
+        var response = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         response.GovernedProposals.Should().ContainSingle(x => x.Id == proposalId.ToString());
         return proposalId;
     }
@@ -692,7 +797,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         string electionId,
         TestIdentity trustee)
     {
-        var currentResponse = await ReloadElectionAsync(client, electionId);
+        var currentResponse = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         var session = currentResponse.FinalizationSessions
             .Single(x => x.Status == ElectionFinalizationSessionStatusProto.FinalizationSessionAwaitingShares);
         var shareIndex = session.EligibleTrustees
@@ -873,16 +978,76 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         return response;
     }
 
-    private async Task<GetElectionResponse> ReloadElectionAsync(
+    private async Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccessAsync(
         HushElections.HushElectionsClient client,
-        string electionId)
+        string electionId,
+        TestIdentity actor)
     {
-        var response = await client.GetElectionAsync(new GetElectionRequest
+        var request = new GetElectionEnvelopeAccessRequest
         {
             ElectionId = electionId,
-        });
+            ActorPublicAddress = actor.PublicSigningAddress,
+        };
+
+        return await client.GetElectionEnvelopeAccessAsync(
+            request,
+            headers: CreateSignedElectionQueryHeaders(
+                nameof(HushElections.HushElectionsClient.GetElectionEnvelopeAccess),
+                actor,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = request.ElectionId,
+                    ["ActorPublicAddress"] = request.ActorPublicAddress,
+                }));
+    }
+
+    private async Task<GetElectionResponse> ReloadElectionAsync(
+        HushElections.HushElectionsClient client,
+        string electionId,
+        TestIdentity? actor = null)
+    {
+        var request = new GetElectionRequest
+        {
+            ElectionId = electionId,
+        };
+        GetElectionResponse response;
+        if (actor is null)
+        {
+            response = await client.GetElectionAsync(request);
+        }
+        else
+        {
+            response = await client.GetElectionAsync(
+                request,
+                headers: CreateSignedElectionQueryHeaders(
+                    nameof(HushElections.HushElectionsClient.GetElection),
+                    actor,
+                    new Dictionary<string, object?>
+                    {
+                        ["ElectionId"] = request.ElectionId,
+                    }));
+        }
 
         response.Success.Should().BeTrue(response.ErrorMessage);
+        return response;
+    }
+
+    private async Task<GetElectionResponse> WaitForTallyReadyElectionAsync(
+        HushElections.HushElectionsClient client,
+        string electionId,
+        TestIdentity actor)
+    {
+        var response = await ReloadElectionAsync(client, electionId, actor);
+
+        for (var attempt = 0;
+             attempt < 20 &&
+             string.IsNullOrWhiteSpace(response.Election.TallyReadyArtifactId);
+             attempt++)
+        {
+            await Task.Delay(100);
+            response = await ReloadElectionAsync(client, electionId, actor);
+        }
+
         return response;
     }
 

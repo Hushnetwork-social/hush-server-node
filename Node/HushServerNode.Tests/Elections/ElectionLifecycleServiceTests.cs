@@ -1072,6 +1072,74 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task RevokeTrusteeInvitation_WithExistingEnvelopeAccess_RemovesEnvelopeAccess()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection();
+        var invitation = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[invitation.Id] = invitation;
+        store.ElectionEnvelopeAccessRecords[(election.ElectionId, "trustee-a")] = new ElectionEnvelopeAccessRecord(
+            election.ElectionId,
+            "trustee-a",
+            "node-wrapped-election-private-key",
+            "wrapped-election-private-key",
+            DateTime.UtcNow,
+            Guid.NewGuid(),
+            12,
+            Guid.NewGuid());
+
+        var result = await service.RevokeTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest(
+            ElectionId: election.ElectionId,
+            InvitationId: invitation.Id,
+            ActorPublicAddress: "owner-address"));
+
+        result.IsSuccess.Should().BeTrue();
+        store.ElectionEnvelopeAccessRecords.Should().NotContainKey((election.ElectionId, "trustee-a"));
+    }
+
+    [Fact]
+    public async Task RejectTrusteeInvitation_WithExistingEnvelopeAccess_RemovesEnvelopeAccess()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection();
+        var invitation = ElectionModelFactory.CreateTrusteeInvitation(
+            election.ElectionId,
+            trusteeUserAddress: "trustee-a",
+            trusteeDisplayName: "Alice",
+            invitedByPublicAddress: "owner-address",
+            sentAtDraftRevision: election.CurrentDraftRevision);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[invitation.Id] = invitation;
+        store.ElectionEnvelopeAccessRecords[(election.ElectionId, "trustee-a")] = new ElectionEnvelopeAccessRecord(
+            election.ElectionId,
+            "trustee-a",
+            "node-wrapped-election-private-key",
+            "wrapped-election-private-key",
+            DateTime.UtcNow,
+            Guid.NewGuid(),
+            12,
+            Guid.NewGuid());
+
+        var result = await service.RejectTrusteeInvitationAsync(new ResolveElectionTrusteeInvitationRequest(
+            ElectionId: election.ElectionId,
+            InvitationId: invitation.Id,
+            ActorPublicAddress: "trustee-a"));
+
+        result.IsSuccess.Should().BeTrue();
+        store.ElectionEnvelopeAccessRecords.Should().NotContainKey((election.ElectionId, "trustee-a"));
+    }
+
+    [Fact]
     public async Task StartElectionCeremonyAsync_WithMatchingProfile_PersistsVersionAndAcceptedTrusteeStates()
     {
         var store = new ElectionStore();
@@ -2016,6 +2084,51 @@ public class ElectionLifecycleServiceTests
         store.Elections[scenario.Election.ElectionId].UnofficialResultArtifactId.Should().NotBeNull();
         store.Elections[scenario.Election.ElectionId].FinalizeArtifactId.Should().BeNull();
         store.ResultArtifacts.Should().ContainSingle(x => x.ArtifactKind == ElectionResultArtifactKind.Unofficial);
+    }
+
+    [Fact]
+    public async Task SubmitFinalizationShareAsync_WithFinalizeSessionPurpose_ReturnsInvalidStateAndDoesNotPersistShares()
+    {
+        var store = new ElectionStore();
+        var scenario = SeedClosedTrusteeElectionForFinalization(store, requiredApprovalCount: 1);
+        var service = CreateService(store);
+        var session = ElectionModelFactory.CreateFinalizationSession(
+            scenario.Election,
+            scenario.CloseArtifact.Id,
+            scenario.AcceptedBallotSetHash,
+            scenario.FinalEncryptedTallyHash,
+            ElectionFinalizationSessionPurpose.Finalization,
+            scenario.OpenArtifact.CeremonySnapshot!,
+            requiredShareCount: 1,
+            eligibleTrustees:
+            [
+                new ElectionTrusteeReference("trustee-a", "Alice"),
+            ],
+            createdByPublicAddress: "owner-address");
+        store.FinalizationSessions[session.Id] = session;
+
+        var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
+            ElectionId: scenario.Election.ElectionId,
+            FinalizationSessionId: session.Id,
+            ActorPublicAddress: "trustee-a",
+            ShareIndex: 1,
+            ShareVersion: "share-v1",
+            TargetType: ElectionFinalizationTargetType.AggregateTally,
+            ClaimedCloseArtifactId: session.CloseArtifactId,
+            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
+            ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
+            ClaimedTargetTallyId: session.TargetTallyId,
+            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
+            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
+            ShareMaterial: "ciphertext-share-material"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.InvalidState);
+        result.ErrorMessage.Should().Contain("close-counting");
+        store.FinalizationShares.Should().BeEmpty();
+        store.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+        store.Elections[scenario.Election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+        store.FinalizationSessions[session.Id].Status.Should().Be(ElectionFinalizationSessionStatus.AwaitingShares);
     }
 
     [Fact]
@@ -3624,6 +3737,12 @@ public class ElectionLifecycleServiceTests
         public Task UpdateElectionEnvelopeAccessAsync(ElectionEnvelopeAccessRecord accessRecord)
         {
             store.ElectionEnvelopeAccessRecords[(accessRecord.ElectionId, accessRecord.ActorPublicAddress)] = accessRecord;
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteElectionEnvelopeAccessAsync(ElectionId electionId, string actorPublicAddress)
+        {
+            store.ElectionEnvelopeAccessRecords.Remove((electionId, actorPublicAddress));
             return Task.CompletedTask;
         }
 

@@ -206,14 +206,14 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
             SourceBlockId: _blockchainCache.CurrentBlockId.Value));
 
-        if (result.IsSuccess)
+        if (result.IsSuccess &&
+            !await ShouldRetainElectionEnvelopeAccessAsync(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                claimAction.ActorPublicAddress))
         {
-            await SaveElectionEnvelopeAccessAsync(
+            await DeleteElectionEnvelopeAccessAsync(
                 decryptedEnvelope.Transaction.Payload.ElectionId,
                 claimAction.ActorPublicAddress,
-                decryptedEnvelope.Transaction.Payload.NodeEncryptedElectionPrivateKey,
-                decryptedEnvelope.Transaction.Payload.ActorEncryptedElectionPrivateKey,
-                decryptedEnvelope.Transaction.TransactionTimeStamp.Value,
                 decryptedEnvelope.Transaction.TransactionId.Value);
         }
 
@@ -830,5 +830,54 @@ public class EncryptedElectionEnvelopeIndexStrategy(
         }
 
         await unitOfWork.CommitAsync();
+    }
+
+    private async Task DeleteElectionEnvelopeAccessAsync(
+        ElectionId electionId,
+        string actorPublicAddress,
+        Guid sourceTransactionId)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var existingRecord = await repository.GetElectionEnvelopeAccessAsync(electionId, actorPublicAddress);
+        if (existingRecord is null)
+        {
+            return;
+        }
+
+        await repository.DeleteElectionEnvelopeAccessAsync(electionId, actorPublicAddress);
+        await unitOfWork.CommitAsync();
+
+        _logger.LogInformation(
+            "[EncryptedElectionEnvelopeIndexStrategy] Removed envelope access for actor {ActorPublicAddress} on election {ElectionId} after transaction {TransactionId}",
+            actorPublicAddress,
+            electionId,
+            sourceTransactionId);
+    }
+
+    private async Task<bool> ShouldRetainElectionEnvelopeAccessAsync(
+        ElectionId electionId,
+        string actorPublicAddress)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionAsync(electionId);
+        if (election is not null &&
+            string.Equals(election.OwnerPublicAddress, actorPublicAddress, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var invitations = await repository.GetTrusteeInvitationsAsync(electionId);
+        if (invitations.Any(x =>
+                string.Equals(x.TrusteeUserAddress, actorPublicAddress, StringComparison.OrdinalIgnoreCase) &&
+                x.Status == ElectionTrusteeInvitationStatus.Accepted))
+        {
+            return true;
+        }
+
+        var grants = await repository.GetReportAccessGrantsAsync(electionId);
+        return grants.Any(x =>
+            string.Equals(x.ActorPublicAddress, actorPublicAddress, StringComparison.OrdinalIgnoreCase));
     }
 }

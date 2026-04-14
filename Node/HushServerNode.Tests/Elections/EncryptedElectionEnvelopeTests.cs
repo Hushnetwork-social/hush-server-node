@@ -718,6 +718,147 @@ public class EncryptedElectionEnvelopeTests
         validatedTransaction.Should().BeOfType<ValidatedTransaction<EncryptedElectionEnvelopePayload>>();
     }
 
+    [Fact]
+    public void ValidateAndSign_WithFinalizeSessionShareSubmission_RejectsNonCloseCountingSession()
+    {
+        var election = ElectionModelFactory.CreateDraftRecord(
+            electionId: ElectionId.NewElectionId,
+            title: "Referendum",
+            shortDescription: "Policy vote",
+            ownerPublicAddress: "owner-address",
+            externalReferenceCode: "REF-2026-01",
+            electionClass: ElectionClass.OrganizationalRemoteVoting,
+            bindingStatus: ElectionBindingStatus.Binding,
+            governanceMode: ElectionGovernanceMode.TrusteeThreshold,
+            disclosureMode: ElectionDisclosureMode.FinalResultsOnly,
+            participationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
+            voteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
+            eligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            outcomeRule: new OutcomeRuleDefinition(
+                OutcomeRuleKind.PassFail,
+                "pass_fail",
+                SeatCount: 0,
+                BlankVoteCountsForTurnout: true,
+                BlankVoteExcludedFromWinnerSelection: true,
+                BlankVoteExcludedFromThresholdDenominator: false,
+                TieResolutionRule: "tie_unresolved",
+                CalculationBasis: "highest_non_blank_votes"),
+            approvedClientApplications:
+            [
+                new ApprovedClientApplicationRecord("hushsocial", "1.0.0"),
+            ],
+            protocolOmegaVersion: "omega-v1.0.0",
+            reportingPolicy: ReportingPolicy.DefaultPhaseOnePackage,
+            reviewWindowPolicy: ReviewWindowPolicy.GovernedReviewWindowReserved,
+            ownerOptions:
+            [
+                new ElectionOptionDefinition("yes", "Yes", null, 1, false),
+                new ElectionOptionDefinition("no", "No", null, 2, false),
+            ],
+            acknowledgedWarningCodes: [],
+            requiredApprovalCount: 1) with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedAt = DateTime.UtcNow.AddMinutes(-5),
+            LastUpdatedAt = DateTime.UtcNow.AddMinutes(-5),
+        };
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            Guid.NewGuid(),
+            1,
+            "dkg-prod-1of1",
+            boundTrusteeCount: 1,
+            requiredApprovalCount: 1,
+            activeTrustees:
+            [
+                new ElectionTrusteeReference("trustee-address", "Trustee"),
+            ],
+            tallyPublicKeyFingerprint: "tally-fingerprint");
+        var session = ElectionModelFactory.CreateFinalizationSession(
+            election,
+            Guid.NewGuid(),
+            acceptedBallotSetHash: [1, 2, 3],
+            finalEncryptedTallyHash: [4, 5, 6],
+            sessionPurpose: ElectionFinalizationSessionPurpose.Finalization,
+            ceremonySnapshot: ceremonySnapshot,
+            requiredShareCount: 1,
+            eligibleTrustees:
+            [
+                new ElectionTrusteeReference("trustee-address", "Trustee"),
+            ],
+            createdByPublicAddress: "owner-address");
+
+        var signedEnvelope = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            EncryptedElectionEnvelopePayloadHandler.CreateNew(
+                election.ElectionId,
+                EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+                "node-envelope",
+                "actor-envelope",
+                "encrypted-payload"),
+            new SignatureInfo("trustee-address", "signature"));
+        var signedActionEnvelope = new DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>>(
+            signedEnvelope,
+            EncryptedElectionEnvelopeActionTypes.SubmitFinalizationShare,
+            JsonSerializer.Serialize(new SubmitElectionFinalizationShareActionPayload(
+                session.Id,
+                "trustee-address",
+                1,
+                "share-v1",
+                ElectionFinalizationTargetType.AggregateTally,
+                session.CloseArtifactId,
+                session.AcceptedBallotSetHash,
+                session.FinalEncryptedTallyHash,
+                session.TargetTallyId,
+                ceremonySnapshot.CeremonyVersionId,
+                ceremonySnapshot.TallyPublicKeyFingerprint,
+                "ciphertext-share-material")));
+
+        var cryptoService = new Mock<IElectionEnvelopeCryptoService>();
+        cryptoService
+            .Setup(x => x.TryDecryptSigned(It.IsAny<AbstractTransaction>()))
+            .Returns(signedActionEnvelope);
+
+        var validationService = new Mock<ICreateElectionDraftValidationService>();
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        credentialsProvider
+            .Setup(x => x.GetCredentials())
+            .Returns(new CredentialsProfile
+            {
+                PublicSigningAddress = "validator-address",
+                PrivateSigningKey = new DigitalSignature().PrivateKey,
+                PublicEncryptAddress = "validator-encrypt-address",
+                PrivateEncryptKey = "validator-private-encrypt-key",
+            });
+
+        var repository = new Mock<IElectionsRepository>();
+        repository.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+        repository.Setup(x => x.GetFinalizationSessionAsync(session.Id)).ReturnsAsync(session);
+
+        var readOnlyUnitOfWork = new Mock<Olimpo.EntityFramework.Persistency.IReadOnlyUnitOfWork<ElectionsDbContext>>();
+        readOnlyUnitOfWork
+            .Setup(x => x.GetRepository<IElectionsRepository>())
+            .Returns(repository.Object);
+
+        var unitOfWorkProvider = new Mock<Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext>>();
+        unitOfWorkProvider
+            .Setup(x => x.CreateReadOnly())
+            .Returns(readOnlyUnitOfWork.Object);
+
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        var sut = CreateContentHandler(
+            cryptoService.Object,
+            validationService.Object,
+            credentialsProvider.Object,
+            unitOfWorkProvider.Object,
+            lifecycleService.Object);
+
+        var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        sut.TryTakeValidationFailure(signedEnvelope.TransactionId.Value, out var failure).Should().BeTrue();
+        failure.Code.Should().Be("election_finalization_share_wrong_session_purpose");
+    }
+
     private static ElectionDraftSpecification CreateDraftSpecification() =>
         new(
             Title: "Board Election",

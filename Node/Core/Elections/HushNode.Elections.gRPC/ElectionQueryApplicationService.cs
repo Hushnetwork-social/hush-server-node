@@ -55,10 +55,11 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         election.LifecycleState == ElectionLifecycleState.Closed &&
         !election.UnofficialResultArtifactId.HasValue;
 
-    public async Task<GetElectionResponse> GetElectionAsync(ElectionId electionId)
+    public async Task<GetElectionResponse> GetElectionAsync(ElectionId electionId, string? actorPublicAddress = null)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var normalizedActorPublicAddress = actorPublicAddress?.Trim() ?? string.Empty;
 
         var election = await repository.GetElectionAsync(electionId);
         if (election is null)
@@ -87,9 +88,24 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var latestDraftSnapshot = await repository.GetLatestDraftSnapshotAsync(electionId);
         var warningAcknowledgements = await repository.GetWarningAcknowledgementsAsync(electionId);
         var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(electionId);
+        var reportAccessGrant = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
+            ? null
+            : await repository.GetReportAccessGrantAsync(electionId, normalizedActorPublicAddress);
+        var isOwner = !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
+            string.Equals(election.OwnerPublicAddress, normalizedActorPublicAddress, StringComparison.OrdinalIgnoreCase);
+        var acceptedTrustee = trusteeInvitations.Any(x =>
+            x.Status == ElectionTrusteeInvitationStatus.Accepted &&
+            string.Equals(x.TrusteeUserAddress, normalizedActorPublicAddress, StringComparison.OrdinalIgnoreCase));
+        var isDesignatedAuditor = reportAccessGrant?.GrantRole == ElectionReportAccessGrantRole.DesignatedAuditor;
+        var canViewGovernedOperationalMetadata =
+            !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
+            (isOwner || acceptedTrustee || isDesignatedAuditor);
+        var canViewFinalizationOperationalMetadata = canViewGovernedOperationalMetadata;
         var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(electionId);
         boundaryArtifacts = await EnsureAdminOnlyProtectedTallyBindingPersistedAsync(election, boundaryArtifacts);
-        var governedProposals = await repository.GetGovernedProposalsAsync(electionId);
+        var governedProposals = canViewGovernedOperationalMetadata
+            ? await repository.GetGovernedProposalsAsync(electionId)
+            : Array.Empty<ElectionGovernedProposalRecord>();
         var governedProposalApprovals = new List<ElectionGovernedProposalApprovalRecord>();
         foreach (var proposal in governedProposals)
         {
@@ -110,14 +126,18 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var activeCeremonyTrusteeStates = activeCeremonyVersion is null
             ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
             : await repository.GetCeremonyTrusteeStatesAsync(activeCeremonyVersion.Id);
-        var finalizationSessions = await repository.GetFinalizationSessionsAsync(electionId);
+        var finalizationSessions = canViewFinalizationOperationalMetadata
+            ? await repository.GetFinalizationSessionsAsync(electionId)
+            : Array.Empty<ElectionFinalizationSessionRecord>();
         var finalizationShares = new List<ElectionFinalizationShareRecord>();
         foreach (var finalizationSession in finalizationSessions)
         {
             finalizationShares.AddRange(await repository.GetFinalizationSharesAsync(finalizationSession.Id));
         }
 
-        var finalizationReleaseEvidenceRecords = await repository.GetFinalizationReleaseEvidenceRecordsAsync(electionId);
+        var finalizationReleaseEvidenceRecords = canViewFinalizationOperationalMetadata
+            ? await repository.GetFinalizationReleaseEvidenceRecordsAsync(electionId)
+            : Array.Empty<ElectionFinalizationReleaseEvidenceRecord>();
 
         var response = new GetElectionResponse
         {
@@ -761,14 +781,45 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
     {
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var normalizedActorPublicAddress = actorPublicAddress?.Trim() ?? string.Empty;
 
-        var accessRecord = await repository.GetElectionEnvelopeAccessAsync(electionId, actorPublicAddress);
+        var election = await repository.GetElectionAsync(electionId);
+        if (election is null)
+        {
+            return new GetElectionEnvelopeAccessResponse
+            {
+                Success = false,
+                ErrorMessage = $"Election {electionId} was not found.",
+            };
+        }
+
+        var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(electionId);
+        var reportAccessGrant = string.IsNullOrWhiteSpace(normalizedActorPublicAddress)
+            ? null
+            : await repository.GetReportAccessGrantAsync(electionId, normalizedActorPublicAddress);
+        var isOwner = !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
+            string.Equals(election.OwnerPublicAddress, normalizedActorPublicAddress, StringComparison.OrdinalIgnoreCase);
+        var acceptedTrustee = trusteeInvitations.Any(x =>
+            x.Status == ElectionTrusteeInvitationStatus.Accepted &&
+            string.Equals(x.TrusteeUserAddress, normalizedActorPublicAddress, StringComparison.OrdinalIgnoreCase));
+        var isDesignatedAuditor = reportAccessGrant?.GrantRole == ElectionReportAccessGrantRole.DesignatedAuditor;
+
+        if (!isOwner && !acceptedTrustee && !isDesignatedAuditor)
+        {
+            return new GetElectionEnvelopeAccessResponse
+            {
+                Success = false,
+                ErrorMessage = $"Election envelope access is not available for actor '{normalizedActorPublicAddress}' on election {electionId}.",
+            };
+        }
+
+        var accessRecord = await repository.GetElectionEnvelopeAccessAsync(electionId, normalizedActorPublicAddress);
         if (accessRecord is null)
         {
             return new GetElectionEnvelopeAccessResponse
             {
                 Success = false,
-                ErrorMessage = $"No election envelope access was found for actor '{actorPublicAddress}' on election {electionId}.",
+                ErrorMessage = $"No election envelope access was found for actor '{normalizedActorPublicAddress}' on election {electionId}.",
             };
         }
 

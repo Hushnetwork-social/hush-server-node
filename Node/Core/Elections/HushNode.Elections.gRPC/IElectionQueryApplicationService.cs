@@ -5,7 +5,7 @@ namespace HushNode.Elections.gRPC;
 
 public interface IElectionQueryApplicationService
 {
-    Task<GetElectionResponse> GetElectionAsync(ElectionId electionId);
+    Task<GetElectionResponse> GetElectionAsync(ElectionId electionId, string? actorPublicAddress = null);
 
     Task<SearchElectionDirectoryResponse> SearchElectionDirectoryAsync(
         string searchTerm,

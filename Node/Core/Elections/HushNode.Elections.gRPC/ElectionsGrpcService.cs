@@ -171,7 +171,21 @@ public class ElectionsGrpcService(
     {
         try
         {
-            return await _queryApplicationService.GetElectionAsync(ElectionGrpcMappings.ParseElectionId(request.ElectionId));
+            var actorPublicAddress = ElectionQueryRequestAuthValidator.ValidateOptionalOrResolveActor(
+                nameof(GetElection),
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = request.ElectionId,
+                },
+                context);
+
+            return await _queryApplicationService.GetElectionAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                actorPublicAddress);
+        }
+        catch (RpcException)
+        {
+            throw;
         }
         catch (FormatException ex)
         {

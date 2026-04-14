@@ -34,6 +34,8 @@ public interface IElectionsRepository : IRepository
 
     Task UpdateElectionEnvelopeAccessAsync(ElectionEnvelopeAccessRecord accessRecord);
 
+    Task DeleteElectionEnvelopeAccessAsync(ElectionId electionId, string actorPublicAddress);
+
     Task<IReadOnlyList<ElectionResultArtifactRecord>> GetResultArtifactsAsync(ElectionId electionId) =>
         Task.FromResult<IReadOnlyList<ElectionResultArtifactRecord>>(Array.Empty<ElectionResultArtifactRecord>());
 
