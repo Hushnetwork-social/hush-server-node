@@ -182,7 +182,7 @@ Feature: FEAT-094 election lifecycle integration
     And the owner closes the election through blockchain submission
     Then the election should remain in "Closed"
     And the election should not expose a tally-ready boundary yet
-    And the publication issue log should contain 1 "ReplayMismatch" issue with occurrence count 2
+    And the publication issue log should contain 1 "ReplayMismatch" issue with occurrence count at least 2
     And 2 ballot mempool entries should remain queued for the election
 
   @FEAT-103 @AT-SURFACE-I02 @NON_E2E

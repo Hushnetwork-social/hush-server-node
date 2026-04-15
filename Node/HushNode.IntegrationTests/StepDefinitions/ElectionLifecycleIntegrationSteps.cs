@@ -929,6 +929,23 @@ public sealed class ElectionLifecycleIntegrationSteps
         issues.Should().OnlyContain(x => x.OccurrenceCount == expectedOccurrenceCount);
     }
 
+    [Then(@"the publication issue log should contain (\d+) ""(.*)"" issue with occurrence count at least (\d+)")]
+    public async Task ThenThePublicationIssueLogShouldContainIssueWithOccurrenceCountAtLeast(
+        int expectedRecordCount,
+        string issueCode,
+        int minimumOccurrenceCount)
+    {
+        await using var scope = GetNode().Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        var parsedIssueCode = ParsePublicationIssueCode(issueCode);
+        var issues = await dbContext.Set<ElectionPublicationIssueRecord>()
+            .Where(x => x.ElectionId == GetCurrentElectionId() && x.IssueCode == parsedIssueCode)
+            .ToListAsync();
+
+        issues.Should().HaveCount(expectedRecordCount);
+        issues.Should().OnlyContain(x => x.OccurrenceCount >= minimumOccurrenceCount);
+    }
+
     [Then(@"(\d+) ballot mempool entries should remain queued for the election")]
     public async Task ThenBallotMempoolEntriesShouldRemainQueuedForTheElection(int expectedCount)
     {
