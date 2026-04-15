@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Grpc.Core;
 using HushNetwork.proto;
 using HushNode.IntegrationTests.Infrastructure;
 using HushNode.Reactions.Crypto;
@@ -14,6 +15,7 @@ using HushServerNode.Testing.Elections;
 using HushShared.Elections.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Olimpo;
 using ReactionECPoint = HushShared.Reactions.Model.ECPoint;
 using Xunit;
 
@@ -73,7 +75,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Charlie);
         await ApproveProposalAsync(context.ElectionId, finalizeProposalId, Delta);
 
-        var finalizedElection = await ReloadElectionAsync(client, context.ElectionId);
+        var finalizedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
         finalizedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Finalized);
         finalizedElection.Election.FinalizeArtifactId.Should().NotBeNullOrWhiteSpace();
         finalizedElection.Election.OfficialResultArtifactId.Should().NotBeNullOrWhiteSpace();
@@ -163,7 +165,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Charlie);
         await ApproveProposalAsync(context.ElectionId, finalizeProposalId, Delta);
 
-        var failedElection = await ReloadElectionAsync(client, context.ElectionId);
+        var failedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
         failedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
         failedElection.Election.FinalizeArtifactId.Should().BeNullOrWhiteSpace();
         failedElection.GovernedProposals.Should().ContainSingle(x =>
@@ -191,14 +193,14 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             failedPackages.Single().FailureReason.Should().Contain("Close eligibility snapshot");
         }
 
-        var electionAfterFailure = await ReloadElectionAsync(client, context.ElectionId);
+        var electionAfterFailure = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
         await RestoreCloseEligibilitySnapshotBoundaryAsync(
             context.ElectionId,
             Guid.Parse(electionAfterFailure.Election.CloseArtifactId));
 
         await RetryProposalExecutionAsync(client, context.ElectionId, finalizeProposalId);
 
-        var finalizedElection = await ReloadElectionAsync(client, context.ElectionId);
+        var finalizedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
         finalizedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Finalized);
         finalizedElection.Election.FinalizeArtifactId.Should().NotBeNullOrWhiteSpace();
 
@@ -275,7 +277,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         await ApproveProposalAsync(electionId, openProposalId, TestIdentities.Charlie);
         await ApproveProposalAsync(electionId, openProposalId, Delta);
 
-        var openElection = await ReloadElectionAsync(client, electionId);
+        var openElection = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         openElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Open);
 
         await ClaimRosterEntryAsync(electionId, TestIdentities.Alice, "voter-alice");
@@ -296,7 +298,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         await ApproveProposalAsync(electionId, closeProposalId, TestIdentities.Charlie);
         await ApproveProposalAsync(electionId, closeProposalId, Delta);
 
-        var closedElection = await ReloadElectionAsync(client, electionId);
+        var closedElection = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         closedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
         closedElection.Election.TallyReadyArtifactId.Should().BeNullOrWhiteSpace();
         closedElection.FinalizationSessions.Should().ContainSingle(x =>
@@ -307,7 +309,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         await SubmitFinalizationShareViaBlockchainAsync(client, electionId, TestIdentities.Charlie);
         await SubmitFinalizationShareViaBlockchainAsync(client, electionId, Delta);
 
-        var tallyReadyElection = await ReloadElectionAsync(client, electionId);
+        var tallyReadyElection = await WaitForTallyReadyElectionAsync(client, electionId, TestIdentities.Alice);
         tallyReadyElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
         tallyReadyElection.Election.TallyReadyArtifactId.Should().NotBeNullOrWhiteSpace();
         tallyReadyElection.Election.UnofficialResultArtifactId.Should().NotBeNullOrWhiteSpace();
@@ -333,12 +335,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
                 BuildOpenReadyRosterEntries()));
         importRosterResponse.Successfull.Should().BeTrue(importRosterResponse.Message);
 
-        var response = await client.GetElectionAsync(new GetElectionRequest
-        {
-            ElectionId = electionId.ToString(),
-        });
-
-        response.Success.Should().BeTrue(response.ErrorMessage);
+        var response = await ReloadElectionAsync(client, electionId.ToString(), TestIdentities.Alice);
         response.LatestDraftSnapshot.Should().NotBeNull();
 
         return new ElectionCommandResponse
@@ -381,7 +378,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
                 profileId));
         submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
 
-        var response = await ReloadElectionAsync(client, electionId);
+        var response = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         response.Success.Should().BeTrue(response.ErrorMessage);
         return response.CeremonyVersions
             .Where(x => x.ProfileId == profileId)
@@ -467,7 +464,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         var submitResponse = await SubmitBlockchainTransactionAsync(signedTransaction);
         submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
 
-        var response = await ReloadElectionAsync(client, electionId);
+        var response = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         response.GovernedProposals.Should().ContainSingle(x => x.Id == proposalId.ToString());
         return proposalId;
     }
@@ -498,7 +495,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
                 proposalId));
         submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
 
-        var response = await ReloadElectionAsync(client, electionId);
+        var response = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         response.GovernedProposals.Should().ContainSingle(x => x.Id == proposalId.ToString());
     }
 
@@ -593,7 +590,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         string electionId,
         TestIdentity trustee)
     {
-        var currentResponse = await ReloadElectionAsync(client, electionId);
+        var currentResponse = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         var session = currentResponse.FinalizationSessions
             .Single(x => x.Status == ElectionFinalizationSessionStatusProto.FinalizationSessionAwaitingShares);
         var shareIndex = session.EligibleTrustees
@@ -638,13 +635,27 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         TestIdentity actor,
         string submissionIdempotencyKey = "")
     {
-        async Task<GetElectionVotingViewResponse> QueryAsync() =>
-            await client.GetElectionVotingViewAsync(new GetElectionVotingViewRequest
+        async Task<GetElectionVotingViewResponse> QueryAsync()
+        {
+            var request = new GetElectionVotingViewRequest
             {
                 ElectionId = electionId,
                 ActorPublicAddress = actor.PublicSigningAddress,
                 SubmissionIdempotencyKey = submissionIdempotencyKey,
-            });
+            };
+
+            return await client.GetElectionVotingViewAsync(
+                request,
+                headers: CreateSignedElectionQueryHeaders(
+                    nameof(HushElections.HushElectionsClient.GetElectionVotingView),
+                    actor,
+                    new Dictionary<string, object?>
+                    {
+                        ["ElectionId"] = request.ElectionId,
+                        ["ActorPublicAddress"] = request.ActorPublicAddress,
+                        ["SubmissionIdempotencyKey"] = request.SubmissionIdempotencyKey,
+                    }));
+        }
 
         var response = await QueryAsync();
         for (var attempt = 0; attempt < 20 && !response.Success; attempt++)
@@ -663,12 +674,25 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         TestIdentity actor,
         bool waitForOfficialResult = false)
     {
-        async Task<GetElectionResultViewResponse> QueryAsync() =>
-            await client.GetElectionResultViewAsync(new GetElectionResultViewRequest
+        async Task<GetElectionResultViewResponse> QueryAsync()
+        {
+            var request = new GetElectionResultViewRequest
             {
                 ElectionId = electionId,
                 ActorPublicAddress = actor.PublicSigningAddress,
-            });
+            };
+
+            return await client.GetElectionResultViewAsync(
+                request,
+                headers: CreateSignedElectionQueryHeaders(
+                    nameof(HushElections.HushElectionsClient.GetElectionResultView),
+                    actor,
+                    new Dictionary<string, object?>
+                    {
+                        ["ElectionId"] = request.ElectionId,
+                        ["ActorPublicAddress"] = request.ActorPublicAddress,
+                    }));
+        }
 
         var response = await QueryAsync();
         for (var attempt = 0;
@@ -686,15 +710,126 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
 
     private async Task<GetElectionResponse> ReloadElectionAsync(
         HushElections.HushElectionsClient client,
-        string electionId)
+        string electionId,
+        TestIdentity? actor = null)
     {
-        var response = await client.GetElectionAsync(new GetElectionRequest
+        var request = new GetElectionRequest
         {
             ElectionId = electionId,
-        });
+        };
+        GetElectionResponse response;
+        if (actor is null)
+        {
+            response = await client.GetElectionAsync(request);
+        }
+        else
+        {
+            response = await client.GetElectionAsync(
+                request,
+                headers: CreateSignedElectionQueryHeaders(
+                    nameof(HushElections.HushElectionsClient.GetElection),
+                    actor,
+                    new Dictionary<string, object?>
+                    {
+                        ["ElectionId"] = request.ElectionId,
+                    }));
+        }
 
         response.Success.Should().BeTrue(response.ErrorMessage);
         return response;
+    }
+
+    private async Task<GetElectionResponse> WaitForTallyReadyElectionAsync(
+        HushElections.HushElectionsClient client,
+        string electionId,
+        TestIdentity actor)
+    {
+        var response = await ReloadElectionAsync(client, electionId, actor);
+
+        for (var attempt = 0;
+             attempt < 20 &&
+             string.IsNullOrWhiteSpace(response.Election.TallyReadyArtifactId);
+             attempt++)
+        {
+            await Task.Delay(100);
+            response = await ReloadElectionAsync(client, electionId, actor);
+        }
+
+        return response;
+    }
+
+    private static Metadata CreateSignedElectionQueryHeaders(
+        string method,
+        TestIdentity actor,
+        IReadOnlyDictionary<string, object?> request)
+    {
+        var signedAt = DateTimeOffset.UtcNow.ToString("O");
+        var payload = BuildSignedElectionQueryPayload(
+            method,
+            actor.PublicSigningAddress,
+            signedAt,
+            request);
+
+        return new Metadata
+        {
+            { "x-hush-election-query-signatory", actor.PublicSigningAddress },
+            { "x-hush-election-query-signed-at", signedAt },
+            { "x-hush-election-query-signature", DigitalSignature.SignMessageCompactBase64(payload, actor.PrivateSigningKey) },
+        };
+    }
+
+    private static string BuildSignedElectionQueryPayload(
+        string method,
+        string actorAddress,
+        string signedAt,
+        IReadOnlyDictionary<string, object?> request)
+    {
+        var payload = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["actorAddress"] = actorAddress,
+            ["method"] = method,
+            ["request"] = DeepSortElectionQueryValue(request),
+            ["signedAt"] = signedAt,
+        };
+
+        return JsonSerializer.Serialize(payload);
+    }
+
+    private static object? DeepSortElectionQueryValue(object? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (value is IReadOnlyDictionary<string, object?> readOnlyDictionary)
+        {
+            var sortedDictionary = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var entry in readOnlyDictionary)
+            {
+                sortedDictionary[entry.Key] = DeepSortElectionQueryValue(entry.Value);
+            }
+
+            return sortedDictionary;
+        }
+
+        if (value is IDictionary<string, object?> dictionary)
+        {
+            var sortedDictionary = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var entry in dictionary)
+            {
+                sortedDictionary[entry.Key] = DeepSortElectionQueryValue(entry.Value);
+            }
+
+            return sortedDictionary;
+        }
+
+        if (value is IEnumerable<object?> sequence && value is not string)
+        {
+            return sequence.Select(DeepSortElectionQueryValue).ToArray();
+        }
+
+        return value;
     }
 
     private async Task<SubmitSignedTransactionReply> SubmitBlockchainTransactionAsync(string signedTransaction)

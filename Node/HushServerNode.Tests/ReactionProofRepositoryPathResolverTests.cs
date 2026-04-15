@@ -21,6 +21,8 @@ public sealed class ReactionProofRepositoryPathResolverTests
     public void ResolveFromRuntimeBase_WhenStartedFromIntegrationBinDebug_ShouldReturnSiblingWebClientRoot()
     {
         using var temp = new TemporaryMonorepoLayout();
+        using var _ = new EnvironmentVariableScope("HUSH_SERVER_NODE_ROOT", null);
+        using var __ = new EnvironmentVariableScope("HUSH_WEB_CLIENT_ROOT", null);
         var runtimeBaseDirectory = Path.Combine(
             temp.WorkspaceRoot,
             "hush-server-node",
@@ -63,6 +65,24 @@ public sealed class ReactionProofRepositoryPathResolverTests
             {
                 Directory.Delete(WorkspaceRoot, recursive: true);
             }
+        }
+    }
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _previousValue;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            _name = name;
+            _previousValue = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable(_name, _previousValue);
         }
     }
 }

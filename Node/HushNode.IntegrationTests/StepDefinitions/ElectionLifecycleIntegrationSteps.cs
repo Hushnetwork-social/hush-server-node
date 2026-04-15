@@ -1458,10 +1458,20 @@ public sealed class ElectionLifecycleIntegrationSteps
 
     private async Task<GetElectionResponse> ReloadElectionAsync()
     {
-        var response = await GetClient().GetElectionAsync(new GetElectionRequest
+        var owner = GetOwner();
+        var request = new GetElectionRequest
         {
             ElectionId = GetElectionId(),
-        });
+        };
+        var response = await GetClient().GetElectionAsync(
+            request,
+            headers: CreateSignedElectionQueryHeaders(
+                nameof(HushElections.HushElectionsClient.GetElection),
+                owner,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = request.ElectionId,
+                }));
 
         response.Success.Should().BeTrue($"GetElection should succeed for {GetElectionId()}: {response.ErrorMessage}");
         return response;

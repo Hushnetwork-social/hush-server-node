@@ -145,12 +145,7 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         submitResponse.Successfull.Should().BeFalse();
         submitResponse.Message.Should().NotBeNullOrWhiteSpace();
 
-        var electionResponse = await client.GetElectionAsync(new GetElectionRequest
-        {
-            ElectionId = electionId,
-        });
-
-        electionResponse.Success.Should().BeTrue();
+        var electionResponse = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         electionResponse.GovernedProposals.Should().NotContain(x => x.Id == proposalId.ToString());
     }
 
@@ -1052,12 +1047,10 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
                 restartReason));
         submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
 
-        var response = await _grpcFactory!.CreateClient<HushElections.HushElectionsClient>().GetElectionAsync(new GetElectionRequest
-        {
-            ElectionId = electionId,
-        });
-
-        response.Success.Should().BeTrue(response.ErrorMessage);
+        var response = await ReloadElectionAsync(
+            _grpcFactory!.CreateClient<HushElections.HushElectionsClient>(),
+            electionId,
+            TestIdentities.Alice);
         var version = response.CeremonyVersions
             .Where(x => x.ProfileId == profileId)
             .OrderByDescending(x => x.VersionNumber)
@@ -1080,12 +1073,7 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
         await _blockControl!.ProduceBlockAsync();
 
-        var response = await client.GetElectionAsync(new GetElectionRequest
-        {
-            ElectionId = electionId,
-        });
-
-        response.Success.Should().BeTrue(response.ErrorMessage);
+        var response = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         response.GovernedProposals.Should().ContainSingle(x => x.Id == proposalId.ToString());
         return response;
     }
@@ -1112,13 +1100,39 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
             approvalResponse.Successfull.Should().BeTrue(approvalResponse.Message);
         }
 
-        var response = await client.GetElectionAsync(new GetElectionRequest
+        var response = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
+        response.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Open);
+        return response;
+    }
+
+    private async Task<GetElectionResponse> ReloadElectionAsync(
+        HushElections.HushElectionsClient client,
+        string electionId,
+        TestIdentity? actor = null)
+    {
+        var request = new GetElectionRequest
         {
             ElectionId = electionId,
-        });
+        };
+        GetElectionResponse response;
+        if (actor is null)
+        {
+            response = await client.GetElectionAsync(request);
+        }
+        else
+        {
+            response = await client.GetElectionAsync(
+                request,
+                headers: CreateSignedElectionQueryHeaders(
+                    nameof(HushElections.HushElectionsClient.GetElection),
+                    actor,
+                    new Dictionary<string, object?>
+                    {
+                        ["ElectionId"] = request.ElectionId,
+                    }));
+        }
 
         response.Success.Should().BeTrue(response.ErrorMessage);
-        response.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Open);
         return response;
     }
 
