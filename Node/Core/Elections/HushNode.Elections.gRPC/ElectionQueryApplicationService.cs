@@ -13,6 +13,7 @@ namespace HushNode.Elections.gRPC;
 
 public class ElectionQueryApplicationService : IElectionQueryApplicationService
 {
+    private const string TrusteeShareVaultMessageType = "trustee-share-vault-package";
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider;
     private readonly ElectionCeremonyOptions _ceremonyOptions;
     private readonly IMemPoolService? _memPoolService;
@@ -55,6 +56,33 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         election.LifecycleState == ElectionLifecycleState.Closed &&
         !election.UnofficialResultArtifactId.HasValue;
 
+    private static bool IsActiveCloseCountingJob(ElectionCloseCountingJobRecord closeCountingJob) =>
+        closeCountingJob.Status is ElectionCloseCountingJobStatus.AwaitingShares
+            or ElectionCloseCountingJobStatus.ThresholdReached
+            or ElectionCloseCountingJobStatus.Running
+            or ElectionCloseCountingJobStatus.Publishing;
+
+    private static async Task<bool> ShouldAttemptClosedResultRepairAsync(
+        IElectionsRepository repository,
+        ElectionRecord election)
+    {
+        if (!ShouldAttemptClosedResultRepair(election))
+        {
+            return false;
+        }
+
+        var finalizationSessions = await repository.GetFinalizationSessionsAsync(election.ElectionId);
+        if (!finalizationSessions.Any(x =>
+                x.SessionPurpose == ElectionFinalizationSessionPurpose.CloseCounting &&
+                x.Status != ElectionFinalizationSessionStatus.Completed))
+        {
+            return true;
+        }
+
+        var closeCountingJobs = await repository.GetCloseCountingJobsAsync(election.ElectionId);
+        return !closeCountingJobs.Any(IsActiveCloseCountingJob);
+    }
+
     public async Task<GetElectionResponse> GetElectionAsync(ElectionId electionId, string? actorPublicAddress = null)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -71,7 +99,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             };
         }
 
-        if (ShouldAttemptClosedResultRepair(election))
+        if (await ShouldAttemptClosedResultRepairAsync(repository, election))
         {
             await TryRepairClosedElectionResultsAsync(electionId);
             election = await repository.GetElectionAsync(electionId);
@@ -129,6 +157,26 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var finalizationSessions = canViewFinalizationOperationalMetadata
             ? await repository.GetFinalizationSessionsAsync(electionId)
             : Array.Empty<ElectionFinalizationSessionRecord>();
+        var closeCountingJobs = canViewFinalizationOperationalMetadata && finalizationSessions.Any(x =>
+                x.SessionPurpose == ElectionFinalizationSessionPurpose.CloseCounting)
+            ? await repository.GetCloseCountingJobsAsync(electionId)
+            : Array.Empty<ElectionCloseCountingJobRecord>();
+        var closeCountingJobBySessionId = closeCountingJobs
+            .GroupBy(x => x.FinalizationSessionId)
+            .ToDictionary(
+                x => x.Key,
+                x => x
+                    .OrderByDescending(y => y.CreatedAt)
+                    .First());
+        var executorSessionKeyEnvelopeByJobId = new Dictionary<Guid, ElectionExecutorSessionKeyEnvelopeRecord>();
+        foreach (var closeCountingJob in closeCountingJobs)
+        {
+            var envelope = await repository.GetExecutorSessionKeyEnvelopeAsync(closeCountingJob.Id);
+            if (envelope is not null)
+            {
+                executorSessionKeyEnvelopeByJobId[closeCountingJob.Id] = envelope;
+            }
+        }
         var finalizationShares = new List<ElectionFinalizationShareRecord>();
         foreach (var finalizationSession in finalizationSessions)
         {
@@ -169,7 +217,14 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         response.ActiveCeremonyTrusteeStates.AddRange(activeCeremonyTrusteeStates
             .OrderBy(x => x.TrusteeDisplayName ?? x.TrusteeUserAddress)
             .Select(x => x.ToProto()));
-        response.FinalizationSessions.AddRange(finalizationSessions.Select(x => x.ToProto()));
+        response.FinalizationSessions.AddRange(finalizationSessions.Select(session =>
+        {
+            closeCountingJobBySessionId.TryGetValue(session.Id, out var closeCountingJob);
+            var executorSessionKeyEnvelope = closeCountingJob is null
+                ? null
+                : executorSessionKeyEnvelopeByJobId.GetValueOrDefault(closeCountingJob.Id);
+            return session.ToProto(closeCountingJob, executorSessionKeyEnvelope);
+        }));
         response.FinalizationShares.AddRange(finalizationShares.Select(x => x.ToProto()));
         response.FinalizationReleaseEvidenceRecords.AddRange(finalizationReleaseEvidenceRecords.Select(x => x.ToProto()));
         response.ResultArtifacts.AddRange(resultArtifacts
@@ -379,14 +434,21 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         }
 
         var elections = await repository.GetElectionsByIdsAsync(electionIds);
-        var repairIds = elections
-            .Where(ShouldAttemptClosedResultRepair)
-            .Select(x => x.ElectionId)
+        var repairIds = new List<ElectionId>();
+        foreach (var election in elections)
+        {
+            if (await ShouldAttemptClosedResultRepairAsync(repository, election))
+            {
+                repairIds.Add(election.ElectionId);
+            }
+        }
+
+        var distinctRepairIds = repairIds
             .Distinct()
             .ToArray();
-        if (repairIds.Length > 0)
+        if (distinctRepairIds.Length > 0)
         {
-            foreach (var repairId in repairIds)
+            foreach (var repairId in distinctRepairIds)
             {
                 await TryRepairClosedElectionResultsAsync(repairId);
             }
@@ -465,6 +527,19 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 : await repository.GetCeremonyShareCustodyRecordAsync(
                     activeCeremonyVersion.Id,
                     normalizedActorPublicAddress);
+            var awaitingCloseCountingSession = !isTrustee ||
+                election.LifecycleState != ElectionLifecycleState.Closed
+                    ? null
+                    : (await repository.GetFinalizationSessionsAsync(election.ElectionId))
+                        .Where(x =>
+                            x.SessionPurpose == ElectionFinalizationSessionPurpose.CloseCounting &&
+                            x.Status == ElectionFinalizationSessionStatus.AwaitingShares)
+                        .OrderByDescending(x => x.CreatedAt)
+                        .ThenByDescending(x => x.Id)
+                        .FirstOrDefault();
+            var awaitingCloseCountingShares = awaitingCloseCountingSession is null
+                ? Array.Empty<ElectionFinalizationShareRecord>()
+                : await repository.GetFinalizationSharesAsync(awaitingCloseCountingSession.Id);
             var suggestedAction = ResolveSuggestedHubAction(
                 election,
                 normalizedActorPublicAddress,
@@ -479,7 +554,9 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 activeCeremonyVersion,
                 activeCeremonyTrusteeStates,
                 selfTrusteeState,
-                selfShareCustody);
+                selfShareCustody,
+                awaitingCloseCountingSession,
+                awaitingCloseCountingShares);
 
             electionEntries.Add(new ElectionHubEntryView
             {
@@ -835,8 +912,6 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         ElectionId electionId,
         string actorPublicAddress)
     {
-        await TryRepairClosedElectionResultsAsync(electionId);
-
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var normalizedActorPublicAddress = actorPublicAddress?.Trim() ?? string.Empty;
@@ -850,6 +925,21 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 ErrorMessage = $"Election {electionId} was not found.",
                 ActorPublicAddress = normalizedActorPublicAddress,
             };
+        }
+
+        if (await ShouldAttemptClosedResultRepairAsync(repository, election))
+        {
+            await TryRepairClosedElectionResultsAsync(electionId);
+            election = await repository.GetElectionAsync(electionId);
+            if (election is null)
+            {
+                return new GetElectionResultViewResponse
+                {
+                    Success = false,
+                    ErrorMessage = $"Election {electionId} was not found.",
+                    ActorPublicAddress = normalizedActorPublicAddress,
+                };
+            }
         }
 
         var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(electionId);
@@ -1000,9 +1090,15 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var selfShareCustody = activeCeremonyVersion is null
             ? null
             : await repository.GetCeremonyShareCustodyRecordAsync(activeCeremonyVersion.Id, actorPublicAddress);
-        var pendingIncomingMessageCount = activeCeremonyVersion is null
-            ? 0
-            : (await repository.GetCeremonyMessageEnvelopesForRecipientAsync(activeCeremonyVersion.Id, actorPublicAddress)).Count;
+        var selfRecipientEnvelopes = activeCeremonyVersion is null
+            ? Array.Empty<ElectionCeremonyMessageEnvelopeRecord>()
+            : await repository.GetCeremonyMessageEnvelopesForRecipientAsync(activeCeremonyVersion.Id, actorPublicAddress);
+        var selfVaultEnvelopes = selfRecipientEnvelopes
+            .Where(IsTrusteeShareVaultEnvelope)
+            .OrderByDescending(x => x.SubmittedAt)
+            .ThenByDescending(x => x.Id)
+            .ToArray();
+        var pendingIncomingMessageCount = selfRecipientEnvelopes.Count(x => !IsTrusteeShareVaultEnvelope(x));
 
         var actorRole = ResolveActorRole(election, trusteeInvitations, actorPublicAddress);
         var response = new GetElectionCeremonyActionViewResponse
@@ -1027,6 +1123,11 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         if (selfShareCustody is not null)
         {
             response.SelfShareCustody = selfShareCustody.ToProto();
+        }
+
+        if (selfVaultEnvelopes.Length > 0)
+        {
+            response.SelfVaultEnvelopes.AddRange(selfVaultEnvelopes.Select(x => x.ToProto()));
         }
 
         if (actorRole == ElectionCeremonyActorRoleProto.CeremonyActorOwner)
@@ -1063,6 +1164,9 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
 
         return response;
     }
+
+    private static bool IsTrusteeShareVaultEnvelope(ElectionCeremonyMessageEnvelopeRecord envelope) =>
+        string.Equals(envelope.MessageType, TrusteeShareVaultMessageType, StringComparison.Ordinal);
 
     public async Task<GetElectionsByOwnerResponse> GetElectionsByOwnerAsync(string ownerPublicAddress)
     {
@@ -1107,7 +1211,9 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         ElectionCeremonyVersionRecord? activeCeremonyVersion,
         IReadOnlyList<ElectionCeremonyTrusteeStateRecord> activeCeremonyTrusteeStates,
         ElectionCeremonyTrusteeStateRecord? selfTrusteeState,
-        ElectionCeremonyShareCustodyRecord? selfShareCustody)
+        ElectionCeremonyShareCustodyRecord? selfShareCustody,
+        ElectionFinalizationSessionRecord? awaitingCloseCountingSession,
+        IReadOnlyList<ElectionFinalizationShareRecord> awaitingCloseCountingShares)
     {
         if (CanLinkedVoterCastBallot(election, selfRosterEntry, participationRecord))
         {
@@ -1146,6 +1252,19 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             return (
                 ElectionHubNextActionHintProto.ElectionHubActionNone,
                 trusteeCeremonyFollowUpReason);
+        }
+
+        var trusteeCloseCountingReason = ResolveTrusteeCloseCountingHubReason(
+            election,
+            actorPublicAddress,
+            isTrustee,
+            awaitingCloseCountingSession,
+            awaitingCloseCountingShares);
+        if (!string.IsNullOrWhiteSpace(trusteeCloseCountingReason))
+        {
+            return (
+                ElectionHubNextActionHintProto.ElectionHubActionNone,
+                trusteeCloseCountingReason);
         }
 
         if (isOwnerAdmin &&
@@ -1223,6 +1342,49 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         return nextRequiredAction is null
             ? null
             : $"Continue the trustee ceremony. {nextRequiredAction.Reason}";
+    }
+
+    private static string? ResolveTrusteeCloseCountingHubReason(
+        ElectionRecord election,
+        string actorPublicAddress,
+        bool isTrustee,
+        ElectionFinalizationSessionRecord? awaitingCloseCountingSession,
+        IReadOnlyList<ElectionFinalizationShareRecord> awaitingCloseCountingShares)
+    {
+        if (!isTrustee ||
+            string.IsNullOrWhiteSpace(actorPublicAddress) ||
+            election.LifecycleState != ElectionLifecycleState.Closed ||
+            awaitingCloseCountingSession is null)
+        {
+            return null;
+        }
+
+        var isEligibleTrustee = awaitingCloseCountingSession.EligibleTrustees.Any(x =>
+            string.Equals(
+                x.TrusteeUserAddress,
+                actorPublicAddress,
+                StringComparison.OrdinalIgnoreCase));
+        if (!isEligibleTrustee)
+        {
+            return null;
+        }
+
+        var latestSelfShare = awaitingCloseCountingShares
+            .Where(x => string.Equals(
+                x.TrusteeUserAddress,
+                actorPublicAddress,
+                StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(x => x.SubmittedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+        if (latestSelfShare?.Status == ElectionFinalizationShareStatus.Accepted)
+        {
+            return null;
+        }
+
+        return latestSelfShare?.Status == ElectionFinalizationShareStatus.Rejected
+            ? "Resubmit the bound trustee tally share for close-counting."
+            : "Submit the bound trustee tally share for close-counting.";
     }
 
     private static string ResolveOwnerDraftHubReason(

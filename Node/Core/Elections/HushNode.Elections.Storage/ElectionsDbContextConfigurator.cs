@@ -44,6 +44,9 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionCeremonyTrusteeState(modelBuilder);
         ConfigureElectionCeremonyShareCustody(modelBuilder);
         ConfigureElectionFinalizationSession(modelBuilder);
+        ConfigureElectionCloseCountingJob(modelBuilder);
+        ConfigureElectionExecutorSessionKeyEnvelope(modelBuilder);
+        ConfigureElectionTallyExecutorLease(modelBuilder);
         ConfigureElectionFinalizationShare(modelBuilder);
         ConfigureElectionFinalizationReleaseEvidence(modelBuilder);
     }
@@ -980,7 +983,10 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.ClaimedTargetTallyId).HasColumnType("varchar(256)");
             entity.Property(x => x.ClaimedCeremonyVersionId).HasColumnType("uuid");
             entity.Property(x => x.ClaimedTallyPublicKeyFingerprint).HasColumnType("varchar(256)");
+            entity.Property(x => x.CloseCountingJobId).HasColumnType("uuid");
+            entity.Property(x => x.ExecutorKeyAlgorithm).HasColumnType("varchar(64)");
             entity.Property(x => x.ShareMaterial).HasColumnType("text");
+            entity.Property(x => x.ShareMaterialHash).HasColumnType("varchar(128)");
             entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(32)");
             entity.Property(x => x.FailureCode).HasColumnType("varchar(128)");
             entity.Property(x => x.FailureReason).HasColumnType("text");
@@ -991,6 +997,82 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
 
             entity.HasIndex(x => new { x.FinalizationSessionId, x.SubmittedAt });
             entity.HasIndex(x => new { x.FinalizationSessionId, x.TrusteeUserAddress, x.Status });
+        });
+    }
+
+    private static void ConfigureElectionCloseCountingJob(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionCloseCountingJobRecord>(entity =>
+        {
+            entity.ToTable("ElectionCloseCountingJobRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.FinalizationSessionId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.CloseArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.AcceptedBallotSetHash).HasColumnType("bytea");
+            entity.Property(x => x.FinalEncryptedTallyHash).HasColumnType("bytea");
+            entity.Property(x => x.TargetTallyId).HasColumnType("varchar(256)");
+            entity.Property(x => x.CeremonyVersionId).HasColumnType("uuid");
+            entity.Property(x => x.TallyPublicKeyFingerprint).HasColumnType("varchar(256)");
+            entity.Property(x => x.RequiredShareCount).HasColumnType("integer");
+            entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.CreatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ThresholdReachedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.CompletedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.RetryCount).HasColumnType("integer");
+            entity.Property(x => x.FailureCode).HasColumnType("varchar(128)");
+            entity.Property(x => x.FailureReason).HasColumnType("text");
+            entity.Property(x => x.LatestTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.LatestBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.LatestBlockId).HasColumnType("uuid");
+
+            entity.HasIndex(x => x.FinalizationSessionId).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.Status });
+            entity.HasIndex(x => new { x.ElectionId, x.CreatedAt });
+        });
+    }
+
+    private static void ConfigureElectionExecutorSessionKeyEnvelope(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionExecutorSessionKeyEnvelopeRecord>(entity =>
+        {
+            entity.ToTable("ElectionExecutorSessionKeyEnvelopeRecord", "Elections");
+            entity.HasKey(x => x.CloseCountingJobId);
+
+            entity.Property(x => x.CloseCountingJobId).HasColumnType("uuid");
+            entity.Property(x => x.ExecutorSessionPublicKey).HasColumnType("text");
+            entity.Property(x => x.SealedExecutorSessionPrivateKey).HasColumnType("text");
+            entity.Property(x => x.KeyAlgorithm).HasColumnType("varchar(96)");
+            entity.Property(x => x.CreatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ExpiresAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.DestroyedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SealedByServiceIdentity).HasColumnType("varchar(160)");
+            entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");
+        });
+    }
+
+    private static void ConfigureElectionTallyExecutorLease(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionTallyExecutorLeaseRecord>(entity =>
+        {
+            entity.ToTable("ElectionTallyExecutorLeaseRecord", "Elections");
+            entity.HasKey(x => x.CloseCountingJobId);
+
+            entity.Property(x => x.CloseCountingJobId).HasColumnType("uuid");
+            entity.Property(x => x.LeaseHolderId).HasColumnType("varchar(160)");
+            entity.Property(x => x.LeaseEpoch).HasColumnType("bigint");
+            entity.Property(x => x.LeasedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LeaseExpiresAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LastHeartbeatAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ReleaseReason).HasColumnType("text");
+            entity.Property(x => x.CompletionReason).HasColumnType("text");
         });
     }
 

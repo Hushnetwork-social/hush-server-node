@@ -60,6 +60,8 @@ public interface IElectionLifecycleService
 
     Task<ElectionCommandResult> SubmitFinalizationShareAsync(SubmitElectionFinalizationShareRequest request);
 
+    Task<ElectionCommandResult> ExecuteCloseCountingJobAsync(ExecuteElectionCloseCountingJobRequest request);
+
     Task<ElectionCommitmentRegistrationResult> RegisterVotingCommitmentAsync(RegisterElectionVotingCommitmentRequest request);
 
     Task<ElectionCastAcceptanceResult> AcceptBallotCastAsync(AcceptElectionBallotCastRequest request);
@@ -277,7 +279,17 @@ public record SubmitElectionFinalizationShareRequest(
     string ClaimedTargetTallyId,
     Guid? ClaimedCeremonyVersionId,
     string? ClaimedTallyPublicKeyFingerprint,
-    string ShareMaterial,
+    string? ShareMaterial = null,
+    Guid? CloseCountingJobId = null,
+    string? ExecutorKeyAlgorithm = null,
+    string? EncryptedExecutorSubmission = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
+public record ExecuteElectionCloseCountingJobRequest(
+    Guid CloseCountingJobId,
+    string LeaseHolderId,
     Guid? SourceTransactionId = null,
     long? SourceBlockHeight = null,
     Guid? SourceBlockId = null);

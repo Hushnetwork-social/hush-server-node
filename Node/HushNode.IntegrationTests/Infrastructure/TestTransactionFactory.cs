@@ -66,12 +66,15 @@ internal static class TestTransactionFactory
                 owner.PublicSigningAddress,
                 snapshotReason,
                 draft)));
-        var unsignedTransaction = EncryptedElectionEnvelopePayloadHandler.CreateNew(
+        var envelopeSurface = BuildCurrentEnvelopeSurface(actionEnvelope);
+        var unsignedTransaction = EncryptedElectionEnvelopePayloadHandler.CreateNewV21(
             electionId,
-            EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
-            EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, TestIdentities.BlockProducer.PublicEncryptAddress),
             EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, owner.PublicEncryptAddress),
-            EncryptKeys.Encrypt(JsonSerializer.Serialize(actionEnvelope), electionEncryptKeys.PublicKey));
+            electionEncryptKeys.PublicKey,
+            EncryptKeys.Encrypt(JsonSerializer.Serialize(actionEnvelope), electionEncryptKeys.PublicKey),
+            actionEnvelope.ActionType,
+            envelopeSurface.PublicActionPayload,
+            envelopeSurface.ActionArtifacts);
 
         var signature = DigitalSignature.SignMessage(
             unsignedTransaction.ToJson(),
@@ -460,12 +463,15 @@ internal static class TestTransactionFactory
             throw new InvalidOperationException($"Election private key for {electionId} is not available in the integration transaction factory.");
         }
 
-        var unsignedTransaction = EncryptedElectionEnvelopePayloadHandler.CreateNew(
+        var envelopeSurface = BuildCurrentEnvelopeSurface(actionEnvelope);
+        var unsignedTransaction = EncryptedElectionEnvelopePayloadHandler.CreateNewV21(
             electionId,
-            EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
-            EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, TestIdentities.BlockProducer.PublicEncryptAddress),
             EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, actor.PublicEncryptAddress),
-            EncryptKeys.Encrypt(JsonSerializer.Serialize(actionEnvelope), electionEncryptKeys.PublicKey));
+            electionEncryptKeys.PublicKey,
+            EncryptKeys.Encrypt(JsonSerializer.Serialize(actionEnvelope), electionEncryptKeys.PublicKey),
+            actionEnvelope.ActionType,
+            envelopeSurface.PublicActionPayload,
+            envelopeSurface.ActionArtifacts);
 
         var signature = DigitalSignature.SignMessage(
             unsignedTransaction.ToJson(),
@@ -476,6 +482,45 @@ internal static class TestTransactionFactory
             new SignatureInfo(actor.PublicSigningAddress, signature));
 
         return signedTransaction.ToJson();
+    }
+
+    private static (JsonElement PublicActionPayload, JsonElement? ActionArtifacts) BuildCurrentEnvelopeSurface(
+        EncryptedElectionActionEnvelope actionEnvelope)
+    {
+        switch (actionEnvelope.ActionType)
+        {
+            case EncryptedElectionEnvelopeActionTypes.ClaimRosterEntry:
+            {
+                var claimAction = JsonSerializer.Deserialize<ClaimElectionRosterEntryActionPayload>(
+                    actionEnvelope.ActionPayload.GetRawText())!;
+                return (
+                    JsonSerializer.SerializeToElement(new
+                    {
+                        claimAction.ActorPublicAddress,
+                        claimAction.OrganizationVoterId,
+                    }),
+                    null);
+            }
+
+            case EncryptedElectionEnvelopeActionTypes.InviteTrustee:
+            {
+                var inviteAction = JsonSerializer.Deserialize<InviteElectionTrusteeActionPayload>(
+                    actionEnvelope.ActionPayload.GetRawText())!;
+                return (
+                    JsonSerializer.SerializeToElement(new
+                    {
+                        inviteAction.InvitationId,
+                        inviteAction.ActorPublicAddress,
+                        inviteAction.TrusteeUserAddress,
+                        inviteAction.TrusteeDisplayName,
+                    }),
+                    JsonSerializer.SerializeToElement(new InviteElectionTrusteeActionArtifacts(
+                        inviteAction.TrusteeEncryptedElectionPrivateKey)));
+            }
+
+            default:
+                return (actionEnvelope.ActionPayload, null);
+        }
     }
 
     /// <summary>
@@ -557,8 +602,36 @@ internal static class TestTransactionFactory
         string claimedTargetTallyId,
         Guid? claimedCeremonyVersionId,
         string? claimedTallyPublicKeyFingerprint,
-        string shareMaterial)
+        string shareMaterial,
+        Guid? closeCountingJobId = null,
+        string? executorSessionPublicKey = null,
+        string? executorKeyAlgorithm = null)
     {
+        if (!closeCountingJobId.HasValue ||
+            string.IsNullOrWhiteSpace(executorSessionPublicKey) ||
+            string.IsNullOrWhiteSpace(executorKeyAlgorithm))
+        {
+            throw new InvalidOperationException(
+                "Executor-encrypted trustee share submission requires close-counting job binding and executor session key material.");
+        }
+
+        var encryptedExecutorSubmission = EncryptKeys.Encrypt(
+            JsonSerializer.Serialize(new CloseCountingExecutorSubmissionPayload(
+                closeCountingJobId.Value,
+                electionId.ToString(),
+                finalizationSessionId,
+                trustee.PublicSigningAddress,
+                shareIndex,
+                shareVersion,
+                targetType,
+                claimedCloseArtifactId,
+                claimedAcceptedBallotSetHash,
+                claimedFinalEncryptedTallyHash,
+                claimedTargetTallyId,
+                claimedCeremonyVersionId,
+                claimedTallyPublicKeyFingerprint,
+                shareMaterial)),
+            executorSessionPublicKey);
         var actionEnvelope = new EncryptedElectionActionEnvelope(
             EncryptedElectionEnvelopeActionTypes.SubmitFinalizationShare,
             JsonSerializer.SerializeToElement(new SubmitElectionFinalizationShareActionPayload(
@@ -573,7 +646,10 @@ internal static class TestTransactionFactory
                 claimedTargetTallyId,
                 claimedCeremonyVersionId,
                 claimedTallyPublicKeyFingerprint,
-                shareMaterial)));
+                ShareMaterial: null,
+                closeCountingJobId,
+                executorKeyAlgorithm,
+                encryptedExecutorSubmission)));
 
         return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
     }

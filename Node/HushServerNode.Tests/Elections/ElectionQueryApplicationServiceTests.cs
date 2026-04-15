@@ -221,6 +221,80 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionAsync_WithAwaitingCloseCountingSession_ProjectsExecutorMetadata()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection();
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                election.ElectionId,
+                trusteeUserAddress: "trustee-a",
+                trusteeDisplayName: "Alice",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: election.CurrentDraftRevision)
+            .Accept(
+                respondedAt: DateTime.UtcNow,
+                resolvedAtDraftRevision: election.CurrentDraftRevision,
+                lifecycleState: election.LifecycleState);
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            Guid.NewGuid(),
+            ceremonyVersionNumber: 1,
+            profileId: "prod-1of1-v1",
+            boundTrusteeCount: 1,
+            requiredApprovalCount: 1,
+            activeTrustees:
+            [
+                new SharedTrusteeReference("trustee-a", "Alice"),
+            ],
+            tallyPublicKeyFingerprint: "tally-fingerprint");
+        var closeCountingSession = ElectionModelFactory.CreateFinalizationSession(
+            election with
+            {
+                LifecycleState = ElectionLifecycleState.Closed,
+                CloseArtifactId = Guid.NewGuid(),
+            },
+            closeArtifactId: Guid.NewGuid(),
+            acceptedBallotSetHash: [1, 2, 3],
+            finalEncryptedTallyHash: [4, 5, 6],
+            sessionPurpose: ElectionFinalizationSessionPurpose.CloseCounting,
+            ceremonySnapshot: ceremonySnapshot,
+            requiredShareCount: 1,
+            eligibleTrustees:
+            [
+                new SharedTrusteeReference("trustee-a", "Alice"),
+            ],
+            createdByPublicAddress: "owner-address");
+        var closeCountingJob = ElectionModelFactory.CreateCloseCountingJob(closeCountingSession);
+        var executorEnvelope = ElectionModelFactory.CreateExecutorSessionKeyEnvelope(
+            closeCountingJob.Id,
+            executorSessionPublicKey: "executor-public-key",
+            sealedExecutorSessionPrivateKey: "sealed-private-key",
+            keyAlgorithm: "ecies-secp256k1-v1",
+            sealedByServiceIdentity: "node-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync([acceptedInvitation]);
+            repo.Setup(x => x.GetFinalizationSessionsAsync(election.ElectionId)).ReturnsAsync([closeCountingSession]);
+            repo.Setup(x => x.GetCloseCountingJobsAsync(election.ElectionId)).ReturnsAsync([closeCountingJob]);
+            repo.Setup(x => x.GetExecutorSessionKeyEnvelopeAsync(closeCountingJob.Id)).ReturnsAsync(executorEnvelope);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionAsync(election.ElectionId, "owner-address");
+
+        response.Success.Should().BeTrue();
+        response.FinalizationSessions.Should().ContainSingle();
+        response.FinalizationSessions[0].Id.Should().Be(closeCountingSession.Id.ToString());
+        response.FinalizationSessions[0].CloseCountingJobId.Should().Be(closeCountingJob.Id.ToString());
+        response.FinalizationSessions[0].CloseCountingJobStatus.Should().Be(
+            ElectionCloseCountingJobStatusProto.CloseCountingJobAwaitingShares);
+        response.FinalizationSessions[0].ExecutorSessionPublicKey.Should().Be("executor-public-key");
+        response.FinalizationSessions[0].ExecutorKeyAlgorithm.Should().Be("ecies-secp256k1-v1");
+    }
+
+    [Fact]
     public async Task GetElectionAsync_WithoutSignedActor_HidesOpenCloseAndFinalizeOperationalMetadata()
     {
         var mocker = new AutoMocker();
@@ -838,6 +912,82 @@ public class ElectionQueryApplicationServiceTests
             ElectionHubNextActionHintProto.ElectionHubActionTrusteeApproveGovernedAction);
         response.Elections[0].SuggestedActionReason.Should().Be(
             "A governed open request is awaiting your approval.");
+    }
+
+    [Fact]
+    public async Task GetElectionHubViewAsync_WithAwaitingCloseCountingShare_ReturnsTrusteeShareReason()
+    {
+        var mocker = new AutoMocker();
+        var closedElection = CreateTrusteeElection("Closed Trustee Share Election") with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedAt = DateTime.UtcNow.AddMinutes(-2),
+            ClosedProgressStatus = ElectionClosedProgressStatus.WaitingForTrusteeShares,
+            LastUpdatedAt = DateTime.UtcNow.AddMinutes(-1),
+        };
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                closedElection.ElectionId,
+                trusteeUserAddress: "trustee-address",
+                trusteeDisplayName: "Trustee Five",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: closedElection.CurrentDraftRevision)
+            .Accept(
+                respondedAt: DateTime.UtcNow.AddMinutes(-10),
+                resolvedAtDraftRevision: closedElection.CurrentDraftRevision,
+                lifecycleState: ElectionLifecycleState.Draft);
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            Guid.NewGuid(),
+            ceremonyVersionNumber: 1,
+            profileId: "dkg-prod-3of5",
+            boundTrusteeCount: 3,
+            requiredApprovalCount: 3,
+            activeTrustees:
+            [
+                new SharedTrusteeReference("trustee-address", "Trustee Five"),
+                new SharedTrusteeReference("trustee-b", "Trustee B"),
+                new SharedTrusteeReference("trustee-c", "Trustee C"),
+            ],
+            tallyPublicKeyFingerprint: "tally-fingerprint");
+        var awaitingSession = ElectionModelFactory.CreateFinalizationSession(
+            closedElection,
+            closeArtifactId: Guid.NewGuid(),
+            acceptedBallotSetHash: [1, 2, 3],
+            finalEncryptedTallyHash: [4, 5, 6],
+            sessionPurpose: ElectionFinalizationSessionPurpose.CloseCounting,
+            ceremonySnapshot: ceremonySnapshot,
+            requiredShareCount: 3,
+            eligibleTrustees:
+            [
+                new SharedTrusteeReference("trustee-address", "Trustee Five"),
+                new SharedTrusteeReference("trustee-b", "Trustee B"),
+                new SharedTrusteeReference("trustee-c", "Trustee C"),
+            ],
+            createdByPublicAddress: "owner-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetActiveTrusteeInvitationsByActorAsync("trustee-address"))
+                .ReturnsAsync([acceptedInvitation]);
+            repo.Setup(x => x.GetElectionsByIdsAsync(It.IsAny<IReadOnlyCollection<ElectionId>>()))
+                .ReturnsAsync([closedElection]);
+            repo.Setup(x => x.GetPendingGovernedProposalAsync(closedElection.ElectionId))
+                .ReturnsAsync((ElectionGovernedProposalRecord?)null);
+            repo.Setup(x => x.GetFinalizationSessionsAsync(closedElection.ElectionId))
+                .ReturnsAsync([awaitingSession]);
+            repo.Setup(x => x.GetFinalizationSharesAsync(awaitingSession.Id))
+                .ReturnsAsync(Array.Empty<ElectionFinalizationShareRecord>());
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionHubViewAsync("trustee-address");
+
+        response.Success.Should().BeTrue();
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].ActorRoles.IsTrustee.Should().BeTrue();
+        response.Elections[0].SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionNone);
+        response.Elections[0].SuggestedActionReason.Should().Be(
+            "Submit the bound trustee tally share for close-counting.");
     }
 
     [Fact]
@@ -2515,6 +2665,17 @@ public class ElectionQueryApplicationServiceTests
                         payloadVersion: "v1",
                         encryptedPayload: [1, 2, 3],
                         payloadFingerprint: "payload-fingerprint"),
+                    ElectionModelFactory.CreateCeremonyMessageEnvelope(
+                        election.ElectionId,
+                        version.Id,
+                        version.VersionNumber,
+                        version.ProfileId,
+                        senderTrusteeUserAddress: "trustee-a",
+                        recipientTrusteeUserAddress: "trustee-a",
+                        messageType: "trustee-share-vault-package",
+                        payloadVersion: "omega-trustee-share-vault-v1",
+                        encryptedPayload: [4, 5, 6],
+                        payloadFingerprint: "vault-fingerprint"),
                 ]);
         });
 
@@ -2527,6 +2688,8 @@ public class ElectionQueryApplicationServiceTests
         response.OwnerActions.Should().BeEmpty();
         response.TrusteeActions.Should().HaveCount(6);
         response.PendingIncomingMessageCount.Should().Be(1);
+        response.SelfVaultEnvelopes.Should().HaveCount(1);
+        response.SelfVaultEnvelopes[0].MessageType.Should().Be("trustee-share-vault-package");
         response.SelfTrusteeState.Should().NotBeNull();
         response.SelfTrusteeState!.TrusteeUserAddress.Should().Be("trustee-a");
         response.TrusteeActions.Single(x => x.ActionType == ElectionCeremonyActionTypeProto.CeremonyActionPublishTransportKey).IsCompleted.Should().BeTrue();
@@ -2589,6 +2752,10 @@ public class ElectionQueryApplicationServiceTests
             .ReturnsAsync(Array.Empty<ElectionCeremonyTrusteeStateRecord>());
         repository.Setup(x => x.GetFinalizationSessionsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionFinalizationSessionRecord>());
+        repository.Setup(x => x.GetCloseCountingJobsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionCloseCountingJobRecord>());
+        repository.Setup(x => x.GetExecutorSessionKeyEnvelopeAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((ElectionExecutorSessionKeyEnvelopeRecord?)null);
         repository.Setup(x => x.GetFinalizationSharesAsync(It.IsAny<Guid>()))
             .ReturnsAsync(Array.Empty<ElectionFinalizationShareRecord>());
         repository.Setup(x => x.GetFinalizationReleaseEvidenceRecordsAsync(It.IsAny<ElectionId>()))

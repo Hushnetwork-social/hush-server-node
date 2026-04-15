@@ -224,6 +224,18 @@ public enum ElectionFinalizationSessionPurpose
     Finalization = 1,
 }
 
+public enum ElectionCloseCountingJobStatus
+{
+    Pending = 0,
+    AwaitingShares = 1,
+    ThresholdReached = 2,
+    Running = 3,
+    Publishing = 4,
+    Completed = 5,
+    Failed = 6,
+    Superseded = 7,
+}
+
 public enum ElectionFinalizationShareStatus
 {
     Accepted = 0,

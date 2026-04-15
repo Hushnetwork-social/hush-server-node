@@ -674,7 +674,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             share.ClaimedTargetTallyId,
             share.ClaimedCeremonyVersionId,
             share.ClaimedTallyPublicKeyFingerprint,
-            BuildHashHex(ComputeHashBytes(share.ShareMaterial)),
+            string.IsNullOrWhiteSpace(share.ShareMaterialHash)
+                ? BuildHashHex(ComputeHashBytes(share.ShareMaterial))
+                : share.ShareMaterialHash,
             share.FailureCode,
             share.FailureReason,
             share.SubmittedAt,

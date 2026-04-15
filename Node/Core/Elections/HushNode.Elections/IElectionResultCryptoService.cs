@@ -11,7 +11,7 @@ public interface IElectionResultCryptoService
 
     string EncryptForElectionParticipants(
         string plaintextPayload,
-        string nodeEncryptedElectionPrivateKey);
+        string participantEncryptionMaterial);
 }
 
 public sealed record ElectionAggregateReleaseResult(

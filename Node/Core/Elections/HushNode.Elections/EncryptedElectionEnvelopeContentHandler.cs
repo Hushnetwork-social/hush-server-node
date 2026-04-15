@@ -269,11 +269,28 @@ public class EncryptedElectionEnvelopeContentHandler(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
         string signatory)
     {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
         var claimAction = decryptedEnvelope.DeserializeAction<ClaimElectionRosterEntryActionPayload>();
-        if (claimAction is null
-            || !HasMatchingActor(signatory, claimAction.ActorPublicAddress)
-            || !string.Equals(
-                claimAction.VerificationCode?.Trim(),
+        if (claimAction is null || !HasMatchingActor(signatory, claimAction.ActorPublicAddress))
+        {
+            return false;
+        }
+
+        if (EncryptedElectionEnvelopePayloadHandler.IsPrivacyHardenedEnvelopeVersion(
+                decryptedEnvelope.Transaction.Payload.EnvelopeVersion) &&
+            !string.IsNullOrWhiteSpace(claimAction.VerificationCode))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_claim_verification_code_public",
+                "Claim roster entry verification code must not be exposed in the public v2.1 envelope payload.");
+        }
+
+        var verificationCode = ResolveClaimVerificationCode(
+            decryptedEnvelope.Transaction.Payload,
+            claimAction.VerificationCode);
+        if (!string.Equals(
+                verificationCode,
                 ElectionEligibilityContracts.TemporaryVerificationCode,
                 StringComparison.Ordinal))
         {
@@ -706,10 +723,32 @@ public class EncryptedElectionEnvelopeContentHandler(
         DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
         string signatory)
     {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
         var inviteTrusteeAction = decryptedEnvelope.DeserializeAction<InviteElectionTrusteeActionPayload>();
         if (inviteTrusteeAction is null)
         {
             return false;
+        }
+
+        if (EncryptedElectionEnvelopePayloadHandler.IsPrivacyHardenedEnvelopeVersion(
+                decryptedEnvelope.Transaction.Payload.EnvelopeVersion))
+        {
+            if (!string.IsNullOrWhiteSpace(inviteTrusteeAction.TrusteeEncryptedElectionPrivateKey))
+            {
+                return RejectWithValidationFailure(
+                    transactionId,
+                    "election_invite_trustee_wrap_public",
+                    "Trustee envelope access material must not be exposed in the public v2.1 action payload.");
+            }
+
+            var inviteArtifacts = decryptedEnvelope.DeserializeActionArtifacts<InviteElectionTrusteeActionArtifacts>();
+            if (inviteArtifacts is null || string.IsNullOrWhiteSpace(inviteArtifacts.TrusteeEncryptedElectionPrivateKey))
+            {
+                return RejectWithValidationFailure(
+                    transactionId,
+                    "election_invite_trustee_wrap_missing",
+                    "Trustee envelope access material is missing from the v2.1 action artifacts.");
+            }
         }
 
         var unsignedTransaction = InviteElectionTrusteePayloadHandler.CreateNew(
@@ -995,6 +1034,54 @@ public class EncryptedElectionEnvelopeContentHandler(
                 "election_finalization_share_wrong_session_purpose",
                 "Trustee shares are only accepted for close-counting release sessions.");
             return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(shareAction.ShareMaterial))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_finalization_share_plaintext_forbidden",
+                "Plaintext trustee share material is no longer accepted in election envelopes.");
+            return false;
+        }
+
+        if (!shareAction.CloseCountingJobId.HasValue ||
+            string.IsNullOrWhiteSpace(shareAction.ExecutorKeyAlgorithm) ||
+            string.IsNullOrWhiteSpace(shareAction.EncryptedExecutorSubmission))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_finalization_share_missing_executor_submission",
+                "Executor-encrypted trustee share submission and job binding are required.");
+            return false;
+        }
+
+        if (shareAction.CloseCountingJobId.HasValue)
+        {
+            var closeCountingJob = repository.GetCloseCountingJobAsync(shareAction.CloseCountingJobId.Value).GetAwaiter().GetResult();
+            if (closeCountingJob is null ||
+                closeCountingJob.FinalizationSessionId != session.Id)
+            {
+                RecordValidationFailure(
+                    transactionId,
+                    "election_finalization_share_unknown_close_counting_job",
+                    "Trustee share submission must bind to the active close-counting job.");
+                return false;
+            }
+
+            var executorEnvelope = repository.GetExecutorSessionKeyEnvelopeAsync(closeCountingJob.Id).GetAwaiter().GetResult();
+            if (executorEnvelope is null ||
+                !string.Equals(
+                    shareAction.ExecutorKeyAlgorithm?.Trim(),
+                    executorEnvelope.KeyAlgorithm,
+                    StringComparison.Ordinal))
+            {
+                RecordValidationFailure(
+                    transactionId,
+                    "election_finalization_share_unknown_executor_key",
+                    "Trustee share submission must use the active executor session key.");
+                return false;
+            }
         }
 
         return session.EligibleTrustees.Any(x =>
@@ -1556,6 +1643,19 @@ public class EncryptedElectionEnvelopeContentHandler(
         Convert.ToHexString(
             System.Security.Cryptography.SHA256.HashData(
                 System.Text.Encoding.UTF8.GetBytes(value.Trim())));
+
+    private static string ResolveClaimVerificationCode(
+        EncryptedElectionEnvelopePayload payload,
+        string? verificationCode)
+    {
+        if (EncryptedElectionEnvelopePayloadHandler.IsPrivacyHardenedEnvelopeVersion(payload.EnvelopeVersion) &&
+            string.IsNullOrWhiteSpace(verificationCode))
+        {
+            return ElectionEligibilityContracts.TemporaryVerificationCode;
+        }
+
+        return verificationCode?.Trim() ?? string.Empty;
+    }
 
     private bool HasPendingAcceptBallotCastSubmission(
         ElectionId electionId,

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -10,9 +11,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HushServerNode.Migrations
 {
     [DbContext(typeof(HushNodeDbContext))]
-    partial class HushNodeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260414195548_Feat104CloseCountingExecutorScaffolding")]
+    partial class Feat104CloseCountingExecutorScaffolding
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1228,15 +1231,9 @@ namespace HushServerNode.Migrations
                         .IsRequired()
                         .HasColumnType("varchar(256)");
 
-                    b.Property<Guid?>("CloseCountingJobId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("ElectionId")
                         .IsRequired()
                         .HasColumnType("varchar(40)");
-
-                    b.Property<string>("ExecutorKeyAlgorithm")
-                        .HasColumnType("varchar(64)");
 
                     b.Property<string>("FailureCode")
                         .HasColumnType("varchar(128)");
@@ -1253,10 +1250,6 @@ namespace HushServerNode.Migrations
                     b.Property<string>("ShareMaterial")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<string>("ShareMaterialHash")
-                        .IsRequired()
-                        .HasColumnType("varchar(128)");
 
                     b.Property<string>("ShareVersion")
                         .IsRequired()

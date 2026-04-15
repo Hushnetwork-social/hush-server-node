@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Google.Protobuf;
+using Grpc.Core;
 using HushNetwork.proto;
 using HushNode.Caching;
 using HushNode.Elections;
@@ -19,6 +20,7 @@ using HushShared.Elections.Model;
 using ReactionECPoint = HushShared.Reactions.Model.ECPoint;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Olimpo;
 using TechTalk.SpecFlow;
 
 namespace HushNode.IntegrationTests.StepDefinitions;
@@ -349,6 +351,7 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastSubmitTransactionResponse = await SubmitAcceptedDevModeBallotCastViaBlockchainAsync(
             ResolveIdentity(voterAlias),
             submissionIdempotencyKey);
+        _lastSubmitTransactionResponse.Successfull.Should().BeTrue(_lastSubmitTransactionResponse.Message);
     }
 
     [When(@"the pending cast block is produced")]
@@ -762,10 +765,19 @@ public sealed class ElectionLifecycleIntegrationSteps
     [Then(@"the owner dashboard should include the election")]
     public async Task ThenTheOwnerDashboardShouldIncludeTheElection()
     {
-        var response = await GetClient().GetElectionsByOwnerAsync(new GetElectionsByOwnerRequest
+        var request = new GetElectionsByOwnerRequest
         {
             OwnerPublicAddress = GetOwner().PublicSigningAddress,
-        });
+        };
+        var response = await GetClient().GetElectionsByOwnerAsync(
+            request,
+            headers: CreateSignedElectionQueryHeaders(
+                nameof(HushElections.HushElectionsClient.GetElectionsByOwner),
+                GetOwner(),
+                new Dictionary<string, object?>
+                {
+                    ["OwnerPublicAddress"] = request.OwnerPublicAddress,
+                }));
 
         response.Elections.Should().Contain(summary =>
             summary.ElectionId == GetElectionId() &&
@@ -1475,11 +1487,21 @@ public sealed class ElectionLifecycleIntegrationSteps
 
     private async Task<GetElectionEligibilityViewResponse> GetElectionEligibilityViewAsync(TestIdentity actor)
     {
-        var response = await GetClient().GetElectionEligibilityViewAsync(new GetElectionEligibilityViewRequest
+        var request = new GetElectionEligibilityViewRequest
         {
             ElectionId = GetElectionId(),
             ActorPublicAddress = actor.PublicSigningAddress,
-        });
+        };
+        var response = await GetClient().GetElectionEligibilityViewAsync(
+            request,
+            headers: CreateSignedElectionQueryHeaders(
+                nameof(HushElections.HushElectionsClient.GetElectionEligibilityView),
+                actor,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = request.ElectionId,
+                    ["ActorPublicAddress"] = request.ActorPublicAddress,
+                }));
 
         response.Success.Should().BeTrue(
             $"GetElectionEligibilityView should succeed for {GetElectionId()} and actor {actor.PublicSigningAddress}: {response.ErrorMessage}");
@@ -1490,13 +1512,27 @@ public sealed class ElectionLifecycleIntegrationSteps
         TestIdentity actor,
         string? submissionIdempotencyKey = null)
     {
-        async Task<GetElectionVotingViewResponse> QueryAsync() =>
-            await GetClient().GetElectionVotingViewAsync(new GetElectionVotingViewRequest
+        async Task<GetElectionVotingViewResponse> QueryAsync()
+        {
+            var request = new GetElectionVotingViewRequest
             {
                 ElectionId = GetElectionId(),
                 ActorPublicAddress = actor.PublicSigningAddress,
                 SubmissionIdempotencyKey = submissionIdempotencyKey ?? string.Empty,
-            });
+            };
+
+            return await GetClient().GetElectionVotingViewAsync(
+                request,
+                headers: CreateSignedElectionQueryHeaders(
+                    nameof(HushElections.HushElectionsClient.GetElectionVotingView),
+                    actor,
+                    new Dictionary<string, object?>
+                    {
+                        ["ElectionId"] = request.ElectionId,
+                        ["ActorPublicAddress"] = request.ActorPublicAddress,
+                        ["SubmissionIdempotencyKey"] = request.SubmissionIdempotencyKey,
+                    }));
+        }
 
         var response = await QueryAsync();
 
@@ -1521,12 +1557,25 @@ public sealed class ElectionLifecycleIntegrationSteps
         bool waitForUnofficialResult = false,
         bool waitForOfficialResult = false)
     {
-        async Task<GetElectionResultViewResponse> QueryAsync() =>
-            await GetClient().GetElectionResultViewAsync(new GetElectionResultViewRequest
+        async Task<GetElectionResultViewResponse> QueryAsync()
+        {
+            var request = new GetElectionResultViewRequest
             {
                 ElectionId = GetElectionId(),
                 ActorPublicAddress = actor.PublicSigningAddress,
-            });
+            };
+
+            return await GetClient().GetElectionResultViewAsync(
+                request,
+                headers: CreateSignedElectionQueryHeaders(
+                    nameof(HushElections.HushElectionsClient.GetElectionResultView),
+                    actor,
+                    new Dictionary<string, object?>
+                    {
+                        ["ElectionId"] = request.ElectionId,
+                        ["ActorPublicAddress"] = request.ActorPublicAddress,
+                    }));
+        }
 
         var response = await QueryAsync();
 
@@ -1543,6 +1592,80 @@ public sealed class ElectionLifecycleIntegrationSteps
         response.Success.Should().BeTrue(
             $"GetElectionResultView should succeed for {GetElectionId()} and actor {actor.PublicSigningAddress}: {response.ErrorMessage}");
         return response;
+    }
+
+    private static Metadata CreateSignedElectionQueryHeaders(
+        string method,
+        TestIdentity actor,
+        IReadOnlyDictionary<string, object?> request)
+    {
+        var signedAt = DateTimeOffset.UtcNow.ToString("O");
+        var payload = BuildSignedElectionQueryPayload(
+            method,
+            actor.PublicSigningAddress,
+            signedAt,
+            request);
+
+        return new Metadata
+        {
+            { "x-hush-election-query-signatory", actor.PublicSigningAddress },
+            { "x-hush-election-query-signed-at", signedAt },
+            { "x-hush-election-query-signature", DigitalSignature.SignMessageCompactBase64(payload, actor.PrivateSigningKey) },
+        };
+    }
+
+    private static string BuildSignedElectionQueryPayload(
+        string method,
+        string actorAddress,
+        string signedAt,
+        IReadOnlyDictionary<string, object?> request)
+    {
+        var payload = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["actorAddress"] = actorAddress,
+            ["method"] = method,
+            ["request"] = DeepSortElectionQueryValue(request),
+            ["signedAt"] = signedAt,
+        };
+
+        return JsonSerializer.Serialize(payload);
+    }
+
+    private static object? DeepSortElectionQueryValue(object? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (value is IReadOnlyDictionary<string, object?> readOnlyDictionary)
+        {
+            var sortedDictionary = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var entry in readOnlyDictionary)
+            {
+                sortedDictionary[entry.Key] = DeepSortElectionQueryValue(entry.Value);
+            }
+
+            return sortedDictionary;
+        }
+
+        if (value is IDictionary<string, object?> dictionary)
+        {
+            var sortedDictionary = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var entry in dictionary)
+            {
+                sortedDictionary[entry.Key] = DeepSortElectionQueryValue(entry.Value);
+            }
+
+            return sortedDictionary;
+        }
+
+        if (value is IEnumerable<object?> sequence && value is not string)
+        {
+            return sequence.Select(DeepSortElectionQueryValue).ToArray();
+        }
+
+        return value;
     }
 
     private async Task CreateReportAccessGrantViaBlockchainAsync(TestIdentity designatedAuditor)
@@ -2017,7 +2140,16 @@ public sealed class ElectionLifecycleIntegrationSteps
             session.TargetTallyId,
             ceremonyVersionId,
             session.CeremonySnapshot?.TallyPublicKeyFingerprint,
-            shareMaterial);
+            shareMaterial,
+            string.IsNullOrWhiteSpace(session.CloseCountingJobId)
+                ? null
+                : Guid.Parse(session.CloseCountingJobId),
+            string.IsNullOrWhiteSpace(session.ExecutorSessionPublicKey)
+                ? null
+                : session.ExecutorSessionPublicKey,
+            string.IsNullOrWhiteSpace(session.ExecutorKeyAlgorithm)
+                ? null
+                : session.ExecutorKeyAlgorithm);
         using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
 
         var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
@@ -2134,25 +2266,28 @@ public sealed class ElectionLifecycleIntegrationSteps
         nonBlankChoiceIndexes.Should().NotBeEmpty("the integration cast path should target a named option, not a blank vote");
         var choiceIndex = ResolveChoiceIndex(actor, submissionIdempotencyKey, nonBlankChoiceIndexes);
         var selectedOption = votingView.Election.Options[choiceIndex];
-
-        var encryptedBallotPackage = useDevModePayload
+        var devArtifactSeed = Guid.NewGuid().ToString();
+        var devModeBallotPackage = useDevModePayload
             ? BuildDevModeEncryptedBallotPackage(
-                actor,
                 votingView.Election.ElectionId,
                 selectedOption.OptionId,
                 selectedOption.DisplayLabel,
                 selectedOption.ShortDescription,
                 selectedOption.BallotOrder,
                 selectedOption.IsBlankOption)
+            : null;
+
+        var encryptedBallotPackage = useDevModePayload
+            ? devModeBallotPackage!
             : BuildEncryptedBallotPackage(actor, submissionIdempotencyKey, selectionCount, choiceIndex);
         var proofBundle = useDevModePayload
             ? BuildDevModeProofBundle(
-                actor,
                 votingView,
-                selectedOption.OptionId)
+                selectedOption.OptionId,
+                devModeBallotPackage!)
             : BuildProofBundle(actor, submissionIdempotencyKey);
         var ballotNullifier = useDevModePayload
-            ? BuildDevModeBallotNullifier(actor, votingView.Election.ElectionId)
+            ? BuildDevModeBallotNullifier(votingView.Election.ElectionId, devArtifactSeed)
             : BuildBallotNullifier(actor, submissionIdempotencyKey);
 
         return TestTransactionFactory.AcceptElectionBallotCast(
@@ -2325,7 +2460,6 @@ public sealed class ElectionLifecycleIntegrationSteps
             SubmissionIdempotencyKey: submissionIdempotencyKey.Trim()));
 
     private static string BuildDevModeEncryptedBallotPackage(
-        TestIdentity actor,
         string electionId,
         string optionId,
         string optionLabel,
@@ -2333,7 +2467,6 @@ public sealed class ElectionLifecycleIntegrationSteps
         int ballotOrder,
         bool isBlankOption)
     {
-        var generatedAt = DateTime.UtcNow.ToString("O");
         var selectionFingerprint = ComputeLowerHexSha256(
             $"election-dev-selection:v1:{electionId}:{optionId}:{optionLabel}");
 
@@ -2342,48 +2475,40 @@ public sealed class ElectionLifecycleIntegrationSteps
             mode = "election-dev-mode-v1",
             packageType = "dev-protected-ballot",
             electionId,
-            actorPublicAddress = actor.PublicSigningAddress,
             optionId,
             optionLabel,
             optionDescription = optionDescription ?? string.Empty,
             ballotOrder,
             isBlankOption,
             selectionFingerprint,
-            generatedAt,
         });
     }
 
     private static string BuildDevModeProofBundle(
-        TestIdentity actor,
         GetElectionVotingViewResponse votingView,
-        string optionId)
+        string optionId,
+        string ballotPackage)
     {
         var electionId = votingView.Election.ElectionId;
-        var generatedAt = DateTime.UtcNow.ToString("O");
-        var commitmentHash = ComputeLowerHexSha256(
-            $"election-dev-commitment:v1:{electionId}:{actor.PublicSigningAddress}");
-        var ballotNullifier = BuildDevModeBallotNullifier(actor, electionId);
+        var ballotPackageHash = ComputeLowerHexSha256(ballotPackage);
 
         return JsonSerializer.Serialize(new
         {
             mode = "election-dev-mode-v1",
             proofType = "dev-election-proof",
             electionId,
-            actorPublicAddress = actor.PublicSigningAddress,
             optionId,
-            commitmentHash,
-            ballotNullifier,
+            ballotPackageHash,
             openArtifactId = votingView.OpenArtifactId,
             eligibleSetHash = votingView.EligibleSetHash,
             ceremonyVersionId = votingView.CeremonyVersionId,
             dkgProfileId = votingView.DkgProfileId,
             tallyPublicKeyFingerprint = votingView.TallyPublicKeyFingerprint,
-            generatedAt,
         });
     }
 
-    private static string BuildDevModeBallotNullifier(TestIdentity actor, string electionId) =>
-        ComputeLowerHexSha256($"election-dev-nullifier:v1:{electionId}:{actor.PublicSigningAddress}");
+    private static string BuildDevModeBallotNullifier(string electionId, string devArtifactSeed) =>
+        ComputeLowerHexSha256($"election-dev-nullifier:v2:{electionId}:{devArtifactSeed}:nullifier");
 
     private string BuildBallotNullifier(TestIdentity actor, string submissionIdempotencyKey) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(

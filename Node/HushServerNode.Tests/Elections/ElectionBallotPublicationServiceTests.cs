@@ -1,11 +1,13 @@
 using FluentAssertions;
 using HushNode.Caching;
+using HushNode.Credentials;
 using HushNode.Elections;
 using HushNode.Elections.Storage;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Elections.Model;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Olimpo;
 using Olimpo.EntityFramework.Persistency;
 using System.Security.Cryptography;
 using Xunit;
@@ -451,12 +453,65 @@ public class ElectionBallotPublicationServiceTests
         store.FinalizationSessions[0].SessionPurpose.Should().Be(ElectionFinalizationSessionPurpose.CloseCounting);
         store.FinalizationSessions[0].RequiredShareCount.Should().Be(1);
         store.FinalizationSessions[0].FinalEncryptedTallyHash.Should().Equal(expectedTallyHash);
+        store.CloseCountingJobs.Should().ContainSingle();
+        store.CloseCountingJobs[0].FinalizationSessionId.Should().Be(store.FinalizationSessions[0].Id);
+        store.CloseCountingJobs[0].Status.Should().Be(ElectionCloseCountingJobStatus.AwaitingShares);
+        store.CloseCountingJobs[0].FinalEncryptedTallyHash.Should().Equal(expectedTallyHash);
+        store.ExecutorSessionKeyEnvelopes.Should().ContainSingle();
+        store.ExecutorSessionKeyEnvelopes[0].CloseCountingJobId.Should().Be(store.CloseCountingJobs[0].Id);
+        store.ExecutorSessionKeyEnvelopes[0].ExecutorSessionPublicKey.Should().NotBeNullOrWhiteSpace();
+        store.ExecutorSessionKeyEnvelopes[0].SealedExecutorSessionPrivateKey
+            .Should().Be(CloseCountingExecutorKeyRegistryConstants.MemoryOnlyEnvelopeMarker);
+        store.ExecutorSessionKeyEnvelopes[0].KeyAlgorithm.Should().Be("ecies-secp256k1-v1");
         store.BoundaryArtifacts.Should().HaveCount(2);
         store.BoundaryArtifacts.Should().OnlyContain(x =>
             x.ArtifactType == ElectionBoundaryArtifactType.Open ||
             x.ArtifactType == ElectionBoundaryArtifactType.Close);
         store.Elections[election.ElectionId].TallyReadyAt.Should().BeNull();
         store.Elections[election.ElectionId].ClosedProgressStatus.Should().Be(ElectionClosedProgressStatus.WaitingForTrusteeShares);
+    }
+
+    [Fact]
+    public async Task ProcessPendingPublicationAsync_ClosedTrusteeElectionWithDevBallots_CreatesCloseCountingSessionUsingDevModeFallback()
+    {
+        var store = new PublicationStore();
+        var election = CreateClosedTrusteeElection(store);
+        SeedAcceptedBallots(store, election, 2);
+        var crypto = new FakePublicationCryptoService
+        {
+            PrepareBehavior = (encryptedBallotPackage, proofBundle, _) =>
+            {
+                var publishedPayload = encryptedBallotPackage.EndsWith("1", StringComparison.Ordinal)
+                    ? CreateDevModePublishedBallotPackage(election, "yes", ballotOrder: 1, actorPublicAddress: "alice-address")
+                    : CreateDevModePublishedBallotPackage(election, "no", ballotOrder: 2, actorPublicAddress: "bob-address");
+                return ElectionBallotPublicationPreparationResult.Success(
+                    publishedPayload,
+                    $"{proofBundle}|proof-published");
+            },
+            ReplayBehavior = _ => ElectionBallotReplayResult.Failure("UNSUPPORTED_BALLOT_PAYLOAD", "dev ballots require trustee fallback"),
+        };
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10));
+
+        await service.ProcessPendingPublicationAsync(new BlockIndex(27));
+
+        store.BallotMemPoolEntries.Should().BeEmpty();
+        store.PublishedBallots.Should().HaveCount(2);
+        store.FinalizationSessions.Should().ContainSingle();
+        store.FinalizationSessions[0].SessionPurpose.Should().Be(ElectionFinalizationSessionPurpose.CloseCounting);
+        store.FinalizationSessions[0].FinalEncryptedTallyHash.Should().NotBeNull().And.NotBeEmpty();
+        store.FinalizationSessions[0].TargetTallyId.Should().NotBeNullOrWhiteSpace();
+        store.CloseCountingJobs.Should().ContainSingle();
+        store.CloseCountingJobs[0].FinalizationSessionId.Should().Be(store.FinalizationSessions[0].Id);
+        store.ExecutorSessionKeyEnvelopes.Should().ContainSingle();
+        store.ExecutorSessionKeyEnvelopes[0].CloseCountingJobId.Should().Be(store.CloseCountingJobs[0].Id);
+        store.PublicationIssues.Should().BeEmpty();
+        store.BoundaryArtifacts.Should().HaveCount(2);
+        store.Elections[election.ElectionId].TallyReadyAt.Should().BeNull();
+        store.Elections[election.ElectionId].ClosedProgressStatus.Should().Be(ElectionClosedProgressStatus.WaitingForTrusteeShares);
+        crypto.ReplayCallCount.Should().Be(1);
     }
 
     [Fact]
@@ -499,6 +554,7 @@ public class ElectionBallotPublicationServiceTests
             provider,
             crypto,
             new FakeBlockchainCache(store.CurrentBlockId),
+            new FakeCredentialsProvider(),
             options,
             NullLogger<ElectionBallotPublicationService>.Instance,
             resultCrypto);
@@ -615,6 +671,22 @@ public class ElectionBallotPublicationServiceTests
             .Returns((ElectionFinalizationSessionRecord session) =>
             {
                 store.FinalizationSessions.Add(session);
+                return Task.CompletedTask;
+            });
+
+        repository
+            .Setup(x => x.SaveCloseCountingJobAsync(It.IsAny<ElectionCloseCountingJobRecord>()))
+            .Returns((ElectionCloseCountingJobRecord closeCountingJob) =>
+            {
+                store.CloseCountingJobs.Add(closeCountingJob);
+                return Task.CompletedTask;
+            });
+
+        repository
+            .Setup(x => x.SaveExecutorSessionKeyEnvelopeAsync(It.IsAny<ElectionExecutorSessionKeyEnvelopeRecord>()))
+            .Returns((ElectionExecutorSessionKeyEnvelopeRecord envelope) =>
+            {
+                store.ExecutorSessionKeyEnvelopes.Add(envelope);
                 return Task.CompletedTask;
             });
 
@@ -963,6 +1035,8 @@ public class ElectionBallotPublicationServiceTests
         public List<ElectionEligibilitySnapshotRecord> EligibilitySnapshots { get; } = [];
         public List<ElectionResultArtifactRecord> ResultArtifacts { get; } = [];
         public List<ElectionFinalizationSessionRecord> FinalizationSessions { get; } = [];
+        public List<ElectionCloseCountingJobRecord> CloseCountingJobs { get; } = [];
+        public List<ElectionExecutorSessionKeyEnvelopeRecord> ExecutorSessionKeyEnvelopes { get; } = [];
         public List<ElectionPublicationIssueRecord> PublicationIssues { get; } = [];
         public List<ElectionBoundaryArtifactRecord> BoundaryArtifacts { get; } = [];
         public List<ElectionId> ClosedAwaitingTallyReadyElectionIds { get; } = [];
@@ -1036,6 +1110,26 @@ public class ElectionBallotPublicationServiceTests
         public IBlockchainCache SetNextBlockId(BlockId id) => this;
 
         public IBlockchainCache IsBlockchainStateInDatabase() => this;
+    }
+
+    private sealed class FakeCredentialsProvider : ICredentialsProvider
+    {
+        private readonly CredentialsProfile _credentials;
+
+        public FakeCredentialsProvider()
+        {
+            var encryptKeys = new EncryptKeys();
+            _credentials = new CredentialsProfile
+            {
+                ProfileName = "publication-test",
+                PublicSigningAddress = "publication-test-signer",
+                PrivateSigningKey = "publication-test-private-signing-key",
+                PublicEncryptAddress = encryptKeys.PublicKey,
+                PrivateEncryptKey = encryptKeys.PrivateKey,
+            };
+        }
+
+        public CredentialsProfile GetCredentials() => _credentials;
     }
 
     private sealed class FakePublicationCryptoService : IElectionBallotPublicationCryptoService

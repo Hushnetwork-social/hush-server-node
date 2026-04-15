@@ -62,7 +62,10 @@ public record ElectionFinalizationShareRecord(
     string ClaimedTargetTallyId,
     Guid? ClaimedCeremonyVersionId,
     string? ClaimedTallyPublicKeyFingerprint,
+    Guid? CloseCountingJobId,
+    string? ExecutorKeyAlgorithm,
     string ShareMaterial,
+    string ShareMaterialHash,
     ElectionFinalizationShareStatus Status,
     string? FailureCode,
     string? FailureReason,
@@ -71,7 +74,20 @@ public record ElectionFinalizationShareRecord(
     long? SourceBlockHeight,
     Guid? SourceBlockId)
 {
+    public string ShareMaterial { get; init; } = NormalizeOptionalValue(ShareMaterial) ?? string.Empty;
+
+    public string ShareMaterialHash { get; init; } = NormalizeOptionalValue(ShareMaterialHash) ?? string.Empty;
+
     public bool IsAccepted => Status == ElectionFinalizationShareStatus.Accepted;
+
+    private static string? NormalizeOptionalValue(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}
+
+public static class ElectionFinalizationShareStorageConstants
+{
+    public const string RedactedStoredShareMaterial = "[redacted-finalization-share-material]";
+    public const string RejectedPlaintextStoredShareMaterial = "[rejected-plaintext-finalization-share-material]";
 }
 
 public record ElectionFinalizationReleaseEvidenceRecord(

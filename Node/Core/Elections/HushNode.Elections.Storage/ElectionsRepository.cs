@@ -902,6 +902,70 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         }
     }
 
+    public async Task<IReadOnlyList<ElectionCloseCountingJobRecord>> GetCloseCountingJobsAsync(ElectionId electionId) =>
+        await Context.ElectionCloseCountingJobs
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync();
+
+    public async Task<ElectionCloseCountingJobRecord?> GetCloseCountingJobAsync(Guid closeCountingJobId) =>
+        await Context.ElectionCloseCountingJobs
+            .FirstOrDefaultAsync(x => x.Id == closeCountingJobId);
+
+    public async Task<ElectionCloseCountingJobRecord?> GetCloseCountingJobBySessionIdAsync(Guid finalizationSessionId) =>
+        await Context.ElectionCloseCountingJobs
+            .FirstOrDefaultAsync(x => x.FinalizationSessionId == finalizationSessionId);
+
+    public async Task SaveCloseCountingJobAsync(ElectionCloseCountingJobRecord closeCountingJob) =>
+        await Context.ElectionCloseCountingJobs.AddAsync(closeCountingJob);
+
+    public async Task UpdateCloseCountingJobAsync(ElectionCloseCountingJobRecord closeCountingJob)
+    {
+        var existing = await Context.ElectionCloseCountingJobs
+            .FirstOrDefaultAsync(x => x.Id == closeCountingJob.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(closeCountingJob);
+        }
+    }
+
+    public async Task<ElectionExecutorSessionKeyEnvelopeRecord?> GetExecutorSessionKeyEnvelopeAsync(Guid closeCountingJobId) =>
+        await Context.ElectionExecutorSessionKeyEnvelopes
+            .FirstOrDefaultAsync(x => x.CloseCountingJobId == closeCountingJobId);
+
+    public async Task SaveExecutorSessionKeyEnvelopeAsync(ElectionExecutorSessionKeyEnvelopeRecord envelope) =>
+        await Context.ElectionExecutorSessionKeyEnvelopes.AddAsync(envelope);
+
+    public async Task UpdateExecutorSessionKeyEnvelopeAsync(ElectionExecutorSessionKeyEnvelopeRecord envelope)
+    {
+        var existing = await Context.ElectionExecutorSessionKeyEnvelopes
+            .FirstOrDefaultAsync(x => x.CloseCountingJobId == envelope.CloseCountingJobId);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(envelope);
+        }
+    }
+
+    public async Task<ElectionTallyExecutorLeaseRecord?> GetTallyExecutorLeaseAsync(Guid closeCountingJobId) =>
+        await Context.ElectionTallyExecutorLeases
+            .FirstOrDefaultAsync(x => x.CloseCountingJobId == closeCountingJobId);
+
+    public async Task SaveTallyExecutorLeaseAsync(ElectionTallyExecutorLeaseRecord lease) =>
+        await Context.ElectionTallyExecutorLeases.AddAsync(lease);
+
+    public async Task UpdateTallyExecutorLeaseAsync(ElectionTallyExecutorLeaseRecord lease)
+    {
+        var existing = await Context.ElectionTallyExecutorLeases
+            .FirstOrDefaultAsync(x => x.CloseCountingJobId == lease.CloseCountingJobId);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(lease);
+        }
+    }
+
     public async Task<IReadOnlyList<ElectionFinalizationShareRecord>> GetFinalizationSharesAsync(Guid finalizationSessionId) =>
         await Context.ElectionFinalizationShares
             .Where(x => x.FinalizationSessionId == finalizationSessionId)
@@ -923,6 +987,17 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task SaveFinalizationShareAsync(ElectionFinalizationShareRecord shareRecord) =>
         await Context.ElectionFinalizationShares.AddAsync(shareRecord);
+
+    public async Task UpdateFinalizationShareAsync(ElectionFinalizationShareRecord shareRecord)
+    {
+        var existing = await Context.ElectionFinalizationShares
+            .FirstOrDefaultAsync(x => x.Id == shareRecord.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(shareRecord);
+        }
+    }
 
     public async Task<IReadOnlyList<ElectionFinalizationReleaseEvidenceRecord>> GetFinalizationReleaseEvidenceRecordsAsync(ElectionId electionId) =>
         await Context.ElectionFinalizationReleaseEvidenceRecords

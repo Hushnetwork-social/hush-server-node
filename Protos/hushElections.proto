@@ -335,6 +335,17 @@ enum ElectionFinalizationSessionPurposeProto {
   FinalizationSessionPurposeFinalize = 1;
 }
 
+enum ElectionCloseCountingJobStatusProto {
+  CloseCountingJobPending = 0;
+  CloseCountingJobAwaitingShares = 1;
+  CloseCountingJobThresholdReached = 2;
+  CloseCountingJobRunning = 3;
+  CloseCountingJobPublishing = 4;
+  CloseCountingJobCompleted = 5;
+  CloseCountingJobFailed = 6;
+  CloseCountingJobSuperseded = 7;
+}
+
 enum ElectionFinalizationShareStatusProto {
   FinalizationShareAccepted = 0;
   FinalizationShareRejected = 1;
@@ -554,6 +565,10 @@ message ElectionFinalizationSession {
   string LatestTransactionId = 18;
   optional int64 LatestBlockHeight = 19;
   string LatestBlockId = 20;
+  string CloseCountingJobId = 21;
+  ElectionCloseCountingJobStatusProto CloseCountingJobStatus = 22;
+  string ExecutorSessionPublicKey = 23;
+  string ExecutorKeyAlgorithm = 24;
 }
 
 message ElectionFinalizationShare {
@@ -1379,6 +1394,7 @@ message GetElectionCeremonyActionViewResponse {
   ElectionCeremonyShareCustody SelfShareCustody = 9;
   int32 PendingIncomingMessageCount = 10;
   repeated string BlockedReasons = 11;
+  repeated ElectionCeremonyMessageEnvelope SelfVaultEnvelopes = 12;
 }
 
 message GetElectionsByOwnerResponse {

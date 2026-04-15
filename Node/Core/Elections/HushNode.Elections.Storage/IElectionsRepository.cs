@@ -290,11 +290,40 @@ public interface IElectionsRepository : IRepository
 
     Task UpdateFinalizationSessionAsync(ElectionFinalizationSessionRecord session);
 
+    Task<IReadOnlyList<ElectionCloseCountingJobRecord>> GetCloseCountingJobsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionCloseCountingJobRecord>>(Array.Empty<ElectionCloseCountingJobRecord>());
+
+    Task<ElectionCloseCountingJobRecord?> GetCloseCountingJobAsync(Guid closeCountingJobId) =>
+        Task.FromResult<ElectionCloseCountingJobRecord?>(null);
+
+    Task<ElectionCloseCountingJobRecord?> GetCloseCountingJobBySessionIdAsync(Guid finalizationSessionId) =>
+        Task.FromResult<ElectionCloseCountingJobRecord?>(null);
+
+    Task SaveCloseCountingJobAsync(ElectionCloseCountingJobRecord closeCountingJob) => Task.CompletedTask;
+
+    Task UpdateCloseCountingJobAsync(ElectionCloseCountingJobRecord closeCountingJob) => Task.CompletedTask;
+
+    Task<ElectionExecutorSessionKeyEnvelopeRecord?> GetExecutorSessionKeyEnvelopeAsync(Guid closeCountingJobId) =>
+        Task.FromResult<ElectionExecutorSessionKeyEnvelopeRecord?>(null);
+
+    Task SaveExecutorSessionKeyEnvelopeAsync(ElectionExecutorSessionKeyEnvelopeRecord envelope) => Task.CompletedTask;
+
+    Task UpdateExecutorSessionKeyEnvelopeAsync(ElectionExecutorSessionKeyEnvelopeRecord envelope) => Task.CompletedTask;
+
+    Task<ElectionTallyExecutorLeaseRecord?> GetTallyExecutorLeaseAsync(Guid closeCountingJobId) =>
+        Task.FromResult<ElectionTallyExecutorLeaseRecord?>(null);
+
+    Task SaveTallyExecutorLeaseAsync(ElectionTallyExecutorLeaseRecord lease) => Task.CompletedTask;
+
+    Task UpdateTallyExecutorLeaseAsync(ElectionTallyExecutorLeaseRecord lease) => Task.CompletedTask;
+
     Task<IReadOnlyList<ElectionFinalizationShareRecord>> GetFinalizationSharesAsync(Guid finalizationSessionId);
 
     Task<ElectionFinalizationShareRecord?> GetAcceptedFinalizationShareAsync(Guid finalizationSessionId, string trusteeUserAddress);
 
     Task SaveFinalizationShareAsync(ElectionFinalizationShareRecord shareRecord);
+
+    Task UpdateFinalizationShareAsync(ElectionFinalizationShareRecord shareRecord) => Task.CompletedTask;
 
     Task<IReadOnlyList<ElectionFinalizationReleaseEvidenceRecord>> GetFinalizationReleaseEvidenceRecordsAsync(ElectionId electionId);
 

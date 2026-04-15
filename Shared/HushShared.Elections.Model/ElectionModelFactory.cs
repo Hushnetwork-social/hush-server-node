@@ -769,6 +769,8 @@ public static partial class ElectionModelFactory
         Guid? claimedCeremonyVersionId,
         string? claimedTallyPublicKeyFingerprint,
         string shareMaterial,
+        Guid? closeCountingJobId = null,
+        string? executorKeyAlgorithm = null,
         DateTime? submittedAt = null,
         Guid? sourceTransactionId = null,
         long? sourceBlockHeight = null,
@@ -789,6 +791,8 @@ public static partial class ElectionModelFactory
             claimedCeremonyVersionId,
             claimedTallyPublicKeyFingerprint,
             shareMaterial,
+            closeCountingJobId,
+            executorKeyAlgorithm,
             ElectionFinalizationShareStatus.Accepted,
             failureCode: null,
             failureReason: null,
@@ -815,6 +819,8 @@ public static partial class ElectionModelFactory
         string shareMaterial,
         string failureCode,
         string failureReason,
+        Guid? closeCountingJobId = null,
+        string? executorKeyAlgorithm = null,
         DateTime? submittedAt = null,
         Guid? sourceTransactionId = null,
         long? sourceBlockHeight = null,
@@ -846,6 +852,8 @@ public static partial class ElectionModelFactory
             claimedCeremonyVersionId,
             claimedTallyPublicKeyFingerprint,
             shareMaterial,
+            closeCountingJobId,
+            executorKeyAlgorithm,
             ElectionFinalizationShareStatus.Rejected,
             failureCode.Trim(),
             failureReason.Trim(),
@@ -910,6 +918,8 @@ public static partial class ElectionModelFactory
         Guid? claimedCeremonyVersionId,
         string? claimedTallyPublicKeyFingerprint,
         string shareMaterial,
+        Guid? closeCountingJobId,
+        string? executorKeyAlgorithm,
         ElectionFinalizationShareStatus status,
         string? failureCode,
         string? failureReason,
@@ -933,6 +943,8 @@ public static partial class ElectionModelFactory
             throw new ArgumentNullException(nameof(claimedFinalEncryptedTallyHash));
         }
 
+        var normalizedShareMaterial = NormalizeOptionalText(shareMaterial) ?? string.Empty;
+
         return new ElectionFinalizationShareRecord(
             Guid.NewGuid(),
             finalizationSessionId,
@@ -949,7 +961,10 @@ public static partial class ElectionModelFactory
             NormalizeOptionalText(claimedTargetTallyId) ?? string.Empty,
             claimedCeremonyVersionId,
             NormalizeOptionalText(claimedTallyPublicKeyFingerprint),
-            NormalizeOptionalText(shareMaterial) ?? string.Empty,
+            closeCountingJobId,
+            NormalizeOptionalText(executorKeyAlgorithm),
+            normalizedShareMaterial,
+            ComputeHashHex(normalizedShareMaterial),
             status,
             NormalizeOptionalText(failureCode),
             NormalizeOptionalText(failureReason),
@@ -957,6 +972,19 @@ public static partial class ElectionModelFactory
             sourceTransactionId,
             sourceBlockHeight,
             sourceBlockId);
+    }
+
+    private static string ComputeHashHex(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(value)))
+            .ToLowerInvariant();
     }
 
     private static int? NormalizeRequiredApprovalCount(

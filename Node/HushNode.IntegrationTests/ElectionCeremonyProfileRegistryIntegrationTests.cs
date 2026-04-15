@@ -771,6 +771,40 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
     }
 
     [Fact]
+    public async Task GetElectionCeremonyActionView_WithTrusteeVaultEnvelope_ReturnsVaultEnvelopeAndExcludesItFromIncomingCount()
+    {
+        var client = await StartClientAsync(enableDevProfiles: true);
+        var createResponse = await CreateTrusteeThresholdDraftAsync(client, "FEAT-097 Trustee Vault Envelope");
+        var electionId = createResponse.Election.ElectionId;
+
+        await InviteAndAcceptRolloutTrusteesAsync(client, electionId);
+        var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
+        var trustee = RolloutTrustees[0];
+        await PublishJoinAndSelfTestAsync(client, electionId, ceremonyVersionId, trustee, 0);
+
+        var submitResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.SubmitElectionCeremonyMaterial(
+                trustee,
+                new ElectionId(Guid.Parse(electionId)),
+                Guid.Parse(ceremonyVersionId),
+                recipientTrusteeUserAddress: trustee.PublicSigningAddress,
+                messageType: "trustee-share-vault-package",
+                payloadVersion: "omega-trustee-share-vault-v1",
+                encryptedPayload: "vault-ciphertext-payload",
+                payloadFingerprint: "vault-envelope-fingerprint"));
+        submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
+
+        var actionView = await GetElectionCeremonyActionViewAsync(client, electionId, trustee);
+
+        actionView.Success.Should().BeTrue();
+        actionView.PendingIncomingMessageCount.Should().Be(0);
+        actionView.SelfVaultEnvelopes.Should().ContainSingle();
+        actionView.SelfVaultEnvelopes[0].MessageType.Should().Be("trustee-share-vault-package");
+        actionView.SelfVaultEnvelopes[0].PayloadVersion.Should().Be("omega-trustee-share-vault-v1");
+        actionView.SelfVaultEnvelopes[0].PayloadFingerprint.Should().Be("vault-envelope-fingerprint");
+    }
+
+    [Fact]
     public async Task PublishElectionCeremonyTransportKey_AfterElectionLeavesDraft_ReturnsRejectedValidationCodeAndLeavesElectionOpen()
     {
         var client = await StartClientAsync(enableDevProfiles: true);

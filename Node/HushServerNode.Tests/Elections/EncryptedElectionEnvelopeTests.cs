@@ -18,7 +18,7 @@ namespace HushServerNode.Tests.Elections;
 public class EncryptedElectionEnvelopeTests
 {
     [Fact]
-    public void TryDecryptSigned_WithValidCreateDraftEnvelope_ReturnsTypedAction()
+    public void TryDecryptSigned_WithLegacyV1CreateDraftEnvelope_ReturnsTypedAction()
     {
         var nodeEncryptKeys = new EncryptKeys();
         var actorEncryptKeys = new EncryptKeys();
@@ -32,7 +32,7 @@ public class EncryptedElectionEnvelopeTests
                 draft)));
         var unsignedTransaction = EncryptedElectionEnvelopePayloadHandler.CreateNew(
             ElectionId.NewElectionId,
-            EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+            EncryptedElectionEnvelopePayloadHandler.LegacyEnvelopeVersion,
             EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, nodeEncryptKeys.PublicKey),
             EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, actorEncryptKeys.PublicKey),
             EncryptKeys.Encrypt(JsonSerializer.Serialize(actionEnvelope), electionEncryptKeys.PublicKey));
@@ -62,6 +62,101 @@ public class EncryptedElectionEnvelopeTests
         actionPayload!.OwnerPublicAddress.Should().Be("owner-address");
         actionPayload.SnapshotReason.Should().Be("initial draft");
         actionPayload.Draft.Title.Should().Be(draft.Title);
+    }
+
+    [Fact]
+    public void TryDecryptSigned_WithV2CreateDraftEnvelope_ReturnsTypedAction()
+    {
+        var actorEncryptKeys = new EncryptKeys();
+        var electionEncryptKeys = new EncryptKeys();
+        var draft = CreateDraftSpecification();
+        var actionPayload = new CreateElectionDraftActionPayload(
+            "owner-address",
+            "initial draft",
+            draft);
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.CreateDraft,
+            JsonSerializer.SerializeToElement(actionPayload));
+        var unsignedTransaction = EncryptedElectionEnvelopePayloadHandler.CreateNewV2(
+            ElectionId.NewElectionId,
+            EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, actorEncryptKeys.PublicKey),
+            electionEncryptKeys.PublicKey,
+            EncryptKeys.Encrypt(JsonSerializer.Serialize(actionEnvelope), electionEncryptKeys.PublicKey),
+            actionEnvelope.ActionType,
+            actionEnvelope.ActionPayload);
+        var signedTransaction = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            unsignedTransaction,
+            new SignatureInfo("owner-address", "signature"));
+
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        credentialsProvider
+            .Setup(x => x.GetCredentials())
+            .Returns(new CredentialsProfile());
+
+        var sut = new ElectionEnvelopeCryptoService(credentialsProvider.Object);
+
+        var decryptedEnvelope = sut.TryDecryptSigned(signedTransaction);
+
+        decryptedEnvelope.Should().NotBeNull();
+        decryptedEnvelope!.ActionType.Should().Be(EncryptedElectionEnvelopeActionTypes.CreateDraft);
+        var decryptedActionPayload = decryptedEnvelope.DeserializeAction<CreateElectionDraftActionPayload>();
+        decryptedActionPayload.Should().NotBeNull();
+        decryptedActionPayload!.OwnerPublicAddress.Should().Be(actionPayload.OwnerPublicAddress);
+        decryptedActionPayload.SnapshotReason.Should().Be(actionPayload.SnapshotReason);
+        decryptedActionPayload.Draft.Title.Should().Be(draft.Title);
+    }
+
+    [Fact]
+    public void TryDecryptSigned_WithV21InviteTrusteeEnvelope_ReturnsArtifactsSeparately()
+    {
+        var actorEncryptKeys = new EncryptKeys();
+        var electionEncryptKeys = new EncryptKeys();
+        var inviteAction = new InviteElectionTrusteeActionPayload(
+            Guid.NewGuid(),
+            "owner-address",
+            "trustee-address",
+            EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, actorEncryptKeys.PublicKey),
+            "Trustee");
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.InviteTrustee,
+            JsonSerializer.SerializeToElement(inviteAction));
+        var unsignedTransaction = EncryptedElectionEnvelopePayloadHandler.CreateNewV21(
+            ElectionId.NewElectionId,
+            EncryptKeys.Encrypt(electionEncryptKeys.PrivateKey, actorEncryptKeys.PublicKey),
+            electionEncryptKeys.PublicKey,
+            EncryptKeys.Encrypt(JsonSerializer.Serialize(actionEnvelope), electionEncryptKeys.PublicKey),
+            actionEnvelope.ActionType,
+            JsonSerializer.SerializeToElement(new
+            {
+                inviteAction.InvitationId,
+                inviteAction.ActorPublicAddress,
+                inviteAction.TrusteeUserAddress,
+                inviteAction.TrusteeDisplayName,
+            }),
+            JsonSerializer.SerializeToElement(new InviteElectionTrusteeActionArtifacts(
+                inviteAction.TrusteeEncryptedElectionPrivateKey)));
+        var signedTransaction = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            unsignedTransaction,
+            new SignatureInfo("owner-address", "signature"));
+
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        credentialsProvider
+            .Setup(x => x.GetCredentials())
+            .Returns(new CredentialsProfile());
+
+        var sut = new ElectionEnvelopeCryptoService(credentialsProvider.Object);
+
+        var decryptedEnvelope = sut.TryDecryptSigned(signedTransaction);
+
+        decryptedEnvelope.Should().NotBeNull();
+        decryptedEnvelope!.ActionType.Should().Be(EncryptedElectionEnvelopeActionTypes.InviteTrustee);
+        var publicInviteAction = decryptedEnvelope.DeserializeAction<InviteElectionTrusteeActionPayload>();
+        publicInviteAction.Should().NotBeNull();
+        publicInviteAction!.TrusteeUserAddress.Should().Be(inviteAction.TrusteeUserAddress);
+        publicInviteAction.TrusteeEncryptedElectionPrivateKey.Should().BeNull();
+        var inviteArtifacts = decryptedEnvelope.DeserializeActionArtifacts<InviteElectionTrusteeActionArtifacts>();
+        inviteArtifacts.Should().NotBeNull();
+        inviteArtifacts!.TrusteeEncryptedElectionPrivateKey.Should().Be(inviteAction.TrusteeEncryptedElectionPrivateKey);
     }
 
     [Fact]
@@ -176,7 +271,7 @@ public class EncryptedElectionEnvelopeTests
             ]);
         var unsignedEnvelope = EncryptedElectionEnvelopePayloadHandler.CreateNew(
             election.ElectionId,
-            EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+            EncryptedElectionEnvelopePayloadHandler.DirectEnvelopeVersion,
             "node-envelope",
             "actor-envelope",
             "encrypted-payload");
@@ -299,7 +394,7 @@ public class EncryptedElectionEnvelopeTests
             "voter-1001@example.org");
         var unsignedEnvelope = EncryptedElectionEnvelopePayloadHandler.CreateNew(
             election.ElectionId,
-            EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+            EncryptedElectionEnvelopePayloadHandler.DirectEnvelopeVersion,
             "node-envelope",
             "actor-envelope",
             "encrypted-payload");
@@ -362,6 +457,110 @@ public class EncryptedElectionEnvelopeTests
             .Signatory
             .Should()
             .Be(validatorSigningKeys.PublicAddress);
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithCurrentClaimRosterEntryEnvelopeExposingVerificationCode_ReturnsNull()
+    {
+        var signedEnvelope = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            EncryptedElectionEnvelopePayloadHandler.CreateNew(
+                ElectionId.NewElectionId,
+                EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+                "node-envelope",
+                "actor-envelope",
+                "encrypted-payload"),
+            new SignatureInfo("voter-address", "signature"));
+
+        var cryptoService = new Mock<IElectionEnvelopeCryptoService>();
+        cryptoService
+            .Setup(x => x.TryDecryptSigned(It.IsAny<AbstractTransaction>()))
+            .Returns(new DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>>(
+                signedEnvelope,
+                EncryptedElectionEnvelopeActionTypes.ClaimRosterEntry,
+                JsonSerializer.Serialize(new ClaimElectionRosterEntryActionPayload(
+                    "voter-address",
+                    "1001",
+                    "1111"))));
+
+        var validationService = new Mock<ICreateElectionDraftValidationService>();
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        credentialsProvider
+            .Setup(x => x.GetCredentials())
+            .Returns(new CredentialsProfile
+            {
+                PublicSigningAddress = "validator-address",
+                PrivateSigningKey = new DigitalSignature().PrivateKey,
+                PublicEncryptAddress = "validator-encrypt-address",
+                PrivateEncryptKey = "validator-private-encrypt-key",
+            });
+
+        var unitOfWorkProvider = new Mock<Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext>>();
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        var sut = CreateContentHandler(
+            cryptoService.Object,
+            validationService.Object,
+            credentialsProvider.Object,
+            unitOfWorkProvider.Object,
+            lifecycleService.Object);
+
+        var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        sut.TryTakeValidationFailure(signedEnvelope.TransactionId.Value, out var failure).Should().BeTrue();
+        failure.Code.Should().Be("election_claim_verification_code_public");
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithCurrentInviteTrusteeEnvelopeExposingTrusteeWrap_ReturnsNull()
+    {
+        var signedEnvelope = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            EncryptedElectionEnvelopePayloadHandler.CreateNew(
+                ElectionId.NewElectionId,
+                EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+                "node-envelope",
+                "actor-envelope",
+                "encrypted-payload"),
+            new SignatureInfo("owner-address", "signature"));
+
+        var cryptoService = new Mock<IElectionEnvelopeCryptoService>();
+        cryptoService
+            .Setup(x => x.TryDecryptSigned(It.IsAny<AbstractTransaction>()))
+            .Returns(new DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>>(
+                signedEnvelope,
+                EncryptedElectionEnvelopeActionTypes.InviteTrustee,
+                JsonSerializer.Serialize(new InviteElectionTrusteeActionPayload(
+                    Guid.NewGuid(),
+                    "owner-address",
+                    "trustee-address",
+                    "ciphertext",
+                    "Trustee"))));
+
+        var validationService = new Mock<ICreateElectionDraftValidationService>();
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        credentialsProvider
+            .Setup(x => x.GetCredentials())
+            .Returns(new CredentialsProfile
+            {
+                PublicSigningAddress = "validator-address",
+                PrivateSigningKey = new DigitalSignature().PrivateKey,
+                PublicEncryptAddress = "validator-encrypt-address",
+                PrivateEncryptKey = "validator-private-encrypt-key",
+            });
+
+        var unitOfWorkProvider = new Mock<Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext>>();
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        var sut = CreateContentHandler(
+            cryptoService.Object,
+            validationService.Object,
+            credentialsProvider.Object,
+            unitOfWorkProvider.Object,
+            lifecycleService.Object);
+
+        var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        sut.TryTakeValidationFailure(signedEnvelope.TransactionId.Value, out var failure).Should().BeTrue();
+        failure.Code.Should().Be("election_invite_trustee_wrap_public");
     }
 
     [Fact]
@@ -857,6 +1056,147 @@ public class EncryptedElectionEnvelopeTests
         validatedTransaction.Should().BeNull();
         sut.TryTakeValidationFailure(signedEnvelope.TransactionId.Value, out var failure).Should().BeTrue();
         failure.Code.Should().Be("election_finalization_share_wrong_session_purpose");
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithSubmitFinalizationSharePlaintextPayload_RejectsValidation()
+    {
+        var election = ElectionModelFactory.CreateDraftRecord(
+            electionId: ElectionId.NewElectionId,
+            title: "Referendum",
+            shortDescription: "Policy vote",
+            ownerPublicAddress: "owner-address",
+            externalReferenceCode: "REF-2026-01",
+            electionClass: ElectionClass.OrganizationalRemoteVoting,
+            bindingStatus: ElectionBindingStatus.Binding,
+            governanceMode: ElectionGovernanceMode.TrusteeThreshold,
+            disclosureMode: ElectionDisclosureMode.FinalResultsOnly,
+            participationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
+            voteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
+            eligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            outcomeRule: new OutcomeRuleDefinition(
+                OutcomeRuleKind.PassFail,
+                "pass_fail",
+                SeatCount: 0,
+                BlankVoteCountsForTurnout: true,
+                BlankVoteExcludedFromWinnerSelection: true,
+                BlankVoteExcludedFromThresholdDenominator: false,
+                TieResolutionRule: "tie_unresolved",
+                CalculationBasis: "highest_non_blank_votes"),
+            approvedClientApplications:
+            [
+                new ApprovedClientApplicationRecord("hushsocial", "1.0.0"),
+            ],
+            protocolOmegaVersion: "omega-v1.0.0",
+            reportingPolicy: ReportingPolicy.DefaultPhaseOnePackage,
+            reviewWindowPolicy: ReviewWindowPolicy.GovernedReviewWindowReserved,
+            ownerOptions:
+            [
+                new ElectionOptionDefinition("yes", "Yes", null, 1, false),
+                new ElectionOptionDefinition("no", "No", null, 2, false),
+            ],
+            acknowledgedWarningCodes: [],
+            requiredApprovalCount: 1) with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedAt = DateTime.UtcNow.AddMinutes(-5),
+            LastUpdatedAt = DateTime.UtcNow.AddMinutes(-5),
+        };
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            Guid.NewGuid(),
+            1,
+            "dkg-prod-1of1",
+            boundTrusteeCount: 1,
+            requiredApprovalCount: 1,
+            activeTrustees:
+            [
+                new ElectionTrusteeReference("trustee-address", "Trustee"),
+            ],
+            tallyPublicKeyFingerprint: "tally-fingerprint");
+        var session = ElectionModelFactory.CreateFinalizationSession(
+            election,
+            Guid.NewGuid(),
+            acceptedBallotSetHash: [1, 2, 3],
+            finalEncryptedTallyHash: [4, 5, 6],
+            sessionPurpose: ElectionFinalizationSessionPurpose.CloseCounting,
+            ceremonySnapshot: ceremonySnapshot,
+            requiredShareCount: 1,
+            eligibleTrustees:
+            [
+                new ElectionTrusteeReference("trustee-address", "Trustee"),
+            ],
+            createdByPublicAddress: "owner-address");
+
+        var signedEnvelope = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            EncryptedElectionEnvelopePayloadHandler.CreateNew(
+                election.ElectionId,
+                EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+                "node-envelope",
+                "actor-envelope",
+                "encrypted-payload"),
+            new SignatureInfo("trustee-address", "signature"));
+        var signedActionEnvelope = new DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>>(
+            signedEnvelope,
+            EncryptedElectionEnvelopeActionTypes.SubmitFinalizationShare,
+            JsonSerializer.Serialize(new SubmitElectionFinalizationShareActionPayload(
+                session.Id,
+                "trustee-address",
+                1,
+                "share-v1",
+                ElectionFinalizationTargetType.AggregateTally,
+                session.CloseArtifactId,
+                session.AcceptedBallotSetHash,
+                session.FinalEncryptedTallyHash,
+                session.TargetTallyId,
+                ceremonySnapshot.CeremonyVersionId,
+                ceremonySnapshot.TallyPublicKeyFingerprint,
+                "ciphertext-share-material")));
+
+        var cryptoService = new Mock<IElectionEnvelopeCryptoService>();
+        cryptoService
+            .Setup(x => x.TryDecryptSigned(It.IsAny<AbstractTransaction>()))
+            .Returns(signedActionEnvelope);
+
+        var validationService = new Mock<ICreateElectionDraftValidationService>();
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        credentialsProvider
+            .Setup(x => x.GetCredentials())
+            .Returns(new CredentialsProfile
+            {
+                PublicSigningAddress = "validator-address",
+                PrivateSigningKey = new DigitalSignature().PrivateKey,
+                PublicEncryptAddress = "validator-encrypt-address",
+                PrivateEncryptKey = "validator-private-encrypt-key",
+            });
+
+        var repository = new Mock<IElectionsRepository>();
+        repository.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+        repository.Setup(x => x.GetFinalizationSessionAsync(session.Id)).ReturnsAsync(session);
+
+        var readOnlyUnitOfWork = new Mock<Olimpo.EntityFramework.Persistency.IReadOnlyUnitOfWork<ElectionsDbContext>>();
+        readOnlyUnitOfWork
+            .Setup(x => x.GetRepository<IElectionsRepository>())
+            .Returns(repository.Object);
+
+        var unitOfWorkProvider = new Mock<Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext>>();
+        unitOfWorkProvider
+            .Setup(x => x.CreateReadOnly())
+            .Returns(readOnlyUnitOfWork.Object);
+
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        var sut = CreateContentHandler(
+            cryptoService.Object,
+            validationService.Object,
+            credentialsProvider.Object,
+            unitOfWorkProvider.Object,
+            lifecycleService.Object);
+
+        var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        sut.TryTakeValidationFailure(signedEnvelope.TransactionId.Value, out var failure).Should().BeTrue();
+        failure.Code.Should().Be("election_finalization_share_plaintext_forbidden");
     }
 
     private static ElectionDraftSpecification CreateDraftSpecification() =>

@@ -658,7 +658,10 @@ internal static class ElectionGrpcMappings
         return proto;
     }
 
-    public static ElectionFinalizationSession ToProto(this ElectionFinalizationSessionRecord session)
+    public static ElectionFinalizationSession ToProto(
+        this ElectionFinalizationSessionRecord session,
+        ElectionCloseCountingJobRecord? closeCountingJob = null,
+        ElectionExecutorSessionKeyEnvelopeRecord? executorSessionKeyEnvelope = null)
     {
         var proto = new ElectionFinalizationSession
         {
@@ -695,6 +698,18 @@ internal static class ElectionGrpcMappings
         if (session.LatestBlockHeight.HasValue)
         {
             proto.LatestBlockHeight = session.LatestBlockHeight.Value;
+        }
+
+        if (closeCountingJob is not null)
+        {
+            proto.CloseCountingJobId = closeCountingJob.Id.ToString();
+            proto.CloseCountingJobStatus = (ElectionCloseCountingJobStatusProto)(int)closeCountingJob.Status;
+        }
+
+        if (executorSessionKeyEnvelope is not null && !executorSessionKeyEnvelope.DestroyedAt.HasValue)
+        {
+            proto.ExecutorSessionPublicKey = executorSessionKeyEnvelope.ExecutorSessionPublicKey;
+            proto.ExecutorKeyAlgorithm = executorSessionKeyEnvelope.KeyAlgorithm;
         }
 
         return proto;

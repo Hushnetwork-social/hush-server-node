@@ -619,7 +619,16 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
                 session.TargetTallyId,
                 ceremonyVersionId,
                 session.CeremonySnapshot?.TallyPublicKeyFingerprint,
-                shareMaterial));
+                shareMaterial,
+                string.IsNullOrWhiteSpace(session.CloseCountingJobId)
+                    ? null
+                    : Guid.Parse(session.CloseCountingJobId),
+                string.IsNullOrWhiteSpace(session.ExecutorSessionPublicKey)
+                    ? null
+                    : session.ExecutorSessionPublicKey,
+                string.IsNullOrWhiteSpace(session.ExecutorKeyAlgorithm)
+                    ? null
+                    : session.ExecutorKeyAlgorithm));
         submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
     }
 

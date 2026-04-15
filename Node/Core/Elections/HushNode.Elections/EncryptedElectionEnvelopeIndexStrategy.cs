@@ -136,7 +136,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             await SaveElectionEnvelopeAccessAsync(
                 decryptedEnvelope.Transaction.Payload.ElectionId,
                 createDraftAction.OwnerPublicAddress,
-                decryptedEnvelope.Transaction.Payload.NodeEncryptedElectionPrivateKey,
+                ResolveAccessEncryptionMaterial(decryptedEnvelope.Transaction.Payload),
                 decryptedEnvelope.Transaction.Payload.ActorEncryptedElectionPrivateKey,
                 decryptedEnvelope.Transaction.TransactionTimeStamp.Value,
                 decryptedEnvelope.Transaction.TransactionId.Value);
@@ -201,7 +201,9 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
             ActorPublicAddress: claimAction.ActorPublicAddress,
             OrganizationVoterId: claimAction.OrganizationVoterId,
-            VerificationCode: claimAction.VerificationCode,
+            VerificationCode: ResolveClaimVerificationCode(
+                decryptedEnvelope.Transaction.Payload,
+                claimAction.VerificationCode),
             SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
             SourceBlockId: _blockchainCache.CurrentBlockId.Value));
@@ -344,11 +346,21 @@ public class EncryptedElectionEnvelopeIndexStrategy(
 
         if (result.IsSuccess)
         {
+            var trusteeEncryptedElectionPrivateKey = ResolveTrusteeAccessEnvelope(
+                decryptedEnvelope,
+                inviteTrusteeAction);
+            if (string.IsNullOrWhiteSpace(trusteeEncryptedElectionPrivateKey))
+            {
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.ValidationFailed,
+                    "Invite trustee action is missing trustee envelope access material.");
+            }
+
             await SaveElectionEnvelopeAccessAsync(
                 decryptedEnvelope.Transaction.Payload.ElectionId,
                 inviteTrusteeAction.TrusteeUserAddress,
-                decryptedEnvelope.Transaction.Payload.NodeEncryptedElectionPrivateKey,
-                inviteTrusteeAction.TrusteeEncryptedElectionPrivateKey,
+                ResolveAccessEncryptionMaterial(decryptedEnvelope.Transaction.Payload),
+                trusteeEncryptedElectionPrivateKey,
                 decryptedEnvelope.Transaction.TransactionTimeStamp.Value,
                 decryptedEnvelope.Transaction.TransactionId.Value);
         }
@@ -590,6 +602,9 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             ClaimedCeremonyVersionId: shareAction.ClaimedCeremonyVersionId,
             ClaimedTallyPublicKeyFingerprint: shareAction.ClaimedTallyPublicKeyFingerprint,
             ShareMaterial: shareAction.ShareMaterial,
+            CloseCountingJobId: shareAction.CloseCountingJobId,
+            ExecutorKeyAlgorithm: shareAction.ExecutorKeyAlgorithm,
+            EncryptedExecutorSubmission: shareAction.EncryptedExecutorSubmission,
             SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
             SourceBlockId: _blockchainCache.CurrentBlockId.Value));
@@ -795,7 +810,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
     private async Task SaveElectionEnvelopeAccessAsync(
         ElectionId electionId,
         string actorPublicAddress,
-        string nodeEncryptedElectionPrivateKey,
+        string encryptionMaterial,
         string actorEncryptedElectionPrivateKey,
         DateTime grantedAt,
         Guid sourceTransactionId)
@@ -813,7 +828,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
         var accessRecord = new ElectionEnvelopeAccessRecord(
             electionId,
             actorPublicAddress,
-            nodeEncryptedElectionPrivateKey,
+            encryptionMaterial,
             actorEncryptedElectionPrivateKey,
             normalizedGrantedAt,
             sourceTransactionId,
@@ -830,6 +845,38 @@ public class EncryptedElectionEnvelopeIndexStrategy(
         }
 
         await unitOfWork.CommitAsync();
+    }
+
+    private static string ResolveAccessEncryptionMaterial(EncryptedElectionEnvelopePayload payload) =>
+        EncryptedElectionEnvelopePayloadHandler.IsDirectPublicEnvelopeVersion(payload.EnvelopeVersion)
+            ? payload.ElectionPublicEncryptKey
+            : payload.NodeEncryptedElectionPrivateKey;
+
+    private static string ResolveClaimVerificationCode(
+        EncryptedElectionEnvelopePayload payload,
+        string? verificationCode)
+    {
+        if (EncryptedElectionEnvelopePayloadHandler.IsPrivacyHardenedEnvelopeVersion(payload.EnvelopeVersion) &&
+            string.IsNullOrWhiteSpace(verificationCode))
+        {
+            return ElectionEligibilityContracts.TemporaryVerificationCode;
+        }
+
+        return verificationCode?.Trim() ?? string.Empty;
+    }
+
+    private static string? ResolveTrusteeAccessEnvelope(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        InviteElectionTrusteeActionPayload inviteTrusteeAction)
+    {
+        if (!EncryptedElectionEnvelopePayloadHandler.IsPrivacyHardenedEnvelopeVersion(
+                decryptedEnvelope.Transaction.Payload.EnvelopeVersion))
+        {
+            return inviteTrusteeAction.TrusteeEncryptedElectionPrivateKey;
+        }
+
+        var inviteArtifacts = decryptedEnvelope.DeserializeActionArtifacts<InviteElectionTrusteeActionArtifacts>();
+        return inviteArtifacts?.TrusteeEncryptedElectionPrivateKey;
     }
 
     private async Task DeleteElectionEnvelopeAccessAsync(

@@ -1,4 +1,5 @@
 using HushNode.Caching;
+using HushNode.Credentials;
 using HushNode.Elections.Storage;
 using HushNode.Indexing.Interfaces;
 using HushShared.Blockchain.TransactionModel;
@@ -77,6 +78,7 @@ public static class ElectionsHostBuild
         services.AddSingleton<IElectionReportPackageService, ElectionReportPackageService>();
         services.AddSingleton<IElectionBallotPublicationCryptoService, ElectionBallotPublicationCryptoService>();
         services.AddSingleton<IElectionResultCryptoService, ElectionResultCryptoService>();
+        services.AddSingleton<ICloseCountingExecutorKeyRegistry, InMemoryCloseCountingExecutorKeyRegistry>();
         services.AddSingleton<ElectionBallotPublicationService>();
         services.AddSingleton<IElectionBallotPublicationService>(sp => sp.GetRequiredService<ElectionBallotPublicationService>());
         services.AddSingleton<IElectionLifecycleService>(sp =>
@@ -86,7 +88,10 @@ public static class ElectionsHostBuild
                 sp.GetRequiredService<ElectionCeremonyOptions>(),
                 sp.GetRequiredService<IElectionCastIdempotencyCacheService>(),
                 sp.GetRequiredService<IElectionResultCryptoService>(),
-                sp.GetRequiredService<IElectionReportPackageService>()));
+                sp.GetRequiredService<IElectionReportPackageService>(),
+                sp.GetRequiredService<ICredentialsProvider>(),
+                sp.GetRequiredService<ICloseCountingExecutorKeyRegistry>()));
+        services.AddHostedService<TallyExecutorBackgroundService>();
     }
 
     private static ElectionCeremonyOptions CreateCeremonyOptions(IConfiguration configuration) =>

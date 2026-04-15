@@ -111,7 +111,7 @@ public sealed class ElectionResultCryptoService(
                 finalEncryptedTallyHash,
                 decodedCounts);
         }
-        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException or FormatException or OverflowException)
         {
             return ElectionAggregateReleaseResult.Failure(
                 "UNSUPPORTED_BALLOT_PAYLOAD",
@@ -121,23 +121,38 @@ public sealed class ElectionResultCryptoService(
 
     public string EncryptForElectionParticipants(
         string plaintextPayload,
-        string nodeEncryptedElectionPrivateKey)
+        string participantEncryptionMaterial)
     {
         if (string.IsNullOrWhiteSpace(plaintextPayload))
         {
             throw new ArgumentException("Plaintext payload is required.", nameof(plaintextPayload));
         }
 
-        if (string.IsNullOrWhiteSpace(nodeEncryptedElectionPrivateKey))
+        if (string.IsNullOrWhiteSpace(participantEncryptionMaterial))
         {
-            throw new ArgumentException("Node-encrypted election private key is required.", nameof(nodeEncryptedElectionPrivateKey));
+            throw new ArgumentException("Participant encryption material is required.", nameof(participantEncryptionMaterial));
         }
 
-        var nodePrivateEncryptKey = _credentialsProvider.GetCredentials().PrivateEncryptKey;
-        var electionPrivateKey = EncryptKeys.Decrypt(nodeEncryptedElectionPrivateKey, nodePrivateEncryptKey);
-        var electionPublicKey = EncryptKeys.DerivePublicKey(electionPrivateKey);
+        var electionPublicKey = LooksLikePublicEncryptKey(participantEncryptionMaterial)
+            ? participantEncryptionMaterial
+            : ResolveLegacyElectionPublicKey(participantEncryptionMaterial);
         return EncryptKeys.Encrypt(plaintextPayload, electionPublicKey);
     }
+
+    private string ResolveLegacyElectionPublicKey(string nodeEncryptedElectionPrivateKey)
+    {
+        var nodePrivateEncryptKey = _credentialsProvider.GetCredentials().PrivateEncryptKey;
+        var electionPrivateKey = EncryptKeys.Decrypt(nodeEncryptedElectionPrivateKey, nodePrivateEncryptKey);
+        return EncryptKeys.DerivePublicKey(electionPrivateKey);
+    }
+
+    private static bool LooksLikePublicEncryptKey(string value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        value.Length is 66 or 130 &&
+        (value.StartsWith("02", StringComparison.Ordinal) ||
+         value.StartsWith("03", StringComparison.Ordinal) ||
+         value.StartsWith("04", StringComparison.Ordinal)) &&
+        value.All(static ch => Uri.IsHexDigit(ch));
 
     private ParsedElectionBallotPackage ParseBallotPackage(string encryptedBallotPackage)
     {

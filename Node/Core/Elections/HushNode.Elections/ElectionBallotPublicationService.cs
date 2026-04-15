@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HushNode.Caching;
+using HushNode.Credentials;
 using HushNode.Elections.Storage;
 using HushNode.Events;
 using HushShared.Blockchain.BlockModel;
@@ -18,12 +19,15 @@ public sealed class ElectionBallotPublicationService(
     IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
     IElectionBallotPublicationCryptoService publicationCryptoService,
     IBlockchainCache blockchainCache,
+    ICredentialsProvider credentialsProvider,
     ElectionBallotPublicationOptions options,
     ILogger<ElectionBallotPublicationService> logger,
-    IElectionResultCryptoService? electionResultCryptoService = null) :
+    IElectionResultCryptoService? electionResultCryptoService = null,
+    ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null) :
     IElectionBallotPublicationService,
     IHandleAsync<BlockIndexCompletedEvent>
 {
+    private const string ExecutorSessionKeyAlgorithm = "ecies-secp256k1-v1";
     private static readonly JsonSerializerOptions ResultPayloadJsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly JsonSerializerOptions DevPublishedPayloadJsonOptions =
         new(JsonSerializerDefaults.Web)
@@ -33,9 +37,12 @@ public sealed class ElectionBallotPublicationService(
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider = unitOfWorkProvider;
     private readonly IElectionBallotPublicationCryptoService _publicationCryptoService = publicationCryptoService;
     private readonly IBlockchainCache _blockchainCache = blockchainCache;
+    private readonly ICredentialsProvider _credentialsProvider = credentialsProvider;
     private readonly ElectionBallotPublicationOptions _options = options;
     private readonly ILogger<ElectionBallotPublicationService> _logger = logger;
     private readonly IElectionResultCryptoService? _electionResultCryptoService = electionResultCryptoService;
+    private readonly ICloseCountingExecutorKeyRegistry _closeCountingExecutorKeyRegistry =
+        closeCountingExecutorKeyRegistry ?? new InMemoryCloseCountingExecutorKeyRegistry();
 
     public Task HandleAsync(BlockIndexCompletedEvent message) =>
         ProcessPendingPublicationAsync(message.BlockIndex);
@@ -374,6 +381,7 @@ public sealed class ElectionBallotPublicationService(
         var ceremonySnapshot = ElectionProtectedTallyBinding.ResolveOpenBoundaryBinding(election, openArtifact);
         var replay = _publicationCryptoService.ReplayPublishedBallots(
             publishedBallots.Select(x => x.EncryptedBallotPackage).ToArray());
+        var resolvedFinalEncryptedTallyHash = replay.FinalEncryptedTallyHash;
         if (!replay.IsSuccessful)
         {
             var repaired = await TryCreateAdminOnlyClosedElectionArtifactsAsync(
@@ -395,19 +403,34 @@ public sealed class ElectionBallotPublicationService(
                 return;
             }
 
-            _logger.LogWarning(
-                "[ElectionBallotPublicationService] Tally-ready replay failed for election {ElectionId}: {FailureCode} {FailureReason}",
-                election.ElectionId,
-                replay.FailureCode,
-                replay.FailureReason);
-            await RegisterIssueAsync(
-                repository,
-                election.ElectionId,
-                ElectionPublicationIssueCode.UnsupportedBallotPayload,
-                DateTime.UtcNow,
-                blockHeight,
-                blockId);
-            return;
+            if (election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold &&
+                ElectionDevModePublishedBallotSupport.TryBuildPublishedBallotTally(
+                    election,
+                    publishedBallots,
+                    out var devModeTally) &&
+                devModeTally is not null)
+            {
+                resolvedFinalEncryptedTallyHash = devModeTally.FinalEncryptedTallyHash;
+                _logger.LogInformation(
+                    "[ElectionBallotPublicationService] Election {ElectionId} used the trustee-threshold dev ballot fallback to bind close-counting progress to the published ballot inventory.",
+                    election.ElectionId);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "[ElectionBallotPublicationService] Tally-ready replay failed for election {ElectionId}: {FailureCode} {FailureReason}",
+                    election.ElectionId,
+                    replay.FailureCode,
+                    replay.FailureReason);
+                await RegisterIssueAsync(
+                    repository,
+                    election.ElectionId,
+                    ElectionPublicationIssueCode.UnsupportedBallotPayload,
+                    DateTime.UtcNow,
+                    blockHeight,
+                    blockId);
+                return;
+            }
         }
 
         if (election.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold)
@@ -423,7 +446,7 @@ public sealed class ElectionBallotPublicationService(
                 acceptedBallotSetHash: acceptedHash,
                 publishedBallotCount: publishedBallots.Count,
                 publishedBallotStreamHash: publishedHash,
-                finalEncryptedTallyHash: replay.FinalEncryptedTallyHash,
+                finalEncryptedTallyHash: resolvedFinalEncryptedTallyHash,
                 sourceBlockHeight: blockHeight,
                 sourceBlockId: blockId);
 
@@ -510,7 +533,7 @@ public sealed class ElectionBallotPublicationService(
             election,
             closeArtifact.Id,
             acceptedHash,
-            replay.FinalEncryptedTallyHash!,
+            resolvedFinalEncryptedTallyHash!,
             ElectionFinalizationSessionPurpose.CloseCounting,
             ceremonySnapshot,
             ceremonySnapshot.RequiredApprovalCount,
@@ -520,8 +543,24 @@ public sealed class ElectionBallotPublicationService(
             createdAt: createdAt,
             latestBlockHeight: blockHeight,
             latestBlockId: blockId);
+        var closeCountingJob = ElectionModelFactory.CreateCloseCountingJob(
+            session,
+            createdAt: createdAt,
+            latestBlockHeight: blockHeight,
+            latestBlockId: blockId);
+        var nodeCredentials = _credentialsProvider.GetCredentials();
+        var executorSessionKeys = _closeCountingExecutorKeyRegistry.Create(closeCountingJob.Id, ExecutorSessionKeyAlgorithm);
+        var executorSessionKeyEnvelope = ElectionModelFactory.CreateExecutorSessionKeyEnvelope(
+            closeCountingJob.Id,
+            executorSessionKeys.PublicKey,
+            CloseCountingExecutorKeyRegistryConstants.MemoryOnlyEnvelopeMarker,
+            ExecutorSessionKeyAlgorithm,
+            createdAt: createdAt,
+            sealedByServiceIdentity: nodeCredentials.PublicSigningAddress);
 
         await repository.SaveFinalizationSessionAsync(session);
+        await repository.SaveCloseCountingJobAsync(closeCountingJob);
+        await repository.SaveExecutorSessionKeyEnvelopeAsync(executorSessionKeyEnvelope);
         await repository.SaveElectionAsync(election with
         {
             LastUpdatedAt = createdAt,
@@ -958,82 +997,20 @@ public sealed class ElectionBallotPublicationService(
         out AdminOnlyDevModeResult? result)
     {
         result = null;
-        if (publishedBallots.Count == 0)
+        if (!ElectionDevModePublishedBallotSupport.TryBuildPublishedBallotTally(
+                election,
+                publishedBallots,
+                out var tally) ||
+            tally is null)
         {
             return false;
         }
 
-        var optionById = election.Options.ToDictionary(
-            x => x.OptionId,
-            StringComparer.OrdinalIgnoreCase);
-        var countsByOptionId = optionById.Keys.ToDictionary(
-            x => x,
-            _ => 0,
-            StringComparer.OrdinalIgnoreCase);
-
-        foreach (var publishedBallot in publishedBallots.OrderBy(x => x.PublicationSequence))
-        {
-            AdminOnlyDevModeBallotPackage? payload;
-            try
-            {
-                payload = JsonSerializer.Deserialize<AdminOnlyDevModeBallotPackage>(
-                    publishedBallot.EncryptedBallotPackage,
-                    ResultPayloadJsonOptions);
-            }
-            catch (JsonException)
-            {
-                return false;
-            }
-
-            if (payload is null ||
-                !string.Equals(payload.Mode, "election-dev-mode-v1", StringComparison.OrdinalIgnoreCase) ||
-                !IsSupportedDevModeBallotPackageType(payload.PackageType) ||
-                string.IsNullOrWhiteSpace(payload.OptionId) ||
-                !string.Equals(payload.ElectionId, election.ElectionId.ToString(), StringComparison.OrdinalIgnoreCase) ||
-                !optionById.TryGetValue(payload.OptionId, out var option) ||
-                option.IsBlankOption != payload.IsBlankOption ||
-                option.BallotOrder != payload.BallotOrder)
-            {
-                return false;
-            }
-
-            countsByOptionId[option.OptionId] = countsByOptionId[option.OptionId] + 1;
-        }
-
-        var blankCount = election.Options
-            .Where(x => x.IsBlankOption)
-            .Sum(x => countsByOptionId.GetValueOrDefault(x.OptionId, 0));
-        var namedOptionResults = election.Options
-            .Where(x => !x.IsBlankOption)
-            .Select(x => new
-            {
-                Option = x,
-                VoteCount = countsByOptionId.GetValueOrDefault(x.OptionId, 0),
-            })
-            .OrderByDescending(x => x.VoteCount)
-            .ThenBy(x => x.Option.BallotOrder)
-            .Select((x, index) => new ElectionResultOptionCount(
-                x.Option.OptionId,
-                x.Option.DisplayLabel,
-                x.Option.ShortDescription,
-                x.Option.BallotOrder,
-                index + 1,
-                x.VoteCount))
-            .ToArray();
-        var totalVotedCount = countsByOptionId.Values.Sum();
-        var tallyPayload = string.Join(
-            '\n',
-            election.Options
-                .OrderBy(x => x.BallotOrder)
-                .Select(x => $"{x.OptionId}|{countsByOptionId.GetValueOrDefault(x.OptionId, 0)}"));
-        var finalEncryptedTallyHash = SHA256.HashData(
-            Encoding.UTF8.GetBytes($"admin-only-dev-tally:v1|{election.ElectionId}|{tallyPayload}"));
-
         result = new AdminOnlyDevModeResult(
-            namedOptionResults,
-            blankCount,
-            totalVotedCount,
-            finalEncryptedTallyHash);
+            tally.NamedOptionResults,
+            tally.BlankCount,
+            tally.TotalVotedCount,
+            tally.FinalEncryptedTallyHash);
         return true;
     }
 

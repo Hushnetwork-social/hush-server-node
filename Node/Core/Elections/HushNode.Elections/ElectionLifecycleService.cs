@@ -4,9 +4,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using HushNode.Caching;
+using HushNode.Credentials;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
 using Microsoft.Extensions.Logging;
+using Olimpo;
 using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Elections;
@@ -14,18 +16,21 @@ namespace HushNode.Elections;
 public class ElectionLifecycleService : IElectionLifecycleService
 {
     private static readonly JsonSerializerOptions ResultPayloadJsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly TimeSpan TallyExecutorLeaseDuration = TimeSpan.FromMinutes(10);
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider;
     private readonly ILogger<ElectionLifecycleService> _logger;
     private readonly ElectionCeremonyOptions _ceremonyOptions;
     private readonly IElectionCastIdempotencyCacheService? _castIdempotencyCacheService;
     private readonly IElectionResultCryptoService? _electionResultCryptoService;
     private readonly IElectionReportPackageService _electionReportPackageService;
+    private readonly ICredentialsProvider? _credentialsProvider;
+    private readonly ICloseCountingExecutorKeyRegistry _closeCountingExecutorKeyRegistry;
     private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
 
     public ElectionLifecycleService(
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ILogger<ElectionLifecycleService> logger)
-        : this(unitOfWorkProvider, logger, new ElectionCeremonyOptions(), null, null, null)
+        : this(unitOfWorkProvider, logger, new ElectionCeremonyOptions(), null, null, null, null, null)
     {
     }
 
@@ -33,7 +38,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ILogger<ElectionLifecycleService> logger,
         ElectionCeremonyOptions ceremonyOptions)
-        : this(unitOfWorkProvider, logger, ceremonyOptions, null, null, null)
+        : this(unitOfWorkProvider, logger, ceremonyOptions, null, null, null, null, null)
     {
     }
 
@@ -43,7 +48,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionCeremonyOptions ceremonyOptions,
         IElectionCastIdempotencyCacheService? castIdempotencyCacheService,
         IElectionResultCryptoService? electionResultCryptoService = null,
-        IElectionReportPackageService? electionReportPackageService = null)
+        IElectionReportPackageService? electionReportPackageService = null,
+        ICredentialsProvider? credentialsProvider = null,
+        ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _logger = logger;
@@ -51,6 +58,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         _castIdempotencyCacheService = castIdempotencyCacheService;
         _electionResultCryptoService = electionResultCryptoService;
         _electionReportPackageService = electionReportPackageService ?? new ElectionReportPackageService();
+        _credentialsProvider = credentialsProvider;
+        _closeCountingExecutorKeyRegistry = closeCountingExecutorKeyRegistry ?? new InMemoryCloseCountingExecutorKeyRegistry();
     }
 
     public async Task<ElectionCommandResult> CreateDraftAsync(CreateElectionDraftRequest request)
@@ -1979,6 +1988,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var submittedAt = DateTime.UtcNow;
+        var storedShareMaterial = ResolveStoredFinalizationShareMaterial(request);
         var existingAcceptedShare = await repository.GetAcceptedFinalizationShareAsync(
             session.Id,
             request.ActorPublicAddress);
@@ -1999,9 +2009,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 request.ClaimedTargetTallyId,
                 request.ClaimedCeremonyVersionId,
                 request.ClaimedTallyPublicKeyFingerprint,
-                request.ShareMaterial,
+                storedShareMaterial,
                 "DUPLICATE_SHARE",
                 "An accepted finalization share is already recorded for this trustee and session.",
+                request.CloseCountingJobId,
+                request.ExecutorKeyAlgorithm,
                 submittedAt,
                 request.SourceTransactionId,
                 request.SourceBlockHeight,
@@ -2017,6 +2029,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         var expectedShareIndex = ResolveExpectedFinalizationShareIndex(session, request.ActorPublicAddress);
         var validationOutcome = ValidateFinalizationShareSubmission(session, request, expectedShareIndex);
+        var executorSubmissionResolution = validationOutcome.IsAccepted
+            ? await TryResolveCloseCountingExecutorSubmissionAsync(repository, session, request)
+            : CloseCountingExecutorSubmissionResolution.Legacy();
+        if (validationOutcome.IsAccepted &&
+            !executorSubmissionResolution.IsAccepted)
+        {
+            validationOutcome = FinalizationShareValidationOutcome.Rejected(
+                executorSubmissionResolution.FailureCode!,
+                executorSubmissionResolution.FailureReason!);
+        }
+
         var shareRecord = validationOutcome.IsAccepted
             ? ElectionModelFactory.CreateAcceptedFinalizationShare(
                 session.Id,
@@ -2033,7 +2056,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 request.ClaimedTargetTallyId,
                 request.ClaimedCeremonyVersionId,
                 request.ClaimedTallyPublicKeyFingerprint,
-                request.ShareMaterial,
+                storedShareMaterial,
+                executorSubmissionResolution.CloseCountingJob?.Id,
+                executorSubmissionResolution.ExecutorKeyAlgorithm,
                 submittedAt,
                 request.SourceTransactionId,
                 request.SourceBlockHeight,
@@ -2053,9 +2078,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 request.ClaimedTargetTallyId,
                 request.ClaimedCeremonyVersionId,
                 request.ClaimedTallyPublicKeyFingerprint,
-                request.ShareMaterial,
+                storedShareMaterial,
                 validationOutcome.FailureCode!,
                 validationOutcome.FailureReason!,
+                request.CloseCountingJobId,
+                request.ExecutorKeyAlgorithm,
                 submittedAt,
                 request.SourceTransactionId,
                 request.SourceBlockHeight,
@@ -2090,6 +2117,18 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         if (acceptedShares.Count < session.RequiredShareCount)
         {
+            if (executorSubmissionResolution.CloseCountingJob is not null)
+            {
+                await repository.UpdateCloseCountingJobAsync(executorSubmissionResolution.CloseCountingJob with
+                {
+                    Status = ElectionCloseCountingJobStatus.AwaitingShares,
+                    LastUpdatedAt = submittedAt,
+                    LatestTransactionId = request.SourceTransactionId,
+                    LatestBlockHeight = request.SourceBlockHeight,
+                    LatestBlockId = request.SourceBlockId,
+                });
+            }
+
             if (session.SessionPurpose == ElectionFinalizationSessionPurpose.CloseCounting &&
                 progressElection.ClosedProgressStatus != ElectionClosedProgressStatus.WaitingForTrusteeShares)
             {
@@ -2115,6 +2154,191 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ClosedProgressStatus = ElectionClosedProgressStatus.TallyCalculationInProgress,
             };
             await repository.SaveElectionAsync(progressElection);
+
+            if (executorSubmissionResolution.CloseCountingJob is not null)
+            {
+                await repository.UpdateCloseCountingJobAsync(executorSubmissionResolution.CloseCountingJob with
+                {
+                    Status = ElectionCloseCountingJobStatus.ThresholdReached,
+                    ThresholdReachedAt = submittedAt,
+                    LastUpdatedAt = submittedAt,
+                    LatestTransactionId = request.SourceTransactionId,
+                    LatestBlockHeight = request.SourceBlockHeight,
+                    LatestBlockId = request.SourceBlockId,
+                });
+            }
+        }
+
+        await unitOfWork.CommitAsync();
+
+        return ElectionCommandResult.Success(
+            progressElection,
+            finalizationSession: session,
+            finalizationShare: shareRecord);
+    }
+
+    public async Task<ElectionCommandResult> ExecuteCloseCountingJobAsync(ExecuteElectionCloseCountingJobRequest request)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var executionStartedAt = DateTime.UtcNow;
+
+        var closeCountingJob = await repository.GetCloseCountingJobAsync(request.CloseCountingJobId);
+        if (closeCountingJob is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Close-counting job {request.CloseCountingJobId} was not found.");
+        }
+
+        if (closeCountingJob.Status == ElectionCloseCountingJobStatus.Completed)
+        {
+            var completedElection = await repository.GetElectionAsync(closeCountingJob.ElectionId);
+            return completedElection is null
+                ? ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.NotFound,
+                    $"Election {closeCountingJob.ElectionId} was not found for completed close-counting job {request.CloseCountingJobId}.")
+                : ElectionCommandResult.Success(completedElection);
+        }
+
+        if (closeCountingJob.Status is not ElectionCloseCountingJobStatus.ThresholdReached
+            and not ElectionCloseCountingJobStatus.Running
+            and not ElectionCloseCountingJobStatus.Publishing)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.InvalidState,
+                $"Close-counting job {request.CloseCountingJobId} is not ready for executor processing.");
+        }
+
+        var leaseAcquisition = await TryAcquireCloseCountingLeaseAsync(
+            repository,
+            closeCountingJob,
+            request.LeaseHolderId,
+            executionStartedAt);
+        if (!leaseAcquisition.IsAcquired)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                leaseAcquisition.FailureReason!);
+        }
+
+        closeCountingJob = leaseAcquisition.CloseCountingJob!;
+        var lease = leaseAcquisition.Lease!;
+
+        var election = await repository.GetElectionForUpdateAsync(closeCountingJob.ElectionId);
+        if (election is null)
+        {
+            await MarkCloseCountingJobFailedAsync(
+                repository,
+                closeCountingJob,
+                lease,
+                "NOT_FOUND",
+                $"Election {closeCountingJob.ElectionId} was not found for close-counting job {closeCountingJob.Id}.",
+                executionStartedAt,
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+            await unitOfWork.CommitAsync();
+
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Election {closeCountingJob.ElectionId} was not found for close-counting job {closeCountingJob.Id}.");
+        }
+
+        var session = await repository.GetFinalizationSessionAsync(closeCountingJob.FinalizationSessionId);
+        if (session is null)
+        {
+            await MarkCloseCountingJobFailedAsync(
+                repository,
+                closeCountingJob,
+                lease,
+                "NOT_FOUND",
+                $"Close-counting job {closeCountingJob.Id} no longer has a bound finalization session.",
+                executionStartedAt,
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+            await unitOfWork.CommitAsync();
+
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Close-counting job {closeCountingJob.Id} no longer has a bound finalization session.");
+        }
+
+        if (session.SessionPurpose != ElectionFinalizationSessionPurpose.CloseCounting)
+        {
+            await MarkCloseCountingJobFailedAsync(
+                repository,
+                closeCountingJob,
+                lease,
+                "INVALID_SESSION",
+                $"Close-counting job {closeCountingJob.Id} is bound to a non-close-counting session.",
+                executionStartedAt,
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+            await unitOfWork.CommitAsync();
+
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.InvalidState,
+                $"Close-counting job {closeCountingJob.Id} is bound to a non-close-counting session.");
+        }
+
+        if (session.Status == ElectionFinalizationSessionStatus.Completed)
+        {
+            var completedJob = closeCountingJob with
+            {
+                Status = ElectionCloseCountingJobStatus.Completed,
+                CompletedAt = closeCountingJob.CompletedAt ?? executionStartedAt,
+                FailureCode = null,
+                FailureReason = null,
+                LastUpdatedAt = executionStartedAt,
+                LatestTransactionId = request.SourceTransactionId,
+                LatestBlockHeight = request.SourceBlockHeight,
+                LatestBlockId = request.SourceBlockId,
+            };
+            await repository.UpdateCloseCountingJobAsync(completedJob);
+            await repository.UpdateTallyExecutorLeaseAsync(lease with
+            {
+                LastHeartbeatAt = executionStartedAt,
+                ReleaseReason = null,
+                CompletionReason = "session-already-completed",
+            });
+            await unitOfWork.CommitAsync();
+
+            return ElectionCommandResult.Success(election, finalizationSession: session);
+        }
+
+        var acceptedShares = (await repository.GetFinalizationSharesAsync(session.Id))
+            .Where(x => x.Status == ElectionFinalizationShareStatus.Accepted)
+            .ToList();
+        if (acceptedShares.Count < session.RequiredShareCount)
+        {
+            var awaitingSharesElection = election with
+            {
+                LastUpdatedAt = executionStartedAt,
+                ClosedProgressStatus = ElectionClosedProgressStatus.WaitingForTrusteeShares,
+            };
+            await repository.SaveElectionAsync(awaitingSharesElection);
+            await repository.UpdateCloseCountingJobAsync(closeCountingJob with
+            {
+                Status = ElectionCloseCountingJobStatus.AwaitingShares,
+                LastUpdatedAt = executionStartedAt,
+                LatestTransactionId = request.SourceTransactionId,
+                LatestBlockHeight = request.SourceBlockHeight,
+                LatestBlockId = request.SourceBlockId,
+            });
+            await repository.UpdateTallyExecutorLeaseAsync(lease with
+            {
+                LastHeartbeatAt = executionStartedAt,
+                ReleaseReason = "threshold-no-longer-satisfied",
+                CompletionReason = null,
+            });
+            await unitOfWork.CommitAsync();
+
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Close-counting job no longer has enough accepted trustee shares to release the tally.");
         }
 
         var acceptedTrustees = session.EligibleTrustees
@@ -2124,31 +2348,44 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         var completionResult = await CompleteCloseCountingSessionAsync(
             repository,
-            progressElection,
+            election,
             session,
             acceptedShares,
             acceptedTrustees,
-            request.ActorPublicAddress,
-            submittedAt,
+            request.LeaseHolderId,
+            executionStartedAt,
             request.SourceTransactionId,
             request.SourceBlockHeight,
             request.SourceBlockId,
-            shareRecord);
-
-        if (!completionResult.IsSuccess &&
-            session.SessionPurpose == ElectionFinalizationSessionPurpose.CloseCounting)
-        {
-            var restoredElection = progressElection with
-            {
-                ClosedProgressStatus = ElectionClosedProgressStatus.WaitingForTrusteeShares,
-                LastUpdatedAt = submittedAt,
-            };
-            await repository.SaveElectionAsync(restoredElection);
-        }
+            finalizationShare: null);
 
         if (completionResult.IsSuccess)
         {
-            await unitOfWork.CommitAsync();
+            await repository.UpdateTallyExecutorLeaseAsync(lease with
+            {
+                LastHeartbeatAt = executionStartedAt,
+                ReleaseReason = null,
+                CompletionReason = "close-counting-completed",
+            });
+        }
+        else
+        {
+            await MarkCloseCountingJobFailedAsync(
+                repository,
+                closeCountingJob,
+                lease,
+                MapCloseCountingFailureCode(completionResult.ErrorCode),
+                completionResult.ErrorMessage ?? "Close-counting execution failed.",
+                executionStartedAt,
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+        }
+
+        await unitOfWork.CommitAsync();
+        if (completionResult.IsSuccess)
+        {
+            _closeCountingExecutorKeyRegistry.Destroy(closeCountingJob.Id);
         }
 
         return completionResult;
@@ -3971,6 +4208,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         await repository.SaveElectionAsync(finalizedElection);
+        await ScrubStoredFinalizationSharesAsync(repository, finalizationShares);
 
         return ElectionCommandResult.Success(
             finalizedElection,
@@ -4191,6 +4429,110 @@ public class ElectionLifecycleService : IElectionLifecycleService
             finalizationReleaseEvidence: releaseEvidence);
     }
 
+    private async Task<CloseCountingLeaseAcquisitionResult> TryAcquireCloseCountingLeaseAsync(
+        IElectionsRepository repository,
+        ElectionCloseCountingJobRecord closeCountingJob,
+        string leaseHolderId,
+        DateTime acquiredAt)
+    {
+        if (string.IsNullOrWhiteSpace(leaseHolderId))
+        {
+            return CloseCountingLeaseAcquisitionResult.Rejected(
+                "Close-counting execution requires a non-empty lease holder identifier.");
+        }
+
+        var normalizedLeaseHolderId = leaseHolderId.Trim();
+
+        var existingLease = await repository.GetTallyExecutorLeaseAsync(closeCountingJob.Id);
+        if (existingLease is not null &&
+            existingLease.LeaseExpiresAt > acquiredAt &&
+            !string.Equals(existingLease.LeaseHolderId, normalizedLeaseHolderId, StringComparison.Ordinal))
+        {
+            return CloseCountingLeaseAcquisitionResult.Rejected(
+                $"Close-counting job {closeCountingJob.Id} is already leased by {existingLease.LeaseHolderId}.");
+        }
+
+        var updatedJob = closeCountingJob with
+        {
+            Status = ElectionCloseCountingJobStatus.Running,
+            FailureCode = null,
+            FailureReason = null,
+            LastUpdatedAt = acquiredAt,
+        };
+        await repository.UpdateCloseCountingJobAsync(updatedJob);
+
+        var lease = existingLease is null
+            ? ElectionModelFactory.CreateTallyExecutorLease(
+                closeCountingJob.Id,
+                normalizedLeaseHolderId,
+                leaseEpoch: 1,
+                leasedAt: acquiredAt,
+                leaseExpiresAt: acquiredAt.Add(TallyExecutorLeaseDuration))
+            : existingLease with
+            {
+                LeaseHolderId = normalizedLeaseHolderId,
+                LeaseEpoch = existingLease.LeaseEpoch + 1,
+                LeasedAt = acquiredAt,
+                LeaseExpiresAt = acquiredAt.Add(TallyExecutorLeaseDuration),
+                LastHeartbeatAt = acquiredAt,
+                ReleaseReason = null,
+                CompletionReason = null,
+            };
+
+        if (existingLease is null)
+        {
+            await repository.SaveTallyExecutorLeaseAsync(lease);
+        }
+        else
+        {
+            await repository.UpdateTallyExecutorLeaseAsync(lease);
+        }
+
+        return CloseCountingLeaseAcquisitionResult.Accepted(updatedJob, lease);
+    }
+
+    private async Task MarkCloseCountingJobFailedAsync(
+        IElectionsRepository repository,
+        ElectionCloseCountingJobRecord closeCountingJob,
+        ElectionTallyExecutorLeaseRecord lease,
+        string failureCode,
+        string failureReason,
+        DateTime failedAt,
+        Guid? sourceTransactionId,
+        long? sourceBlockHeight,
+        Guid? sourceBlockId)
+    {
+        await repository.UpdateCloseCountingJobAsync(closeCountingJob with
+        {
+            Status = ElectionCloseCountingJobStatus.Failed,
+            FailureCode = failureCode,
+            FailureReason = failureReason,
+            LastUpdatedAt = failedAt,
+            RetryCount = closeCountingJob.RetryCount + 1,
+            LatestTransactionId = sourceTransactionId,
+            LatestBlockHeight = sourceBlockHeight,
+            LatestBlockId = sourceBlockId,
+        });
+        await repository.UpdateTallyExecutorLeaseAsync(lease with
+        {
+            LastHeartbeatAt = failedAt,
+            ReleaseReason = failureCode,
+            CompletionReason = null,
+        });
+    }
+
+    private static string MapCloseCountingFailureCode(ElectionCommandErrorCode errorCode) =>
+        errorCode switch
+        {
+            ElectionCommandErrorCode.NotFound => "NOT_FOUND",
+            ElectionCommandErrorCode.Forbidden => "FORBIDDEN",
+            ElectionCommandErrorCode.InvalidState => "INVALID_STATE",
+            ElectionCommandErrorCode.DependencyBlocked => "DEPENDENCY_BLOCKED",
+            ElectionCommandErrorCode.Conflict => "CONFLICT",
+            ElectionCommandErrorCode.NotSupported => "NOT_SUPPORTED",
+            _ => "VALIDATION_FAILED",
+        };
+
     private async Task<ElectionCommandResult> CompleteCloseCountingSessionAsync(
         IElectionsRepository repository,
         ElectionRecord election,
@@ -4266,6 +4608,20 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Close-counting completion requires the owner election envelope access record.");
         }
 
+        var closeCountingJob = await TryGetCloseCountingJobForSessionAsync(repository, election.ElectionId, session.Id);
+        if (closeCountingJob is not null)
+        {
+            closeCountingJob = closeCountingJob with
+            {
+                Status = ElectionCloseCountingJobStatus.Running,
+                LastUpdatedAt = completedAt,
+                LatestTransactionId = sourceTransactionId,
+                LatestBlockHeight = sourceBlockHeight,
+                LatestBlockId = sourceBlockId,
+            };
+            await repository.UpdateCloseCountingJobAsync(closeCountingJob);
+        }
+
         var acceptedHash = ComputeAcceptedBallotInventoryHash(acceptedBallots);
         if (!ByteArrayEquals(acceptedHash, session.AcceptedBallotSetHash))
         {
@@ -4274,52 +4630,107 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Close-counting completion inventory does not match the bound accepted-ballot set hash.");
         }
 
+        var releaseSharesResolution = await TryResolveAcceptedSharesForAggregateReleaseAsync(
+            repository,
+            session,
+            acceptedShares,
+            closeCountingJob);
+        if (!releaseSharesResolution.IsAccepted)
+        {
+            if (closeCountingJob is not null)
+            {
+                await repository.UpdateCloseCountingJobAsync(closeCountingJob with
+                {
+                    Status = ElectionCloseCountingJobStatus.Failed,
+                    FailureCode = releaseSharesResolution.FailureCode,
+                    FailureReason = releaseSharesResolution.FailureReason,
+                    LastUpdatedAt = completedAt,
+                    RetryCount = closeCountingJob.RetryCount + 1,
+                    LatestTransactionId = sourceTransactionId,
+                    LatestBlockHeight = sourceBlockHeight,
+                    LatestBlockId = sourceBlockId,
+                });
+            }
+
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                releaseSharesResolution.FailureReason!);
+        }
+
         var publishedHash = ComputePublishedBallotStreamHash(publishedBallots);
         var release = _electionResultCryptoService.TryReleaseAggregateTally(
             publishedBallots.Select(x => x.EncryptedBallotPackage).ToArray(),
-            acceptedShares,
+            releaseSharesResolution.ReleaseShares!,
             acceptedBallots.Count);
-        if (!release.IsSuccessful)
+
+        byte[] resolvedFinalEncryptedTallyHash;
+        IReadOnlyList<ElectionResultOptionCount> namedOptionResults;
+        int blankCount;
+        int totalVotedCount;
+
+        if (release.IsSuccessful)
+        {
+            if (!ByteArrayEquals(release.FinalEncryptedTallyHash, session.FinalEncryptedTallyHash))
+            {
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.ValidationFailed,
+                    "Close-counting aggregate release hash does not match the bound tally target.");
+            }
+
+            var decodedCounts = release.DecodedCounts ?? Array.Empty<int>();
+            if (decodedCounts.Count != election.Options.Count)
+            {
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.ValidationFailed,
+                    $"Close-counting aggregate release did not return a count for every ballot option. Expected {election.Options.Count} slots but received {decodedCounts.Count}.");
+            }
+
+            var optionCounts = election.Options
+                .Select((option, index) => new { Option = option, Count = decodedCounts[index] })
+                .ToArray();
+            var blankOption = optionCounts.FirstOrDefault(x => x.Option.IsBlankOption);
+            namedOptionResults = optionCounts
+                .Where(x => !x.Option.IsBlankOption)
+                .OrderByDescending(x => x.Count)
+                .ThenBy(x => x.Option.BallotOrder)
+                .Select((x, index) => new ElectionResultOptionCount(
+                    x.Option.OptionId,
+                    x.Option.DisplayLabel,
+                    x.Option.ShortDescription,
+                    x.Option.BallotOrder,
+                    index + 1,
+                    x.Count))
+                .ToArray();
+
+            blankCount = blankOption?.Count ?? 0;
+            totalVotedCount = decodedCounts.Sum();
+            resolvedFinalEncryptedTallyHash = release.FinalEncryptedTallyHash!;
+        }
+        else if (ElectionDevModePublishedBallotSupport.TryBuildPublishedBallotTally(
+                     election,
+                     publishedBallots,
+                     out var devModeTally) &&
+                 devModeTally is not null)
+        {
+            if (!ByteArrayEquals(devModeTally.FinalEncryptedTallyHash, session.FinalEncryptedTallyHash))
+            {
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.ValidationFailed,
+                    "Close-counting dev-mode tally hash does not match the bound tally target.");
+            }
+
+            namedOptionResults = devModeTally.NamedOptionResults;
+            blankCount = devModeTally.BlankCount;
+            totalVotedCount = devModeTally.TotalVotedCount;
+            resolvedFinalEncryptedTallyHash = devModeTally.FinalEncryptedTallyHash;
+        }
+        else
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.ValidationFailed,
                 $"Close-counting aggregate release failed: {release.FailureReason}");
         }
 
-        if (!ByteArrayEquals(release.FinalEncryptedTallyHash, session.FinalEncryptedTallyHash))
-        {
-            return ElectionCommandResult.Failure(
-                ElectionCommandErrorCode.ValidationFailed,
-                "Close-counting aggregate release hash does not match the bound tally target.");
-        }
-
-        var decodedCounts = release.DecodedCounts ?? Array.Empty<int>();
-        if (decodedCounts.Count != election.Options.Count)
-        {
-            return ElectionCommandResult.Failure(
-                ElectionCommandErrorCode.ValidationFailed,
-                $"Close-counting aggregate release did not return a count for every ballot option. Expected {election.Options.Count} slots but received {decodedCounts.Count}.");
-        }
-
-        var optionCounts = election.Options
-            .Select((option, index) => new { Option = option, Count = decodedCounts[index] })
-            .ToArray();
-        var blankOption = optionCounts.FirstOrDefault(x => x.Option.IsBlankOption);
-        var namedOptionResults = optionCounts
-            .Where(x => !x.Option.IsBlankOption)
-            .OrderByDescending(x => x.Count)
-            .ThenBy(x => x.Option.BallotOrder)
-            .Select((x, index) => new ElectionResultOptionCount(
-                x.Option.OptionId,
-                x.Option.DisplayLabel,
-                x.Option.ShortDescription,
-                x.Option.BallotOrder,
-                index + 1,
-                x.Count))
-            .ToArray();
-
-        var blankCount = blankOption?.Count ?? 0;
-        var totalVotedCount = decodedCounts.Sum();
         var eligibleToVoteCount = closeSnapshot.ActiveDenominatorCount;
         var didNotVoteCount = closeSnapshot.DidNotVoteCount;
         if (totalVotedCount != namedOptionResults.Sum(x => x.VoteCount) + blankCount)
@@ -4353,7 +4764,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             acceptedBallotSetHash: acceptedHash,
             publishedBallotCount: publishedBallots.Count,
             publishedBallotStreamHash: publishedHash,
-            finalEncryptedTallyHash: release.FinalEncryptedTallyHash,
+            finalEncryptedTallyHash: resolvedFinalEncryptedTallyHash,
             sourceTransactionId: sourceTransactionId,
             sourceBlockHeight: sourceBlockHeight,
             sourceBlockId: sourceBlockId);
@@ -4416,11 +4827,52 @@ public class ElectionLifecycleService : IElectionLifecycleService
             ClosedProgressStatus = ElectionClosedProgressStatus.None,
         };
 
+        if (closeCountingJob is not null)
+        {
+            closeCountingJob = closeCountingJob with
+            {
+                Status = ElectionCloseCountingJobStatus.Publishing,
+                LastUpdatedAt = completedAt,
+                LatestTransactionId = sourceTransactionId,
+                LatestBlockHeight = sourceBlockHeight,
+                LatestBlockId = sourceBlockId,
+            };
+            await repository.UpdateCloseCountingJobAsync(closeCountingJob);
+        }
+
         await repository.SaveFinalizationReleaseEvidenceRecordAsync(releaseEvidence);
         await repository.UpdateFinalizationSessionAsync(completedSession);
         await repository.SaveBoundaryArtifactAsync(tallyReadyArtifact);
         await repository.SaveResultArtifactAsync(unofficialResult);
         await repository.SaveElectionAsync(updatedElection);
+        await ScrubStoredFinalizationSharesAsync(repository, acceptedShares);
+        if (closeCountingJob is not null)
+        {
+            var executorEnvelope = await repository.GetExecutorSessionKeyEnvelopeAsync(closeCountingJob.Id);
+            if (executorEnvelope is not null && !executorEnvelope.DestroyedAt.HasValue)
+            {
+                await repository.UpdateExecutorSessionKeyEnvelopeAsync(executorEnvelope with
+                {
+                    SealedExecutorSessionPrivateKey = CloseCountingExecutorKeyRegistryConstants.DestroyedEnvelopeMarker,
+                    ExpiresAt = completedAt,
+                    DestroyedAt = completedAt,
+                    LastUpdatedAt = completedAt,
+                });
+            }
+
+            closeCountingJob = closeCountingJob with
+            {
+                Status = ElectionCloseCountingJobStatus.Completed,
+                CompletedAt = completedAt,
+                FailureCode = null,
+                FailureReason = null,
+                LastUpdatedAt = completedAt,
+                LatestTransactionId = sourceTransactionId,
+                LatestBlockHeight = sourceBlockHeight,
+                LatestBlockId = sourceBlockId,
+            };
+            await repository.UpdateCloseCountingJobAsync(closeCountingJob);
+        }
 
         return ElectionCommandResult.Success(
             updatedElection,
@@ -4454,6 +4906,273 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var session = finalizationSessions.FirstOrDefault(x => x.Id == releaseEvidence.FinalizationSessionId);
         return new ReportPackageFinalizationContext(session, releaseEvidence);
     }
+
+    private async Task ScrubStoredFinalizationSharesAsync(
+        IElectionsRepository repository,
+        IReadOnlyList<ElectionFinalizationShareRecord> finalizationShares)
+    {
+        foreach (var share in finalizationShares)
+        {
+            if (string.IsNullOrWhiteSpace(share.ShareMaterial) ||
+                string.Equals(
+                    share.ShareMaterial,
+                    ElectionFinalizationShareStorageConstants.RedactedStoredShareMaterial,
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            await repository.UpdateFinalizationShareAsync(share with
+            {
+                ShareMaterial = ElectionFinalizationShareStorageConstants.RedactedStoredShareMaterial,
+                ShareMaterialHash = string.IsNullOrWhiteSpace(share.ShareMaterialHash)
+                    ? ComputeStoredFinalizationShareHash(share.ShareMaterial)
+                    : share.ShareMaterialHash,
+            });
+        }
+    }
+
+    private static string ComputeStoredFinalizationShareHash(string shareMaterial) =>
+        string.IsNullOrWhiteSpace(shareMaterial)
+            ? string.Empty
+            : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(shareMaterial))).ToLowerInvariant();
+
+    private async Task<ElectionCloseCountingJobRecord?> TryGetCloseCountingJobForSessionAsync(
+        IElectionsRepository repository,
+        ElectionId electionId,
+        Guid finalizationSessionId)
+    {
+        var closeCountingJobs = await repository.GetCloseCountingJobsAsync(electionId);
+        return closeCountingJobs
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault(x => x.FinalizationSessionId == finalizationSessionId);
+    }
+
+    private async Task<CloseCountingExecutorSubmissionResolution> TryResolveCloseCountingExecutorSubmissionAsync(
+        IElectionsRepository repository,
+        ElectionFinalizationSessionRecord session,
+        SubmitElectionFinalizationShareRequest request)
+    {
+        if (!request.CloseCountingJobId.HasValue)
+        {
+            return CloseCountingExecutorSubmissionResolution.Rejected(
+                "MALFORMED_SHARE",
+                "Executor-encrypted trustee share is missing the close-counting job binding.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.EncryptedExecutorSubmission))
+        {
+            return CloseCountingExecutorSubmissionResolution.Rejected(
+                "MALFORMED_SHARE",
+                "Executor-encrypted trustee share submission is required.");
+        }
+
+        var closeCountingJob = await repository.GetCloseCountingJobAsync(request.CloseCountingJobId.Value);
+        if (closeCountingJob is null ||
+            closeCountingJob.FinalizationSessionId != session.Id)
+        {
+            return CloseCountingExecutorSubmissionResolution.Rejected(
+                "WRONG_TARGET_SHARE",
+                "Executor-encrypted trustee share does not match the active close-counting job.");
+        }
+
+        var executorEnvelope = await repository.GetExecutorSessionKeyEnvelopeAsync(closeCountingJob.Id);
+        if (executorEnvelope is null || executorEnvelope.DestroyedAt.HasValue)
+        {
+            return CloseCountingExecutorSubmissionResolution.Rejected(
+                "MALFORMED_SHARE",
+                "Executor-encrypted trustee share does not have an active executor session key.");
+        }
+
+        if (!string.Equals(
+                request.ExecutorKeyAlgorithm?.Trim(),
+                executorEnvelope.KeyAlgorithm,
+                StringComparison.Ordinal))
+        {
+            return CloseCountingExecutorSubmissionResolution.Rejected(
+                "MALFORMED_SHARE",
+                "Executor-encrypted trustee share does not match the active executor key algorithm.");
+        }
+
+        var decryptedSubmission = TryDecryptExecutorSubmission(
+            closeCountingJob.Id,
+            request.EncryptedExecutorSubmission!);
+        if (decryptedSubmission is null)
+        {
+            return CloseCountingExecutorSubmissionResolution.Rejected(
+                "MALFORMED_SHARE",
+                "Executor-encrypted trustee share could not be decrypted.");
+        }
+
+        if (!DoesExecutorSubmissionMatchRequest(request, decryptedSubmission))
+        {
+            return CloseCountingExecutorSubmissionResolution.Rejected(
+                "WRONG_TARGET_SHARE",
+                "Executor-encrypted trustee share does not match the exact close-counting target.");
+        }
+
+        if (string.IsNullOrWhiteSpace(decryptedSubmission.ShareMaterial))
+        {
+            return CloseCountingExecutorSubmissionResolution.Rejected(
+                "MALFORMED_SHARE",
+                "Executor-encrypted trustee share did not contain any share material.");
+        }
+
+        return CloseCountingExecutorSubmissionResolution.Accepted(
+            closeCountingJob,
+            executorEnvelope.KeyAlgorithm,
+            decryptedSubmission);
+    }
+
+    private async Task<FinalizationShareReleaseResolution> TryResolveAcceptedSharesForAggregateReleaseAsync(
+        IElectionsRepository repository,
+        ElectionFinalizationSessionRecord session,
+        IReadOnlyList<ElectionFinalizationShareRecord> acceptedShares,
+        ElectionCloseCountingJobRecord? closeCountingJob)
+    {
+        if (!acceptedShares.Any(x => x.CloseCountingJobId.HasValue))
+        {
+            return FinalizationShareReleaseResolution.Accepted(acceptedShares);
+        }
+
+        if (closeCountingJob is null)
+        {
+            return FinalizationShareReleaseResolution.Rejected(
+                "MALFORMED_SHARE",
+                "Close-counting release is missing the bound executor job.");
+        }
+
+        var executorEnvelope = await repository.GetExecutorSessionKeyEnvelopeAsync(closeCountingJob.Id);
+        if (executorEnvelope is null || executorEnvelope.DestroyedAt.HasValue)
+        {
+            return FinalizationShareReleaseResolution.Rejected(
+                "MALFORMED_SHARE",
+                "Close-counting release is missing the active executor session key.");
+        }
+
+        var decryptedShares = new List<ElectionFinalizationShareRecord>(acceptedShares.Count);
+        foreach (var share in acceptedShares)
+        {
+            if (!share.CloseCountingJobId.HasValue)
+            {
+                decryptedShares.Add(share);
+                continue;
+            }
+
+            if (share.CloseCountingJobId.Value != closeCountingJob.Id ||
+                !string.Equals(
+                    share.ExecutorKeyAlgorithm?.Trim(),
+                    executorEnvelope.KeyAlgorithm,
+                    StringComparison.Ordinal))
+            {
+                return FinalizationShareReleaseResolution.Rejected(
+                    "WRONG_TARGET_SHARE",
+                    "Stored trustee share does not match the active close-counting executor binding.");
+            }
+
+            var decryptedSubmission = TryDecryptExecutorSubmission(
+                closeCountingJob.Id,
+                share.ShareMaterial);
+            if (decryptedSubmission is null ||
+                string.IsNullOrWhiteSpace(decryptedSubmission.ShareMaterial))
+            {
+                return FinalizationShareReleaseResolution.Rejected(
+                    "MALFORMED_SHARE",
+                    "Stored trustee share could not be decrypted for aggregate release.");
+            }
+
+            if (!DoesExecutorSubmissionMatchShareRecord(session, share, decryptedSubmission))
+            {
+                return FinalizationShareReleaseResolution.Rejected(
+                    "WRONG_TARGET_SHARE",
+                    "Stored trustee share no longer matches the bound close-counting target.");
+            }
+
+            decryptedShares.Add(share with
+            {
+                ShareMaterial = decryptedSubmission.ShareMaterial,
+            });
+        }
+
+        return FinalizationShareReleaseResolution.Accepted(decryptedShares);
+    }
+
+    private CloseCountingExecutorSubmissionPayload? TryDecryptExecutorSubmission(
+        Guid closeCountingJobId,
+        string encryptedExecutorSubmission)
+    {
+        if (string.IsNullOrWhiteSpace(encryptedExecutorSubmission) ||
+            !_closeCountingExecutorKeyRegistry.TryGet(closeCountingJobId, out var executorSessionKeyMaterial) ||
+            executorSessionKeyMaterial is null ||
+            string.IsNullOrWhiteSpace(executorSessionKeyMaterial.PrivateKey))
+        {
+            return null;
+        }
+
+        try
+        {
+            var innerJson = EncryptKeys.Decrypt(
+                encryptedExecutorSubmission,
+                executorSessionKeyMaterial.PrivateKey);
+
+            return JsonSerializer.Deserialize<CloseCountingExecutorSubmissionPayload>(
+                innerJson,
+                ResultPayloadJsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string ResolveStoredFinalizationShareMaterial(SubmitElectionFinalizationShareRequest request) =>
+        !string.IsNullOrWhiteSpace(request.EncryptedExecutorSubmission)
+            ? request.EncryptedExecutorSubmission.Trim()
+            : string.IsNullOrWhiteSpace(request.ShareMaterial)
+                ? string.Empty
+                : ElectionFinalizationShareStorageConstants.RejectedPlaintextStoredShareMaterial;
+
+    private static bool DoesExecutorSubmissionMatchRequest(
+        SubmitElectionFinalizationShareRequest request,
+        CloseCountingExecutorSubmissionPayload submission) =>
+        submission.CloseCountingJobId == request.CloseCountingJobId &&
+        string.Equals(submission.ElectionId, request.ElectionId.ToString(), StringComparison.Ordinal) &&
+        submission.FinalizationSessionId == request.FinalizationSessionId &&
+        string.Equals(submission.ActorPublicAddress, request.ActorPublicAddress, StringComparison.OrdinalIgnoreCase) &&
+        submission.ShareIndex == request.ShareIndex &&
+        string.Equals(submission.ShareVersion, request.ShareVersion, StringComparison.Ordinal) &&
+        submission.TargetType == request.TargetType &&
+        submission.ClaimedCloseArtifactId == request.ClaimedCloseArtifactId &&
+        ByteArrayEquals(submission.ClaimedAcceptedBallotSetHash, request.ClaimedAcceptedBallotSetHash) &&
+        ByteArrayEquals(submission.ClaimedFinalEncryptedTallyHash, request.ClaimedFinalEncryptedTallyHash) &&
+        string.Equals(submission.ClaimedTargetTallyId, request.ClaimedTargetTallyId, StringComparison.Ordinal) &&
+        submission.ClaimedCeremonyVersionId == request.ClaimedCeremonyVersionId &&
+        string.Equals(
+            submission.ClaimedTallyPublicKeyFingerprint?.Trim(),
+            request.ClaimedTallyPublicKeyFingerprint?.Trim(),
+            StringComparison.Ordinal);
+
+    private static bool DoesExecutorSubmissionMatchShareRecord(
+        ElectionFinalizationSessionRecord session,
+        ElectionFinalizationShareRecord share,
+        CloseCountingExecutorSubmissionPayload submission) =>
+        submission.CloseCountingJobId == share.CloseCountingJobId &&
+        string.Equals(submission.ElectionId, share.ElectionId.ToString(), StringComparison.Ordinal) &&
+        submission.FinalizationSessionId == share.FinalizationSessionId &&
+        string.Equals(submission.ActorPublicAddress, share.TrusteeUserAddress, StringComparison.OrdinalIgnoreCase) &&
+        submission.ShareIndex == share.ShareIndex &&
+        string.Equals(submission.ShareVersion, share.ShareVersion, StringComparison.Ordinal) &&
+        submission.TargetType == share.TargetType &&
+        submission.ClaimedCloseArtifactId == share.ClaimedCloseArtifactId &&
+        ByteArrayEquals(submission.ClaimedAcceptedBallotSetHash, share.ClaimedAcceptedBallotSetHash) &&
+        ByteArrayEquals(submission.ClaimedFinalEncryptedTallyHash, share.ClaimedFinalEncryptedTallyHash) &&
+        string.Equals(submission.ClaimedTargetTallyId, share.ClaimedTargetTallyId, StringComparison.Ordinal) &&
+        submission.ClaimedCeremonyVersionId == share.ClaimedCeremonyVersionId &&
+        string.Equals(
+            submission.ClaimedTallyPublicKeyFingerprint?.Trim(),
+            share.ClaimedTallyPublicKeyFingerprint?.Trim(),
+            StringComparison.Ordinal) &&
+        submission.ClaimedCloseArtifactId == session.CloseArtifactId;
 
     private static int ResolveExpectedFinalizationShareIndex(
         ElectionFinalizationSessionRecord session,
@@ -4502,16 +5221,29 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Only aggregate-tally release targets are allowed.");
         }
 
+        var hasLegacyShareMaterial = !string.IsNullOrWhiteSpace(request.ShareMaterial);
+        var hasExecutorSubmission =
+            request.CloseCountingJobId.HasValue &&
+            !string.IsNullOrWhiteSpace(request.ExecutorKeyAlgorithm) &&
+            !string.IsNullOrWhiteSpace(request.EncryptedExecutorSubmission);
+
+        if (hasLegacyShareMaterial)
+        {
+            return FinalizationShareValidationOutcome.Rejected(
+                "PLAINTEXT_SHARE_FORBIDDEN",
+                "Plaintext trustee share material is no longer accepted. Use the executor-encrypted trustee share submission.");
+        }
+
         if (request.ShareIndex < 1 ||
             string.IsNullOrWhiteSpace(request.ShareVersion) ||
-            string.IsNullOrWhiteSpace(request.ShareMaterial) ||
+            !hasExecutorSubmission ||
             request.ClaimedAcceptedBallotSetHash is not { Length: > 0 } ||
             request.ClaimedFinalEncryptedTallyHash is not { Length: > 0 } ||
             string.IsNullOrWhiteSpace(request.ClaimedTargetTallyId))
         {
             return FinalizationShareValidationOutcome.Rejected(
                 "MALFORMED_SHARE",
-                "Finalization share submission is missing required share or target fields.");
+                "Finalization share submission is missing executor-encrypted share binding or required target fields.");
         }
 
         if (expectedShareIndex < 1 || request.ShareIndex != expectedShareIndex)
@@ -4651,6 +5383,60 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         public static FinalizationShareValidationOutcome Rejected(string failureCode, string failureReason) =>
             new(false, failureCode, failureReason);
+    }
+
+    private sealed record CloseCountingLeaseAcquisitionResult(
+        bool IsAcquired,
+        ElectionCloseCountingJobRecord? CloseCountingJob,
+        ElectionTallyExecutorLeaseRecord? Lease,
+        string? FailureReason)
+    {
+        public static CloseCountingLeaseAcquisitionResult Accepted(
+            ElectionCloseCountingJobRecord closeCountingJob,
+            ElectionTallyExecutorLeaseRecord lease) =>
+            new(true, closeCountingJob, lease, null);
+
+        public static CloseCountingLeaseAcquisitionResult Rejected(string failureReason) =>
+            new(false, null, null, failureReason);
+    }
+
+    private sealed record CloseCountingExecutorSubmissionResolution(
+        bool IsAccepted,
+        ElectionCloseCountingJobRecord? CloseCountingJob,
+        string? ExecutorKeyAlgorithm,
+        CloseCountingExecutorSubmissionPayload? Submission,
+        string? FailureCode,
+        string? FailureReason)
+    {
+        public static CloseCountingExecutorSubmissionResolution Legacy() =>
+            new(true, null, null, null, null, null);
+
+        public static CloseCountingExecutorSubmissionResolution Accepted(
+            ElectionCloseCountingJobRecord closeCountingJob,
+            string executorKeyAlgorithm,
+            CloseCountingExecutorSubmissionPayload submission) =>
+            new(true, closeCountingJob, executorKeyAlgorithm, submission, null, null);
+
+        public static CloseCountingExecutorSubmissionResolution Rejected(
+            string failureCode,
+            string failureReason) =>
+            new(false, null, null, null, failureCode, failureReason);
+    }
+
+    private sealed record FinalizationShareReleaseResolution(
+        bool IsAccepted,
+        IReadOnlyList<ElectionFinalizationShareRecord>? ReleaseShares,
+        string? FailureCode,
+        string? FailureReason)
+    {
+        public static FinalizationShareReleaseResolution Accepted(
+            IReadOnlyList<ElectionFinalizationShareRecord> releaseShares) =>
+            new(true, releaseShares, null, null);
+
+        public static FinalizationShareReleaseResolution Rejected(
+            string failureCode,
+            string failureReason) =>
+            new(false, null, failureCode, failureReason);
     }
 
     private sealed record ResultArtifactPayload(

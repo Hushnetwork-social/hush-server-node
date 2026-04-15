@@ -19,13 +19,19 @@ public interface IElectionEnvelopeCryptoService
 public sealed record DecryptedElectionEnvelope<TTransaction>(
     TTransaction Transaction,
     string ActionType,
-    string ActionPayloadJson)
+    string ActionPayloadJson,
+    string? ActionArtifactsJson = null)
     where TTransaction : AbstractTransaction
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public TAction? DeserializeAction<TAction>() =>
         JsonSerializer.Deserialize<TAction>(ActionPayloadJson, JsonOptions);
+
+    public TAction? DeserializeActionArtifacts<TAction>() =>
+        string.IsNullOrWhiteSpace(ActionArtifactsJson)
+            ? default
+            : JsonSerializer.Deserialize<TAction>(ActionArtifactsJson, JsonOptions);
 }
 
 public class ElectionEnvelopeCryptoService(
@@ -60,9 +66,23 @@ public class ElectionEnvelopeCryptoService(
         where TTransaction : SignedTransaction<EncryptedElectionEnvelopePayload>
     {
         var payload = transaction.Payload;
+        if (EncryptedElectionEnvelopePayloadHandler.IsDirectPublicEnvelopeVersion(payload.EnvelopeVersion))
+        {
+            if (string.IsNullOrWhiteSpace(payload.ActionType) || payload.ActionPayload is null)
+            {
+                return null;
+            }
+
+            return new DecryptedElectionEnvelope<TTransaction>(
+                transaction,
+                payload.ActionType,
+                payload.ActionPayload.Value.GetRawText(),
+                payload.ActionArtifacts?.GetRawText());
+        }
+
         if (!string.Equals(
                 payload.EnvelopeVersion,
-                EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+                EncryptedElectionEnvelopePayloadHandler.LegacyEnvelopeVersion,
                 StringComparison.Ordinal))
         {
             return null;

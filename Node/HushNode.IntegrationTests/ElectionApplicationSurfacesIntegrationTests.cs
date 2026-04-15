@@ -7,12 +7,15 @@ using System.Text.Json;
 using FluentAssertions;
 using Grpc.Core;
 using HushNetwork.proto;
+using HushNode.Elections;
 using HushNode.IntegrationTests.Infrastructure;
 using HushNode.Reactions.Crypto;
 using HushServerNode;
 using HushServerNode.Testing;
 using HushServerNode.Testing.Elections;
 using HushShared.Elections.Model;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Olimpo;
 using ReactionECPoint = HushShared.Reactions.Model.ECPoint;
 using Xunit;
@@ -157,6 +160,30 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         resultView.CanViewParticipantEncryptedResults.Should().BeTrue();
         resultView.UnofficialResult.Should().NotBeNull();
         resultView.OfficialResult.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task FinalizeElection_AfterTrusteeClose_KeepsStoredFinalizationSharesRedactedAndPreservesHashes()
+    {
+        var client = await StartClientAsync();
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "FEAT-106 Finalization Share Redaction",
+            castWithAlice: true);
+
+        await FinalizeElectionAsync(client, context.ElectionId);
+
+        await using var scope = _node!.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        var storedShares = await dbContext.Set<ElectionFinalizationShareRecord>()
+            .Where(x => x.ElectionId == new ElectionId(Guid.Parse(context.ElectionId)))
+            .OrderBy(x => x.SubmittedAt)
+            .ToListAsync();
+
+        storedShares.Should().HaveCount(3);
+        storedShares.Should().OnlyContain(x =>
+            x.ShareMaterial == ElectionFinalizationShareStorageConstants.RedactedStoredShareMaterial);
+        storedShares.Should().OnlyContain(x => !string.IsNullOrWhiteSpace(x.ShareMaterialHash));
     }
 
     [Fact]
@@ -317,6 +344,279 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
                 TestIdentities.Bob.PublicSigningAddress,
                 TestIdentities.Charlie.PublicSigningAddress,
                 Delta.PublicSigningAddress);
+    }
+
+    [Fact]
+    public async Task GovernedClose_AfterThresholdAndBeforeShares_AllowsImmediateOwnerAndTrusteeReads()
+    {
+        var client = await StartClientAsync();
+        var createResponse = await CreateTrusteeThresholdDraftAsync(client, "FEAT-103 Post-Close Trustee Read");
+        var electionId = createResponse.Election.ElectionId;
+
+        await InviteAndAcceptRolloutTrusteesAsync(electionId);
+        var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+
+        var openProposalId = await StartGovernedProposalAsync(
+            client,
+            electionId,
+            ElectionGovernedActionType.Open);
+        await ApproveProposalAsync(electionId, openProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(electionId, openProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(electionId, openProposalId, Delta);
+
+        await ClaimRosterEntryAsync(electionId, TestIdentities.Alice, "voter-alice");
+        await RegisterVotingCommitmentAsync(client, electionId, TestIdentities.Alice, "feat103-post-close-commitment");
+        var castSubmitResponse = await SubmitAcceptedBallotCastViaBlockchainAsync(
+            client,
+            electionId,
+            TestIdentities.Alice,
+            "feat103-post-close-cast");
+        castSubmitResponse.Successfull.Should().BeTrue(castSubmitResponse.Message);
+
+        var closeProposalId = await StartGovernedProposalAsync(
+            client,
+            electionId,
+            ElectionGovernedActionType.Close);
+        await ApproveProposalAsync(electionId, closeProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(electionId, closeProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(electionId, closeProposalId, Delta);
+
+        var ownerReadTask = ReloadElectionAsync(client, electionId, TestIdentities.Alice);
+        var trusteeReadTask = ReloadElectionAsync(client, electionId, Echo);
+        var trusteeHubTask = GetElectionHubViewAsync(client, Echo);
+
+        await Task.WhenAll(ownerReadTask, trusteeReadTask, trusteeHubTask);
+
+        var ownerRead = await ownerReadTask;
+        ownerRead.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+        ownerRead.Election.ClosedProgressStatus.Should().BeOneOf(
+            ElectionClosedProgressStatusProto.ClosedProgressTallyCalculationInProgress,
+            ElectionClosedProgressStatusProto.ClosedProgressWaitingForTrusteeShares);
+
+        var trusteeRead = await trusteeReadTask;
+        trusteeRead.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+
+        var trusteeHub = await trusteeHubTask;
+        trusteeHub.Success.Should().BeTrue();
+        trusteeHub.Elections.Should().ContainSingle(x => x.Election.ElectionId == electionId);
+    }
+
+    [Fact]
+    public async Task GovernedClose_WhenCloseCountingSessionCreated_ProjectsExecutorSessionMetadata()
+    {
+        var client = await StartClientAsync();
+        var createResponse = await CreateTrusteeThresholdDraftAsync(client, "FEAT-104 Close Counting Executor Metadata");
+        var electionId = createResponse.Election.ElectionId;
+
+        await InviteAndAcceptRolloutTrusteesAsync(electionId);
+        var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+
+        var openProposalId = await StartGovernedProposalAsync(
+            client,
+            electionId,
+            ElectionGovernedActionType.Open);
+        await ApproveProposalAsync(electionId, openProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(electionId, openProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(electionId, openProposalId, Delta);
+
+        await ClaimRosterEntryAsync(electionId, TestIdentities.Alice, "voter-alice");
+        await RegisterVotingCommitmentAsync(client, electionId, TestIdentities.Alice, "feat104-executor-metadata-commitment");
+        var castSubmitResponse = await SubmitAcceptedBallotCastViaBlockchainAsync(
+            client,
+            electionId,
+            TestIdentities.Alice,
+            "feat104-executor-metadata-cast",
+            useDevModePayload: true);
+        castSubmitResponse.Successfull.Should().BeTrue(castSubmitResponse.Message);
+
+        var closeProposalId = await StartGovernedProposalAsync(
+            client,
+            electionId,
+            ElectionGovernedActionType.Close);
+        await ApproveProposalAsync(electionId, closeProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(electionId, closeProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(electionId, closeProposalId, Delta);
+
+        var closedElection = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
+        closedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+        var closeCountingSession = closedElection.FinalizationSessions.Should()
+            .ContainSingle(x =>
+                x.SessionPurpose == ElectionFinalizationSessionPurposeProto.FinalizationSessionPurposeCloseCounting &&
+                x.Status == ElectionFinalizationSessionStatusProto.FinalizationSessionAwaitingShares)
+            .Subject;
+        closeCountingSession.CloseCountingJobId.Should().NotBeNullOrWhiteSpace();
+        closeCountingSession.CloseCountingJobStatus.Should().Be(ElectionCloseCountingJobStatusProto.CloseCountingJobAwaitingShares);
+        closeCountingSession.ExecutorSessionPublicKey.Should().NotBeNullOrWhiteSpace();
+        closeCountingSession.ExecutorKeyAlgorithm.Should().Be("ecies-secp256k1-v1");
+    }
+
+    [Fact]
+    public async Task GovernedClose_WithDevModeBallotPayload_CompletesCloseCountingAndKeepsReadsHealthy()
+    {
+        var client = await StartClientAsync();
+        var createResponse = await CreateTrusteeThresholdDraftAsync(client, "FEAT-103 Dev-Mode Trustee Close");
+        var electionId = createResponse.Election.ElectionId;
+
+        await InviteAndAcceptRolloutTrusteesAsync(electionId);
+        var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+
+        var openProposalId = await StartGovernedProposalAsync(
+            client,
+            electionId,
+            ElectionGovernedActionType.Open);
+        await ApproveProposalAsync(electionId, openProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(electionId, openProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(electionId, openProposalId, Delta);
+
+        await ClaimRosterEntryAsync(electionId, TestIdentities.Alice, "voter-alice");
+        await RegisterVotingCommitmentAsync(client, electionId, TestIdentities.Alice, "feat103-dev-close-commitment");
+        var castSubmitResponse = await SubmitAcceptedBallotCastViaBlockchainAsync(
+            client,
+            electionId,
+            TestIdentities.Alice,
+            "feat103-dev-close-cast",
+            useDevModePayload: true);
+        castSubmitResponse.Successfull.Should().BeTrue(castSubmitResponse.Message);
+
+        var closeProposalId = await StartGovernedProposalAsync(
+            client,
+            electionId,
+            ElectionGovernedActionType.Close);
+        await ApproveProposalAsync(electionId, closeProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(electionId, closeProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(electionId, closeProposalId, Delta);
+
+        var closedElection = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
+        closedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+        closedElection.Election.TallyReadyArtifactId.Should().BeNullOrWhiteSpace();
+        closedElection.FinalizationSessions.Should().ContainSingle(x =>
+            x.SessionPurpose == ElectionFinalizationSessionPurposeProto.FinalizationSessionPurposeCloseCounting &&
+            x.Status == ElectionFinalizationSessionStatusProto.FinalizationSessionAwaitingShares);
+
+        var trusteeReadAfterClose = await ReloadElectionAsync(client, electionId, Echo);
+        trusteeReadAfterClose.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+        var trusteeHubAfterClose = await GetElectionHubViewAsync(client, Echo);
+        trusteeHubAfterClose.Elections.Should().ContainSingle(x => x.Election.ElectionId == electionId);
+        var eligibleTrusteeHubAfterClose = await GetElectionHubViewAsync(client, Delta);
+        var trusteeHubEntryAfterClose = eligibleTrusteeHubAfterClose.Elections.Should()
+            .ContainSingle(x => x.Election.ElectionId == electionId)
+            .Subject;
+        trusteeHubEntryAfterClose.SuggestedActionReason.Should().Be(
+            "Submit the bound trustee tally share for close-counting.");
+
+        await SubmitFinalizationShareViaBlockchainAsync(client, electionId, TestIdentities.Bob);
+        await SubmitFinalizationShareViaBlockchainAsync(client, electionId, TestIdentities.Charlie);
+        await SubmitFinalizationShareViaBlockchainAsync(client, electionId, Delta);
+
+        var ownerAfterShares = await WaitForTallyReadyElectionAsync(client, electionId, TestIdentities.Alice);
+        ownerAfterShares.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+        ownerAfterShares.Election.TallyReadyArtifactId.Should().NotBeNullOrWhiteSpace();
+        ownerAfterShares.Election.UnofficialResultArtifactId.Should().NotBeNullOrWhiteSpace();
+        ownerAfterShares.FinalizationSessions.Should().NotContain(x =>
+            x.SessionPurpose == ElectionFinalizationSessionPurposeProto.FinalizationSessionPurposeCloseCounting &&
+            x.Status == ElectionFinalizationSessionStatusProto.FinalizationSessionAwaitingShares);
+
+        var trusteeAfterShares = await ReloadElectionAsync(client, electionId, Echo);
+        trusteeAfterShares.Election.TallyReadyArtifactId.Should().NotBeNullOrWhiteSpace();
+        trusteeAfterShares.Election.UnofficialResultArtifactId.Should().NotBeNullOrWhiteSpace();
+        var trusteeHubAfterShares = await GetElectionHubViewAsync(client, Echo);
+        trusteeHubAfterShares.Elections.Should().ContainSingle(x => x.Election.ElectionId == electionId);
+    }
+
+    [Fact]
+    public async Task GovernedClose_WithDevModeBallotPayload_AndPlaceholderTrusteeShares_CompletesCloseCountingAndKeepsReadsHealthy()
+    {
+        var client = await StartClientAsync();
+        var createResponse = await CreateTrusteeThresholdDraftAsync(client, "FEAT-103 Placeholder Trustee Share");
+        var electionId = createResponse.Election.ElectionId;
+
+        await InviteAndAcceptRolloutTrusteesAsync(electionId);
+        var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+
+        var openProposalId = await StartGovernedProposalAsync(
+            client,
+            electionId,
+            ElectionGovernedActionType.Open);
+        await ApproveProposalAsync(electionId, openProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(electionId, openProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(electionId, openProposalId, Delta);
+
+        await ClaimRosterEntryAsync(electionId, TestIdentities.Alice, "voter-alice");
+        await RegisterVotingCommitmentAsync(client, electionId, TestIdentities.Alice, "feat103-placeholder-share-commitment");
+        var castSubmitResponse = await SubmitAcceptedBallotCastViaBlockchainAsync(
+            client,
+            electionId,
+            TestIdentities.Alice,
+            "feat103-placeholder-share-cast",
+            useDevModePayload: true);
+        castSubmitResponse.Successfull.Should().BeTrue(castSubmitResponse.Message);
+
+        var closeProposalId = await StartGovernedProposalAsync(
+            client,
+            electionId,
+            ElectionGovernedActionType.Close);
+        await ApproveProposalAsync(electionId, closeProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(electionId, closeProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(electionId, closeProposalId, Delta);
+
+        var closedElection = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
+        closedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+        closedElection.FinalizationSessions.Should().ContainSingle(x =>
+            x.SessionPurpose == ElectionFinalizationSessionPurposeProto.FinalizationSessionPurposeCloseCounting &&
+            x.Status == ElectionFinalizationSessionStatusProto.FinalizationSessionAwaitingShares);
+
+        await SubmitFinalizationShareViaBlockchainAsync(client, electionId, TestIdentities.Bob, "aggregate-finalization-share");
+        await SubmitFinalizationShareViaBlockchainAsync(client, electionId, TestIdentities.Charlie, "aggregate-finalization-share");
+        await SubmitFinalizationShareViaBlockchainAsync(client, electionId, Delta, "aggregate-finalization-share");
+
+        await using (var scope = _node!.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+            var storedShares = await dbContext.Set<ElectionFinalizationShareRecord>()
+                .Where(x => x.ElectionId == new ElectionId(Guid.Parse(electionId)))
+                .OrderBy(x => x.SubmittedAt)
+                .ToListAsync();
+
+            storedShares.Should().HaveCount(3);
+            storedShares.Should().OnlyContain(x => x.CloseCountingJobId.HasValue);
+            storedShares.Should().OnlyContain(x => x.ExecutorKeyAlgorithm == "ecies-secp256k1-v1");
+            storedShares.Should().OnlyContain(x => x.ShareMaterial != "aggregate-finalization-share");
+        }
+
+        var ownerAfterShares = await WaitForTallyReadyElectionAsync(client, electionId, TestIdentities.Alice);
+        ownerAfterShares.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+        ownerAfterShares.Election.TallyReadyArtifactId.Should().NotBeNullOrWhiteSpace();
+        ownerAfterShares.Election.UnofficialResultArtifactId.Should().NotBeNullOrWhiteSpace();
+
+        await using (var scope = _node!.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+            var closeCountingJob = await dbContext.Set<ElectionCloseCountingJobRecord>()
+                .SingleAsync(x => x.ElectionId == new ElectionId(Guid.Parse(electionId)));
+            var executorEnvelope = await dbContext.Set<ElectionExecutorSessionKeyEnvelopeRecord>()
+                .SingleAsync(x => x.CloseCountingJobId == closeCountingJob.Id);
+            var storedShares = await dbContext.Set<ElectionFinalizationShareRecord>()
+                .Where(x => x.ElectionId == new ElectionId(Guid.Parse(electionId)))
+                .OrderBy(x => x.SubmittedAt)
+                .ToListAsync();
+
+            executorEnvelope.SealedExecutorSessionPrivateKey
+                .Should().Be(CloseCountingExecutorKeyRegistryConstants.DestroyedEnvelopeMarker);
+            executorEnvelope.DestroyedAt.Should().NotBeNull();
+            executorEnvelope.ExpiresAt.Should().NotBeNull();
+            storedShares.Should().HaveCount(3);
+            storedShares.Should().OnlyContain(x =>
+                x.ShareMaterial == ElectionFinalizationShareStorageConstants.RedactedStoredShareMaterial);
+            storedShares.Should().OnlyContain(x => !string.IsNullOrWhiteSpace(x.ShareMaterialHash));
+        }
+
+        var trusteeAfterShares = await ReloadElectionAsync(client, electionId, Echo);
+        trusteeAfterShares.Election.TallyReadyArtifactId.Should().NotBeNullOrWhiteSpace();
+        trusteeAfterShares.Election.UnofficialResultArtifactId.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
@@ -741,13 +1041,15 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         HushElections.HushElectionsClient client,
         string electionId,
         TestIdentity actor,
-        string submissionIdempotencyKey)
+        string submissionIdempotencyKey,
+        bool useDevModePayload = false)
     {
         var signedTransaction = await BuildAcceptedBallotCastTransactionAsync(
             client,
             electionId,
             actor,
-            submissionIdempotencyKey);
+            submissionIdempotencyKey,
+            useDevModePayload);
 
         return await SubmitBlockchainTransactionAsync(signedTransaction);
     }
@@ -756,7 +1058,8 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         HushElections.HushElectionsClient client,
         string electionId,
         TestIdentity actor,
-        string submissionIdempotencyKey)
+        string submissionIdempotencyKey,
+        bool useDevModePayload = false)
     {
         var votingView = await GetElectionVotingViewAsync(client, electionId, actor);
 
@@ -777,14 +1080,31 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         nonBlankChoiceIndexes.Should().NotBeEmpty();
 
         var choiceIndex = ResolveChoiceIndex(actor, submissionIdempotencyKey, nonBlankChoiceIndexes);
+        var selectedOption = votingView.Election.Options[choiceIndex];
+        var devArtifactSeed = Guid.NewGuid().ToString();
+        var devModeBallotPackage = useDevModePayload
+            ? BuildDevModeEncryptedBallotPackage(
+                electionId,
+                selectedOption.OptionId,
+                selectedOption.DisplayLabel,
+                selectedOption.ShortDescription,
+                selectedOption.BallotOrder,
+                selectedOption.IsBlankOption)
+            : null;
 
         return TestTransactionFactory.AcceptElectionBallotCast(
             actor,
             new ElectionId(Guid.Parse(electionId)),
             submissionIdempotencyKey,
-            BuildEncryptedBallotPackage(electionId, actor, submissionIdempotencyKey, selectionCount, choiceIndex),
-            BuildProofBundle(electionId, actor, submissionIdempotencyKey),
-            BuildBallotNullifier(electionId, actor, submissionIdempotencyKey),
+            useDevModePayload
+                ? devModeBallotPackage!
+                : BuildEncryptedBallotPackage(electionId, actor, submissionIdempotencyKey, selectionCount, choiceIndex),
+            useDevModePayload
+                ? BuildDevModeProofBundle(votingView, selectedOption.OptionId, devModeBallotPackage!)
+                : BuildProofBundle(electionId, actor, submissionIdempotencyKey),
+            useDevModePayload
+                ? BuildDevModeBallotNullifier(electionId, devArtifactSeed)
+                : BuildBallotNullifier(electionId, actor, submissionIdempotencyKey),
             Guid.Parse(votingView.OpenArtifactId),
             Convert.FromBase64String(votingView.EligibleSetHash),
             Guid.Parse(votingView.CeremonyVersionId),
@@ -795,7 +1115,8 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
     private async Task SubmitFinalizationShareViaBlockchainAsync(
         HushElections.HushElectionsClient client,
         string electionId,
-        TestIdentity trustee)
+        TestIdentity trustee,
+        string? shareMaterialOverride = null)
     {
         var currentResponse = await ReloadElectionAsync(client, electionId, TestIdentities.Alice);
         var session = currentResponse.FinalizationSessions
@@ -807,7 +1128,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         var ceremonyVersionId = string.IsNullOrWhiteSpace(session.CeremonySnapshot?.CeremonyVersionId)
             ? (Guid?)null
             : Guid.Parse(session.CeremonySnapshot.CeremonyVersionId);
-        var shareMaterial = BuildFinalizationShareMaterial(electionId, trustee, session);
+        var shareMaterial = shareMaterialOverride ?? BuildFinalizationShareMaterial(electionId, trustee, session);
 
         var submitResponse = await SubmitBlockchainTransactionAsync(
             TestTransactionFactory.SubmitElectionFinalizationShare(
@@ -823,7 +1144,16 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
                 session.TargetTallyId,
                 ceremonyVersionId,
                 session.CeremonySnapshot?.TallyPublicKeyFingerprint,
-                shareMaterial));
+                shareMaterial,
+                string.IsNullOrWhiteSpace(session.CloseCountingJobId)
+                    ? null
+                    : Guid.Parse(session.CloseCountingJobId),
+                string.IsNullOrWhiteSpace(session.ExecutorSessionPublicKey)
+                    ? null
+                    : session.ExecutorSessionPublicKey,
+                string.IsNullOrWhiteSpace(session.ExecutorKeyAlgorithm)
+                    ? null
+                    : session.ExecutorKeyAlgorithm));
         submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
     }
 
@@ -1189,12 +1519,63 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
             ElectionId: electionId,
             SubmissionIdempotencyKey: submissionIdempotencyKey.Trim()));
 
+    private static string BuildDevModeEncryptedBallotPackage(
+        string electionId,
+        string optionId,
+        string optionLabel,
+        string? optionDescription,
+        int ballotOrder,
+        bool isBlankOption)
+    {
+        var selectionFingerprint = ComputeLowerHexSha256(
+            $"election-dev-selection:v1:{electionId}:{optionId}:{optionLabel}");
+
+        return JsonSerializer.Serialize(new
+        {
+            mode = "election-dev-mode-v1",
+            packageType = "dev-protected-ballot",
+            electionId,
+            optionId,
+            optionLabel,
+            optionDescription = optionDescription ?? string.Empty,
+            ballotOrder,
+            isBlankOption,
+            selectionFingerprint,
+        });
+    }
+
+    private static string BuildDevModeProofBundle(
+        GetElectionVotingViewResponse votingView,
+        string optionId,
+        string ballotPackage)
+    {
+        var electionId = votingView.Election.ElectionId;
+        var ballotPackageHash = ComputeLowerHexSha256(ballotPackage);
+
+        return JsonSerializer.Serialize(new
+        {
+            mode = "election-dev-mode-v1",
+            proofType = "dev-election-proof",
+            electionId,
+            optionId,
+            ballotPackageHash,
+            openArtifactId = votingView.OpenArtifactId,
+            eligibleSetHash = votingView.EligibleSetHash,
+            ceremonyVersionId = votingView.CeremonyVersionId,
+            dkgProfileId = votingView.DkgProfileId,
+            tallyPublicKeyFingerprint = votingView.TallyPublicKeyFingerprint,
+        });
+    }
+
     private static string BuildBallotNullifier(
         string electionId,
         TestIdentity actor,
         string submissionIdempotencyKey) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             $"feat103:ballot-nullifier:{electionId}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}")));
+
+    private static string BuildDevModeBallotNullifier(string electionId, string devArtifactSeed) =>
+        ComputeLowerHexSha256($"election-dev-nullifier:v2:{electionId}:{devArtifactSeed}:nullifier");
 
     private static int ResolveChoiceIndex(
         TestIdentity actor,
@@ -1206,6 +1587,9 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         var scalar = new BigInteger(digest, isUnsigned: true, isBigEndian: true);
         return availableChoiceIndexes[(int)(scalar % availableChoiceIndexes.Count)];
     }
+
+    private static string ComputeLowerHexSha256(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty))).ToLowerInvariant();
 
     private static string BuildFinalizationShareMaterial(
         string electionId,

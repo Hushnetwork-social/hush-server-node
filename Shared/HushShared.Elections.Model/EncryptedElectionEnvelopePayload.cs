@@ -10,7 +10,11 @@ public record EncryptedElectionEnvelopePayload(
     string EnvelopeVersion,
     string NodeEncryptedElectionPrivateKey,
     string ActorEncryptedElectionPrivateKey,
-    string EncryptedPayload) : ITransactionPayloadKind;
+    string EncryptedPayload,
+    string ElectionPublicEncryptKey = "",
+    string ActionType = "",
+    JsonElement? ActionPayload = null,
+    JsonElement? ActionArtifacts = null) : ITransactionPayloadKind;
 
 public record EncryptedElectionActionEnvelope(
     string ActionType,
@@ -62,6 +66,9 @@ public record InviteElectionTrusteeActionPayload(
     string TrusteeEncryptedElectionPrivateKey,
     string? TrusteeDisplayName);
 
+public record InviteElectionTrusteeActionArtifacts(
+    string TrusteeEncryptedElectionPrivateKey);
+
 public record CreateElectionReportAccessGrantActionPayload(
     string ActorPublicAddress,
     string DesignatedAuditorPublicAddress);
@@ -106,7 +113,9 @@ public record FinalizeElectionActionPayload(
     byte[]? AcceptedBallotSetHash,
     byte[]? FinalEncryptedTallyHash);
 
-public record SubmitElectionFinalizationShareActionPayload(
+public record CloseCountingExecutorSubmissionPayload(
+    Guid CloseCountingJobId,
+    string ElectionId,
     Guid FinalizationSessionId,
     string ActorPublicAddress,
     int ShareIndex,
@@ -119,6 +128,23 @@ public record SubmitElectionFinalizationShareActionPayload(
     Guid? ClaimedCeremonyVersionId,
     string? ClaimedTallyPublicKeyFingerprint,
     string ShareMaterial);
+
+public record SubmitElectionFinalizationShareActionPayload(
+    Guid FinalizationSessionId,
+    string ActorPublicAddress,
+    int ShareIndex,
+    string ShareVersion,
+    ElectionFinalizationTargetType TargetType,
+    Guid ClaimedCloseArtifactId,
+    byte[]? ClaimedAcceptedBallotSetHash,
+    byte[]? ClaimedFinalEncryptedTallyHash,
+    string ClaimedTargetTallyId,
+    Guid? ClaimedCeremonyVersionId,
+    string? ClaimedTallyPublicKeyFingerprint,
+    string? ShareMaterial = null,
+    Guid? CloseCountingJobId = null,
+    string? ExecutorKeyAlgorithm = null,
+    string? EncryptedExecutorSubmission = null);
 
 public record StartElectionCeremonyActionPayload(
     string ActorPublicAddress,
@@ -217,7 +243,17 @@ public static class EncryptedElectionEnvelopePayloadHandler
     public static Guid EncryptedElectionEnvelopePayloadKind { get; } =
         Guid.Parse("e839953b-dc29-4d81-a44e-9694f6614943");
 
-    public const string CurrentEnvelopeVersion = "election-envelope-v1";
+    public const string LegacyEnvelopeVersion = "election-envelope-v1";
+    public const string DirectEnvelopeVersion = "election-envelope-v2";
+    public const string PrivacyHardenedEnvelopeVersion = "election-envelope-v2.1";
+    public const string CurrentEnvelopeVersion = PrivacyHardenedEnvelopeVersion;
+
+    public static bool IsDirectPublicEnvelopeVersion(string? envelopeVersion) =>
+        string.Equals(envelopeVersion, DirectEnvelopeVersion, StringComparison.Ordinal) ||
+        string.Equals(envelopeVersion, PrivacyHardenedEnvelopeVersion, StringComparison.Ordinal);
+
+    public static bool IsPrivacyHardenedEnvelopeVersion(string? envelopeVersion) =>
+        string.Equals(envelopeVersion, PrivacyHardenedEnvelopeVersion, StringComparison.Ordinal);
 
     public static UnsignedTransaction<EncryptedElectionEnvelopePayload> CreateNew(
         ElectionId electionId,
@@ -234,4 +270,62 @@ public static class EncryptedElectionEnvelopePayloadHandler
                 nodeEncryptedElectionPrivateKey,
                 actorEncryptedElectionPrivateKey,
                 encryptedPayload));
+
+    public static UnsignedTransaction<EncryptedElectionEnvelopePayload> CreateNewV2(
+        ElectionId electionId,
+        string actorEncryptedElectionPrivateKey,
+        string electionPublicEncryptKey,
+        string encryptedPayload,
+        string actionType,
+        JsonElement actionPayload) =>
+        CreateNewDirect(
+            electionId,
+            DirectEnvelopeVersion,
+            actorEncryptedElectionPrivateKey,
+            electionPublicEncryptKey,
+            encryptedPayload,
+            actionType,
+            actionPayload,
+            actionArtifacts: null);
+
+    public static UnsignedTransaction<EncryptedElectionEnvelopePayload> CreateNewV21(
+        ElectionId electionId,
+        string actorEncryptedElectionPrivateKey,
+        string electionPublicEncryptKey,
+        string encryptedPayload,
+        string actionType,
+        JsonElement actionPayload,
+        JsonElement? actionArtifacts = null) =>
+        CreateNewDirect(
+            electionId,
+            CurrentEnvelopeVersion,
+            actorEncryptedElectionPrivateKey,
+            electionPublicEncryptKey,
+            encryptedPayload,
+            actionType,
+            actionPayload,
+            actionArtifacts);
+
+    private static UnsignedTransaction<EncryptedElectionEnvelopePayload> CreateNewDirect(
+        ElectionId electionId,
+        string envelopeVersion,
+        string actorEncryptedElectionPrivateKey,
+        string electionPublicEncryptKey,
+        string encryptedPayload,
+        string actionType,
+        JsonElement actionPayload,
+        JsonElement? actionArtifacts) =>
+        UnsignedTransactionHandler.CreateNew(
+            EncryptedElectionEnvelopePayloadKind,
+            Timestamp.Current,
+            new EncryptedElectionEnvelopePayload(
+                electionId,
+                envelopeVersion,
+                string.Empty,
+                actorEncryptedElectionPrivateKey,
+                encryptedPayload,
+                electionPublicEncryptKey,
+                actionType,
+                actionPayload,
+                actionArtifacts));
 }

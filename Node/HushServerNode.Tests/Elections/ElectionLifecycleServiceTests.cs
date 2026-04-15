@@ -1,12 +1,15 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using HushNode.Caching;
+using HushNode.Credentials;
 using HushNode.Elections;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Olimpo;
 using Olimpo.EntityFramework.Persistency;
 using Xunit;
 
@@ -14,6 +17,9 @@ namespace HushServerNode.Tests.Elections;
 
 public class ElectionLifecycleServiceTests
 {
+    private const string ExecutorKeyAlgorithm = "ecies-secp256k1-v1";
+    private static readonly CredentialsProfile TestNodeCredentials = CreateTestNodeCredentials();
+
     [Fact]
     public async Task CreateDraftAsync_WithValidRequest_PersistsDraftHistoryAndWarnings()
     {
@@ -2034,56 +2040,207 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
-    public async Task SubmitFinalizationShareAsync_WhenThresholdReached_PublishesUnofficialResultAndStoresReleaseEvidence()
+    public async Task SubmitFinalizationShareAsync_WhenThresholdReached_MarksCloseCountingJobAndDefersExecution()
     {
         var store = new ElectionStore();
-        var scenario = SeedClosedTrusteeElectionForCloseCountingSession(store, requiredApprovalCount: 1);
+        var closeCountingExecutorKeyRegistry = new InMemoryCloseCountingExecutorKeyRegistry();
+        var scenario = SeedClosedTrusteeElectionForCloseCountingSession(
+            store,
+            requiredApprovalCount: 1,
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
         var service = CreateService(
             store,
-            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash));
-        var session = scenario.Session;
+            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
         var shareTransactionId = Guid.NewGuid();
 
-        var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
-            ElectionId: scenario.Election.ElectionId,
-            FinalizationSessionId: session.Id,
-            ActorPublicAddress: "trustee-a",
-            ShareIndex: 1,
-            ShareVersion: "share-v1",
-            TargetType: ElectionFinalizationTargetType.AggregateTally,
-            ClaimedCloseArtifactId: session.CloseArtifactId,
-            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
-            ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
-            ClaimedTargetTallyId: session.TargetTallyId,
-            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
-            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
-            ShareMaterial: "ciphertext-share-material",
-            SourceTransactionId: shareTransactionId,
-            SourceBlockHeight: 71,
-            SourceBlockId: Guid.NewGuid()));
+        var request = CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            sourceTransactionId: shareTransactionId,
+            sourceBlockHeight: 71,
+            sourceBlockId: Guid.NewGuid());
+
+        var result = await service.SubmitFinalizationShareAsync(request);
 
         result.IsSuccess.Should().BeTrue();
         result.Election.Should().NotBeNull();
         result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Closed);
-        result.BoundaryArtifact.Should().NotBeNull();
-        result.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
-        result.BoundaryArtifact.SourceTransactionId.Should().Be(shareTransactionId);
-        result.BoundaryArtifact.SourceBlockHeight.Should().Be(71);
+        result.BoundaryArtifact.Should().BeNull();
         result.FinalizationShare.Should().NotBeNull();
         result.FinalizationShare!.Status.Should().Be(ElectionFinalizationShareStatus.Accepted);
         result.FinalizationShare.SourceTransactionId.Should().Be(shareTransactionId);
         result.FinalizationSession.Should().NotBeNull();
+        result.FinalizationSession!.Status.Should().Be(ElectionFinalizationSessionStatus.AwaitingShares);
+        result.FinalizationReleaseEvidence.Should().BeNull();
+        store.FinalizationShares.Should().ContainSingle();
+        store.FinalizationShares[0].CloseCountingJobId.Should().Be(scenario.CloseCountingJob.Id);
+        store.FinalizationShares[0].ExecutorKeyAlgorithm.Should().Be(ExecutorKeyAlgorithm);
+        store.FinalizationShares[0].ShareMaterial.Should().NotBe("ciphertext-share-material");
+        store.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+        store.CloseCountingJobs[scenario.CloseCountingJob.Id].Status.Should().Be(ElectionCloseCountingJobStatus.ThresholdReached);
+        store.CloseCountingJobs[scenario.CloseCountingJob.Id].ThresholdReachedAt.Should().NotBeNull();
+        store.CloseCountingJobs[scenario.CloseCountingJob.Id].LatestTransactionId.Should().Be(shareTransactionId);
+        store.CloseCountingJobs[scenario.CloseCountingJob.Id].LatestBlockHeight.Should().Be(71);
+        store.Elections[scenario.Election.ElectionId].TallyReadyArtifactId.Should().BeNull();
+        store.Elections[scenario.Election.ElectionId].UnofficialResultArtifactId.Should().BeNull();
+        store.Elections[scenario.Election.ElectionId].FinalizeArtifactId.Should().BeNull();
+        store.Elections[scenario.Election.ElectionId].ClosedProgressStatus.Should().Be(ElectionClosedProgressStatus.TallyCalculationInProgress);
+        store.ResultArtifacts.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ExecuteCloseCountingJobAsync_WhenThresholdReached_PublishesUnofficialResultAndStoresReleaseEvidence()
+    {
+        var store = new ElectionStore();
+        var closeCountingExecutorKeyRegistry = new InMemoryCloseCountingExecutorKeyRegistry();
+        var scenario = SeedClosedTrusteeElectionForCloseCountingSession(
+            store,
+            requiredApprovalCount: 1,
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
+        var service = CreateService(
+            store,
+            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
+        var shareTransactionId = Guid.NewGuid();
+
+        var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            sourceTransactionId: shareTransactionId,
+            sourceBlockHeight: 71,
+            sourceBlockId: Guid.NewGuid()));
+
+        submitResult.IsSuccess.Should().BeTrue();
+
+        var executeResult = await service.ExecuteCloseCountingJobAsync(new ExecuteElectionCloseCountingJobRequest(
+            scenario.CloseCountingJob.Id,
+            LeaseHolderId: "tally-executor:test-node"));
+
+        executeResult.IsSuccess.Should().BeTrue();
+        executeResult.Election.Should().NotBeNull();
+        executeResult.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+        executeResult.BoundaryArtifact.Should().NotBeNull();
+        executeResult.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
+        executeResult.FinalizationSession.Should().NotBeNull();
+        executeResult.FinalizationSession!.Status.Should().Be(ElectionFinalizationSessionStatus.Completed);
+        executeResult.FinalizationReleaseEvidence.Should().NotBeNull();
+        executeResult.FinalizationReleaseEvidence!.AcceptedShareCount.Should().Be(1);
+        store.FinalizationReleaseEvidenceRecords.Should().ContainSingle();
+        store.FinalizationReleaseEvidenceRecords[0].FinalizationSessionId.Should().Be(scenario.Session.Id);
+        store.Elections[scenario.Election.ElectionId].TallyReadyArtifactId.Should().Be(executeResult.BoundaryArtifact.Id);
+        store.Elections[scenario.Election.ElectionId].UnofficialResultArtifactId.Should().NotBeNull();
+        store.CloseCountingJobs[scenario.CloseCountingJob.Id].Status.Should().Be(ElectionCloseCountingJobStatus.Completed);
+        store.TallyExecutorLeases[scenario.CloseCountingJob.Id].CompletionReason.Should().Be("close-counting-completed");
+        store.ExecutorSessionKeyEnvelopes[scenario.CloseCountingJob.Id].SealedExecutorSessionPrivateKey
+            .Should().Be(CloseCountingExecutorKeyRegistryConstants.DestroyedEnvelopeMarker);
+        store.ExecutorSessionKeyEnvelopes[scenario.CloseCountingJob.Id].DestroyedAt.Should().NotBeNull();
+        closeCountingExecutorKeyRegistry.TryGet(scenario.CloseCountingJob.Id, out _).Should().BeFalse();
+        store.ResultArtifacts.Should().ContainSingle(x => x.ArtifactKind == ElectionResultArtifactKind.Unofficial);
+        store.FinalizationShares.Should().ContainSingle();
+        store.FinalizationShares[0].ShareMaterial.Should().Be(ElectionFinalizationShareStorageConstants.RedactedStoredShareMaterial);
+        store.FinalizationShares[0].ShareMaterialHash.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task ExecuteCloseCountingJobAsync_WhenThresholdReachedWithDevModePublishedBallots_UsesDevModeFallback()
+    {
+        var store = new ElectionStore();
+        var closeCountingExecutorKeyRegistry = new InMemoryCloseCountingExecutorKeyRegistry();
+        var scenario = SeedClosedTrusteeElectionForCloseCountingSession(
+            store,
+            requiredApprovalCount: 1,
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
+        var expectedTallyHash = ComputeDevModePublishedTallyHashForTests(
+            scenario.Election,
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["yes"] = 2,
+                ["no"] = 1,
+            });
+        var updatedSession = scenario.Session with
+        {
+            FinalEncryptedTallyHash = expectedTallyHash,
+        };
+        store.FinalizationSessions[updatedSession.Id] = updatedSession;
+        scenario = scenario with
+        {
+            Session = updatedSession,
+            FinalEncryptedTallyHash = expectedTallyHash,
+        };
+
+        store.PublishedBallots.Clear();
+        store.PublishedBallots.Add(ElectionModelFactory.CreatePublishedBallotRecord(
+            scenario.Election.ElectionId,
+            publicationSequence: 1,
+            encryptedBallotPackage: CreateDevModePublishedBallotPackageForTests(
+                scenario.Election,
+                "yes",
+                ballotOrder: 1,
+                actorPublicAddress: "voter-a"),
+            proofBundle: "proof-1",
+            publishedAt: DateTime.UtcNow.AddMinutes(-6)));
+        store.PublishedBallots.Add(ElectionModelFactory.CreatePublishedBallotRecord(
+            scenario.Election.ElectionId,
+            publicationSequence: 2,
+            encryptedBallotPackage: CreateDevModePublishedBallotPackageForTests(
+                scenario.Election,
+                "no",
+                ballotOrder: 2,
+                actorPublicAddress: "voter-b"),
+            proofBundle: "proof-2",
+            publishedAt: DateTime.UtcNow.AddMinutes(-6)));
+        store.PublishedBallots.Add(ElectionModelFactory.CreatePublishedBallotRecord(
+            scenario.Election.ElectionId,
+            publicationSequence: 3,
+            encryptedBallotPackage: CreateDevModePublishedBallotPackageForTests(
+                scenario.Election,
+                "yes",
+                ballotOrder: 1,
+                actorPublicAddress: "voter-c"),
+            proofBundle: "proof-3",
+            publishedAt: DateTime.UtcNow.AddMinutes(-6)));
+
+        var service = CreateService(
+            store,
+            electionResultCryptoService: new DevModeFallbackElectionResultCryptoService(),
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
+        var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally));
+
+        submitResult.IsSuccess.Should().BeTrue();
+
+        var result = await service.ExecuteCloseCountingJobAsync(new ExecuteElectionCloseCountingJobRequest(
+            scenario.CloseCountingJob.Id,
+            LeaseHolderId: "tally-executor:test-node"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.BoundaryArtifact.Should().NotBeNull();
+        result.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
+        result.BoundaryArtifact.FinalEncryptedTallyHash.Should().Equal(expectedTallyHash);
+        result.FinalizationSession.Should().NotBeNull();
         result.FinalizationSession!.Status.Should().Be(ElectionFinalizationSessionStatus.Completed);
         result.FinalizationReleaseEvidence.Should().NotBeNull();
-        result.FinalizationReleaseEvidence!.AcceptedShareCount.Should().Be(1);
-        result.FinalizationReleaseEvidence.SourceTransactionId.Should().Be(shareTransactionId);
-        store.FinalizationShares.Should().ContainSingle();
-        store.FinalizationReleaseEvidenceRecords.Should().ContainSingle();
-        store.FinalizationReleaseEvidenceRecords[0].FinalizationSessionId.Should().Be(session.Id);
-        store.Elections[scenario.Election.ElectionId].TallyReadyArtifactId.Should().Be(result.BoundaryArtifact.Id);
-        store.Elections[scenario.Election.ElectionId].UnofficialResultArtifactId.Should().NotBeNull();
-        store.Elections[scenario.Election.ElectionId].FinalizeArtifactId.Should().BeNull();
+        store.ExecutorSessionKeyEnvelopes[scenario.CloseCountingJob.Id].DestroyedAt.Should().NotBeNull();
+        closeCountingExecutorKeyRegistry.TryGet(scenario.CloseCountingJob.Id, out _).Should().BeFalse();
         store.ResultArtifacts.Should().ContainSingle(x => x.ArtifactKind == ElectionResultArtifactKind.Unofficial);
+        store.ResultArtifacts[0].NamedOptionResults.Select(x => (x.OptionId, x.VoteCount))
+            .Should().Equal(("yes", 2), ("no", 1));
+        store.ResultArtifacts[0].BlankCount.Should().Be(0);
+        store.ResultArtifacts[0].TotalVotedCount.Should().Be(3);
     }
 
     [Fact]
@@ -2141,20 +2298,13 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash));
         var session = scenario.Session;
 
-        var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
-            ElectionId: scenario.Election.ElectionId,
-            FinalizationSessionId: session.Id,
-            ActorPublicAddress: "trustee-a",
-            ShareIndex: 1,
-            ShareVersion: "share-v1",
-            TargetType: ElectionFinalizationTargetType.SingleBallot,
-            ClaimedCloseArtifactId: session.CloseArtifactId,
-            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
-            ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
-            ClaimedTargetTallyId: session.TargetTallyId,
-            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
-            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
-            ShareMaterial: "ciphertext-share-material"));
+        var result = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.SingleBallot));
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
@@ -2177,20 +2327,14 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash));
         var session = scenario.Session;
 
-        var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
-            ElectionId: scenario.Election.ElectionId,
-            FinalizationSessionId: session.Id,
-            ActorPublicAddress: "trustee-a",
-            ShareIndex: 1,
-            ShareVersion: "share-v1",
-            TargetType: ElectionFinalizationTargetType.AggregateTally,
-            ClaimedCloseArtifactId: session.CloseArtifactId,
-            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
-            ClaimedFinalEncryptedTallyHash: [99, 98, 97],
-            ClaimedTargetTallyId: session.TargetTallyId,
-            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
-            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
-            ShareMaterial: "ciphertext-share-material"));
+        var result = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            claimedFinalEncryptedTallyHash: [99, 98, 97]));
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
@@ -2207,46 +2351,37 @@ public class ElectionLifecycleServiceTests
     public async Task SubmitFinalizationShareAsync_WithDuplicateAcceptedShare_PersistsRejectedShareAndKeepsElectionClosed()
     {
         var store = new ElectionStore();
-        var scenario = SeedClosedTrusteeElectionForCloseCountingSession(store, requiredApprovalCount: 2);
+        var closeCountingExecutorKeyRegistry = new InMemoryCloseCountingExecutorKeyRegistry();
+        var scenario = SeedClosedTrusteeElectionForCloseCountingSession(
+            store,
+            requiredApprovalCount: 2,
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
         var service = CreateService(
             store,
-            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash));
+            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
         var session = scenario.Session;
 
-        var firstResult = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
-            ElectionId: scenario.Election.ElectionId,
-            FinalizationSessionId: session.Id,
-            ActorPublicAddress: "trustee-a",
-            ShareIndex: 1,
-            ShareVersion: "share-v1",
-            TargetType: ElectionFinalizationTargetType.AggregateTally,
-            ClaimedCloseArtifactId: session.CloseArtifactId,
-            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
-            ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
-            ClaimedTargetTallyId: session.TargetTallyId,
-            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
-            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
-            ShareMaterial: "ciphertext-share-material"));
+        var firstResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally));
 
         firstResult.IsSuccess.Should().BeTrue();
         firstResult.FinalizationShare.Should().NotBeNull();
         firstResult.FinalizationShare!.Status.Should().Be(ElectionFinalizationShareStatus.Accepted);
         store.Elections[scenario.Election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Closed);
 
-        var duplicateResult = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
-            ElectionId: scenario.Election.ElectionId,
-            FinalizationSessionId: session.Id,
-            ActorPublicAddress: "trustee-a",
-            ShareIndex: 1,
-            ShareVersion: "share-v1",
-            TargetType: ElectionFinalizationTargetType.AggregateTally,
-            ClaimedCloseArtifactId: session.CloseArtifactId,
-            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
-            ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
-            ClaimedTargetTallyId: session.TargetTallyId,
-            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
-            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
-            ShareMaterial: "ciphertext-share-material"));
+        var duplicateResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally));
 
         duplicateResult.IsSuccess.Should().BeFalse();
         duplicateResult.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
@@ -2263,30 +2398,28 @@ public class ElectionLifecycleServiceTests
     public async Task SubmitFinalizationShareAsync_WithMalformedShare_PersistsRejectedShareAndLeavesElectionClosed()
     {
         var store = new ElectionStore();
-        var scenario = SeedClosedTrusteeElectionForCloseCountingSession(store, requiredApprovalCount: 1);
+        var closeCountingExecutorKeyRegistry = new InMemoryCloseCountingExecutorKeyRegistry();
+        var scenario = SeedClosedTrusteeElectionForCloseCountingSession(
+            store,
+            requiredApprovalCount: 1,
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
         var service = CreateService(
             store,
-            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash));
+            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
         var session = scenario.Session;
 
-        var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
-            ElectionId: scenario.Election.ElectionId,
-            FinalizationSessionId: session.Id,
-            ActorPublicAddress: "trustee-a",
-            ShareIndex: 1,
-            ShareVersion: "share-v1",
-            TargetType: ElectionFinalizationTargetType.AggregateTally,
-            ClaimedCloseArtifactId: session.CloseArtifactId,
-            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
-            ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
-            ClaimedTargetTallyId: session.TargetTallyId,
-            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
-            ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
-            ShareMaterial: ""));
+        var result = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: string.Empty,
+            targetType: ElectionFinalizationTargetType.AggregateTally));
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
-        result.ErrorMessage.Should().Contain("missing required share or target fields");
+        result.ErrorMessage.Should().Contain("did not contain any share material");
         store.FinalizationShares.Should().ContainSingle();
         store.FinalizationShares[0].Status.Should().Be(ElectionFinalizationShareStatus.Rejected);
         store.FinalizationShares[0].FailureCode.Should().Be("MALFORMED_SHARE");
@@ -2305,6 +2438,36 @@ public class ElectionLifecycleServiceTests
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash));
         var session = scenario.Session;
 
+        var result = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            claimedCeremonyVersionId: Guid.NewGuid()));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        result.ErrorMessage.Should().Contain("exact session ceremony binding");
+        store.FinalizationShares.Should().ContainSingle();
+        store.FinalizationShares[0].Status.Should().Be(ElectionFinalizationShareStatus.Rejected);
+        store.FinalizationShares[0].FailureCode.Should().Be("WRONG_TARGET_SHARE");
+        store.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
+        store.Elections[scenario.Election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+        store.FinalizationSessions[session.Id].Status.Should().Be(ElectionFinalizationSessionStatus.AwaitingShares);
+    }
+
+    [Fact]
+    public async Task SubmitFinalizationShareAsync_WithPlaintextShareMaterial_RejectsAndSanitizesStoredRecord()
+    {
+        var store = new ElectionStore();
+        var scenario = SeedClosedTrusteeElectionForCloseCountingSession(store, requiredApprovalCount: 1);
+        var service = CreateService(
+            store,
+            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash));
+        var session = scenario.Session;
+
         var result = await service.SubmitFinalizationShareAsync(new SubmitElectionFinalizationShareRequest(
             ElectionId: scenario.Election.ElectionId,
             FinalizationSessionId: session.Id,
@@ -2316,19 +2479,19 @@ public class ElectionLifecycleServiceTests
             ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
             ClaimedFinalEncryptedTallyHash: scenario.FinalEncryptedTallyHash,
             ClaimedTargetTallyId: session.TargetTallyId,
-            ClaimedCeremonyVersionId: Guid.NewGuid(),
+            ClaimedCeremonyVersionId: scenario.CeremonyVersion.Id,
             ClaimedTallyPublicKeyFingerprint: scenario.CeremonyVersion.TallyPublicKeyFingerprint,
             ShareMaterial: "ciphertext-share-material"));
 
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
-        result.ErrorMessage.Should().Contain("exact session ceremony binding");
+        result.ErrorMessage.Should().Contain("Plaintext trustee share material");
         store.FinalizationShares.Should().ContainSingle();
         store.FinalizationShares[0].Status.Should().Be(ElectionFinalizationShareStatus.Rejected);
-        store.FinalizationShares[0].FailureCode.Should().Be("WRONG_TARGET_SHARE");
-        store.FinalizationReleaseEvidenceRecords.Should().BeEmpty();
-        store.Elections[scenario.Election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Closed);
-        store.FinalizationSessions[session.Id].Status.Should().Be(ElectionFinalizationSessionStatus.AwaitingShares);
+        store.FinalizationShares[0].FailureCode.Should().Be("PLAINTEXT_SHARE_FORBIDDEN");
+        store.FinalizationShares[0].ShareMaterial.Should().Be(
+            ElectionFinalizationShareStorageConstants.RejectedPlaintextStoredShareMaterial);
+        store.FinalizationShares[0].ShareMaterial.Should().NotBe("ciphertext-share-material");
     }
 
     [Fact]
@@ -2656,14 +2819,17 @@ public class ElectionLifecycleServiceTests
         ElectionCeremonyOptions? ceremonyOptions = null,
         IElectionCastIdempotencyCacheService? castIdempotencyCacheService = null,
         IElectionResultCryptoService? electionResultCryptoService = null,
-        IElectionReportPackageService? electionReportPackageService = null) =>
+        IElectionReportPackageService? electionReportPackageService = null,
+        ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null) =>
         new(
             new FakeUnitOfWorkProvider(store),
             NullLogger<ElectionLifecycleService>.Instance,
             ceremonyOptions ?? new ElectionCeremonyOptions(),
             castIdempotencyCacheService,
             electionResultCryptoService,
-            electionReportPackageService);
+            electionReportPackageService,
+            new FakeCredentialsProvider(),
+            closeCountingExecutorKeyRegistry);
 
     private static async Task<AdminFinalizeReadyContext> SeedClosedAdminElectionReadyForFinalizeAsync(ElectionStore store)
     {
@@ -3120,8 +3286,10 @@ public class ElectionLifecycleServiceTests
     private static TrusteeCloseCountingScenario SeedClosedTrusteeElectionForCloseCountingSession(
         ElectionStore store,
         int requiredApprovalCount,
-        byte[]? finalEncryptedTallyHash = null)
+        byte[]? finalEncryptedTallyHash = null,
+        ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null)
     {
+        closeCountingExecutorKeyRegistry ??= new InMemoryCloseCountingExecutorKeyRegistry();
         var draftElection = CreateTrusteeElection(requiredApprovalCount: requiredApprovalCount);
         var trusteeA = CreateAcceptedTrusteeInvitation(draftElection, "trustee-a", "Alice");
         var trusteeB = CreateAcceptedTrusteeInvitation(draftElection, "trustee-b", "Bob");
@@ -3224,6 +3392,17 @@ public class ElectionLifecycleServiceTests
             ],
             "owner-address",
             createdAt: DateTime.UtcNow.AddMinutes(-4));
+        var closeCountingJob = ElectionModelFactory.CreateCloseCountingJob(
+            session,
+            createdAt: DateTime.UtcNow.AddMinutes(-4));
+        var executorSessionKeys = closeCountingExecutorKeyRegistry.Create(closeCountingJob.Id, ExecutorKeyAlgorithm);
+        var executorSessionKeyEnvelope = ElectionModelFactory.CreateExecutorSessionKeyEnvelope(
+            closeCountingJob.Id,
+            executorSessionKeys.PublicKey,
+            CloseCountingExecutorKeyRegistryConstants.MemoryOnlyEnvelopeMarker,
+            ExecutorKeyAlgorithm,
+            createdAt: DateTime.UtcNow.AddMinutes(-4),
+            sealedByServiceIdentity: "election-lifecycle-tests");
 
         store.Elections[storedElection.ElectionId] = storedElection;
         store.TrusteeInvitations[trusteeA.Id] = trusteeA;
@@ -3244,10 +3423,15 @@ public class ElectionLifecycleServiceTests
         store.AcceptedBallots.AddRange(acceptedBallots);
         store.PublishedBallots.AddRange(publishedBallots);
         store.FinalizationSessions[session.Id] = session;
+        store.CloseCountingJobs[closeCountingJob.Id] = closeCountingJob;
+        store.ExecutorSessionKeyEnvelopes[closeCountingJob.Id] = executorSessionKeyEnvelope;
 
         return new TrusteeCloseCountingScenario(
             storedElection,
             session,
+            closeCountingJob,
+            executorSessionKeyEnvelope,
+            closeCountingExecutorKeyRegistry,
             ceremonyVersion,
             openArtifact,
             closeArtifact,
@@ -3256,6 +3440,60 @@ public class ElectionLifecycleServiceTests
             publishedBallots,
             acceptedBallotHash,
             resolvedFinalEncryptedTallyHash);
+    }
+
+    private static SubmitElectionFinalizationShareRequest CreateExecutorBoundFinalizationShareRequest(
+        TrusteeCloseCountingScenario scenario,
+        string actorPublicAddress,
+        int shareIndex,
+        string shareVersion,
+        string shareMaterial,
+        ElectionFinalizationTargetType targetType,
+        Guid? claimedCeremonyVersionId = null,
+        string? claimedTallyPublicKeyFingerprint = null,
+        byte[]? claimedFinalEncryptedTallyHash = null,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null)
+    {
+        var encryptedExecutorSubmission = EncryptKeys.Encrypt(
+            JsonSerializer.Serialize(new CloseCountingExecutorSubmissionPayload(
+                scenario.CloseCountingJob.Id,
+                scenario.Election.ElectionId.ToString(),
+                scenario.Session.Id,
+                actorPublicAddress,
+                shareIndex,
+                shareVersion,
+                targetType,
+                scenario.Session.CloseArtifactId,
+                scenario.AcceptedBallotSetHash,
+                claimedFinalEncryptedTallyHash ?? scenario.FinalEncryptedTallyHash,
+                scenario.Session.TargetTallyId,
+                claimedCeremonyVersionId ?? scenario.CeremonyVersion.Id,
+                claimedTallyPublicKeyFingerprint ?? scenario.CeremonyVersion.TallyPublicKeyFingerprint,
+                shareMaterial)),
+            scenario.ExecutorSessionKeyEnvelope.ExecutorSessionPublicKey);
+
+        return new SubmitElectionFinalizationShareRequest(
+            ElectionId: scenario.Election.ElectionId,
+            FinalizationSessionId: scenario.Session.Id,
+            ActorPublicAddress: actorPublicAddress,
+            ShareIndex: shareIndex,
+            ShareVersion: shareVersion,
+            TargetType: targetType,
+            ClaimedCloseArtifactId: scenario.Session.CloseArtifactId,
+            ClaimedAcceptedBallotSetHash: scenario.AcceptedBallotSetHash,
+            ClaimedFinalEncryptedTallyHash: claimedFinalEncryptedTallyHash ?? scenario.FinalEncryptedTallyHash,
+            ClaimedTargetTallyId: scenario.Session.TargetTallyId,
+            ClaimedCeremonyVersionId: claimedCeremonyVersionId ?? scenario.CeremonyVersion.Id,
+            ClaimedTallyPublicKeyFingerprint: claimedTallyPublicKeyFingerprint ?? scenario.CeremonyVersion.TallyPublicKeyFingerprint,
+            ShareMaterial: null,
+            CloseCountingJobId: scenario.CloseCountingJob.Id,
+            ExecutorKeyAlgorithm: scenario.ExecutorSessionKeyEnvelope.KeyAlgorithm,
+            EncryptedExecutorSubmission: encryptedExecutorSubmission,
+            SourceTransactionId: sourceTransactionId,
+            SourceBlockHeight: sourceBlockHeight,
+            SourceBlockId: sourceBlockId);
     }
 
     private static ElectionRecord CreateTrusteeElection(
@@ -3483,6 +3721,40 @@ public class ElectionLifecycleServiceTests
     private static string ComputeHexSha256ForTests(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty)));
 
+    private static string CreateDevModePublishedBallotPackageForTests(
+        ElectionRecord election,
+        string optionId,
+        int ballotOrder,
+        string actorPublicAddress,
+        bool isBlankOption = false,
+        string? optionLabel = null) =>
+        JsonSerializer.Serialize(new
+        {
+            mode = "election-dev-mode-v1",
+            packageType = "dev-published-ballot",
+            electionId = election.ElectionId.ToString(),
+            optionId,
+            optionLabel = optionLabel ?? optionId,
+            optionDescription = string.Empty,
+            ballotOrder,
+            isBlankOption,
+            publicationNonce = ComputeHexSha256ForTests($"{actorPublicAddress}:{optionId}:{ballotOrder}"),
+        });
+
+    private static byte[] ComputeDevModePublishedTallyHashForTests(
+        ElectionRecord election,
+        IReadOnlyDictionary<string, int> countsByOptionId)
+    {
+        var tallyPayload = string.Join(
+            '\n',
+            election.Options
+                .OrderBy(x => x.BallotOrder)
+                .Select(x => $"{x.OptionId}|{countsByOptionId.GetValueOrDefault(x.OptionId, 0)}"));
+
+        return SHA256.HashData(
+            Encoding.UTF8.GetBytes($"admin-only-dev-tally:v1|{election.ElectionId}|{tallyPayload}"));
+    }
+
     private sealed record TrusteeFinalizationScenario(
         ElectionRecord Election,
         ElectionGovernedProposalRecord Proposal,
@@ -3497,6 +3769,9 @@ public class ElectionLifecycleServiceTests
     private sealed record TrusteeCloseCountingScenario(
         ElectionRecord Election,
         ElectionFinalizationSessionRecord Session,
+        ElectionCloseCountingJobRecord CloseCountingJob,
+        ElectionExecutorSessionKeyEnvelopeRecord ExecutorSessionKeyEnvelope,
+        ICloseCountingExecutorKeyRegistry CloseCountingExecutorKeyRegistry,
         ElectionCeremonyVersionRecord CeremonyVersion,
         ElectionBoundaryArtifactRecord OpenArtifact,
         ElectionBoundaryArtifactRecord CloseArtifact,
@@ -3541,6 +3816,9 @@ public class ElectionLifecycleServiceTests
         public List<ElectionCeremonyMessageEnvelopeRecord> CeremonyMessageEnvelopes { get; } = [];
         public Dictionary<Guid, ElectionCeremonyTrusteeStateRecord> CeremonyTrusteeStates { get; } = [];
         public Dictionary<Guid, ElectionCeremonyShareCustodyRecord> CeremonyShareCustodyRecords { get; } = [];
+        public Dictionary<Guid, ElectionCloseCountingJobRecord> CloseCountingJobs { get; } = [];
+        public Dictionary<Guid, ElectionExecutorSessionKeyEnvelopeRecord> ExecutorSessionKeyEnvelopes { get; } = [];
+        public Dictionary<Guid, ElectionTallyExecutorLeaseRecord> TallyExecutorLeases { get; } = [];
         public Dictionary<Guid, ElectionFinalizationSessionRecord> FinalizationSessions { get; } = [];
         public List<ElectionFinalizationShareRecord> FinalizationShares { get; } = [];
         public List<ElectionFinalizationReleaseEvidenceRecord> FinalizationReleaseEvidenceRecords { get; } = [];
@@ -3549,6 +3827,24 @@ public class ElectionLifecycleServiceTests
         public List<ElectionReportAccessGrantRecord> ReportAccessGrants { get; } = [];
         public TaskCompletionSource<bool>? GetElectionForUpdateEntered { get; set; }
         public TaskCompletionSource<bool>? ReleaseGetElectionForUpdate { get; set; }
+    }
+
+    private static CredentialsProfile CreateTestNodeCredentials()
+    {
+        var encryptKeys = new EncryptKeys();
+        return new CredentialsProfile
+        {
+            ProfileName = "lifecycle-test-node",
+            PublicSigningAddress = "lifecycle-test-signer",
+            PrivateSigningKey = "lifecycle-test-private-signing-key",
+            PublicEncryptAddress = encryptKeys.PublicKey,
+            PrivateEncryptKey = encryptKeys.PrivateKey,
+        };
+    }
+
+    private sealed class FakeCredentialsProvider : ICredentialsProvider
+    {
+        public CredentialsProfile GetCredentials() => TestNodeCredentials;
     }
 
     private sealed record AdminFinalizeReadyContext(
@@ -3566,6 +3862,20 @@ public class ElectionLifecycleServiceTests
             IReadOnlyList<ElectionFinalizationShareRecord> acceptedShares,
             int maxSupportedCount) =>
             ElectionAggregateReleaseResult.Success(finalEncryptedTallyHash, decodedCounts);
+
+        public string EncryptForElectionParticipants(string plaintextPayload, string nodeEncryptedElectionPrivateKey) =>
+            $"enc::{plaintextPayload}";
+    }
+
+    private sealed class DevModeFallbackElectionResultCryptoService : IElectionResultCryptoService
+    {
+        public ElectionAggregateReleaseResult TryReleaseAggregateTally(
+            IReadOnlyList<string> encryptedBallotPackages,
+            IReadOnlyList<ElectionFinalizationShareRecord> acceptedShares,
+            int maxSupportedCount) =>
+            ElectionAggregateReleaseResult.Failure(
+                "UNSUPPORTED_BALLOT_PAYLOAD",
+                "dev ballots require fallback");
 
         public string EncryptForElectionParticipants(string plaintextPayload, string nodeEncryptedElectionPrivateKey) =>
             $"enc::{plaintextPayload}";
@@ -4320,6 +4630,58 @@ public class ElectionLifecycleServiceTests
             return Task.CompletedTask;
         }
 
+        public Task<IReadOnlyList<ElectionCloseCountingJobRecord>> GetCloseCountingJobsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionCloseCountingJobRecord>>(
+                store.CloseCountingJobs.Values
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.CreatedAt)
+                    .ToArray());
+
+        public Task<ElectionCloseCountingJobRecord?> GetCloseCountingJobAsync(Guid closeCountingJobId) =>
+            Task.FromResult(store.CloseCountingJobs.GetValueOrDefault(closeCountingJobId));
+
+        public Task SaveCloseCountingJobAsync(ElectionCloseCountingJobRecord closeCountingJob)
+        {
+            store.CloseCountingJobs[closeCountingJob.Id] = closeCountingJob;
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateCloseCountingJobAsync(ElectionCloseCountingJobRecord closeCountingJob)
+        {
+            store.CloseCountingJobs[closeCountingJob.Id] = closeCountingJob;
+            return Task.CompletedTask;
+        }
+
+        public Task<ElectionExecutorSessionKeyEnvelopeRecord?> GetExecutorSessionKeyEnvelopeAsync(Guid closeCountingJobId) =>
+            Task.FromResult(store.ExecutorSessionKeyEnvelopes.GetValueOrDefault(closeCountingJobId));
+
+        public Task SaveExecutorSessionKeyEnvelopeAsync(ElectionExecutorSessionKeyEnvelopeRecord envelope)
+        {
+            store.ExecutorSessionKeyEnvelopes[envelope.CloseCountingJobId] = envelope;
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateExecutorSessionKeyEnvelopeAsync(ElectionExecutorSessionKeyEnvelopeRecord envelope)
+        {
+            store.ExecutorSessionKeyEnvelopes[envelope.CloseCountingJobId] = envelope;
+            return Task.CompletedTask;
+        }
+
+        public Task<ElectionTallyExecutorLeaseRecord?> GetTallyExecutorLeaseAsync(Guid closeCountingJobId) =>
+            Task.FromResult(store.TallyExecutorLeases.GetValueOrDefault(closeCountingJobId));
+
+        public Task SaveTallyExecutorLeaseAsync(ElectionTallyExecutorLeaseRecord lease)
+        {
+            store.TallyExecutorLeases[lease.CloseCountingJobId] = lease;
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateTallyExecutorLeaseAsync(ElectionTallyExecutorLeaseRecord lease)
+        {
+            store.TallyExecutorLeases[lease.CloseCountingJobId] = lease;
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<ElectionFinalizationShareRecord>> GetFinalizationSharesAsync(Guid finalizationSessionId) =>
             Task.FromResult<IReadOnlyList<ElectionFinalizationShareRecord>>(
                 store.FinalizationShares
@@ -4344,6 +4706,17 @@ public class ElectionLifecycleServiceTests
         public Task SaveFinalizationShareAsync(ElectionFinalizationShareRecord shareRecord)
         {
             store.FinalizationShares.Add(shareRecord);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateFinalizationShareAsync(ElectionFinalizationShareRecord shareRecord)
+        {
+            var index = store.FinalizationShares.FindIndex(x => x.Id == shareRecord.Id);
+            if (index >= 0)
+            {
+                store.FinalizationShares[index] = shareRecord;
+            }
+
             return Task.CompletedTask;
         }
 
