@@ -25,6 +25,10 @@ namespace HushNode.IntegrationTests;
 [Trait("Category", "FEAT-102")]
 public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
 {
+    private static readonly JsonSerializerOptions CamelCaseJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
     private static readonly TestIdentity Delta = TestIdentities.GenerateFromSeed("TEST_DELTA_V1", "Delta");
     private static readonly TestIdentity Echo = TestIdentities.GenerateFromSeed("TEST_ECHO_V1", "Echo");
     private static readonly TestIdentity Foxtrot = TestIdentities.GenerateFromSeed("TEST_FOXTROT_V1", "Foxtrot");
@@ -36,6 +40,16 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         Delta,
         Echo,
         Foxtrot,
+    ];
+    private static readonly string[] BindingBallotLeakMarkers =
+    [
+        "election-dev-mode-v1",
+        "dev-protected-ballot",
+        "plaintext-choice-projection",
+        "selectionFingerprint",
+        "omega-binding-ballot-v1",
+        "omega-binding-proof-v1",
+        "binding-circuit-envelope",
     ];
 
     private HushTestFixture? _fixture;
@@ -95,13 +109,51 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanNamedParticipationRoster);
         ownerResult.VisibleReportArtifacts.Should().Contain(x =>
             x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactMachineNamedParticipationRosterProjection);
+        var ownerManifestArtifact = ownerResult.VisibleReportArtifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanManifest);
+        ownerManifestArtifact.Content.Should().Contain("Binding status");
+        ownerManifestArtifact.Content.Should().Contain("Non-binding election: `no`");
+        ownerManifestArtifact.Content.Should().Contain("Circuit class: `Production`");
+        ownerManifestArtifact.Content.Should().Contain("Profile family");
+        ownerManifestArtifact.Content.Should().Contain("Secrecy boundary");
+        ownerManifestArtifact.Content.Should().Contain("Custody boundary");
+        ownerManifestArtifact.Content.Should().Contain("dkg-prod-3of5");
+        var ownerResultReportArtifact = ownerResult.VisibleReportArtifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanResultReport);
+        ownerResultReportArtifact.Content.Should().Contain("Binding status");
+        ownerResultReportArtifact.Content.Should().Contain("Non-binding election: `no`");
+        ownerResultReportArtifact.Content.Should().Contain("Circuit class: `Production`");
+        ownerResultReportArtifact.Content.Should().Contain("TrusteeThreshold");
+        ownerResultReportArtifact.Content.Should().Contain("production-like ceremony profiles");
+        ownerResultReportArtifact.Content.Should().Contain("protected-ballot path");
+        var ownerRosterArtifact = ownerResult.VisibleReportArtifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanNamedParticipationRoster);
+        ownerRosterArtifact.Content.Should().Contain("Binding status: `Binding`");
+        ownerRosterArtifact.Content.Should().Contain("Non-binding election: `no`");
+        ownerRosterArtifact.Content.Should().Contain("Circuit class: `Production`");
         var ownerAuditArtifact = ownerResult.VisibleReportArtifacts.Single(x =>
             x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanAuditProvenanceReport);
         ownerAuditArtifact.Content.Should().Contain("AllTrusteesRequiredFragility");
         ownerAuditArtifact.Content.Should().Contain("Tally public key fingerprint");
+        ownerAuditArtifact.Content.Should().Contain("Binding status");
+        ownerAuditArtifact.Content.Should().Contain("Non-binding election: `no`");
+        ownerAuditArtifact.Content.Should().Contain("Circuit class: `Production`");
+        ownerAuditArtifact.Content.Should().Contain("Profile family");
+        ownerAuditArtifact.Content.Should().Contain("Secrecy boundary");
+        ownerAuditArtifact.Content.Should().Contain("Custody boundary");
         ownerAuditArtifact.Content.Should().Contain("Governed Finalization Approvals");
         ownerAuditArtifact.Content.Should().Contain("Finalization Share Evidence");
         ownerAuditArtifact.Content.Should().Contain("Official result hash");
+        var ownerOutcomeArtifact = ownerResult.VisibleReportArtifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanOutcomeDetermination);
+        ownerOutcomeArtifact.Content.Should().Contain("Binding status: `Binding`");
+        ownerOutcomeArtifact.Content.Should().Contain("Non-binding election: `no`");
+        ownerOutcomeArtifact.Content.Should().Contain("Circuit class: `Production`");
+        var ownerDisputeArtifact = ownerResult.VisibleReportArtifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanDisputeReviewIndex);
+        ownerDisputeArtifact.Content.Should().Contain("Binding status: `Binding`");
+        ownerDisputeArtifact.Content.Should().Contain("Non-binding election: `no`");
+        ownerDisputeArtifact.Content.Should().Contain("Circuit class: `Production`");
 
         var trusteeResult = await GetElectionResultViewAsync(
             client,
@@ -231,11 +283,62 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         }
     }
 
-    private async Task<HushElections.HushElectionsClient> StartClientAsync()
+    [Fact]
+    [Trait("Category", "FEAT-105")]
+    public async Task FinalizeElection_WithBindingBallotPath_DoesNotPersistBallotPayloadLeakMarkersInReportArtifactsOrNormalLogs()
+    {
+        var diagnostics = new DiagnosticCapture();
+        var client = await StartClientAsync(diagnostics);
+        const string castSubmissionIdempotencyKey = "feat105-phase4-report-log-audit";
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "FEAT-105 Binding Report and Log Audit",
+            castSubmissionIdempotencyKey);
+
+        var finalizeProposalId = await StartGovernedProposalAsync(
+            client,
+            context.ElectionId,
+            ElectionGovernedActionType.Finalize);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, Delta);
+
+        var ownerResult = await GetElectionResultViewAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            waitForOfficialResult: true);
+        ownerResult.LatestReportPackage.Should().NotBeNull();
+        ownerResult.LatestReportPackage!.Status.Should().Be(ElectionReportPackageStatusProto.ReportPackageSealed);
+
+        await using var scope = _node!.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        var reportPackageId = Guid.Parse(ownerResult.LatestReportPackage.Id);
+        var persistedArtifacts = await dbContext.Set<ElectionReportArtifactRecord>()
+            .Where(x => x.ReportPackageId == reportPackageId)
+            .OrderBy(x => x.SortOrder)
+            .ToListAsync();
+
+        persistedArtifacts.Should().NotBeEmpty();
+
+        var persistedArtifactContent = string.Join(
+            "\n---artifact---\n",
+            persistedArtifacts.Select(x => x.Content));
+        var capturedLogs = diagnostics.GetCapturedLogs();
+
+        foreach (var leakMarker in BindingBallotLeakMarkers.Append(castSubmissionIdempotencyKey))
+        {
+            persistedArtifactContent.Should().NotContain(leakMarker);
+            capturedLogs.Should().NotContain(leakMarker);
+        }
+    }
+
+    private async Task<HushElections.HushElectionsClient> StartClientAsync(
+        DiagnosticCapture? diagnosticCapture = null)
     {
         await DisposeNodeAsync();
         await _fixture!.ResetAllAsync();
-        (_node, _blockControl, _grpcFactory) = await _fixture.StartNodeAsync();
+        (_node, _blockControl, _grpcFactory) = await _fixture.StartNodeAsync(diagnosticCapture);
         return _grpcFactory.CreateClient<HushElections.HushElectionsClient>();
     }
 
@@ -254,7 +357,8 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
 
     private async Task<ClosedElectionReadyContext> CreateClosedElectionReadyForFinalizeAsync(
         HushElections.HushElectionsClient client,
-        string title)
+        string title,
+        string castSubmissionIdempotencyKey = "feat102-cast-001")
     {
         var createResponse = await CreateTrusteeThresholdDraftAsync(client, title);
         var electionId = createResponse.Election.ElectionId;
@@ -287,7 +391,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             client,
             electionId,
             TestIdentities.Alice,
-            "feat102-cast-001");
+            castSubmissionIdempotencyKey);
         castSubmitResponse.Successfull.Should().BeTrue(castSubmitResponse.Message);
 
         var closeProposalId = await StartGovernedProposalAsync(
@@ -392,8 +496,6 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         string ceremonyVersionId,
         int requiredCompletionCount)
     {
-        const string tallyFingerprint = "feat102-ready-tally-fingerprint";
-
         for (var index = 0; index < requiredCompletionCount; index++)
         {
             var trustee = RolloutTrustees[index];
@@ -418,7 +520,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
                     Guid.Parse(ceremonyVersionId),
                     trustee.PublicSigningAddress,
                     $"feat102-share-v1-{index}",
-                    tallyFingerprint));
+                    tallyPublicKeyFingerprint: null));
             completeTrusteeResponse.Successfull.Should().BeTrue(completeTrusteeResponse.Message);
         }
     }
@@ -559,6 +661,9 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         votingView.CeremonyVersionId.Should().NotBeNullOrWhiteSpace();
         votingView.DkgProfileId.Should().NotBeNullOrWhiteSpace();
         votingView.TallyPublicKeyFingerprint.Should().NotBeNullOrWhiteSpace();
+        votingView.TallyPublicKey.Should().NotBeNull();
+        votingView.TallyPublicKey.X.Length.Should().Be(32);
+        votingView.TallyPublicKey.Y.Length.Should().Be(32);
 
         var selectionCount = votingView.Election.Options.Count;
         selectionCount.Should().BeGreaterThan(0);
@@ -570,13 +675,25 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         nonBlankChoiceIndexes.Should().NotBeEmpty();
 
         var choiceIndex = ResolveChoiceIndex(actor, submissionIdempotencyKey, nonBlankChoiceIndexes);
+        var tallyPublicKey = ReactionECPoint.FromCoordinates(
+            votingView.TallyPublicKey.X.ToByteArray(),
+            votingView.TallyPublicKey.Y.ToByteArray());
+
+        var encryptedBallotPackage = BuildEncryptedBallotPackage(
+            electionId,
+            actor,
+            submissionIdempotencyKey,
+            selectionCount,
+            choiceIndex,
+            tallyPublicKey);
+        var proofBundle = BuildProofBundle(votingView, encryptedBallotPackage);
 
         return TestTransactionFactory.AcceptElectionBallotCast(
             actor,
             new ElectionId(Guid.Parse(electionId)),
             submissionIdempotencyKey,
-            BuildEncryptedBallotPackage(electionId, actor, submissionIdempotencyKey, selectionCount, choiceIndex),
-            BuildProofBundle(electionId, actor, submissionIdempotencyKey),
+            encryptedBallotPackage,
+            proofBundle,
             BuildBallotNullifier(electionId, actor, submissionIdempotencyKey),
             Guid.Parse(votingView.OpenArtifactId),
             Convert.FromBase64String(votingView.EligibleSetHash),
@@ -896,18 +1013,17 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         TestIdentity actor,
         string submissionIdempotencyKey,
         int selectionCount,
-        int choiceIndex)
+        int choiceIndex,
+        ReactionECPoint tallyPublicKey)
     {
         var curve = new BabyJubJubCurve();
-        var publicKeySeed = ParseSeedToScalar($"feat100:public-key:{electionId}", curve.Order);
         var nonceSeed = ParseSeedToScalar(
             $"feat100:nonces:{electionId}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}",
             curve.Order);
-        var keyPair = ControlledElectionHarness.CreateDeterministicKeyPair(publicKeySeed, curve);
         var ballot = ControlledElectionHarness.EncryptOneHotBallot(
             ballotId: $"feat100-ballot:{electionId}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}",
             choiceIndex: choiceIndex,
-            publicKey: keyPair.PublicKey,
+            publicKey: tallyPublicKey,
             nonces: ControlledElectionHarness.CreateDeterministicNonceSequence(
                 nonceSeed,
                 selectionCount,
@@ -916,25 +1032,33 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             curve: curve);
 
         var payload = new PublishedElectionBallotPackage(
-            Version: "election-ballot.v1",
-            PublicKey: ToPublishedPoint(keyPair.PublicKey),
+            Version: "omega-binding-ballot-v1",
+            PublicKey: ToPublishedPoint(tallyPublicKey),
             SelectionCount: selectionCount,
             Ciphertext: new PublishedElectionCiphertext(
                 ballot.Slots.Select(slot => ToPublishedPoint(slot.C1)).ToArray(),
                 ballot.Slots.Select(slot => ToPublishedPoint(slot.C2)).ToArray()));
 
-        return JsonSerializer.Serialize(payload);
+        return JsonSerializer.Serialize(payload, CamelCaseJsonOptions);
     }
 
     private static string BuildProofBundle(
-        string electionId,
-        TestIdentity actor,
-        string submissionIdempotencyKey) =>
-        JsonSerializer.Serialize(new PublishedElectionProofBundle(
-            Version: "integration-proof-bundle.v1",
-            Actor: actor.PublicSigningAddress,
-            ElectionId: electionId,
-            SubmissionIdempotencyKey: submissionIdempotencyKey.Trim()));
+        GetElectionVotingViewResponse votingView,
+        string ballotPackage) =>
+        JsonSerializer.Serialize(new
+        {
+            version = "omega-binding-proof-v1",
+            proofType = "binding-circuit-envelope",
+            proofProfile = "PRODUCTION_LIKE_PROFILE",
+            circuitVersion = "omega-v1.0.0",
+            artifactShape = "opaque-one-hot-elgamal",
+            ballotPackageHash = ComputeLowerHexSha256(ballotPackage),
+            openArtifactId = votingView.OpenArtifactId,
+            eligibleSetHash = votingView.EligibleSetHash,
+            ceremonyVersionId = votingView.CeremonyVersionId,
+            dkgProfileId = votingView.DkgProfileId,
+            tallyPublicKeyFingerprint = votingView.TallyPublicKeyFingerprint,
+        });
 
     private static string BuildBallotNullifier(
         string electionId,
@@ -942,6 +1066,10 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         string submissionIdempotencyKey) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             $"feat099:ballot-nullifier:{electionId}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}")));
+
+    private static string ComputeLowerHexSha256(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty)))
+            .ToLowerInvariant();
 
     private static int ResolveChoiceIndex(
         TestIdentity actor,
@@ -1007,6 +1135,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             ExternalReferenceCode: "REF-2026-102",
             ElectionClass: ElectionClass.OrganizationalRemoteVoting,
             BindingStatus: ElectionBindingStatus.Binding,
+            SelectedProfileId: "dkg-prod-3of5",
             GovernanceMode: ElectionGovernanceMode.TrusteeThreshold,
             DisclosureMode: ElectionDisclosureMode.FinalResultsOnly,
             ParticipationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,

@@ -62,6 +62,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 .ToArray();
             var officialResultProjection = BuildResultArtifactProjection(request.OfficialResult);
             var officialResultHash = ComputeHashBytes(SerializeJson(officialResultProjection));
+            var ceremonyPublicKey = ResolveCeremonyPublicKeyProjection(request);
             var outcomeProjection = BuildOutcomeProjection(
                 request.Election,
                 request.OfficialResult,
@@ -69,7 +70,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             var resultReportProjection = BuildResultReportProjection(
                 request.Election,
                 request.OfficialResult,
-                outcomeProjection);
+                outcomeProjection,
+                ceremonyPublicKey);
             var auditProjection = BuildAuditProjection(
                 request,
                 frozenEvidenceFingerprint,
@@ -201,6 +203,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                         machineRosterId,
                         humanRosterId,
                         request.Election.ElectionId.ToString(),
+                        request.Election.BindingStatus.ToString(),
+                        request.Election.BindingStatus == ElectionBindingStatus.NonBinding,
+                        request.Election.GovernanceMode.ToString(),
+                        request.Election.SelectedProfileId,
+                        GetCircuitClassificationLabel(request.Election),
+                        GetModeProfileFamilyLabel(request.Election),
                         rosterEntries.Length,
                         rosterEntries)),
                 CreateMarkdownArtifact(
@@ -297,6 +305,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                     humanDisputeId,
                     request.Election.ElectionId.ToString(),
                     packageId,
+                    request.Election.BindingStatus.ToString(),
+                    request.Election.BindingStatus == ElectionBindingStatus.NonBinding,
+                    request.Election.GovernanceMode.ToString(),
+                    request.Election.SelectedProfileId,
+                    GetCircuitClassificationLabel(request.Election),
+                    GetModeProfileFamilyLabel(request.Election),
                     disputeCatalogEntries)));
             artifacts.Add(CreateMarkdownArtifact(
                 request,
@@ -536,11 +550,18 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             request.CloseArtifact.Metadata.OwnerPublicAddress,
             request.CloseArtifact.Metadata.ExternalReferenceCode,
             request.CloseArtifact.SourceDraftRevision,
+            request.CloseArtifact.Policy.BindingStatus.ToString(),
+            request.CloseArtifact.Policy.BindingStatus == ElectionBindingStatus.NonBinding,
             request.CloseArtifact.Policy.GovernanceMode.ToString(),
+            request.Election.SelectedProfileId,
+            GetCircuitClassificationLabel(request.Election),
+            GetModeProfileFamilyLabel(request.Election),
             request.CloseArtifact.Policy.ParticipationPrivacyMode.ToString(),
             request.CloseArtifact.Policy.ReportingPolicy.ToString(),
             request.CloseArtifact.Policy.ReviewWindowPolicy.ToString(),
             request.CloseArtifact.Policy.OfficialResultVisibilityPolicy.ToString(),
+            GetSecrecyBoundarySummary(request.Election),
+            GetGovernanceCustodySummary(request.Election),
             request.CloseArtifact.Policy.RequiredApprovalCount,
             request.CloseArtifact.Policy.ApprovedClientApplications
                 .Select(x => new ApprovedClientProjection(x.ApplicationId, x.Version))
@@ -741,8 +762,17 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             AttemptedAt: request.AttemptedAt,
             AttemptedBy: request.AttemptedByPublicAddress,
             FrozenEvidenceFingerprint: frozenEvidenceFingerprint,
+            BindingStatus: request.Election.BindingStatus.ToString(),
+            IsNonBindingElection: request.Election.BindingStatus == ElectionBindingStatus.NonBinding,
             GovernanceMode: request.Election.GovernanceMode.ToString(),
+            SelectedProfileId: request.Election.SelectedProfileId,
+            CircuitClassification: GetCircuitClassificationLabel(request.Election),
+            ModeProfileFamily: GetModeProfileFamilyLabel(request.Election),
+            BoundCeremonyProfileId: ResolveCeremonyPublicKeyProjection(request)?.ProfileId,
+            TallyPublicKeyFingerprint: ResolveCeremonyPublicKeyProjection(request)?.TallyPublicKeyFingerprint,
             OfficialVisibility: request.Election.OfficialResultVisibilityPolicy.ToString(),
+            SecrecyBoundarySummary: GetSecrecyBoundarySummary(request.Election),
+            CustodyBoundarySummary: GetGovernanceCustodySummary(request.Election),
             AcceptedTrusteeCount: acceptedTrusteeCount,
             RosterEntryCount: rosterEntryCount,
             FinalizeArtifactId: request.FinalizeArtifact.Id,
@@ -765,6 +795,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             ArtifactId: Guid.Empty,
             ManifestArtifactId: Guid.Empty,
             ElectionId: request.Election.ElectionId.ToString(),
+            BindingStatus: request.Election.BindingStatus.ToString(),
+            IsNonBindingElection: request.Election.BindingStatus == ElectionBindingStatus.NonBinding,
+            GovernanceMode: request.Election.GovernanceMode.ToString(),
+            SelectedProfileId: request.Election.SelectedProfileId,
+            CircuitClassification: GetCircuitClassificationLabel(request.Election),
+            ModeProfileFamily: GetModeProfileFamilyLabel(request.Election),
             CloseArtifactId: request.CloseArtifact.Id,
             CloseEligibilitySnapshotId: request.CloseEligibilitySnapshot?.Id,
             TallyReadyArtifactId: request.TallyReadyArtifact.Id,
@@ -786,7 +822,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
     private static ResultReportProjection BuildResultReportProjection(
         ElectionRecord election,
         ElectionResultArtifactRecord officialResult,
-        OutcomeDeterminationProjection outcomeProjection)
+        OutcomeDeterminationProjection outcomeProjection,
+        CeremonyPublicKeyProjection? ceremonyPublicKey)
     {
         var eligibleCount = Math.Max(officialResult.EligibleToVoteCount, 0);
         var turnoutPercent = eligibleCount == 0
@@ -817,7 +854,17 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             ElectionId: election.ElectionId.ToString(),
             ElectionTitle: election.Title,
             OfficialResultArtifactId: officialResult.Id,
+            BindingStatus: election.BindingStatus.ToString(),
+            IsNonBindingElection: election.BindingStatus == ElectionBindingStatus.NonBinding,
+            GovernanceMode: election.GovernanceMode.ToString(),
+            SelectedProfileId: election.SelectedProfileId,
+            CircuitClassification: GetCircuitClassificationLabel(election),
+            ModeProfileFamily: GetModeProfileFamilyLabel(election),
+            BoundCeremonyProfileId: ceremonyPublicKey?.ProfileId,
+            TallyPublicKeyFingerprint: ceremonyPublicKey?.TallyPublicKeyFingerprint,
             Visibility: officialResult.Visibility.ToString(),
+            SecrecyBoundarySummary: GetSecrecyBoundarySummary(election),
+            CustodyBoundarySummary: GetGovernanceCustodySummary(election),
             TotalVotedCount: officialResult.TotalVotedCount,
             EligibleToVoteCount: officialResult.EligibleToVoteCount,
             DidNotVoteCount: officialResult.DidNotVoteCount,
@@ -924,6 +971,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             MachineArtifactId: Guid.Empty,
             HumanArtifactId: Guid.Empty,
             ElectionId: election.ElectionId.ToString(),
+            BindingStatus: election.BindingStatus.ToString(),
+            IsNonBindingElection: election.BindingStatus == ElectionBindingStatus.NonBinding,
+            GovernanceMode: election.GovernanceMode.ToString(),
+            SelectedProfileId: election.SelectedProfileId,
+            CircuitClassification: GetCircuitClassificationLabel(election),
+            ModeProfileFamily: GetModeProfileFamilyLabel(election),
             OutcomeRuleKind: election.OutcomeRule.Kind.ToString(),
             OutcomeTemplateKey: election.OutcomeRule.TemplateKey,
             CalculationBasis: election.OutcomeRule.CalculationBasis,
@@ -1027,8 +1080,17 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         - Attempted at: `{manifest.AttemptedAt:O}`
         - Attempted by: `{manifest.AttemptedBy}`
         - Frozen evidence fingerprint: `{frozenEvidenceFingerprint}`
+        - Binding status: `{manifest.BindingStatus}`
+        - Non-binding election: `{(manifest.IsNonBindingElection ? "yes" : "no")}`
         - Governance mode: `{manifest.GovernanceMode}`
+        - Selected circuit/profile: `{manifest.SelectedProfileId}`
+        - Circuit class: `{manifest.CircuitClassification}`
+        - Profile family: `{manifest.ModeProfileFamily}`
+        - Bound ceremony profile: `{manifest.BoundCeremonyProfileId ?? "not recorded"}`
+        - Tally public key fingerprint: `{manifest.TallyPublicKeyFingerprint ?? "not recorded"}`
         - Official visibility: `{manifest.OfficialVisibility}`
+        - Secrecy boundary: {manifest.SecrecyBoundarySummary}
+        - Custody boundary: {manifest.CustodyBoundarySummary}
         - Accepted trustee count: `{manifest.AcceptedTrusteeCount}`
         - Roster entry count: `{manifest.RosterEntryCount}`
         - Warning count: `{manifest.WarningCount}`
@@ -1052,7 +1114,17 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         builder.AppendLine($"- Election id: `{projection.ElectionId}`");
         builder.AppendLine($"- Election title: {projection.ElectionTitle}");
         builder.AppendLine($"- Official result artifact id: `{projection.OfficialResultArtifactId}`");
+        builder.AppendLine($"- Binding status: `{projection.BindingStatus}`");
+        builder.AppendLine($"- Non-binding election: `{(projection.IsNonBindingElection ? "yes" : "no")}`");
+        builder.AppendLine($"- Governance mode: `{projection.GovernanceMode}`");
+        builder.AppendLine($"- Selected circuit/profile: `{projection.SelectedProfileId}`");
+        builder.AppendLine($"- Circuit class: `{projection.CircuitClassification}`");
+        builder.AppendLine($"- Profile family: `{projection.ModeProfileFamily}`");
+        builder.AppendLine($"- Bound ceremony profile: `{projection.BoundCeremonyProfileId ?? "not recorded"}`");
+        builder.AppendLine($"- Tally public key fingerprint: `{projection.TallyPublicKeyFingerprint ?? "not recorded"}`");
         builder.AppendLine($"- Visibility: `{projection.Visibility}`");
+        builder.AppendLine($"- Secrecy boundary: {projection.SecrecyBoundarySummary}");
+        builder.AppendLine($"- Custody boundary: {projection.CustodyBoundarySummary}");
         builder.AppendLine($"- Total voted: `{projection.TotalVotedCount}`");
         builder.AppendLine($"- Eligible to vote: `{projection.EligibleToVoteCount}`");
         builder.AppendLine($"- Did not vote: `{projection.DidNotVoteCount}`");
@@ -1081,6 +1153,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         builder.AppendLine($"- Election id: `{election.ElectionId}`");
         builder.AppendLine($"- Election title: {election.Title}");
         builder.AppendLine($"- Roster entries: `{rosterEntries.Count}`");
+        builder.AppendLine($"- Binding status: `{election.BindingStatus}`");
+        builder.AppendLine($"- Non-binding election: `{(election.BindingStatus == ElectionBindingStatus.NonBinding ? "yes" : "no")}`");
+        builder.AppendLine($"- Governance mode: `{election.GovernanceMode}`");
+        builder.AppendLine($"- Selected circuit/profile: `{election.SelectedProfileId}`");
+        builder.AppendLine($"- Circuit class: `{GetCircuitClassificationLabel(election)}`");
+        builder.AppendLine($"- Profile family: `{GetModeProfileFamilyLabel(election)}`");
         builder.AppendLine();
         builder.AppendLine("| Organization voter id | Link status | Voting right | Linked actor | Participation | Counts as participation |");
         builder.AppendLine("|-----------------------|-------------|--------------|--------------|---------------|-------------------------|");
@@ -1124,11 +1202,18 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         builder.AppendLine($"- External reference: `{projection.Setup.ExternalReferenceCode ?? "none"}`");
         builder.AppendLine($"- Draft revision: `{projection.Setup.SourceDraftRevision}`");
         builder.AppendLine($"- Governance mode: `{projection.Setup.GovernanceMode}`");
+        builder.AppendLine($"- Binding status: `{projection.Setup.BindingStatus}`");
+        builder.AppendLine($"- Non-binding election: `{(projection.Setup.IsNonBindingElection ? "yes" : "no")}`");
+        builder.AppendLine($"- Selected circuit/profile: `{projection.Setup.SelectedProfileId}`");
+        builder.AppendLine($"- Circuit class: `{projection.Setup.CircuitClassification}`");
+        builder.AppendLine($"- Profile family: `{projection.Setup.ModeProfileFamily}`");
         builder.AppendLine($"- Participation privacy mode: `{projection.Setup.ParticipationPrivacyMode}`");
         builder.AppendLine($"- Reporting policy: `{projection.Setup.ReportingPolicy}`");
         builder.AppendLine($"- Review window policy: `{projection.Setup.ReviewWindowPolicy}`");
         builder.AppendLine($"- Official visibility: `{projection.Setup.OfficialVisibility}`");
         builder.AppendLine($"- Required approval count: `{projection.Setup.RequiredApprovalCount?.ToString() ?? "none"}`");
+        builder.AppendLine($"- Secrecy boundary: {projection.Setup.SecrecyBoundarySummary}");
+        builder.AppendLine($"- Custody boundary: {projection.Setup.CustodyBoundarySummary}");
         builder.AppendLine();
         builder.AppendLine("### Approved Clients");
         builder.AppendLine();
@@ -1252,6 +1337,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         # Outcome Determination
 
         - Election id: `{projection.ElectionId}`
+        - Binding status: `{projection.BindingStatus}`
+        - Non-binding election: `{(projection.IsNonBindingElection ? "yes" : "no")}`
+        - Governance mode: `{projection.GovernanceMode}`
+        - Selected circuit/profile: `{projection.SelectedProfileId}`
+        - Circuit class: `{projection.CircuitClassification}`
+        - Profile family: `{projection.ModeProfileFamily}`
         - Outcome rule kind: `{projection.OutcomeRuleKind}`
         - Template key: `{projection.OutcomeTemplateKey}`
         - Calculation basis: `{projection.CalculationBasis}`
@@ -1281,6 +1372,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         builder.AppendLine($"- Election id: `{election.ElectionId}`");
         builder.AppendLine($"- Package id: `{packageId}`");
         builder.AppendLine($"- Catalog entries: `{entries.Count}`");
+        builder.AppendLine($"- Binding status: `{election.BindingStatus}`");
+        builder.AppendLine($"- Non-binding election: `{(election.BindingStatus == ElectionBindingStatus.NonBinding ? "yes" : "no")}`");
+        builder.AppendLine($"- Governance mode: `{election.GovernanceMode}`");
+        builder.AppendLine($"- Selected circuit/profile: `{election.SelectedProfileId}`");
+        builder.AppendLine($"- Circuit class: `{GetCircuitClassificationLabel(election)}`");
+        builder.AppendLine($"- Profile family: `{GetModeProfileFamilyLabel(election)}`");
         builder.AppendLine();
         builder.AppendLine("| Title | Kind | Format | Scope | Artifact id | Hash | Paired artifact id |");
         builder.AppendLine("|-------|------|--------|-------|-------------|------|--------------------|");
@@ -1295,6 +1392,28 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
 
     private static byte[] ComputeHashBytes(string value) =>
         SHA256.HashData(Encoding.UTF8.GetBytes(value));
+
+    private static string GetModeProfileFamilyLabel(ElectionRecord election) =>
+        election.SelectedProfileDevOnly
+            ? "dev/open ceremony profiles"
+            : "production-like ceremony profiles";
+
+    private static string GetCircuitClassificationLabel(ElectionRecord election) =>
+        election.SelectedProfileDevOnly
+            ? "Development"
+            : "Production";
+
+    private static string GetSecrecyBoundarySummary(ElectionRecord election) =>
+        election.SelectedProfileDevOnly
+            ? "This election runs the explicit non-binding open-audit path. Readable ballot content may appear where artifact visibility allows, so this mode is excluded from secret-ballot claims."
+            : "This election runs the protected-ballot path. Result and report artifacts should expose aggregate outcomes and circuit metadata, not readable ballot choices.";
+
+    private static string GetGovernanceCustodySummary(ElectionRecord election) =>
+        election.GovernanceMode == ElectionGovernanceMode.AdminOnly
+            ? election.SelectedProfileDevOnly
+                ? "Admin-only open-audit custody keeps the owner-admin workflow while intentionally allowing readable ballot artifacts for audit review. This mode still does not expose reusable protected tally private keys or hidden single-ballot inspection authority beyond the explicit open-audit contract."
+                : "Admin-only protected custody keeps tally release bound to the owner-admin protected custody profile. This path does not expose trustee shares, reusable tally private keys, or single-ballot inspection authority."
+            : "Trustee-threshold custody requires exact-target aggregate tally release with executor-bound trustee submissions. This path does not expose arbitrary ballot inspection, raw trustee shares on persisted surfaces, or reusable tally private keys.";
 
     private static string SerializeJson(object payload) =>
         JsonSerializer.Serialize(payload, JsonOptions);
@@ -1351,11 +1470,18 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         string OwnerPublicAddress,
         string? ExternalReferenceCode,
         int SourceDraftRevision,
+        string BindingStatus,
+        bool IsNonBindingElection,
         string GovernanceMode,
+        string SelectedProfileId,
+        string CircuitClassification,
+        string ModeProfileFamily,
         string ParticipationPrivacyMode,
         string ReportingPolicy,
         string ReviewWindowPolicy,
         string OfficialVisibility,
+        string SecrecyBoundarySummary,
+        string CustodyBoundarySummary,
         int? RequiredApprovalCount,
         IReadOnlyList<ApprovedClientProjection> ApprovedClients,
         IReadOnlyList<ElectionOptionProjection> Options,
@@ -1530,8 +1656,17 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         DateTime AttemptedAt,
         string AttemptedBy,
         string FrozenEvidenceFingerprint,
+        string BindingStatus,
+        bool IsNonBindingElection,
         string GovernanceMode,
+        string SelectedProfileId,
+        string CircuitClassification,
+        string ModeProfileFamily,
+        string? BoundCeremonyProfileId,
+        string? TallyPublicKeyFingerprint,
         string OfficialVisibility,
+        string SecrecyBoundarySummary,
+        string CustodyBoundarySummary,
         int AcceptedTrusteeCount,
         int RosterEntryCount,
         Guid FinalizeArtifactId,
@@ -1547,6 +1682,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         Guid ArtifactId,
         Guid ManifestArtifactId,
         string ElectionId,
+        string BindingStatus,
+        bool IsNonBindingElection,
+        string GovernanceMode,
+        string SelectedProfileId,
+        string CircuitClassification,
+        string ModeProfileFamily,
         Guid CloseArtifactId,
         Guid? CloseEligibilitySnapshotId,
         Guid TallyReadyArtifactId,
@@ -1571,7 +1712,17 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         string ElectionId,
         string ElectionTitle,
         Guid OfficialResultArtifactId,
+        string BindingStatus,
+        bool IsNonBindingElection,
+        string GovernanceMode,
+        string SelectedProfileId,
+        string CircuitClassification,
+        string ModeProfileFamily,
+        string? BoundCeremonyProfileId,
+        string? TallyPublicKeyFingerprint,
         string Visibility,
+        string SecrecyBoundarySummary,
+        string CustodyBoundarySummary,
         int TotalVotedCount,
         int EligibleToVoteCount,
         int DidNotVoteCount,
@@ -1596,6 +1747,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         Guid MachineArtifactId,
         Guid HumanArtifactId,
         string ElectionId,
+        string BindingStatus,
+        bool IsNonBindingElection,
+        string GovernanceMode,
+        string SelectedProfileId,
+        string CircuitClassification,
+        string ModeProfileFamily,
         int EntryCount,
         IReadOnlyList<RosterEntryProjection> Entries);
 
@@ -1642,6 +1799,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         Guid MachineArtifactId,
         Guid HumanArtifactId,
         string ElectionId,
+        string BindingStatus,
+        bool IsNonBindingElection,
+        string GovernanceMode,
+        string SelectedProfileId,
+        string CircuitClassification,
+        string ModeProfileFamily,
         string OutcomeRuleKind,
         string OutcomeTemplateKey,
         string CalculationBasis,
@@ -1661,6 +1824,12 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         Guid HumanArtifactId,
         string ElectionId,
         Guid PackageId,
+        string BindingStatus,
+        bool IsNonBindingElection,
+        string GovernanceMode,
+        string SelectedProfileId,
+        string CircuitClassification,
+        string ModeProfileFamily,
         IReadOnlyList<DisputeArtifactCatalogEntryProjection> Entries);
 
     private sealed record DisputeArtifactCatalogEntryProjection(

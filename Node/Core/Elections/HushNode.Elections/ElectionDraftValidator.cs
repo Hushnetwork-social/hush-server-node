@@ -31,6 +31,11 @@ internal static class ElectionDraftValidator
             errors.Add("Protocol Omega version is required.");
         }
 
+        if (string.IsNullOrWhiteSpace(draft.SelectedProfileId))
+        {
+            errors.Add("A selected circuit/profile id is required.");
+        }
+
         if (draft.ElectionClass != ElectionClass.OrganizationalRemoteVoting)
         {
             errors.Add("FEAT-094 only supports organizational remote voting elections.");

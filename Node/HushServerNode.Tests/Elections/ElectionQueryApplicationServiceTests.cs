@@ -77,7 +77,8 @@ public class ElectionQueryApplicationServiceTests
                 [
                     new SharedTrusteeReference("trustee-a", "Alice"),
                 ],
-                tallyPublicKeyFingerprint: "tally-fingerprint"));
+                tallyPublicKeyFingerprint: CeremonyTestKeyFixtures.Fingerprint,
+                tallyPublicKey: CeremonyTestKeyFixtures.PublicKeyBytes));
         var profile = ElectionModelFactory.CreateCeremonyProfile(
             "prod-1of1-v1",
             "Production 1 of 1",
@@ -97,7 +98,10 @@ public class ElectionQueryApplicationServiceTests
                     new SharedTrusteeReference("trustee-a", "Alice"),
                 ],
                 startedByPublicAddress: "owner-address")
-            .MarkReady(DateTime.UtcNow, "tally-fingerprint");
+            .MarkReady(
+                DateTime.UtcNow,
+                CeremonyTestKeyFixtures.Fingerprint,
+                CeremonyTestKeyFixtures.PublicKeyBytes);
         var transcriptEvent = ElectionModelFactory.CreateCeremonyTranscriptEvent(
             election.ElectionId,
             ceremonyVersion.Id,
@@ -105,7 +109,7 @@ public class ElectionQueryApplicationServiceTests
             ElectionCeremonyTranscriptEventType.VersionReady,
             "Ceremony version became ready.",
             actorPublicAddress: "owner-address",
-            tallyPublicKeyFingerprint: "tally-fingerprint");
+            tallyPublicKeyFingerprint: CeremonyTestKeyFixtures.Fingerprint);
         var activeTrusteeState = ElectionModelFactory.CreateCeremonyTrusteeState(
                 election.ElectionId,
                 ceremonyVersion.Id,
@@ -115,7 +119,7 @@ public class ElectionQueryApplicationServiceTests
             .PublishTransportKey("transport-a", DateTime.UtcNow)
             .MarkJoined(DateTime.UtcNow)
             .RecordSelfTestSuccess(DateTime.UtcNow)
-            .RecordMaterialSubmitted(DateTime.UtcNow, "share-v1")
+            .RecordMaterialSubmitted(DateTime.UtcNow, "share-v1", CeremonyTestKeyFixtures.PublicKeyBytes)
             .MarkCompleted(DateTime.UtcNow, "share-v1");
         var finalizationSession = ElectionModelFactory.CreateFinalizationSession(
             election,
@@ -199,7 +203,9 @@ public class ElectionQueryApplicationServiceTests
         response.TrusteeInvitations.Should().ContainSingle();
         response.BoundaryArtifacts.Should().ContainSingle();
         response.BoundaryArtifacts[0].CeremonySnapshot.Should().NotBeNull();
-        response.BoundaryArtifacts[0].CeremonySnapshot!.TallyPublicKeyFingerprint.Should().Be("tally-fingerprint");
+        response.BoundaryArtifacts[0].CeremonySnapshot!.TallyPublicKeyFingerprint.Should().Be(CeremonyTestKeyFixtures.Fingerprint);
+        response.BoundaryArtifacts[0].CeremonySnapshot!.TallyPublicKey.X.Length.Should().Be(32);
+        response.BoundaryArtifacts[0].CeremonySnapshot!.TallyPublicKey.Y.Length.Should().Be(32);
         response.GovernedProposals.Should().ContainSingle();
         response.GovernedProposals[0].ActionType.Should().Be(ElectionGovernedActionTypeProto.GovernedActionClose);
         response.GovernedProposalApprovals.Should().ContainSingle();
@@ -245,7 +251,8 @@ public class ElectionQueryApplicationServiceTests
             [
                 new SharedTrusteeReference("trustee-a", "Alice"),
             ],
-            tallyPublicKeyFingerprint: "tally-fingerprint");
+            tallyPublicKeyFingerprint: CeremonyTestKeyFixtures.Fingerprint,
+            tallyPublicKey: CeremonyTestKeyFixtures.PublicKeyBytes);
         var closeCountingSession = ElectionModelFactory.CreateFinalizationSession(
             election with
             {
@@ -269,6 +276,7 @@ public class ElectionQueryApplicationServiceTests
             executorSessionPublicKey: "executor-public-key",
             sealedExecutorSessionPrivateKey: "sealed-private-key",
             keyAlgorithm: "ecies-secp256k1-v1",
+            sealAlgorithm: "test-transparent-envelope-v1",
             sealedByServiceIdentity: "node-address");
 
         ConfigureReadOnlyRepository(mocker, repo =>
@@ -347,7 +355,8 @@ public class ElectionQueryApplicationServiceTests
             boundTrusteeCount: 1,
             requiredApprovalCount: 1,
             activeTrustees: trustees,
-            tallyPublicKeyFingerprint: "tally-fingerprint");
+            tallyPublicKeyFingerprint: CeremonyTestKeyFixtures.Fingerprint,
+            tallyPublicKey: CeremonyTestKeyFixtures.PublicKeyBytes);
         var completedSession = ElectionModelFactory.CreateFinalizationSession(
             election,
             Guid.NewGuid(),
@@ -438,6 +447,103 @@ public class ElectionQueryApplicationServiceTests
         // Assert
         response.Success.Should().BeFalse();
         response.ErrorMessage.Should().Contain(electionId.ToString());
+    }
+
+    [Fact]
+    public async Task GetElectionAsync_WithLegacyBindingDraftSnapshotMissingSelectedProfile_UsesCompatibilityFallback()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection();
+        var snapshot = ElectionModelFactory.CreateDraftSnapshot(
+            election,
+            snapshotReason: "legacy draft",
+            recordedByPublicAddress: "owner-address") with
+        {
+            Policy = new ElectionFrozenPolicySnapshot(
+                ElectionClass: election.ElectionClass,
+                BindingStatus: election.BindingStatus,
+                SelectedProfileId: null!,
+                SelectedProfileDevOnly: false,
+                GovernanceMode: election.GovernanceMode,
+                DisclosureMode: election.DisclosureMode,
+                ParticipationPrivacyMode: election.ParticipationPrivacyMode,
+                VoteUpdatePolicy: election.VoteUpdatePolicy,
+                EligibilitySourceType: election.EligibilitySourceType,
+                EligibilityMutationPolicy: election.EligibilityMutationPolicy,
+                OutcomeRule: election.OutcomeRule,
+                ApprovedClientApplications: election.ApprovedClientApplications,
+                ProtocolOmegaVersion: election.ProtocolOmegaVersion,
+                ReportingPolicy: election.ReportingPolicy,
+                ReviewWindowPolicy: election.ReviewWindowPolicy,
+                OfficialResultVisibilityPolicy: election.OfficialResultVisibilityPolicy,
+                RequiredApprovalCount: election.RequiredApprovalCount),
+        };
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetLatestDraftSnapshotAsync(election.ElectionId)).ReturnsAsync(snapshot);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionAsync(election.ElectionId);
+
+        response.Success.Should().BeTrue();
+        response.LatestDraftSnapshot.Should().NotBeNull();
+        response.LatestDraftSnapshot!.Policy.SelectedProfileId.Should().Be("admin-prod-1of1");
+        response.LatestDraftSnapshot.Policy.SelectedProfileDevOnly.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetElectionAsync_WithLegacyNonBindingDraftSnapshotMissingSelectedProfile_UsesCompatibilityFallback()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection() with
+        {
+            BindingStatus = ElectionBindingStatus.NonBinding,
+            SelectedProfileId = "admin-dev-1of1",
+            SelectedProfileDevOnly = true,
+        };
+        var snapshot = ElectionModelFactory.CreateDraftSnapshot(
+            election,
+            snapshotReason: "legacy draft",
+            recordedByPublicAddress: "owner-address") with
+        {
+            Policy = new ElectionFrozenPolicySnapshot(
+                ElectionClass: election.ElectionClass,
+                BindingStatus: election.BindingStatus,
+                SelectedProfileId: null!,
+                SelectedProfileDevOnly: false,
+                GovernanceMode: election.GovernanceMode,
+                DisclosureMode: election.DisclosureMode,
+                ParticipationPrivacyMode: election.ParticipationPrivacyMode,
+                VoteUpdatePolicy: election.VoteUpdatePolicy,
+                EligibilitySourceType: election.EligibilitySourceType,
+                EligibilityMutationPolicy: election.EligibilityMutationPolicy,
+                OutcomeRule: election.OutcomeRule,
+                ApprovedClientApplications: election.ApprovedClientApplications,
+                ProtocolOmegaVersion: election.ProtocolOmegaVersion,
+                ReportingPolicy: election.ReportingPolicy,
+                ReviewWindowPolicy: election.ReviewWindowPolicy,
+                OfficialResultVisibilityPolicy: election.OfficialResultVisibilityPolicy,
+                RequiredApprovalCount: election.RequiredApprovalCount),
+        };
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetLatestDraftSnapshotAsync(election.ElectionId)).ReturnsAsync(snapshot);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionAsync(election.ElectionId);
+
+        response.Success.Should().BeTrue();
+        response.LatestDraftSnapshot.Should().NotBeNull();
+        response.LatestDraftSnapshot!.Policy.SelectedProfileId.Should().Be("admin-dev-1of1");
+        response.LatestDraftSnapshot.Policy.SelectedProfileDevOnly.Should().BeTrue();
     }
 
     [Fact]
@@ -947,7 +1053,8 @@ public class ElectionQueryApplicationServiceTests
                 new SharedTrusteeReference("trustee-b", "Trustee B"),
                 new SharedTrusteeReference("trustee-c", "Trustee C"),
             ],
-            tallyPublicKeyFingerprint: "tally-fingerprint");
+            tallyPublicKeyFingerprint: CeremonyTestKeyFixtures.Fingerprint,
+            tallyPublicKey: CeremonyTestKeyFixtures.PublicKeyBytes);
         var awaitingSession = ElectionModelFactory.CreateFinalizationSession(
             closedElection,
             closeArtifactId: Guid.NewGuid(),
@@ -1075,7 +1182,10 @@ public class ElectionQueryApplicationServiceTests
                     new SharedTrusteeReference("trustee-address", "Trustee Five"),
                 ],
                 startedByPublicAddress: "owner-address")
-            .MarkReady(DateTime.UtcNow.AddMinutes(-1), "tally-kc-001");
+            .MarkReady(
+                DateTime.UtcNow.AddMinutes(-1),
+                CeremonyTestKeyFixtures.Fingerprint,
+                CeremonyTestKeyFixtures.PublicKeyBytes);
         var trusteeState = ElectionModelFactory.CreateCeremonyTrusteeState(
                 draftTrusteeElection.ElectionId,
                 version.Id,
@@ -1085,7 +1195,10 @@ public class ElectionQueryApplicationServiceTests
             .PublishTransportKey("transport-a", DateTime.UtcNow.AddMinutes(-5))
             .MarkJoined(DateTime.UtcNow.AddMinutes(-4))
             .RecordSelfTestSuccess(DateTime.UtcNow.AddMinutes(-3))
-            .RecordMaterialSubmitted(DateTime.UtcNow.AddMinutes(-2), "share-v1")
+            .RecordMaterialSubmitted(
+                DateTime.UtcNow.AddMinutes(-2),
+                "share-v1",
+                CeremonyTestKeyFixtures.PublicKeyBytes)
             .MarkCompleted(DateTime.UtcNow.AddMinutes(-1), "share-v1");
         var shareCustody = ElectionModelFactory.CreateCeremonyShareCustodyRecord(
             draftTrusteeElection.ElectionId,
@@ -1195,7 +1308,10 @@ public class ElectionQueryApplicationServiceTests
             .PublishTransportKey("transport-a", DateTime.UtcNow.AddMinutes(-4))
             .MarkJoined(DateTime.UtcNow.AddMinutes(-3))
             .RecordSelfTestSuccess(DateTime.UtcNow.AddMinutes(-2))
-            .RecordMaterialSubmitted(DateTime.UtcNow.AddMinutes(-1), "share-v1");
+            .RecordMaterialSubmitted(
+                DateTime.UtcNow.AddMinutes(-1),
+                "share-v1",
+                CeremonyTestKeyFixtures.PublicKeyBytes);
 
         ConfigureReadOnlyRepository(mocker, repo =>
         {
@@ -1220,6 +1336,67 @@ public class ElectionQueryApplicationServiceTests
         response.Elections[0].SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionOwnerManageDraft);
         response.Elections[0].SuggestedActionReason.Should().Be(
             "The election remains in draft while the key ceremony awaits owner validation of submitted trustee packages. You can still edit ballot content, but trustee changes require a new key ceremony version.");
+    }
+
+    [Fact]
+    public async Task GetElectionHubViewAsync_WithReadyLegacyCeremonyAndSubmittedPackages_ReturnsRemainingValidationReason()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection("Owner Draft Ready But Incomplete");
+        var version = ElectionModelFactory.CreateCeremonyVersion(
+            election.ElectionId,
+            versionNumber: 1,
+            profileId: "dkg-prod-3of5",
+            requiredApprovalCount: 3,
+            boundTrustees:
+            [
+                new SharedTrusteeReference("trustee-a", "Trustee A"),
+                new SharedTrusteeReference("trustee-b", "Trustee B"),
+                new SharedTrusteeReference("trustee-c", "Trustee C"),
+                new SharedTrusteeReference("trustee-d", "Trustee D"),
+                new SharedTrusteeReference("trustee-e", "Trustee E"),
+            ],
+            startedByPublicAddress: "owner-address").MarkReady(
+                DateTime.UtcNow,
+                "fingerprint-1",
+                CeremonyTestKeyFixtures.PublicKeyBytes);
+        var submittedTrusteeState = ElectionModelFactory.CreateCeremonyTrusteeState(
+                election.ElectionId,
+                version.Id,
+                "trustee-d",
+                "Trustee D",
+                ElectionTrusteeCeremonyState.AcceptedTrustee)
+            .PublishTransportKey("transport-d", DateTime.UtcNow.AddMinutes(-4))
+            .MarkJoined(DateTime.UtcNow.AddMinutes(-3))
+            .RecordSelfTestSuccess(DateTime.UtcNow.AddMinutes(-2))
+            .RecordMaterialSubmitted(
+                DateTime.UtcNow.AddMinutes(-1),
+                "share-v4",
+                CeremonyTestKeyFixtures.PublicKeyBytes);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionsByOwnerAsync("owner-address"))
+                .ReturnsAsync([election]);
+            repo.Setup(x => x.GetElectionsByIdsAsync(It.Is<IReadOnlyCollection<ElectionId>>(ids =>
+                    ids.Count == 1 &&
+                    ids.Contains(election.ElectionId))))
+                .ReturnsAsync([election]);
+            repo.Setup(x => x.GetActiveCeremonyVersionAsync(election.ElectionId))
+                .ReturnsAsync(version);
+            repo.Setup(x => x.GetCeremonyTrusteeStatesAsync(version.Id))
+                .ReturnsAsync([submittedTrusteeState]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionHubViewAsync("owner-address");
+
+        response.Success.Should().BeTrue();
+        response.Elections.Should().ContainSingle();
+        response.Elections[0].SuggestedAction.Should().Be(ElectionHubNextActionHintProto.ElectionHubActionOwnerManageDraft);
+        response.Elections[0].SuggestedActionReason.Should().Be(
+            "The active ceremony version already has a threshold-ready key, but owner validation still needs to finish the remaining trustee packages before open. You can still edit ballot content, but trustee changes require a new key ceremony version.");
     }
 
     [Fact]
@@ -1595,7 +1772,8 @@ public class ElectionQueryApplicationServiceTests
             [
                 new SharedTrusteeReference("trustee-a", "Alice"),
             ],
-            tallyPublicKeyFingerprint: "tally-fingerprint");
+            tallyPublicKeyFingerprint: CeremonyTestKeyFixtures.Fingerprint,
+            tallyPublicKey: CeremonyTestKeyFixtures.PublicKeyBytes);
         var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
             ElectionBoundaryArtifactType.Open,
             election with { OpenArtifactId = Guid.NewGuid() },
@@ -1671,6 +1849,8 @@ public class ElectionQueryApplicationServiceTests
         response.CeremonyVersionId.Should().Be(ceremonySnapshot.CeremonyVersionId.ToString());
         response.DkgProfileId.Should().Be(ceremonySnapshot.ProfileId);
         response.TallyPublicKeyFingerprint.Should().Be(ceremonySnapshot.TallyPublicKeyFingerprint);
+        response.TallyPublicKey.X.Length.Should().Be(32);
+        response.TallyPublicKey.Y.Length.Should().Be(32);
     }
 
     [Fact]
@@ -2002,6 +2182,153 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionAsync_WithBindingElection_ReturnsVisibleCeremonyProfilesWhenDevProfilesAreEnabled()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection();
+        var prodProfile = ElectionModelFactory.CreateCeremonyProfile(
+            "prod-1of1-v1",
+            "Production 1 of 1",
+            "Production profile",
+            "provider-a",
+            "v1",
+            trusteeCount: 1,
+            requiredApprovalCount: 1,
+            devOnly: false);
+        var devProfile = ElectionModelFactory.CreateCeremonyProfile(
+            "dev-1of1-v1",
+            "Dev 1 of 1",
+            "Dev profile",
+            "provider-a",
+            "v1",
+            trusteeCount: 1,
+            requiredApprovalCount: 1,
+            devOnly: true);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetCeremonyProfilesAsync()).ReturnsAsync([prodProfile, devProfile]);
+        });
+
+        var sut = CreateQueryService(mocker, new ElectionCeremonyOptions(EnableDevCeremonyProfiles: true));
+
+        var response = await sut.GetElectionAsync(election.ElectionId);
+
+        response.Success.Should().BeTrue();
+        response.CeremonyProfiles
+            .Select(x => x.ProfileId)
+            .Should()
+            .BeEquivalentTo(prodProfile.ProfileId, devProfile.ProfileId);
+    }
+
+    [Fact]
+    public async Task GetElectionAsync_WithNonBindingElection_ReturnsVisibleCeremonyProfilesWhenDevProfilesAreEnabled()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection() with
+        {
+            BindingStatus = ElectionBindingStatus.NonBinding,
+        };
+        var prodProfile = ElectionModelFactory.CreateCeremonyProfile(
+            "prod-1of1-v1",
+            "Production 1 of 1",
+            "Production profile",
+            "provider-a",
+            "v1",
+            trusteeCount: 1,
+            requiredApprovalCount: 1,
+            devOnly: false);
+        var devProfile = ElectionModelFactory.CreateCeremonyProfile(
+            "dev-1of1-v1",
+            "Dev 1 of 1",
+            "Dev profile",
+            "provider-a",
+            "v1",
+            trusteeCount: 1,
+            requiredApprovalCount: 1,
+            devOnly: true);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetCeremonyProfilesAsync()).ReturnsAsync([prodProfile, devProfile]);
+        });
+
+        var sut = CreateQueryService(mocker, new ElectionCeremonyOptions(EnableDevCeremonyProfiles: true));
+
+        var response = await sut.GetElectionAsync(election.ElectionId);
+
+        response.Success.Should().BeTrue();
+        response.CeremonyProfiles
+            .Select(x => x.ProfileId)
+            .Should()
+            .BeEquivalentTo(prodProfile.ProfileId, devProfile.ProfileId);
+    }
+
+    [Fact]
+    public async Task GetElectionAsync_WithAdminOnlyElection_ReturnsAdminOnlySelectableProfiles()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection();
+        var registryProdProfile = ElectionModelFactory.CreateCeremonyProfile(
+            "prod-1of1-v1",
+            "Production 1 of 1",
+            "Production profile",
+            "provider-a",
+            "v1",
+            trusteeCount: 1,
+            requiredApprovalCount: 1,
+            devOnly: false);
+        var registryDevProfile = ElectionModelFactory.CreateCeremonyProfile(
+            "dev-1of1-v1",
+            "Dev 1 of 1",
+            "Dev profile",
+            "provider-a",
+            "v1",
+            trusteeCount: 1,
+            requiredApprovalCount: 1,
+            devOnly: true);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetCeremonyProfilesAsync()).ReturnsAsync([registryProdProfile, registryDevProfile]);
+        });
+
+        var sut = CreateQueryService(mocker, new ElectionCeremonyOptions(EnableDevCeremonyProfiles: true));
+
+        var response = await sut.GetElectionAsync(election.ElectionId);
+
+        response.Success.Should().BeTrue();
+        response.CeremonyProfiles
+            .Select(x => x.ProfileId)
+            .Should()
+            .BeEquivalentTo("admin-prod-1of1", "admin-dev-1of1");
+    }
+
+    [Fact]
+    public async Task GetElectionAsync_WithAdminOnlyElectionAndDevProfilesDisabled_FiltersAdminDevCircuit()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection();
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetCeremonyProfilesAsync()).ReturnsAsync(Array.Empty<ElectionCeremonyProfileRecord>());
+        });
+
+        var sut = CreateQueryService(mocker, new ElectionCeremonyOptions(EnableDevCeremonyProfiles: false));
+
+        var response = await sut.GetElectionAsync(election.ElectionId);
+
+        response.Success.Should().BeTrue();
+        response.CeremonyProfiles.Should().ContainSingle();
+        response.CeremonyProfiles[0].ProfileId.Should().Be("admin-prod-1of1");
+    }
+
+    [Fact]
     public async Task GetElectionResultViewAsync_WithParticipantActor_ReturnsUnofficialAndOfficialArtifacts()
     {
         var mocker = new AutoMocker();
@@ -2011,6 +2338,37 @@ public class ElectionQueryApplicationServiceTests
             TallyReadyAt = DateTime.UtcNow.AddMinutes(-2),
             ClosedProgressStatus = ElectionClosedProgressStatus.None,
             OfficialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly,
+            OpenArtifactId = Guid.NewGuid(),
+        };
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            Guid.NewGuid(),
+            ceremonyVersionNumber: 1,
+            profileId: "dkg-prod-3of5",
+            boundTrusteeCount: 3,
+            requiredApprovalCount: 3,
+            activeTrustees:
+            [
+                new SharedTrusteeReference("trustee-a", "Trustee A"),
+                new SharedTrusteeReference("trustee-b", "Trustee B"),
+                new SharedTrusteeReference("trustee-c", "Trustee C"),
+            ],
+            tallyPublicKeyFingerprint: CeremonyTestKeyFixtures.Fingerprint,
+            tallyPublicKey: CeremonyTestKeyFixtures.PublicKeyBytes);
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            election with
+            {
+                LifecycleState = ElectionLifecycleState.Open,
+                ClosedAt = null,
+                VoteAcceptanceLockedAt = null,
+                TallyReadyAt = null,
+                TallyReadyArtifactId = null,
+            },
+            recordedByPublicAddress: "owner-address",
+            recordedAt: DateTime.UtcNow.AddMinutes(-10),
+            ceremonySnapshot: ceremonySnapshot) with
+        {
+            Id = election.OpenArtifactId!.Value,
         };
         var rosterEntry = ElectionModelFactory.CreateRosterEntry(
                 election.ElectionId,
@@ -2059,6 +2417,7 @@ public class ElectionQueryApplicationServiceTests
         {
             repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
             repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync(Array.Empty<ElectionTrusteeInvitationRecord>());
+            repo.Setup(x => x.GetBoundaryArtifactsAsync(election.ElectionId)).ReturnsAsync([openArtifact]);
             repo.Setup(x => x.GetRosterEntryByLinkedActorAsync(election.ElectionId, "participant-address")).ReturnsAsync(rosterEntry);
             repo.Setup(x => x.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Unofficial)).ReturnsAsync(unofficial);
             repo.Setup(x => x.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Official)).ReturnsAsync(official);
@@ -2071,6 +2430,9 @@ public class ElectionQueryApplicationServiceTests
         response.Success.Should().BeTrue();
         response.CanViewParticipantEncryptedResults.Should().BeTrue();
         response.CanViewReportPackage.Should().BeFalse();
+        response.CeremonySnapshot.Should().NotBeNull();
+        response.CeremonySnapshot.ProfileId.Should().Be("dkg-prod-3of5");
+        response.CeremonySnapshot.TallyPublicKeyFingerprint.Should().Be(CeremonyTestKeyFixtures.Fingerprint);
         response.UnofficialResult.Should().NotBeNull();
         response.OfficialResult.Should().NotBeNull();
         response.UnofficialResult.EncryptedPayload.Should().Be("enc::unofficial");
@@ -2639,7 +3001,7 @@ public class ElectionQueryApplicationServiceTests
             .PublishTransportKey("transport-a", DateTime.UtcNow)
             .MarkJoined(DateTime.UtcNow)
             .RecordSelfTestSuccess(DateTime.UtcNow)
-            .RecordMaterialSubmitted(DateTime.UtcNow, "share-v1")
+            .RecordMaterialSubmitted(DateTime.UtcNow, "share-v1", CeremonyTestKeyFixtures.PublicKeyBytes)
             .RecordValidationFailure("Wrong version payload.", DateTime.UtcNow);
 
         ConfigureReadOnlyRepository(mocker, repo =>

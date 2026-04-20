@@ -1,11 +1,17 @@
 using System.Collections.Concurrent;
+using System.Globalization;
+using System.Numerics;
+using System.Text;
+using System.Text.Json;
 using HushNode.Credentials;
+using HushNode.Reactions.Crypto;
 using HushNode.Elections.Storage;
 using HushNode.MemPool;
 using HushShared.Blockchain.Model;
 using HushShared.Blockchain.TransactionModel;
 using HushShared.Blockchain.TransactionModel.States;
 using HushShared.Elections.Model;
+using HushShared.Reactions.Model;
 using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Elections;
@@ -516,7 +522,20 @@ public class EncryptedElectionEnvelopeContentHandler(
             return false;
         }
 
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
+        if (election is null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_not_found",
+                $"Election {decryptedEnvelope.Transaction.Payload.ElectionId} was not found.");
+            return false;
+        }
+
         if (!ElectionDevModePrivacyGuard.TryValidateAcceptedBallotArtifacts(
+                election.SelectedProfileDevOnly,
                 decryptedEnvelope.Transaction.Payload.ElectionId,
                 acceptAction.ActorPublicAddress,
                 acceptAction.EncryptedBallotPackage,
@@ -528,18 +547,6 @@ public class EncryptedElectionEnvelopeContentHandler(
                 transactionId,
                 "election_cast_validation_failed",
                 castPrivacyValidationError);
-            return false;
-        }
-
-        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
-        var repository = unitOfWork.GetRepository<IElectionsRepository>();
-        var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
-        if (election is null)
-        {
-            RecordValidationFailure(
-                transactionId,
-                "election_cast_not_found",
-                $"Election {decryptedEnvelope.Transaction.Payload.ElectionId} was not found.");
             return false;
         }
 
@@ -716,7 +723,225 @@ public class EncryptedElectionEnvelopeContentHandler(
             return false;
         }
 
+        if (!TryValidateBindingProofBundle(
+                acceptAction,
+                out var proofValidationError))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_proof_invalid",
+                proofValidationError);
+            return false;
+        }
+
+        if (ceremonySnapshot?.TallyPublicKey is { Length: > 0 } &&
+            !TryValidateBindingBallotTargetKey(
+                acceptAction.EncryptedBallotPackage,
+                ceremonySnapshot.TallyPublicKey,
+                out var ballotKeyValidationError))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_cast_wrong_tally_key",
+                ballotKeyValidationError);
+            return false;
+        }
+
         return true;
+    }
+
+    private static bool TryValidateBindingProofBundle(
+        AcceptElectionBallotCastActionPayload acceptAction,
+        out string error)
+    {
+        error = string.Empty;
+
+        try
+        {
+            using var ballotDocument = JsonDocument.Parse(acceptAction.EncryptedBallotPackage);
+            if (!TryGetJsonStringProperty(ballotDocument.RootElement, "version", out var ballotVersion) ||
+                !string.Equals(ballotVersion, "omega-binding-ballot-v1", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            using var proofDocument = JsonDocument.Parse(acceptAction.ProofBundle);
+            if (!TryGetJsonStringProperty(proofDocument.RootElement, "version", out var version) ||
+                !string.Equals(version, "omega-binding-proof-v1", StringComparison.Ordinal))
+            {
+                error = "Binding ballot packages require the omega-binding-proof-v1 envelope.";
+                return false;
+            }
+
+            if (!TryGetJsonStringProperty(proofDocument.RootElement, "proofType", out var proofType) ||
+                !string.Equals(proofType, "binding-circuit-envelope", StringComparison.Ordinal))
+            {
+                error = "Binding proof bundles must declare the binding-circuit-envelope proof type.";
+                return false;
+            }
+
+            if (!TryGetJsonStringProperty(proofDocument.RootElement, "proofProfile", out var proofProfile) ||
+                !string.Equals(proofProfile, "PRODUCTION_LIKE_PROFILE", StringComparison.Ordinal))
+            {
+                error = "Binding proof bundles must use the production-like proof profile.";
+                return false;
+            }
+
+            if (!TryGetJsonStringProperty(proofDocument.RootElement, "circuitVersion", out _))
+            {
+                error = "Binding proof bundles must declare a circuit version.";
+                return false;
+            }
+
+            if (!TryGetJsonStringProperty(proofDocument.RootElement, "artifactShape", out var artifactShape) ||
+                !string.Equals(artifactShape, "opaque-one-hot-elgamal", StringComparison.Ordinal))
+            {
+                error = "Binding proof bundles must declare the opaque-one-hot-elgamal artifact shape.";
+                return false;
+            }
+
+            var expectedBallotPackageHash = ComputeLowerHexSha256(acceptAction.EncryptedBallotPackage);
+            if (!TryGetJsonStringProperty(proofDocument.RootElement, "ballotPackageHash", out var ballotPackageHash) ||
+                !string.Equals(ballotPackageHash, expectedBallotPackageHash, StringComparison.OrdinalIgnoreCase))
+            {
+                error = "Binding proof bundles must match the submitted ballot package hash.";
+                return false;
+            }
+
+            if (!TryGetJsonStringProperty(proofDocument.RootElement, "openArtifactId", out var openArtifactId) ||
+                !Guid.TryParse(openArtifactId, out var parsedOpenArtifactId) ||
+                parsedOpenArtifactId != acceptAction.OpenArtifactId)
+            {
+                error = "Binding proof bundles must bind the active open artifact.";
+                return false;
+            }
+
+            var expectedEligibleSetHash = Convert.ToBase64String(acceptAction.EligibleSetHash);
+            if (!TryGetJsonStringProperty(proofDocument.RootElement, "eligibleSetHash", out var eligibleSetHash) ||
+                !string.Equals(eligibleSetHash, expectedEligibleSetHash, StringComparison.Ordinal))
+            {
+                error = "Binding proof bundles must bind the active eligible-set hash.";
+                return false;
+            }
+
+            if (!TryGetJsonStringProperty(proofDocument.RootElement, "ceremonyVersionId", out var ceremonyVersionId) ||
+                !Guid.TryParse(ceremonyVersionId, out var parsedCeremonyVersionId) ||
+                parsedCeremonyVersionId != acceptAction.CeremonyVersionId)
+            {
+                error = "Binding proof bundles must bind the active ceremony version.";
+                return false;
+            }
+
+            if (!TryGetJsonStringProperty(proofDocument.RootElement, "dkgProfileId", out var dkgProfileId) ||
+                !string.Equals(dkgProfileId, acceptAction.DkgProfileId, StringComparison.Ordinal))
+            {
+                error = "Binding proof bundles must bind the active ceremony profile.";
+                return false;
+            }
+
+            if (!TryGetJsonStringProperty(proofDocument.RootElement, "tallyPublicKeyFingerprint", out var tallyPublicKeyFingerprint) ||
+                !string.Equals(
+                    tallyPublicKeyFingerprint,
+                    acceptAction.TallyPublicKeyFingerprint,
+                    StringComparison.Ordinal))
+            {
+                error = "Binding proof bundles must bind the active tally public key fingerprint.";
+                return false;
+            }
+
+            return true;
+        }
+        catch (JsonException)
+        {
+            error = "Binding proof bundles must be readable JSON.";
+            return false;
+        }
+    }
+
+    private static bool TryValidateBindingBallotTargetKey(
+        string encryptedBallotPackage,
+        byte[] expectedTallyPublicKey,
+        out string error)
+    {
+        error = string.Empty;
+
+        try
+        {
+            using var document = JsonDocument.Parse(encryptedBallotPackage);
+            if (!document.RootElement.TryGetProperty("version", out var versionElement) ||
+                !string.Equals(versionElement.GetString(), "omega-binding-ballot-v1", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (!document.RootElement.TryGetProperty("publicKey", out var publicKeyElement) ||
+                !publicKeyElement.TryGetProperty("x", out var xElement) ||
+                !publicKeyElement.TryGetProperty("y", out var yElement))
+            {
+                error = "Binding ballot packages must carry the ceremony tally public key.";
+                return false;
+            }
+
+            var providedPoint = new ECPoint(
+                BigInteger.Parse(xElement.GetString() ?? string.Empty, CultureInfo.InvariantCulture),
+                BigInteger.Parse(yElement.GetString() ?? string.Empty, CultureInfo.InvariantCulture));
+            var expectedPoint = ECPoint.FromBytes(expectedTallyPublicKey);
+            if (providedPoint.X != expectedPoint.X || providedPoint.Y != expectedPoint.Y)
+            {
+                error = "Binding ballot packages must target the active ceremony tally public key.";
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is JsonException or FormatException or OverflowException or ArgumentException)
+        {
+            error = "Binding ballot packages must carry a readable tally public key.";
+            return false;
+        }
+    }
+
+    private static bool TryGetJsonStringProperty(
+        JsonElement element,
+        string propertyName,
+        out string value)
+    {
+        value = string.Empty;
+        if (!TryGetJsonPropertyCaseInsensitive(element, propertyName, out var propertyElement) ||
+            propertyElement.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var rawValue = propertyElement.GetString();
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return false;
+        }
+
+        value = rawValue.Trim();
+        return true;
+    }
+
+    private static bool TryGetJsonPropertyCaseInsensitive(
+        JsonElement element,
+        string propertyName,
+        out JsonElement propertyElement)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    propertyElement = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        propertyElement = default;
+        return false;
     }
 
     private bool IsValidInviteTrusteeAction(
@@ -1308,6 +1533,19 @@ public class EncryptedElectionEnvelopeContentHandler(
                 "Share version is required.");
         }
 
+        var curve = new BabyJubJubCurve();
+        if (!ElectionTallyPublicKeyDerivation.TryParsePointPayload(
+                submitAction.CloseCountingPublicCommitment,
+                curve,
+                out var parsedCommitment,
+                out var commitmentValidationError))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "election_ceremony_submit_invalid_commitment",
+                commitmentValidationError);
+        }
+
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var context = LoadActiveCeremonyTrusteeContext(
@@ -1337,7 +1575,10 @@ public class EncryptedElectionEnvelopeContentHandler(
         return TryValidateCeremonyTransition(
             transactionId,
             "election_ceremony_submit_invalid_state",
-            () => context.TrusteeState.RecordMaterialSubmitted(DateTime.UtcNow, submitAction.ShareVersion));
+            () => context.TrusteeState.RecordMaterialSubmitted(
+                DateTime.UtcNow,
+                submitAction.ShareVersion,
+                parsedCommitment!));
     }
 
     private bool IsValidRecordCeremonyValidationFailureAction(
@@ -1457,19 +1698,13 @@ public class EncryptedElectionEnvelopeContentHandler(
             return false;
         }
 
-        var trusteeStates = repository
-            .GetCeremonyTrusteeStatesAsync(completeAction.CeremonyVersionId)
-            .GetAwaiter()
-            .GetResult();
-        var completedTrustees = CountCompletedTrustees(trusteeStates, completeAction.TrusteeUserAddress);
-        if (ownerContext.Version.Status == ElectionCeremonyVersionStatus.InProgress
-            && completedTrustees >= ownerContext.Version.RequiredApprovalCount
-            && string.IsNullOrWhiteSpace(completeAction.TallyPublicKeyFingerprint))
+        if (ownerContext.Version.Status != ElectionCeremonyVersionStatus.InProgress &&
+            ownerContext.Version.Status != ElectionCeremonyVersionStatus.Ready)
         {
             return RejectWithValidationFailure(
                 transactionId,
-                "election_ceremony_complete_missing_tally_fingerprint",
-                "Tally public key fingerprint is required when the ceremony reaches readiness.");
+                "election_ceremony_complete_invalid_version_status",
+                "Only active in-progress or ready ceremony versions can accept trustee completions.");
         }
 
         return true;
@@ -1642,7 +1877,11 @@ public class EncryptedElectionEnvelopeContentHandler(
     private static string ComputeScopedHash(string value) =>
         Convert.ToHexString(
             System.Security.Cryptography.SHA256.HashData(
-                System.Text.Encoding.UTF8.GetBytes(value.Trim())));
+                Encoding.UTF8.GetBytes(value.Trim())));
+
+    private static string ComputeLowerHexSha256(string value) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty)))
+            .ToLowerInvariant();
 
     private static string ResolveClaimVerificationCode(
         EncryptedElectionEnvelopePayload payload,
@@ -1887,17 +2126,8 @@ public class EncryptedElectionEnvelopeContentHandler(
         return ShareCustodyContextValidationResult.Success(election, version, custodyRecord);
     }
 
-    private static int CountCompletedTrustees(
-        IReadOnlyList<ElectionCeremonyTrusteeStateRecord> trusteeStates,
-        string updatedTrusteeUserAddress)
-    {
-        var completedCount = trusteeStates.Count(x => x.State == ElectionTrusteeCeremonyState.CeremonyCompleted);
-        return trusteeStates.Any(x =>
-                string.Equals(x.TrusteeUserAddress, updatedTrusteeUserAddress, StringComparison.OrdinalIgnoreCase) &&
-                x.State == ElectionTrusteeCeremonyState.CeremonyCompleted)
-            ? completedCount
-            : completedCount + 1;
-    }
+    private static int CountCompletedTrustees(IReadOnlyList<ElectionCeremonyTrusteeStateRecord> trusteeStates) =>
+        trusteeStates.Count(x => x.State == ElectionTrusteeCeremonyState.CeremonyCompleted);
 
     private sealed record CeremonyTrusteeContextValidationResult(
         bool IsSuccess,

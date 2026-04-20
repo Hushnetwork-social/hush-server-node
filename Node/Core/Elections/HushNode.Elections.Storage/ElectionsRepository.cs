@@ -948,6 +948,24 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         }
     }
 
+    public async Task<ElectionAdminOnlyProtectedTallyEnvelopeRecord?> GetAdminOnlyProtectedTallyEnvelopeAsync(ElectionId electionId) =>
+        await Context.ElectionAdminOnlyProtectedTallyEnvelopes
+            .FirstOrDefaultAsync(x => x.ElectionId == electionId);
+
+    public async Task SaveAdminOnlyProtectedTallyEnvelopeAsync(ElectionAdminOnlyProtectedTallyEnvelopeRecord envelope) =>
+        await Context.ElectionAdminOnlyProtectedTallyEnvelopes.AddAsync(envelope);
+
+    public async Task UpdateAdminOnlyProtectedTallyEnvelopeAsync(ElectionAdminOnlyProtectedTallyEnvelopeRecord envelope)
+    {
+        var existing = await Context.ElectionAdminOnlyProtectedTallyEnvelopes
+            .FirstOrDefaultAsync(x => x.ElectionId == envelope.ElectionId);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(envelope);
+        }
+    }
+
     public async Task<ElectionTallyExecutorLeaseRecord?> GetTallyExecutorLeaseAsync(Guid closeCountingJobId) =>
         await Context.ElectionTallyExecutorLeases
             .FirstOrDefaultAsync(x => x.CloseCountingJobId == closeCountingJobId);

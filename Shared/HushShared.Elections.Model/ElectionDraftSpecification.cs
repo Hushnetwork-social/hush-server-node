@@ -6,6 +6,7 @@ public record ElectionDraftSpecification(
     string? ExternalReferenceCode,
     ElectionClass ElectionClass,
     ElectionBindingStatus BindingStatus,
+    string SelectedProfileId,
     ElectionGovernanceMode GovernanceMode,
     ElectionDisclosureMode DisclosureMode,
     ParticipationPrivacyMode ParticipationPrivacyMode,
@@ -20,4 +21,6 @@ public record ElectionDraftSpecification(
     IReadOnlyList<ElectionOptionDefinition> OwnerOptions,
     IReadOnlyList<ElectionWarningCode>? AcknowledgedWarningCodes = null,
     int? RequiredApprovalCount = null,
-    OfficialResultVisibilityPolicy OfficialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly);
+    OfficialResultVisibilityPolicy OfficialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly)
+{
+}

@@ -1,0 +1,7 @@
+{
+  "Elections": {
+    "Ceremony": {
+      "EnableDevCeremonyProfiles": true
+    }
+  }
+}

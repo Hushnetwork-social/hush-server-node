@@ -67,7 +67,10 @@ public class ElectionCeremonyRepositoryTests
                 new ElectionTrusteeReference("trustee-e", "Erin"),
             ],
             startedByPublicAddress: "owner-address");
-        var readyVersion = version.MarkReady(DateTime.UtcNow, "tally-fingerprint-1");
+        var readyVersion = version.MarkReady(
+            DateTime.UtcNow,
+            CeremonyTestKeyFixtures.Fingerprint,
+            CeremonyTestKeyFixtures.PublicKeyBytes);
         var transcriptEvent = ElectionModelFactory.CreateCeremonyTranscriptEvent(
             electionId: election.ElectionId,
             ceremonyVersionId: version.Id,
@@ -94,7 +97,7 @@ public class ElectionCeremonyRepositoryTests
             .PublishTransportKey("transport-fingerprint", DateTime.UtcNow)
             .MarkJoined(DateTime.UtcNow)
             .RecordSelfTestSuccess(DateTime.UtcNow)
-            .RecordMaterialSubmitted(DateTime.UtcNow, "share-v1")
+            .RecordMaterialSubmitted(DateTime.UtcNow, "share-v1", CeremonyTestKeyFixtures.PublicKeyBytes)
             .MarkCompleted(DateTime.UtcNow, "share-v1");
         var shareCustody = ElectionModelFactory.CreateCeremonyShareCustodyRecord(
             electionId: election.ElectionId,
@@ -123,11 +126,12 @@ public class ElectionCeremonyRepositoryTests
 
         activeVersion.Should().NotBeNull();
         activeVersion!.Status.Should().Be(ElectionCeremonyVersionStatus.Ready);
-        activeVersion.TallyPublicKeyFingerprint.Should().Be("tally-fingerprint-1");
+        activeVersion.TallyPublicKeyFingerprint.Should().Be(CeremonyTestKeyFixtures.Fingerprint);
+        activeVersion.TallyPublicKey.Should().Equal(CeremonyTestKeyFixtures.PublicKeyBytes);
         versions.Should().ContainSingle();
         transcript.Should().ContainSingle();
         transcript[0].EventType.Should().Be(ElectionCeremonyTranscriptEventType.VersionReady);
-        transcript[0].TallyPublicKeyFingerprint.Should().Be("tally-fingerprint-1");
+        transcript[0].TallyPublicKeyFingerprint.Should().Be(CeremonyTestKeyFixtures.Fingerprint);
         envelopes.Should().ContainSingle();
         envelopes[0].EncryptedPayload.Should().Equal([1, 2, 3, 4]);
         envelopes[0].PayloadFingerprint.Should().Be("payload-fingerprint-1");

@@ -26,6 +26,63 @@ public static partial class ElectionModelFactory
         int currentDraftRevision = 1,
         int? requiredApprovalCount = null,
         DateTime? createdAt = null,
+        OfficialResultVisibilityPolicy officialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly) =>
+        CreateDraftRecord(
+            electionId,
+            title,
+            shortDescription,
+            ownerPublicAddress,
+            externalReferenceCode,
+            electionClass,
+            bindingStatus,
+            selectedProfileId: ElectionSelectableProfileCatalog.GetDefaultProfileId(
+                governanceMode,
+                bindingStatus),
+            selectedProfileDevOnly: bindingStatus == ElectionBindingStatus.NonBinding,
+            governanceMode,
+            disclosureMode,
+            participationPrivacyMode,
+            voteUpdatePolicy,
+            eligibilitySourceType,
+            eligibilityMutationPolicy,
+            outcomeRule,
+            approvedClientApplications,
+            protocolOmegaVersion,
+            reportingPolicy,
+            reviewWindowPolicy,
+            ownerOptions,
+            acknowledgedWarningCodes,
+            currentDraftRevision,
+            requiredApprovalCount,
+            createdAt,
+            officialResultVisibilityPolicy);
+
+    public static ElectionRecord CreateDraftRecord(
+        ElectionId electionId,
+        string title,
+        string? shortDescription,
+        string ownerPublicAddress,
+        string? externalReferenceCode,
+        ElectionClass electionClass,
+        ElectionBindingStatus bindingStatus,
+        string selectedProfileId,
+        bool selectedProfileDevOnly,
+        ElectionGovernanceMode governanceMode,
+        ElectionDisclosureMode disclosureMode,
+        ParticipationPrivacyMode participationPrivacyMode,
+        VoteUpdatePolicy voteUpdatePolicy,
+        EligibilitySourceType eligibilitySourceType,
+        EligibilityMutationPolicy eligibilityMutationPolicy,
+        OutcomeRuleDefinition outcomeRule,
+        IReadOnlyList<ApprovedClientApplicationRecord> approvedClientApplications,
+        string protocolOmegaVersion,
+        ReportingPolicy reportingPolicy,
+        ReviewWindowPolicy reviewWindowPolicy,
+        IReadOnlyList<ElectionOptionDefinition> ownerOptions,
+        IReadOnlyList<ElectionWarningCode>? acknowledgedWarningCodes = null,
+        int currentDraftRevision = 1,
+        int? requiredApprovalCount = null,
+        DateTime? createdAt = null,
         OfficialResultVisibilityPolicy officialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly)
     {
         if (string.IsNullOrWhiteSpace(title))
@@ -63,6 +120,8 @@ public static partial class ElectionModelFactory
             ElectionLifecycleState.Draft,
             electionClass,
             bindingStatus,
+            NormalizeRequiredText(selectedProfileId, nameof(selectedProfileId)),
+            selectedProfileDevOnly,
             governanceMode,
             disclosureMode,
             participationPrivacyMode,
@@ -126,6 +185,8 @@ public static partial class ElectionModelFactory
             new ElectionFrozenPolicySnapshot(
                 election.ElectionClass,
                 election.BindingStatus,
+                election.SelectedProfileId,
+                election.SelectedProfileDevOnly,
                 election.GovernanceMode,
                 election.DisclosureMode,
                 election.ParticipationPrivacyMode,
@@ -188,6 +249,8 @@ public static partial class ElectionModelFactory
             new ElectionFrozenPolicySnapshot(
                 election.ElectionClass,
                 election.BindingStatus,
+                election.SelectedProfileId,
+                election.SelectedProfileDevOnly,
                 election.GovernanceMode,
                 election.DisclosureMode,
                 election.ParticipationPrivacyMode,
@@ -345,7 +408,8 @@ public static partial class ElectionModelFactory
         int boundTrusteeCount,
         int requiredApprovalCount,
         IReadOnlyList<ElectionTrusteeReference> activeTrustees,
-        string tallyPublicKeyFingerprint)
+        string tallyPublicKeyFingerprint,
+        byte[]? tallyPublicKey = null)
     {
         if (ceremonyVersionNumber < 1)
         {
@@ -389,7 +453,8 @@ public static partial class ElectionModelFactory
             requiredApprovalCount,
             normalizedTrustees,
             EveryActiveTrusteeMustApprove: normalizedTrustees.Length == requiredApprovalCount,
-            NormalizeRequiredText(tallyPublicKeyFingerprint, nameof(tallyPublicKeyFingerprint)));
+            NormalizeRequiredText(tallyPublicKeyFingerprint, nameof(tallyPublicKeyFingerprint)),
+            CloneBytes(tallyPublicKey));
     }
 
     public static ElectionGovernedProposalRecord CreateGovernedProposal(
@@ -542,7 +607,8 @@ public static partial class ElectionModelFactory
             CompletedAt: null,
             SupersededAt: null,
             SupersededReason: null,
-            TallyPublicKeyFingerprint: null);
+            TallyPublicKeyFingerprint: null,
+            TallyPublicKey: null);
     }
 
     public static ElectionCeremonyTranscriptEventRecord CreateCeremonyTranscriptEvent(
@@ -647,7 +713,8 @@ public static partial class ElectionModelFactory
             CompletedAt: null,
             RemovedAt: null,
             ShareVersion: null,
-            LastUpdatedAt: timestamp);
+            LastUpdatedAt: timestamp,
+            CloseCountingPublicCommitment: null);
     }
 
     public static ElectionCeremonyShareCustodyRecord CreateCeremonyShareCustodyRecord(
@@ -1119,7 +1186,8 @@ public static partial class ElectionModelFactory
                     .Select(x => new ElectionTrusteeReference(x.TrusteeUserAddress, x.TrusteeDisplayName))
                     .ToArray(),
                 snapshot.EveryActiveTrusteeMustApprove,
-                snapshot.TallyPublicKeyFingerprint);
+                snapshot.TallyPublicKeyFingerprint,
+                CloneBytes(snapshot.TallyPublicKey));
 
     private static byte[]? CloneBytes(byte[]? value) => value is null ? null : value.ToArray();
 

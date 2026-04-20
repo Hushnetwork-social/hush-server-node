@@ -453,6 +453,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             ConfigureKestrel(builder.WebHost, nativeGrpcPort, grpcWebPort);
         }
 
+        ConfigureLogging(builder);
         ConfigureServices(builder, testConfig);
 
         var app = builder.Build();
@@ -475,6 +476,14 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         ConfigureMiddleware(app);
 
         return app;
+    }
+
+    private static void ConfigureLogging(WebApplicationBuilder builder)
+    {
+        builder.Logging.ClearProviders();
+        builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
+        builder.Logging.AddConsole();
+        builder.Logging.AddDebug();
     }
 
     private static void ConfigureKestrel(IWebHostBuilder webHost, int nativeGrpcPort, int grpcWebPort)
@@ -552,6 +561,14 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             .RegisterNotificationGrpc()
             .RegisterPushNotificationsModule()
             .RegisterCoreModuleUrlMetadata();
+
+        if (testConfig != null)
+        {
+            builder.Services.AddSingleton<ICloseCountingExecutorEnvelopeCrypto>(
+                new TransparentTestCloseCountingExecutorEnvelopeCrypto());
+            builder.Services.AddSingleton<IAdminOnlyProtectedTallyEnvelopeCrypto>(
+                new TransparentTestAdminOnlyProtectedTallyEnvelopeCrypto());
+        }
 
         // Register feed message cache service (FEAT-046)
         // This must come after RegisterNotificationGrpc which registers IConnectionMultiplexer
@@ -721,11 +738,22 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
     {
         // Get the directory where the executable is located
         var basePath = AppContext.BaseDirectory;
+        var environmentName =
+            Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ??
+            Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
 
         configurationBuilder
             .SetBasePath(basePath)
-            .AddJsonFile("ApplicationSettings.json")
-            .AddEnvironmentVariables();
+            .AddJsonFile("ApplicationSettings.json");
+
+        if (!string.IsNullOrWhiteSpace(environmentName))
+        {
+            configurationBuilder.AddJsonFile(
+                $"ApplicationSettings.{environmentName}.json",
+                optional: true);
+        }
+
+        configurationBuilder.AddEnvironmentVariables();
 
         return configurationBuilder;
     }

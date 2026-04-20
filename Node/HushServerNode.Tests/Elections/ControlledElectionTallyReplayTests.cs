@@ -1,10 +1,11 @@
+using Xunit;
 using System.Collections.Immutable;
 using FluentAssertions;
 using HushServerNode.Testing.Elections;
-using Xunit;
 
 namespace HushServerNode.Tests.Elections;
 
+[Trait("Category", "FEAT-105")]
 public sealed class ControlledElectionTallyReplayTests
 {
     [Fact]

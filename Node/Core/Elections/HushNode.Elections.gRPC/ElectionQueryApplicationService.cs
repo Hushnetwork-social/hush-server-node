@@ -2,6 +2,7 @@ using HushNetwork.proto;
 using HushNode.Caching;
 using HushNode.MemPool;
 using HushNode.Elections.Storage;
+using HushNode.Elections;
 using HushShared.Elections.Model;
 using System.Data;
 using System.Security.Cryptography;
@@ -141,7 +142,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         }
 
         var ceremonyProfiles = await repository.GetCeremonyProfilesAsync();
-        var visibleCeremonyProfiles = FilterVisibleCeremonyProfiles(ceremonyProfiles);
+        var visibleCeremonyProfiles = FilterVisibleCeremonyProfiles(election, ceremonyProfiles);
         var ceremonyVersions = await repository.GetCeremonyVersionsAsync(electionId);
         var ceremonyTranscriptEvents = new List<ElectionCeremonyTranscriptEventRecord>();
         foreach (var version in ceremonyVersions.OrderByDescending(x => x.VersionNumber))
@@ -777,6 +778,10 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 response.CeremonyVersionId = ceremonySnapshot.CeremonyVersionId.ToString();
                 response.DkgProfileId = ceremonySnapshot.ProfileId;
                 response.TallyPublicKeyFingerprint = ceremonySnapshot.TallyPublicKeyFingerprint;
+                if (ceremonySnapshot.TallyPublicKey is { Length: > 0 })
+                {
+                    response.TallyPublicKey = HushNode.Elections.gRPC.ElectionGrpcMappings.ToProto(ceremonySnapshot).TallyPublicKey;
+                }
             }
         }
 
@@ -965,6 +970,8 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             (isOwner || acceptedTrustee || isDesignatedAuditor);
         var canViewRestrictedReportArtifacts = isOwner || isDesignatedAuditor;
 
+        var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(electionId);
+        var ceremonySnapshot = ResolveResultCeremonySnapshot(election, boundaryArtifacts);
         var unofficialResult = await repository.GetResultArtifactAsync(electionId, ElectionResultArtifactKind.Unofficial);
         var officialResult = await repository.GetResultArtifactAsync(electionId, ElectionResultArtifactKind.Official);
         var latestReportPackage = await repository.GetLatestReportPackageAsync(electionId);
@@ -983,6 +990,11 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                 election.LifecycleState == ElectionLifecycleState.Closed &&
                 latestReportPackage?.Status == ElectionReportPackageStatus.GenerationFailed,
         };
+
+        if (ceremonySnapshot is not null)
+        {
+            response.CeremonySnapshot = ceremonySnapshot.ToProto();
+        }
 
         if (unofficialResult is not null && canViewParticipantEncryptedResults)
         {
@@ -1080,7 +1092,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         }
 
         var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(electionId);
-        var visibleProfiles = FilterVisibleCeremonyProfiles(await repository.GetCeremonyProfilesAsync());
+        var visibleProfiles = FilterVisibleCeremonyProfiles(election, await repository.GetCeremonyProfilesAsync());
         var activeCeremonyVersion = await repository.GetActiveCeremonyVersionAsync(electionId);
         var activeCeremonyTrusteeStates = activeCeremonyVersion is null
             ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
@@ -1409,7 +1421,9 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                     ? "The election remains in draft while the key ceremony awaits owner validation of submitted trustee packages. You can still edit ballot content, but trustee changes require a new key ceremony version."
                     : "The election remains in draft while the key ceremony is in progress. You can still edit ballot content, but trustee changes require a new key ceremony version.",
             ElectionCeremonyVersionStatus.Ready =>
-                "The key ceremony is ready. You can still edit ballot content, but trustee changes require a new key ceremony version before open.",
+                activeCeremonyTrusteeStates.Any(x => x.State == ElectionTrusteeCeremonyState.CeremonyMaterialSubmitted)
+                    ? "The active ceremony version already has a threshold-ready key, but owner validation still needs to finish the remaining trustee packages before open. You can still edit ballot content, but trustee changes require a new key ceremony version."
+                    : "The key ceremony is ready. You can still edit ballot content, but trustee changes require a new key ceremony version before open.",
             _ =>
                 "This trustee-threshold draft still needs a successful key ceremony before open can proceed.",
         };
@@ -1528,6 +1542,55 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             .FirstOrDefault();
     }
 
+    private static HushShared.Elections.Model.ElectionCeremonyBindingSnapshot? ResolveResultCeremonySnapshot(
+        ElectionRecord election,
+        IReadOnlyList<ElectionBoundaryArtifactRecord> boundaryArtifacts)
+    {
+        if (election.TallyReadyArtifactId.HasValue)
+        {
+            var tallyReadyArtifact = boundaryArtifacts.FirstOrDefault(x =>
+                x.Id == election.TallyReadyArtifactId.Value &&
+                x.CeremonySnapshot is not null);
+            if (tallyReadyArtifact?.CeremonySnapshot is not null)
+            {
+                return tallyReadyArtifact.CeremonySnapshot;
+            }
+        }
+
+        if (election.FinalizeArtifactId.HasValue)
+        {
+            var finalizeArtifact = boundaryArtifacts.FirstOrDefault(x =>
+                x.Id == election.FinalizeArtifactId.Value &&
+                x.CeremonySnapshot is not null);
+            if (finalizeArtifact?.CeremonySnapshot is not null)
+            {
+                return finalizeArtifact.CeremonySnapshot;
+            }
+        }
+
+        if (election.CloseArtifactId.HasValue)
+        {
+            var closeArtifact = boundaryArtifacts.FirstOrDefault(x =>
+                x.Id == election.CloseArtifactId.Value &&
+                x.CeremonySnapshot is not null);
+            if (closeArtifact?.CeremonySnapshot is not null)
+            {
+                return closeArtifact.CeremonySnapshot;
+            }
+        }
+
+        if (ResolveOpenArtifact(election, boundaryArtifacts)?.CeremonySnapshot is { } openSnapshot)
+        {
+            return openSnapshot;
+        }
+
+        return boundaryArtifacts
+            .Where(x => x.CeremonySnapshot is not null)
+            .OrderByDescending(x => x.RecordedAt)
+            .Select(x => x.CeremonySnapshot)
+            .FirstOrDefault();
+    }
+
     private static ElectionEligibilitySummaryView BuildEligibilitySummary(
         ElectionRecord election,
         IReadOnlyList<ElectionRosterEntryRecord> rosterEntries,
@@ -1558,12 +1621,12 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
     }
 
     private IReadOnlyList<ElectionCeremonyProfileRecord> FilterVisibleCeremonyProfiles(
+        ElectionRecord election,
         IReadOnlyList<ElectionCeremonyProfileRecord> ceremonyProfiles) =>
-        ceremonyProfiles
-            .Where(x => _ceremonyOptions.EnableDevCeremonyProfiles || !x.DevOnly)
-            .OrderBy(x => x.DevOnly)
-            .ThenBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        ElectionSelectableProfileCatalog.GetSelectableProfiles(
+            election.GovernanceMode,
+            ceremonyProfiles,
+            includeDevProfiles: _ceremonyOptions.EnableDevCeremonyProfiles);
 
     private static ElectionEligibilityActorRoleProto ResolveEligibilityActorRole(
         ElectionRecord election,

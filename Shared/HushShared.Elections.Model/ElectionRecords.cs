@@ -9,6 +9,8 @@ public record ElectionRecord(
     ElectionLifecycleState LifecycleState,
     ElectionClass ElectionClass,
     ElectionBindingStatus BindingStatus,
+    string SelectedProfileId,
+    bool SelectedProfileDevOnly,
     ElectionGovernanceMode GovernanceMode,
     ElectionDisclosureMode DisclosureMode,
     ParticipationPrivacyMode ParticipationPrivacyMode,
@@ -186,7 +188,8 @@ public record ElectionCeremonyBindingSnapshot(
     int RequiredApprovalCount,
     IReadOnlyList<ElectionTrusteeReference> ActiveTrustees,
     bool EveryActiveTrusteeMustApprove,
-    string TallyPublicKeyFingerprint);
+    string TallyPublicKeyFingerprint,
+    byte[]? TallyPublicKey = null);
 
 public record ElectionTrusteeInvitationRecord(
     Guid Id,
@@ -424,13 +427,15 @@ public record ElectionCeremonyVersionRecord(
     DateTime? CompletedAt,
     DateTime? SupersededAt,
     string? SupersededReason,
-    string? TallyPublicKeyFingerprint)
+    string? TallyPublicKeyFingerprint,
+    byte[]? TallyPublicKey = null)
 {
     public bool IsActive => Status != ElectionCeremonyVersionStatus.Superseded;
 
     public ElectionCeremonyVersionRecord MarkReady(
         DateTime completedAt,
-        string tallyPublicKeyFingerprint)
+        string tallyPublicKeyFingerprint,
+        byte[] tallyPublicKey)
     {
         EnsureInProgress();
 
@@ -439,11 +444,17 @@ public record ElectionCeremonyVersionRecord(
             throw new ArgumentException("Tally public key fingerprint is required.", nameof(tallyPublicKeyFingerprint));
         }
 
+        if (tallyPublicKey is null || tallyPublicKey.Length == 0)
+        {
+            throw new ArgumentException("Tally public key is required.", nameof(tallyPublicKey));
+        }
+
         return this with
         {
             Status = ElectionCeremonyVersionStatus.Ready,
             CompletedAt = completedAt,
             TallyPublicKeyFingerprint = tallyPublicKeyFingerprint.Trim(),
+            TallyPublicKey = tallyPublicKey.ToArray(),
         };
     }
 
@@ -525,7 +536,8 @@ public record ElectionCeremonyTrusteeStateRecord(
     DateTime? CompletedAt,
     DateTime? RemovedAt,
     string? ShareVersion,
-    DateTime LastUpdatedAt)
+    DateTime LastUpdatedAt,
+    byte[]? CloseCountingPublicCommitment = null)
 {
     public bool HasPublishedTransportKey =>
         !string.IsNullOrWhiteSpace(TransportPublicKeyFingerprint) &&
@@ -602,10 +614,14 @@ public record ElectionCeremonyTrusteeStateRecord(
             ValidationFailedAt = null,
             ValidationFailureReason = null,
             LastUpdatedAt = succeededAt,
+            CloseCountingPublicCommitment = null,
         };
     }
 
-    public ElectionCeremonyTrusteeStateRecord RecordMaterialSubmitted(DateTime submittedAt, string shareVersion)
+    public ElectionCeremonyTrusteeStateRecord RecordMaterialSubmitted(
+        DateTime submittedAt,
+        string shareVersion,
+        byte[] closeCountingPublicCommitment)
     {
         EnsureMutable();
 
@@ -631,12 +647,18 @@ public record ElectionCeremonyTrusteeStateRecord(
             throw new ArgumentException("Share version is required.", nameof(shareVersion));
         }
 
+        if (closeCountingPublicCommitment is null || closeCountingPublicCommitment.Length == 0)
+        {
+            throw new ArgumentException("Close-counting public commitment is required.", nameof(closeCountingPublicCommitment));
+        }
+
         return this with
         {
             State = ElectionTrusteeCeremonyState.CeremonyMaterialSubmitted,
             MaterialSubmittedAt = submittedAt,
             ShareVersion = shareVersion.Trim(),
             LastUpdatedAt = submittedAt,
+            CloseCountingPublicCommitment = closeCountingPublicCommitment.ToArray(),
         };
     }
 
@@ -661,6 +683,7 @@ public record ElectionCeremonyTrusteeStateRecord(
             ValidationFailedAt = failedAt,
             ValidationFailureReason = validationFailureReason.Trim(),
             LastUpdatedAt = failedAt,
+            CloseCountingPublicCommitment = null,
         };
     }
 

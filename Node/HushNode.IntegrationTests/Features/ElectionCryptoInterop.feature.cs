@@ -21,6 +21,7 @@ namespace HushNode.IntegrationTests.Features
     [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     [Xunit.TraitAttribute("Category", "Integration")]
     [Xunit.TraitAttribute("Category", "FEAT-107")]
+    [Xunit.TraitAttribute("Category", "FEAT-105")]
     [Xunit.TraitAttribute("Category", "ElectionCrypto")]
     [Xunit.TraitAttribute("Category", "NON_E2E")]
     public partial class ElectionCryptoCross_RepoInteropFeature : object, Xunit.IClassFixture<ElectionCryptoCross_RepoInteropFeature.FixtureData>, System.IDisposable
@@ -31,6 +32,7 @@ namespace HushNode.IntegrationTests.Features
         private static string[] featureTags = new string[] {
                 "Integration",
                 "FEAT-107",
+                "FEAT-105",
                 "ElectionCrypto",
                 "NON_E2E"};
         

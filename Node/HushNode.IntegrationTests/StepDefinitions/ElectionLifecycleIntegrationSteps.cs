@@ -444,8 +444,6 @@ public sealed class ElectionLifecycleIntegrationSteps
     [When(@"the owner prepares a ready trustee ceremony through blockchain submission")]
     public async Task WhenTheOwnerPreparesAReadyTrusteeCeremonyThroughBlockchainSubmission()
     {
-        const string tallyFingerprint = "feat094-ready-tally-fingerprint";
-
         foreach (var trustee in RolloutTrustees)
         {
             if (!_trusteeInvitationIds.ContainsKey(trustee.PublicSigningAddress))
@@ -497,7 +495,7 @@ public sealed class ElectionLifecycleIntegrationSteps
                 trustee.PublicSigningAddress,
                 ceremonyVersionGuid,
                 $"feat094-share-v1-{index}",
-                tallyFingerprint);
+                tallyPublicKeyFingerprint: null);
             completeResponse.Success.Should().BeTrue($"ceremony completion should succeed: {completeResponse.ErrorMessage}");
         }
     }
@@ -2283,6 +2281,9 @@ public sealed class ElectionLifecycleIntegrationSteps
         votingView.CeremonyVersionId.Should().NotBeNullOrWhiteSpace();
         votingView.DkgProfileId.Should().NotBeNullOrWhiteSpace();
         votingView.TallyPublicKeyFingerprint.Should().NotBeNullOrWhiteSpace();
+        votingView.TallyPublicKey.Should().NotBeNull();
+        votingView.TallyPublicKey.X.Length.Should().Be(32);
+        votingView.TallyPublicKey.Y.Length.Should().Be(32);
         var selectionCount = votingView.Election.Options.Count;
         selectionCount.Should().BeGreaterThan(0, "the election must expose at least one ballot option before ballot casting");
         var nonBlankChoiceIndexes = votingView.Election.Options
@@ -2303,10 +2304,18 @@ public sealed class ElectionLifecycleIntegrationSteps
                 selectedOption.BallotOrder,
                 selectedOption.IsBlankOption)
             : null;
+        var tallyPublicKey = HushShared.Reactions.Model.ECPoint.FromCoordinates(
+            votingView.TallyPublicKey.X.ToByteArray(),
+            votingView.TallyPublicKey.Y.ToByteArray());
 
         var encryptedBallotPackage = useDevModePayload
             ? devModeBallotPackage!
-            : BuildEncryptedBallotPackage(actor, submissionIdempotencyKey, selectionCount, choiceIndex);
+            : BuildEncryptedBallotPackage(
+                actor,
+                submissionIdempotencyKey,
+                selectionCount,
+                choiceIndex,
+                tallyPublicKey);
         var proofBundle = useDevModePayload
             ? BuildDevModeProofBundle(
                 votingView,
@@ -2449,18 +2458,17 @@ public sealed class ElectionLifecycleIntegrationSteps
         TestIdentity actor,
         string submissionIdempotencyKey,
         int selectionCount,
-        int choiceIndex)
+        int choiceIndex,
+        HushShared.Reactions.Model.ECPoint tallyPublicKey)
     {
         var curve = new BabyJubJubCurve();
-        var publicKeySeed = ParseSeedToScalar($"feat100:public-key:{GetElectionId()}", curve.Order);
         var nonceSeed = ParseSeedToScalar(
             $"feat100:nonces:{GetElectionId()}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}",
             curve.Order);
-        var keyPair = ControlledElectionHarness.CreateDeterministicKeyPair(publicKeySeed, curve);
         var ballot = ControlledElectionHarness.EncryptOneHotBallot(
             ballotId: $"feat100-ballot:{GetElectionId()}:{actor.PublicSigningAddress}:{submissionIdempotencyKey.Trim()}",
             choiceIndex: choiceIndex,
-            publicKey: keyPair.PublicKey,
+            publicKey: tallyPublicKey,
             nonces: ControlledElectionHarness.CreateDeterministicNonceSequence(
                 nonceSeed,
                 selectionCount,
@@ -2469,8 +2477,8 @@ public sealed class ElectionLifecycleIntegrationSteps
             curve: curve);
 
         var payload = new PublishedElectionBallotPackage(
-            Version: "election-ballot.v1",
-            PublicKey: ToPublishedPoint(keyPair.PublicKey),
+            Version: "omega-binding-ballot-v1",
+            PublicKey: ToPublishedPoint(tallyPublicKey),
             SelectionCount: selectionCount,
             Ciphertext: new PublishedElectionCiphertext(
                 ballot.Slots.Select(slot => ToPublishedPoint(slot.C1)).ToArray(),
@@ -2611,6 +2619,7 @@ public sealed class ElectionLifecycleIntegrationSteps
             ExternalReferenceCode: "ORG-2026-01",
             ElectionClass: ElectionClass.OrganizationalRemoteVoting,
             BindingStatus: bindingStatus,
+            SelectedProfileId: bindingStatus == ElectionBindingStatus.NonBinding ? "dkg-dev-3of5" : "dkg-prod-3of5",
             GovernanceMode: ElectionGovernanceMode.AdminOnly,
             DisclosureMode: ElectionDisclosureMode.FinalResultsOnly,
             ParticipationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
@@ -2670,6 +2679,7 @@ public sealed class ElectionLifecycleIntegrationSteps
             ExternalReferenceCode: "REF-2026-096",
             ElectionClass: ElectionClass.OrganizationalRemoteVoting,
             BindingStatus: ElectionBindingStatus.Binding,
+            SelectedProfileId: "dkg-prod-3of5",
             GovernanceMode: ElectionGovernanceMode.TrusteeThreshold,
             DisclosureMode: ElectionDisclosureMode.FinalResultsOnly,
             ParticipationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,

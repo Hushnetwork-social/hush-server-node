@@ -6,6 +6,7 @@ using Xunit;
 
 namespace HushServerNode.Tests.Elections;
 
+[Trait("Category", "FEAT-105")]
 public sealed class ControlledElectionAggregateReleaseTests
 {
     [Fact]

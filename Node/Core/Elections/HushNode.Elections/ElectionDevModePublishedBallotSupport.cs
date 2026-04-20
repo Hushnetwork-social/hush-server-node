@@ -15,6 +15,11 @@ internal static class ElectionDevModePublishedBallotSupport
         out ElectionDevModePublishedBallotTally? tally)
     {
         tally = null;
+        if (!election.SelectedProfileDevOnly)
+        {
+            return false;
+        }
+
         if (publishedBallots.Count == 0)
         {
             return false;

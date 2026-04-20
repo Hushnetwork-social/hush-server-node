@@ -38,6 +38,7 @@ internal static class ElectionDevModePrivacyGuard
     }
 
     public static bool TryValidateAcceptedBallotArtifacts(
+        bool selectedProfileDevOnly,
         ElectionId electionId,
         string actorPublicAddress,
         string encryptedBallotPackage,
@@ -46,6 +47,16 @@ internal static class ElectionDevModePrivacyGuard
         out string errorMessage)
     {
         errorMessage = string.Empty;
+        var hasDevModeBallotPackage = IsDevModePayload(encryptedBallotPackage, out var ballotPackage);
+        var hasDevModeProofBundle = IsDevModePayload(proofBundle, out var proofPayload);
+
+        if (!selectedProfileDevOnly &&
+            (hasDevModeBallotPackage || hasDevModeProofBundle))
+        {
+            errorMessage =
+                "The selected non-dev circuit cannot accept dev/open ballot artifacts. Refresh the client and submit a protected FEAT-105 ballot package.";
+            return false;
+        }
 
         var legacyBallotNullifier = ComputeLowerHexSha256(
             $"election-dev-nullifier:v1:{electionId}:{actorPublicAddress}");
@@ -59,7 +70,7 @@ internal static class ElectionDevModePrivacyGuard
             return false;
         }
 
-        if (IsDevModePayload(encryptedBallotPackage, out var ballotPackage))
+        if (hasDevModeBallotPackage)
         {
             if (HasNonEmptyStringProperty(ballotPackage, "actorPublicAddress"))
             {
@@ -69,7 +80,7 @@ internal static class ElectionDevModePrivacyGuard
             }
         }
 
-        if (IsDevModePayload(proofBundle, out var proofPayload))
+        if (hasDevModeProofBundle)
         {
             if (HasNonEmptyStringProperty(proofPayload, "actorPublicAddress") ||
                 HasNonEmptyStringProperty(proofPayload, "commitmentHash") ||

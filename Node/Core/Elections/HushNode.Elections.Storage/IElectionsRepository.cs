@@ -310,6 +310,15 @@ public interface IElectionsRepository : IRepository
 
     Task UpdateExecutorSessionKeyEnvelopeAsync(ElectionExecutorSessionKeyEnvelopeRecord envelope) => Task.CompletedTask;
 
+    Task<ElectionAdminOnlyProtectedTallyEnvelopeRecord?> GetAdminOnlyProtectedTallyEnvelopeAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionAdminOnlyProtectedTallyEnvelopeRecord?>(null);
+
+    Task SaveAdminOnlyProtectedTallyEnvelopeAsync(ElectionAdminOnlyProtectedTallyEnvelopeRecord envelope) =>
+        Task.CompletedTask;
+
+    Task UpdateAdminOnlyProtectedTallyEnvelopeAsync(ElectionAdminOnlyProtectedTallyEnvelopeRecord envelope) =>
+        Task.CompletedTask;
+
     Task<ElectionTallyExecutorLeaseRecord?> GetTallyExecutorLeaseAsync(Guid closeCountingJobId) =>
         Task.FromResult<ElectionTallyExecutorLeaseRecord?>(null);
 

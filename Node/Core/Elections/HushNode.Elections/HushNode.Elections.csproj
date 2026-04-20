@@ -21,6 +21,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="9.0.2" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.2" />
     <PackageReference Include="System.Reactive" Version="6.0.1" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.2" />
   </ItemGroup>
 
 </Project>

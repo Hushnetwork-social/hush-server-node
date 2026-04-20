@@ -168,6 +168,10 @@ public record RecordElectionCeremonySelfTestActionPayload(
     Guid CeremonyVersionId,
     string ActorPublicAddress);
 
+public record ElectionCurvePointPayload(
+    string X,
+    string Y);
+
 public record SubmitElectionCeremonyMaterialActionPayload(
     Guid CeremonyVersionId,
     string ActorPublicAddress,
@@ -176,7 +180,8 @@ public record SubmitElectionCeremonyMaterialActionPayload(
     string PayloadVersion,
     string EncryptedPayload,
     string PayloadFingerprint,
-    string ShareVersion);
+    string ShareVersion,
+    ElectionCurvePointPayload? CloseCountingPublicCommitment = null);
 
 public record RecordElectionCeremonyValidationFailureActionPayload(
     Guid CeremonyVersionId,

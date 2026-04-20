@@ -57,6 +57,52 @@ namespace HushNode.Elections.Storage.Migrations
                     b.ToTable("ElectionAcceptedBallotRecord", "Elections");
                 });
 
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionAdminOnlyProtectedTallyEnvelopeRecord", b =>
+                {
+                    b.Property<string>("ElectionId")
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DestroyedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ScalarEncoding")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("SealAlgorithm")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("SealedByServiceIdentity")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("SealedTallyPrivateScalar")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SelectedProfileId")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<byte[]>("TallyPublicKey")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("TallyPublicKeyFingerprint")
+                        .IsRequired()
+                        .HasColumnType("varchar(256)");
+
+                    b.HasKey("ElectionId");
+
+                    b.ToTable("ElectionAdminOnlyProtectedTallyEnvelopeRecord", "Elections");
+                });
+
             modelBuilder.Entity("HushShared.Elections.Model.ElectionBallotMemPoolRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -414,6 +460,9 @@ namespace HushNode.Elections.Storage.Migrations
                     b.Property<Guid>("CeremonyVersionId")
                         .HasColumnType("uuid");
 
+                    b.Property<byte[]>("CloseCountingPublicCommitment")
+                        .HasColumnType("bytea");
+
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -512,6 +561,9 @@ namespace HushNode.Elections.Storage.Migrations
 
                     b.Property<string>("SupersededReason")
                         .HasColumnType("text");
+
+                    b.Property<byte[]>("TallyPublicKey")
+                        .HasColumnType("bytea");
 
                     b.Property<string>("TallyPublicKeyFingerprint")
                         .HasColumnType("varchar(256)");
@@ -922,6 +974,10 @@ namespace HushNode.Elections.Storage.Migrations
 
                     b.Property<DateTime>("LastUpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SealAlgorithm")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
 
                     b.Property<string>("SealedByServiceIdentity")
                         .HasColumnType("varchar(160)");
@@ -1528,6 +1584,13 @@ namespace HushNode.Elections.Storage.Migrations
                     b.Property<string>("ReviewWindowPolicy")
                         .IsRequired()
                         .HasColumnType("varchar(64)");
+
+                    b.Property<bool>("SelectedProfileDevOnly")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SelectedProfileId")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("ShortDescription")
                         .HasColumnType("text");

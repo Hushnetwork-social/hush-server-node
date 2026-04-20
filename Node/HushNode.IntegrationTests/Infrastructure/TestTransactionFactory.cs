@@ -8,8 +8,12 @@ using HushShared.Identity.Model;
 using HushShared.Reactions.Model;
 using HushNode.Reactions.Crypto;
 using HushServerNode.Testing;
+using HushServerNode.Testing.Elections;
 using Olimpo;
 using System.Collections.Concurrent;
+using System.Numerics;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace HushNode.IntegrationTests.Infrastructure;
 
@@ -341,7 +345,8 @@ internal static class TestTransactionFactory
         string payloadVersion,
         string encryptedPayload,
         string payloadFingerprint,
-        string? shareVersion = null)
+        string? shareVersion = null,
+        ElectionCurvePointPayload? closeCountingPublicCommitment = null)
     {
         var actionEnvelope = new EncryptedElectionActionEnvelope(
             EncryptedElectionEnvelopeActionTypes.SubmitCeremonyMaterial,
@@ -353,7 +358,8 @@ internal static class TestTransactionFactory
                 payloadVersion,
                 encryptedPayload,
                 payloadFingerprint,
-                shareVersion ?? $"share-{payloadFingerprint}")));
+                shareVersion ?? $"share-{payloadFingerprint}",
+                closeCountingPublicCommitment ?? BuildElectionCloseCountingPublicCommitment(electionId))));
 
         return CreateEncryptedElectionEnvelopeTransaction(trustee, electionId, actionEnvelope);
     }
@@ -1259,6 +1265,24 @@ internal static class TestTransactionFactory
         var padded = new byte[32];
         Array.Copy(input, 0, padded, 32 - input.Length, input.Length);
         return padded;
+    }
+
+    private static ElectionCurvePointPayload BuildElectionCloseCountingPublicCommitment(ElectionId electionId)
+    {
+        var curve = new BabyJubJubCurve();
+        var publicKeySeed = ParseSeedToScalar($"feat100:public-key:{electionId}", curve.Order);
+        var keyPair = ControlledElectionHarness.CreateDeterministicKeyPair(publicKeySeed, curve);
+
+        return new ElectionCurvePointPayload(
+            Convert.ToBase64String(PadTo32Bytes(keyPair.PublicKey.X.ToByteArray(isUnsigned: true, isBigEndian: true))),
+            Convert.ToBase64String(PadTo32Bytes(keyPair.PublicKey.Y.ToByteArray(isUnsigned: true, isBigEndian: true))));
+    }
+
+    private static BigInteger ParseSeedToScalar(string seed, BigInteger order)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
+        var scalar = new BigInteger(bytes, isUnsigned: true, isBigEndian: true) % order;
+        return scalar.IsZero ? BigInteger.One : scalar;
     }
 
     /// <summary>

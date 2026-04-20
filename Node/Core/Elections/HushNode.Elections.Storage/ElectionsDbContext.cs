@@ -41,6 +41,7 @@ public class ElectionsDbContext(
     public DbSet<ElectionFinalizationSessionRecord> ElectionFinalizationSessions { get; set; }
     public DbSet<ElectionCloseCountingJobRecord> ElectionCloseCountingJobs { get; set; }
     public DbSet<ElectionExecutorSessionKeyEnvelopeRecord> ElectionExecutorSessionKeyEnvelopes { get; set; }
+    public DbSet<ElectionAdminOnlyProtectedTallyEnvelopeRecord> ElectionAdminOnlyProtectedTallyEnvelopes { get; set; }
     public DbSet<ElectionTallyExecutorLeaseRecord> ElectionTallyExecutorLeases { get; set; }
     public DbSet<ElectionFinalizationShareRecord> ElectionFinalizationShares { get; set; }
     public DbSet<ElectionFinalizationReleaseEvidenceRecord> ElectionFinalizationReleaseEvidenceRecords { get; set; }

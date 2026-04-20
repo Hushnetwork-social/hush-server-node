@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using HushNode.Credentials;
@@ -12,6 +15,7 @@ using Moq;
 using Olimpo;
 using Xunit;
 using SharedTrusteeReference = HushShared.Elections.Model.ElectionTrusteeReference;
+using ReactionECPoint = HushShared.Reactions.Model.ECPoint;
 
 namespace HushServerNode.Tests.Elections;
 
@@ -764,6 +768,176 @@ public class EncryptedElectionEnvelopeTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-105")]
+    public void ValidateAndSign_WithBindingDevModeBallotArtifacts_RejectsValidation()
+    {
+        var openedAt = DateTime.UtcNow.AddMinutes(-10);
+        var openArtifactId = Guid.NewGuid();
+        var election = ElectionModelFactory.CreateDraftRecord(
+            electionId: ElectionId.NewElectionId,
+            title: "Board Election",
+            shortDescription: "Annual board vote",
+            ownerPublicAddress: "owner-address",
+            externalReferenceCode: "ORG-2026-01",
+            electionClass: ElectionClass.OrganizationalRemoteVoting,
+            bindingStatus: ElectionBindingStatus.Binding,
+            governanceMode: ElectionGovernanceMode.AdminOnly,
+            disclosureMode: ElectionDisclosureMode.FinalResultsOnly,
+            participationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
+            voteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
+            eligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            outcomeRule: new OutcomeRuleDefinition(
+                OutcomeRuleKind.SingleWinner,
+                "single_winner",
+                SeatCount: 1,
+                BlankVoteCountsForTurnout: true,
+                BlankVoteExcludedFromWinnerSelection: true,
+                BlankVoteExcludedFromThresholdDenominator: false,
+                TieResolutionRule: "tie_unresolved",
+                CalculationBasis: "highest_non_blank_votes"),
+            approvedClientApplications:
+            [
+                new ApprovedClientApplicationRecord("hushsocial", "1.0.0"),
+            ],
+            protocolOmegaVersion: "omega-v1.0.0",
+            reportingPolicy: ReportingPolicy.DefaultPhaseOnePackage,
+            reviewWindowPolicy: ReviewWindowPolicy.NoReviewWindow,
+            ownerOptions:
+            [
+                new ElectionOptionDefinition("option-a", "Alice", "First option", 1, false),
+                new ElectionOptionDefinition("option-b", "Bob", "Second option", 2, false),
+            ],
+            acknowledgedWarningCodes:
+            [
+                ElectionWarningCode.LowAnonymitySet,
+            ]) with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+            OpenArtifactId = openArtifactId,
+        };
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            Guid.NewGuid(),
+            1,
+            "dkg-prod-1of1",
+            boundTrusteeCount: 1,
+            requiredApprovalCount: 1,
+            activeTrustees:
+            [
+                new ElectionTrusteeReference("trustee-address", "Trustee"),
+            ],
+            tallyPublicKeyFingerprint: "tally-fingerprint");
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            election,
+            recordedByPublicAddress: "owner-address",
+            recordedAt: openedAt,
+            frozenEligibleVoterSetHash: [1, 2, 3, 4]) with
+        {
+            Id = openArtifactId,
+            CeremonySnapshot = ceremonySnapshot,
+        };
+        var rosterEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "1001",
+                ElectionRosterContactType.Email,
+                "voter-1001@example.org")
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address", openedAt.AddMinutes(1));
+        var commitmentRegistration = ElectionModelFactory.CreateCommitmentRegistrationRecord(
+            election.ElectionId,
+            rosterEntry.OrganizationVoterId,
+            "voter-address",
+            "commitment-hash-1",
+            openedAt.AddMinutes(2));
+
+        var signedEnvelope = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            EncryptedElectionEnvelopePayloadHandler.CreateNew(
+                election.ElectionId,
+                EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+                "node-envelope",
+                "actor-envelope",
+                "encrypted-payload"),
+            new SignatureInfo("voter-address", "signature"));
+        var signedActionEnvelope = new DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>>(
+            signedEnvelope,
+            EncryptedElectionEnvelopeActionTypes.AcceptBallotCast,
+            JsonSerializer.Serialize(new AcceptElectionBallotCastActionPayload(
+                "voter-address",
+                "cast-key-1",
+                CreateDevModeAcceptedBallotPackageForTests(),
+                CreateDevModeAcceptedProofBundleForTests(),
+                "nullifier-1",
+                openArtifact.Id,
+                [1, 2, 3, 4],
+                ceremonySnapshot.CeremonyVersionId,
+                ceremonySnapshot.ProfileId,
+                ceremonySnapshot.TallyPublicKeyFingerprint)));
+
+        var cryptoService = new Mock<IElectionEnvelopeCryptoService>();
+        cryptoService
+            .Setup(x => x.TryDecryptSigned(It.IsAny<AbstractTransaction>()))
+            .Returns(signedActionEnvelope);
+
+        var validationService = new Mock<ICreateElectionDraftValidationService>();
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        credentialsProvider
+            .Setup(x => x.GetCredentials())
+            .Returns(new CredentialsProfile
+            {
+                PublicSigningAddress = "validator-address",
+                PrivateSigningKey = new DigitalSignature().PrivateKey,
+                PublicEncryptAddress = "validator-encrypt-address",
+                PrivateEncryptKey = "validator-private-encrypt-key",
+            });
+
+        var repository = new Mock<IElectionsRepository>();
+        repository.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+        repository.Setup(x => x.GetCastIdempotencyRecordAsync(election.ElectionId, It.IsAny<string>()))
+            .ReturnsAsync((ElectionCastIdempotencyRecord?)null);
+        repository.Setup(x => x.GetRosterEntryByLinkedActorAsync(election.ElectionId, "voter-address"))
+            .ReturnsAsync(rosterEntry);
+        repository.Setup(x => x.GetCommitmentRegistrationAsync(election.ElectionId, rosterEntry.OrganizationVoterId))
+            .ReturnsAsync(commitmentRegistration);
+        repository.Setup(x => x.GetCheckoffConsumptionAsync(election.ElectionId, rosterEntry.OrganizationVoterId))
+            .ReturnsAsync((ElectionCheckoffConsumptionRecord?)null);
+        repository.Setup(x => x.GetParticipationRecordAsync(election.ElectionId, rosterEntry.OrganizationVoterId))
+            .ReturnsAsync((ElectionParticipationRecord?)null);
+        repository.Setup(x => x.GetAcceptedBallotByNullifierAsync(election.ElectionId, "nullifier-1"))
+            .ReturnsAsync((ElectionAcceptedBallotRecord?)null);
+        repository.Setup(x => x.GetBoundaryArtifactsAsync(election.ElectionId))
+            .ReturnsAsync([openArtifact]);
+
+        var readOnlyUnitOfWork = new Mock<Olimpo.EntityFramework.Persistency.IReadOnlyUnitOfWork<ElectionsDbContext>>();
+        readOnlyUnitOfWork
+            .Setup(x => x.GetRepository<IElectionsRepository>())
+            .Returns(repository.Object);
+
+        var unitOfWorkProvider = new Mock<Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext>>();
+        unitOfWorkProvider
+            .Setup(x => x.CreateReadOnly())
+            .Returns(readOnlyUnitOfWork.Object);
+
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        var sut = CreateContentHandler(
+            cryptoService.Object,
+            validationService.Object,
+            credentialsProvider.Object,
+            unitOfWorkProvider.Object,
+            lifecycleService.Object);
+
+        var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        sut.TryTakeValidationFailure(signedEnvelope.TransactionId.Value, out var failure).Should().BeTrue();
+        failure.Code.Should().Be("election_cast_validation_failed");
+        failure.Message.Should().Contain("selected non-dev circuit");
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-105")]
     public void ValidateAndSign_WithLegacyAdminOnlyOpenBoundaryWithoutStoredSnapshot_UsesSyntheticProtectedTallyBinding()
     {
         var openedAt = DateTime.UtcNow.AddMinutes(-10);
@@ -845,14 +1019,22 @@ public class EncryptedElectionEnvelopeTests
                 "actor-envelope",
                 "encrypted-payload"),
             new SignatureInfo("voter-address", "signature"));
+        var ballotPackage = CreateBindingAcceptedBallotPackageForTests(syntheticBinding.TallyPublicKey!);
+        var proofBundle = CreateBindingAcceptedProofBundleForTests(
+            openArtifact.Id,
+            [1, 2, 3, 4],
+            syntheticBinding.CeremonyVersionId,
+            syntheticBinding.ProfileId,
+            syntheticBinding.TallyPublicKeyFingerprint,
+            ballotPackage);
         var signedActionEnvelope = new DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>>(
             signedEnvelope,
             EncryptedElectionEnvelopeActionTypes.AcceptBallotCast,
             JsonSerializer.Serialize(new AcceptElectionBallotCastActionPayload(
                 "voter-address",
                 "cast-key-1",
-                "ciphertext",
-                "proof-bundle",
+                ballotPackage,
+                proofBundle,
                 "nullifier-1",
                 openArtifact.Id,
                 [1, 2, 3, 4],
@@ -915,6 +1097,184 @@ public class EncryptedElectionEnvelopeTests
         var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
 
         validatedTransaction.Should().BeOfType<ValidatedTransaction<EncryptedElectionEnvelopePayload>>();
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-105")]
+    public void ValidateAndSign_WithBindingProofBundleHashMismatch_RejectsValidation()
+    {
+        var openedAt = DateTime.UtcNow.AddMinutes(-10);
+        var openArtifactId = Guid.NewGuid();
+        var election = ElectionModelFactory.CreateDraftRecord(
+            electionId: ElectionId.NewElectionId,
+            title: "Board Election",
+            shortDescription: "Annual board vote",
+            ownerPublicAddress: "owner-address",
+            externalReferenceCode: "ORG-2026-01",
+            electionClass: ElectionClass.OrganizationalRemoteVoting,
+            bindingStatus: ElectionBindingStatus.Binding,
+            governanceMode: ElectionGovernanceMode.AdminOnly,
+            disclosureMode: ElectionDisclosureMode.FinalResultsOnly,
+            participationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
+            voteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
+            eligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            outcomeRule: new OutcomeRuleDefinition(
+                OutcomeRuleKind.SingleWinner,
+                "single_winner",
+                SeatCount: 1,
+                BlankVoteCountsForTurnout: true,
+                BlankVoteExcludedFromWinnerSelection: true,
+                BlankVoteExcludedFromThresholdDenominator: false,
+                TieResolutionRule: "tie_unresolved",
+                CalculationBasis: "highest_non_blank_votes"),
+            approvedClientApplications:
+            [
+                new ApprovedClientApplicationRecord("hushsocial", "1.0.0"),
+            ],
+            protocolOmegaVersion: "omega-v1.0.0",
+            reportingPolicy: ReportingPolicy.DefaultPhaseOnePackage,
+            reviewWindowPolicy: ReviewWindowPolicy.NoReviewWindow,
+            ownerOptions:
+            [
+                new ElectionOptionDefinition("option-a", "Alice", "First option", 1, false),
+                new ElectionOptionDefinition("option-b", "Bob", "Second option", 2, false),
+            ],
+            acknowledgedWarningCodes:
+            [
+                ElectionWarningCode.LowAnonymitySet,
+            ]) with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            LastUpdatedAt = openedAt,
+            OpenArtifactId = openArtifactId,
+        };
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            Guid.NewGuid(),
+            1,
+            "dkg-prod-1of1",
+            boundTrusteeCount: 1,
+            requiredApprovalCount: 1,
+            activeTrustees:
+            [
+                new ElectionTrusteeReference("trustee-address", "Trustee"),
+            ],
+            tallyPublicKeyFingerprint: "tally-fingerprint");
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            election,
+            recordedByPublicAddress: "owner-address",
+            recordedAt: openedAt,
+            frozenEligibleVoterSetHash: [1, 2, 3, 4]) with
+        {
+            Id = openArtifactId,
+            CeremonySnapshot = ceremonySnapshot,
+        };
+        var rosterEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "1001",
+                ElectionRosterContactType.Email,
+                "voter-1001@example.org")
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address", openedAt.AddMinutes(1));
+        var commitmentRegistration = ElectionModelFactory.CreateCommitmentRegistrationRecord(
+            election.ElectionId,
+            rosterEntry.OrganizationVoterId,
+            "voter-address",
+            "commitment-hash-1",
+            openedAt.AddMinutes(2));
+        var ballotPackage = CreateBindingAcceptedBallotPackageForTests(ceremonySnapshot.TallyPublicKey!);
+        var tamperedProofBundle = CreateBindingAcceptedProofBundleForTests(
+            openArtifact.Id,
+            [1, 2, 3, 4],
+            ceremonySnapshot.CeremonyVersionId,
+            ceremonySnapshot.ProfileId,
+            ceremonySnapshot.TallyPublicKeyFingerprint,
+            ballotPackage,
+            ballotPackageHashOverride: "tampered-ballot-package-hash");
+
+        var signedEnvelope = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            EncryptedElectionEnvelopePayloadHandler.CreateNew(
+                election.ElectionId,
+                EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+                "node-envelope",
+                "actor-envelope",
+                "encrypted-payload"),
+            new SignatureInfo("voter-address", "signature"));
+        var signedActionEnvelope = new DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>>(
+            signedEnvelope,
+            EncryptedElectionEnvelopeActionTypes.AcceptBallotCast,
+            JsonSerializer.Serialize(new AcceptElectionBallotCastActionPayload(
+                "voter-address",
+                "cast-key-1",
+                ballotPackage,
+                tamperedProofBundle,
+                "nullifier-1",
+                openArtifact.Id,
+                [1, 2, 3, 4],
+                ceremonySnapshot.CeremonyVersionId,
+                ceremonySnapshot.ProfileId,
+                ceremonySnapshot.TallyPublicKeyFingerprint)));
+
+        var cryptoService = new Mock<IElectionEnvelopeCryptoService>();
+        cryptoService
+            .Setup(x => x.TryDecryptSigned(It.IsAny<AbstractTransaction>()))
+            .Returns(signedActionEnvelope);
+
+        var validationService = new Mock<ICreateElectionDraftValidationService>();
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        credentialsProvider
+            .Setup(x => x.GetCredentials())
+            .Returns(new CredentialsProfile
+            {
+                PublicSigningAddress = "validator-address",
+                PrivateSigningKey = new DigitalSignature().PrivateKey,
+                PublicEncryptAddress = "validator-encrypt-address",
+                PrivateEncryptKey = "validator-private-encrypt-key",
+            });
+
+        var repository = new Mock<IElectionsRepository>();
+        repository.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+        repository.Setup(x => x.GetCastIdempotencyRecordAsync(election.ElectionId, It.IsAny<string>()))
+            .ReturnsAsync((ElectionCastIdempotencyRecord?)null);
+        repository.Setup(x => x.GetRosterEntryByLinkedActorAsync(election.ElectionId, "voter-address"))
+            .ReturnsAsync(rosterEntry);
+        repository.Setup(x => x.GetCommitmentRegistrationAsync(election.ElectionId, rosterEntry.OrganizationVoterId))
+            .ReturnsAsync(commitmentRegistration);
+        repository.Setup(x => x.GetCheckoffConsumptionAsync(election.ElectionId, rosterEntry.OrganizationVoterId))
+            .ReturnsAsync((ElectionCheckoffConsumptionRecord?)null);
+        repository.Setup(x => x.GetParticipationRecordAsync(election.ElectionId, rosterEntry.OrganizationVoterId))
+            .ReturnsAsync((ElectionParticipationRecord?)null);
+        repository.Setup(x => x.GetAcceptedBallotByNullifierAsync(election.ElectionId, "nullifier-1"))
+            .ReturnsAsync((ElectionAcceptedBallotRecord?)null);
+        repository.Setup(x => x.GetBoundaryArtifactsAsync(election.ElectionId))
+            .ReturnsAsync([openArtifact]);
+
+        var readOnlyUnitOfWork = new Mock<Olimpo.EntityFramework.Persistency.IReadOnlyUnitOfWork<ElectionsDbContext>>();
+        readOnlyUnitOfWork
+            .Setup(x => x.GetRepository<IElectionsRepository>())
+            .Returns(repository.Object);
+
+        var unitOfWorkProvider = new Mock<Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext>>();
+        unitOfWorkProvider
+            .Setup(x => x.CreateReadOnly())
+            .Returns(readOnlyUnitOfWork.Object);
+
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        var sut = CreateContentHandler(
+            cryptoService.Object,
+            validationService.Object,
+            credentialsProvider.Object,
+            unitOfWorkProvider.Object,
+            lifecycleService.Object);
+
+        var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        sut.TryTakeValidationFailure(signedEnvelope.TransactionId.Value, out var failure).Should().BeTrue();
+        failure.Code.Should().Be("election_cast_proof_invalid");
+        failure.Message.Should().Contain("ballot package hash");
     }
 
     [Fact]
@@ -1206,6 +1566,7 @@ public class EncryptedElectionEnvelopeTests
             ExternalReferenceCode: "ORG-2026-01",
             ElectionClass: ElectionClass.OrganizationalRemoteVoting,
             BindingStatus: ElectionBindingStatus.Binding,
+            SelectedProfileId: "dkg-prod-3of5",
             GovernanceMode: ElectionGovernanceMode.AdminOnly,
             DisclosureMode: ElectionDisclosureMode.FinalResultsOnly,
             ParticipationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
@@ -1237,6 +1598,78 @@ public class EncryptedElectionEnvelopeTests
             [
                 ElectionWarningCode.LowAnonymitySet,
             ]);
+
+    private static string CreateDevModeAcceptedBallotPackageForTests() =>
+        JsonSerializer.Serialize(new
+        {
+            mode = "election-dev-mode-v1",
+            packageType = "dev-protected-ballot",
+            optionId = "option-a",
+            optionLabel = "Alice",
+            optionDescription = "First option",
+            ballotOrder = 1,
+            isBlankOption = false,
+            selectionFingerprint = "selection-a",
+        });
+
+    private static string CreateDevModeAcceptedProofBundleForTests() =>
+        JsonSerializer.Serialize(new
+        {
+            mode = "election-dev-mode-v1",
+            proofType = "dev-plaintext-proof",
+            openArtifactId = "open-artifact",
+            statement = "plaintext-choice-projection",
+        });
+
+    private static string CreateBindingAcceptedBallotPackageForTests(byte[]? tallyPublicKey)
+    {
+        var expectedPoint = tallyPublicKey is { Length: > 0 }
+            ? ReactionECPoint.FromBytes(tallyPublicKey)
+            : new ReactionECPoint(1, 2);
+        return JsonSerializer.Serialize(new
+        {
+            version = "omega-binding-ballot-v1",
+            packageType = "binding-protected-ballot",
+            publicKey = new
+            {
+                x = expectedPoint.X.ToString(CultureInfo.InvariantCulture),
+                y = expectedPoint.Y.ToString(CultureInfo.InvariantCulture),
+            },
+            selectionCount = 2,
+            ciphertext = new
+            {
+                c1 = Array.Empty<object>(),
+                c2 = Array.Empty<object>(),
+            },
+        });
+    }
+
+    private static string CreateBindingAcceptedProofBundleForTests(
+        Guid openArtifactId,
+        byte[] eligibleSetHash,
+        Guid ceremonyVersionId,
+        string dkgProfileId,
+        string tallyPublicKeyFingerprint,
+        string ballotPackage,
+        string? ballotPackageHashOverride = null) =>
+        JsonSerializer.Serialize(new
+        {
+            version = "omega-binding-proof-v1",
+            proofType = "binding-circuit-envelope",
+            proofProfile = "PRODUCTION_LIKE_PROFILE",
+            circuitVersion = "omega-v1.0.0",
+            artifactShape = "opaque-one-hot-elgamal",
+            ballotPackageHash = ballotPackageHashOverride ?? ComputeLowerHexSha256(ballotPackage),
+            openArtifactId = openArtifactId.ToString(),
+            eligibleSetHash = Convert.ToBase64String(eligibleSetHash),
+            ceremonyVersionId = ceremonyVersionId.ToString(),
+            dkgProfileId,
+            tallyPublicKeyFingerprint,
+        });
+
+    private static string ComputeLowerHexSha256(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty)))
+            .ToLowerInvariant();
 
     private static EncryptedElectionEnvelopeContentHandler CreateContentHandler(
         IElectionEnvelopeCryptoService cryptoService,

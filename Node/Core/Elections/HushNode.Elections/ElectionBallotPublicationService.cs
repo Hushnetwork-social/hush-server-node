@@ -1,10 +1,13 @@
 using System.Data;
+using System.Globalization;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HushNode.Caching;
 using HushNode.Credentials;
+using HushNode.Reactions.Crypto;
 using HushNode.Elections.Storage;
 using HushNode.Events;
 using HushShared.Blockchain.BlockModel;
@@ -23,7 +26,10 @@ public sealed class ElectionBallotPublicationService(
     ElectionBallotPublicationOptions options,
     ILogger<ElectionBallotPublicationService> logger,
     IElectionResultCryptoService? electionResultCryptoService = null,
-    ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null) :
+    ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null,
+    ICloseCountingExecutorEnvelopeCrypto? closeCountingExecutorEnvelopeCrypto = null,
+    IAdminOnlyProtectedTallyEnvelopeCrypto? adminOnlyProtectedTallyEnvelopeCrypto = null,
+    IBabyJubJub? curve = null) :
     IElectionBallotPublicationService,
     IHandleAsync<BlockIndexCompletedEvent>
 {
@@ -41,8 +47,13 @@ public sealed class ElectionBallotPublicationService(
     private readonly ElectionBallotPublicationOptions _options = options;
     private readonly ILogger<ElectionBallotPublicationService> _logger = logger;
     private readonly IElectionResultCryptoService? _electionResultCryptoService = electionResultCryptoService;
+    private readonly IBabyJubJub _curve = curve ?? new BabyJubJubCurve();
     private readonly ICloseCountingExecutorKeyRegistry _closeCountingExecutorKeyRegistry =
         closeCountingExecutorKeyRegistry ?? new InMemoryCloseCountingExecutorKeyRegistry();
+    private readonly ICloseCountingExecutorEnvelopeCrypto _closeCountingExecutorEnvelopeCrypto =
+        closeCountingExecutorEnvelopeCrypto ?? new UnavailableCloseCountingExecutorEnvelopeCrypto();
+    private readonly IAdminOnlyProtectedTallyEnvelopeCrypto _adminOnlyProtectedTallyEnvelopeCrypto =
+        adminOnlyProtectedTallyEnvelopeCrypto ?? new UnavailableAdminOnlyProtectedTallyEnvelopeCrypto();
 
     public Task HandleAsync(BlockIndexCompletedEvent message) =>
         ProcessPendingPublicationAsync(message.BlockIndex);
@@ -131,11 +142,17 @@ public sealed class ElectionBallotPublicationService(
 
                 var publicationPayload = await PreparePublicationPayloadAsync(
                     repository,
+                    election,
                     electionId,
                     acceptedBallot,
                     publishedAt,
                     blockIndex.Value,
                     _blockchainCache.CurrentBlockId.Value);
+                if (publicationPayload is null)
+                {
+                    continue;
+                }
+
                 var publishedBallot = ElectionModelFactory.CreatePublishedBallotRecord(
                     electionId,
                     nextSequence++,
@@ -217,18 +234,34 @@ public sealed class ElectionBallotPublicationService(
         }
     }
 
-    private async Task<PublicationPayload> PreparePublicationPayloadAsync(
+    private async Task<PublicationPayload?> PreparePublicationPayloadAsync(
         IElectionsRepository repository,
+        ElectionRecord election,
         ElectionId electionId,
         ElectionAcceptedBallotRecord acceptedBallot,
         DateTime observedAt,
         long blockHeight,
         Guid blockId)
     {
-        var devModePayload = TryPrepareDevModePublicationPayload(acceptedBallot);
-        if (devModePayload is not null)
+        var devModeBallot = TryParseDevModeAcceptedBallotPackage(acceptedBallot);
+        if (devModeBallot is not null)
         {
-            return devModePayload;
+            if (election.BindingStatus != ElectionBindingStatus.NonBinding)
+            {
+                await RegisterIssueAsync(
+                    repository,
+                    electionId,
+                    ElectionPublicationIssueCode.UnsupportedBallotPayload,
+                    observedAt,
+                    blockHeight,
+                    blockId);
+                _logger.LogWarning(
+                    "[ElectionBallotPublicationService] Rejecting dev/open ballot publication fallback for binding election {ElectionId}.",
+                    electionId);
+                return null;
+            }
+
+            return BuildDevModePublicationPayload(devModeBallot);
         }
 
         var attempt = _publicationCryptoService.PrepareForPublication(
@@ -268,7 +301,7 @@ public sealed class ElectionBallotPublicationService(
             acceptedBallot.ProofBundle);
     }
 
-    private static PublicationPayload? TryPrepareDevModePublicationPayload(ElectionAcceptedBallotRecord acceptedBallot)
+    private static AdminOnlyDevModeBallotPackage? TryParseDevModeAcceptedBallotPackage(ElectionAcceptedBallotRecord acceptedBallot)
     {
         AdminOnlyDevModeBallotPackage? payload;
         try
@@ -292,6 +325,11 @@ public sealed class ElectionBallotPublicationService(
             return null;
         }
 
+        return payload;
+    }
+
+    private static PublicationPayload BuildDevModePublicationPayload(AdminOnlyDevModeBallotPackage payload)
+    {
         var publishedPackage = JsonSerializer.Serialize(
             payload with
             {
@@ -464,14 +502,15 @@ public sealed class ElectionBallotPublicationService(
             }
             else
             {
-                unofficialResult = await TryCreateAdminOnlyDevModeUnofficialResultAsync(
+                unofficialResult = await TryCreateAdminOnlyUnofficialResultAsync(
                     repository,
                     election,
                     artifact,
                     publishedBallots,
                     recordedAt,
                     blockHeight,
-                    blockId);
+                    blockId,
+                    ceremonySnapshot);
             }
 
             var updatedElection = election with
@@ -548,15 +587,24 @@ public sealed class ElectionBallotPublicationService(
             createdAt: createdAt,
             latestBlockHeight: blockHeight,
             latestBlockId: blockId);
-        var nodeCredentials = _credentialsProvider.GetCredentials();
+        if (!_closeCountingExecutorEnvelopeCrypto.IsAvailable(out var closeCountingEnvelopeError))
+        {
+            _logger.LogError(
+                "[ElectionBallotPublicationService] Close-counting session could not be created for election {ElectionId} because trustee executor custody is unavailable: {Error}",
+                election.ElectionId,
+                closeCountingEnvelopeError);
+            return;
+        }
+
         var executorSessionKeys = _closeCountingExecutorKeyRegistry.Create(closeCountingJob.Id, ExecutorSessionKeyAlgorithm);
         var executorSessionKeyEnvelope = ElectionModelFactory.CreateExecutorSessionKeyEnvelope(
             closeCountingJob.Id,
             executorSessionKeys.PublicKey,
-            CloseCountingExecutorKeyRegistryConstants.MemoryOnlyEnvelopeMarker,
+            _closeCountingExecutorEnvelopeCrypto.SealPrivateKey(executorSessionKeys.PrivateKey),
             ExecutorSessionKeyAlgorithm,
+            _closeCountingExecutorEnvelopeCrypto.SealAlgorithm,
             createdAt: createdAt,
-            sealedByServiceIdentity: nodeCredentials.PublicSigningAddress);
+            sealedByServiceIdentity: _closeCountingExecutorEnvelopeCrypto.SealedByServiceIdentity);
 
         await repository.SaveFinalizationSessionAsync(session);
         await repository.SaveCloseCountingJobAsync(closeCountingJob);
@@ -759,6 +807,36 @@ public sealed class ElectionBallotPublicationService(
         return true;
     }
 
+    private async Task<ElectionResultArtifactRecord?> TryCreateAdminOnlyUnofficialResultAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionBoundaryArtifactRecord tallyReadyArtifact,
+        IReadOnlyList<ElectionPublishedBallotRecord> publishedBallots,
+        DateTime recordedAt,
+        long? blockHeight,
+        Guid? blockId,
+        ElectionCeremonyBindingSnapshot? ceremonySnapshot = null)
+    {
+        return election.SelectedProfileDevOnly
+            ? await TryCreateAdminOnlyDevModeUnofficialResultAsync(
+                repository,
+                election,
+                tallyReadyArtifact,
+                publishedBallots,
+                recordedAt,
+                blockHeight,
+                blockId)
+            : await TryCreateAdminOnlyProtectedUnofficialResultAsync(
+                repository,
+                election,
+                tallyReadyArtifact,
+                publishedBallots,
+                recordedAt,
+                blockHeight,
+                blockId,
+                ceremonySnapshot);
+    }
+
     private async Task<ElectionResultArtifactRecord?> TryCreateAdminOnlyDevModeUnofficialResultAsync(
         IElectionsRepository repository,
         ElectionRecord election,
@@ -800,6 +878,131 @@ public sealed class ElectionBallotPublicationService(
             devModeResult.NamedOptionResults,
             devModeResult.BlankCount,
             devModeResult.TotalVotedCount,
+            closeSnapshot,
+            recordedAt,
+            blockHeight,
+            blockId);
+    }
+
+    private async Task<ElectionResultArtifactRecord?> TryCreateAdminOnlyProtectedUnofficialResultAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionBoundaryArtifactRecord tallyReadyArtifact,
+        IReadOnlyList<ElectionPublishedBallotRecord> publishedBallots,
+        DateTime recordedAt,
+        long? blockHeight,
+        Guid? blockId,
+        ElectionCeremonyBindingSnapshot? ceremonySnapshot)
+    {
+        if (_electionResultCryptoService is null)
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Admin-only protected result publication could not run for election {ElectionId} because the result crypto service is unavailable.",
+                election.ElectionId);
+            return null;
+        }
+
+        if (publishedBallots.Count == 0)
+        {
+            return null;
+        }
+
+        var releaseShareResult = await ResolveAdminOnlyProtectedReleaseShareAsync(
+                repository,
+                election,
+                tallyReadyArtifact,
+                ceremonySnapshot);
+        if (!releaseShareResult.IsSuccess)
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Admin-only protected result publication could not run for election {ElectionId}: {FailureReason}",
+                election.ElectionId,
+                releaseShareResult.Error);
+            return null;
+        }
+
+        var closeSnapshot = await repository.GetEligibilitySnapshotAsync(
+            election.ElectionId,
+            ElectionEligibilitySnapshotType.Close);
+        if (closeSnapshot is null)
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Admin-only protected result publication could not run for election {ElectionId} because the close eligibility snapshot is unavailable.",
+                election.ElectionId);
+            return null;
+        }
+
+        var release = _electionResultCryptoService.TryReleaseAggregateTally(
+            publishedBallots.Select(x => x.EncryptedBallotPackage).ToArray(),
+            [releaseShareResult.ReleaseShare!],
+            closeSnapshot.ActiveDenominatorCount);
+        if (!release.IsSuccessful)
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Admin-only protected result publication could not run for election {ElectionId}: {FailureCode} {FailureReason}",
+                election.ElectionId,
+                release.FailureCode,
+                release.FailureReason);
+            return null;
+        }
+
+        if (release.FinalEncryptedTallyHash is null ||
+            !ByteArrayEquals(release.FinalEncryptedTallyHash, tallyReadyArtifact.FinalEncryptedTallyHash))
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Admin-only protected result publication could not run for election {ElectionId} because the released tally hash does not match tally_ready.",
+                election.ElectionId);
+            return null;
+        }
+
+        var decodedCounts = release.DecodedCounts ?? Array.Empty<int>();
+        if (publishedBallots.Count == 0 && decodedCounts.Count == 0)
+        {
+            decodedCounts = Enumerable.Repeat(0, election.Options.Count).ToArray();
+        }
+
+        if (decodedCounts.Count != election.Options.Count)
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Admin-only protected result publication could not run for election {ElectionId} because the released tally slot count does not match the ballot options.",
+                election.ElectionId);
+            return null;
+        }
+
+        var optionCounts = election.Options
+            .Select((option, index) => new { Option = option, Count = decodedCounts[index] })
+            .ToArray();
+        var blankOption = optionCounts.FirstOrDefault(x => x.Option.IsBlankOption);
+        var namedOptionResults = optionCounts
+            .Where(x => !x.Option.IsBlankOption)
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.Option.BallotOrder)
+            .Select((x, index) => new ElectionResultOptionCount(
+                x.Option.OptionId,
+                x.Option.DisplayLabel,
+                x.Option.ShortDescription,
+                x.Option.BallotOrder,
+                index + 1,
+                x.Count))
+            .ToArray();
+        var blankCount = blankOption?.Count ?? 0;
+        var totalVotedCount = decodedCounts.Sum();
+
+        if (totalVotedCount != closeSnapshot.CountedParticipationCount)
+        {
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] Admin-only protected result publication could not run for election {ElectionId} because the released tally does not reconcile with the close snapshot.",
+                election.ElectionId);
+            return null;
+        }
+
+        return await TryCreateParticipantEncryptedUnofficialResultAsync(
+            repository,
+            election,
+            tallyReadyArtifact,
+            namedOptionResults,
+            blankCount,
+            totalVotedCount,
             closeSnapshot,
             recordedAt,
             blockHeight,
@@ -951,6 +1154,106 @@ public sealed class ElectionBallotPublicationService(
             recordedAt,
             blockHeight,
             blockId);
+    }
+
+    private async Task<(bool IsSuccess, ElectionFinalizationShareRecord? ReleaseShare, string Error)> ResolveAdminOnlyProtectedReleaseShareAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionBoundaryArtifactRecord tallyReadyArtifact,
+        ElectionCeremonyBindingSnapshot? ceremonySnapshot)
+    {
+        ceremonySnapshot ??= tallyReadyArtifact.CeremonySnapshot;
+        if (ceremonySnapshot?.TallyPublicKey is not { Length: > 0 })
+        {
+            return (false, null, "Admin-only protected tally binding is missing the usable tally public key.");
+        }
+
+        BigInteger scalar;
+        string error;
+        var envelope = await repository.GetAdminOnlyProtectedTallyEnvelopeAsync(election.ElectionId);
+        if (envelope is not null)
+        {
+            if (!ElectionProtectedTallyBinding.TryBuildAdminOnlyProtectedTallyBindingSnapshot(
+                    election,
+                    envelope,
+                    _curve,
+                    out var envelopeSnapshot,
+                    out error))
+            {
+                return (false, null, error);
+            }
+
+            if (envelopeSnapshot?.TallyPublicKey is not { Length: > 0 } ||
+                !CryptographicOperations.FixedTimeEquals(
+                    envelopeSnapshot.TallyPublicKey,
+                    ceremonySnapshot.TallyPublicKey))
+            {
+                return (false, null, "Admin-only protected tally envelope does not match the active ceremony binding.");
+            }
+
+            if (!ElectionProtectedTallyBinding.TryUnsealAdminOnlyProtectedTallyScalar(
+                    election,
+                    envelope,
+                    _adminOnlyProtectedTallyEnvelopeCrypto,
+                    _curve,
+                    out scalar,
+                    out error))
+            {
+                return (false, null, error);
+            }
+        }
+        else
+        {
+            if (!ElectionProtectedTallyBinding.TryValidateAdminOnlyProtectedTallyPublicKey(
+                    election,
+                    _credentialsProvider,
+                    _curve,
+                    ceremonySnapshot.TallyPublicKey,
+                    out error))
+            {
+                return (false, null, error);
+            }
+
+            if (!ElectionProtectedTallyBinding.TryDeriveAdminOnlyProtectedTallyScalar(
+                    election,
+                    _credentialsProvider,
+                    _curve,
+                    out scalar,
+                    out error))
+            {
+                return (false, null, error);
+            }
+        }
+
+        var shareMaterial = scalar.ToString(CultureInfo.InvariantCulture);
+        var releaseShare = new ElectionFinalizationShareRecord(
+            Guid.NewGuid(),
+            Guid.Empty,
+            election.ElectionId,
+            election.OwnerPublicAddress,
+            null,
+            election.OwnerPublicAddress,
+            ShareIndex: 1,
+            ShareVersion: $"admin-only-protected-custody:{election.SelectedProfileId}",
+            TargetType: ElectionFinalizationTargetType.AggregateTally,
+            ClaimedCloseArtifactId: tallyReadyArtifact.Id,
+            ClaimedAcceptedBallotSetHash: tallyReadyArtifact.AcceptedBallotSetHash ?? Array.Empty<byte>(),
+            ClaimedFinalEncryptedTallyHash: tallyReadyArtifact.FinalEncryptedTallyHash ?? Array.Empty<byte>(),
+            ClaimedTargetTallyId: $"admin-only-protected:{election.ElectionId}",
+            ClaimedCeremonyVersionId: ceremonySnapshot.CeremonyVersionId,
+            ClaimedTallyPublicKeyFingerprint: ceremonySnapshot.TallyPublicKeyFingerprint,
+            CloseCountingJobId: null,
+            ExecutorKeyAlgorithm: null,
+            ShareMaterial: shareMaterial,
+            ShareMaterialHash: Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(shareMaterial))),
+            Status: ElectionFinalizationShareStatus.Accepted,
+            FailureCode: null,
+            FailureReason: null,
+            SubmittedAt: DateTime.UtcNow,
+            SourceTransactionId: null,
+            SourceBlockHeight: null,
+            SourceBlockId: null);
+        return (true, releaseShare, string.Empty);
     }
 
     private async Task RegisterIssueAsync(

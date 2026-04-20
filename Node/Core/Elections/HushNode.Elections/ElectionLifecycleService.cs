@@ -5,8 +5,11 @@ using System.Text;
 using System.Text.Json;
 using HushNode.Caching;
 using HushNode.Credentials;
+using HushNode.Identity.Storage;
+using HushNode.Reactions.Crypto;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
+using HushShared.Identity.Model;
 using Microsoft.Extensions.Logging;
 using Olimpo;
 using Olimpo.EntityFramework.Persistency;
@@ -24,13 +27,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly IElectionResultCryptoService? _electionResultCryptoService;
     private readonly IElectionReportPackageService _electionReportPackageService;
     private readonly ICredentialsProvider? _credentialsProvider;
+    private readonly IIdentityService? _identityService;
     private readonly ICloseCountingExecutorKeyRegistry _closeCountingExecutorKeyRegistry;
+    private readonly ICloseCountingExecutorEnvelopeCrypto _closeCountingExecutorEnvelopeCrypto;
+    private readonly IAdminOnlyProtectedTallyEnvelopeCrypto _adminOnlyProtectedTallyEnvelopeCrypto;
+    private readonly IBabyJubJub _curve;
     private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
 
     public ElectionLifecycleService(
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ILogger<ElectionLifecycleService> logger)
-        : this(unitOfWorkProvider, logger, new ElectionCeremonyOptions(), null, null, null, null, null)
+        : this(unitOfWorkProvider, logger, new ElectionCeremonyOptions(), null, null, null, null, null, null, null, null)
     {
     }
 
@@ -38,7 +45,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ILogger<ElectionLifecycleService> logger,
         ElectionCeremonyOptions ceremonyOptions)
-        : this(unitOfWorkProvider, logger, ceremonyOptions, null, null, null, null, null)
+        : this(unitOfWorkProvider, logger, ceremonyOptions, null, null, null, null, null, null, null, null, null)
     {
     }
 
@@ -50,7 +57,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IElectionResultCryptoService? electionResultCryptoService = null,
         IElectionReportPackageService? electionReportPackageService = null,
         ICredentialsProvider? credentialsProvider = null,
-        ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null)
+        IIdentityService? identityService = null,
+        ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null,
+        ICloseCountingExecutorEnvelopeCrypto? closeCountingExecutorEnvelopeCrypto = null,
+        IAdminOnlyProtectedTallyEnvelopeCrypto? adminOnlyProtectedTallyEnvelopeCrypto = null,
+        IBabyJubJub? curve = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _logger = logger;
@@ -59,7 +70,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
         _electionResultCryptoService = electionResultCryptoService;
         _electionReportPackageService = electionReportPackageService ?? new ElectionReportPackageService();
         _credentialsProvider = credentialsProvider;
+        _identityService = identityService;
         _closeCountingExecutorKeyRegistry = closeCountingExecutorKeyRegistry ?? new InMemoryCloseCountingExecutorKeyRegistry();
+        _closeCountingExecutorEnvelopeCrypto = closeCountingExecutorEnvelopeCrypto ?? new UnavailableCloseCountingExecutorEnvelopeCrypto();
+        _adminOnlyProtectedTallyEnvelopeCrypto = adminOnlyProtectedTallyEnvelopeCrypto ?? new UnavailableAdminOnlyProtectedTallyEnvelopeCrypto();
+        _curve = curve ?? new BabyJubJubCurve();
     }
 
     public async Task<ElectionCommandResult> CreateDraftAsync(CreateElectionDraftRequest request)
@@ -83,6 +98,15 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 validationErrors);
         }
 
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var selectedProfileResult = await ValidateSelectedProfileAsync(repository, request.Draft);
+        if (selectedProfileResult.ErrorResult is not null)
+        {
+            return selectedProfileResult.ErrorResult;
+        }
+
+        var selectedProfile = selectedProfileResult.Profile!;
         var election = ElectionModelFactory.CreateDraftRecord(
             electionId: request.PreassignedElectionId ?? ElectionId.NewElectionId,
             title: request.Draft.Title,
@@ -91,6 +115,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
             externalReferenceCode: request.Draft.ExternalReferenceCode,
             electionClass: request.Draft.ElectionClass,
             bindingStatus: request.Draft.BindingStatus,
+            selectedProfileId: selectedProfile.ProfileId,
+            selectedProfileDevOnly: selectedProfile.DevOnly,
             governanceMode: request.Draft.GovernanceMode,
             disclosureMode: request.Draft.DisclosureMode,
             participationPrivacyMode: request.Draft.ParticipationPrivacyMode,
@@ -121,9 +147,6 @@ public class ElectionLifecycleService : IElectionLifecycleService
             sourceTransactionId: request.SourceTransactionId,
             sourceBlockHeight: request.SourceBlockHeight,
             sourceBlockId: request.SourceBlockId);
-
-        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
-        var repository = unitOfWork.GetRepository<IElectionsRepository>();
 
         await repository.SaveElectionAsync(election);
         await repository.SaveDraftSnapshotAsync(snapshot);
@@ -188,6 +211,14 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Only the owner can edit a draft election.");
         }
 
+        var selectedProfileResult = await ValidateSelectedProfileAsync(repository, request.Draft);
+        if (selectedProfileResult.ErrorResult is not null)
+        {
+            return selectedProfileResult.ErrorResult;
+        }
+
+        var selectedProfile = selectedProfileResult.Profile!;
+
         var updated = ElectionModelFactory.CreateDraftRecord(
             electionId: existing.ElectionId,
             title: request.Draft.Title,
@@ -196,6 +227,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
             externalReferenceCode: request.Draft.ExternalReferenceCode,
             electionClass: request.Draft.ElectionClass,
             bindingStatus: request.Draft.BindingStatus,
+            selectedProfileId: selectedProfile.ProfileId,
+            selectedProfileDevOnly: selectedProfile.DevOnly,
             governanceMode: request.Draft.GovernanceMode,
             disclosureMode: request.Draft.DisclosureMode,
             participationPrivacyMode: request.Draft.ParticipationPrivacyMode,
@@ -710,19 +743,6 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "A non-empty eligible-set hash is required.");
         }
 
-        if (!ElectionDevModePrivacyGuard.TryValidateAcceptedBallotArtifacts(
-                request.ElectionId,
-                request.ActorPublicAddress,
-                request.EncryptedBallotPackage,
-                request.ProofBundle,
-                request.BallotNullifier,
-                out var castPrivacyValidationError))
-        {
-            return ElectionCastAcceptanceResult.Failure(
-                ElectionCastAcceptanceFailureReason.ValidationFailed,
-                castPrivacyValidationError);
-        }
-
         var idempotencyKeyHash = ComputeScopedHash(request.IdempotencyKey);
         var pendingKey = BuildPendingCastTrackingKey(request.ElectionId, idempotencyKeyHash);
         if (!_pendingCastTracking.TryAdd(pendingKey, true))
@@ -743,6 +763,20 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 return ElectionCastAcceptanceResult.Failure(
                     ElectionCastAcceptanceFailureReason.NotFound,
                     $"Election {request.ElectionId} was not found.");
+            }
+
+            if (!ElectionDevModePrivacyGuard.TryValidateAcceptedBallotArtifacts(
+                    election.SelectedProfileDevOnly,
+                    request.ElectionId,
+                    request.ActorPublicAddress,
+                    request.EncryptedBallotPackage,
+                    request.ProofBundle,
+                    request.BallotNullifier,
+                    out var castPrivacyValidationError))
+            {
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.ValidationFailed,
+                    castPrivacyValidationError);
             }
 
             if (election.VoteAcceptanceLockedAt.HasValue ||
@@ -1226,6 +1260,30 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Share version is required.");
         }
 
+        if (request.CloseCountingPublicCommitment is null || request.CloseCountingPublicCommitment.Length == 0)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Close-counting public commitment is required.");
+        }
+
+        try
+        {
+            var commitmentPoint = ElectionTallyPublicKeyDerivation.DeserializePoint(request.CloseCountingPublicCommitment);
+            if (!_curve.IsOnCurve(commitmentPoint))
+            {
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.ValidationFailed,
+                    "Close-counting public commitment must be a valid Baby JubJub point.");
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                ex.Message);
+        }
+
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var activeVersion = await LoadActiveCeremonyTrusteeContextAsync(
@@ -1255,7 +1313,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
         try
         {
             var submittedAt = DateTime.UtcNow;
-            updatedState = ceremonyContext.TrusteeState!.RecordMaterialSubmitted(submittedAt, request.ShareVersion);
+            updatedState = ceremonyContext.TrusteeState!.RecordMaterialSubmitted(
+                submittedAt,
+                request.ShareVersion,
+                request.CloseCountingPublicCommitment);
             messageEnvelope = ElectionModelFactory.CreateCeremonyMessageEnvelope(
                 request.ElectionId,
                 request.CeremonyVersionId,
@@ -1332,6 +1393,14 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.NotFound,
                 $"Ceremony version {request.CeremonyVersionId} was not found for election {request.ElectionId}.");
+        }
+
+        if (version.Status != ElectionCeremonyVersionStatus.InProgress &&
+            version.Status != ElectionCeremonyVersionStatus.Ready)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.InvalidState,
+                "Only active in-progress or ready ceremony versions can accept ceremony validation changes.");
         }
 
         var trusteeState = await repository.GetCeremonyTrusteeStateAsync(request.CeremonyVersionId, request.TrusteeUserAddress);
@@ -1482,26 +1551,73 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var trusteeStates = await repository.GetCeremonyTrusteeStatesAsync(request.CeremonyVersionId);
-        var completedTrustees = CountCompletedTrustees(trusteeStates, updatedState.TrusteeUserAddress);
+        var candidateStates = trusteeStates
+            .Select(state => string.Equals(
+                state.TrusteeUserAddress,
+                updatedState.TrusteeUserAddress,
+                StringComparison.OrdinalIgnoreCase)
+                ? updatedState
+                : state)
+            .ToArray();
+        var completedTrustees = CountCompletedTrustees(candidateStates);
         var updatedVersion = version;
         if (updatedVersion.Status == ElectionCeremonyVersionStatus.InProgress &&
-            completedTrustees >= updatedVersion.RequiredApprovalCount)
+            completedTrustees >= updatedVersion.TrusteeCount)
         {
-            if (string.IsNullOrWhiteSpace(request.TallyPublicKeyFingerprint))
+            ThresholdSharePreparationResult thresholdSharePreparation;
+            try
+            {
+                thresholdSharePreparation = await PrepareThresholdTrusteeReleaseSharesAsync(
+                    election,
+                    updatedVersion,
+                    candidateStates,
+                    completedAt);
+            }
+            catch (InvalidOperationException ex)
             {
                 return ElectionCommandResult.Failure(
                     ElectionCommandErrorCode.ValidationFailed,
-                    "Tally public key fingerprint is required when the ceremony reaches readiness.");
+                    ex.Message);
             }
 
-            updatedVersion = updatedVersion.MarkReady(completedAt, request.TallyPublicKeyFingerprint);
+            if (!string.IsNullOrWhiteSpace(request.TallyPublicKeyFingerprint) &&
+                !string.Equals(
+                    request.TallyPublicKeyFingerprint.Trim(),
+                    thresholdSharePreparation.Distribution.TallyPublicKeyFingerprint,
+                    StringComparison.Ordinal))
+            {
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.ValidationFailed,
+                    "Supplied tally public key fingerprint does not match the server-issued ceremony key.");
+            }
+
+            foreach (var generatedState in thresholdSharePreparation.UpdatedTrusteeStates)
+            {
+                await repository.UpdateCeremonyTrusteeStateAsync(generatedState);
+            }
+
+            foreach (var messageEnvelope in thresholdSharePreparation.ReleaseShareEnvelopes)
+            {
+                await repository.SaveCeremonyMessageEnvelopeAsync(messageEnvelope);
+            }
+
+            updatedState = thresholdSharePreparation.UpdatedTrusteeStates.First(x =>
+                string.Equals(
+                    x.TrusteeUserAddress,
+                    request.TrusteeUserAddress,
+                    StringComparison.OrdinalIgnoreCase));
+            candidateStates = thresholdSharePreparation.UpdatedTrusteeStates.ToArray();
+            updatedVersion = updatedVersion.MarkReady(
+                completedAt,
+                thresholdSharePreparation.Distribution.TallyPublicKeyFingerprint,
+                thresholdSharePreparation.Distribution.TallyPublicKey);
             await repository.UpdateCeremonyVersionAsync(updatedVersion);
             updatedEvents.Add(ElectionModelFactory.CreateCeremonyTranscriptEvent(
                 request.ElectionId,
                 request.CeremonyVersionId,
                 updatedVersion.VersionNumber,
                 ElectionCeremonyTranscriptEventType.VersionReady,
-                $"Ceremony version {updatedVersion.VersionNumber} reached the required trustee threshold.",
+                $"Ceremony version {updatedVersion.VersionNumber} validated every bound trustee package, issued trustee release shares, and is ready.",
                 occurredAt: completedAt,
                 actorPublicAddress: request.ActorPublicAddress,
                 tallyPublicKeyFingerprint: updatedVersion.TallyPublicKeyFingerprint));
@@ -1611,6 +1727,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var activeCeremonyTrusteeStates = activeCeremonyVersion is null
             ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
             : await repository.GetCeremonyTrusteeStatesAsync(activeCeremonyVersion.Id);
+        var selectedProfile = await ResolveSelectedProfileAsync(repository, election);
 
         return EvaluateOpenReadiness(
             election,
@@ -1619,6 +1736,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             activeCeremonyVersion,
             activeCeremonyTrusteeStates,
             warningAcknowledgements,
+            selectedProfile,
             request.RequiredWarningCodes,
             blockGovernedWorkflowMissing: false);
     }
@@ -2341,17 +2459,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Close-counting job no longer has enough accepted trustee shares to release the tally.");
         }
 
-        var acceptedTrustees = session.EligibleTrustees
-            .Where(x => acceptedShares.Any(share =>
-                string.Equals(share.TrusteeUserAddress, x.TrusteeUserAddress, StringComparison.OrdinalIgnoreCase)))
-            .ToArray();
-
         var completionResult = await CompleteCloseCountingSessionAsync(
             repository,
             election,
             session,
             acceptedShares,
-            acceptedTrustees,
             request.LeaseHolderId,
             executionStartedAt,
             request.SourceTransactionId,
@@ -2487,6 +2599,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 var activeCeremonyTrusteeStates = activeCeremonyVersion is null
                     ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
                     : await repository.GetCeremonyTrusteeStatesAsync(activeCeremonyVersion.Id);
+                var selectedProfile = await ResolveSelectedProfileAsync(repository, election);
                 var readiness = EvaluateOpenReadiness(
                     election,
                     invitations,
@@ -2494,6 +2607,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     activeCeremonyVersion,
                     activeCeremonyTrusteeStates,
                     warningAcknowledgements,
+                    selectedProfile,
                     election.AcknowledgedWarningCodes,
                     blockGovernedWorkflowMissing: false);
 
@@ -2688,6 +2802,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var activeCeremonyTrusteeStates = activeCeremonyVersion is null
             ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
             : await repository.GetCeremonyTrusteeStatesAsync(activeCeremonyVersion.Id);
+        var selectedProfile = await ResolveSelectedProfileAsync(repository, election);
         var readiness = EvaluateOpenReadiness(
             election,
             invitations,
@@ -2695,6 +2810,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             activeCeremonyVersion,
             activeCeremonyTrusteeStates,
             warningAcknowledgements,
+            selectedProfile,
             requiredWarningCodes,
             blockGovernedWorkflowMissing: !allowTrusteeThresholdExecution);
 
@@ -2727,13 +2843,28 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Provided frozen eligible voter set hash does not match the server-derived eligibility basis.");
         }
 
+        var (openCeremonySnapshot, openCeremonyError) = await ResolveOpenCeremonySnapshotAsync(
+            repository,
+            election,
+            selectedProfile,
+            readiness.CeremonySnapshot,
+            openedAt);
+        if (!string.IsNullOrWhiteSpace(openCeremonyError) || openCeremonySnapshot is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                string.IsNullOrWhiteSpace(openCeremonyError)
+                    ? "Election cannot open without a valid ceremony binding snapshot."
+                    : openCeremonyError);
+        }
+
         var artifact = ElectionModelFactory.CreateBoundaryArtifact(
             artifactType: ElectionBoundaryArtifactType.Open,
             election: election,
             recordedByPublicAddress: actorPublicAddress,
             recordedAt: openedAt,
-            trusteeSnapshot: CreateTrusteeSnapshot(election, invitations, readiness.CeremonySnapshot),
-            ceremonySnapshot: readiness.CeremonySnapshot,
+            trusteeSnapshot: CreateTrusteeSnapshot(election, invitations, openCeremonySnapshot),
+            ceremonySnapshot: openCeremonySnapshot,
             frozenEligibleVoterSetHash: frozenEligibleVoterSetHash is { Length: > 0 }
                 ? frozenEligibleVoterSetHash
                 : resolvedFrozenEligibleVoterSetHash,
@@ -2776,6 +2907,62 @@ public class ElectionLifecycleService : IElectionLifecycleService
             boundaryArtifact: artifact,
             rosterEntries: frozenRosterEntries,
             eligibilitySnapshot: openSnapshot);
+    }
+
+    private async Task<(ElectionCeremonyBindingSnapshot? Snapshot, string Error)> ResolveOpenCeremonySnapshotAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionCeremonyProfileRecord? selectedProfile,
+        ElectionCeremonyBindingSnapshot? readinessSnapshot,
+        DateTime openedAt)
+    {
+        if (election.GovernanceMode != ElectionGovernanceMode.AdminOnly ||
+            selectedProfile is null ||
+            selectedProfile.DevOnly)
+        {
+            return (readinessSnapshot, string.Empty);
+        }
+
+        var existingEnvelope = await repository.GetAdminOnlyProtectedTallyEnvelopeAsync(election.ElectionId);
+        if (existingEnvelope is not null &&
+            !existingEnvelope.DestroyedAt.HasValue &&
+            string.Equals(existingEnvelope.SelectedProfileId, selectedProfile.ProfileId, StringComparison.Ordinal) &&
+            ElectionProtectedTallyBinding.TryBuildAdminOnlyProtectedTallyBindingSnapshot(
+                election,
+                existingEnvelope,
+                _curve,
+                out var existingSnapshot,
+                out _))
+        {
+            return (existingSnapshot, string.Empty);
+        }
+
+        if (!ElectionProtectedTallyBinding.TryCreateAdminOnlyProtectedTallyEnvelope(
+                election,
+                _adminOnlyProtectedTallyEnvelopeCrypto,
+                _curve,
+                out var newEnvelope,
+                out var snapshot,
+                out var error,
+                createdAt: openedAt))
+        {
+            return (null, error);
+        }
+
+        if (existingEnvelope is null)
+        {
+            await repository.SaveAdminOnlyProtectedTallyEnvelopeAsync(newEnvelope!);
+        }
+        else
+        {
+            await repository.UpdateAdminOnlyProtectedTallyEnvelopeAsync(newEnvelope! with
+            {
+                CreatedAt = existingEnvelope.CreatedAt,
+                LastUpdatedAt = openedAt,
+            });
+        }
+
+        return (snapshot, string.Empty);
     }
 
     private static ElectionCommandResult? ValidateDraftNotBlockedByGovernedOpenProposal(ElectionGovernedProposalRecord? pendingProposal) =>
@@ -3119,23 +3306,21 @@ public class ElectionLifecycleService : IElectionLifecycleService
         return null;
     }
 
-    private static ElectionOpenValidationResult EvaluateOpenReadiness(
+    private ElectionOpenValidationResult EvaluateOpenReadiness(
         ElectionRecord election,
         IReadOnlyList<ElectionTrusteeInvitationRecord> invitations,
         IReadOnlyList<ElectionRosterEntryRecord> rosterEntries,
         ElectionCeremonyVersionRecord? activeCeremonyVersion,
         IReadOnlyList<ElectionCeremonyTrusteeStateRecord> activeCeremonyTrusteeStates,
         IReadOnlyList<ElectionWarningAcknowledgementRecord> warningAcknowledgements,
+        ElectionCeremonyProfileRecord? selectedProfile,
         IReadOnlyList<ElectionWarningCode>? requestedWarnings,
         bool blockGovernedWorkflowMissing)
     {
         var errors = new List<string>();
         var requiredWarnings = NormalizeWarningCodes(requestedWarnings).ToList();
         var nonBlankOptions = election.Options.Where(x => !x.IsBlankOption).ToArray();
-        ElectionCeremonyBindingSnapshot? ceremonySnapshot =
-            election.GovernanceMode == ElectionGovernanceMode.AdminOnly
-                ? ElectionProtectedTallyBinding.BuildAdminOnlyProtectedTallyBindingSnapshot(election)
-                : null;
+        ElectionCeremonyBindingSnapshot? ceremonySnapshot = null;
 
         if (election.LifecycleState != ElectionLifecycleState.Draft)
         {
@@ -3169,6 +3354,51 @@ public class ElectionLifecycleService : IElectionLifecycleService
             errors.Add("Frozen-at-open elections require at least one active rostered voter before open.");
         }
 
+        if (string.IsNullOrWhiteSpace(election.SelectedProfileId))
+        {
+            errors.Add("A selected circuit/profile is required before opening the election.");
+        }
+        else if (selectedProfile is null)
+        {
+            errors.Add($"Selected circuit/profile {election.SelectedProfileId} was not found.");
+        }
+        else
+        {
+            if (selectedProfile.DevOnly && !_ceremonyOptions.EnableDevCeremonyProfiles)
+            {
+                errors.Add($"Selected circuit/profile {selectedProfile.ProfileId} is disabled in this deployment.");
+            }
+
+            if (!ElectionModeProfileCompatibility.IsProfileAllowed(election.BindingStatus, selectedProfile))
+            {
+                errors.Add(ElectionModeProfileCompatibility.BuildIncompatibilityReason(
+                    election.BindingStatus,
+                    selectedProfile));
+            }
+        }
+
+        if (election.GovernanceMode == ElectionGovernanceMode.AdminOnly && selectedProfile is not null)
+        {
+            if (selectedProfile.DevOnly)
+            {
+                ceremonySnapshot = ElectionProtectedTallyBinding.BuildAdminOnlyProtectedTallyBindingSnapshot(election) with
+                {
+                    ProfileId = selectedProfile.ProfileId,
+                };
+            }
+            else if (!_adminOnlyProtectedTallyEnvelopeCrypto.IsAvailable(out var adminOnlyBindingError))
+            {
+                errors.Add(adminOnlyBindingError);
+            }
+            else
+            {
+                ceremonySnapshot = ElectionProtectedTallyBinding.BuildAdminOnlyProtectedTallyBindingSnapshot(election) with
+                {
+                    ProfileId = selectedProfile.ProfileId,
+                };
+            }
+        }
+
         if (election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold)
         {
             if (!election.RequiredApprovalCount.HasValue)
@@ -3179,6 +3409,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             {
                 ceremonySnapshot = TryBuildCeremonySnapshot(
                     election,
+                    selectedProfile,
                     activeCeremonyVersion,
                     activeCeremonyTrusteeStates,
                     errors);
@@ -3220,6 +3451,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
     private static ElectionCeremonyBindingSnapshot? TryBuildCeremonySnapshot(
         ElectionRecord election,
+        ElectionCeremonyProfileRecord? selectedProfile,
         ElectionCeremonyVersionRecord? activeCeremonyVersion,
         IReadOnlyList<ElectionCeremonyTrusteeStateRecord> activeCeremonyTrusteeStates,
         List<string> errors)
@@ -3241,9 +3473,22 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return null;
         }
 
+        if (selectedProfile is not null &&
+            !string.Equals(activeCeremonyVersion.ProfileId, selectedProfile.ProfileId, StringComparison.Ordinal))
+        {
+            errors.Add("The active ceremony version does not match the selected circuit/profile for this election.");
+            return null;
+        }
+
         if (string.IsNullOrWhiteSpace(activeCeremonyVersion.TallyPublicKeyFingerprint))
         {
             errors.Add("Ready ceremony versions must publish the tally public key fingerprint before open.");
+            return null;
+        }
+
+        if (activeCeremonyVersion.TallyPublicKey is null || activeCeremonyVersion.TallyPublicKey.Length == 0)
+        {
+            errors.Add("Ready ceremony versions must publish the usable tally public key before open.");
             return null;
         }
 
@@ -3253,9 +3498,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var activeTrustees = GetCompletedTrusteeReferences(activeCeremonyVersion, activeCeremonyTrusteeStates);
-        if (activeTrustees.Length < election.RequiredApprovalCount.Value)
+        if (activeTrustees.Length < activeCeremonyVersion.TrusteeCount)
         {
-            errors.Add("Trustee-threshold elections require enough ceremony-complete trustees to satisfy the required approval count before open.");
+            errors.Add("Trustee-threshold elections require every bound trustee package to complete the active ceremony version before open.");
             return null;
         }
 
@@ -3266,7 +3511,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
             activeCeremonyVersion.TrusteeCount,
             election.RequiredApprovalCount.Value,
             activeTrustees,
-            activeCeremonyVersion.TallyPublicKeyFingerprint);
+            activeCeremonyVersion.TallyPublicKeyFingerprint,
+            activeCeremonyVersion.TallyPublicKey);
     }
 
     private static IReadOnlyList<ElectionOptionDefinition> NormalizeOwnerOptions(IReadOnlyList<ElectionOptionDefinition> ownerOptions) =>
@@ -3311,6 +3557,84 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 sourceBlockId: sourceBlockId))
             .ToArray();
 
+    private async Task<(ElectionCeremonyProfileRecord? Profile, ElectionCommandResult? ErrorResult)> ValidateSelectedProfileAsync(
+        IElectionsRepository repository,
+        ElectionDraftSpecification draft)
+    {
+        var selectedProfileId = draft.SelectedProfileId?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(selectedProfileId))
+        {
+            return (
+                null,
+                ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.ValidationFailed,
+                    "A selected circuit/profile is required."));
+        }
+
+        var registryProfiles = await repository.GetCeremonyProfilesAsync();
+        var profile = ElectionSelectableProfileCatalog.ResolveProfile(
+            draft.GovernanceMode,
+            selectedProfileId,
+            registryProfiles);
+        if (profile is null)
+        {
+            return (
+                null,
+                ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.NotFound,
+                    $"Selected circuit/profile {selectedProfileId} was not found."));
+        }
+
+        if (profile.DevOnly && !_ceremonyOptions.EnableDevCeremonyProfiles)
+        {
+            return (
+                null,
+                ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.NotSupported,
+                    $"Selected circuit/profile {selectedProfileId} is disabled in this deployment."));
+        }
+
+        if (!ElectionModeProfileCompatibility.IsProfileAllowed(draft.BindingStatus, profile))
+        {
+            return (
+                null,
+                ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.ValidationFailed,
+                    ElectionModeProfileCompatibility.BuildIncompatibilityReason(
+                        draft.BindingStatus,
+                        profile)));
+        }
+
+        if (draft.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold &&
+            draft.RequiredApprovalCount.HasValue &&
+            profile.RequiredApprovalCount != draft.RequiredApprovalCount.Value)
+        {
+            return (
+                null,
+                ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.ValidationFailed,
+                    "The selected ceremony profile threshold does not match the election approval threshold."));
+        }
+
+        return (profile, null);
+    }
+
+    private async Task<ElectionCeremonyProfileRecord?> ResolveSelectedProfileAsync(
+        IElectionsRepository repository,
+        ElectionRecord election)
+    {
+        if (string.IsNullOrWhiteSpace(election.SelectedProfileId))
+        {
+            return null;
+        }
+
+        var registryProfiles = await repository.GetCeremonyProfilesAsync();
+        return ElectionSelectableProfileCatalog.ResolveProfile(
+            election.GovernanceMode,
+            election.SelectedProfileId,
+            registryProfiles);
+    }
+
     private async Task<ElectionCommandResult> StartOrRestartElectionCeremonyInternalAsync(
         IElectionsRepository repository,
         ElectionId electionId,
@@ -3352,6 +3676,20 @@ public class ElectionLifecycleService : IElectionLifecycleService
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.NotSupported,
                 $"Ceremony profile {profileId} is disabled in this deployment.");
+        }
+
+        if (!ElectionModeProfileCompatibility.IsProfileAllowed(election.BindingStatus, profile))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                ElectionModeProfileCompatibility.BuildIncompatibilityReason(election.BindingStatus, profile));
+        }
+
+        if (!string.Equals(profile.ProfileId, election.SelectedProfileId, StringComparison.Ordinal))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "The active ceremony profile must match the circuit/profile selected in the draft policy.");
         }
 
         if (!election.RequiredApprovalCount.HasValue)
@@ -3670,16 +4008,79 @@ public class ElectionLifecycleService : IElectionLifecycleService
             (x.State != ElectionTrusteeCeremonyState.AcceptedTrustee &&
              x.State != ElectionTrusteeCeremonyState.CeremonyNotStarted));
 
-    private static int CountCompletedTrustees(
-        IReadOnlyList<ElectionCeremonyTrusteeStateRecord> trusteeStates,
-        string updatedTrusteeUserAddress)
+    private static int CountCompletedTrustees(IReadOnlyList<ElectionCeremonyTrusteeStateRecord> trusteeStates) =>
+        trusteeStates.Count(x => x.State == ElectionTrusteeCeremonyState.CeremonyCompleted);
+
+    private async Task<ThresholdSharePreparationResult> PrepareThresholdTrusteeReleaseSharesAsync(
+        ElectionRecord election,
+        ElectionCeremonyVersionRecord version,
+        IReadOnlyList<ElectionCeremonyTrusteeStateRecord> candidateStates,
+        DateTime preparedAt)
     {
-        var completedCount = trusteeStates.Count(x => x.State == ElectionTrusteeCeremonyState.CeremonyCompleted);
-        return trusteeStates.Any(x =>
-                string.Equals(x.TrusteeUserAddress, updatedTrusteeUserAddress, StringComparison.OrdinalIgnoreCase) &&
-                x.State == ElectionTrusteeCeremonyState.CeremonyCompleted)
-            ? completedCount
-            : completedCount + 1;
+        if (_identityService is null)
+        {
+            throw new InvalidOperationException(
+                "Trustee release-share issuance requires the identity service to resolve trustee encryption keys.");
+        }
+
+        var distribution = TrusteeThresholdShareDistribution.Create(
+            election,
+            version,
+            candidateStates,
+            _curve);
+        var assignmentByTrustee = distribution.Assignments.ToDictionary(
+            x => x.TrusteeUserAddress,
+            StringComparer.OrdinalIgnoreCase);
+        var updatedTrusteeStates = candidateStates
+            .Select(state =>
+            {
+                if (!assignmentByTrustee.TryGetValue(state.TrusteeUserAddress, out var assignment))
+                {
+                    return state;
+                }
+
+                return state with
+                {
+                    CloseCountingPublicCommitment = assignment.CloseCountingPublicCommitment.ToArray(),
+                    LastUpdatedAt = preparedAt,
+                };
+            })
+            .ToArray();
+        var releaseShareEnvelopes = new List<ElectionCeremonyMessageEnvelopeRecord>(distribution.Assignments.Count);
+
+        foreach (var assignment in distribution.Assignments)
+        {
+            var trusteeProfile = await _identityService.RetrieveIdentityAsync(assignment.TrusteeUserAddress);
+            if (trusteeProfile is not Profile profile ||
+                string.IsNullOrWhiteSpace(profile.PublicEncryptAddress))
+            {
+                throw new InvalidOperationException(
+                    $"Trustee {assignment.TrusteeUserAddress} does not have a usable encryption identity for server-issued share delivery.");
+            }
+
+            var encryptedPayload = TrusteeThresholdShareDistribution.CreateEncryptedReleaseEnvelope(
+                election,
+                version,
+                assignment,
+                profile.PublicEncryptAddress);
+            releaseShareEnvelopes.Add(ElectionModelFactory.CreateCeremonyMessageEnvelope(
+                election.ElectionId,
+                version.Id,
+                version.VersionNumber,
+                version.ProfileId,
+                senderTrusteeUserAddress: assignment.TrusteeUserAddress,
+                recipientTrusteeUserAddress: assignment.TrusteeUserAddress,
+                messageType: TrusteeThresholdShareDistribution.TrusteeVaultMessageType,
+                payloadVersion: TrusteeThresholdShareDistribution.ServerIssuedPayloadVersion,
+                encryptedPayload: Encoding.UTF8.GetBytes(encryptedPayload),
+                payloadFingerprint: TrusteeThresholdShareDistribution.ComputePayloadFingerprint(encryptedPayload),
+                submittedAt: preparedAt));
+        }
+
+        return new ThresholdSharePreparationResult(
+            distribution,
+            updatedTrusteeStates,
+            releaseShareEnvelopes);
     }
 
     private async Task<ElectionCommandResult> ResolveTrusteeInvitationInternalAsync(
@@ -4538,7 +4939,6 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionRecord election,
         ElectionFinalizationSessionRecord session,
         IReadOnlyList<ElectionFinalizationShareRecord> acceptedShares,
-        IReadOnlyList<ElectionTrusteeReference> acceptedTrustees,
         string completedByPublicAddress,
         DateTime completedAt,
         Guid? sourceTransactionId,
@@ -4658,26 +5058,59 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var publishedHash = ComputePublishedBallotStreamHash(publishedBallots);
-        var release = _electionResultCryptoService.TryReleaseAggregateTally(
+        var aggregateReleaseAttempt = TryResolveAggregateReleaseForSession(
             publishedBallots.Select(x => x.EncryptedBallotPackage).ToArray(),
             releaseSharesResolution.ReleaseShares!,
+            session.RequiredShareCount,
             acceptedBallots.Count);
+        if (!aggregateReleaseAttempt.HasAttempt)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                $"Close-counting aggregate release failed: {aggregateReleaseAttempt.FailureReason}");
+        }
+
+        var releaseShares = aggregateReleaseAttempt.ReleaseShares!;
+        var releaseResult = aggregateReleaseAttempt.Release!;
+        var acceptedTrustees = session.EligibleTrustees
+            .Where(x => releaseShares.Any(share =>
+                string.Equals(share.TrusteeUserAddress, x.TrusteeUserAddress, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+        var attemptedShareSubset = string.Join(
+            ", ",
+            releaseShares
+                .OrderBy(x => x.ShareIndex)
+                .Select(x => x.TrusteeDisplayName ?? x.TrusteeUserAddress));
+
+        var releaseAttemptFailurePrefix =
+            acceptedShares.Count > session.RequiredShareCount && !releaseResult.IsSuccessful
+                ? $"Close-counting aggregate release could not reconstruct the bound tally from the attempted {session.RequiredShareCount}-share subset ({attemptedShareSubset})."
+                : "Close-counting aggregate release failed.";
+
+        var releaseAttemptFailureMessage = string.IsNullOrWhiteSpace(aggregateReleaseAttempt.FailureReason)
+            ? releaseAttemptFailurePrefix
+            : $"{releaseAttemptFailurePrefix} {aggregateReleaseAttempt.FailureReason}";
 
         byte[] resolvedFinalEncryptedTallyHash;
         IReadOnlyList<ElectionResultOptionCount> namedOptionResults;
         int blankCount;
         int totalVotedCount;
 
-        if (release.IsSuccessful)
+        if (releaseResult.IsSuccessful)
         {
-            if (!ByteArrayEquals(release.FinalEncryptedTallyHash, session.FinalEncryptedTallyHash))
+            if (!ByteArrayEquals(releaseResult.FinalEncryptedTallyHash, session.FinalEncryptedTallyHash))
             {
                 return ElectionCommandResult.Failure(
                     ElectionCommandErrorCode.ValidationFailed,
                     "Close-counting aggregate release hash does not match the bound tally target.");
             }
 
-            var decodedCounts = release.DecodedCounts ?? Array.Empty<int>();
+            var decodedCounts = releaseResult.DecodedCounts ?? Array.Empty<int>();
+            if (publishedBallots.Count == 0 && decodedCounts.Count == 0)
+            {
+                decodedCounts = Enumerable.Repeat(0, election.Options.Count).ToArray();
+            }
+
             if (decodedCounts.Count != election.Options.Count)
             {
                 return ElectionCommandResult.Failure(
@@ -4704,7 +5137,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
             blankCount = blankOption?.Count ?? 0;
             totalVotedCount = decodedCounts.Sum();
-            resolvedFinalEncryptedTallyHash = release.FinalEncryptedTallyHash!;
+            resolvedFinalEncryptedTallyHash = releaseResult.FinalEncryptedTallyHash!;
         }
         else if (ElectionDevModePublishedBallotSupport.TryBuildPublishedBallotTally(
                      election,
@@ -4728,7 +5161,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.ValidationFailed,
-                $"Close-counting aggregate release failed: {release.FailureReason}");
+                releaseAttemptFailureMessage);
         }
 
         var eligibleToVoteCount = closeSnapshot.ActiveDenominatorCount;
@@ -4882,6 +5315,93 @@ public class ElectionLifecycleService : IElectionLifecycleService
             finalizationReleaseEvidence: releaseEvidence);
     }
 
+    private AggregateReleaseAttemptResolution TryResolveAggregateReleaseForSession(
+        IReadOnlyList<string> encryptedBallotPackages,
+        IReadOnlyList<ElectionFinalizationShareRecord> acceptedShares,
+        int requiredShareCount,
+        int maxSupportedCount)
+    {
+        if (_electionResultCryptoService is null)
+        {
+            return AggregateReleaseAttemptResolution.NoAttempt(
+                "Close-counting aggregate release requires the FEAT-101 result crypto service.");
+        }
+
+        if (requiredShareCount < 1)
+        {
+            return AggregateReleaseAttemptResolution.NoAttempt(
+                "Close-counting aggregate release requires a positive trustee-share threshold.");
+        }
+
+        if (acceptedShares.Count < requiredShareCount)
+        {
+            return AggregateReleaseAttemptResolution.NoAttempt(
+                "Close-counting aggregate release does not have enough accepted trustee shares yet.");
+        }
+
+        ElectionAggregateReleaseResult? firstFailure = null;
+        IReadOnlyList<ElectionFinalizationShareRecord>? firstFailureShares = null;
+        foreach (var shareSubset in EnumerateFinalizationShareSubsets(acceptedShares, requiredShareCount))
+        {
+            var release = _electionResultCryptoService.TryReleaseAggregateTally(
+                encryptedBallotPackages,
+                shareSubset,
+                maxSupportedCount);
+
+            if (release.IsSuccessful)
+            {
+                return AggregateReleaseAttemptResolution.FromAttempt(release, shareSubset);
+            }
+
+            if (firstFailure is null)
+            {
+                firstFailure = release;
+                firstFailureShares = shareSubset;
+            }
+        }
+
+        return firstFailure is null || firstFailureShares is null
+            ? AggregateReleaseAttemptResolution.NoAttempt(
+                "Accepted trustee shares did not reconstruct the bound tally key.")
+            : AggregateReleaseAttemptResolution.FromAttempt(firstFailure, firstFailureShares);
+    }
+
+    private static IReadOnlyList<IReadOnlyList<ElectionFinalizationShareRecord>> EnumerateFinalizationShareSubsets(
+        IReadOnlyList<ElectionFinalizationShareRecord> acceptedShares,
+        int subsetSize)
+    {
+        if (subsetSize < 1 || acceptedShares.Count < subsetSize)
+        {
+            return Array.Empty<IReadOnlyList<ElectionFinalizationShareRecord>>();
+        }
+
+        var orderedShares = acceptedShares
+            .OrderBy(x => x.ShareIndex)
+            .ThenBy(x => x.TrusteeUserAddress, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var subsets = new List<IReadOnlyList<ElectionFinalizationShareRecord>>();
+        var current = new ElectionFinalizationShareRecord[subsetSize];
+
+        void Build(int startIndex, int depth)
+        {
+            if (depth == subsetSize)
+            {
+                subsets.Add(current.ToArray());
+                return;
+            }
+
+            var remainingSlots = subsetSize - depth;
+            for (var index = startIndex; index <= orderedShares.Length - remainingSlots; index++)
+            {
+                current[depth] = orderedShares[index];
+                Build(index + 1, depth + 1);
+            }
+        }
+
+        Build(0, 0);
+        return subsets;
+    }
+
     private async Task<ReportPackageFinalizationContext> ResolveReportPackageFinalizationContextAsync(
         IElectionsRepository repository,
         ElectionId electionId,
@@ -4994,9 +5514,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Executor-encrypted trustee share does not match the active executor key algorithm.");
         }
 
+        var executorPrivateKey = ResolveExecutorSessionPrivateKey(closeCountingJob.Id, executorEnvelope);
+        if (string.IsNullOrWhiteSpace(executorPrivateKey))
+        {
+            return CloseCountingExecutorSubmissionResolution.Rejected(
+                "MALFORMED_SHARE",
+                "Executor-encrypted trustee share does not have a recoverable executor session key.");
+        }
+
         var decryptedSubmission = TryDecryptExecutorSubmission(
-            closeCountingJob.Id,
-            request.EncryptedExecutorSubmission!);
+            request.EncryptedExecutorSubmission!,
+            executorPrivateKey);
         if (decryptedSubmission is null)
         {
             return CloseCountingExecutorSubmissionResolution.Rejected(
@@ -5070,9 +5598,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     "Stored trustee share does not match the active close-counting executor binding.");
             }
 
+            var executorPrivateKey = ResolveExecutorSessionPrivateKey(closeCountingJob.Id, executorEnvelope);
+            if (string.IsNullOrWhiteSpace(executorPrivateKey))
+            {
+                return FinalizationShareReleaseResolution.Rejected(
+                    "MALFORMED_SHARE",
+                    "Close-counting release could not recover the active executor session key.");
+            }
+
             var decryptedSubmission = TryDecryptExecutorSubmission(
-                closeCountingJob.Id,
-                share.ShareMaterial);
+                share.ShareMaterial,
+                executorPrivateKey);
             if (decryptedSubmission is null ||
                 string.IsNullOrWhiteSpace(decryptedSubmission.ShareMaterial))
             {
@@ -5097,14 +5633,54 @@ public class ElectionLifecycleService : IElectionLifecycleService
         return FinalizationShareReleaseResolution.Accepted(decryptedShares);
     }
 
-    private CloseCountingExecutorSubmissionPayload? TryDecryptExecutorSubmission(
+    private string? ResolveExecutorSessionPrivateKey(
         Guid closeCountingJobId,
-        string encryptedExecutorSubmission)
+        ElectionExecutorSessionKeyEnvelopeRecord executorEnvelope)
+    {
+        if (_closeCountingExecutorKeyRegistry.TryGet(closeCountingJobId, out var executorSessionKeyMaterial) &&
+            executorSessionKeyMaterial is not null &&
+            !string.IsNullOrWhiteSpace(executorSessionKeyMaterial.PrivateKey))
+        {
+            return executorSessionKeyMaterial.PrivateKey;
+        }
+
+        var executorPrivateKey = _closeCountingExecutorEnvelopeCrypto.TryUnsealPrivateKey(
+            executorEnvelope,
+            out var error);
+        if (!string.IsNullOrWhiteSpace(executorPrivateKey))
+        {
+            return executorPrivateKey;
+        }
+
+        if (LegacyNodeIdentityCloseCountingExecutorEnvelopeCrypto.RequiresLegacyNodeKeyFallback(executorEnvelope))
+        {
+            executorPrivateKey = LegacyNodeIdentityCloseCountingExecutorEnvelopeCrypto.TryUnsealPrivateKey(
+                executorEnvelope,
+                _credentialsProvider,
+                out error);
+            if (!string.IsNullOrWhiteSpace(executorPrivateKey))
+            {
+                return executorPrivateKey;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            _logger.LogWarning(
+                "[ElectionLifecycleService] Close-counting executor key recovery failed for job {CloseCountingJobId}: {Error}",
+                closeCountingJobId,
+                error);
+        }
+
+        return null;
+    }
+
+    private CloseCountingExecutorSubmissionPayload? TryDecryptExecutorSubmission(
+        string encryptedExecutorSubmission,
+        string executorPrivateKey)
     {
         if (string.IsNullOrWhiteSpace(encryptedExecutorSubmission) ||
-            !_closeCountingExecutorKeyRegistry.TryGet(closeCountingJobId, out var executorSessionKeyMaterial) ||
-            executorSessionKeyMaterial is null ||
-            string.IsNullOrWhiteSpace(executorSessionKeyMaterial.PrivateKey))
+            string.IsNullOrWhiteSpace(executorPrivateKey))
         {
             return null;
         }
@@ -5113,7 +5689,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         {
             var innerJson = EncryptKeys.Decrypt(
                 encryptedExecutorSubmission,
-                executorSessionKeyMaterial.PrivateKey);
+                executorPrivateKey);
 
             return JsonSerializer.Deserialize<CloseCountingExecutorSubmissionPayload>(
                 innerJson,
@@ -5437,6 +6013,26 @@ public class ElectionLifecycleService : IElectionLifecycleService
             string failureCode,
             string failureReason) =>
             new(false, null, failureCode, failureReason);
+    }
+
+    private sealed record ThresholdSharePreparationResult(
+        TrusteeThresholdShareDistributionResult Distribution,
+        IReadOnlyList<ElectionCeremonyTrusteeStateRecord> UpdatedTrusteeStates,
+        IReadOnlyList<ElectionCeremonyMessageEnvelopeRecord> ReleaseShareEnvelopes);
+
+    private sealed record AggregateReleaseAttemptResolution(
+        bool HasAttempt,
+        ElectionAggregateReleaseResult? Release,
+        IReadOnlyList<ElectionFinalizationShareRecord>? ReleaseShares,
+        string? FailureReason)
+    {
+        public static AggregateReleaseAttemptResolution FromAttempt(
+            ElectionAggregateReleaseResult release,
+            IReadOnlyList<ElectionFinalizationShareRecord> releaseShares) =>
+            new(true, release, releaseShares, release.FailureReason);
+
+        public static AggregateReleaseAttemptResolution NoAttempt(string failureReason) =>
+            new(false, null, null, failureReason);
     }
 
     private sealed record ResultArtifactPayload(

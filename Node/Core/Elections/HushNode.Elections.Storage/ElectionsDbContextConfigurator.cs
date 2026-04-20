@@ -46,6 +46,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionFinalizationSession(modelBuilder);
         ConfigureElectionCloseCountingJob(modelBuilder);
         ConfigureElectionExecutorSessionKeyEnvelope(modelBuilder);
+        ConfigureAdminOnlyProtectedTallyEnvelope(modelBuilder);
         ConfigureElectionTallyExecutorLease(modelBuilder);
         ConfigureElectionFinalizationShare(modelBuilder);
         ConfigureElectionFinalizationReleaseEvidence(modelBuilder);
@@ -71,6 +72,8 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.LifecycleState).HasConversion<string>().HasColumnType("varchar(32)");
             entity.Property(x => x.ElectionClass).HasConversion<string>().HasColumnType("varchar(64)");
             entity.Property(x => x.BindingStatus).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.SelectedProfileId).HasColumnType("text");
+            entity.Property(x => x.SelectedProfileDevOnly).HasColumnType("boolean");
             entity.Property(x => x.GovernanceMode).HasConversion<string>().HasColumnType("varchar(32)");
             entity.Property(x => x.DisclosureMode).HasConversion<string>().HasColumnType("varchar(64)");
             entity.Property(x => x.ParticipationPrivacyMode).HasConversion<string>().HasColumnType("varchar(96)");
@@ -788,6 +791,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.SupersededAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.SupersededReason).HasColumnType("text");
             entity.Property(x => x.TallyPublicKeyFingerprint).HasColumnType("varchar(256)");
+            entity.Property(x => x.TallyPublicKey).HasColumnType("bytea");
 
             ConfigureJsonProperty(entity.Property(x => x.BoundTrustees));
 
@@ -884,6 +888,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.RemovedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.ShareVersion).HasColumnType("varchar(64)");
             entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.CloseCountingPublicCommitment).HasColumnType("bytea");
 
             entity.HasIndex(x => new { x.CeremonyVersionId, x.TrusteeUserAddress }).IsUnique();
             entity.HasIndex(x => new { x.ElectionId, x.State });
@@ -1050,8 +1055,34 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.ExecutorSessionPublicKey).HasColumnType("text");
             entity.Property(x => x.SealedExecutorSessionPrivateKey).HasColumnType("text");
             entity.Property(x => x.KeyAlgorithm).HasColumnType("varchar(96)");
+            entity.Property(x => x.SealAlgorithm).HasColumnType("varchar(96)");
             entity.Property(x => x.CreatedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.ExpiresAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.DestroyedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SealedByServiceIdentity).HasColumnType("varchar(160)");
+            entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");
+        });
+    }
+
+    private static void ConfigureAdminOnlyProtectedTallyEnvelope(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionAdminOnlyProtectedTallyEnvelopeRecord>(entity =>
+        {
+            entity.ToTable("ElectionAdminOnlyProtectedTallyEnvelopeRecord", "Elections");
+            entity.HasKey(x => x.ElectionId);
+
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.SelectedProfileId).HasColumnType("varchar(96)");
+            entity.Property(x => x.TallyPublicKey).HasColumnType("bytea");
+            entity.Property(x => x.TallyPublicKeyFingerprint).HasColumnType("varchar(256)");
+            entity.Property(x => x.SealedTallyPrivateScalar).HasColumnType("text");
+            entity.Property(x => x.ScalarEncoding).HasColumnType("varchar(96)");
+            entity.Property(x => x.SealAlgorithm).HasColumnType("varchar(96)");
+            entity.Property(x => x.CreatedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.DestroyedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.SealedByServiceIdentity).HasColumnType("varchar(160)");
             entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");

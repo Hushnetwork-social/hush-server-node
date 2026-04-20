@@ -710,6 +710,17 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 "Submit ceremony material action payload could not be deserialized.");
         }
 
+        if (!ElectionTallyPublicKeyDerivation.TryParsePointPayload(
+                submitAction.CloseCountingPublicCommitment,
+                new HushNode.Reactions.Crypto.BabyJubJubCurve(),
+                out var closeCountingPublicCommitment,
+                out var commitmentValidationError))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                commitmentValidationError);
+        }
+
         return await _electionLifecycleService.SubmitElectionCeremonyMaterialAsync(
             new SubmitElectionCeremonyMaterialRequest(
                 decryptedEnvelope.Transaction.Payload.ElectionId,
@@ -720,7 +731,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 submitAction.PayloadVersion,
                 Encoding.UTF8.GetBytes(submitAction.EncryptedPayload),
                 submitAction.PayloadFingerprint,
-                submitAction.ShareVersion));
+                submitAction.ShareVersion,
+                closeCountingPublicCommitment!));
     }
 
     private async Task<ElectionCommandResult> HandleRecordCeremonyValidationFailureAsync(

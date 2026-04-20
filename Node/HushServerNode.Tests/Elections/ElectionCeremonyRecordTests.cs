@@ -52,13 +52,15 @@ public class ElectionCeremonyRecordTests
 
         var ready = version.MarkReady(
             completedAt: DateTime.UtcNow,
-            tallyPublicKeyFingerprint: "tally-fingerprint-1");
+            tallyPublicKeyFingerprint: CeremonyTestKeyFixtures.Fingerprint,
+            tallyPublicKey: CeremonyTestKeyFixtures.PublicKeyBytes);
         var superseded = ready.Supersede(
             supersededAt: DateTime.UtcNow,
             supersededReason: "roster changed after progress");
 
         ready.Status.Should().Be(ElectionCeremonyVersionStatus.Ready);
-        ready.TallyPublicKeyFingerprint.Should().Be("tally-fingerprint-1");
+        ready.TallyPublicKeyFingerprint.Should().Be(CeremonyTestKeyFixtures.Fingerprint);
+        ready.TallyPublicKey.Should().Equal(CeremonyTestKeyFixtures.PublicKeyBytes);
         superseded.Status.Should().Be(ElectionCeremonyVersionStatus.Superseded);
         superseded.SupersededReason.Should().Be("roster changed after progress");
         superseded.BoundTrustees.Should().HaveCount(5);
@@ -76,10 +78,16 @@ public class ElectionCeremonyRecordTests
         var published = state.PublishTransportKey("transport-fingerprint", DateTime.UtcNow);
         var joined = published.MarkJoined(DateTime.UtcNow);
         var selfTested = joined.RecordSelfTestSuccess(DateTime.UtcNow);
-        var submitted = selfTested.RecordMaterialSubmitted(DateTime.UtcNow, "share-v1");
+        var submitted = selfTested.RecordMaterialSubmitted(
+            DateTime.UtcNow,
+            "share-v1",
+            CeremonyTestKeyFixtures.PublicKeyBytes);
         var failed = submitted.RecordValidationFailure("wrong recipient binding", DateTime.UtcNow);
         var reselfTested = failed.RecordSelfTestSuccess(DateTime.UtcNow);
-        var resubmitted = reselfTested.RecordMaterialSubmitted(DateTime.UtcNow, "share-v2");
+        var resubmitted = reselfTested.RecordMaterialSubmitted(
+            DateTime.UtcNow,
+            "share-v2",
+            CeremonyTestKeyFixtures.PublicKeyBytes);
         var completed = resubmitted.MarkCompleted(DateTime.UtcNow, "share-v2");
 
         published.HasPublishedTransportKey.Should().BeTrue();
@@ -157,7 +165,10 @@ public class ElectionCeremonyRecordTests
                 trusteeDisplayName: "Alice")
             .PublishTransportKey("transport-fingerprint", DateTime.UtcNow);
 
-        var act = () => state.RecordMaterialSubmitted(DateTime.UtcNow, "share-v1");
+        var act = () => state.RecordMaterialSubmitted(
+            DateTime.UtcNow,
+            "share-v1",
+            CeremonyTestKeyFixtures.PublicKeyBytes);
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*join the ceremony before submitting material*");

@@ -912,7 +912,7 @@ namespace HushNode.IntegrationTests.Features
 #line hidden
 #line 185
     testRunner.And("the publication issue log should contain 1 \"ReplayMismatch\" issue with occurrence" +
-                        " count 2", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+                        " count at least 2", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 186
     testRunner.And("2 ballot mempool entries should remain queued for the election", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");

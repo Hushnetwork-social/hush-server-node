@@ -1192,8 +1192,6 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         string ceremonyVersionId,
         int requiredCompletionCount)
     {
-        const string tallyFingerprint = "feat097-ready-tally-fingerprint";
-
         for (var index = 0; index < requiredCompletionCount; index++)
         {
             var trustee = RolloutTrustees[index];
@@ -1218,7 +1216,7 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
                     Guid.Parse(ceremonyVersionId),
                     trustee.PublicSigningAddress,
                     $"share-v1-{index}",
-                    tallyFingerprint));
+                    tallyPublicKeyFingerprint: null));
             completeResponse.Successfull.Should().BeTrue(completeResponse.Message);
         }
     }
@@ -1363,6 +1361,7 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
             ExternalReferenceCode: "REF-2026-097",
             ElectionClass: ElectionClass.OrganizationalRemoteVoting,
             BindingStatus: ElectionBindingStatus.Binding,
+            SelectedProfileId: "dkg-prod-3of5",
             GovernanceMode: ElectionGovernanceMode.TrusteeThreshold,
             DisclosureMode: ElectionDisclosureMode.FinalResultsOnly,
             ParticipationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,

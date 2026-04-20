@@ -416,6 +416,8 @@ message ElectionFrozenPolicy {
   ReportingPolicyProto ReportingPolicy = 12;
   ReviewWindowPolicyProto ReviewWindowPolicy = 13;
   optional int32 RequiredApprovalCount = 14;
+  string SelectedProfileId = 15;
+  bool SelectedProfileDevOnly = 16;
 }
 
 message ElectionTrusteeReference {
@@ -442,6 +444,11 @@ message ElectionCeremonyProfile {
   google.protobuf.Timestamp LastUpdatedAt = 10;
 }
 
+message ElectionCurvePoint {
+  bytes X = 1;
+  bytes Y = 2;
+}
+
 message ElectionCeremonyBindingSnapshot {
   string CeremonyVersionId = 1;
   int32 VersionNumber = 2;
@@ -450,6 +457,7 @@ message ElectionCeremonyBindingSnapshot {
   int32 RequiredApprovalCount = 5;
   repeated ElectionTrusteeReference CompletedTrustees = 6;
   string TallyPublicKeyFingerprint = 7;
+  ElectionCurvePoint TallyPublicKey = 8;
 }
 
 message ElectionCeremonyVersion {
@@ -467,6 +475,7 @@ message ElectionCeremonyVersion {
   google.protobuf.Timestamp SupersededAt = 12;
   string SupersededReason = 13;
   string TallyPublicKeyFingerprint = 14;
+  ElectionCurvePoint TallyPublicKey = 15;
 }
 
 message ElectionCeremonyTranscriptEvent {
@@ -732,6 +741,8 @@ message ElectionRecordView {
   ElectionClosedProgressStatusProto ClosedProgressStatus = 36;
   string UnofficialResultArtifactId = 37;
   string OfficialResultArtifactId = 38;
+  string SelectedProfileId = 39;
+  bool SelectedProfileDevOnly = 40;
 }
 
 message ElectionSummary {
@@ -853,6 +864,7 @@ message ElectionDraftInput {
   repeated ElectionOption OwnerOptions = 17;
   repeated ElectionWarningCodeProto AcknowledgedWarningCodes = 18;
   optional int32 RequiredApprovalCount = 19;
+  string SelectedProfileId = 20;
 }
 
 message CreateElectionDraftRequest {
@@ -1139,6 +1151,7 @@ message GetElectionResultViewResponse {
   bool CanRetryFailedPackageFinalization = 10;
   ElectionReportPackageSummaryView LatestReportPackage = 11;
   repeated ElectionReportArtifactView VisibleReportArtifacts = 12;
+  ElectionCeremonyBindingSnapshot CeremonySnapshot = 13;
 }
 
 message ElectionApplicationRoleFlagsView {
@@ -1305,6 +1318,7 @@ message GetElectionVotingViewResponse {
   string ReceiptId = 18;
   string AcceptanceId = 19;
   string ServerProof = 20;
+  ElectionCurvePoint TallyPublicKey = 21;
 }
 
 message GetElectionCeremonyActionViewRequest {

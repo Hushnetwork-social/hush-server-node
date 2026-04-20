@@ -2,6 +2,8 @@ using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using HushNetwork.proto;
 using HushShared.Elections.Model;
+using HushShared.Reactions.Model;
+using ReactionECPoint = HushShared.Reactions.Model.ECPoint;
 
 namespace HushNode.Elections.gRPC;
 
@@ -17,6 +19,7 @@ internal static class ElectionGrpcMappings
             ExternalReferenceCode: NormalizeOptionalString(draft.ExternalReferenceCode),
             ElectionClass: (ElectionClass)(int)draft.ElectionClass,
             BindingStatus: (ElectionBindingStatus)(int)draft.BindingStatus,
+            SelectedProfileId: draft.SelectedProfileId ?? string.Empty,
             GovernanceMode: (ElectionGovernanceMode)(int)draft.GovernanceMode,
             DisclosureMode: (ElectionDisclosureMode)(int)draft.DisclosureMode,
             ParticipationPrivacyMode: (ParticipationPrivacyMode)(int)draft.ParticipationPrivacyMode,
@@ -157,6 +160,12 @@ internal static class ElectionGrpcMappings
 
     public static ElectionRecordView ToProto(this ElectionRecord election)
     {
+        var selectedProfile = ResolveSelectedProfileProjection(
+            election.GovernanceMode,
+            election.BindingStatus,
+            election.SelectedProfileId,
+            election.SelectedProfileDevOnly);
+
         var view = new ElectionRecordView
         {
             ElectionId = election.ElectionId.ToString(),
@@ -167,6 +176,8 @@ internal static class ElectionGrpcMappings
             LifecycleState = (ElectionLifecycleStateProto)(int)election.LifecycleState,
             ElectionClass = (ElectionClassProto)(int)election.ElectionClass,
             BindingStatus = (ElectionBindingStatusProto)(int)election.BindingStatus,
+            SelectedProfileId = selectedProfile.SelectedProfileId,
+            SelectedProfileDevOnly = selectedProfile.SelectedProfileDevOnly,
             GovernanceMode = (ElectionGovernanceModeProto)(int)election.GovernanceMode,
             DisclosureMode = (ElectionDisclosureModeProto)(int)election.DisclosureMode,
             ParticipationPrivacyMode = (ParticipationPrivacyModeProto)(int)election.ParticipationPrivacyMode,
@@ -411,10 +422,18 @@ internal static class ElectionGrpcMappings
 
     public static ElectionFrozenPolicy ToProto(this ElectionFrozenPolicySnapshot policy)
     {
+        var selectedProfile = ResolveSelectedProfileProjection(
+            policy.GovernanceMode,
+            policy.BindingStatus,
+            policy.SelectedProfileId,
+            policy.SelectedProfileDevOnly);
+
         var proto = new ElectionFrozenPolicy
         {
             ElectionClass = (ElectionClassProto)(int)policy.ElectionClass,
             BindingStatus = (ElectionBindingStatusProto)(int)policy.BindingStatus,
+            SelectedProfileId = selectedProfile.SelectedProfileId,
+            SelectedProfileDevOnly = selectedProfile.SelectedProfileDevOnly,
             GovernanceMode = (ElectionGovernanceModeProto)(int)policy.GovernanceMode,
             DisclosureMode = (ElectionDisclosureModeProto)(int)policy.DisclosureMode,
             ParticipationPrivacyMode = (ParticipationPrivacyModeProto)(int)policy.ParticipationPrivacyMode,
@@ -435,6 +454,36 @@ internal static class ElectionGrpcMappings
         }
 
         return proto;
+    }
+
+    private static (string SelectedProfileId, bool SelectedProfileDevOnly) ResolveSelectedProfileProjection(
+        ElectionGovernanceMode governanceMode,
+        ElectionBindingStatus bindingStatus,
+        string? selectedProfileId,
+        bool selectedProfileDevOnly)
+    {
+        if (!string.IsNullOrWhiteSpace(selectedProfileId))
+        {
+            var normalizedProfileId = ElectionSelectableProfileCatalog.NormalizeProfileId(
+                governanceMode,
+                selectedProfileId);
+            return (
+                normalizedProfileId,
+                ElectionSelectableProfileCatalog.ResolveDevOnlyFlag(
+                    governanceMode,
+                    normalizedProfileId,
+                    selectedProfileDevOnly));
+        }
+
+        var defaultProfileId = ElectionSelectableProfileCatalog.GetDefaultProfileId(
+            governanceMode,
+            bindingStatus);
+        return (
+            defaultProfileId,
+            ElectionSelectableProfileCatalog.ResolveDevOnlyFlag(
+                governanceMode,
+                defaultProfileId,
+                bindingStatus == ElectionBindingStatus.NonBinding));
     }
 
     public static HushNetwork.proto.ElectionTrusteeBoundarySnapshot ToProto(this HushShared.Elections.Model.ElectionTrusteeBoundarySnapshot snapshot)
@@ -481,6 +530,11 @@ internal static class ElectionGrpcMappings
             TallyPublicKeyFingerprint = snapshot.TallyPublicKeyFingerprint,
         };
 
+        if (snapshot.TallyPublicKey is { Length: > 0 })
+        {
+            proto.TallyPublicKey = ToProtoPoint(ReactionECPoint.FromBytes(snapshot.TallyPublicKey));
+        }
+
         proto.CompletedTrustees.AddRange(snapshot.ActiveTrustees.Select(x => new HushNetwork.proto.ElectionTrusteeReference
         {
             TrusteeUserAddress = x.TrusteeUserAddress,
@@ -506,6 +560,11 @@ internal static class ElectionGrpcMappings
             SupersededReason = version.SupersededReason ?? string.Empty,
             TallyPublicKeyFingerprint = version.TallyPublicKeyFingerprint ?? string.Empty,
         };
+
+        if (version.TallyPublicKey is { Length: > 0 })
+        {
+            proto.TallyPublicKey = ToProtoPoint(ReactionECPoint.FromBytes(version.TallyPublicKey));
+        }
 
         proto.BoundTrustees.AddRange(version.BoundTrustees.Select(x => new HushNetwork.proto.ElectionTrusteeReference
         {
@@ -954,4 +1013,29 @@ internal static class ElectionGrpcMappings
 
     private static ByteString ToByteString(byte[]? value) =>
         value is null ? ByteString.Empty : ByteString.CopyFrom(value);
+
+    private static HushNetwork.proto.ElectionCurvePoint ToProtoPoint(ReactionECPoint point) =>
+        new()
+        {
+            X = ToByteString(ToFixedLengthBytes(point.X)),
+            Y = ToByteString(ToFixedLengthBytes(point.Y)),
+        };
+
+    private static byte[] ToFixedLengthBytes(System.Numerics.BigInteger value)
+    {
+        var bytes = value.ToByteArray(isUnsigned: true, isBigEndian: true);
+        if (bytes.Length > 32)
+        {
+            throw new InvalidOperationException("Election tally public key coordinates must fit in 32 bytes.");
+        }
+
+        if (bytes.Length == 32)
+        {
+            return bytes;
+        }
+
+        var padded = new byte[32];
+        bytes.CopyTo(padded.AsSpan(32 - bytes.Length));
+        return padded;
+    }
 }

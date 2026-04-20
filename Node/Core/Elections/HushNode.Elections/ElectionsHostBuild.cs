@@ -1,5 +1,6 @@
 using HushNode.Caching;
 using HushNode.Credentials;
+using HushNode.Identity.Storage;
 using HushNode.Elections.Storage;
 using HushNode.Indexing.Interfaces;
 using HushShared.Blockchain.TransactionModel;
@@ -78,6 +79,14 @@ public static class ElectionsHostBuild
         services.AddSingleton<IElectionReportPackageService, ElectionReportPackageService>();
         services.AddSingleton<IElectionBallotPublicationCryptoService, ElectionBallotPublicationCryptoService>();
         services.AddSingleton<IElectionResultCryptoService, ElectionResultCryptoService>();
+        services.AddSingleton<ICloseCountingExecutorEnvelopeCrypto>(_ =>
+            OperatingSystem.IsWindows()
+                ? new WindowsDpapiCloseCountingExecutorEnvelopeCrypto()
+                : new UnavailableCloseCountingExecutorEnvelopeCrypto());
+        services.AddSingleton<IAdminOnlyProtectedTallyEnvelopeCrypto>(_ =>
+            OperatingSystem.IsWindows()
+                ? new WindowsDpapiAdminOnlyProtectedTallyEnvelopeCrypto()
+                : new UnavailableAdminOnlyProtectedTallyEnvelopeCrypto());
         services.AddSingleton<ICloseCountingExecutorKeyRegistry, InMemoryCloseCountingExecutorKeyRegistry>();
         services.AddSingleton<ElectionBallotPublicationService>();
         services.AddSingleton<IElectionBallotPublicationService>(sp => sp.GetRequiredService<ElectionBallotPublicationService>());
@@ -90,7 +99,10 @@ public static class ElectionsHostBuild
                 sp.GetRequiredService<IElectionResultCryptoService>(),
                 sp.GetRequiredService<IElectionReportPackageService>(),
                 sp.GetRequiredService<ICredentialsProvider>(),
-                sp.GetRequiredService<ICloseCountingExecutorKeyRegistry>()));
+                sp.GetService<IIdentityService>(),
+                sp.GetRequiredService<ICloseCountingExecutorKeyRegistry>(),
+                sp.GetRequiredService<ICloseCountingExecutorEnvelopeCrypto>(),
+                sp.GetRequiredService<IAdminOnlyProtectedTallyEnvelopeCrypto>()));
         services.AddHostedService<TallyExecutorBackgroundService>();
     }
 

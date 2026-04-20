@@ -42,6 +42,8 @@ public record ElectionMetadataSnapshot(
 public record ElectionFrozenPolicySnapshot(
     ElectionClass ElectionClass,
     ElectionBindingStatus BindingStatus,
+    string SelectedProfileId,
+    bool SelectedProfileDevOnly,
     ElectionGovernanceMode GovernanceMode,
     ElectionDisclosureMode DisclosureMode,
     ParticipationPrivacyMode ParticipationPrivacyMode,

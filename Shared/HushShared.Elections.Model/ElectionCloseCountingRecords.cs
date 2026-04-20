@@ -28,6 +28,7 @@ public record ElectionExecutorSessionKeyEnvelopeRecord(
     string ExecutorSessionPublicKey,
     string SealedExecutorSessionPrivateKey,
     string KeyAlgorithm,
+    string SealAlgorithm,
     DateTime CreatedAt,
     DateTime? ExpiresAt,
     DateTime? DestroyedAt,

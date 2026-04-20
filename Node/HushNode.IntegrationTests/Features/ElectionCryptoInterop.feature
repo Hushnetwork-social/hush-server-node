@@ -1,4 +1,4 @@
-@Integration @FEAT-107 @ElectionCrypto @NON_E2E
+@Integration @FEAT-107 @FEAT-105 @ElectionCrypto @NON_E2E
 Feature: Election crypto cross-repo interop
   As a FEAT-107 maintainer
   I want a narrow non-E2E client/server interop slice
