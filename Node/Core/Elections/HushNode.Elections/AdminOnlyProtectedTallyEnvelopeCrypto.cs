@@ -29,6 +29,8 @@ public sealed class WindowsDpapiAdminOnlyProtectedTallyEnvelopeCrypto : IAdminOn
 {
     private static readonly byte[] PurposeBytes =
         Encoding.UTF8.GetBytes("hush:elections:admin-only-protected-tally-scalar:v1");
+    private const string UnavailableError =
+        "Admin-only protected tally custody requires an OS-protected envelope provider; Windows DPAPI is unavailable on this platform.";
 
     public string SealAlgorithm => "windows-dpapi-current-user-v1";
 
@@ -39,7 +41,7 @@ public sealed class WindowsDpapiAdminOnlyProtectedTallyEnvelopeCrypto : IAdminOn
     {
         if (!OperatingSystem.IsWindows())
         {
-            error = "Admin-only protected tally custody requires an OS-protected envelope provider; Windows DPAPI is unavailable on this platform.";
+            error = UnavailableError;
             return false;
         }
 
@@ -51,9 +53,9 @@ public sealed class WindowsDpapiAdminOnlyProtectedTallyEnvelopeCrypto : IAdminOn
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(privateScalar);
 
-        if (!IsAvailable(out var error))
+        if (!OperatingSystem.IsWindows())
         {
-            throw new InvalidOperationException(error);
+            throw new InvalidOperationException(UnavailableError);
         }
 
         var plaintextBytes = Encoding.UTF8.GetBytes(privateScalar.Trim());
@@ -70,8 +72,9 @@ public sealed class WindowsDpapiAdminOnlyProtectedTallyEnvelopeCrypto : IAdminOn
     {
         ArgumentNullException.ThrowIfNull(envelope);
 
-        if (!IsAvailable(out error))
+        if (!OperatingSystem.IsWindows())
         {
+            error = UnavailableError;
             return null;
         }
 

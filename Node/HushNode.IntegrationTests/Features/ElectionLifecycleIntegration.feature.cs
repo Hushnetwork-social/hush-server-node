@@ -949,7 +949,8 @@ namespace HushNode.IntegrationTests.Features
     testRunner.Given("FEAT-094 election integration services are available", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
 #line hidden
 #line 191
-    testRunner.And("the owner has an open admin-only election through blockchain submission", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+    testRunner.And("the owner has an open non-binding admin-only election through blockchain submissi" +
+                        "on", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 192
     testRunner.When("voter \"Alice\" claims roster entry \"voter-alice\" with temporary verification code " +

@@ -30,6 +30,8 @@ public sealed class WindowsDpapiCloseCountingExecutorEnvelopeCrypto : ICloseCoun
 {
     private static readonly byte[] PurposeBytes =
         Encoding.UTF8.GetBytes("hush:elections:close-counting-executor-session-key:v1");
+    private const string UnavailableError =
+        "Trustee close-counting custody requires an OS-protected envelope provider; Windows DPAPI is unavailable on this platform.";
 
     public string SealAlgorithm => "windows-dpapi-current-user-v1";
 
@@ -40,7 +42,7 @@ public sealed class WindowsDpapiCloseCountingExecutorEnvelopeCrypto : ICloseCoun
     {
         if (!OperatingSystem.IsWindows())
         {
-            error = "Trustee close-counting custody requires an OS-protected envelope provider; Windows DPAPI is unavailable on this platform.";
+            error = UnavailableError;
             return false;
         }
 
@@ -52,9 +54,9 @@ public sealed class WindowsDpapiCloseCountingExecutorEnvelopeCrypto : ICloseCoun
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(privateKey);
 
-        if (!IsAvailable(out var error))
+        if (!OperatingSystem.IsWindows())
         {
-            throw new InvalidOperationException(error);
+            throw new InvalidOperationException(UnavailableError);
         }
 
         var plaintextBytes = Encoding.UTF8.GetBytes(privateKey.Trim());
@@ -71,8 +73,9 @@ public sealed class WindowsDpapiCloseCountingExecutorEnvelopeCrypto : ICloseCoun
     {
         ArgumentNullException.ThrowIfNull(envelope);
 
-        if (!IsAvailable(out error))
+        if (!OperatingSystem.IsWindows())
         {
+            error = UnavailableError;
             return null;
         }
 

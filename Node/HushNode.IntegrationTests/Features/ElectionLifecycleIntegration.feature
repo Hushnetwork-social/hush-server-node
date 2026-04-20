@@ -188,7 +188,7 @@ Feature: FEAT-094 election lifecycle integration
   @FEAT-103 @AT-SURFACE-I02 @NON_E2E
   Scenario: Opening a closed admin-only election repairs missing unofficial result artifacts
     Given FEAT-094 election integration services are available
-    And the owner has an open admin-only election through blockchain submission
+    And the owner has an open non-binding admin-only election through blockchain submission
     When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
     And voter "Alice" registers voting commitment "alice-commitment-feat103-repair-v1" through blockchain submission
     And voter "Alice" submits FEAT-103 dev ballot cast with idempotency key "alice-feat103-repair-001" through blockchain submission
