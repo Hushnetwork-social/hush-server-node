@@ -2570,7 +2570,7 @@ public class ElectionLifecycleServiceTests
 
         var service = CreateService(
             store,
-            electionResultCryptoService: new FakeElectionResultCryptoService(),
+            electionResultCryptoService: new FakeElectionResultCryptoService([0, 0, 0], scenario.FinalEncryptedTallyHash),
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
 
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(

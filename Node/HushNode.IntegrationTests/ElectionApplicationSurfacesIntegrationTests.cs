@@ -201,7 +201,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
 
         await InviteAndAcceptRolloutTrusteesAsync(electionId);
         var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
-        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: RolloutTrustees.Count);
 
         var readiness = await client.GetElectionOpenReadinessAsync(new GetElectionOpenReadinessRequest
         {
@@ -322,7 +322,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
 
         await InviteAndAcceptRolloutTrusteesAsync(electionId);
         var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
-        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: RolloutTrustees.Count);
 
         var readiness = await client.GetElectionOpenReadinessAsync(new GetElectionOpenReadinessRequest
         {
@@ -369,7 +369,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
 
         await InviteAndAcceptRolloutTrusteesAsync(electionId);
         var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
-        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: RolloutTrustees.Count);
 
         var readiness = await client.GetElectionOpenReadinessAsync(new GetElectionOpenReadinessRequest
         {
@@ -417,7 +417,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
 
         await InviteAndAcceptRolloutTrusteesAsync(electionId);
         var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
-        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: RolloutTrustees.Count);
 
         var openProposalId = await StartGovernedProposalAsync(
             client,
@@ -473,7 +473,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
 
         await InviteAndAcceptRolloutTrusteesAsync(electionId);
         var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
-        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: RolloutTrustees.Count);
 
         var openProposalId = await StartGovernedProposalAsync(
             client,
@@ -525,7 +525,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
 
         await InviteAndAcceptRolloutTrusteesAsync(electionId);
         var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-dev-3of5");
-        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: RolloutTrustees.Count);
 
         var openProposalId = await StartGovernedProposalAsync(
             client,
@@ -602,7 +602,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
 
         await InviteAndAcceptRolloutTrusteesAsync(electionId);
         var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-dev-3of5");
-        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: RolloutTrustees.Count);
 
         var openProposalId = await StartGovernedProposalAsync(
             client,
@@ -636,9 +636,13 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
             x.SessionPurpose == ElectionFinalizationSessionPurposeProto.FinalizationSessionPurposeCloseCounting &&
             x.Status == ElectionFinalizationSessionStatusProto.FinalizationSessionAwaitingShares);
 
-        await SubmitFinalizationShareViaBlockchainAsync(client, electionId, TestIdentities.Bob, "aggregate-finalization-share");
-        await SubmitFinalizationShareViaBlockchainAsync(client, electionId, TestIdentities.Charlie, "aggregate-finalization-share");
-        await SubmitFinalizationShareViaBlockchainAsync(client, electionId, Delta, "aggregate-finalization-share");
+        var issuedShares = new[]
+        {
+            await SubmitFinalizationShareViaBlockchainAsync(client, electionId, TestIdentities.Bob),
+            await SubmitFinalizationShareViaBlockchainAsync(client, electionId, TestIdentities.Charlie),
+            await SubmitFinalizationShareViaBlockchainAsync(client, electionId, Delta),
+        };
+        var issuedShareMaterials = issuedShares.Select(x => x.ShareMaterial).ToHashSet(StringComparer.Ordinal);
 
         await using (var scope = _node!.Services.CreateAsyncScope())
         {
@@ -651,7 +655,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
             storedShares.Should().HaveCount(3);
             storedShares.Should().OnlyContain(x => x.CloseCountingJobId.HasValue);
             storedShares.Should().OnlyContain(x => x.ExecutorKeyAlgorithm == "ecies-secp256k1-v1");
-            storedShares.Should().OnlyContain(x => x.ShareMaterial != "aggregate-finalization-share");
+            storedShares.Should().OnlyContain(x => !issuedShareMaterials.Contains(x.ShareMaterial));
         }
 
         var ownerAfterShares = await WaitForTallyReadyElectionAsync(client, electionId, TestIdentities.Alice);
@@ -820,7 +824,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
 
         await InviteAndAcceptRolloutTrusteesAsync(electionId);
         var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
-        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: 3);
+        await CompleteReadyThresholdAsync(electionId, ceremonyVersionId, requiredCompletionCount: RolloutTrustees.Count);
 
         var readiness = await client.GetElectionOpenReadinessAsync(new GetElectionOpenReadinessRequest
         {
@@ -947,6 +951,10 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
     {
         foreach (var trustee in RolloutTrustees)
         {
+            var identitySubmitResponse = await SubmitBlockchainTransactionAsync(
+                TestTransactionFactory.CreateIdentityRegistration(trustee));
+            identitySubmitResponse.Successfull.Should().BeTrue(identitySubmitResponse.Message);
+
             var (inviteTransaction, invitationId) = TestTransactionFactory.CreateElectionTrusteeInvitation(
                 TestIdentities.Alice,
                 new ElectionId(Guid.Parse(electionId)),
@@ -1200,7 +1208,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
             votingView.TallyPublicKeyFingerprint);
     }
 
-    private async Task SubmitFinalizationShareViaBlockchainAsync(
+    private async Task<IssuedCloseCountingShare> SubmitFinalizationShareViaBlockchainAsync(
         HushElections.HushElectionsClient client,
         string electionId,
         TestIdentity trustee,
@@ -1216,7 +1224,8 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         var ceremonyVersionId = string.IsNullOrWhiteSpace(session.CeremonySnapshot?.CeremonyVersionId)
             ? (Guid?)null
             : Guid.Parse(session.CeremonySnapshot.CeremonyVersionId);
-        var shareMaterial = shareMaterialOverride ?? BuildFinalizationShareMaterial(electionId, trustee, session);
+        var issuedShare = await ResolveIssuedCloseCountingShareAsync(client, electionId, trustee);
+        var shareMaterial = shareMaterialOverride ?? issuedShare.ShareMaterial;
 
         var submitResponse = await SubmitBlockchainTransactionAsync(
             TestTransactionFactory.SubmitElectionFinalizationShare(
@@ -1224,7 +1233,7 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
                 new ElectionId(Guid.Parse(electionId)),
                 Guid.Parse(session.Id),
                 shareIndex,
-                $"feat103-share-v1-{trustee.DisplayName.ToLowerInvariant()}",
+                issuedShare.ShareVersion,
                 ElectionFinalizationTargetType.AggregateTally,
                 Guid.Parse(session.CloseArtifactId),
                 session.AcceptedBallotSetHash.ToByteArray(),
@@ -1243,6 +1252,47 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
                     ? null
                     : session.ExecutorKeyAlgorithm));
         submitResponse.Successfull.Should().BeTrue(submitResponse.Message);
+        return issuedShare;
+    }
+
+    private async Task<IssuedCloseCountingShare> ResolveIssuedCloseCountingShareAsync(
+        HushElections.HushElectionsClient client,
+        string electionId,
+        TestIdentity trustee)
+    {
+        var actionView = await client.GetElectionCeremonyActionViewAsync(
+            new GetElectionCeremonyActionViewRequest
+            {
+                ElectionId = electionId,
+                ActorPublicAddress = trustee.PublicSigningAddress,
+            },
+            headers: CreateSignedElectionQueryHeaders(
+                nameof(HushElections.HushElectionsClient.GetElectionCeremonyActionView),
+                trustee,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId,
+                    ["ActorPublicAddress"] = trustee.PublicSigningAddress,
+                }));
+
+        actionView.Success.Should().BeTrue(actionView.ErrorMessage);
+        var vaultEnvelope = actionView.SelfVaultEnvelopes.Should()
+            .ContainSingle(x => x.PayloadVersion == "omega-trustee-release-share-v1")
+            .Subject;
+        var encryptedPayload = Encoding.UTF8.GetString(vaultEnvelope.EncryptedPayload.ToByteArray());
+        var decryptedPayload = EncryptKeys.Decrypt(encryptedPayload, trustee.PrivateEncryptKey);
+        var releaseEnvelope = JsonSerializer.Deserialize<TrusteeReleaseEnvelopeDto>(
+            decryptedPayload,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        releaseEnvelope.Should().NotBeNull();
+        releaseEnvelope!.ElectionId.Should().Be(electionId);
+        releaseEnvelope.TrusteeUserAddress.Should().Be(trustee.PublicSigningAddress);
+        releaseEnvelope.Material.CloseCountingShare.ScalarMaterial.Should().NotBeNullOrWhiteSpace();
+
+        return new IssuedCloseCountingShare(
+            releaseEnvelope.ShareVersion,
+            releaseEnvelope.Material.CloseCountingShare.ScalarMaterial);
     }
 
     private async Task<GetElectionHubViewResponse> GetElectionHubViewAsync(
@@ -1835,6 +1885,32 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
         string CastBlockJson);
 
     private sealed record ClosedElectionReadyContext(string ElectionId);
+
+    private sealed record IssuedCloseCountingShare(
+        string ShareVersion,
+        string ShareMaterial);
+
+    private sealed record TrusteeReleaseEnvelopeDto(
+        string PackageVersion,
+        string MaterialKind,
+        string ElectionId,
+        string CeremonyVersionId,
+        string TrusteeUserAddress,
+        string ShareVersion,
+        TrusteeReleaseMaterialDto Material);
+
+    private sealed record TrusteeReleaseMaterialDto(
+        string PackageKind,
+        string SessionPurpose,
+        string ProtocolVersion,
+        string ProfileId,
+        int VersionNumber,
+        TrusteeReleaseCloseCountingShareDto CloseCountingShare);
+
+    private sealed record TrusteeReleaseCloseCountingShareDto(
+        string Format,
+        string ScalarMaterial,
+        string ScalarMaterialHash);
 
     private sealed record PublishedElectionBallotPackage(
         string Version,

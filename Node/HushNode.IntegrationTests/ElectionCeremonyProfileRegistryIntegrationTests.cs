@@ -96,7 +96,7 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
 
         await InviteAndAcceptRolloutTrusteesAsync(client, electionId);
         var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
-        await CompleteReadyThresholdAsync(client, electionId, ceremonyVersionId, requiredCompletionCount: 3);
+        await CompleteReadyThresholdAsync(client, electionId, ceremonyVersionId, requiredCompletionCount: RolloutTrustees.Count);
 
         var readiness = await client.GetElectionOpenReadinessAsync(new GetElectionOpenReadinessRequest
         {
@@ -106,7 +106,7 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         readiness.IsReadyToOpen.Should().BeTrue(string.Join(" | ", readiness.ValidationErrors));
         readiness.CeremonySnapshot.Should().NotBeNull();
         readiness.CeremonySnapshot!.ProfileId.Should().Be("dkg-prod-3of5");
-        readiness.CeremonySnapshot.CompletedTrustees.Should().HaveCount(3);
+        readiness.CeremonySnapshot.CompletedTrustees.Should().HaveCount(RolloutTrustees.Count);
 
         var proposalResponse = await StartGovernedProposalViaBlockchainAsync(
             client,
@@ -808,7 +808,7 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
 
         await InviteAndAcceptRolloutTrusteesAsync(client, electionId);
         var ceremonyVersionId = await StartCeremonyAsync(client, electionId, "dkg-prod-3of5");
-        await CompleteReadyThresholdAsync(client, electionId, ceremonyVersionId, requiredCompletionCount: 3);
+        await CompleteReadyThresholdAsync(client, electionId, ceremonyVersionId, requiredCompletionCount: RolloutTrustees.Count);
         await OpenElectionThroughGovernedApprovalsAsync(client, electionId, requiredApprovalCount: 3);
         var trustee = RolloutTrustees[3];
 
@@ -834,8 +834,8 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
         electionResponse.ActiveCeremonyTrusteeStates.Should().ContainSingle(x =>
             string.Equals(x.TrusteeUserAddress, trustee.PublicSigningAddress, StringComparison.Ordinal) &&
             x.CeremonyVersionId == ceremonyVersionId &&
-            x.TransportPublicKeyFingerprint == "" &&
-            x.State == ElectionTrusteeCeremonyStateProto.CeremonyStateAcceptedTrustee);
+            x.TransportPublicKeyFingerprint == "transport-fingerprint-3" &&
+            x.State == ElectionTrusteeCeremonyStateProto.CeremonyStateCompleted);
     }
 
     [Fact]
@@ -993,6 +993,10 @@ public sealed class ElectionCeremonyProfileRegistryIntegrationTests : IAsyncLife
     {
         foreach (var trustee in RolloutTrustees)
         {
+            var identitySubmitResponse = await SubmitBlockchainTransactionAsync(
+                TestTransactionFactory.CreateIdentityRegistration(trustee));
+            identitySubmitResponse.Successfull.Should().BeTrue(identitySubmitResponse.Message);
+
             var (signedTransaction, invitationId) = TestTransactionFactory.CreateElectionTrusteeInvitation(
                 TestIdentities.Alice,
                 new ElectionId(Guid.Parse(electionId)),
