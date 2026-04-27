@@ -29,6 +29,7 @@ $allBlocks = @(
     @{ Name = "CDRS-E2E-BETWEEN-READ-AND-SYNC"; Filter = 'Category=CDRS-E2E-BETWEEN-READ-AND-SYNC' },
     @{ Name = "CDRS-E2E-CONVERGE-HIGHEST"; Filter = 'Category=CDRS-E2E-CONVERGE-HIGHEST' },
     @{ Name = "IdentityNameChange"; Filter = 'Category=IdentityNameChange&Category!=LONG_RUNNING' },
+    @{ Name = "HV-E2E-EMPTY-INITIAL"; Filter = 'Category=HV-E2E-EMPTY-INITIAL&Category!=LONG_RUNNING' },
     @{ Name = "HS-E2E-084-NAV"; Filter = 'Category=HS-E2E-084-NAV' },
     @{ Name = "HS-E2E-085-CIRCLE-REMOVAL"; Filter = 'Category=HS-E2E-085-CIRCLE-REMOVAL' },
     @{ Name = "HS-E2E-085-BOOTSTRAP-STABLE"; Filter = 'Category=HS-E2E-085-BOOTSTRAP-STABLE' },
