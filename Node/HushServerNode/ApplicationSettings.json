@@ -40,6 +40,12 @@
             "EnableDevCeremonyProfiles": false,
             "ApprovedRegistryRelativePath": "ceremony-profiles/omega-v1.0.0/approved-ceremony-profiles.json",
             "RequiredRolloutVersion": "omega-v1.0.0"
+        },
+        "AdminOnlyProtectedTallyEnvelope": {
+            "Provider": "auto",
+            "AwsKmsKeyId": "",
+            "AwsKmsRegion": "",
+            "AwsKmsServiceUrl": ""
         }
     },
 

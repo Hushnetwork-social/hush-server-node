@@ -23,6 +23,15 @@
         "Enabled": true
     },
 
+    "Elections": {
+        "AdminOnlyProtectedTallyEnvelope": {
+            "Provider": "auto",
+            "AwsKmsKeyId": "",
+            "AwsKmsRegion": "",
+            "AwsKmsServiceUrl": ""
+        }
+    },
+
     "ServerInfo": {
         "ListeningPort": 4665
     },

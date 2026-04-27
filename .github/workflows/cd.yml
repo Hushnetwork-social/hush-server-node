@@ -138,6 +138,29 @@ jobs:
       # DEPLOY TO AWS LIGHTSAIL
       # ============================================
 
+      - name: Verify admin-only AWS KMS config
+        env:
+          AWS_KMS_KEY_ID: ${{ secrets.AWS_KMS_KEY_ID }}
+          AWS_KMS_ACCESS_KEY_ID: ${{ secrets.AWS_KMS_ACCESS_KEY_ID }}
+          AWS_KMS_SECRET_ACCESS_KEY: ${{ secrets.AWS_KMS_SECRET_ACCESS_KEY }}
+        run: |
+          if [[ -z "${AWS_KMS_KEY_ID}" ]]; then
+            echo "::error::Missing AWS_KMS_KEY_ID secret. Set it to the AWS KMS key id, key ARN, or alias for admin-only protected tally custody."
+            exit 1
+          fi
+
+          if [[ -n "${AWS_KMS_ACCESS_KEY_ID}" && -z "${AWS_KMS_SECRET_ACCESS_KEY}" ]]; then
+            echo "::error::AWS_KMS_ACCESS_KEY_ID is set but AWS_KMS_SECRET_ACCESS_KEY is missing."
+            exit 1
+          fi
+
+          if [[ -z "${AWS_KMS_ACCESS_KEY_ID}" && -n "${AWS_KMS_SECRET_ACCESS_KEY}" ]]; then
+            echo "::error::AWS_KMS_SECRET_ACCESS_KEY is set but AWS_KMS_ACCESS_KEY_ID is missing."
+            exit 1
+          fi
+
+          echo "Admin-only AWS KMS key id is configured for deployment."
+
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -196,11 +219,22 @@ jobs:
           IMAGE_TAG: ${{ steps.version.outputs.version }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_KMS_KEY_ID: ${{ secrets.AWS_KMS_KEY_ID }}
+          AWS_KMS_ACCESS_KEY_ID: ${{ secrets.AWS_KMS_ACCESS_KEY_ID }}
+          AWS_KMS_SECRET_ACCESS_KEY: ${{ secrets.AWS_KMS_SECRET_ACCESS_KEY }}
         run: |
-          ssh -i ~/.ssh/lightsail.pem -o ServerAliveInterval=30 -o ServerAliveCountMax=10 ${SSH_USER}@${SSH_HOST} "IMAGE_TAG=${IMAGE_TAG}" "GHCR_TOKEN=${GHCR_TOKEN}" "GHCR_IMAGE=${GHCR_IMAGE}" 'bash -s' << 'DEPLOY_SCRIPT'
+          ssh -i ~/.ssh/lightsail.pem -o ServerAliveInterval=30 -o ServerAliveCountMax=10 ${SSH_USER}@${SSH_HOST} "IMAGE_TAG=${IMAGE_TAG}" "GHCR_TOKEN=${GHCR_TOKEN}" "GHCR_IMAGE=${GHCR_IMAGE}" "AWS_REGION=${AWS_REGION}" "AWS_KMS_KEY_ID=${AWS_KMS_KEY_ID}" "AWS_KMS_ACCESS_KEY_ID=${AWS_KMS_ACCESS_KEY_ID}" "AWS_KMS_SECRET_ACCESS_KEY=${AWS_KMS_SECRET_ACCESS_KEY}" 'bash -s' << 'DEPLOY_SCRIPT'
             set -e
 
             echo "Starting deployment of version ${IMAGE_TAG}..."
+            : "${AWS_KMS_KEY_ID:?AWS_KMS_KEY_ID is required for admin-only protected tally custody.}"
+            AWS_REGION="${AWS_REGION:-eu-central-1}"
+
+            if { [ -n "${AWS_KMS_ACCESS_KEY_ID:-}" ] && [ -z "${AWS_KMS_SECRET_ACCESS_KEY:-}" ]; } || { [ -z "${AWS_KMS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_KMS_SECRET_ACCESS_KEY:-}" ]; }; then
+              echo "AWS KMS static credential secrets must be provided together, or omitted together when the server has an IAM role/profile."
+              exit 1
+            fi
 
             # Login to GHCR
             echo "Logging in to GitHub Container Registry..."
@@ -218,6 +252,20 @@ jobs:
             # Start new container with version in name
             CONTAINER_NAME="HushNetworkNode_v${IMAGE_TAG}"
             echo "Starting new container: ${CONTAINER_NAME}..."
+            DOCKER_ENV_ARGS=(
+              -e "Elections__AdminOnlyProtectedTallyEnvelope__Provider=aws-kms"
+              -e "Elections__AdminOnlyProtectedTallyEnvelope__AwsKmsKeyId=${AWS_KMS_KEY_ID}"
+              -e "Elections__AdminOnlyProtectedTallyEnvelope__AwsKmsRegion=${AWS_REGION}"
+              -e "AWS_REGION=${AWS_REGION}"
+            )
+
+            if [ -n "${AWS_KMS_ACCESS_KEY_ID:-}" ]; then
+              DOCKER_ENV_ARGS+=(
+                -e "AWS_ACCESS_KEY_ID=${AWS_KMS_ACCESS_KEY_ID}"
+                -e "AWS_SECRET_ACCESS_KEY=${AWS_KMS_SECRET_ACCESS_KEY}"
+              )
+            fi
+
             sudo docker run -d \
               --name ${CONTAINER_NAME} \
               --restart always \
@@ -225,6 +273,7 @@ jobs:
               -p 4665:4665 \
               -p 127.0.0.1:4666:4666 \
               --env-file /mnt/hush_db_data/config/.env \
+              "${DOCKER_ENV_ARGS[@]}" \
               -v /mnt/hush_db_data/config/stacker-credentials.dat:/app/stacker-credentials.dat:ro \
               -v /mnt/hush_db_data/config/ApplicationSettings.json:/app/ApplicationSettings.json:ro \
               -v /mnt/hush_db_data/config/firebase-sa.json:/app/firebase-sa.json:ro \
@@ -257,6 +306,7 @@ jobs:
           echo "**Version:** \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Container:** \`HushNetworkNode_v${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Target:** AWS Lightsail (Frankfurt)" >> $GITHUB_STEP_SUMMARY
+          echo "**Admin-only protected tally custody:** AWS KMS" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Endpoints:**" >> $GITHUB_STEP_SUMMARY
           echo "- gRPC-Web: \`https://api.hushnetwork.social\`" >> $GITHUB_STEP_SUMMARY

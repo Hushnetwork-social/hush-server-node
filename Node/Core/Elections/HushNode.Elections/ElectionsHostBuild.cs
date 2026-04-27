@@ -21,6 +21,7 @@ public static class ElectionsHostBuild
         {
             services.AddSingleton(CreateCeremonyOptions(hostContext.Configuration));
             services.AddSingleton(CreateBallotPublicationOptions(hostContext.Configuration));
+            services.AddSingleton(CreateAdminOnlyProtectedTallyEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton<IBootstrapper, ElectionCeremonyProfileRegistryBootstrapper>();
             services.AddSingleton<IBootstrapper, ElectionBallotPublicationBootstrapper>();
             services.RegisterElectionsStorageServices(hostContext);
@@ -83,10 +84,9 @@ public static class ElectionsHostBuild
             OperatingSystem.IsWindows()
                 ? new WindowsDpapiCloseCountingExecutorEnvelopeCrypto()
                 : new UnavailableCloseCountingExecutorEnvelopeCrypto());
-        services.AddSingleton<IAdminOnlyProtectedTallyEnvelopeCrypto>(_ =>
-            OperatingSystem.IsWindows()
-                ? new WindowsDpapiAdminOnlyProtectedTallyEnvelopeCrypto()
-                : new UnavailableAdminOnlyProtectedTallyEnvelopeCrypto());
+        services.AddSingleton<IAdminOnlyProtectedTallyEnvelopeCrypto>(sp =>
+            AdminOnlyProtectedTallyEnvelopeCryptoFactory.Create(
+                sp.GetRequiredService<AdminOnlyProtectedTallyEnvelopeCryptoOptions>()));
         services.AddSingleton<ICloseCountingExecutorKeyRegistry, InMemoryCloseCountingExecutorKeyRegistry>();
         services.AddSingleton<ElectionBallotPublicationService>();
         services.AddSingleton<IElectionBallotPublicationService>(sp => sp.GetRequiredService<ElectionBallotPublicationService>());
@@ -123,4 +123,54 @@ public static class ElectionsHostBuild
             HighWaterMark: configuration.GetValue("Elections:BallotPublication:HighWaterMark", 20),
             LowWaterMark: configuration.GetValue("Elections:BallotPublication:LowWaterMark", 10),
             MaxBatchPerBlock: configuration.GetValue("Elections:BallotPublication:MaxBatchPerBlock", 20));
+
+    private static AdminOnlyProtectedTallyEnvelopeCryptoOptions CreateAdminOnlyProtectedTallyEnvelopeOptions(
+        IConfiguration configuration) =>
+        new(
+            Provider: GetConfigValue(
+                configuration,
+                "Elections:AdminOnlyProtectedTallyEnvelope:Provider",
+                "HUSH_ELECTIONS_ADMIN_ONLY_ENVELOPE_PROVIDER")
+                ?? AdminOnlyProtectedTallyEnvelopeCryptoOptions.ProviderAuto,
+            AwsKmsKeyId: GetConfigValue(
+                configuration,
+                "Elections:AdminOnlyProtectedTallyEnvelope:AwsKmsKeyId",
+                "HUSH_ELECTIONS_ADMIN_ONLY_KMS_KEY_ID"),
+            AwsKmsRegion: GetConfigValue(
+                configuration,
+                "Elections:AdminOnlyProtectedTallyEnvelope:AwsKmsRegion",
+                "HUSH_ELECTIONS_ADMIN_ONLY_KMS_REGION",
+                "AWS_REGION",
+                "AWS_DEFAULT_REGION"),
+            AwsKmsServiceUrl: GetConfigValue(
+                configuration,
+                "Elections:AdminOnlyProtectedTallyEnvelope:AwsKmsServiceUrl",
+                "HUSH_ELECTIONS_ADMIN_ONLY_KMS_SERVICE_URL"),
+            AwsKmsServiceIdentityLabel: GetConfigValue(
+                configuration,
+                "Elections:AdminOnlyProtectedTallyEnvelope:AwsKmsServiceIdentityLabel",
+                "HUSH_ELECTIONS_ADMIN_ONLY_KMS_SERVICE_IDENTITY"));
+
+    private static string? GetConfigValue(
+        IConfiguration configuration,
+        string key,
+        params string[] environmentVariableNames)
+    {
+        var configured = configuration.GetValue<string>(key);
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured.Trim();
+        }
+
+        foreach (var variableName in environmentVariableNames)
+        {
+            var value = Environment.GetEnvironmentVariable(variableName);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return null;
+    }
 }

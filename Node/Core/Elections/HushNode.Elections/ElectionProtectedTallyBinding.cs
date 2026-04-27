@@ -231,7 +231,10 @@ public static class ElectionProtectedTallyBinding
                     election.SelectedProfileId),
                 publicKeyBytes,
                 fingerprint,
-                envelopeCrypto.SealPrivateScalar(scalarText),
+                envelopeCrypto.SealPrivateScalar(
+                    scalarText,
+                    election.ElectionId,
+                    election.SelectedProfileId),
                 AdminOnlyProtectedTallyEnvelopeCryptoConstants.ScalarEncoding,
                 envelopeCrypto.SealAlgorithm,
                 envelopeCrypto.SealedByServiceIdentity,
