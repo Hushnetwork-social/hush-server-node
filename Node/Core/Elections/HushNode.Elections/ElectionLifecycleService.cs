@@ -31,6 +31,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly ICloseCountingExecutorKeyRegistry _closeCountingExecutorKeyRegistry;
     private readonly ICloseCountingExecutorEnvelopeCrypto _closeCountingExecutorEnvelopeCrypto;
     private readonly IAdminOnlyProtectedTallyEnvelopeCrypto _adminOnlyProtectedTallyEnvelopeCrypto;
+    private readonly IElectionSensitiveStorageMaintenance? _sensitiveStorageMaintenance;
     private readonly IBabyJubJub _curve;
     private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
 
@@ -61,7 +62,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null,
         ICloseCountingExecutorEnvelopeCrypto? closeCountingExecutorEnvelopeCrypto = null,
         IAdminOnlyProtectedTallyEnvelopeCrypto? adminOnlyProtectedTallyEnvelopeCrypto = null,
-        IBabyJubJub? curve = null)
+        IBabyJubJub? curve = null,
+        IElectionSensitiveStorageMaintenance? sensitiveStorageMaintenance = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _logger = logger;
@@ -74,6 +76,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         _closeCountingExecutorKeyRegistry = closeCountingExecutorKeyRegistry ?? new InMemoryCloseCountingExecutorKeyRegistry();
         _closeCountingExecutorEnvelopeCrypto = closeCountingExecutorEnvelopeCrypto ?? new UnavailableCloseCountingExecutorEnvelopeCrypto();
         _adminOnlyProtectedTallyEnvelopeCrypto = adminOnlyProtectedTallyEnvelopeCrypto ?? new UnavailableAdminOnlyProtectedTallyEnvelopeCrypto();
+        _sensitiveStorageMaintenance = sensitiveStorageMaintenance;
         _curve = curve ?? new BabyJubJubCurve();
     }
 
@@ -2049,6 +2052,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         if (result.IsSuccess)
         {
             await unitOfWork.CommitAsync();
+            await CompactAdminOnlyProtectedTallyEnvelopeStorageIfNeededAsync(result.Election);
         }
 
         return result;
@@ -5480,6 +5484,27 @@ public class ElectionLifecycleService : IElectionLifecycleService
             DestroyedAt = scrubbedAt,
             LastUpdatedAt = scrubbedAt,
         });
+    }
+
+    private async Task CompactAdminOnlyProtectedTallyEnvelopeStorageIfNeededAsync(ElectionRecord? election)
+    {
+        if (election?.GovernanceMode != ElectionGovernanceMode.AdminOnly ||
+            _sensitiveStorageMaintenance is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _sensitiveStorageMaintenance.CompactAdminOnlyProtectedTallyEnvelopeStorageAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "[ElectionLifecycleService] Admin-only protected tally envelope storage compaction failed after election {ElectionId} finalization.",
+                election.ElectionId);
+        }
     }
 
     private static string ComputeStoredFinalizationShareHash(string shareMaterial) =>

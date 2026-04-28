@@ -103,7 +103,8 @@ public static class ElectionsHostBuild
                 sp.GetService<IIdentityService>(),
                 sp.GetRequiredService<ICloseCountingExecutorKeyRegistry>(),
                 sp.GetRequiredService<ICloseCountingExecutorEnvelopeCrypto>(),
-                sp.GetRequiredService<IAdminOnlyProtectedTallyEnvelopeCrypto>()));
+                sp.GetRequiredService<IAdminOnlyProtectedTallyEnvelopeCrypto>(),
+                sensitiveStorageMaintenance: sp.GetService<IElectionSensitiveStorageMaintenance>()));
         services.AddHostedService<TallyExecutorBackgroundService>();
     }
 

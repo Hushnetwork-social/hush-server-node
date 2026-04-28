@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Olimpo.EntityFramework.Persistency;
 
 namespace HushNode.Elections.Storage;
@@ -29,5 +30,9 @@ public static class StorageHostBuild
         services.AddTransient<ElectionsDbContextConfigurator>();
 
         services.AddTransient<IElectionsRepository, ElectionsRepository>();
+        services.AddSingleton<IElectionSensitiveStorageMaintenance>(provider =>
+            new PostgresElectionSensitiveStorageMaintenance(
+                hostContext.Configuration.GetConnectionString("HushNetworkDb"),
+                provider.GetRequiredService<ILogger<PostgresElectionSensitiveStorageMaintenance>>()));
     }
 }

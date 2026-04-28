@@ -3235,9 +3235,11 @@ public class ElectionLifecycleServiceTests
     public async Task CloseAndFinalizeAsync_WithValidOrdering_PersistsCanonicalBoundaryArtifacts()
     {
         var store = new ElectionStore();
+        var sensitiveStorageMaintenance = new FakeElectionSensitiveStorageMaintenance();
         var service = CreateService(
             store,
-            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1], finalEncryptedTallyHash: new byte[] { 9, 10 }));
+            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1], finalEncryptedTallyHash: new byte[] { 9, 10 }),
+            sensitiveStorageMaintenance: sensitiveStorageMaintenance);
         var election = CreateOpenElection() with
         {
             OfficialResultVisibilityPolicy = OfficialResultVisibilityPolicy.PublicPlaintext,
@@ -3367,6 +3369,7 @@ public class ElectionLifecycleServiceTests
         store.AdminOnlyProtectedTallyEnvelopes[election.ElectionId].SealedTallyPrivateScalar
             .Should().Be(AdminOnlyProtectedTallyEnvelopeCryptoConstants.DestroyedEnvelopeMarker);
         store.AdminOnlyProtectedTallyEnvelopes[election.ElectionId].DestroyedAt.Should().NotBeNull();
+        sensitiveStorageMaintenance.AdminOnlyProtectedTallyEnvelopeCompactionCount.Should().Be(1);
         store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport)
             .Content.Should().Contain("LowAnonymitySet");
         store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport)
@@ -3570,7 +3573,8 @@ public class ElectionLifecycleServiceTests
         ICredentialsProvider? credentialsProvider = null,
         IIdentityService? identityService = null,
         ICloseCountingExecutorEnvelopeCrypto? closeCountingExecutorEnvelopeCrypto = null,
-        IAdminOnlyProtectedTallyEnvelopeCrypto? adminOnlyProtectedTallyEnvelopeCrypto = null)
+        IAdminOnlyProtectedTallyEnvelopeCrypto? adminOnlyProtectedTallyEnvelopeCrypto = null,
+        IElectionSensitiveStorageMaintenance? sensitiveStorageMaintenance = null)
     {
         SeedStandardCeremonyProfiles(store);
 
@@ -3585,7 +3589,19 @@ public class ElectionLifecycleServiceTests
             identityService ?? new FakeIdentityService(),
             closeCountingExecutorKeyRegistry,
             closeCountingExecutorEnvelopeCrypto ?? new TransparentTestCloseCountingExecutorEnvelopeCrypto(),
-            adminOnlyProtectedTallyEnvelopeCrypto ?? new TransparentTestAdminOnlyProtectedTallyEnvelopeCrypto());
+            adminOnlyProtectedTallyEnvelopeCrypto ?? new TransparentTestAdminOnlyProtectedTallyEnvelopeCrypto(),
+            sensitiveStorageMaintenance: sensitiveStorageMaintenance);
+    }
+
+    private sealed class FakeElectionSensitiveStorageMaintenance : IElectionSensitiveStorageMaintenance
+    {
+        public int AdminOnlyProtectedTallyEnvelopeCompactionCount { get; private set; }
+
+        public Task CompactAdminOnlyProtectedTallyEnvelopeStorageAsync(CancellationToken cancellationToken = default)
+        {
+            AdminOnlyProtectedTallyEnvelopeCompactionCount++;
+            return Task.CompletedTask;
+        }
     }
 
     private static async Task<AdminFinalizeReadyContext> SeedClosedAdminElectionReadyForFinalizeAsync(ElectionStore store)
