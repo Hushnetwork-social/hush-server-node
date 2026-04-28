@@ -297,13 +297,12 @@ jobs:
           SSH_HOST: ${{ secrets.AWS_HOST }}
           SSH_USER: ${{ secrets.AWS_SSH_USER }}
           IMAGE_TAG: ${{ steps.version.outputs.version }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           AWS_REGION: ${{ vars.AWS_REGION }}
           AWS_KMS_KEY_ID: ${{ secrets.AWS_KMS_KEY_ID }}
           AWS_CLOSE_COUNTING_KMS_KEY_ID: ${{ secrets.AWS_CLOSE_COUNTING_KMS_KEY_ID }}
         run: |
-          ssh -i ~/.ssh/lightsail.pem -o ServerAliveInterval=30 -o ServerAliveCountMax=10 ${SSH_USER}@${SSH_HOST} "IMAGE_TAG=${IMAGE_TAG}" "GHCR_TOKEN=${GHCR_TOKEN}" "GHCR_IMAGE=${GHCR_IMAGE}" "AWS_REGION=${AWS_REGION}" "AWS_KMS_KEY_ID=${AWS_KMS_KEY_ID}" "AWS_CLOSE_COUNTING_KMS_KEY_ID=${AWS_CLOSE_COUNTING_KMS_KEY_ID}" 'bash -s' << 'DEPLOY_SCRIPT'
+          ssh -i ~/.ssh/lightsail.pem -o ServerAliveInterval=30 -o ServerAliveCountMax=10 ${SSH_USER}@${SSH_HOST} "IMAGE_TAG=${IMAGE_TAG}" "GHCR_IMAGE=${GHCR_IMAGE}" "AWS_REGION=${AWS_REGION}" "AWS_KMS_KEY_ID=${AWS_KMS_KEY_ID}" "AWS_CLOSE_COUNTING_KMS_KEY_ID=${AWS_CLOSE_COUNTING_KMS_KEY_ID}" 'bash -s' << 'DEPLOY_SCRIPT'
             set -e
 
             echo "Starting deployment of version ${IMAGE_TAG}..."
@@ -319,10 +318,6 @@ jobs:
               echo "AWS KMS credentials file is missing on the Lightsail host."
               exit 1
             fi
-
-            # Login to GHCR
-            echo "Logging in to GitHub Container Registry..."
-            echo "${GHCR_TOKEN}" | sudo docker login ghcr.io -u github --password-stdin
 
             # Pull the new image
             echo "Pulling new image..."
