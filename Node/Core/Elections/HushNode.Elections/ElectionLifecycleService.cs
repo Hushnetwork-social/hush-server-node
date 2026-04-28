@@ -2029,29 +2029,36 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
     public async Task<ElectionCommandResult> FinalizeElectionAsync(FinalizeElectionRequest request)
     {
-        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
-        var repository = unitOfWork.GetRepository<IElectionsRepository>();
-        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
-
-        if (election is null)
+        ElectionCommandResult result;
+        using (var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable))
         {
-            return ElectionCommandResult.Failure(
-                ElectionCommandErrorCode.NotFound,
-                $"Election {request.ElectionId} was not found.");
-        }
+            var repository = unitOfWork.GetRepository<IElectionsRepository>();
+            var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
 
-        var result = await FinalizeElectionInternalAsync(
-            repository,
-            election,
-            request.ActorPublicAddress,
-            allowTrusteeThresholdExecution: false,
-            request.SourceTransactionId,
-            request.SourceBlockHeight,
-            request.SourceBlockId);
+            if (election is null)
+            {
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.NotFound,
+                    $"Election {request.ElectionId} was not found.");
+            }
+
+            result = await FinalizeElectionInternalAsync(
+                repository,
+                election,
+                request.ActorPublicAddress,
+                allowTrusteeThresholdExecution: false,
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+
+            if (result.IsSuccess)
+            {
+                await unitOfWork.CommitAsync();
+            }
+        }
 
         if (result.IsSuccess)
         {
-            await unitOfWork.CommitAsync();
             await CompactAdminOnlyProtectedTallyEnvelopeStorageIfNeededAsync(result.Election);
         }
 

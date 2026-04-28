@@ -3235,7 +3235,8 @@ public class ElectionLifecycleServiceTests
     public async Task CloseAndFinalizeAsync_WithValidOrdering_PersistsCanonicalBoundaryArtifacts()
     {
         var store = new ElectionStore();
-        var sensitiveStorageMaintenance = new FakeElectionSensitiveStorageMaintenance();
+        var sensitiveStorageMaintenance = new FakeElectionSensitiveStorageMaintenance(
+            () => store.ActiveWritableUnitOfWorkCount > 0);
         var service = CreateService(
             store,
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1], finalEncryptedTallyHash: new byte[] { 9, 10 }),
@@ -3370,6 +3371,7 @@ public class ElectionLifecycleServiceTests
             .Should().Be(AdminOnlyProtectedTallyEnvelopeCryptoConstants.DestroyedEnvelopeMarker);
         store.AdminOnlyProtectedTallyEnvelopes[election.ElectionId].DestroyedAt.Should().NotBeNull();
         sensitiveStorageMaintenance.AdminOnlyProtectedTallyEnvelopeCompactionCount.Should().Be(1);
+        sensitiveStorageMaintenance.WasCalledAfterWritableUnitDisposed.Should().BeTrue();
         store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport)
             .Content.Should().Contain("LowAnonymitySet");
         store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport)
@@ -3595,11 +3597,20 @@ public class ElectionLifecycleServiceTests
 
     private sealed class FakeElectionSensitiveStorageMaintenance : IElectionSensitiveStorageMaintenance
     {
+        private readonly Func<bool>? _hasActiveWritableUnitOfWork;
+
+        public FakeElectionSensitiveStorageMaintenance(Func<bool>? hasActiveWritableUnitOfWork = null)
+        {
+            _hasActiveWritableUnitOfWork = hasActiveWritableUnitOfWork;
+        }
+
         public int AdminOnlyProtectedTallyEnvelopeCompactionCount { get; private set; }
+        public bool WasCalledAfterWritableUnitDisposed { get; private set; }
 
         public Task CompactAdminOnlyProtectedTallyEnvelopeStorageAsync(CancellationToken cancellationToken = default)
         {
             AdminOnlyProtectedTallyEnvelopeCompactionCount++;
+            WasCalledAfterWritableUnitDisposed = _hasActiveWritableUnitOfWork?.Invoke() == false;
             return Task.CompletedTask;
         }
     }
@@ -4702,6 +4713,7 @@ public class ElectionLifecycleServiceTests
         public List<ElectionReportAccessGrantRecord> ReportAccessGrants { get; } = [];
         public TaskCompletionSource<bool>? GetElectionForUpdateEntered { get; set; }
         public TaskCompletionSource<bool>? ReleaseGetElectionForUpdate { get; set; }
+        public int ActiveWritableUnitOfWorkCount { get; set; }
     }
 
     private static CredentialsProfile CreateTestNodeCredentials()
@@ -4856,10 +4868,10 @@ public class ElectionLifecycleServiceTests
             new FakeReadOnlyUnitOfWork(new FakeElectionsRepository(store));
 
         public IWritableUnitOfWork<ElectionsDbContext> CreateWritable() =>
-            new FakeWritableUnitOfWork(new FakeElectionsRepository(store));
+            new FakeWritableUnitOfWork(new FakeElectionsRepository(store), store);
 
         public IWritableUnitOfWork<ElectionsDbContext> CreateWritable(System.Data.IsolationLevel isolationLevel) =>
-            new FakeWritableUnitOfWork(new FakeElectionsRepository(store));
+            new FakeWritableUnitOfWork(new FakeElectionsRepository(store), store);
     }
 
     private sealed class FakeReadOnlyUnitOfWork(FakeElectionsRepository repository) : IReadOnlyUnitOfWork<ElectionsDbContext>
@@ -4877,8 +4889,19 @@ public class ElectionLifecycleServiceTests
         }
     }
 
-    private sealed class FakeWritableUnitOfWork(FakeElectionsRepository repository) : IWritableUnitOfWork<ElectionsDbContext>
+    private sealed class FakeWritableUnitOfWork : IWritableUnitOfWork<ElectionsDbContext>
     {
+        private readonly FakeElectionsRepository _repository;
+        private readonly ElectionStore _store;
+        private bool _disposed;
+
+        public FakeWritableUnitOfWork(FakeElectionsRepository repository, ElectionStore store)
+        {
+            _repository = repository;
+            _store = store;
+            _store.ActiveWritableUnitOfWorkCount++;
+        }
+
         public ElectionsDbContext Context => null!;
 
         public Task CommitAsync() => Task.CompletedTask;
@@ -4886,13 +4909,20 @@ public class ElectionLifecycleServiceTests
         public TRepository GetRepository<TRepository>()
             where TRepository : IRepository =>
             typeof(TRepository) == typeof(IElectionsRepository)
-                ? (TRepository)(object)repository
+                ? (TRepository)(object)_repository
                 : throw new InvalidOperationException($"Repository {typeof(TRepository).Name} is not supported by this test harness.");
 
         public Task RollbackAsync() => Task.CompletedTask;
 
         public void Dispose()
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _store.ActiveWritableUnitOfWorkCount--;
+            _disposed = true;
         }
     }
 
