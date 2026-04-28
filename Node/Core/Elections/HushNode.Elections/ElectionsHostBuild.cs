@@ -21,6 +21,7 @@ public static class ElectionsHostBuild
         {
             services.AddSingleton(CreateCeremonyOptions(hostContext.Configuration));
             services.AddSingleton(CreateBallotPublicationOptions(hostContext.Configuration));
+            services.AddSingleton(CreateEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreateAdminOnlyProtectedTallyEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreateCloseCountingExecutorEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton<IBootstrapper, ElectionCeremonyProfileRegistryBootstrapper>();
@@ -123,6 +124,15 @@ public static class ElectionsHostBuild
             HighWaterMark: configuration.GetValue("Elections:BallotPublication:HighWaterMark", 20),
             LowWaterMark: configuration.GetValue("Elections:BallotPublication:LowWaterMark", 10),
             MaxBatchPerBlock: configuration.GetValue("Elections:BallotPublication:MaxBatchPerBlock", 20));
+
+    private static ElectionEnvelopeOptions CreateEnvelopeOptions(IConfiguration configuration) =>
+        new(
+            AllowLegacyNodeEncryptedEnvelopeValidation: configuration.GetValue(
+                "Elections:Envelope:AllowLegacyNodeEncryptedEnvelopeValidation",
+                defaultValue: true),
+            AllowLegacyNodeEncryptedParticipantResultMaterial: configuration.GetValue(
+                "Elections:Envelope:AllowLegacyNodeEncryptedParticipantResultMaterial",
+                defaultValue: true));
 
     private static AdminOnlyProtectedTallyEnvelopeCryptoOptions CreateAdminOnlyProtectedTallyEnvelopeOptions(
         IConfiguration configuration) =>

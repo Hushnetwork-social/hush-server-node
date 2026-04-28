@@ -31,7 +31,8 @@ public class EncryptedElectionEnvelopeContentHandler(
     ICredentialsProvider credentialsProvider,
     IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
     IMemPoolService memPoolService,
-    ElectionCeremonyOptions ceremonyOptions) : ITransactionContentHandler, ITransactionValidationFailureReporter
+    ElectionCeremonyOptions ceremonyOptions,
+    ElectionEnvelopeOptions envelopeOptions) : ITransactionContentHandler, ITransactionValidationFailureReporter
 {
     private readonly IElectionEnvelopeCryptoService _envelopeCryptoService = envelopeCryptoService;
     private readonly ICreateElectionDraftValidationService _createElectionDraftValidationService =
@@ -55,6 +56,7 @@ public class EncryptedElectionEnvelopeContentHandler(
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider = unitOfWorkProvider;
     private readonly IMemPoolService _memPoolService = memPoolService;
     private readonly ElectionCeremonyOptions _ceremonyOptions = ceremonyOptions;
+    private readonly ElectionEnvelopeOptions _envelopeOptions = envelopeOptions;
     private readonly ConcurrentDictionary<Guid, TransactionValidationFailure> _validationFailures = new();
 
     public bool CanValidate(Guid transactionKind) =>
@@ -66,6 +68,11 @@ public class EncryptedElectionEnvelopeContentHandler(
     public AbstractTransaction? ValidateAndSign(AbstractTransaction transaction)
     {
         _validationFailures.TryRemove(transaction.TransactionId.Value, out _);
+
+        if (!IsAllowedEnvelopeVersion(transaction))
+        {
+            return null;
+        }
 
         var decryptedEnvelope = _envelopeCryptoService.TryDecryptSigned(transaction);
         if (decryptedEnvelope is null)
@@ -96,6 +103,22 @@ public class EncryptedElectionEnvelopeContentHandler(
         return decryptedEnvelope.Transaction.SignByValidator(
             blockProducerCredentials.PublicSigningAddress,
             blockProducerCredentials.PrivateSigningKey);
+    }
+
+    private bool IsAllowedEnvelopeVersion(AbstractTransaction transaction)
+    {
+        if (_envelopeOptions.AllowLegacyNodeEncryptedEnvelopeValidation ||
+            transaction is not SignedTransaction<EncryptedElectionEnvelopePayload> signedTransaction ||
+            EncryptedElectionEnvelopePayloadHandler.IsDirectPublicEnvelopeVersion(
+                signedTransaction.Payload.EnvelopeVersion))
+        {
+            return true;
+        }
+
+        return RejectWithValidationFailure(
+            transaction.TransactionId.Value,
+            "legacy_node_encrypted_election_envelope_disabled",
+            "Legacy node-encrypted election envelopes are disabled in this deployment.");
     }
 
     private void RecordValidationFailure(

@@ -164,6 +164,43 @@ public class EncryptedElectionEnvelopeTests
     }
 
     [Fact]
+    public void ValidateAndSign_WithLegacyEnvelopeDisabled_ReturnsNullWithoutDecrypting()
+    {
+        var signedEnvelope = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            EncryptedElectionEnvelopePayloadHandler.CreateNew(
+                ElectionId.NewElectionId,
+                EncryptedElectionEnvelopePayloadHandler.LegacyEnvelopeVersion,
+                "node-encrypted-election-private-key",
+                "actor-encrypted-election-private-key",
+                "encrypted-payload"),
+            new SignatureInfo("owner-address", "signature"));
+
+        var cryptoService = new Mock<IElectionEnvelopeCryptoService>(MockBehavior.Strict);
+        var validationService = new Mock<ICreateElectionDraftValidationService>();
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        var unitOfWorkProvider = new Mock<Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext>>();
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        var sut = CreateContentHandler(
+            cryptoService.Object,
+            validationService.Object,
+            credentialsProvider.Object,
+            unitOfWorkProvider.Object,
+            lifecycleService.Object,
+            envelopeOptions: new ElectionEnvelopeOptions(
+                AllowLegacyNodeEncryptedEnvelopeValidation: false,
+                AllowLegacyNodeEncryptedParticipantResultMaterial: false));
+
+        var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        sut.TryTakeValidationFailure(signedEnvelope.TransactionId.Value, out var failure).Should().BeTrue();
+        failure.Code.Should().Be("legacy_node_encrypted_election_envelope_disabled");
+        cryptoService.Verify(
+            x => x.TryDecryptSigned(It.IsAny<AbstractTransaction>()),
+            Times.Never);
+    }
+
+    [Fact]
     public void ValidateAndSign_WithValidCreateDraftEnvelope_ReturnsValidatedOuterEnvelope()
     {
         var validatorSigningKeys = new DigitalSignature();
@@ -1677,7 +1714,8 @@ public class EncryptedElectionEnvelopeTests
         ICredentialsProvider credentialsProvider,
         Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         IElectionLifecycleService lifecycleService,
-        IMemPoolService? memPoolService = null) =>
+        IMemPoolService? memPoolService = null,
+        ElectionEnvelopeOptions? envelopeOptions = null) =>
         new(
             cryptoService,
             validationService,
@@ -1696,5 +1734,6 @@ public class EncryptedElectionEnvelopeTests
             new ElectionCeremonyOptions(
                 EnableDevCeremonyProfiles: true,
                 ApprovedRegistryRelativePath: "ignored",
-                RequiredRolloutVersion: "test"));
+                RequiredRolloutVersion: "test"),
+            envelopeOptions ?? ElectionEnvelopeOptions.Default);
 }

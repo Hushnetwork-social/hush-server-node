@@ -24,6 +24,10 @@
     },
 
     "Elections": {
+        "Envelope": {
+            "AllowLegacyNodeEncryptedEnvelopeValidation": false,
+            "AllowLegacyNodeEncryptedParticipantResultMaterial": false
+        },
         "AdminOnlyProtectedTallyEnvelope": {
             "Provider": "auto",
             "AwsKmsKeyId": "",

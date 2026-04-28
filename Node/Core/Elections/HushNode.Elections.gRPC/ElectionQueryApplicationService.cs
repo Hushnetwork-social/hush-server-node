@@ -84,6 +84,20 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         return !closeCountingJobs.Any(IsActiveCloseCountingJob);
     }
 
+    private static bool IsPostgresSerializationFailure(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            var sqlState = current.GetType().GetProperty("SqlState")?.GetValue(current) as string;
+            if (string.Equals(sqlState, "40001", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public async Task<GetElectionResponse> GetElectionAsync(ElectionId electionId, string? actorPublicAddress = null)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
@@ -102,7 +116,16 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
 
         if (await ShouldAttemptClosedResultRepairAsync(repository, election))
         {
-            await TryRepairClosedElectionResultsAsync(electionId);
+            try
+            {
+                await TryRepairClosedElectionResultsAsync(electionId);
+            }
+            catch (Exception ex) when (IsPostgresSerializationFailure(ex))
+            {
+                // Query-time repair is opportunistic. A concurrent lifecycle write can safely win;
+                // the caller still receives the latest readable election state below.
+            }
+
             election = await repository.GetElectionAsync(electionId);
             if (election is null)
             {

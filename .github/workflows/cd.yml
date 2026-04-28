@@ -259,6 +259,39 @@ jobs:
             fi
           CONFIG_SCRIPT
 
+      - name: Upload AWS KMS credentials to server
+        env:
+          SSH_HOST: ${{ secrets.AWS_HOST }}
+          SSH_USER: ${{ secrets.AWS_SSH_USER }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_KMS_ACCESS_KEY_ID: ${{ secrets.AWS_KMS_ACCESS_KEY_ID }}
+          AWS_KMS_SECRET_ACCESS_KEY: ${{ secrets.AWS_KMS_SECRET_ACCESS_KEY }}
+        run: |
+          AWS_REGION="${AWS_REGION:-eu-central-1}"
+
+          if [ -z "${AWS_KMS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_KMS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "AWS KMS static credential secrets are required for this Lightsail Docker deployment."
+            exit 1
+          fi
+
+          tmp_credentials="$(mktemp)"
+          trap 'rm -f "${tmp_credentials}"' EXIT
+          {
+            printf '[hush-election-kms]\n'
+            printf 'aws_access_key_id = %s\n' "${AWS_KMS_ACCESS_KEY_ID}"
+            printf 'aws_secret_access_key = %s\n' "${AWS_KMS_SECRET_ACCESS_KEY}"
+            printf 'region = %s\n' "${AWS_REGION}"
+          } > "${tmp_credentials}"
+          chmod 600 "${tmp_credentials}"
+
+          scp -i ~/.ssh/lightsail.pem "${tmp_credentials}" ${SSH_USER}@${SSH_HOST}:/tmp/hush-aws-kms-credentials
+          ssh -i ~/.ssh/lightsail.pem -o ServerAliveInterval=30 -o ServerAliveCountMax=10 ${SSH_USER}@${SSH_HOST} 'bash -s' << 'AWS_CREDS_INSTALL'
+            set -e
+            sudo install -d -m 700 -o root -g root /mnt/hush_db_data/config/aws
+            sudo install -m 600 -o root -g root /tmp/hush-aws-kms-credentials /mnt/hush_db_data/config/aws/kms-credentials
+            rm -f /tmp/hush-aws-kms-credentials
+          AWS_CREDS_INSTALL
+
       - name: Deploy to AWS Lightsail
         env:
           SSH_HOST: ${{ secrets.AWS_HOST }}
@@ -269,10 +302,8 @@ jobs:
           AWS_REGION: ${{ vars.AWS_REGION }}
           AWS_KMS_KEY_ID: ${{ secrets.AWS_KMS_KEY_ID }}
           AWS_CLOSE_COUNTING_KMS_KEY_ID: ${{ secrets.AWS_CLOSE_COUNTING_KMS_KEY_ID }}
-          AWS_KMS_ACCESS_KEY_ID: ${{ secrets.AWS_KMS_ACCESS_KEY_ID }}
-          AWS_KMS_SECRET_ACCESS_KEY: ${{ secrets.AWS_KMS_SECRET_ACCESS_KEY }}
         run: |
-          ssh -i ~/.ssh/lightsail.pem -o ServerAliveInterval=30 -o ServerAliveCountMax=10 ${SSH_USER}@${SSH_HOST} "IMAGE_TAG=${IMAGE_TAG}" "GHCR_TOKEN=${GHCR_TOKEN}" "GHCR_IMAGE=${GHCR_IMAGE}" "AWS_REGION=${AWS_REGION}" "AWS_KMS_KEY_ID=${AWS_KMS_KEY_ID}" "AWS_CLOSE_COUNTING_KMS_KEY_ID=${AWS_CLOSE_COUNTING_KMS_KEY_ID}" "AWS_KMS_ACCESS_KEY_ID=${AWS_KMS_ACCESS_KEY_ID}" "AWS_KMS_SECRET_ACCESS_KEY=${AWS_KMS_SECRET_ACCESS_KEY}" 'bash -s' << 'DEPLOY_SCRIPT'
+          ssh -i ~/.ssh/lightsail.pem -o ServerAliveInterval=30 -o ServerAliveCountMax=10 ${SSH_USER}@${SSH_HOST} "IMAGE_TAG=${IMAGE_TAG}" "GHCR_TOKEN=${GHCR_TOKEN}" "GHCR_IMAGE=${GHCR_IMAGE}" "AWS_REGION=${AWS_REGION}" "AWS_KMS_KEY_ID=${AWS_KMS_KEY_ID}" "AWS_CLOSE_COUNTING_KMS_KEY_ID=${AWS_CLOSE_COUNTING_KMS_KEY_ID}" 'bash -s' << 'DEPLOY_SCRIPT'
             set -e
 
             echo "Starting deployment of version ${IMAGE_TAG}..."
@@ -280,8 +311,12 @@ jobs:
             AWS_REGION="${AWS_REGION:-eu-central-1}"
             AWS_CLOSE_COUNTING_KMS_KEY_ID="${AWS_CLOSE_COUNTING_KMS_KEY_ID:-${AWS_KMS_KEY_ID}}"
 
-            if [ -z "${AWS_KMS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_KMS_SECRET_ACCESS_KEY:-}" ]; then
-              echo "AWS KMS static credential secrets are required for this Lightsail Docker deployment."
+            AWS_CREDENTIALS_DIR="/mnt/hush_db_data/config/aws"
+            AWS_CREDENTIALS_FILE="${AWS_CREDENTIALS_DIR}/kms-credentials"
+            AWS_CREDENTIALS_FILE_CONTAINER="/run/secrets/hush-aws-kms-credentials"
+            AWS_PROFILE_NAME="hush-election-kms"
+            if [ ! -s "${AWS_CREDENTIALS_FILE}" ]; then
+              echo "AWS KMS credentials file is missing on the Lightsail host."
               exit 1
             fi
 
@@ -308,9 +343,11 @@ jobs:
               -e "Elections__CloseCountingExecutorEnvelope__Provider=aws-kms"
               -e "Elections__CloseCountingExecutorEnvelope__AwsKmsKeyId=${AWS_CLOSE_COUNTING_KMS_KEY_ID}"
               -e "Elections__CloseCountingExecutorEnvelope__AwsKmsRegion=${AWS_REGION}"
+              -e "Elections__Envelope__AllowLegacyNodeEncryptedEnvelopeValidation=false"
+              -e "Elections__Envelope__AllowLegacyNodeEncryptedParticipantResultMaterial=false"
               -e "AWS_REGION=${AWS_REGION}"
-              -e "AWS_ACCESS_KEY_ID=${AWS_KMS_ACCESS_KEY_ID}"
-              -e "AWS_SECRET_ACCESS_KEY=${AWS_KMS_SECRET_ACCESS_KEY}"
+              -e "AWS_SHARED_CREDENTIALS_FILE=${AWS_CREDENTIALS_FILE_CONTAINER}"
+              -e "AWS_PROFILE=${AWS_PROFILE_NAME}"
             )
 
             sudo docker run -d \
@@ -324,6 +361,7 @@ jobs:
               -v /mnt/hush_db_data/config/stacker-credentials.dat:/app/stacker-credentials.dat:ro \
               -v /mnt/hush_db_data/config/ApplicationSettings.json:/app/ApplicationSettings.json:ro \
               -v /mnt/hush_db_data/config/firebase-sa.json:/app/firebase-sa.json:ro \
+              -v "${AWS_CREDENTIALS_FILE}:${AWS_CREDENTIALS_FILE_CONTAINER}:ro" \
               ${GHCR_IMAGE}:${IMAGE_TAG}
 
             # Verify container is running

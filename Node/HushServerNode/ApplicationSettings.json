@@ -36,6 +36,10 @@
     },
 
     "Elections": {
+        "Envelope": {
+            "AllowLegacyNodeEncryptedEnvelopeValidation": true,
+            "AllowLegacyNodeEncryptedParticipantResultMaterial": true
+        },
         "Ceremony": {
             "EnableDevCeremonyProfiles": false,
             "ApprovedRegistryRelativePath": "ceremony-profiles/omega-v1.0.0/approved-ceremony-profiles.json",

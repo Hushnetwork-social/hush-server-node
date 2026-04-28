@@ -14,11 +14,13 @@ namespace HushNode.Elections;
 
 public sealed class ElectionResultCryptoService(
     IBabyJubJub curve,
-    ICredentialsProvider credentialsProvider) : IElectionResultCryptoService
+    ICredentialsProvider credentialsProvider,
+    ElectionEnvelopeOptions? envelopeOptions = null) : IElectionResultCryptoService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IBabyJubJub _curve = curve;
     private readonly ICredentialsProvider _credentialsProvider = credentialsProvider;
+    private readonly ElectionEnvelopeOptions _envelopeOptions = envelopeOptions ?? ElectionEnvelopeOptions.Default;
 
     public ElectionAggregateReleaseResult TryReleaseAggregateTally(
         IReadOnlyList<string> encryptedBallotPackages,
@@ -141,6 +143,12 @@ public sealed class ElectionResultCryptoService(
 
     private string ResolveLegacyElectionPublicKey(string nodeEncryptedElectionPrivateKey)
     {
+        if (!_envelopeOptions.AllowLegacyNodeEncryptedParticipantResultMaterial)
+        {
+            throw new InvalidOperationException(
+                "Legacy node-encrypted election private-key material is disabled for participant result encryption in this deployment.");
+        }
+
         var nodePrivateEncryptKey = _credentialsProvider.GetCredentials().PrivateEncryptKey;
         var electionPrivateKey = EncryptKeys.Decrypt(nodeEncryptedElectionPrivateKey, nodePrivateEncryptKey);
         return EncryptKeys.DerivePublicKey(electionPrivateKey);
