@@ -4610,6 +4610,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         await repository.SaveElectionAsync(finalizedElection);
         await ScrubStoredFinalizationSharesAsync(repository, finalizationShares);
+        await ScrubAdminOnlyProtectedTallyEnvelopeAsync(repository, finalizedElection, officialRecordedAt);
 
         return ElectionCommandResult.Success(
             finalizedElection,
@@ -5450,6 +5451,35 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     : share.ShareMaterialHash,
             });
         }
+    }
+
+    private async Task ScrubAdminOnlyProtectedTallyEnvelopeAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        DateTime scrubbedAt)
+    {
+        if (election.GovernanceMode != ElectionGovernanceMode.AdminOnly)
+        {
+            return;
+        }
+
+        var envelope = await repository.GetAdminOnlyProtectedTallyEnvelopeAsync(election.ElectionId);
+        if (envelope is null ||
+            envelope.DestroyedAt.HasValue ||
+            string.Equals(
+                envelope.SealedTallyPrivateScalar,
+                AdminOnlyProtectedTallyEnvelopeCryptoConstants.DestroyedEnvelopeMarker,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        await repository.UpdateAdminOnlyProtectedTallyEnvelopeAsync(envelope with
+        {
+            SealedTallyPrivateScalar = AdminOnlyProtectedTallyEnvelopeCryptoConstants.DestroyedEnvelopeMarker,
+            DestroyedAt = scrubbedAt,
+            LastUpdatedAt = scrubbedAt,
+        });
     }
 
     private static string ComputeStoredFinalizationShareHash(string shareMaterial) =>

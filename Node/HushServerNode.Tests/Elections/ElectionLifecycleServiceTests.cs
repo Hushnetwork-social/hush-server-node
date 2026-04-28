@@ -3314,6 +3314,20 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId] = tallyReadyElection;
         store.BoundaryArtifacts.Add(tallyReadyArtifact);
         store.ResultArtifacts.Add(unofficialResult);
+        var adminOnlyEnvelopeCrypto = new TransparentTestAdminOnlyProtectedTallyEnvelopeCrypto();
+        store.AdminOnlyProtectedTallyEnvelopes[election.ElectionId] =
+            ElectionModelFactory.CreateAdminOnlyProtectedTallyEnvelope(
+                election.ElectionId,
+                election.SelectedProfileId,
+                tallyPublicKey: [0x01, 0x02, 0x03],
+                tallyPublicKeyFingerprint: "test-fingerprint",
+                sealedTallyPrivateScalar: adminOnlyEnvelopeCrypto.SealPrivateScalar(
+                    "12345",
+                    election.ElectionId,
+                    election.SelectedProfileId),
+                AdminOnlyProtectedTallyEnvelopeCryptoConstants.ScalarEncoding,
+                adminOnlyEnvelopeCrypto.SealAlgorithm,
+                adminOnlyEnvelopeCrypto.SealedByServiceIdentity);
 
         var finalizeResult = await service.FinalizeElectionAsync(new FinalizeElectionRequest(
             ElectionId: election.ElectionId,
@@ -3350,6 +3364,9 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId].OfficialResultArtifactId.Should().NotBeNull();
         store.ReportPackages.Should().ContainSingle();
         store.ReportArtifacts.Should().HaveCount(13);
+        store.AdminOnlyProtectedTallyEnvelopes[election.ElectionId].SealedTallyPrivateScalar
+            .Should().Be(AdminOnlyProtectedTallyEnvelopeCryptoConstants.DestroyedEnvelopeMarker);
+        store.AdminOnlyProtectedTallyEnvelopes[election.ElectionId].DestroyedAt.Should().NotBeNull();
         store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport)
             .Content.Should().Contain("LowAnonymitySet");
         store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport)
@@ -4172,7 +4189,10 @@ public class ElectionLifecycleServiceTests
         var executorSessionKeyEnvelope = ElectionModelFactory.CreateExecutorSessionKeyEnvelope(
             closeCountingJob.Id,
             executorSessionKeys.PublicKey,
-            closeCountingExecutorEnvelopeCrypto.SealPrivateKey(executorSessionKeys.PrivateKey),
+            closeCountingExecutorEnvelopeCrypto.SealPrivateKey(
+                executorSessionKeys.PrivateKey,
+                closeCountingJob.Id,
+                ExecutorKeyAlgorithm),
             ExecutorKeyAlgorithm,
             closeCountingExecutorEnvelopeCrypto.SealAlgorithm,
             createdAt: DateTime.UtcNow.AddMinutes(-4),

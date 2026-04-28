@@ -600,7 +600,10 @@ public sealed class ElectionBallotPublicationService(
         var executorSessionKeyEnvelope = ElectionModelFactory.CreateExecutorSessionKeyEnvelope(
             closeCountingJob.Id,
             executorSessionKeys.PublicKey,
-            _closeCountingExecutorEnvelopeCrypto.SealPrivateKey(executorSessionKeys.PrivateKey),
+            _closeCountingExecutorEnvelopeCrypto.SealPrivateKey(
+                executorSessionKeys.PrivateKey,
+                closeCountingJob.Id,
+                ExecutorSessionKeyAlgorithm),
             ExecutorSessionKeyAlgorithm,
             _closeCountingExecutorEnvelopeCrypto.SealAlgorithm,
             createdAt: createdAt,

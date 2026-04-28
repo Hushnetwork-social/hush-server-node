@@ -22,6 +22,7 @@ public static class ElectionsHostBuild
             services.AddSingleton(CreateCeremonyOptions(hostContext.Configuration));
             services.AddSingleton(CreateBallotPublicationOptions(hostContext.Configuration));
             services.AddSingleton(CreateAdminOnlyProtectedTallyEnvelopeOptions(hostContext.Configuration));
+            services.AddSingleton(CreateCloseCountingExecutorEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton<IBootstrapper, ElectionCeremonyProfileRegistryBootstrapper>();
             services.AddSingleton<IBootstrapper, ElectionBallotPublicationBootstrapper>();
             services.RegisterElectionsStorageServices(hostContext);
@@ -80,10 +81,9 @@ public static class ElectionsHostBuild
         services.AddSingleton<IElectionReportPackageService, ElectionReportPackageService>();
         services.AddSingleton<IElectionBallotPublicationCryptoService, ElectionBallotPublicationCryptoService>();
         services.AddSingleton<IElectionResultCryptoService, ElectionResultCryptoService>();
-        services.AddSingleton<ICloseCountingExecutorEnvelopeCrypto>(_ =>
-            OperatingSystem.IsWindows()
-                ? new WindowsDpapiCloseCountingExecutorEnvelopeCrypto()
-                : new UnavailableCloseCountingExecutorEnvelopeCrypto());
+        services.AddSingleton<ICloseCountingExecutorEnvelopeCrypto>(sp =>
+            CloseCountingExecutorEnvelopeCryptoFactory.Create(
+                sp.GetRequiredService<CloseCountingExecutorEnvelopeCryptoOptions>()));
         services.AddSingleton<IAdminOnlyProtectedTallyEnvelopeCrypto>(sp =>
             AdminOnlyProtectedTallyEnvelopeCryptoFactory.Create(
                 sp.GetRequiredService<AdminOnlyProtectedTallyEnvelopeCryptoOptions>()));
@@ -150,6 +150,33 @@ public static class ElectionsHostBuild
                 configuration,
                 "Elections:AdminOnlyProtectedTallyEnvelope:AwsKmsServiceIdentityLabel",
                 "HUSH_ELECTIONS_ADMIN_ONLY_KMS_SERVICE_IDENTITY"));
+
+    private static CloseCountingExecutorEnvelopeCryptoOptions CreateCloseCountingExecutorEnvelopeOptions(
+        IConfiguration configuration) =>
+        new(
+            Provider: GetConfigValue(
+                configuration,
+                "Elections:CloseCountingExecutorEnvelope:Provider",
+                "HUSH_ELECTIONS_CLOSE_COUNTING_EXECUTOR_ENVELOPE_PROVIDER")
+                ?? CloseCountingExecutorEnvelopeCryptoOptions.ProviderAuto,
+            AwsKmsKeyId: GetConfigValue(
+                configuration,
+                "Elections:CloseCountingExecutorEnvelope:AwsKmsKeyId",
+                "HUSH_ELECTIONS_CLOSE_COUNTING_EXECUTOR_KMS_KEY_ID"),
+            AwsKmsRegion: GetConfigValue(
+                configuration,
+                "Elections:CloseCountingExecutorEnvelope:AwsKmsRegion",
+                "HUSH_ELECTIONS_CLOSE_COUNTING_EXECUTOR_KMS_REGION",
+                "AWS_REGION",
+                "AWS_DEFAULT_REGION"),
+            AwsKmsServiceUrl: GetConfigValue(
+                configuration,
+                "Elections:CloseCountingExecutorEnvelope:AwsKmsServiceUrl",
+                "HUSH_ELECTIONS_CLOSE_COUNTING_EXECUTOR_KMS_SERVICE_URL"),
+            AwsKmsServiceIdentityLabel: GetConfigValue(
+                configuration,
+                "Elections:CloseCountingExecutorEnvelope:AwsKmsServiceIdentityLabel",
+                "HUSH_ELECTIONS_CLOSE_COUNTING_EXECUTOR_KMS_SERVICE_IDENTITY"));
 
     private static string? GetConfigValue(
         IConfiguration configuration,

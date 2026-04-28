@@ -93,7 +93,7 @@ public class AdminOnlyProtectedTallyEnvelopeCryptoTests
         scalar.Should().Be("67890");
         error.Should().BeEmpty();
         capturedRequest.Should().NotBeNull();
-        capturedRequest!.KeyId.Should().Be("alias/hush-election-admin-only-tally-test");
+        capturedRequest!.KeyId.Should().BeNullOrEmpty();
         capturedRequest.CiphertextBlob.ToArray().Should().Equal([0x04, 0x05, 0x06]);
         capturedRequest.EncryptionContext.Should().Contain(
             new KeyValuePair<string, string>("election-id", electionId.ToString()));

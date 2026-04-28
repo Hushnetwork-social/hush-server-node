@@ -46,6 +46,12 @@
             "AwsKmsKeyId": "",
             "AwsKmsRegion": "",
             "AwsKmsServiceUrl": ""
+        },
+        "CloseCountingExecutorEnvelope": {
+            "Provider": "auto",
+            "AwsKmsKeyId": "",
+            "AwsKmsRegion": "",
+            "AwsKmsServiceUrl": ""
         }
     },
 

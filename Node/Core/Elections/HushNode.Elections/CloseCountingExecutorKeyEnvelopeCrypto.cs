@@ -1,3 +1,7 @@
+using Amazon;
+using Amazon.KeyManagementService;
+using Amazon.KeyManagementService.Model;
+using Amazon.Runtime;
 using System.Security.Cryptography;
 using System.Text;
 using HushNode.Credentials;
@@ -14,7 +18,10 @@ public interface ICloseCountingExecutorEnvelopeCrypto
 
     bool IsAvailable(out string error);
 
-    string SealPrivateKey(string privateKey);
+    string SealPrivateKey(
+        string privateKey,
+        Guid closeCountingJobId,
+        string keyAlgorithm);
 
     string? TryUnsealPrivateKey(
         ElectionExecutorSessionKeyEnvelopeRecord envelope,
@@ -50,7 +57,10 @@ public sealed class WindowsDpapiCloseCountingExecutorEnvelopeCrypto : ICloseCoun
         return true;
     }
 
-    public string SealPrivateKey(string privateKey)
+    public string SealPrivateKey(
+        string privateKey,
+        Guid closeCountingJobId,
+        string keyAlgorithm)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(privateKey);
 
@@ -130,7 +140,10 @@ public sealed class UnavailableCloseCountingExecutorEnvelopeCrypto : ICloseCount
         return false;
     }
 
-    public string SealPrivateKey(string privateKey) =>
+    public string SealPrivateKey(
+        string privateKey,
+        Guid closeCountingJobId,
+        string keyAlgorithm) =>
         throw new InvalidOperationException("Trustee close-counting custody is unavailable in this deployment.");
 
     public string? TryUnsealPrivateKey(
@@ -154,7 +167,10 @@ public sealed class TransparentTestCloseCountingExecutorEnvelopeCrypto : ICloseC
         return true;
     }
 
-    public string SealPrivateKey(string privateKey)
+    public string SealPrivateKey(
+        string privateKey,
+        Guid closeCountingJobId,
+        string keyAlgorithm)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(privateKey);
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(privateKey.Trim()));
@@ -194,6 +210,279 @@ public sealed class TransparentTestCloseCountingExecutorEnvelopeCrypto : ICloseC
             error = "The test executor envelope payload is not valid base64.";
             return null;
         }
+    }
+}
+
+public sealed record CloseCountingExecutorEnvelopeCryptoOptions(
+    string Provider,
+    string? AwsKmsKeyId = null,
+    string? AwsKmsRegion = null,
+    string? AwsKmsServiceUrl = null,
+    string? AwsKmsServiceIdentityLabel = null)
+{
+    public const string ProviderAuto = "auto";
+    public const string ProviderUnavailable = "unavailable";
+    public const string ProviderWindowsDpapi = "windows-dpapi";
+    public const string ProviderAwsKms = "aws-kms";
+
+    public static CloseCountingExecutorEnvelopeCryptoOptions Default { get; } =
+        new(ProviderAuto);
+
+    public string NormalizedProvider =>
+        string.IsNullOrWhiteSpace(Provider)
+            ? ProviderAuto
+            : Provider.Trim().ToLowerInvariant();
+}
+
+public static class CloseCountingExecutorEnvelopeCryptoFactory
+{
+    public static ICloseCountingExecutorEnvelopeCrypto Create(
+        CloseCountingExecutorEnvelopeCryptoOptions? options = null)
+    {
+        var resolvedOptions = options ?? CloseCountingExecutorEnvelopeCryptoOptions.Default;
+        return resolvedOptions.NormalizedProvider switch
+        {
+            CloseCountingExecutorEnvelopeCryptoOptions.ProviderAwsKms =>
+                CreateAwsKmsProvider(resolvedOptions),
+            CloseCountingExecutorEnvelopeCryptoOptions.ProviderWindowsDpapi =>
+                OperatingSystem.IsWindows()
+                    ? new WindowsDpapiCloseCountingExecutorEnvelopeCrypto()
+                    : new UnavailableCloseCountingExecutorEnvelopeCrypto(),
+            CloseCountingExecutorEnvelopeCryptoOptions.ProviderUnavailable =>
+                new UnavailableCloseCountingExecutorEnvelopeCrypto(),
+            CloseCountingExecutorEnvelopeCryptoOptions.ProviderAuto =>
+                CreateAutoProvider(resolvedOptions),
+            _ => new UnavailableCloseCountingExecutorEnvelopeCrypto(),
+        };
+    }
+
+    private static ICloseCountingExecutorEnvelopeCrypto CreateAutoProvider(
+        CloseCountingExecutorEnvelopeCryptoOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.AwsKmsKeyId))
+        {
+            return CreateAwsKmsProvider(options);
+        }
+
+        return OperatingSystem.IsWindows()
+            ? new WindowsDpapiCloseCountingExecutorEnvelopeCrypto()
+            : new UnavailableCloseCountingExecutorEnvelopeCrypto();
+    }
+
+    private static ICloseCountingExecutorEnvelopeCrypto CreateAwsKmsProvider(
+        CloseCountingExecutorEnvelopeCryptoOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(options.AwsKmsKeyId))
+        {
+            return new UnavailableCloseCountingExecutorEnvelopeCrypto();
+        }
+
+        return new AwsKmsCloseCountingExecutorEnvelopeCrypto(
+            options,
+            CreateAwsKmsClient(options),
+            disposeClient: true);
+    }
+
+    private static IAmazonKeyManagementService CreateAwsKmsClient(
+        CloseCountingExecutorEnvelopeCryptoOptions options)
+    {
+        var serviceUrl = options.AwsKmsServiceUrl?.Trim();
+        var region = options.AwsKmsRegion?.Trim();
+
+        if (!string.IsNullOrWhiteSpace(serviceUrl))
+        {
+            return new AmazonKeyManagementServiceClient(
+                new AmazonKeyManagementServiceConfig
+                {
+                    ServiceURL = serviceUrl,
+                    AuthenticationRegion = string.IsNullOrWhiteSpace(region) ? "us-east-1" : region,
+                });
+        }
+
+        if (!string.IsNullOrWhiteSpace(region))
+        {
+            return new AmazonKeyManagementServiceClient(
+                new AmazonKeyManagementServiceConfig
+                {
+                    RegionEndpoint = RegionEndpoint.GetBySystemName(region),
+                });
+        }
+
+        return new AmazonKeyManagementServiceClient();
+    }
+}
+
+public sealed class AwsKmsCloseCountingExecutorEnvelopeCrypto : ICloseCountingExecutorEnvelopeCrypto, IDisposable
+{
+    private const string ContextPurpose = "hush:elections:close-counting-executor-session-key:v1";
+    private readonly CloseCountingExecutorEnvelopeCryptoOptions _options;
+    private readonly IAmazonKeyManagementService _kmsClient;
+    private readonly bool _disposeClient;
+
+    public AwsKmsCloseCountingExecutorEnvelopeCrypto(
+        CloseCountingExecutorEnvelopeCryptoOptions options,
+        IAmazonKeyManagementService kmsClient,
+        bool disposeClient = false)
+    {
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _kmsClient = kmsClient ?? throw new ArgumentNullException(nameof(kmsClient));
+        _disposeClient = disposeClient;
+    }
+
+    public string SealAlgorithm => "aws-kms-close-counting-executor-v1";
+
+    public string? SealedByServiceIdentity =>
+        _options.AwsKmsServiceIdentityLabel?.Trim()
+        ?? BuildServiceIdentityLabel(_options.AwsKmsKeyId);
+
+    public bool IsAvailable(out string error)
+    {
+        if (string.IsNullOrWhiteSpace(_options.AwsKmsKeyId))
+        {
+            error = "Trustee close-counting custody is configured for AWS KMS, but no KMS key id or alias is configured.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    public string SealPrivateKey(
+        string privateKey,
+        Guid closeCountingJobId,
+        string keyAlgorithm)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(privateKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyAlgorithm);
+
+        if (!IsAvailable(out var availabilityError))
+        {
+            throw new InvalidOperationException(availabilityError);
+        }
+
+        try
+        {
+            var request = new EncryptRequest
+            {
+                KeyId = _options.AwsKmsKeyId!.Trim(),
+                Plaintext = new MemoryStream(Encoding.UTF8.GetBytes(privateKey.Trim())),
+                EncryptionContext = BuildEncryptionContext(closeCountingJobId, keyAlgorithm),
+            };
+
+            var response = _kmsClient.EncryptAsync(request).GetAwaiter().GetResult();
+            if (response.CiphertextBlob is null || response.CiphertextBlob.Length == 0)
+            {
+                throw new InvalidOperationException("AWS KMS returned an empty encrypted close-counting executor envelope.");
+            }
+
+            return Convert.ToBase64String(response.CiphertextBlob.ToArray());
+        }
+        catch (Exception ex) when (ex is AmazonKeyManagementServiceException or AmazonServiceException)
+        {
+            throw new InvalidOperationException(
+                $"AWS KMS failed to seal the trustee close-counting executor envelope: {ex.Message}",
+                ex);
+        }
+    }
+
+    public string? TryUnsealPrivateKey(
+        ElectionExecutorSessionKeyEnvelopeRecord envelope,
+        out string error)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+
+        if (!string.Equals(envelope.SealAlgorithm, SealAlgorithm, StringComparison.Ordinal))
+        {
+            error = $"Seal algorithm mismatch. Expected {SealAlgorithm} but found {envelope.SealAlgorithm}.";
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(envelope.SealedExecutorSessionPrivateKey) ||
+            string.Equals(
+                envelope.SealedExecutorSessionPrivateKey,
+                CloseCountingExecutorKeyRegistryConstants.DestroyedEnvelopeMarker,
+                StringComparison.Ordinal) ||
+            string.Equals(
+                envelope.SealedExecutorSessionPrivateKey,
+                CloseCountingExecutorKeyRegistryConstants.MemoryOnlyEnvelopeMarker,
+                StringComparison.Ordinal))
+        {
+            error = "The AWS KMS close-counting executor envelope no longer contains a sealed private key.";
+            return null;
+        }
+
+        if (!IsAvailable(out error))
+        {
+            return null;
+        }
+
+        try
+        {
+            var ciphertext = Convert.FromBase64String(envelope.SealedExecutorSessionPrivateKey);
+            var request = new DecryptRequest
+            {
+                CiphertextBlob = new MemoryStream(ciphertext),
+                EncryptionContext = BuildEncryptionContext(envelope.CloseCountingJobId, envelope.KeyAlgorithm),
+            };
+
+            var response = _kmsClient.DecryptAsync(request).GetAwaiter().GetResult();
+            if (response.Plaintext is null || response.Plaintext.Length == 0)
+            {
+                error = "AWS KMS returned an empty decrypted close-counting executor envelope.";
+                return null;
+            }
+
+            error = string.Empty;
+            return Encoding.UTF8.GetString(response.Plaintext.ToArray());
+        }
+        catch (FormatException)
+        {
+            error = "The AWS KMS close-counting executor envelope payload is not valid base64.";
+            return null;
+        }
+        catch (Exception ex) when (ex is AmazonKeyManagementServiceException or AmazonServiceException)
+        {
+            error = $"AWS KMS failed to unseal the trustee close-counting executor envelope: {ex.Message}";
+            return null;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposeClient)
+        {
+            _kmsClient.Dispose();
+        }
+    }
+
+    private static Dictionary<string, string> BuildEncryptionContext(
+        Guid closeCountingJobId,
+        string keyAlgorithm) =>
+        new(StringComparer.Ordinal)
+        {
+            ["hush-purpose"] = ContextPurpose,
+            ["close-counting-job-id"] = closeCountingJobId.ToString("D"),
+            ["key-algorithm"] = keyAlgorithm.Trim(),
+        };
+
+    private static string? BuildServiceIdentityLabel(string? keyId)
+    {
+        if (string.IsNullOrWhiteSpace(keyId))
+        {
+            return null;
+        }
+
+        var label = keyId.Trim();
+        var slashIndex = label.LastIndexOf('/');
+        if (label.StartsWith("arn:", StringComparison.OrdinalIgnoreCase) && slashIndex >= 0)
+        {
+            label = label[(slashIndex + 1)..];
+        }
+
+        var serviceIdentity = $"aws-kms:{label}";
+        return serviceIdentity.Length <= 160
+            ? serviceIdentity
+            : serviceIdentity[..160];
     }
 }
 

@@ -224,17 +224,18 @@ public static class ElectionProtectedTallyBinding
             var fingerprint = ElectionTallyPublicKeyDerivation.ComputeFingerprint(publicKeyBytes);
             var scalarText = scalar.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var timestamp = createdAt ?? DateTime.UtcNow;
+            var normalizedProfileId = ElectionSelectableProfileCatalog.NormalizeProfileId(
+                ElectionGovernanceMode.AdminOnly,
+                election.SelectedProfileId);
             envelope = ElectionModelFactory.CreateAdminOnlyProtectedTallyEnvelope(
                 election.ElectionId,
-                ElectionSelectableProfileCatalog.NormalizeProfileId(
-                    ElectionGovernanceMode.AdminOnly,
-                    election.SelectedProfileId),
+                normalizedProfileId,
                 publicKeyBytes,
                 fingerprint,
                 envelopeCrypto.SealPrivateScalar(
                     scalarText,
                     election.ElectionId,
-                    election.SelectedProfileId),
+                    normalizedProfileId),
                 AdminOnlyProtectedTallyEnvelopeCryptoConstants.ScalarEncoding,
                 envelopeCrypto.SealAlgorithm,
                 envelopeCrypto.SealedByServiceIdentity,

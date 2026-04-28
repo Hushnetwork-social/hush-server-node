@@ -331,7 +331,6 @@ public sealed class AwsKmsAdminOnlyProtectedTallyEnvelopeCrypto : IAdminOnlyProt
             var request = new DecryptRequest
             {
                 CiphertextBlob = new MemoryStream(ciphertext),
-                KeyId = _options.AwsKmsKeyId!.Trim(),
                 EncryptionContext = BuildEncryptionContext(envelope.ElectionId, envelope.SelectedProfileId),
             };
 

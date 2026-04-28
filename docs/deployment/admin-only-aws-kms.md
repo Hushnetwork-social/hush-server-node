@@ -1,7 +1,8 @@
-# Admin-Only Protected Tally Custody on AWS KMS
+# Election Custody on AWS KMS
 
-HushServerNode can open admin-only non-dev elections on Linux only when the
-admin-only protected tally envelope provider is configured.
+HushServerNode can run non-dev election custody on Linux only when the
+non-Windows envelope providers are configured. AWS KMS is the pragmatic
+production provider for the current Lightsail Docker deployment.
 
 ## Runtime Configuration
 
@@ -12,6 +13,9 @@ container:
 Elections__AdminOnlyProtectedTallyEnvelope__Provider=aws-kms
 Elections__AdminOnlyProtectedTallyEnvelope__AwsKmsKeyId=<AWS KMS key id, ARN, or alias>
 Elections__AdminOnlyProtectedTallyEnvelope__AwsKmsRegion=<AWS region>
+Elections__CloseCountingExecutorEnvelope__Provider=aws-kms
+Elections__CloseCountingExecutorEnvelope__AwsKmsKeyId=<AWS KMS key id, ARN, or alias>
+Elections__CloseCountingExecutorEnvelope__AwsKmsRegion=<AWS region>
 AWS_REGION=<AWS region>
 ```
 
@@ -20,6 +24,16 @@ Required GitHub environment secret:
 ```text
 AWS_KMS_KEY_ID
 ```
+
+Optional GitHub environment secret:
+
+```text
+AWS_CLOSE_COUNTING_KMS_KEY_ID
+```
+
+If `AWS_CLOSE_COUNTING_KMS_KEY_ID` is omitted, the CD workflow reuses
+`AWS_KMS_KEY_ID`. A separate key is cleaner, but reusing the current KMS key
+with separate encryption context is an acceptable Lightsail tradeoff.
 
 Optional GitHub environment variable:
 
@@ -32,7 +46,9 @@ If `AWS_REGION` is not set, the CD workflow defaults to `eu-central-1`.
 ## Credentials
 
 Prefer an IAM role/profile attached to the AWS runtime with permissions for the
-configured key:
+configured key. The current Lightsail Docker deployment uses a least-privilege
+IAM user exposed to the container through environment variables because that is
+the practical deploy path for this host.
 
 ```json
 {
@@ -54,7 +70,19 @@ AWS_KMS_ACCESS_KEY_ID
 AWS_KMS_SECRET_ACCESS_KEY
 ```
 
-Both static credential secrets must be set together or omitted together.
+Both static credential secrets are required by the current CD workflow because
+GitHub performs a real KMS encrypt/decrypt smoke test before replacing the
+running server container.
+
+Use KMS key-policy/IAM conditions where possible to restrict access by
+encryption context:
+
+```text
+kms:EncryptionContext:hush-purpose =
+  hush:elections:admin-only-protected-tally-scalar:v1
+or
+  hush:elections:close-counting-executor-session-key:v1
+```
 
 ## Local Linux Container Testing
 

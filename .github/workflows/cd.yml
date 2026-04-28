@@ -138,28 +138,75 @@ jobs:
       # DEPLOY TO AWS LIGHTSAIL
       # ============================================
 
-      - name: Verify admin-only AWS KMS config
+      - name: Verify AWS KMS custody config
         env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
           AWS_KMS_KEY_ID: ${{ secrets.AWS_KMS_KEY_ID }}
+          AWS_CLOSE_COUNTING_KMS_KEY_ID: ${{ secrets.AWS_CLOSE_COUNTING_KMS_KEY_ID }}
           AWS_KMS_ACCESS_KEY_ID: ${{ secrets.AWS_KMS_ACCESS_KEY_ID }}
           AWS_KMS_SECRET_ACCESS_KEY: ${{ secrets.AWS_KMS_SECRET_ACCESS_KEY }}
         run: |
+          AWS_REGION="${AWS_REGION:-eu-central-1}"
+          AWS_CLOSE_COUNTING_KMS_KEY_ID="${AWS_CLOSE_COUNTING_KMS_KEY_ID:-${AWS_KMS_KEY_ID}}"
+
           if [[ -z "${AWS_KMS_KEY_ID}" ]]; then
             echo "::error::Missing AWS_KMS_KEY_ID secret. Set it to the AWS KMS key id, key ARN, or alias for admin-only protected tally custody."
             exit 1
           fi
 
-          if [[ -n "${AWS_KMS_ACCESS_KEY_ID}" && -z "${AWS_KMS_SECRET_ACCESS_KEY}" ]]; then
-            echo "::error::AWS_KMS_ACCESS_KEY_ID is set but AWS_KMS_SECRET_ACCESS_KEY is missing."
+          if [[ -z "${AWS_CLOSE_COUNTING_KMS_KEY_ID}" ]]; then
+            echo "::error::Missing close-counting KMS key id. Set AWS_CLOSE_COUNTING_KMS_KEY_ID or reuse AWS_KMS_KEY_ID."
             exit 1
           fi
 
-          if [[ -z "${AWS_KMS_ACCESS_KEY_ID}" && -n "${AWS_KMS_SECRET_ACCESS_KEY}" ]]; then
-            echo "::error::AWS_KMS_SECRET_ACCESS_KEY is set but AWS_KMS_ACCESS_KEY_ID is missing."
+          if [[ -z "${AWS_KMS_ACCESS_KEY_ID}" || -z "${AWS_KMS_SECRET_ACCESS_KEY}" ]]; then
+            echo "::error::AWS_KMS_ACCESS_KEY_ID and AWS_KMS_SECRET_ACCESS_KEY are required for the GitHub-hosted KMS smoke test and Lightsail container runtime."
             exit 1
           fi
 
-          echo "Admin-only AWS KMS key id is configured for deployment."
+          export AWS_ACCESS_KEY_ID="${AWS_KMS_ACCESS_KEY_ID}"
+          export AWS_SECRET_ACCESS_KEY="${AWS_KMS_SECRET_ACCESS_KEY}"
+          export AWS_DEFAULT_REGION="${AWS_REGION}"
+
+          kms_roundtrip() {
+            local label="$1"
+            local key_id="$2"
+            local context="$3"
+            local tmp_dir
+            tmp_dir="$(mktemp -d)"
+            printf 'hush-kms-smoke:%s' "${label}" > "${tmp_dir}/plain"
+
+            aws kms describe-key --region "${AWS_REGION}" --key-id "${key_id}" >/dev/null
+            aws kms encrypt \
+              --region "${AWS_REGION}" \
+              --key-id "${key_id}" \
+              --plaintext "fileb://${tmp_dir}/plain" \
+              --encryption-context "${context}" \
+              --query CiphertextBlob \
+              --output text | base64 -d > "${tmp_dir}/cipher"
+
+            aws kms decrypt \
+              --region "${AWS_REGION}" \
+              --ciphertext-blob "fileb://${tmp_dir}/cipher" \
+              --encryption-context "${context}" \
+              --query Plaintext \
+              --output text | base64 -d > "${tmp_dir}/decrypted"
+
+            cmp "${tmp_dir}/plain" "${tmp_dir}/decrypted"
+            rm -rf "${tmp_dir}"
+          }
+
+          kms_roundtrip \
+            "admin-only" \
+            "${AWS_KMS_KEY_ID}" \
+            "hush-purpose=hush:elections:admin-only-protected-tally-scalar:v1,election-id=00000000-0000-0000-0000-000000000000,selected-profile-id=admin-prod-1of1,scalar-encoding=babyjubjub-scalar-decimal-v1"
+
+          kms_roundtrip \
+            "close-counting" \
+            "${AWS_CLOSE_COUNTING_KMS_KEY_ID}" \
+            "hush-purpose=hush:elections:close-counting-executor-session-key:v1,close-counting-job-id=00000000-0000-0000-0000-000000000000,key-algorithm=x25519-xsalsa20-poly1305-v1"
+
+          echo "AWS KMS custody smoke checks passed."
 
       - name: Setup SSH key
         run: |
@@ -221,18 +268,20 @@ jobs:
           GHCR_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           AWS_REGION: ${{ vars.AWS_REGION }}
           AWS_KMS_KEY_ID: ${{ secrets.AWS_KMS_KEY_ID }}
+          AWS_CLOSE_COUNTING_KMS_KEY_ID: ${{ secrets.AWS_CLOSE_COUNTING_KMS_KEY_ID }}
           AWS_KMS_ACCESS_KEY_ID: ${{ secrets.AWS_KMS_ACCESS_KEY_ID }}
           AWS_KMS_SECRET_ACCESS_KEY: ${{ secrets.AWS_KMS_SECRET_ACCESS_KEY }}
         run: |
-          ssh -i ~/.ssh/lightsail.pem -o ServerAliveInterval=30 -o ServerAliveCountMax=10 ${SSH_USER}@${SSH_HOST} "IMAGE_TAG=${IMAGE_TAG}" "GHCR_TOKEN=${GHCR_TOKEN}" "GHCR_IMAGE=${GHCR_IMAGE}" "AWS_REGION=${AWS_REGION}" "AWS_KMS_KEY_ID=${AWS_KMS_KEY_ID}" "AWS_KMS_ACCESS_KEY_ID=${AWS_KMS_ACCESS_KEY_ID}" "AWS_KMS_SECRET_ACCESS_KEY=${AWS_KMS_SECRET_ACCESS_KEY}" 'bash -s' << 'DEPLOY_SCRIPT'
+          ssh -i ~/.ssh/lightsail.pem -o ServerAliveInterval=30 -o ServerAliveCountMax=10 ${SSH_USER}@${SSH_HOST} "IMAGE_TAG=${IMAGE_TAG}" "GHCR_TOKEN=${GHCR_TOKEN}" "GHCR_IMAGE=${GHCR_IMAGE}" "AWS_REGION=${AWS_REGION}" "AWS_KMS_KEY_ID=${AWS_KMS_KEY_ID}" "AWS_CLOSE_COUNTING_KMS_KEY_ID=${AWS_CLOSE_COUNTING_KMS_KEY_ID}" "AWS_KMS_ACCESS_KEY_ID=${AWS_KMS_ACCESS_KEY_ID}" "AWS_KMS_SECRET_ACCESS_KEY=${AWS_KMS_SECRET_ACCESS_KEY}" 'bash -s' << 'DEPLOY_SCRIPT'
             set -e
 
             echo "Starting deployment of version ${IMAGE_TAG}..."
             : "${AWS_KMS_KEY_ID:?AWS_KMS_KEY_ID is required for admin-only protected tally custody.}"
             AWS_REGION="${AWS_REGION:-eu-central-1}"
+            AWS_CLOSE_COUNTING_KMS_KEY_ID="${AWS_CLOSE_COUNTING_KMS_KEY_ID:-${AWS_KMS_KEY_ID}}"
 
-            if { [ -n "${AWS_KMS_ACCESS_KEY_ID:-}" ] && [ -z "${AWS_KMS_SECRET_ACCESS_KEY:-}" ]; } || { [ -z "${AWS_KMS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_KMS_SECRET_ACCESS_KEY:-}" ]; }; then
-              echo "AWS KMS static credential secrets must be provided together, or omitted together when the server has an IAM role/profile."
+            if [ -z "${AWS_KMS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_KMS_SECRET_ACCESS_KEY:-}" ]; then
+              echo "AWS KMS static credential secrets are required for this Lightsail Docker deployment."
               exit 1
             fi
 
@@ -256,15 +305,13 @@ jobs:
               -e "Elections__AdminOnlyProtectedTallyEnvelope__Provider=aws-kms"
               -e "Elections__AdminOnlyProtectedTallyEnvelope__AwsKmsKeyId=${AWS_KMS_KEY_ID}"
               -e "Elections__AdminOnlyProtectedTallyEnvelope__AwsKmsRegion=${AWS_REGION}"
+              -e "Elections__CloseCountingExecutorEnvelope__Provider=aws-kms"
+              -e "Elections__CloseCountingExecutorEnvelope__AwsKmsKeyId=${AWS_CLOSE_COUNTING_KMS_KEY_ID}"
+              -e "Elections__CloseCountingExecutorEnvelope__AwsKmsRegion=${AWS_REGION}"
               -e "AWS_REGION=${AWS_REGION}"
+              -e "AWS_ACCESS_KEY_ID=${AWS_KMS_ACCESS_KEY_ID}"
+              -e "AWS_SECRET_ACCESS_KEY=${AWS_KMS_SECRET_ACCESS_KEY}"
             )
-
-            if [ -n "${AWS_KMS_ACCESS_KEY_ID:-}" ]; then
-              DOCKER_ENV_ARGS+=(
-                -e "AWS_ACCESS_KEY_ID=${AWS_KMS_ACCESS_KEY_ID}"
-                -e "AWS_SECRET_ACCESS_KEY=${AWS_KMS_SECRET_ACCESS_KEY}"
-              )
-            fi
 
             sudo docker run -d \
               --name ${CONTAINER_NAME} \
@@ -307,6 +354,7 @@ jobs:
           echo "**Container:** \`HushNetworkNode_v${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Target:** AWS Lightsail (Frankfurt)" >> $GITHUB_STEP_SUMMARY
           echo "**Admin-only protected tally custody:** AWS KMS" >> $GITHUB_STEP_SUMMARY
+          echo "**Trustee close-counting executor custody:** AWS KMS" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Endpoints:**" >> $GITHUB_STEP_SUMMARY
           echo "- gRPC-Web: \`https://api.hushnetwork.social\`" >> $GITHUB_STEP_SUMMARY
