@@ -23,7 +23,7 @@ jobs:
   # CI GATE — must pass before deploying
   # ============================================
   ci:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     defaults:
       run:
@@ -70,7 +70,7 @@ jobs:
   # ============================================
   build-and-deploy:
     needs: [ci]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     environment: HushServerNode AWS CD
 
     permissions:
