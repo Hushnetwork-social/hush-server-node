@@ -314,7 +314,7 @@ jobs:
             AWS_CREDENTIALS_FILE="${AWS_CREDENTIALS_DIR}/kms-credentials"
             AWS_CREDENTIALS_FILE_CONTAINER="/run/secrets/hush-aws-kms-credentials"
             AWS_PROFILE_NAME="hush-election-kms"
-            if [ ! -s "${AWS_CREDENTIALS_FILE}" ]; then
+            if ! sudo test -s "${AWS_CREDENTIALS_FILE}"; then
               echo "AWS KMS credentials file is missing on the Lightsail host."
               exit 1
             fi
