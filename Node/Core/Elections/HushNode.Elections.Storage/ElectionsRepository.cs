@@ -287,6 +287,33 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         return latestEntries.FirstOrDefault(x => x.IsCompatibleWithProfile(normalizedProfileId));
     }
 
+    public async Task<ApprovedProtocolPackageCatalogEntryRecord?> GetLatestProtocolPackageCatalogEntryAsync(string selectedProfileId)
+    {
+        var normalizedProfileId = selectedProfileId.Trim();
+        var currentEntries = await Context.ApprovedProtocolPackageCatalogEntries
+            .Where(x =>
+                x.ApprovalStatus != ProtocolPackageApprovalStatus.Retired &&
+                x.IsLatestForCompatibleProfiles)
+            .OrderByDescending(x => x.ApprovedAt)
+            .ThenBy(x => x.PackageId)
+            .ToListAsync();
+
+        var latestCurrentEntry = currentEntries.FirstOrDefault(x => x.IsCompatibleWithProfile(normalizedProfileId));
+        if (latestCurrentEntry is not null)
+        {
+            return latestCurrentEntry;
+        }
+
+        var fallbackEntries = await Context.ApprovedProtocolPackageCatalogEntries
+            .Where(x => x.ApprovalStatus != ProtocolPackageApprovalStatus.Retired)
+            .OrderByDescending(x => x.ApprovedAt)
+            .ThenByDescending(x => x.PackageVersion)
+            .ThenBy(x => x.PackageId)
+            .ToListAsync();
+
+        return fallbackEntries.FirstOrDefault(x => x.IsCompatibleWithProfile(normalizedProfileId));
+    }
+
     public async Task SaveApprovedProtocolPackageCatalogEntryAsync(ApprovedProtocolPackageCatalogEntryRecord catalogEntry) =>
         await Context.ApprovedProtocolPackageCatalogEntries.AddAsync(catalogEntry);
 

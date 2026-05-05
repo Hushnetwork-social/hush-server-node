@@ -90,6 +90,9 @@ public interface IElectionsRepository : IRepository
     Task<ApprovedProtocolPackageCatalogEntryRecord?> GetLatestApprovedProtocolPackageCatalogEntryAsync(string selectedProfileId) =>
         Task.FromResult<ApprovedProtocolPackageCatalogEntryRecord?>(null);
 
+    Task<ApprovedProtocolPackageCatalogEntryRecord?> GetLatestProtocolPackageCatalogEntryAsync(string selectedProfileId) =>
+        GetLatestApprovedProtocolPackageCatalogEntryAsync(selectedProfileId);
+
     Task SaveApprovedProtocolPackageCatalogEntryAsync(ApprovedProtocolPackageCatalogEntryRecord catalogEntry) =>
         Task.CompletedTask;
 

@@ -2105,6 +2105,41 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task OpenElectionAsync_WithDraftPrivateCurrentProtocolPackage_SealsRefs()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection(
+            acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]);
+        var warning = ElectionModelFactory.CreateWarningAcknowledgement(
+            election.ElectionId,
+            ElectionWarningCode.LowAnonymitySet,
+            election.CurrentDraftRevision,
+            acknowledgedByPublicAddress: "owner-address");
+
+        store.Elections[election.ElectionId] = election;
+        store.WarningAcknowledgements.Add(warning);
+        SeedApprovedProtocolPackage(
+            store,
+            election.SelectedProfileId,
+            approvalStatus: ProtocolPackageApprovalStatus.DraftPrivate);
+        SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
+
+        var result = await service.OpenElectionAsync(new OpenElectionRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet]));
+
+        result.IsSuccess.Should().BeTrue();
+        result.ProtocolPackageBinding.Should().NotBeNull();
+        result.ProtocolPackageBinding!.PackageApprovalStatus.Should().Be(ProtocolPackageApprovalStatus.DraftPrivate);
+        result.ProtocolPackageBinding.Status.Should().Be(ProtocolPackageBindingStatus.Sealed);
+        store.ProtocolPackageBindings.Should().ContainSingle(x => x.Status == ProtocolPackageBindingStatus.Sealed);
+        store.BoundaryArtifacts.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task OpenElectionAsync_WithStaleProtocolPackageBinding_ReturnsValidationFailed()
     {
         var store = new ElectionStore();
@@ -4026,7 +4061,8 @@ public class ElectionLifecycleServiceTests
         string selectedProfileId,
         string packageVersion = "v1.0.0",
         bool isLatest = true,
-        char hashSeed = 'a')
+        char hashSeed = 'a',
+        ProtocolPackageApprovalStatus approvalStatus = ProtocolPackageApprovalStatus.ApprovedInternal)
     {
         var catalogEntry = ElectionModelFactory.CreateApprovedProtocolPackageCatalogEntry(
             packageId: "omega-hushvoting-v1",
@@ -4038,7 +4074,7 @@ public class ElectionLifecycleServiceTests
             [
                 selectedProfileId,
             ],
-            approvalStatus: ProtocolPackageApprovalStatus.ApprovedInternal,
+            approvalStatus: approvalStatus,
             isLatestForCompatibleProfiles: isLatest,
             specAccessLocations:
             [
@@ -6176,6 +6212,31 @@ public class ElectionLifecycleServiceTests
                 .ToArray();
 
             return Task.FromResult(latestEntries.FirstOrDefault(x => x.IsCompatibleWithProfile(selectedProfileId)));
+        }
+
+        public Task<ApprovedProtocolPackageCatalogEntryRecord?> GetLatestProtocolPackageCatalogEntryAsync(string selectedProfileId)
+        {
+            var currentEntry = store.ApprovedProtocolPackageCatalogEntries
+                .Where(x =>
+                    x.ApprovalStatus != ProtocolPackageApprovalStatus.Retired &&
+                    x.IsLatestForCompatibleProfiles)
+                .OrderByDescending(x => x.ApprovedAt)
+                .ThenBy(x => x.PackageId, StringComparer.Ordinal)
+                .FirstOrDefault(x => x.IsCompatibleWithProfile(selectedProfileId));
+
+            if (currentEntry is not null)
+            {
+                return Task.FromResult<ApprovedProtocolPackageCatalogEntryRecord?>(currentEntry);
+            }
+
+            var fallbackEntry = store.ApprovedProtocolPackageCatalogEntries
+                .Where(x => x.ApprovalStatus != ProtocolPackageApprovalStatus.Retired)
+                .OrderByDescending(x => x.ApprovedAt)
+                .ThenByDescending(x => x.PackageVersion, StringComparer.Ordinal)
+                .ThenBy(x => x.PackageId, StringComparer.Ordinal)
+                .FirstOrDefault(x => x.IsCompatibleWithProfile(selectedProfileId));
+
+            return Task.FromResult<ApprovedProtocolPackageCatalogEntryRecord?>(fallbackEntry);
         }
 
         public Task SaveApprovedProtocolPackageCatalogEntryAsync(ApprovedProtocolPackageCatalogEntryRecord catalogEntry)

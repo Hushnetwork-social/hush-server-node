@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using StackExchange.Redis;
+using System.Text.Json;
 using Testcontainers.PostgreSql;
 using Testcontainers.Redis;
 using Xunit;
 using HushServerNode;
 using HushServerNode.Testing;
+using HushShared.Elections.Model;
 
 namespace HushNode.IntegrationTests.Infrastructure;
 
@@ -19,6 +21,8 @@ internal sealed class HushTestFixture : IAsyncLifetime
     private PostgreSqlContainer? _postgresContainer;
     private RedisContainer? _redisContainer;
     private ConnectionMultiplexer? _redisConnection;
+    private string? _protocolPackageCatalogRoot;
+    private string? _protocolPackageCatalogPath;
 
     /// <summary>
     /// Gets the PostgreSQL connection string for the test container.
@@ -54,6 +58,8 @@ internal sealed class HushTestFixture : IAsyncLifetime
         var redisOptions = ConfigurationOptions.Parse(_redisContainer!.GetConnectionString());
         redisOptions.AllowAdmin = true;
         _redisConnection = await ConnectionMultiplexer.ConnectAsync(redisOptions);
+
+        WriteApprovedProtocolPackageCatalog();
     }
 
     /// <summary>
@@ -81,6 +87,12 @@ internal sealed class HushTestFixture : IAsyncLifetime
         }
 
         await Task.WhenAll(disposeTasks);
+
+        if (_protocolPackageCatalogRoot is not null &&
+            Directory.Exists(_protocolPackageCatalogRoot))
+        {
+            Directory.Delete(_protocolPackageCatalogRoot, recursive: true);
+        }
     }
 
     /// <summary>
@@ -138,7 +150,7 @@ internal sealed class HushTestFixture : IAsyncLifetime
             PostgresConnectionString,
             RedisConnectionString,  // FEAT-046: Pass Redis connection for cache testing
             diagnosticCapture,
-            configurationOverrides);
+            MergeDefaultConfigurationOverrides(configurationOverrides));
 
         await node.StartAsync();
 
@@ -163,7 +175,7 @@ internal sealed class HushTestFixture : IAsyncLifetime
             PostgresConnectionString,
             RedisConnectionString,
             diagnosticCapture,
-            configurationOverrides);
+            MergeDefaultConfigurationOverrides(configurationOverrides));
 
         await node.StartAsync();
 
@@ -288,4 +300,83 @@ internal sealed class HushTestFixture : IAsyncLifetime
 
         await _redisContainer.StartAsync();
     }
+
+    private IReadOnlyDictionary<string, string?> MergeDefaultConfigurationOverrides(
+        IReadOnlyDictionary<string, string?>? configurationOverrides)
+    {
+        var merged = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+        if (configurationOverrides is not null)
+        {
+            foreach (var pair in configurationOverrides)
+            {
+                merged[pair.Key] = pair.Value;
+            }
+        }
+
+        if (!merged.ContainsKey("Elections:ProtocolPackages:ApprovedCatalogRelativePath"))
+        {
+            merged["Elections:ProtocolPackages:ApprovedCatalogRelativePath"] = _protocolPackageCatalogPath
+                ?? throw new InvalidOperationException("Test protocol package catalog has not been initialized.");
+        }
+
+        return merged;
+    }
+
+    private void WriteApprovedProtocolPackageCatalog()
+    {
+        _protocolPackageCatalogRoot = Path.Combine(
+            Path.GetTempPath(),
+            $"hush-integration-protocol-package-{Guid.NewGuid():N}");
+        _protocolPackageCatalogPath = Path.Combine(
+            _protocolPackageCatalogRoot,
+            "ApprovedProtocolPackageCatalog.json");
+
+        Directory.CreateDirectory(_protocolPackageCatalogRoot);
+
+        var catalogEntry = ElectionModelFactory.CreateApprovedProtocolPackageCatalogEntry(
+            packageId: "omega-hushvoting-v1",
+            packageVersion: "v1.2.0",
+            specPackageHash: Hash('a'),
+            proofPackageHash: Hash('b'),
+            releaseManifestHash: Hash('c'),
+            compatibleProfileIds:
+            [
+                "admin-dev-1of1",
+                "admin-prod-1of1",
+                "dkg-dev-3of5",
+                "dkg-prod-3of5",
+            ],
+            approvalStatus: ProtocolPackageApprovalStatus.DraftPrivate,
+            isLatestForCompatibleProfiles: true,
+            specAccessLocations:
+            [
+                ElectionModelFactory.CreateProtocolPackageAccessLocation(
+                    ProtocolPackageAccessLocationKind.PublicWebsite,
+                    "Integration test protocol specification package",
+                    "https://tests.hushnetwork.local/protocol-omega/hushvoting-v1/v1.2.0/spec.zip",
+                    Hash('d')),
+            ],
+            proofAccessLocations:
+            [
+                ElectionModelFactory.CreateProtocolPackageAccessLocation(
+                    ProtocolPackageAccessLocationKind.PublicWebsite,
+                    "Integration test protocol proof package",
+                    "https://tests.hushnetwork.local/protocol-omega/hushvoting-v1/v1.2.0/proof.zip",
+                    Hash('e')),
+            ],
+            externalReviewStatus: ProtocolPackageExternalReviewStatus.NotReviewed,
+            approvedAt: new DateTime(2026, 5, 5, 0, 0, 0, DateTimeKind.Utc));
+
+        File.WriteAllText(
+            _protocolPackageCatalogPath,
+            JsonSerializer.Serialize(
+                new[] { catalogEntry },
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                {
+                    WriteIndented = true,
+                }));
+    }
+
+    private static string Hash(char seed) => new(seed, 64);
 }

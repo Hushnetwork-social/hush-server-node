@@ -16,13 +16,13 @@ public sealed class ProtocolPackageBindingService
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(election);
 
-        var latestCatalogEntry = await repository.GetLatestApprovedProtocolPackageCatalogEntryAsync(election.SelectedProfileId);
+        var latestCatalogEntry = await repository.GetLatestProtocolPackageCatalogEntryAsync(election.SelectedProfileId);
         if (latestCatalogEntry is null)
         {
             return null;
         }
 
-        var binding = ElectionModelFactory.CreateProtocolPackageBindingFromCatalog(
+        var binding = CreateCurrentBindingFromCatalog(
             election.ElectionId,
             latestCatalogEntry,
             election.SelectedProfileId,
@@ -61,7 +61,7 @@ public sealed class ProtocolPackageBindingService
             return incompatible;
         }
 
-        var latestCatalogEntry = await repository.GetLatestApprovedProtocolPackageCatalogEntryAsync(updatedElection.SelectedProfileId);
+        var latestCatalogEntry = await repository.GetLatestProtocolPackageCatalogEntryAsync(updatedElection.SelectedProfileId);
         if (latestCatalogEntry is not null &&
             !BindingMatchesCatalog(binding, latestCatalogEntry) &&
             binding.Status != ProtocolPackageBindingStatus.Stale)
@@ -102,17 +102,17 @@ public sealed class ProtocolPackageBindingService
                 "Only the owner can refresh protocol package refs.");
         }
 
-        var latestCatalogEntry = await repository.GetLatestApprovedProtocolPackageCatalogEntryAsync(election.SelectedProfileId);
+        var latestCatalogEntry = await repository.GetLatestProtocolPackageCatalogEntryAsync(election.SelectedProfileId);
         if (latestCatalogEntry is null)
         {
             return ProtocolPackageBindingRefreshOutcome.Failure(
                 ElectionCommandErrorCode.ValidationFailed,
-                $"No approved Protocol Omega package is available for selected profile {election.SelectedProfileId}.");
+                $"No Protocol Omega package is available for selected profile {election.SelectedProfileId}.");
         }
 
         var current = await repository.GetLatestProtocolPackageBindingAsync(election.ElectionId);
         var refreshed = current is null
-            ? ElectionModelFactory.CreateProtocolPackageBindingFromCatalog(
+            ? CreateCurrentBindingFromCatalog(
                 election.ElectionId,
                 latestCatalogEntry,
                 election.SelectedProfileId,
@@ -131,7 +131,10 @@ public sealed class ProtocolPackageBindingService
                 ProtocolPackageBindingSource.OwnerRefresh,
                 sourceTransactionId,
                 sourceBlockHeight,
-                sourceBlockId);
+                sourceBlockId) with
+            {
+                Status = ProtocolPackageBindingStatus.Latest,
+            };
 
         await repository.SaveProtocolPackageBindingAsync(refreshed);
         return ProtocolPackageBindingRefreshOutcome.Success(refreshed);
@@ -150,7 +153,7 @@ public sealed class ProtocolPackageBindingService
             return ProtocolPackageBindingOpenValidation.NotReady(
                 ProtocolPackageBindingStatus.Missing,
                 null,
-                "Latest approved Protocol Omega package refs are missing. Refresh the protocol package binding before opening the election.");
+                "Latest Protocol Omega package refs are missing. Refresh the protocol package binding before opening the election.");
         }
 
         if (!string.Equals(binding.SelectedProfileId, election.SelectedProfileId, StringComparison.Ordinal))
@@ -161,13 +164,13 @@ public sealed class ProtocolPackageBindingService
                 "Protocol Omega package refs are incompatible with the selected circuit/profile. Refresh the protocol package binding before opening the election.");
         }
 
-        var latestCatalogEntry = await repository.GetLatestApprovedProtocolPackageCatalogEntryAsync(election.SelectedProfileId);
+        var latestCatalogEntry = await repository.GetLatestProtocolPackageCatalogEntryAsync(election.SelectedProfileId);
         if (latestCatalogEntry is null)
         {
             return ProtocolPackageBindingOpenValidation.NotReady(
                 ProtocolPackageBindingStatus.Missing,
                 binding,
-                $"No approved Protocol Omega package is available for selected profile {election.SelectedProfileId}.");
+                $"No Protocol Omega package is available for selected profile {election.SelectedProfileId}.");
         }
 
         if (!BindingMatchesCatalog(binding, latestCatalogEntry))
@@ -175,7 +178,7 @@ public sealed class ProtocolPackageBindingService
             return ProtocolPackageBindingOpenValidation.NotReady(
                 ProtocolPackageBindingStatus.Stale,
                 binding,
-                "Protocol Omega package refs are stale. Refresh to the latest approved compatible package before opening the election.");
+                "Protocol Omega package refs are stale. Refresh to the latest compatible package before opening the election.");
         }
 
         if (binding.Status != ProtocolPackageBindingStatus.Latest)
@@ -183,7 +186,7 @@ public sealed class ProtocolPackageBindingService
             return ProtocolPackageBindingOpenValidation.NotReady(
                 binding.Status,
                 binding,
-                $"Protocol Omega package refs are {binding.Status}. Refresh to the latest approved compatible package before opening the election.");
+                $"Protocol Omega package refs are {binding.Status}. Refresh to the latest compatible package before opening the election.");
         }
 
         return ProtocolPackageBindingOpenValidation.Ready(binding);
@@ -214,13 +217,39 @@ public sealed class ProtocolPackageBindingService
     private static bool BindingMatchesCatalog(
         ProtocolPackageBindingRecord binding,
         ApprovedProtocolPackageCatalogEntryRecord catalogEntry) =>
-        catalogEntry.IsApprovedForElectionOpen &&
+        catalogEntry.ApprovalStatus != ProtocolPackageApprovalStatus.Retired &&
         catalogEntry.IsCompatibleWithProfile(binding.SelectedProfileId) &&
         string.Equals(binding.PackageId, catalogEntry.PackageId, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(binding.PackageVersion, catalogEntry.PackageVersion, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(binding.SpecPackageHash, catalogEntry.SpecPackageHash, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(binding.ProofPackageHash, catalogEntry.ProofPackageHash, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(binding.ReleaseManifestHash, catalogEntry.ReleaseManifestHash, StringComparison.OrdinalIgnoreCase);
+
+    private static ProtocolPackageBindingRecord CreateCurrentBindingFromCatalog(
+        ElectionId electionId,
+        ApprovedProtocolPackageCatalogEntryRecord catalogEntry,
+        string selectedProfileId,
+        int draftRevision,
+        string boundByPublicAddress,
+        DateTime? boundAt = null,
+        ProtocolPackageBindingSource source = ProtocolPackageBindingSource.CatalogSelection,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null) =>
+        ElectionModelFactory.CreateProtocolPackageBindingFromCatalog(
+            electionId,
+            catalogEntry,
+            selectedProfileId,
+            draftRevision,
+            boundByPublicAddress,
+            boundAt,
+            source,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId) with
+        {
+            Status = ProtocolPackageBindingStatus.Latest,
+        };
 }
 
 public sealed record ProtocolPackageBindingOpenValidation(

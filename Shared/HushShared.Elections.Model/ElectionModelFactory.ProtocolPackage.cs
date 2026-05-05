@@ -131,7 +131,7 @@ public static partial class ElectionModelFactory
             catalogEntry.SpecAccessLocations,
             catalogEntry.ProofAccessLocations,
             catalogEntry.ApprovalStatus,
-            catalogEntry.IsApprovedForElectionOpen
+            catalogEntry.IsLatestForCompatibleProfiles
                 ? ProtocolPackageBindingStatus.Latest
                 : ProtocolPackageBindingStatus.Stale,
             source,

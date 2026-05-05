@@ -132,6 +132,24 @@ public class ProtocolPackageRecordTests
     }
 
     [Fact]
+    public void CreateProtocolPackageBindingFromCatalog_WithDraftCurrentPackage_KeepsRefsUsableAndStatusVisible()
+    {
+        var catalogEntry = CreateCatalogEntry(ProtocolPackageApprovalStatus.DraftPrivate);
+
+        var binding = ElectionModelFactory.CreateProtocolPackageBindingFromCatalog(
+            ElectionId.NewElectionId,
+            catalogEntry,
+            selectedProfileId: "organizational_remote_voting_trustee_threshold_v1",
+            draftRevision: 3,
+            boundByPublicAddress: "owner-address");
+
+        catalogEntry.IsApprovedForElectionOpen.Should().BeFalse();
+        binding.PackageApprovalStatus.Should().Be(ProtocolPackageApprovalStatus.DraftPrivate);
+        binding.Status.Should().Be(ProtocolPackageBindingStatus.Latest);
+        binding.BlocksElectionOpen.Should().BeFalse();
+    }
+
+    [Fact]
     public void CreateProtocolPackageBindingFromCatalog_WithIncompatibleProfile_ShouldThrow()
     {
         var catalogEntry = CreateCatalogEntry();
@@ -231,7 +249,9 @@ public class ProtocolPackageRecordTests
             .And.ParamName.Should().Be("Source");
     }
 
-    private static ApprovedProtocolPackageCatalogEntryRecord CreateCatalogEntry() =>
+    private static ApprovedProtocolPackageCatalogEntryRecord CreateCatalogEntry(
+        ProtocolPackageApprovalStatus approvalStatus = ProtocolPackageApprovalStatus.ApprovedInternal,
+        bool isLatestForCompatibleProfiles = true) =>
         ElectionModelFactory.CreateApprovedProtocolPackageCatalogEntry(
             packageId: "omega-hushvoting-v1",
             packageVersion: "v1.0.0",
@@ -242,8 +262,8 @@ public class ProtocolPackageRecordTests
             [
                 "organizational_remote_voting_trustee_threshold_v1",
             ],
-            approvalStatus: ProtocolPackageApprovalStatus.ApprovedInternal,
-            isLatestForCompatibleProfiles: true,
+            approvalStatus: approvalStatus,
+            isLatestForCompatibleProfiles: isLatestForCompatibleProfiles,
             specAccessLocations:
             [
                 CreateAccessLocation(Hash('d')),

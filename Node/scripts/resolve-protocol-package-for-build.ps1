@@ -432,7 +432,7 @@ function Write-BuildCatalog {
     $entry = [ordered]@{
         approvalStatus = $approvalStatus
         approvedAt = $Manifest.releasedAt
-        isLatestForCompatibleProfiles = $isApproved
+        isLatestForCompatibleProfiles = $true
         externalReviewStatus = $Manifest.externalReviewStatus
         packageId = $Manifest.packageId
         packageVersion = $Manifest.packageVersion
@@ -481,10 +481,12 @@ function Test-ResolvedOutputMatchesCandidate {
     )
 
     $metadataPath = Join-Path $ResolvedOutputRoot "SelectedProtocolPackage.json"
+    $catalogPath = Join-Path $ResolvedOutputRoot "ApprovedProtocolPackageCatalog.json"
     $versionRoot = Join-Path $ResolvedOutputRoot $Candidate.Version.Name
     $manifestPath = Join-Path $versionRoot "ProtocolOmegaPackageManifest.json"
 
     if (-not (Test-Path -LiteralPath $metadataPath) -or
+        -not (Test-Path -LiteralPath $catalogPath) -or
         -not (Test-Path -LiteralPath $versionRoot) -or
         -not (Test-Path -LiteralPath $manifestPath)) {
         return $false
@@ -492,8 +494,22 @@ function Test-ResolvedOutputMatchesCandidate {
 
     try {
         $metadata = Read-JsonFile $metadataPath
+        $catalog = @(Read-JsonFile $catalogPath)
     }
     catch {
+        return $false
+    }
+
+    $catalogEntry = @($catalog | Where-Object {
+        $_.packageId -eq $Candidate.Manifest.packageId -and
+        $_.packageVersion -eq $Candidate.Manifest.packageVersion
+    } | Select-Object -First 1)
+
+    if ($catalogEntry.Count -eq 0 -or
+        $catalogEntry[0].isLatestForCompatibleProfiles -ne $true -or
+        $catalogEntry[0].specPackageHash -ne $Candidate.Manifest.specPackageHash -or
+        $catalogEntry[0].proofPackageHash -ne $Candidate.Manifest.proofPackageHash -or
+        $catalogEntry[0].releaseManifestHash -ne $Candidate.Manifest.releaseManifestHash) {
         return $false
     }
 

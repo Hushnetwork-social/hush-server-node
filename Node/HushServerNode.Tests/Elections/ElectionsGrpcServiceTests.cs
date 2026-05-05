@@ -254,7 +254,7 @@ public class ElectionsGrpcServiceTests
                 protocolPackageValidation: Domain.ProtocolPackageBindingOpenValidation.NotReady(
                     ProtocolPackageBindingStatus.Missing,
                     null,
-                    "Latest approved Protocol Omega package refs are missing.")));
+                    "Latest Protocol Omega package refs are missing.")));
 
         var sut = mocker.CreateInstance<ElectionsGrpcService>();
         var request = new GetElectionOpenReadinessRequest

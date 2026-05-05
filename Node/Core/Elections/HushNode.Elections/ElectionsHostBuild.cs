@@ -20,11 +20,13 @@ public static class ElectionsHostBuild
         builder.ConfigureServices((hostContext, services) =>
         {
             services.AddSingleton(CreateCeremonyOptions(hostContext.Configuration));
+            services.AddSingleton(CreateProtocolPackageCatalogOptions(hostContext.Configuration));
             services.AddSingleton(CreateBallotPublicationOptions(hostContext.Configuration));
             services.AddSingleton(CreateEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreateAdminOnlyProtectedTallyEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreateCloseCountingExecutorEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton<IBootstrapper, ElectionCeremonyProfileRegistryBootstrapper>();
+            services.AddSingleton<IBootstrapper, ProtocolPackageCatalogBootstrapper>();
             services.AddSingleton<IBootstrapper, ElectionBallotPublicationBootstrapper>();
             services.RegisterElectionsStorageServices(hostContext);
             services.RegisterElectionsCoreServices();
@@ -119,6 +121,15 @@ public static class ElectionsHostBuild
             RequiredRolloutVersion: configuration.GetValue(
                 "Elections:Ceremony:RequiredRolloutVersion",
                 defaultValue: ElectionCeremonyProfileCatalog.ExpectedVersion)!);
+
+    private static ProtocolPackageCatalogOptions CreateProtocolPackageCatalogOptions(IConfiguration configuration) =>
+        new(
+            ApprovedCatalogRelativePath: configuration.GetValue(
+                "Elections:ProtocolPackages:ApprovedCatalogRelativePath",
+                defaultValue: ProtocolPackageCatalog.DefaultApprovedCatalogRelativePath)!,
+            FailOnMissingCatalog: configuration.GetValue(
+                "Elections:ProtocolPackages:FailOnMissingCatalog",
+                defaultValue: false));
 
     private static ElectionBallotPublicationOptions CreateBallotPublicationOptions(IConfiguration configuration) =>
         new(
