@@ -12,94 +12,18 @@ public class HushVotingPackageVerifierTamperTests
     public static TheoryData<string, string, string, VerificationCheckStatus, VerificationOverallStatus, int> TamperFixtures =>
         new()
         {
-            {
-                "tamper-missing-artifact",
-                VerificationProfileIds.DevelopmentCurrentV1,
-                VerificationResultCodes.PackageManifestMissingArtifact,
-                VerificationCheckStatus.Fail,
-                VerificationOverallStatus.Fail,
-                1
-            },
-            {
-                "tamper-artifact-hash",
-                VerificationProfileIds.DevelopmentCurrentV1,
-                VerificationResultCodes.PackageManifestArtifactHashMismatch,
-                VerificationCheckStatus.Fail,
-                VerificationOverallStatus.Fail,
-                1
-            },
-            {
-                "tamper-wrong-election-id",
-                VerificationProfileIds.DevelopmentCurrentV1,
-                VerificationResultCodes.ElectionIdMismatch,
-                VerificationCheckStatus.Fail,
-                VerificationOverallStatus.Fail,
-                1
-            },
-            {
-                "tamper-duplicate-nullifier",
-                VerificationProfileIds.DevelopmentCurrentV1,
-                VerificationResultCodes.AcceptedBallotDuplicateNullifier,
-                VerificationCheckStatus.Fail,
-                VerificationOverallStatus.Fail,
-                1
-            },
-            {
-                "tamper-accepted-set-hash",
-                VerificationProfileIds.DevelopmentCurrentV1,
-                VerificationResultCodes.AcceptedBallotInventoryHashMismatch,
-                VerificationCheckStatus.Fail,
-                VerificationOverallStatus.Fail,
-                1
-            },
-            {
-                "tamper-published-stream-sequence",
-                VerificationProfileIds.DevelopmentCurrentV1,
-                VerificationResultCodes.PublishedBallotSequenceInvalid,
-                VerificationCheckStatus.Fail,
-                VerificationOverallStatus.Fail,
-                1
-            },
-            {
-                "tamper-published-stream-hash",
-                VerificationProfileIds.DevelopmentCurrentV1,
-                VerificationResultCodes.PublishedBallotStreamHashMismatch,
-                VerificationCheckStatus.Fail,
-                VerificationOverallStatus.Fail,
-                1
-            },
-            {
-                "tamper-named-voter-in-public-artifact",
-                VerificationProfileIds.DevelopmentCurrentV1,
-                VerificationResultCodes.PublicRestrictedFieldLeak,
-                VerificationCheckStatus.Fail,
-                VerificationOverallStatus.Fail,
-                1
-            },
-            {
-                "tamper-raw-trustee-share",
-                VerificationProfileIds.DevelopmentCurrentV1,
-                VerificationResultCodes.PublicRestrictedFieldLeak,
-                VerificationCheckStatus.Fail,
-                VerificationOverallStatus.Fail,
-                1
-            },
-            {
-                "missing-sp07-development-warning",
-                VerificationProfileIds.DevelopmentCurrentV1,
-                VerificationResultCodes.PublicationProofPendingFeat117,
-                VerificationCheckStatus.Warn,
-                VerificationOverallStatus.Warn,
-                0
-            },
-            {
-                "missing-sp07-high-assurance-fail-closed",
-                VerificationProfileIds.HighAssuranceV1,
-                VerificationResultCodes.PublicationProofPendingFeat117,
-                VerificationCheckStatus.Fail,
-                VerificationOverallStatus.Fail,
-                1
-            },
+            { "tamper-missing-artifact", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PackageManifestMissingArtifact, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-artifact-hash", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PackageManifestArtifactHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-wrong-election-id", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.ElectionIdMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-malformed-election-id", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PackageUnparseable, VerificationCheckStatus.Fail, VerificationOverallStatus.NotAvailable, 2 },
+            { "tamper-duplicate-nullifier", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.AcceptedBallotDuplicateNullifier, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-accepted-set-hash", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.AcceptedBallotInventoryHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-published-stream-sequence", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublishedBallotSequenceInvalid, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-published-stream-hash", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublishedBallotStreamHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-named-voter-in-public-artifact", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicRestrictedFieldLeak, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-raw-trustee-share", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicRestrictedFieldLeak, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "missing-sp07-development-warning", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicationProofPendingFeat117, VerificationCheckStatus.Warn, VerificationOverallStatus.Warn, 0 },
+            { "missing-sp07-high-assurance-fail-closed", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.PublicationProofPendingFeat117, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
         };
 
     [Theory]
@@ -161,6 +85,10 @@ public class HushVotingPackageVerifierTamperTests
                     packagePath,
                     VerificationPackageFileNames.AcceptedBallotSet,
                     accepted with { ElectionId = Guid.NewGuid().ToString() });
+                return;
+
+            case "tamper-malformed-election-id":
+                await ReplaceElectionIdsAndRefreshManifestAsync(packagePath, "not-a-guid");
                 return;
 
             case "tamper-duplicate-nullifier":
@@ -257,6 +185,70 @@ public class HushVotingPackageVerifierTamperTests
         await File.WriteAllTextAsync(
             ResolvePackagePath(packagePath, relativePath),
             JsonSerializer.Serialize(value, VerificationJson.Options));
+
+    private static async Task ReplaceElectionIdsAndRefreshManifestAsync(
+        string packagePath,
+        string electionId)
+    {
+        var manifest = await ReadArtifactAsync<AuditPackageManifestRecord>(
+            packagePath,
+            VerificationPackageFileNames.AuditPackageManifest);
+        var inputManifest = await ReadArtifactAsync<VerifierInputManifestRecord>(
+            packagePath,
+            VerificationPackageFileNames.VerifierInputManifest);
+        var electionRecord = await ReadArtifactAsync<ElectionRecordReferenceRecord>(
+            packagePath,
+            VerificationPackageFileNames.ElectionRecord);
+        var accepted = await ReadArtifactAsync<AcceptedBallotSetArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.AcceptedBallotSet);
+        var published = await ReadArtifactAsync<PublishedBallotStreamArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.PublishedBallotStream);
+        var tallyReplay = await ReadArtifactAsync<TallyReplayArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.TallyReplay);
+        var trusteeRelease = await ReadArtifactAsync<TrusteeReleaseEvidenceArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.TrusteeReleaseEvidence);
+        var resultBinding = await ReadArtifactAsync<ResultBindingArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.ResultBinding);
+
+        await WriteArtifactAsync(packagePath, VerificationPackageFileNames.VerifierInputManifest, inputManifest with { ElectionId = electionId });
+        await WriteArtifactAsync(packagePath, VerificationPackageFileNames.ElectionRecord, electionRecord with { ElectionId = electionId });
+        await WriteArtifactAsync(packagePath, VerificationPackageFileNames.AcceptedBallotSet, accepted with { ElectionId = electionId });
+        await WriteArtifactAsync(packagePath, VerificationPackageFileNames.PublishedBallotStream, published with { ElectionId = electionId });
+        await WriteArtifactAsync(packagePath, VerificationPackageFileNames.TallyReplay, tallyReplay with { ElectionId = electionId });
+        await WriteArtifactAsync(packagePath, VerificationPackageFileNames.TrusteeReleaseEvidence, trusteeRelease with { ElectionId = electionId });
+        await WriteArtifactAsync(packagePath, VerificationPackageFileNames.ResultBinding, resultBinding with { ElectionId = electionId });
+        await WriteArtifactAsync(
+            packagePath,
+            VerificationPackageFileNames.AuditPackageManifest,
+            manifest with
+            {
+                ElectionId = electionId,
+                Entries = await RefreshManifestEntriesAsync(packagePath, manifest.Entries),
+            });
+    }
+
+    private static async Task<IReadOnlyList<AuditPackageManifestEntryRecord>> RefreshManifestEntriesAsync(
+        string packagePath,
+        IReadOnlyList<AuditPackageManifestEntryRecord> entries)
+    {
+        var refreshed = new List<AuditPackageManifestEntryRecord>();
+        foreach (var entry in entries)
+        {
+            var bytes = await File.ReadAllBytesAsync(ResolvePackagePath(packagePath, entry.Path));
+            refreshed.Add(entry with
+            {
+                Sha256Hash = VerificationCanonicalHash.ComputeManifestFileSha256(bytes),
+                SizeBytes = bytes.Length,
+            });
+        }
+
+        return refreshed;
+    }
 
     private static async Task AddJsonPropertyAsync(
         string packagePath,

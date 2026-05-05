@@ -107,19 +107,11 @@ public sealed partial class HushVotingPackageVerifier
         }
         catch (JsonException exception)
         {
-            var output = CreateOutput(
-                packageId: "unparseable",
-                electionId: "unparseable",
-                request.VerifierProfileId,
-                VerificationOverallStatus.NotAvailable,
-                [
-                    CreateResult(
-                        "VFY-PKG-002",
-                        VerificationCheckStatus.Fail,
-                        VerificationResultCodes.PackageUnparseable,
-                        exception.Message),
-                ]);
-            return await WriteOutputAsync(request, output, cancellationToken);
+            return await WriteUnparseableOutputAsync(request, exception.Message, cancellationToken);
+        }
+        catch (FormatException exception)
+        {
+            return await WriteUnparseableOutputAsync(request, exception.Message, cancellationToken);
         }
         catch (IOException exception)
         {
@@ -137,6 +129,26 @@ public sealed partial class HushVotingPackageVerifier
                 ]);
             return await WriteOutputAsync(request, output, cancellationToken);
         }
+    }
+
+    private static Task<HushVotingPackageVerificationResult> WriteUnparseableOutputAsync(
+        HushVotingPackageVerificationRequest request,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        var output = CreateOutput(
+            packageId: "unparseable",
+            electionId: "unparseable",
+            request.VerifierProfileId,
+            VerificationOverallStatus.NotAvailable,
+            [
+                CreateResult(
+                    "VFY-PKG-002",
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.PackageUnparseable,
+                    message),
+            ]);
+        return WriteOutputAsync(request, output, cancellationToken);
     }
 
     public static bool IsLiveDependency(string? packagePath)
