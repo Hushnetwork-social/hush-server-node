@@ -213,6 +213,13 @@ internal static partial class ElectionGrpcMappings
             TallyReadyArtifactId = election.TallyReadyArtifactId?.ToString() ?? string.Empty,
             UnofficialResultArtifactId = election.UnofficialResultArtifactId?.ToString() ?? string.Empty,
             OfficialResultArtifactId = election.OfficialResultArtifactId?.ToString() ?? string.Empty,
+            BallotDefinitionVersion = election.BallotDefinitionVersion ?? 0,
+            BallotDefinitionHash = ToByteString(election.BallotDefinitionHash),
+            BallotDefinitionMutationPolicy =
+                (BallotDefinitionMutationPolicyProto)(int)(election.BallotDefinitionMutationPolicy
+                    ?? ElectionBallotDefinitionMutationPolicy.ImmutableAfterOpen),
+            HasBallotDefinitionSeal = election.BallotDefinitionVersion.HasValue &&
+                election.BallotDefinitionHash is { Length: > 0 },
         };
 
         view.ApprovedClientApplications.AddRange(election.ApprovedClientApplications.Select(x => x.ToProto()));
@@ -247,6 +254,12 @@ internal static partial class ElectionGrpcMappings
         if (election.VoteAcceptanceLockedAt.HasValue)
         {
             view.VoteAcceptanceLockedAt = ToTimestamp(election.VoteAcceptanceLockedAt.Value);
+        }
+
+        if (election.BallotDefinitionSealedAt.HasValue)
+        {
+            view.BallotDefinitionSealedAt = ToTimestamp(election.BallotDefinitionSealedAt.Value);
+            view.HasBallotDefinitionSealedAt = true;
         }
 
         return view;

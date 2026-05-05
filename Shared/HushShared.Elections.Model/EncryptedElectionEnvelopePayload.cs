@@ -50,6 +50,25 @@ public record RegisterElectionVotingCommitmentActionPayload(
     string ActorPublicAddress,
     string CommitmentHash);
 
+public record RegisterPreparedBallotCommitmentActionPayload(
+    string ActorPublicAddress,
+    Guid PreparedBallotId,
+    string PreparedBallotHash,
+    int BallotDefinitionVersion,
+    byte[] BallotDefinitionHash,
+    string CeremonyProfileId,
+    string ProofStatementId,
+    DateTime? PrecommittedAt = null);
+
+public record SpoilPreparedBallotActionPayload(
+    string ActorPublicAddress,
+    Guid PreparedBallotId,
+    string PreparedBallotHash,
+    string SpoiledTranscriptHash,
+    string SpoilRecordHash,
+    string LocalVerifierVersion,
+    DateTime? SpoiledAt = null);
+
 public record AcceptElectionBallotCastActionPayload(
     string ActorPublicAddress,
     string IdempotencyKey,
@@ -60,7 +79,13 @@ public record AcceptElectionBallotCastActionPayload(
     byte[] EligibleSetHash,
     Guid CeremonyVersionId,
     string DkgProfileId,
-    string TallyPublicKeyFingerprint);
+    string TallyPublicKeyFingerprint,
+    Guid? PreparedBallotId = null,
+    string? PreparedBallotHash = null,
+    string? ReceiptCommitment = null,
+    string? ReceiptCommitmentScheme = null,
+    int? BallotDefinitionVersion = null,
+    byte[]? BallotDefinitionHash = null);
 
 public record InviteElectionTrusteeActionPayload(
     Guid InvitationId,
@@ -222,6 +247,8 @@ public static class EncryptedElectionEnvelopeActionTypes
     public const string ClaimRosterEntry = "claim_roster_entry";
     public const string ActivateRosterEntry = "activate_roster_entry";
     public const string RegisterVotingCommitment = "register_voting_commitment";
+    public const string RegisterPreparedBallotCommitment = "register_prepared_ballot_commitment";
+    public const string SpoilPreparedBallot = "spoil_prepared_ballot";
     public const string AcceptBallotCast = "accept_ballot_cast";
     public const string InviteTrustee = "invite_trustee";
     public const string CreateReportAccessGrant = "create_report_access_grant";

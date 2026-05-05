@@ -41,6 +41,11 @@ public static class VerificationResultCodes
     public const string PublicationProofEvidencePending = "publication_proof_evidence_pending";
     public const string ReleaseIntegrityEvidencePending = "release_integrity_evidence_pending";
     public const string ChallengeSpoilEvidencePending = "challenge_spoil_evidence_pending";
+    public const string ChallengeSpoilEvidenceValid = "challenge_spoil_evidence_valid";
+    public const string ChallengeSpoilBallotDefinitionMismatch = "challenge_spoil_ballot_definition_mismatch";
+    public const string ChallengeSpoilCountMismatch = "challenge_spoil_count_mismatch";
+    public const string ChallengeSpoilReceiptMismatch = "challenge_spoil_receipt_mismatch";
+    public const string ChallengeSpoilRestrictedEvidenceMismatch = "challenge_spoil_restricted_evidence_mismatch";
 }
 
 public static class VerificationExitCodes

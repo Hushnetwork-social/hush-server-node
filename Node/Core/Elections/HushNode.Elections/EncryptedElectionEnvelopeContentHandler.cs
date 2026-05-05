@@ -176,6 +176,10 @@ public class EncryptedElectionEnvelopeContentHandler(
                 IsValidActivateRosterEntryAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.RegisterVotingCommitment =>
                 IsValidRegisterVotingCommitmentAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.RegisterPreparedBallotCommitment =>
+                IsValidRegisterPreparedBallotCommitmentAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.SpoilPreparedBallot =>
+                IsValidSpoilPreparedBallotAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.AcceptBallotCast =>
                 IsValidAcceptBallotCastAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.InviteTrustee =>
@@ -529,6 +533,87 @@ public class EncryptedElectionEnvelopeContentHandler(
                 transactionId,
                 "election_commitment_already_registered",
                 "A voting commitment is already registered for this voter in this election.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool IsValidRegisterPreparedBallotCommitmentAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
+        var registerAction = decryptedEnvelope.DeserializeAction<RegisterPreparedBallotCommitmentActionPayload>();
+        if (registerAction is null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_prepared_ballot_validation_failed",
+                "Prepared ballot commitment payload could not be read.");
+            return false;
+        }
+
+        if (!HasMatchingActor(signatory, registerAction.ActorPublicAddress))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_prepared_ballot_actor_mismatch",
+                "Prepared ballot commitment validation requires the authenticated voter to match the signed actor.");
+            return false;
+        }
+
+        if (registerAction.PreparedBallotId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(registerAction.PreparedBallotHash) ||
+            registerAction.BallotDefinitionVersion <= 0 ||
+            registerAction.BallotDefinitionHash is not { Length: > 0 } ||
+            !string.Equals(registerAction.CeremonyProfileId, ElectionSp04ProfileIds.ChallengeSpoilV1, StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(registerAction.ProofStatementId))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_prepared_ballot_validation_failed",
+                "The prepared ballot commitment request is missing one or more required SP-04 fields.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool IsValidSpoilPreparedBallotAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
+        var spoilAction = decryptedEnvelope.DeserializeAction<SpoilPreparedBallotActionPayload>();
+        if (spoilAction is null)
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_spoil_prepared_ballot_validation_failed",
+                "Prepared ballot spoil payload could not be read.");
+            return false;
+        }
+
+        if (!HasMatchingActor(signatory, spoilAction.ActorPublicAddress))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_spoil_prepared_ballot_actor_mismatch",
+                "Prepared ballot spoil validation requires the authenticated voter to match the signed actor.");
+            return false;
+        }
+
+        if (spoilAction.PreparedBallotId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(spoilAction.PreparedBallotHash) ||
+            string.IsNullOrWhiteSpace(spoilAction.SpoiledTranscriptHash) ||
+            string.IsNullOrWhiteSpace(spoilAction.SpoilRecordHash) ||
+            string.IsNullOrWhiteSpace(spoilAction.LocalVerifierVersion))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_spoil_prepared_ballot_validation_failed",
+                "The prepared ballot spoil request is missing one or more required SP-04 fields.");
             return false;
         }
 

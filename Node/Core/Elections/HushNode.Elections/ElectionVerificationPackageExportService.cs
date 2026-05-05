@@ -28,6 +28,8 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
         AddJson(files, VerificationPackageFileNames.TallyReplay, BuildTallyReplay(request), VerificationArtifactVisibility.Public);
         AddJson(files, VerificationPackageFileNames.TrusteeReleaseEvidence, BuildTrusteeReleaseEvidence(request), VerificationArtifactVisibility.Public);
         AddJson(files, VerificationPackageFileNames.ResultBinding, BuildResultBinding(request), VerificationArtifactVisibility.Public);
+        AddJson(files, VerificationPackageFileNames.Sp04Evidence, BuildSp04Evidence(request), VerificationArtifactVisibility.Public);
+        AddJson(files, VerificationPackageFileNames.Sp04ReceiptCommitments, BuildSp04ReceiptCommitments(request), VerificationArtifactVisibility.Public);
 
         if (request.PackageView == VerificationPackageView.RestrictedOwnerAuditor)
         {
@@ -35,6 +37,21 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
                 files,
                 VerificationPackageFileNames.RestrictedRosterCheckoff,
                 BuildRestrictedRosterCheckoff(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp04CeremonyRecords,
+                BuildRestrictedSp04CeremonyRecords(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp04PreparedBallotCommitments,
+                BuildRestrictedSp04PreparedBallots(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp04SpoilMarkers,
+                BuildRestrictedSp04SpoilMarkers(request),
                 VerificationArtifactVisibility.Restricted);
         }
 
@@ -116,6 +133,13 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
             request.ProtocolPackageBinding.Status != ProtocolPackageBindingStatus.Sealed)
         {
             return Failure(VerificationResultCodes.VerifierProfilePackageMismatch, "Sealed protocol package refs are required.");
+        }
+
+        if (request.Election.BallotDefinitionVersion is null ||
+            request.Election.BallotDefinitionHash is not { Length: > 0 } ||
+            request.Election.BallotDefinitionSealedAt is null)
+        {
+            return Failure(VerificationResultCodes.ChallengeSpoilEvidencePending, "A sealed ballot definition is required for SP-04 verification export.");
         }
 
         if (request.PackageView == VerificationPackageView.RestrictedOwnerAuditor &&

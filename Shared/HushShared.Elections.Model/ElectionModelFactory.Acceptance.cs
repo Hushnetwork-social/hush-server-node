@@ -35,7 +35,13 @@ public static partial class ElectionModelFactory
         string encryptedBallotPackage,
         string proofBundle,
         string ballotNullifier,
-        DateTime? acceptedAt = null)
+        DateTime? acceptedAt = null,
+        Guid? preparedBallotId = null,
+        string? preparedBallotHash = null,
+        string? receiptCommitment = null,
+        string? receiptCommitmentScheme = null,
+        int? ballotDefinitionVersion = null,
+        byte[]? ballotDefinitionHash = null)
     {
         return new ElectionAcceptedBallotRecord(
             Guid.NewGuid(),
@@ -43,7 +49,13 @@ public static partial class ElectionModelFactory
             ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(encryptedBallotPackage, nameof(encryptedBallotPackage)),
             ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(proofBundle, nameof(proofBundle)),
             ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(ballotNullifier, nameof(ballotNullifier)),
-            acceptedAt ?? DateTime.UtcNow);
+            acceptedAt ?? DateTime.UtcNow,
+            preparedBallotId,
+            preparedBallotHash,
+            receiptCommitment,
+            receiptCommitmentScheme,
+            ballotDefinitionVersion,
+            ballotDefinitionHash);
     }
 
     public static ElectionCastIdempotencyRecord CreateCastIdempotencyRecord(

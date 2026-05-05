@@ -18,6 +18,10 @@ public class ElectionVerificationPackageExportServiceTests
 
         result.Success.Should().BeTrue();
         result.Files.Select(x => x.RelativePath).Should().Contain(VerificationPackageFileNames.RootFiles);
+        result.Files.Select(x => x.RelativePath).Should().Contain([
+            VerificationPackageFileNames.Sp04Evidence,
+            VerificationPackageFileNames.Sp04ReceiptCommitments,
+        ]);
         result.Files.Should().NotContain(x => x.RelativePath.StartsWith("artifacts/restricted/", StringComparison.OrdinalIgnoreCase));
 
         var manifest = ReadFile<AuditPackageManifestRecord>(result, VerificationPackageFileNames.AuditPackageManifest);
@@ -51,6 +55,15 @@ public class ElectionVerificationPackageExportServiceTests
         result.Success.Should().BeTrue();
         result.Files.Should().Contain(x =>
             x.RelativePath == VerificationPackageFileNames.RestrictedRosterCheckoff &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp04CeremonyRecords &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp04PreparedBallotCommitments &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp04SpoilMarkers &&
             x.Visibility == VerificationArtifactVisibility.Restricted);
     }
 
@@ -118,10 +131,162 @@ public class ElectionVerificationPackageExportServiceTests
             ],
             officialResultVisibilityPolicy: OfficialResultVisibilityPolicy.PublicPlaintext);
 
+        var openedAt = DateTime.UtcNow.AddMinutes(-10);
+        var ballotDefinitionSeal = ElectionModelFactory.CreateBallotDefinitionSeal(
+            ElectionBallotDefinitionCanonicalizer.CurrentVersion,
+            ElectionBallotDefinitionCanonicalizer.ComputeHash(draftElection),
+            openedAt);
+        var sealedElection = draftElection with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = openedAt,
+            BallotDefinitionVersion = ballotDefinitionSeal.BallotDefinitionVersion,
+            BallotDefinitionHash = ballotDefinitionSeal.BallotDefinitionHash,
+            BallotDefinitionSealedAt = ballotDefinitionSeal.SealedAt,
+            BallotDefinitionMutationPolicy = ballotDefinitionSeal.MutationPolicy,
+        };
+
+        var voter1FinalPreparedId = Guid.NewGuid();
+        var voter2FinalPreparedId = Guid.NewGuid();
         var acceptedBallots = new[]
         {
-            ElectionModelFactory.CreateAcceptedBallotRecord(electionId, "ballot-a", "proof-a", "nullifier-a"),
-            ElectionModelFactory.CreateAcceptedBallotRecord(electionId, "ballot-b", "proof-b", "nullifier-b"),
+            ElectionModelFactory.CreateAcceptedBallotRecord(
+                electionId,
+                "ballot-a",
+                "proof-a",
+                "nullifier-a",
+                preparedBallotId: voter1FinalPreparedId,
+                preparedBallotHash: "prepared-final-a",
+                receiptCommitment: "receipt-a",
+                receiptCommitmentScheme: "sha256(receipt_secret|prepared_ballot_hash|accepted_ballot_id)",
+                ballotDefinitionVersion: ballotDefinitionSeal.BallotDefinitionVersion,
+                ballotDefinitionHash: ballotDefinitionSeal.BallotDefinitionHash),
+            ElectionModelFactory.CreateAcceptedBallotRecord(
+                electionId,
+                "ballot-b",
+                "proof-b",
+                "nullifier-b",
+                preparedBallotId: voter2FinalPreparedId,
+                preparedBallotHash: "prepared-final-b",
+                receiptCommitment: "receipt-b",
+                receiptCommitmentScheme: "sha256(receipt_secret|prepared_ballot_hash|accepted_ballot_id)",
+                ballotDefinitionVersion: ballotDefinitionSeal.BallotDefinitionVersion,
+                ballotDefinitionHash: ballotDefinitionSeal.BallotDefinitionHash),
+        };
+        var voter1SpoiledPreparedId = Guid.NewGuid();
+        var voter2SpoiledPreparedId = Guid.NewGuid();
+        var spoiledPreparedBallots = new[]
+        {
+            ElectionModelFactory.CreateSpoiledPreparedBallotRecord(
+                electionId,
+                voter1SpoiledPreparedId,
+                "prepared-spoiled-a",
+                "spoiled-transcript-a",
+                "spoil-record-a",
+                "local-verifier-v1",
+                openedAt.AddMinutes(2)),
+            ElectionModelFactory.CreateSpoiledPreparedBallotRecord(
+                electionId,
+                voter2SpoiledPreparedId,
+                "prepared-spoiled-b",
+                "spoiled-transcript-b",
+                "spoil-record-b",
+                "local-verifier-v1",
+                openedAt.AddMinutes(2)),
+        };
+        var preparedBallots = new[]
+        {
+            ElectionModelFactory.CreatePreparedBallotCommitmentRecord(
+                electionId,
+                "voter-1",
+                "actor-voter-1",
+                "prepared-spoiled-a",
+                ballotDefinitionSeal.BallotDefinitionVersion,
+                ballotDefinitionSeal.BallotDefinitionHash,
+                "sp04-proof",
+                openedAt.AddMinutes(1),
+                preparedBallotId: voter1SpoiledPreparedId) with
+            {
+                State = ElectionPreparedBallotState.Spoiled,
+                SpoilMarkerId = spoiledPreparedBallots[0].Id,
+                SpoiledAt = spoiledPreparedBallots[0].SpoiledAt,
+            },
+            ElectionModelFactory.CreatePreparedBallotCommitmentRecord(
+                electionId,
+                "voter-1",
+                "actor-voter-1",
+                "prepared-final-a",
+                ballotDefinitionSeal.BallotDefinitionVersion,
+                ballotDefinitionSeal.BallotDefinitionHash,
+                "sp04-proof",
+                openedAt.AddMinutes(3),
+                preparedBallotId: voter1FinalPreparedId) with
+            {
+                State = ElectionPreparedBallotState.Cast,
+                AcceptedBallotId = acceptedBallots[0].Id,
+                CastAt = openedAt.AddMinutes(4),
+            },
+            ElectionModelFactory.CreatePreparedBallotCommitmentRecord(
+                electionId,
+                "voter-2",
+                "actor-voter-2",
+                "prepared-spoiled-b",
+                ballotDefinitionSeal.BallotDefinitionVersion,
+                ballotDefinitionSeal.BallotDefinitionHash,
+                "sp04-proof",
+                openedAt.AddMinutes(1),
+                preparedBallotId: voter2SpoiledPreparedId) with
+            {
+                State = ElectionPreparedBallotState.Spoiled,
+                SpoilMarkerId = spoiledPreparedBallots[1].Id,
+                SpoiledAt = spoiledPreparedBallots[1].SpoiledAt,
+            },
+            ElectionModelFactory.CreatePreparedBallotCommitmentRecord(
+                electionId,
+                "voter-2",
+                "actor-voter-2",
+                "prepared-final-b",
+                ballotDefinitionSeal.BallotDefinitionVersion,
+                ballotDefinitionSeal.BallotDefinitionHash,
+                "sp04-proof",
+                openedAt.AddMinutes(3),
+                preparedBallotId: voter2FinalPreparedId) with
+            {
+                State = ElectionPreparedBallotState.Cast,
+                AcceptedBallotId = acceptedBallots[1].Id,
+                CastAt = openedAt.AddMinutes(4),
+            },
+        };
+        var ceremonies = new[]
+        {
+            ElectionModelFactory.CreateVoterCeremonyRecord(
+                electionId,
+                "voter-1",
+                "actor-voter-1",
+                ballotDefinitionSeal.BallotDefinitionVersion,
+                ballotDefinitionSeal.BallotDefinitionHash,
+                createdAt: openedAt.AddMinutes(1)) with
+            {
+                PreparedPackageCount = 2,
+                SpoiledPackageCount = 1,
+                FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
+                FinalAcceptedBallotId = acceptedBallots[0].Id,
+                LastUpdatedAt = openedAt.AddMinutes(4),
+            },
+            ElectionModelFactory.CreateVoterCeremonyRecord(
+                electionId,
+                "voter-2",
+                "actor-voter-2",
+                ballotDefinitionSeal.BallotDefinitionVersion,
+                ballotDefinitionSeal.BallotDefinitionHash,
+                createdAt: openedAt.AddMinutes(1)) with
+            {
+                PreparedPackageCount = 2,
+                SpoiledPackageCount = 1,
+                FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
+                FinalAcceptedBallotId = acceptedBallots[1].Id,
+                LastUpdatedAt = openedAt.AddMinutes(4),
+            },
         };
         var publishedBallots = new[]
         {
@@ -130,7 +295,7 @@ public class ElectionVerificationPackageExportServiceTests
         };
         var closeArtifact = ElectionModelFactory.CreateBoundaryArtifact(
             ElectionBoundaryArtifactType.Close,
-            draftElection,
+            sealedElection,
             recordedByPublicAddress: "owner-address",
             acceptedBallotCount: acceptedBallots.Length,
             acceptedBallotSetHash: VerificationCanonicalHash.ComputeAcceptedBallotInventoryHash(acceptedBallots),
@@ -141,7 +306,7 @@ public class ElectionVerificationPackageExportServiceTests
         var officialResultArtifactId = Guid.NewGuid();
         var unofficialResultArtifactId = Guid.NewGuid();
         var finalizeArtifactId = Guid.NewGuid();
-        var finalizedElection = draftElection with
+        var finalizedElection = sealedElection with
         {
             LifecycleState = ElectionLifecycleState.Finalized,
             ClosedAt = DateTime.UtcNow.AddMinutes(-5),
@@ -192,7 +357,8 @@ public class ElectionVerificationPackageExportServiceTests
             ReleaseEvidenceRecords: [],
             RosterEntries:
             [
-                CreateRosterEntry(electionId),
+                CreateRosterEntry(electionId, "voter-1", "actor-voter-1"),
+                CreateRosterEntry(electionId, "voter-2", "actor-voter-2"),
             ],
             ParticipationRecords:
             [
@@ -205,11 +371,23 @@ public class ElectionVerificationPackageExportServiceTests
                     LatestTransactionId: null,
                     LatestBlockHeight: null,
                     LatestBlockId: null),
+                new ElectionParticipationRecord(
+                    electionId,
+                    "voter-2",
+                    ElectionParticipationStatus.CountedAsVoted,
+                    DateTime.UtcNow,
+                    DateTime.UtcNow,
+                    LatestTransactionId: null,
+                    LatestBlockHeight: null,
+                    LatestBlockId: null),
             ],
             view,
             profileId,
             restrictedAccessAuthorized,
-            ExportedAt: DateTime.UnixEpoch);
+            ExportedAt: DateTime.UnixEpoch,
+            VoterCeremonyRecords: ceremonies,
+            PreparedBallotCommitments: preparedBallots,
+            SpoiledPreparedBallots: spoiledPreparedBallots);
     }
 
     private static ProtocolPackageBindingRecord CreateSealedProtocolBinding(
@@ -242,14 +420,17 @@ public class ElectionVerificationPackageExportServiceTests
             .SealAtOpen(DateTime.UtcNow, "owner-address");
     }
 
-    private static ElectionRosterEntryRecord CreateRosterEntry(ElectionId electionId) =>
+    private static ElectionRosterEntryRecord CreateRosterEntry(
+        ElectionId electionId,
+        string organizationVoterId,
+        string actorPublicAddress) =>
         new(
             electionId,
-            "voter-1",
+            organizationVoterId,
             ElectionRosterContactType.Email,
-            "voter@example.test",
+            $"{organizationVoterId}@example.test",
             ElectionVoterLinkStatus.Linked,
-            "actor-voter-1",
+            actorPublicAddress,
             DateTime.UtcNow,
             ElectionVotingRightStatus.Active,
             DateTime.UtcNow,

@@ -228,12 +228,22 @@ public static partial class ElectionModelFactory
         byte[]? finalEncryptedTallyHash = null,
         Guid? sourceTransactionId = null,
         long? sourceBlockHeight = null,
-        Guid? sourceBlockId = null)
+        Guid? sourceBlockId = null,
+        int? ballotDefinitionVersion = null,
+        byte[]? ballotDefinitionHash = null,
+        DateTime? ballotDefinitionSealedAt = null,
+        ElectionBallotDefinitionMutationPolicy? ballotDefinitionMutationPolicy = null)
     {
         if (string.IsNullOrWhiteSpace(recordedByPublicAddress))
         {
             throw new ArgumentException("Recorded-by public address is required.", nameof(recordedByPublicAddress));
         }
+
+        var resolvedBallotDefinitionVersion = ballotDefinitionVersion ?? election.BallotDefinitionVersion;
+        var resolvedBallotDefinitionHash = ballotDefinitionHash ?? election.BallotDefinitionHash;
+        var resolvedBallotDefinitionSealedAt = ballotDefinitionSealedAt ?? election.BallotDefinitionSealedAt;
+        var resolvedBallotDefinitionMutationPolicy =
+            ballotDefinitionMutationPolicy ?? election.BallotDefinitionMutationPolicy;
 
         return new ElectionBoundaryArtifactRecord(
             Guid.NewGuid(),
@@ -281,7 +291,11 @@ public static partial class ElectionModelFactory
             recordedByPublicAddress.Trim(),
             sourceTransactionId,
             sourceBlockHeight,
-            sourceBlockId);
+            sourceBlockId,
+            resolvedBallotDefinitionVersion,
+            CloneBytes(resolvedBallotDefinitionHash),
+            resolvedBallotDefinitionSealedAt,
+            resolvedBallotDefinitionMutationPolicy);
     }
 
     public static ElectionWarningAcknowledgementRecord CreateWarningAcknowledgement(

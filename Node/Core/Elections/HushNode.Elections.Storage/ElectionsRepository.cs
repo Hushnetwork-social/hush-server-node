@@ -499,6 +499,94 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         }
     }
 
+    public async Task<IReadOnlyList<ElectionVoterCeremonyRecord>> GetVoterCeremonyRecordsAsync(ElectionId electionId) =>
+        await Context.ElectionVoterCeremonyRecords
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.CreatedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<ElectionVoterCeremonyRecord?> GetVoterCeremonyRecordAsync(
+        ElectionId electionId,
+        string organizationVoterId) =>
+        await Context.ElectionVoterCeremonyRecords
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.OrganizationVoterId == organizationVoterId);
+
+    public async Task<ElectionVoterCeremonyRecord?> GetVoterCeremonyRecordByLinkedActorAsync(
+        ElectionId electionId,
+        string actorPublicAddress) =>
+        await Context.ElectionVoterCeremonyRecords
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.LinkedActorPublicAddress == actorPublicAddress);
+
+    public async Task SaveVoterCeremonyRecordAsync(ElectionVoterCeremonyRecord ceremonyRecord) =>
+        await Context.ElectionVoterCeremonyRecords.AddAsync(ceremonyRecord);
+
+    public async Task UpdateVoterCeremonyRecordAsync(ElectionVoterCeremonyRecord ceremonyRecord)
+    {
+        var existing = await Context.ElectionVoterCeremonyRecords
+            .FirstOrDefaultAsync(x => x.Id == ceremonyRecord.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(ceremonyRecord);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionPreparedBallotCommitmentRecord>> GetPreparedBallotCommitmentsAsync(
+        ElectionId electionId) =>
+        await Context.ElectionPreparedBallotCommitments
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.PrecommittedAt)
+            .ThenBy(x => x.PreparedBallotId)
+            .ToListAsync();
+
+    public async Task<ElectionPreparedBallotCommitmentRecord?> GetPreparedBallotCommitmentAsync(Guid preparedBallotId) =>
+        await Context.ElectionPreparedBallotCommitments
+            .FirstOrDefaultAsync(x => x.PreparedBallotId == preparedBallotId);
+
+    public async Task<ElectionPreparedBallotCommitmentRecord?> GetPreparedBallotCommitmentByHashAsync(
+        ElectionId electionId,
+        string preparedBallotHash) =>
+        await Context.ElectionPreparedBallotCommitments
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.PreparedBallotHash == preparedBallotHash);
+
+    public async Task SavePreparedBallotCommitmentAsync(
+        ElectionPreparedBallotCommitmentRecord preparedBallotCommitment) =>
+        await Context.ElectionPreparedBallotCommitments.AddAsync(preparedBallotCommitment);
+
+    public async Task UpdatePreparedBallotCommitmentAsync(
+        ElectionPreparedBallotCommitmentRecord preparedBallotCommitment)
+    {
+        var existing = await Context.ElectionPreparedBallotCommitments
+            .FirstOrDefaultAsync(x => x.PreparedBallotId == preparedBallotCommitment.PreparedBallotId);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(preparedBallotCommitment);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionSpoiledPreparedBallotRecord>> GetSpoiledPreparedBallotsAsync(
+        ElectionId electionId) =>
+        await Context.ElectionSpoiledPreparedBallots
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.SpoiledAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<ElectionSpoiledPreparedBallotRecord?> GetSpoiledPreparedBallotAsync(Guid preparedBallotId) =>
+        await Context.ElectionSpoiledPreparedBallots
+            .FirstOrDefaultAsync(x => x.PreparedBallotId == preparedBallotId);
+
+    public async Task SaveSpoiledPreparedBallotAsync(ElectionSpoiledPreparedBallotRecord spoiledPreparedBallot) =>
+        await Context.ElectionSpoiledPreparedBallots.AddAsync(spoiledPreparedBallot);
+
     public async Task<IReadOnlyList<ElectionCheckoffConsumptionRecord>> GetCheckoffConsumptionsAsync(ElectionId electionId) =>
         await Context.ElectionCheckoffConsumptions
             .Where(x => x.ElectionId == electionId)

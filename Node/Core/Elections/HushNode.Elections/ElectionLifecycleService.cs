@@ -791,6 +791,381 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
     }
 
+    public async Task<ElectionPreparedBallotCommitmentResult> RegisterPreparedBallotCommitmentAsync(
+        RegisterPreparedBallotCommitmentRequest request)
+    {
+        if (request.PreparedBallotId == Guid.Empty)
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.ValidationFailed,
+                "A non-empty prepared ballot id is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.PreparedBallotHash))
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.ValidationFailed,
+                "A non-empty prepared ballot hash is required.");
+        }
+
+        if (request.BallotDefinitionHash is null || request.BallotDefinitionHash.Length == 0)
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.ValidationFailed,
+                "A non-empty ballot definition hash is required.");
+        }
+
+        if (!string.Equals(request.CeremonyProfileId, ElectionSp04ProfileIds.ChallengeSpoilV1, StringComparison.Ordinal))
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.UnsupportedCeremonyProfile,
+                "The prepared ballot ceremony profile is not supported for SP-04 v1.");
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+        if (election is null)
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.NotFound,
+                $"Election {request.ElectionId} was not found.");
+        }
+
+        if (election.VoteAcceptanceLockedAt.HasValue ||
+            election.LifecycleState == ElectionLifecycleState.Closed ||
+            election.LifecycleState == ElectionLifecycleState.Finalized)
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.ClosePersisted,
+                "Prepared ballot registration is closed because the election close boundary is already persisted.");
+        }
+
+        if (election.LifecycleState != ElectionLifecycleState.Open)
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.ElectionNotOpen,
+                "Prepared ballot registration is only available while the election is open.");
+        }
+
+        if (!MatchesBallotDefinitionSeal(election, request.BallotDefinitionVersion, request.BallotDefinitionHash))
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.BallotDefinitionHashMismatch,
+                "Prepared ballot registration is bound to a different ballot definition than the open election.");
+        }
+
+        var rosterEntry = await repository.GetRosterEntryByLinkedActorAsync(request.ElectionId, request.ActorPublicAddress);
+        if (rosterEntry is null)
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.NotLinked,
+                "The authenticated Hush account is not linked to a roster entry for this election.");
+        }
+
+        if (!IsRosterEntryEligibleForCommitmentRegistration(election, rosterEntry))
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.NotActive,
+                "This voter does not currently hold an active voting right for prepared ballot registration.");
+        }
+
+        var commitmentRegistration = await repository.GetCommitmentRegistrationAsync(
+            request.ElectionId,
+            rosterEntry.OrganizationVoterId);
+        if (commitmentRegistration is null ||
+            !string.Equals(commitmentRegistration.LinkedActorPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.CommitmentMissing,
+                "A voting commitment must be registered before a prepared ballot can be recorded.");
+        }
+
+        var existingPreparedById = await repository.GetPreparedBallotCommitmentAsync(request.PreparedBallotId);
+        var existingPreparedByHash = await repository.GetPreparedBallotCommitmentByHashAsync(
+            request.ElectionId,
+            request.PreparedBallotHash);
+        if (existingPreparedById is not null || existingPreparedByHash is not null)
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.DuplicatePreparedBallot,
+                "This prepared ballot was already registered for the election.");
+        }
+
+        var precommittedAt = request.PrecommittedAt ?? DateTime.UtcNow;
+
+        try
+        {
+            var existingCeremony = await repository.GetVoterCeremonyRecordAsync(
+                request.ElectionId,
+                rosterEntry.OrganizationVoterId);
+            var ceremonyRecord = existingCeremony ??
+                ElectionModelFactory.CreateVoterCeremonyRecord(
+                    request.ElectionId,
+                    rosterEntry.OrganizationVoterId,
+                    request.ActorPublicAddress,
+                    request.BallotDefinitionVersion,
+                    request.BallotDefinitionHash,
+                    request.CeremonyProfileId,
+                    precommittedAt,
+                    request.SourceTransactionId,
+                    request.SourceBlockHeight,
+                    request.SourceBlockId);
+
+            if (!string.Equals(ceremonyRecord.LinkedActorPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal) ||
+                !string.Equals(ceremonyRecord.CeremonyProfileId, request.CeremonyProfileId, StringComparison.Ordinal) ||
+                ceremonyRecord.BallotDefinitionVersion != request.BallotDefinitionVersion ||
+                !BytesEqual(ceremonyRecord.BallotDefinitionHash, request.BallotDefinitionHash))
+            {
+                return ElectionPreparedBallotCommitmentResult.Failure(
+                    ElectionPreparedBallotCommitmentFailureReason.BallotDefinitionHashMismatch,
+                    "The voter ceremony record is bound to a different actor, profile, or ballot definition.");
+            }
+
+            var updatedCeremony = ceremonyRecord with
+            {
+                PreparedPackageCount = ceremonyRecord.PreparedPackageCount + 1,
+                LastUpdatedAt = precommittedAt,
+            };
+            var preparedBallotCommitment = ElectionModelFactory.CreatePreparedBallotCommitmentRecord(
+                request.ElectionId,
+                rosterEntry.OrganizationVoterId,
+                request.ActorPublicAddress,
+                request.PreparedBallotHash,
+                request.BallotDefinitionVersion,
+                request.BallotDefinitionHash,
+                request.ProofStatementId,
+                precommittedAt,
+                preparedBallotId: request.PreparedBallotId,
+                ceremonyProfileId: request.CeremonyProfileId,
+                sourceTransactionId: request.SourceTransactionId,
+                sourceBlockHeight: request.SourceBlockHeight,
+                sourceBlockId: request.SourceBlockId);
+            var updatedElection = election with
+            {
+                LastUpdatedAt = precommittedAt,
+            };
+
+            if (existingCeremony is null)
+            {
+                await repository.SaveVoterCeremonyRecordAsync(updatedCeremony);
+            }
+            else
+            {
+                await repository.UpdateVoterCeremonyRecordAsync(updatedCeremony);
+            }
+
+            await repository.SavePreparedBallotCommitmentAsync(preparedBallotCommitment);
+            await repository.SaveElectionAsync(updatedElection);
+            await unitOfWork.CommitAsync();
+
+            return ElectionPreparedBallotCommitmentResult.Success(
+                updatedElection,
+                rosterEntry,
+                commitmentRegistration,
+                updatedCeremony,
+                preparedBallotCommitment);
+        }
+        catch (ArgumentException ex)
+        {
+            return ElectionPreparedBallotCommitmentResult.Failure(
+                ElectionPreparedBallotCommitmentFailureReason.ValidationFailed,
+                ex.Message);
+        }
+    }
+
+    public async Task<ElectionSpoilPreparedBallotResult> SpoilPreparedBallotAsync(SpoilPreparedBallotRequest request)
+    {
+        if (request.PreparedBallotId == Guid.Empty)
+        {
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.ValidationFailed,
+                "A non-empty prepared ballot id is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.PreparedBallotHash) ||
+            string.IsNullOrWhiteSpace(request.SpoiledTranscriptHash) ||
+            string.IsNullOrWhiteSpace(request.SpoilRecordHash) ||
+            string.IsNullOrWhiteSpace(request.LocalVerifierVersion))
+        {
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.ValidationFailed,
+                "Prepared ballot hash, spoiled transcript hash, spoil record hash, and local verifier version are required.");
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+        if (election is null)
+        {
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.NotFound,
+                $"Election {request.ElectionId} was not found.");
+        }
+
+        if (election.VoteAcceptanceLockedAt.HasValue ||
+            election.LifecycleState == ElectionLifecycleState.Closed ||
+            election.LifecycleState == ElectionLifecycleState.Finalized)
+        {
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.ClosePersisted,
+                "Prepared ballot spoil is closed because the election close boundary is already persisted.");
+        }
+
+        if (election.LifecycleState != ElectionLifecycleState.Open)
+        {
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.ElectionNotOpen,
+                "Prepared ballot spoil is only available while the election is open.");
+        }
+
+        var rosterEntry = await repository.GetRosterEntryByLinkedActorAsync(request.ElectionId, request.ActorPublicAddress);
+        if (rosterEntry is null)
+        {
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.NotLinked,
+                "The authenticated Hush account is not linked to a roster entry for this election.");
+        }
+
+        if (!IsRosterEntryEligibleForCommitmentRegistration(election, rosterEntry))
+        {
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.NotActive,
+                "This voter does not currently hold an active voting right for prepared ballot spoil.");
+        }
+
+        var preparedBallotCommitment = await repository.GetPreparedBallotCommitmentAsync(request.PreparedBallotId);
+        if (preparedBallotCommitment is null ||
+            preparedBallotCommitment.ElectionId != request.ElectionId ||
+            !string.Equals(preparedBallotCommitment.OrganizationVoterId, rosterEntry.OrganizationVoterId, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(preparedBallotCommitment.LinkedActorPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
+        {
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.PreparedBallotMissing,
+                "The prepared ballot commitment was not found for this election and voter.");
+        }
+
+        if (!string.Equals(preparedBallotCommitment.PreparedBallotHash, request.PreparedBallotHash, StringComparison.Ordinal))
+        {
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.PreparedBallotHashMismatch,
+                "The spoil request is bound to a different prepared ballot hash.");
+        }
+
+        var spoiledAt = request.SpoiledAt ?? DateTime.UtcNow;
+        if (preparedBallotCommitment.IsExpired(spoiledAt))
+        {
+            await repository.UpdatePreparedBallotCommitmentAsync(preparedBallotCommitment with
+            {
+                State = ElectionPreparedBallotState.Expired,
+            });
+            await unitOfWork.CommitAsync();
+
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.PreparedBallotExpired,
+                "The prepared ballot has expired and cannot be spoiled.");
+        }
+
+        if (preparedBallotCommitment.State == ElectionPreparedBallotState.Spoiled ||
+            await repository.GetSpoiledPreparedBallotAsync(request.PreparedBallotId) is not null)
+        {
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.PreparedBallotAlreadySpoiled,
+                "The prepared ballot was already spoiled.");
+        }
+
+        if (preparedBallotCommitment.State == ElectionPreparedBallotState.Cast)
+        {
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.PreparedBallotAlreadyCast,
+                "The prepared ballot was already cast and cannot be spoiled.");
+        }
+
+        try
+        {
+            var spoiledPreparedBallot = ElectionModelFactory.CreateSpoiledPreparedBallotRecord(
+                request.ElectionId,
+                request.PreparedBallotId,
+                request.PreparedBallotHash,
+                request.SpoiledTranscriptHash,
+                request.SpoilRecordHash,
+                request.LocalVerifierVersion,
+                spoiledAt,
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+            var updatedPreparedBallot = preparedBallotCommitment with
+            {
+                State = ElectionPreparedBallotState.Spoiled,
+                SpoilMarkerId = spoiledPreparedBallot.Id,
+                SpoiledAt = spoiledAt,
+            };
+            var existingCeremony = await repository.GetVoterCeremonyRecordAsync(
+                request.ElectionId,
+                rosterEntry.OrganizationVoterId);
+            if (existingCeremony is not null &&
+                (!string.Equals(existingCeremony.LinkedActorPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal) ||
+                 !string.Equals(existingCeremony.CeremonyProfileId, preparedBallotCommitment.CeremonyProfileId, StringComparison.Ordinal) ||
+                 existingCeremony.BallotDefinitionVersion != preparedBallotCommitment.BallotDefinitionVersion ||
+                 !BytesEqual(existingCeremony.BallotDefinitionHash, preparedBallotCommitment.BallotDefinitionHash)))
+            {
+                return ElectionSpoilPreparedBallotResult.Failure(
+                    ElectionSpoilPreparedBallotFailureReason.PreparedBallotMissing,
+                    "The voter ceremony record is bound to a different actor, profile, or ballot definition.");
+            }
+
+            var updatedCeremony = (existingCeremony ??
+                ElectionModelFactory.CreateVoterCeremonyRecord(
+                    request.ElectionId,
+                    rosterEntry.OrganizationVoterId,
+                    request.ActorPublicAddress,
+                    preparedBallotCommitment.BallotDefinitionVersion,
+                    preparedBallotCommitment.BallotDefinitionHash,
+                    preparedBallotCommitment.CeremonyProfileId,
+                    spoiledAt,
+                    request.SourceTransactionId,
+                    request.SourceBlockHeight,
+                    request.SourceBlockId)) with
+            {
+                SpoiledPackageCount = (existingCeremony?.SpoiledPackageCount ?? 0) + 1,
+                LastUpdatedAt = spoiledAt,
+            };
+            var updatedElection = election with
+            {
+                LastUpdatedAt = spoiledAt,
+            };
+
+            await repository.UpdatePreparedBallotCommitmentAsync(updatedPreparedBallot);
+            await repository.SaveSpoiledPreparedBallotAsync(spoiledPreparedBallot);
+            if (existingCeremony is null)
+            {
+                await repository.SaveVoterCeremonyRecordAsync(updatedCeremony);
+            }
+            else
+            {
+                await repository.UpdateVoterCeremonyRecordAsync(updatedCeremony);
+            }
+
+            await repository.SaveElectionAsync(updatedElection);
+            await unitOfWork.CommitAsync();
+
+            return ElectionSpoilPreparedBallotResult.Success(
+                updatedElection,
+                rosterEntry,
+                updatedPreparedBallot,
+                spoiledPreparedBallot,
+                updatedCeremony);
+        }
+        catch (ArgumentException ex)
+        {
+            return ElectionSpoilPreparedBallotResult.Failure(
+                ElectionSpoilPreparedBallotFailureReason.ValidationFailed,
+                ex.Message);
+        }
+    }
+
     public async Task<ElectionCastAcceptanceResult> AcceptBallotCastAsync(AcceptElectionBallotCastRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.IdempotencyKey))
@@ -930,6 +1305,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
             }
 
             var acceptedAt = DateTime.UtcNow;
+            var sp04Validation = await ValidateSp04CastContextAsync(
+                repository,
+                election,
+                rosterEntry,
+                request,
+                acceptedAt);
+            if (sp04Validation.Failure is not null)
+            {
+                return sp04Validation.Failure;
+            }
+
             var protectedAcceptedAt = CreateProtectedAcceptedBallotTimestamp(election);
 
             try
@@ -956,7 +1342,13 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     request.EncryptedBallotPackage,
                     request.ProofBundle,
                     request.BallotNullifier,
-                    protectedAcceptedAt);
+                    protectedAcceptedAt,
+                    request.PreparedBallotId,
+                    request.PreparedBallotHash,
+                    request.ReceiptCommitment,
+                    request.ReceiptCommitmentScheme,
+                    request.BallotDefinitionVersion,
+                    request.BallotDefinitionHash);
                 var ballotMemPoolEntry = ElectionModelFactory.CreateBallotMemPoolEntry(
                     request.ElectionId,
                     acceptedBallot.Id,
@@ -965,12 +1357,26 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     request.ElectionId,
                     idempotencyKeyHash,
                     acceptedAt);
+                var castPreparedBallot = sp04Validation.PreparedBallotCommitment! with
+                {
+                    State = ElectionPreparedBallotState.Cast,
+                    AcceptedBallotId = acceptedBallot.Id,
+                    CastAt = acceptedAt,
+                };
+                var completedCeremony = sp04Validation.CeremonyRecord! with
+                {
+                    FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
+                    FinalAcceptedBallotId = acceptedBallot.Id,
+                    LastUpdatedAt = acceptedAt,
+                };
 
                 await repository.SaveParticipationRecordAsync(participationRecord);
                 await repository.SaveCheckoffConsumptionAsync(newCheckoffConsumption);
                 await repository.SaveAcceptedBallotAsync(acceptedBallot);
                 await repository.SaveBallotMemPoolEntryAsync(ballotMemPoolEntry);
                 await repository.SaveCastIdempotencyRecordAsync(idempotencyRecord);
+                await repository.UpdatePreparedBallotCommitmentAsync(castPreparedBallot);
+                await repository.UpdateVoterCeremonyRecordAsync(completedCeremony);
                 await repository.SaveElectionAsync(updatedElection);
                 await unitOfWork.CommitAsync();
                 if (_castIdempotencyCacheService is not null)
@@ -987,7 +1393,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     participationRecord,
                     newCheckoffConsumption,
                     acceptedBallot,
-                    idempotencyRecord);
+                    idempotencyRecord,
+                    castPreparedBallot);
             }
             catch (ArgumentException ex)
             {
@@ -2944,6 +3351,12 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     : openCeremonyError);
         }
 
+        var ballotDefinitionSeal = ElectionModelFactory.CreateBallotDefinitionSeal(
+            ElectionBallotDefinitionCanonicalizer.CurrentVersion,
+            ElectionBallotDefinitionCanonicalizer.ComputeHash(election),
+            openedAt,
+            ElectionBallotDefinitionMutationPolicy.ImmutableAfterOpen);
+
         var artifact = ElectionModelFactory.CreateBoundaryArtifact(
             artifactType: ElectionBoundaryArtifactType.Open,
             election: election,
@@ -2959,7 +3372,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
             reviewWindowExecutionReference: reviewWindowExecutionReference,
             sourceTransactionId: sourceTransactionId,
             sourceBlockHeight: sourceBlockHeight,
-            sourceBlockId: sourceBlockId);
+            sourceBlockId: sourceBlockId,
+            ballotDefinitionVersion: ballotDefinitionSeal.BallotDefinitionVersion,
+            ballotDefinitionHash: ballotDefinitionSeal.BallotDefinitionHash,
+            ballotDefinitionSealedAt: ballotDefinitionSeal.SealedAt,
+            ballotDefinitionMutationPolicy: ballotDefinitionSeal.MutationPolicy);
         var openSnapshot = BuildOpenEligibilitySnapshot(
             election,
             frozenRosterEntries,
@@ -2977,6 +3394,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             OpenedAt = openedAt,
             VoteAcceptanceLockedAt = null,
             OpenArtifactId = artifact.Id,
+            BallotDefinitionVersion = ballotDefinitionSeal.BallotDefinitionVersion,
+            BallotDefinitionHash = ballotDefinitionSeal.BallotDefinitionHash,
+            BallotDefinitionSealedAt = ballotDefinitionSeal.SealedAt,
+            BallotDefinitionMutationPolicy = ballotDefinitionSeal.MutationPolicy,
         };
 
         foreach (var rosterEntry in frozenRosterEntries)
@@ -3107,6 +3528,133 @@ public class ElectionLifecycleService : IElectionLifecycleService
             EligibilityMutationPolicy.LateActivationForRosteredVotersOnly => rosterEntry.IsActive,
             _ => false,
         };
+    }
+
+    private static bool MatchesBallotDefinitionSeal(
+        ElectionRecord election,
+        int ballotDefinitionVersion,
+        byte[] ballotDefinitionHash)
+    {
+        if (!election.BallotDefinitionVersion.HasValue ||
+            election.BallotDefinitionVersion.Value != ballotDefinitionVersion ||
+            election.BallotDefinitionHash is null ||
+            ballotDefinitionHash.Length == 0)
+        {
+            return false;
+        }
+
+        return BytesEqual(election.BallotDefinitionHash, ballotDefinitionHash);
+    }
+
+    private async Task<Sp04CastValidationOutcome> ValidateSp04CastContextAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionRosterEntryRecord rosterEntry,
+        AcceptElectionBallotCastRequest request,
+        DateTime acceptedAt)
+    {
+        if (!request.PreparedBallotId.HasValue ||
+            string.IsNullOrWhiteSpace(request.PreparedBallotHash))
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.PreparedBallotMissing,
+                "A prepared ballot commitment must be referenced before final cast acceptance."));
+        }
+
+        if (request.BallotDefinitionVersion is null ||
+            request.BallotDefinitionHash is null ||
+            request.BallotDefinitionHash.Length == 0 ||
+            !MatchesBallotDefinitionSeal(election, request.BallotDefinitionVersion.Value, request.BallotDefinitionHash))
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.BallotDefinitionHashMismatch,
+                "The final cast is bound to a different ballot definition than the open election."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ReceiptCommitment) ||
+            string.IsNullOrWhiteSpace(request.ReceiptCommitmentScheme))
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.ReceiptCommitmentMissing,
+                "A receipt commitment and commitment scheme are required for final cast acceptance."));
+        }
+
+        var preparedBallotCommitment = await repository.GetPreparedBallotCommitmentAsync(request.PreparedBallotId.Value);
+        if (preparedBallotCommitment is null ||
+            preparedBallotCommitment.ElectionId != request.ElectionId ||
+            !string.Equals(preparedBallotCommitment.OrganizationVoterId, rosterEntry.OrganizationVoterId, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(preparedBallotCommitment.LinkedActorPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.PreparedBallotMissing,
+                "The referenced prepared ballot commitment was not found for this election and voter."));
+        }
+
+        if (!string.Equals(preparedBallotCommitment.CeremonyProfileId, ElectionSp04ProfileIds.ChallengeSpoilV1, StringComparison.Ordinal))
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.UnsupportedCeremonyProfile,
+                "The prepared ballot ceremony profile is not supported for SP-04 v1."));
+        }
+
+        if (!string.Equals(preparedBallotCommitment.PreparedBallotHash, request.PreparedBallotHash, StringComparison.Ordinal))
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.PreparedBallotHashMismatch,
+                "The final cast references a different prepared ballot hash."));
+        }
+
+        if (preparedBallotCommitment.BallotDefinitionVersion != request.BallotDefinitionVersion.Value ||
+            !BytesEqual(preparedBallotCommitment.BallotDefinitionHash, request.BallotDefinitionHash))
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.BallotDefinitionHashMismatch,
+                "The prepared ballot commitment is bound to a different ballot definition than the final cast."));
+        }
+
+        if (preparedBallotCommitment.IsExpired(acceptedAt) ||
+            preparedBallotCommitment.State == ElectionPreparedBallotState.Expired)
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.PreparedBallotExpired,
+                "The prepared ballot commitment expired before final cast acceptance."));
+        }
+
+        if (preparedBallotCommitment.State == ElectionPreparedBallotState.Spoiled)
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.PreparedBallotAlreadySpoiled,
+                "The prepared ballot was spoiled and cannot be accepted as the final cast."));
+        }
+
+        if (preparedBallotCommitment.State == ElectionPreparedBallotState.Cast)
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.PreparedBallotAlreadyCast,
+                "The prepared ballot was already accepted as a final cast."));
+        }
+
+        var ceremonyRecord = await repository.GetVoterCeremonyRecordAsync(
+            request.ElectionId,
+            rosterEntry.OrganizationVoterId);
+        if (ceremonyRecord is null ||
+            !string.Equals(ceremonyRecord.LinkedActorPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal) ||
+            !string.Equals(ceremonyRecord.CeremonyProfileId, ElectionSp04ProfileIds.ChallengeSpoilV1, StringComparison.Ordinal) ||
+            ceremonyRecord.SpoiledPackageCount < 1)
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.ChallengeRequiredBeforeCast,
+                "At least one successful challenge/spoil is required before final cast acceptance."));
+        }
+
+        if (ceremonyRecord.FinalState == ElectionVoterCeremonyFinalState.FinalCastAccepted)
+        {
+            return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
+                ElectionCastAcceptanceFailureReason.AlreadyVoted,
+                "This voter ceremony already has a final accepted cast."));
+        }
+
+        return Sp04CastValidationOutcome.Success(preparedBallotCommitment, ceremonyRecord);
     }
 
     private async Task<ElectionCastAcceptanceResult?> ValidateCastBoundaryContextAsync(
@@ -6090,6 +6638,20 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         return true;
+    }
+
+    private sealed record Sp04CastValidationOutcome(
+        ElectionCastAcceptanceResult? Failure,
+        ElectionPreparedBallotCommitmentRecord? PreparedBallotCommitment,
+        ElectionVoterCeremonyRecord? CeremonyRecord)
+    {
+        public static Sp04CastValidationOutcome Fail(ElectionCastAcceptanceResult failure) =>
+            new(failure, null, null);
+
+        public static Sp04CastValidationOutcome Success(
+            ElectionPreparedBallotCommitmentRecord preparedBallotCommitment,
+            ElectionVoterCeremonyRecord ceremonyRecord) =>
+            new(null, preparedBallotCommitment, ceremonyRecord);
     }
 
     private sealed record ReportPackageFinalizationContext(

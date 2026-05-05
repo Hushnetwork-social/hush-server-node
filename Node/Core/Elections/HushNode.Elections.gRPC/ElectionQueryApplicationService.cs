@@ -808,6 +808,21 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
         {
             response.OpenArtifactId = openArtifact.Id.ToString();
             response.EligibleSetHash = EncodeHash(openArtifact.FrozenEligibleVoterSetHash);
+            response.BallotDefinitionVersion = openArtifact.BallotDefinitionVersion ?? 0;
+            response.BallotDefinitionHash = openArtifact.BallotDefinitionHash is { Length: > 0 }
+                ? Google.Protobuf.ByteString.CopyFrom(openArtifact.BallotDefinitionHash)
+                : Google.Protobuf.ByteString.Empty;
+            response.BallotDefinitionMutationPolicy =
+                (BallotDefinitionMutationPolicyProto)(int)(openArtifact.BallotDefinitionMutationPolicy
+                    ?? ElectionBallotDefinitionMutationPolicy.ImmutableAfterOpen);
+            response.Sp04Required = openArtifact.BallotDefinitionVersion.HasValue &&
+                openArtifact.BallotDefinitionHash is { Length: > 0 };
+
+            if (openArtifact.BallotDefinitionSealedAt.HasValue)
+            {
+                response.BallotDefinitionSealedAt = ToProtoTimestamp(openArtifact.BallotDefinitionSealedAt.Value);
+                response.HasBallotDefinitionSealedAt = true;
+            }
 
             var ceremonySnapshot = ElectionProtectedTallyBinding.ResolveOpenBoundaryBinding(election, openArtifact);
             if (ceremonySnapshot is not null)
@@ -815,6 +830,7 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
                 response.CeremonyVersionId = ceremonySnapshot.CeremonyVersionId.ToString();
                 response.DkgProfileId = ceremonySnapshot.ProfileId;
                 response.TallyPublicKeyFingerprint = ceremonySnapshot.TallyPublicKeyFingerprint;
+                response.CeremonyProfileId = ElectionSp04ProfileIds.ChallengeSpoilV1;
                 if (ceremonySnapshot.TallyPublicKey is { Length: > 0 })
                 {
                     response.TallyPublicKey = HushNode.Elections.gRPC.ElectionGrpcMappings.ToProto(ceremonySnapshot).TallyPublicKey;
@@ -822,7 +838,145 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             }
         }
 
+        if (response.Sp04Required && selfRosterEntry is not null)
+        {
+            await PopulateSp04VotingReadModelAsync(
+                repository,
+                response,
+                electionId,
+                normalizedActorPublicAddress,
+                selfRosterEntry);
+        }
+
         return response;
+    }
+
+    private async Task PopulateSp04VotingReadModelAsync(
+        IElectionsRepository repository,
+        GetElectionVotingViewResponse response,
+        ElectionId electionId,
+        string actorPublicAddress,
+        ElectionRosterEntryRecord selfRosterEntry)
+    {
+        response.RequiredChallengeCount = 1;
+
+        var nowUtc = DateTime.UtcNow;
+        var ceremonyRecord = await repository.GetVoterCeremonyRecordAsync(
+            electionId,
+            selfRosterEntry.OrganizationVoterId);
+        var ceremonyOwnedByActor = ceremonyRecord is not null &&
+            string.Equals(
+                ceremonyRecord.LinkedActorPublicAddress,
+                actorPublicAddress,
+                StringComparison.OrdinalIgnoreCase);
+
+        if (ceremonyOwnedByActor)
+        {
+            response.SpoiledPackageCount = ceremonyRecord!.SpoiledPackageCount;
+            response.ChallengeSatisfied = ceremonyRecord.SpoiledPackageCount >= response.RequiredChallengeCount;
+        }
+
+        var preparedBallots = (await repository.GetPreparedBallotCommitmentsAsync(electionId))
+            .Where(x =>
+                string.Equals(
+                    x.OrganizationVoterId,
+                    selfRosterEntry.OrganizationVoterId,
+                    StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(
+                    x.LinkedActorPublicAddress,
+                    actorPublicAddress,
+                    StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(x => x.PrecommittedAt)
+            .ThenByDescending(x => x.PreparedBallotId)
+            .ToArray();
+
+        var acceptedBallotId = ceremonyOwnedByActor ? ceremonyRecord!.FinalAcceptedBallotId : null;
+        var castPreparedBallot = preparedBallots.FirstOrDefault(x => x.AcceptedBallotId.HasValue);
+        acceptedBallotId ??= castPreparedBallot?.AcceptedBallotId;
+
+        var acceptedBallot = acceptedBallotId.HasValue
+            ? (await repository.GetAcceptedBallotsAsync(electionId)).FirstOrDefault(x => x.Id == acceptedBallotId.Value)
+            : null;
+        var activePreparedBallot = preparedBallots.FirstOrDefault(x =>
+            x.State == ElectionPreparedBallotState.Prepared &&
+            !x.IsExpired(nowUtc));
+        var displayPreparedBallot = acceptedBallot is not null && acceptedBallot.PreparedBallotId.HasValue
+            ? preparedBallots.FirstOrDefault(x => x.PreparedBallotId == acceptedBallot.PreparedBallotId.Value) ??
+              castPreparedBallot
+            : activePreparedBallot ?? preparedBallots.FirstOrDefault();
+
+        if (displayPreparedBallot is not null)
+        {
+            response.PreparedBallotId = displayPreparedBallot.PreparedBallotId.ToString();
+            response.PreparedBallotHash = displayPreparedBallot.PreparedBallotHash;
+            response.PreparedBallotState = MapPreparedBallotState(displayPreparedBallot, nowUtc);
+            response.PreparedBallotPrecommittedAt = ToProtoTimestamp(displayPreparedBallot.PrecommittedAt);
+            response.HasPreparedBallotPrecommittedAt = true;
+            response.PreparedBallotExpiresAt = ToProtoTimestamp(displayPreparedBallot.ExpiresAt);
+            response.HasPreparedBallotExpiresAt = true;
+        }
+
+        if (acceptedBallot is not null)
+        {
+            if (acceptedBallot.PreparedBallotId.HasValue)
+            {
+                response.PreparedBallotId = acceptedBallot.PreparedBallotId.Value.ToString();
+            }
+
+            if (!string.IsNullOrWhiteSpace(acceptedBallot.PreparedBallotHash))
+            {
+                response.PreparedBallotHash = acceptedBallot.PreparedBallotHash;
+            }
+
+            response.ReceiptCommitment = acceptedBallot.ReceiptCommitment ?? string.Empty;
+            response.ReceiptCommitmentScheme = acceptedBallot.ReceiptCommitmentScheme ?? string.Empty;
+        }
+
+        var blocker = ResolveSp04VotingBlocker(response, activePreparedBallot, acceptedBallot);
+        response.Sp04BlockerCode = blocker.Code;
+        response.Sp04BlockerMessage = blocker.Message;
+    }
+
+    private static PreparedBallotStateProto MapPreparedBallotState(
+        ElectionPreparedBallotCommitmentRecord preparedBallot,
+        DateTime nowUtc)
+    {
+        if (preparedBallot.State == ElectionPreparedBallotState.Prepared &&
+            preparedBallot.IsExpired(nowUtc))
+        {
+            return PreparedBallotStateProto.PreparedBallotExpired;
+        }
+
+        return (PreparedBallotStateProto)(int)preparedBallot.State;
+    }
+
+    private static (string Code, string Message) ResolveSp04VotingBlocker(
+        GetElectionVotingViewResponse response,
+        ElectionPreparedBallotCommitmentRecord? activePreparedBallot,
+        ElectionAcceptedBallotRecord? acceptedBallot)
+    {
+        if (acceptedBallot is not null ||
+            response.PersonalParticipationStatus == ElectionParticipationStatusProto.ParticipationCountedAsVoted)
+        {
+            return ("final_cast_accepted", "The final ballot has already been accepted.");
+        }
+
+        if (!response.CommitmentRegistered)
+        {
+            return ("commitment_missing", "The voter commitment must be registered before preparing a ballot package.");
+        }
+
+        if (!response.ChallengeSatisfied)
+        {
+            return ("challenge_required", "At least one prepared ballot package must be challenged and spoiled before final cast.");
+        }
+
+        if (activePreparedBallot is null)
+        {
+            return ("prepared_package_missing", "A fresh prepared ballot package is required before final cast.");
+        }
+
+        return (string.Empty, string.Empty);
     }
 
     public async Task<VerifyElectionReceiptResponse> VerifyElectionReceiptAsync(
@@ -830,21 +984,30 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
         string actorPublicAddress,
         string receiptId,
         string acceptanceId,
-        string serverProof)
+        string serverProof,
+        string? receiptCommitment = null,
+        string? preparedBallotId = null)
     {
         var normalizedActorPublicAddress = actorPublicAddress?.Trim() ?? string.Empty;
         var normalizedReceiptId = receiptId?.Trim() ?? string.Empty;
         var normalizedAcceptanceId = acceptanceId?.Trim() ?? string.Empty;
         var normalizedServerProof = serverProof?.Trim() ?? string.Empty;
+        var normalizedReceiptCommitment = receiptCommitment?.Trim() ?? string.Empty;
+        var normalizedPreparedBallotId = preparedBallotId?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(normalizedReceiptId) ||
-            string.IsNullOrWhiteSpace(normalizedAcceptanceId) ||
-            string.IsNullOrWhiteSpace(normalizedServerProof))
+        var hasLegacyCheckoffReceipt =
+            !string.IsNullOrWhiteSpace(normalizedReceiptId) &&
+            !string.IsNullOrWhiteSpace(normalizedAcceptanceId) &&
+            !string.IsNullOrWhiteSpace(normalizedServerProof);
+        var hasBoundReceiptCommitment =
+            !string.IsNullOrWhiteSpace(normalizedReceiptCommitment);
+
+        if (!hasLegacyCheckoffReceipt && !hasBoundReceiptCommitment)
         {
             return new VerifyElectionReceiptResponse
             {
                 Success = false,
-                ErrorMessage = "ReceiptId, AcceptanceId, and ServerProof are required to verify the receipt.",
+                ErrorMessage = "ReceiptId, AcceptanceId, and ServerProof or ReceiptCommitment are required to verify the receipt.",
                 ActorPublicAddress = normalizedActorPublicAddress,
                 ElectionId = electionId.ToString(),
             };
@@ -869,10 +1032,20 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
         var lifecycleState = votingView.Election?.LifecycleState ?? ElectionLifecycleStateProto.Draft;
         var hasAcceptedCheckoff = votingView.HasAcceptedAt;
         var receiptMatchesAcceptedCheckoff =
+            hasLegacyCheckoffReceipt &&
             hasAcceptedCheckoff &&
             string.Equals(votingView.ReceiptId, normalizedReceiptId, StringComparison.Ordinal) &&
             string.Equals(votingView.AcceptanceId, normalizedAcceptanceId, StringComparison.Ordinal) &&
             string.Equals(votingView.ServerProof, normalizedServerProof, StringComparison.Ordinal);
+        var hasStoredBoundReceipt = !string.IsNullOrWhiteSpace(votingView.ReceiptCommitment);
+        var preparedBallotMatches =
+            string.IsNullOrWhiteSpace(normalizedPreparedBallotId) ||
+            string.Equals(votingView.PreparedBallotId, normalizedPreparedBallotId, StringComparison.OrdinalIgnoreCase);
+        var receiptCommitmentInAcceptedSet =
+            hasBoundReceiptCommitment &&
+            hasStoredBoundReceipt &&
+            preparedBallotMatches &&
+            string.Equals(votingView.ReceiptCommitment, normalizedReceiptCommitment, StringComparison.Ordinal);
 
         return new VerifyElectionReceiptResponse
         {
@@ -891,6 +1064,11 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             VerifiedReceiptId = votingView.ReceiptId ?? string.Empty,
             VerifiedAcceptanceId = votingView.AcceptanceId ?? string.Empty,
             VerifiedServerProof = votingView.ServerProof ?? string.Empty,
+            HasBoundReceipt = hasStoredBoundReceipt,
+            ReceiptCommitmentInAcceptedSet = receiptCommitmentInAcceptedSet,
+            VerifiedReceiptCommitment = votingView.ReceiptCommitment ?? string.Empty,
+            VerifiedReceiptCommitmentScheme = votingView.ReceiptCommitmentScheme ?? string.Empty,
+            VerifiedPreparedBallotId = votingView.PreparedBallotId ?? string.Empty,
         };
     }
 

@@ -34,6 +34,9 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
     private static readonly TestIdentity Echo = TestIdentities.GenerateFromSeed("TEST_ECHO_V1", "Echo");
     private static readonly TestIdentity Foxtrot = TestIdentities.GenerateFromSeed("TEST_FOXTROT_V1", "Foxtrot");
     private static readonly TestIdentity Guest = TestIdentities.GenerateFromSeed("TEST_GUEST_V1", "Guest");
+    private const string Sp04ReceiptCommitmentScheme = "hushvoting-sp04-receipt-commitment-sha256-v1";
+    private const string Sp04ProofStatementId = "hushvoting-sp04-prepared-ballot-proof-v1";
+    private const string Sp04LocalVerifierVersion = "hushvoting-local-sp04-verifier-v1";
     private static readonly IReadOnlyList<TestIdentity> RolloutTrustees =
     [
         TestIdentities.Bob,
@@ -294,6 +297,131 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         restrictedAsOwner.Files.Should().Contain(x =>
             x.RelativePath == VerificationPackageFileNames.RestrictedRosterCheckoff &&
             x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-114")]
+    public async Task ChallengeSpoilCeremony_WithBoundReceipt_ExportsPublicAndRestrictedSp04Evidence()
+    {
+        var client = await StartClientAsync();
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "FEAT-114 Challenge Spoil Ceremony",
+            castSubmissionIdempotencyKey: "feat114-cast-001");
+
+        var finalizeProposalId = await StartGovernedProposalAsync(
+            client,
+            context.ElectionId,
+            ElectionGovernedActionType.Finalize);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, Delta);
+
+        var finalizedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        finalizedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Finalized);
+
+        var voterView = await GetElectionVotingViewAsync(client, context.ElectionId, TestIdentities.Alice);
+        voterView.Sp04Required.Should().BeTrue();
+        voterView.ChallengeSatisfied.Should().BeTrue();
+        voterView.SpoiledPackageCount.Should().BeGreaterThanOrEqualTo(1);
+        voterView.PreparedBallotState.Should().Be(PreparedBallotStateProto.PreparedBallotCast);
+        voterView.PreparedBallotId.Should().NotBeNullOrWhiteSpace();
+        voterView.PreparedBallotHash.Should().NotBeNullOrWhiteSpace();
+        voterView.ReceiptCommitment.Should().NotBeNullOrWhiteSpace();
+        voterView.ReceiptCommitmentScheme.Should().Be(Sp04ReceiptCommitmentScheme);
+
+        var receiptVerification = await VerifyElectionReceiptAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            voterView.ReceiptCommitment,
+            voterView.PreparedBallotId);
+        receiptVerification.Success.Should().BeTrue(receiptVerification.ErrorMessage);
+        receiptVerification.HasBoundReceipt.Should().BeTrue();
+        receiptVerification.ReceiptCommitmentInAcceptedSet.Should().BeTrue();
+        receiptVerification.ParticipationCountedAsVoted.Should().BeTrue();
+        receiptVerification.VerifiedPreparedBallotId.Should().Be(voterView.PreparedBallotId);
+
+        var ownerStatus = await GetElectionVerificationPackageStatusAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice);
+        ownerStatus.Success.Should().BeTrue(ownerStatus.ErrorMessage);
+        ownerStatus.Status.Should().NotBeNull();
+        ownerStatus.Status!.Sp04Evidence.PreparedPackageCount.Should().BeGreaterThanOrEqualTo(2);
+        ownerStatus.Status.Sp04Evidence.SpoiledPackageCount.Should().BeGreaterThanOrEqualTo(1);
+        ownerStatus.Status.Sp04Evidence.AcceptedBoundReceiptCount.Should().Be(1);
+        ownerStatus.Status.Sp04Evidence.ReceiptCommitmentSetHash.Should().NotBeNullOrWhiteSpace();
+
+        var publicExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+        publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
+        publicExport.Files.Should().Contain(x => x.RelativePath == VerificationPackageFileNames.Sp04Evidence);
+        publicExport.Files.Should().Contain(x => x.RelativePath == VerificationPackageFileNames.Sp04ReceiptCommitments);
+        publicExport.Files.Should().NotContain(x =>
+            x.RelativePath.StartsWith("artifacts/restricted/", StringComparison.OrdinalIgnoreCase) ||
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+
+        var publicSp04Evidence = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp04Evidence);
+        publicSp04Evidence.RootElement.GetProperty("preparedPackageCount").GetInt32().Should().BeGreaterThanOrEqualTo(2);
+        publicSp04Evidence.RootElement.GetProperty("spoiledPackageCount").GetInt32().Should().BeGreaterThanOrEqualTo(1);
+        publicSp04Evidence.RootElement.GetProperty("acceptedBoundReceiptCount").GetInt32().Should().Be(1);
+        publicSp04Evidence.Dispose();
+
+        var publicReceiptCommitments = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp04ReceiptCommitments);
+        publicReceiptCommitments.RootElement.GetArrayLength().Should().Be(1);
+        publicReceiptCommitments.RootElement[0].GetProperty("preparedBallotId").GetString()
+            .Should().Be(voterView.PreparedBallotId);
+        publicReceiptCommitments.RootElement[0].GetProperty("receiptCommitment").GetString()
+            .Should().Be(voterView.ReceiptCommitment);
+        publicReceiptCommitments.Dispose();
+
+        var publicPayload = string.Join(
+            '\n',
+            publicExport.Files.Select(x => Encoding.UTF8.GetString(x.Content.ToByteArray())));
+        publicPayload.Should().NotContain("voter-alice");
+        publicPayload.Should().NotContain("spoiled-transcript-hash");
+        publicPayload.Should().NotContain("spoil-record-hash");
+
+        using var packageDirectory = new TemporaryPackageDirectory();
+        WriteVerificationPackageToDirectory(publicExport, packageDirectory.PackagePath);
+        var verifierOutputPath = Path.Combine(packageDirectory.PackagePath, "verifier-output-local");
+        var verification = await new HushVotingPackageVerifier().VerifyAsync(new(
+            packageDirectory.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1,
+            verifierOutputPath));
+        verification.ExitCode.Should().Be(VerificationExitCodes.Pass);
+        verification.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.ChallengeSpoilEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
+
+        var restrictedExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackageRestrictedOwnerAuditor);
+        restrictedExport.Success.Should().BeTrue(restrictedExport.ErrorMessage);
+        restrictedExport.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp04CeremonyRecords &&
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+        restrictedExport.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp04PreparedBallotCommitments &&
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+        restrictedExport.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp04SpoilMarkers &&
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+
+        var restrictedPrepared = GetPackageFileText(
+            restrictedExport,
+            VerificationPackageFileNames.RestrictedSp04PreparedBallotCommitments);
+        restrictedPrepared.Should().Contain("\"state\": \"spoiled\"");
+        restrictedPrepared.Should().Contain("\"state\": \"cast\"");
+        restrictedPrepared.Should().Contain(voterView.PreparedBallotId);
+        restrictedPrepared.Should().NotContain("plaintext-choice");
+        restrictedPrepared.Should().NotContain("final-randomness");
     }
 
     [Fact]
@@ -765,6 +893,16 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         votingView.TallyPublicKey.Should().NotBeNull();
         votingView.TallyPublicKey.X.Length.Should().Be(32);
         votingView.TallyPublicKey.Y.Length.Should().Be(32);
+        votingView.Sp04Required.Should().BeTrue();
+        votingView.BallotDefinitionVersion.Should().BeGreaterThan(0);
+        votingView.BallotDefinitionHash.Length.Should().BeGreaterThan(0);
+
+        await EnsureSp04ChallengeSatisfiedAsync(
+            client,
+            electionId,
+            actor,
+            submissionIdempotencyKey,
+            votingView);
 
         var selectionCount = votingView.Election.Options.Count;
         selectionCount.Should().BeGreaterThan(0);
@@ -788,6 +926,14 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             choiceIndex,
             tallyPublicKey);
         var proofBundle = BuildProofBundle(votingView, encryptedBallotPackage);
+        var sp04Binding = await RegisterFinalPreparedBallotAsync(
+            client,
+            electionId,
+            actor,
+            submissionIdempotencyKey,
+            votingView,
+            encryptedBallotPackage,
+            proofBundle);
 
         return TestTransactionFactory.AcceptElectionBallotCast(
             actor,
@@ -800,7 +946,137 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             Convert.FromBase64String(votingView.EligibleSetHash),
             Guid.Parse(votingView.CeremonyVersionId),
             votingView.DkgProfileId,
-            votingView.TallyPublicKeyFingerprint);
+            votingView.TallyPublicKeyFingerprint,
+            sp04Binding.PreparedBallotId,
+            sp04Binding.PreparedBallotHash,
+            sp04Binding.ReceiptCommitment,
+            sp04Binding.ReceiptCommitmentScheme,
+            sp04Binding.BallotDefinitionVersion,
+            sp04Binding.BallotDefinitionHash);
+    }
+
+    private async Task EnsureSp04ChallengeSatisfiedAsync(
+        HushElections.HushElectionsClient client,
+        string electionId,
+        TestIdentity actor,
+        string submissionIdempotencyKey,
+        GetElectionVotingViewResponse votingView)
+    {
+        if (votingView.ChallengeSatisfied)
+        {
+            return;
+        }
+
+        var challengePreparedBallotId = Guid.NewGuid();
+        var challengePreparedHash = ComputeLowerHexSha256(
+            JsonSerializer.Serialize(new
+            {
+                purpose = "challenge",
+                electionId,
+                actor = actor.PublicSigningAddress,
+                submissionIdempotencyKey,
+                votingView.BallotDefinitionVersion,
+                ballotDefinitionHash = Convert.ToHexString(votingView.BallotDefinitionHash.ToByteArray()),
+            }));
+
+        var prepareResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.RegisterPreparedBallotCommitment(
+                actor,
+                new ElectionId(Guid.Parse(electionId)),
+                challengePreparedBallotId,
+                challengePreparedHash,
+                votingView.BallotDefinitionVersion,
+                votingView.BallotDefinitionHash.ToByteArray(),
+                ElectionSp04ProfileIds.ChallengeSpoilV1,
+                Sp04ProofStatementId));
+        prepareResponse.Successfull.Should().BeTrue(prepareResponse.Message);
+
+        var preparedView = await GetElectionVotingViewAsync(client, electionId, actor);
+        preparedView.PreparedBallotId.Should().Be(challengePreparedBallotId.ToString());
+        preparedView.PreparedBallotHash.Should().Be(challengePreparedHash);
+        preparedView.PreparedBallotState.Should().Be(PreparedBallotStateProto.PreparedBallotPrepared);
+        preparedView.HasPreparedBallotExpiresAt.Should().BeTrue();
+
+        var spoiledTranscriptHash = ComputeLowerHexSha256(
+            $"spoiled-transcript|{electionId}|{challengePreparedBallotId:N}|{challengePreparedHash}|{submissionIdempotencyKey}");
+        var spoilRecordHash = ComputeLowerHexSha256(
+            $"spoil-record|{electionId}|{challengePreparedBallotId:N}|{challengePreparedHash}|{spoiledTranscriptHash}");
+        var spoilResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.SpoilPreparedBallot(
+                actor,
+                new ElectionId(Guid.Parse(electionId)),
+                challengePreparedBallotId,
+                challengePreparedHash,
+                spoiledTranscriptHash,
+                spoilRecordHash,
+                Sp04LocalVerifierVersion));
+        spoilResponse.Successfull.Should().BeTrue(spoilResponse.Message);
+
+        var spoiledView = await GetElectionVotingViewAsync(client, electionId, actor);
+        spoiledView.ChallengeSatisfied.Should().BeTrue();
+        spoiledView.SpoiledPackageCount.Should().BeGreaterThanOrEqualTo(1);
+    }
+
+    private async Task<Sp04CastBinding> RegisterFinalPreparedBallotAsync(
+        HushElections.HushElectionsClient client,
+        string electionId,
+        TestIdentity actor,
+        string submissionIdempotencyKey,
+        GetElectionVotingViewResponse votingView,
+        string encryptedBallotPackage,
+        string proofBundle)
+    {
+        var preparedBallotId = Guid.NewGuid();
+        var preparedBallotHash = ComputeLowerHexSha256(
+            JsonSerializer.Serialize(new
+            {
+                purpose = "final",
+                electionId,
+                actor = actor.PublicSigningAddress,
+                submissionIdempotencyKey,
+                encryptedBallotPackageHash = ComputeLowerHexSha256(encryptedBallotPackage),
+                proofBundleHash = ComputeLowerHexSha256(proofBundle),
+                votingView.BallotDefinitionVersion,
+                ballotDefinitionHash = Convert.ToHexString(votingView.BallotDefinitionHash.ToByteArray()),
+            }));
+        var receiptCommitment = ComputeLowerHexSha256(
+            JsonSerializer.Serialize(new
+            {
+                version = "sp04-receipt-commitment-v1",
+                electionId,
+                preparedBallotId,
+                preparedBallotHash,
+                ballotDefinitionHash = Convert.ToHexString(votingView.BallotDefinitionHash.ToByteArray()),
+                votingView.BallotDefinitionVersion,
+                scheme = Sp04ReceiptCommitmentScheme,
+            }));
+
+        var prepareResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.RegisterPreparedBallotCommitment(
+                actor,
+                new ElectionId(Guid.Parse(electionId)),
+                preparedBallotId,
+                preparedBallotHash,
+                votingView.BallotDefinitionVersion,
+                votingView.BallotDefinitionHash.ToByteArray(),
+                ElectionSp04ProfileIds.ChallengeSpoilV1,
+                Sp04ProofStatementId));
+        prepareResponse.Successfull.Should().BeTrue(prepareResponse.Message);
+
+        var preparedView = await GetElectionVotingViewAsync(client, electionId, actor);
+        preparedView.PreparedBallotId.Should().Be(preparedBallotId.ToString());
+        preparedView.PreparedBallotHash.Should().Be(preparedBallotHash);
+        preparedView.PreparedBallotState.Should().Be(PreparedBallotStateProto.PreparedBallotPrepared);
+        preparedView.ChallengeSatisfied.Should().BeTrue();
+        preparedView.Sp04BlockerCode.Should().BeEmpty();
+
+        return new Sp04CastBinding(
+            preparedBallotId,
+            preparedBallotHash,
+            receiptCommitment,
+            Sp04ReceiptCommitmentScheme,
+            votingView.BallotDefinitionVersion,
+            votingView.BallotDefinitionHash.ToByteArray());
     }
 
     private async Task SubmitFinalizationShareViaBlockchainAsync(
@@ -1015,6 +1291,38 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
                 }));
     }
 
+    private async Task<VerifyElectionReceiptResponse> VerifyElectionReceiptAsync(
+        HushElections.HushElectionsClient client,
+        string electionId,
+        TestIdentity actor,
+        string receiptCommitment,
+        string preparedBallotId)
+    {
+        var request = new VerifyElectionReceiptRequest
+        {
+            ElectionId = electionId,
+            ActorPublicAddress = actor.PublicSigningAddress,
+            ReceiptCommitment = receiptCommitment,
+            PreparedBallotId = preparedBallotId,
+        };
+
+        return await client.VerifyElectionReceiptAsync(
+            request,
+            headers: CreateSignedElectionQueryHeaders(
+                nameof(HushElections.HushElectionsClient.VerifyElectionReceipt),
+                actor,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = request.ElectionId,
+                    ["ActorPublicAddress"] = request.ActorPublicAddress,
+                    ["ReceiptId"] = request.ReceiptId,
+                    ["AcceptanceId"] = request.AcceptanceId,
+                    ["ServerProof"] = request.ServerProof,
+                    ["ReceiptCommitment"] = request.ReceiptCommitment,
+                    ["PreparedBallotId"] = request.PreparedBallotId,
+                }));
+    }
+
     private static void WriteVerificationPackageToDirectory(
         ExportElectionVerificationPackageResponse response,
         string packagePath)
@@ -1030,6 +1338,21 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
             File.WriteAllBytes(fullPath, file.Content.ToByteArray());
         }
+    }
+
+    private static JsonDocument ParsePackageJson(
+        ExportElectionVerificationPackageResponse response,
+        string relativePath) =>
+        JsonDocument.Parse(GetPackageFileText(response, relativePath));
+
+    private static string GetPackageFileText(
+        ExportElectionVerificationPackageResponse response,
+        string relativePath)
+    {
+        var file = response.Files.Should()
+            .ContainSingle(x => x.RelativePath == relativePath)
+            .Subject;
+        return Encoding.UTF8.GetString(file.Content.ToByteArray());
     }
 
     private async Task<GetElectionResponse> ReloadElectionAsync(
@@ -1398,6 +1721,14 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             OfficialResultVisibilityPolicy: OfficialResultVisibilityPolicy.PublicPlaintext);
 
     private sealed record ClosedElectionReadyContext(string ElectionId);
+
+    private sealed record Sp04CastBinding(
+        Guid PreparedBallotId,
+        string PreparedBallotHash,
+        string ReceiptCommitment,
+        string ReceiptCommitmentScheme,
+        int BallotDefinitionVersion,
+        byte[] BallotDefinitionHash);
 
     private sealed record IssuedCloseCountingShare(
         string ShareVersion,

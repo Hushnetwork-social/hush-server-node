@@ -160,6 +160,20 @@ public class ElectionsGrpcService(
             StatusCode.FailedPrecondition,
             "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for RegisterElectionVotingCommitment."));
 
+    public override Task<Proto.RegisterPreparedBallotCommitmentResponse> RegisterPreparedBallotCommitment(
+        Proto.RegisterPreparedBallotCommitmentRequest request,
+        ServerCallContext context) =>
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for RegisterPreparedBallotCommitment."));
+
+    public override Task<Proto.SpoilPreparedBallotResponse> SpoilPreparedBallot(
+        Proto.SpoilPreparedBallotRequest request,
+        ServerCallContext context) =>
+        throw new RpcException(new Status(
+            StatusCode.FailedPrecondition,
+            "Election writes must be submitted through HushBlockchain.SubmitSignedTransaction. HushElections is query-only for SpoilPreparedBallot."));
+
     public override Task<Proto.AcceptElectionBallotCastResponse> AcceptElectionBallotCast(
         Proto.AcceptElectionBallotCastRequest request,
         ServerCallContext context) =>
@@ -329,6 +343,8 @@ public class ElectionsGrpcService(
                 ["ReceiptId"] = request.ReceiptId,
                 ["AcceptanceId"] = request.AcceptanceId,
                 ["ServerProof"] = request.ServerProof,
+                ["ReceiptCommitment"] = request.ReceiptCommitment,
+                ["PreparedBallotId"] = request.PreparedBallotId,
             },
             context);
 
@@ -339,7 +355,9 @@ public class ElectionsGrpcService(
                 request.ActorPublicAddress,
                 request.ReceiptId,
                 request.AcceptanceId,
-                request.ServerProof);
+                request.ServerProof,
+                request.ReceiptCommitment,
+                request.PreparedBallotId);
         }
         catch (FormatException ex)
         {

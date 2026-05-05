@@ -160,6 +160,47 @@ public interface IElectionsRepository : IRepository
 
     Task UpdateCommitmentRegistrationAsync(ElectionCommitmentRegistrationRecord commitmentRegistration) => Task.CompletedTask;
 
+    Task<IReadOnlyList<ElectionVoterCeremonyRecord>> GetVoterCeremonyRecordsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionVoterCeremonyRecord>>(Array.Empty<ElectionVoterCeremonyRecord>());
+
+    Task<ElectionVoterCeremonyRecord?> GetVoterCeremonyRecordAsync(ElectionId electionId, string organizationVoterId) =>
+        Task.FromResult<ElectionVoterCeremonyRecord?>(null);
+
+    Task<ElectionVoterCeremonyRecord?> GetVoterCeremonyRecordByLinkedActorAsync(
+        ElectionId electionId,
+        string actorPublicAddress) =>
+        Task.FromResult<ElectionVoterCeremonyRecord?>(null);
+
+    Task SaveVoterCeremonyRecordAsync(ElectionVoterCeremonyRecord ceremonyRecord) => Task.CompletedTask;
+
+    Task UpdateVoterCeremonyRecordAsync(ElectionVoterCeremonyRecord ceremonyRecord) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionPreparedBallotCommitmentRecord>> GetPreparedBallotCommitmentsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionPreparedBallotCommitmentRecord>>(Array.Empty<ElectionPreparedBallotCommitmentRecord>());
+
+    Task<ElectionPreparedBallotCommitmentRecord?> GetPreparedBallotCommitmentAsync(Guid preparedBallotId) =>
+        Task.FromResult<ElectionPreparedBallotCommitmentRecord?>(null);
+
+    Task<ElectionPreparedBallotCommitmentRecord?> GetPreparedBallotCommitmentByHashAsync(
+        ElectionId electionId,
+        string preparedBallotHash) =>
+        Task.FromResult<ElectionPreparedBallotCommitmentRecord?>(null);
+
+    Task SavePreparedBallotCommitmentAsync(ElectionPreparedBallotCommitmentRecord preparedBallotCommitment) =>
+        Task.CompletedTask;
+
+    Task UpdatePreparedBallotCommitmentAsync(ElectionPreparedBallotCommitmentRecord preparedBallotCommitment) =>
+        Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionSpoiledPreparedBallotRecord>> GetSpoiledPreparedBallotsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionSpoiledPreparedBallotRecord>>(Array.Empty<ElectionSpoiledPreparedBallotRecord>());
+
+    Task<ElectionSpoiledPreparedBallotRecord?> GetSpoiledPreparedBallotAsync(Guid preparedBallotId) =>
+        Task.FromResult<ElectionSpoiledPreparedBallotRecord?>(null);
+
+    Task SaveSpoiledPreparedBallotAsync(ElectionSpoiledPreparedBallotRecord spoiledPreparedBallot) =>
+        Task.CompletedTask;
+
     Task<IReadOnlyList<ElectionCheckoffConsumptionRecord>> GetCheckoffConsumptionsAsync(ElectionId electionId) =>
         Task.FromResult<IReadOnlyList<ElectionCheckoffConsumptionRecord>>(Array.Empty<ElectionCheckoffConsumptionRecord>());
 

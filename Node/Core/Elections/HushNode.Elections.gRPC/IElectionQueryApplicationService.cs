@@ -27,7 +27,9 @@ public interface IElectionQueryApplicationService
         string actorPublicAddress,
         string receiptId,
         string acceptanceId,
-        string serverProof);
+        string serverProof,
+        string? receiptCommitment = null,
+        string? preparedBallotId = null);
 
     Task<GetElectionEnvelopeAccessResponse> GetElectionEnvelopeAccessAsync(ElectionId electionId, string actorPublicAddress);
 
