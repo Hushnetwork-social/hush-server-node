@@ -35,6 +35,8 @@ public static class VerificationResultCodes
     public const string PublishedBallotSequenceInvalid = "published_ballot_sequence_invalid";
     public const string PublicRestrictedFieldLeak = "public_restricted_field_leak";
     public const string RestrictedEvidenceMissing = "restricted_evidence_missing";
+    public const string RestrictedExportUnauthorized = "restricted_export_unauthorized";
+    public const string UnsupportedLiveDependency = "unsupported_live_dependency";
     public const string FutureEvidencePending = "future_evidence_pending";
     public const string PublicationProofPendingFeat117 = "not_implemented_pending_FEAT_117";
     public const string ReleaseIntegrityPendingFeat118 = "not_implemented_pending_FEAT_118";
@@ -59,4 +61,3 @@ public static class VerificationExitCodes
             _ => InternalVerifierError,
         };
 }
-

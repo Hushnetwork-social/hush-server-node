@@ -60,5 +60,7 @@ public static class VerificationCanonicalHash
 
     public static string ComputeSha256UpperHex(string content) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content ?? string.Empty)));
-}
 
+    public static string ToLowerHex(byte[]? bytes) =>
+        Convert.ToHexString(bytes ?? []).ToLowerInvariant();
+}
