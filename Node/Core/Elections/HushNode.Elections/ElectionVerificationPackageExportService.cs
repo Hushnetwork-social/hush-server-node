@@ -38,16 +38,15 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
                 VerificationArtifactVisibility.Restricted);
         }
 
-        var provisionalManifestEntries = BuildManifestEntries(files, request.VerifierProfileId);
-        var provisionalManifest = new AuditPackageManifestRecord(
+        var manifest = new AuditPackageManifestRecord(
             ManifestVersion: "1.0",
             packageId,
             request.Election.ElectionId.ToString(),
             request.PackageView,
             request.VerifierProfileId,
             exportedAt,
-            provisionalManifestEntries);
-        var manifestBytes = SerializeToBytes(provisionalManifest);
+            BuildManifestEntries(files, request.VerifierProfileId));
+        var manifestBytes = SerializeToBytes(manifest);
         var manifestHash = VerificationCanonicalHash.ComputeManifestFileSha256(manifestBytes);
         var inputManifest = new VerifierInputManifestRecord(
             ManifestVersion: "1.0",
@@ -62,12 +61,7 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
                 : VerificationPackageFileNames.ArtifactDirectories);
 
         AddJson(files, VerificationPackageFileNames.VerifierInputManifest, inputManifest, VerificationArtifactVisibility.Public);
-
-        var finalManifest = provisionalManifest with
-        {
-            Entries = BuildManifestEntries(files, request.VerifierProfileId),
-        };
-        AddJson(files, VerificationPackageFileNames.AuditPackageManifest, finalManifest, VerificationArtifactVisibility.Public);
+        AddJson(files, VerificationPackageFileNames.AuditPackageManifest, manifest, VerificationArtifactVisibility.Public);
 
         var packageHash = VerificationCanonicalHash.ComputeManifestFileSha256(
             Encoding.UTF8.GetBytes(string.Join(
