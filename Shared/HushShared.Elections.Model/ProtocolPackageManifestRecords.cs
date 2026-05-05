@@ -115,6 +115,9 @@ public record ProtocolOmegaPackageReleaseManifestRecord(
     ProtocolPackageExternalReviewStatus ExternalReviewStatus,
     DateTime ReleasedAt)
 {
+    private readonly IReadOnlyList<ProtocolPackageFileHashRecord> _releaseFiles =
+        Array.Empty<ProtocolPackageFileHashRecord>();
+
     public string PackageId { get; init; } =
         ProtocolPackageRecordValidation.NormalizeRequiredValue(
             PackageId,
@@ -154,6 +157,14 @@ public record ProtocolOmegaPackageReleaseManifestRecord(
         ProtocolPackageRecordValidation.NormalizeRequiredRecordList(
             ProofAccessLocations,
             nameof(ProofAccessLocations));
+
+    public IReadOnlyList<ProtocolPackageFileHashRecord> ReleaseFiles
+    {
+        get => _releaseFiles;
+        init => _releaseFiles = ProtocolPackageRecordValidation.NormalizeRequiredRecordList(
+            value,
+            nameof(ReleaseFiles));
+    }
 }
 
 public record ApprovedProtocolPackageCatalogEntryRecord(

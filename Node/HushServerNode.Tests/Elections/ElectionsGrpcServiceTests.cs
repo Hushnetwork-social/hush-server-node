@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Google.Protobuf;
 using Grpc.Core;
 using HushNetwork.proto;
 using HushNode.Elections.gRPC;
@@ -840,6 +841,102 @@ public class ElectionsGrpcServiceTests
         response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
         response.CanViewParticipantEncryptedResults.Should().BeTrue();
         response.CanViewReportPackage.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetElectionVerificationPackageStatus_WithValidRequest_ReturnsStatusPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionVerificationPackageStatusAsync(electionId, TestActorPublicAddress))
+            .ReturnsAsync(new GetElectionVerificationPackageStatusResponse
+            {
+                Success = true,
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+                Status = new ElectionVerificationPackageStatusView
+                {
+                    ElectionId = electionId.ToString(),
+                    ActorPublicAddress = TestActorPublicAddress,
+                    IsVisible = true,
+                    Status = ElectionVerificationPackageStatusProto.VerificationPackageReady,
+                },
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionVerificationPackageStatus(new GetElectionVerificationPackageStatusRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionVerificationPackageStatus),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+            }));
+
+        response.Success.Should().BeTrue();
+        response.Status.Should().NotBeNull();
+        response.Status.Status.Should().Be(ElectionVerificationPackageStatusProto.VerificationPackageReady);
+    }
+
+    [Fact]
+    public async Task ExportElectionVerificationPackage_WithValidRequest_ReturnsExportPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.ExportElectionVerificationPackageAsync(
+                electionId,
+                TestActorPublicAddress,
+                ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous))
+            .ReturnsAsync(new ExportElectionVerificationPackageResponse
+            {
+                Success = true,
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+                PackageView = ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous,
+                PackageId = $"HushElectionPackage-{electionId}",
+                PackageHash = new string('a', 64),
+                Files =
+                {
+                    new ElectionVerificationPackageFileView
+                    {
+                        RelativePath = "ElectionRecord.json",
+                        MediaType = "application/json",
+                        Visibility = ElectionVerificationArtifactVisibilityProto.VerificationArtifactPublic,
+                        Content = ByteString.CopyFromUtf8("{}"),
+                    },
+                },
+            });
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.ExportElectionVerificationPackage(new ExportElectionVerificationPackageRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+            PackageView = ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.ExportElectionVerificationPackage),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+                ["PackageView"] = ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous,
+            }));
+
+        response.Success.Should().BeTrue();
+        response.PackageHash.Should().Be(new string('a', 64));
+        response.Files.Should().ContainSingle();
+        response.Files[0].RelativePath.Should().Be("ElectionRecord.json");
     }
 
     [Fact]

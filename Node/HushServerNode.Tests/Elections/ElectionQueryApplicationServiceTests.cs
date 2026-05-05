@@ -6,6 +6,7 @@ using HushNode.Elections.gRPC;
 using HushNode.MemPool;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
+using HushShared.Elections.Verification.Model;
 using Moq;
 using Moq.AutoMock;
 using Olimpo.EntityFramework.Persistency;
@@ -2925,6 +2926,218 @@ public class ElectionQueryApplicationServiceTests
         response.ProtocolPackageBinding!.Status.Should().Be(ProtocolPackageBindingStatusProto.ProtocolPackageBindingSealed);
         response.ProtocolPackageBinding.SpecPackageHash.Should().Be(sealedProtocolPackageBinding.SpecPackageHash);
         response.ProtocolPackageBinding.HasSealedAt.Should().BeTrue();
+        response.VerificationPackageStatus.Should().NotBeNull();
+        response.VerificationPackageStatus!.Status.Should().Be(ElectionVerificationPackageStatusProto.VerificationPackageReady);
+        response.VerificationPackageStatus.ProtocolPackageBinding.PackageApprovalStatus.Should().Be(
+            ProtocolPackageApprovalStatusProto.ProtocolPackageApprovedInternal);
+        response.VerificationPackageStatus.LastVerifierResult.OverallStatus.Should().Be(
+            ElectionVerifierOverallStatusProto.ElectionVerifierNotAvailable);
+    }
+
+    [Fact]
+    public async Task GetElectionVerificationPackageStatusAsync_WithOwnerFinalizedDraftProtocol_ReturnsReadyPackageRefsAndHashes()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = DateTime.UtcNow.AddMinutes(-1),
+            TallyReadyArtifactId = Guid.NewGuid(),
+            UnofficialResultArtifactId = Guid.NewGuid(),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            FinalizeArtifactId = Guid.NewGuid(),
+        };
+        var reportPackage = CreateSealedVerificationReportPackage(election);
+        var sealedProtocolPackageBinding = CreateLatestProtocolPackageBinding(
+                election,
+                approvalStatus: ProtocolPackageApprovalStatus.DraftPrivate)
+            .SealAtOpen(DateTime.UtcNow.AddMinutes(-10), "owner-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetSealedProtocolPackageBindingAsync(election.ElectionId))
+                .ReturnsAsync(sealedProtocolPackageBinding);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionVerificationPackageStatusAsync(election.ElectionId, "owner-address");
+
+        response.Success.Should().BeTrue();
+        response.Status.Should().NotBeNull();
+        response.Status.IsVisible.Should().BeTrue();
+        response.Status.Status.Should().Be(ElectionVerificationPackageStatusProto.VerificationPackageReady);
+        response.Status.ProtocolPackageBinding.PackageApprovalStatus.Should().Be(
+            ProtocolPackageApprovalStatusProto.ProtocolPackageDraftPrivate);
+        response.Status.PublicPackage.IsAvailable.Should().BeTrue();
+        response.Status.PublicPackage.VerifierProfileId.Should().Be(VerificationProfileIds.PublicAnonymousV1);
+        response.Status.PublicPackage.PackageHash.Should().NotBeNullOrWhiteSpace();
+        response.Status.RestrictedPackage.IsAvailable.Should().BeTrue();
+        response.Status.RestrictedPackage.VerifierProfileId.Should().Be(VerificationProfileIds.RestrictedOwnerAuditorV1);
+        response.Status.RestrictedPackage.PackageHash.Should().NotBeNullOrWhiteSpace();
+        response.Status.LastVerifierResult.OverallStatus.Should().Be(ElectionVerifierOverallStatusProto.ElectionVerifierNotAvailable);
+    }
+
+    [Fact]
+    public async Task GetElectionVerificationPackageStatusAsync_WithTrusteeRole_AllowsPublicAndDeniesRestricted()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = DateTime.UtcNow.AddMinutes(-1),
+            TallyReadyArtifactId = Guid.NewGuid(),
+            UnofficialResultArtifactId = Guid.NewGuid(),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            FinalizeArtifactId = Guid.NewGuid(),
+        };
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                election.ElectionId,
+                trusteeUserAddress: "trustee-a",
+                trusteeDisplayName: "Alice",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: election.CurrentDraftRevision)
+            .Accept(DateTime.UtcNow, election.CurrentDraftRevision, ElectionLifecycleState.Draft);
+        var reportPackage = CreateSealedVerificationReportPackage(election);
+        var sealedProtocolPackageBinding = CreateLatestProtocolPackageBinding(election)
+            .SealAtOpen(DateTime.UtcNow.AddMinutes(-10), "owner-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync([acceptedInvitation]);
+            repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetSealedProtocolPackageBindingAsync(election.ElectionId))
+                .ReturnsAsync(sealedProtocolPackageBinding);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionVerificationPackageStatusAsync(election.ElectionId, "trustee-a");
+
+        response.Success.Should().BeTrue();
+        response.Status.IsVisible.Should().BeTrue();
+        response.Status.PublicPackage.IsAvailable.Should().BeTrue();
+        response.Status.RestrictedPackage.IsAvailable.Should().BeFalse();
+        response.Status.RestrictedPackage.Blocker.Should().Be(
+            ElectionVerificationPackageBlockerProto.VerificationPackageBlockerUnauthorized);
+        response.Status.ProtocolPackageBinding.Status.Should().Be(
+            ProtocolPackageBindingStatusProto.ProtocolPackageBindingSealed);
+    }
+
+    [Fact]
+    public async Task GetElectionVerificationPackageStatusAsync_WithVoterOnlyActor_HidesPackageControls()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = DateTime.UtcNow.AddMinutes(-1),
+        };
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionVerificationPackageStatusAsync(election.ElectionId, "voter-address");
+
+        response.Success.Should().BeTrue();
+        response.Status.IsVisible.Should().BeFalse();
+        response.Status.Status.Should().Be(ElectionVerificationPackageStatusProto.VerificationPackageNotVisible);
+        response.Status.PublicPackage.IsAvailable.Should().BeFalse();
+        response.Status.PublicPackage.Blocker.Should().Be(
+            ElectionVerificationPackageBlockerProto.VerificationPackageBlockerNotVisible);
+        response.Status.RestrictedPackage.IsAvailable.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExportElectionVerificationPackageAsync_WithOwnerPublicPackage_ReturnsPackageFilesWithoutRestrictedEvidence()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = DateTime.UtcNow.AddMinutes(-1),
+            TallyReadyArtifactId = Guid.NewGuid(),
+            UnofficialResultArtifactId = Guid.NewGuid(),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            FinalizeArtifactId = Guid.NewGuid(),
+        };
+        var reportPackage = CreateSealedVerificationReportPackage(election);
+        var sealedProtocolPackageBinding = CreateLatestProtocolPackageBinding(election)
+            .SealAtOpen(DateTime.UtcNow.AddMinutes(-10), "owner-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetSealedProtocolPackageBindingAsync(election.ElectionId))
+                .ReturnsAsync(sealedProtocolPackageBinding);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.ExportElectionVerificationPackageAsync(
+            election.ElectionId,
+            "owner-address",
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+
+        response.Success.Should().BeTrue();
+        response.Blocker.Should().Be(ElectionVerificationPackageBlockerProto.VerificationPackageBlockerNone);
+        response.PackageHash.Should().NotBeNullOrWhiteSpace();
+        response.Files.Select(x => x.RelativePath).Should().Contain(VerificationPackageFileNames.ElectionRecord);
+        response.Files.Select(x => x.RelativePath).Should().NotContain(VerificationPackageFileNames.RestrictedRosterCheckoff);
+    }
+
+    [Fact]
+    public async Task ExportElectionVerificationPackageAsync_WithTrusteeRestrictedPackage_ReturnsUnauthorized()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = DateTime.UtcNow.AddMinutes(-1),
+            TallyReadyArtifactId = Guid.NewGuid(),
+            UnofficialResultArtifactId = Guid.NewGuid(),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            FinalizeArtifactId = Guid.NewGuid(),
+        };
+        var acceptedInvitation = ElectionModelFactory.CreateTrusteeInvitation(
+                election.ElectionId,
+                trusteeUserAddress: "trustee-a",
+                trusteeDisplayName: "Alice",
+                invitedByPublicAddress: "owner-address",
+                sentAtDraftRevision: election.CurrentDraftRevision)
+            .Accept(DateTime.UtcNow, election.CurrentDraftRevision, ElectionLifecycleState.Draft);
+        var reportPackage = CreateSealedVerificationReportPackage(election);
+        var sealedProtocolPackageBinding = CreateLatestProtocolPackageBinding(election)
+            .SealAtOpen(DateTime.UtcNow.AddMinutes(-10), "owner-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync([acceptedInvitation]);
+            repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetSealedProtocolPackageBindingAsync(election.ElectionId))
+                .ReturnsAsync(sealedProtocolPackageBinding);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.ExportElectionVerificationPackageAsync(
+            election.ElectionId,
+            "trustee-a",
+            ElectionVerificationPackageViewProto.VerificationPackageRestrictedOwnerAuditor);
+
+        response.Success.Should().BeFalse();
+        response.Blocker.Should().Be(ElectionVerificationPackageBlockerProto.VerificationPackageBlockerUnauthorized);
+        response.ResultCode.Should().Be(VerificationResultCodes.RestrictedExportUnauthorized);
+        response.Files.Should().BeEmpty();
     }
 
     [Fact]
@@ -3219,6 +3432,10 @@ public class ElectionQueryApplicationServiceTests
             .ReturnsAsync(Array.Empty<ElectionEligibilityActivationEventRecord>());
         repository.Setup(x => x.GetEligibilitySnapshotsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionEligibilitySnapshotRecord>());
+        repository.Setup(x => x.GetAcceptedBallotsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionAcceptedBallotRecord>());
+        repository.Setup(x => x.GetPublishedBallotsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionPublishedBallotRecord>());
         repository.Setup(x => x.GetRosterEntryByLinkedActorAsync(It.IsAny<ElectionId>(), It.IsAny<string>()))
             .ReturnsAsync((ElectionRosterEntryRecord?)null);
         repository.Setup(x => x.GetCeremonyShareCustodyRecordAsync(It.IsAny<Guid>(), It.IsAny<string>()))
@@ -3328,7 +3545,8 @@ public class ElectionQueryApplicationServiceTests
     private static ProtocolPackageBindingRecord CreateLatestProtocolPackageBinding(
         ElectionRecord election,
         string packageVersion = "v1.0.0",
-        char hashSeed = 'a')
+        char hashSeed = 'a',
+        ProtocolPackageApprovalStatus approvalStatus = ProtocolPackageApprovalStatus.ApprovedInternal)
     {
         var catalogEntry = ElectionModelFactory.CreateApprovedProtocolPackageCatalogEntry(
             packageId: "omega-hushvoting-v1",
@@ -3340,7 +3558,7 @@ public class ElectionQueryApplicationServiceTests
             [
                 election.SelectedProfileId,
             ],
-            approvalStatus: ProtocolPackageApprovalStatus.ApprovedInternal,
+            approvalStatus: approvalStatus,
             isLatestForCompatibleProfiles: true,
             specAccessLocations:
             [
@@ -3359,6 +3577,22 @@ public class ElectionQueryApplicationServiceTests
             election.CurrentDraftRevision,
             "owner-address");
     }
+
+    private static ElectionReportPackageRecord CreateSealedVerificationReportPackage(ElectionRecord election) =>
+        ElectionModelFactory.CreateSealedReportPackage(
+            election.ElectionId,
+            attemptNumber: 1,
+            tallyReadyArtifactId: election.TallyReadyArtifactId ?? Guid.NewGuid(),
+            unofficialResultArtifactId: election.UnofficialResultArtifactId ?? Guid.NewGuid(),
+            officialResultArtifactId: election.OfficialResultArtifactId ?? Guid.NewGuid(),
+            finalizeArtifactId: election.FinalizeArtifactId ?? Guid.NewGuid(),
+            frozenEvidenceHash: [1, 2, 3],
+            frozenEvidenceFingerprint: "verification-fingerprint",
+            packageHash: [4, 5, 6],
+            artifactCount: 1,
+            attemptedByPublicAddress: "owner-address",
+            attemptedAt: DateTime.UtcNow.AddMinutes(-1),
+            sealedAt: DateTime.UtcNow);
 
     private static ProtocolPackageAccessLocationRecord CreateProtocolPackageAccessLocation(string contentHash) =>
         ElectionModelFactory.CreateProtocolPackageAccessLocation(

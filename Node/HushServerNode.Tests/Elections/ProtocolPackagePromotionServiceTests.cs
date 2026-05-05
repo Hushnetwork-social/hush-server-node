@@ -43,9 +43,21 @@ public class ProtocolPackagePromotionServiceTests : IDisposable
 
         second.SpecificationManifest.Files.Should().HaveCount(ProtocolPackagePromotionService.RequiredSpecificationFiles.Count);
         second.ProofManifest.Files.Should().HaveCount(ProtocolPackagePromotionService.RequiredProofFiles.Count);
+        second.ReleaseManifest.ReleaseFiles.Should().HaveCount(ProtocolPackagePromotionService.RequiredReleaseFiles.Count);
+        second.ReleaseManifest.ReleaseFiles.Should().ContainSingle(x => x.RelativePath == "ChangeLog.md");
         second.SpecificationManifest.Files.Should().OnlyContain(x => x.Sha256Hash.Length == 64 && x.SizeBytes > 0);
         second.ProofManifest.Files.Should().OnlyContain(x => x.Sha256Hash.Length == 64 && x.SizeBytes > 0);
+        second.ReleaseManifest.ReleaseFiles.Should().OnlyContain(x => x.Sha256Hash.Length == 64 && x.SizeBytes > 0);
 
+        File.Exists(Path.Combine(
+            paths.OfficialArtifactsRoot,
+            "v1.0.0",
+            "ChangeLog.md")).Should().BeTrue();
+        File.Exists(Path.Combine(
+            paths.OfficialArtifactsRoot,
+            "v1.0.0",
+            ProtocolPackagePromotionService.SpecificationPackageFolderName,
+            "ChangeLog.md")).Should().BeFalse();
         File.Exists(Path.Combine(
             paths.OfficialArtifactsRoot,
             "v1.0.0",
@@ -269,6 +281,14 @@ public class ProtocolPackagePromotionServiceTests : IDisposable
         result.MissingSourceFiles.Should().BeEmpty();
         result.SpecificationManifest.Files.Should().HaveCount(ProtocolPackagePromotionService.RequiredSpecificationFiles.Count);
         result.ProofManifest.Files.Should().HaveCount(ProtocolPackagePromotionService.RequiredProofFiles.Count);
+        result.ReleaseManifest.ReleaseFiles.Should().HaveCount(ProtocolPackagePromotionService.RequiredReleaseFiles.Count);
+        File.Exists(Path.Combine(
+            paths.WorkingSourceRoot,
+            "ChangeLog.md")).Should().BeTrue();
+        File.ReadAllText(Path.Combine(
+                paths.WorkingSourceRoot,
+                "ChangeLog.md"))
+            .Should().Contain("specified_not_implemented_yet");
         File.Exists(Path.Combine(
             paths.WorkingSourceRoot,
             ProtocolPackagePromotionService.SpecificationPackageFolderName,
@@ -322,6 +342,10 @@ public class ProtocolPackagePromotionServiceTests : IDisposable
         string workingSourceRoot,
         string? skippedRelativePath = null)
     {
+        WriteReleaseFiles(
+            workingSourceRoot,
+            skippedRelativePath,
+            includeIncompleteMarker: false);
         WritePackageFiles(
             workingSourceRoot,
             ProtocolPackagePromotionService.SpecificationPackageFolderName,
@@ -338,6 +362,10 @@ public class ProtocolPackagePromotionServiceTests : IDisposable
 
     private static void WriteIncompleteSourcePackage(string workingSourceRoot)
     {
+        WriteReleaseFiles(
+            workingSourceRoot,
+            skippedRelativePath: null,
+            includeIncompleteMarker: true);
         WritePackageFiles(
             workingSourceRoot,
             ProtocolPackagePromotionService.SpecificationPackageFolderName,
@@ -350,6 +378,28 @@ public class ProtocolPackagePromotionServiceTests : IDisposable
             ProtocolPackagePromotionService.RequiredProofFiles,
             skippedRelativePath: null,
             includeIncompleteMarker: true);
+    }
+
+    private static void WriteReleaseFiles(
+        string workingSourceRoot,
+        string? skippedRelativePath,
+        bool includeIncompleteMarker)
+    {
+        foreach (var relativePath in ProtocolPackagePromotionService.RequiredReleaseFiles)
+        {
+            var normalizedRelativePath = relativePath.Replace('\\', '/');
+            if (string.Equals(normalizedRelativePath, skippedRelativePath, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var fullPath = Path.Combine(workingSourceRoot, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            var content = includeIncompleteMarker
+                ? $"# {relativePath}{Environment.NewLine}{Environment.NewLine}Status: specified_not_implemented_yet{Environment.NewLine}Package: {ProtocolPackagePromotionService.ReleasePackageFolderName}{Environment.NewLine}Version: v1.0.0"
+                : $"# {relativePath}{Environment.NewLine}{Environment.NewLine}Package: {ProtocolPackagePromotionService.ReleasePackageFolderName}{Environment.NewLine}Version: v1.0.0";
+            File.WriteAllText(fullPath, content);
+        }
     }
 
     private static void WritePackageFiles(

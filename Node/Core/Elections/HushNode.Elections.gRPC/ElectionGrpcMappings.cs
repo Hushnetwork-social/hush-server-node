@@ -7,7 +7,7 @@ using ReactionECPoint = HushShared.Reactions.Model.ECPoint;
 
 namespace HushNode.Elections.gRPC;
 
-internal static class ElectionGrpcMappings
+internal static partial class ElectionGrpcMappings
 {
     public static ElectionDraftSpecification ToDomain(this ElectionDraftInput draft)
     {

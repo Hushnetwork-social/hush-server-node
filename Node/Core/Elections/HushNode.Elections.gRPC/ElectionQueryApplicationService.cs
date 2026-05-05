@@ -12,7 +12,7 @@ using Timestamp = Google.Protobuf.WellKnownTypes.Timestamp;
 
 namespace HushNode.Elections.gRPC;
 
-public class ElectionQueryApplicationService : IElectionQueryApplicationService
+public partial class ElectionQueryApplicationService : IElectionQueryApplicationService
 {
     private const string TrusteeShareVaultMessageType = "trustee-share-vault-package";
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider;
@@ -21,16 +21,17 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
     private readonly IElectionEnvelopeCryptoService? _electionEnvelopeCryptoService;
     private readonly IElectionCastIdempotencyCacheService? _castIdempotencyCacheService;
     private readonly IElectionBallotPublicationService? _electionBallotPublicationService;
+    private readonly IElectionVerificationPackageExportService _verificationPackageExportService;
 
     public ElectionQueryApplicationService(IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider)
-        : this(unitOfWorkProvider, new ElectionCeremonyOptions(), null, null, null, null)
+        : this(unitOfWorkProvider, new ElectionCeremonyOptions(), null, null, null, null, null)
     {
     }
 
     public ElectionQueryApplicationService(
         IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider,
         ElectionCeremonyOptions ceremonyOptions)
-        : this(unitOfWorkProvider, ceremonyOptions, null, null, null, null)
+        : this(unitOfWorkProvider, ceremonyOptions, null, null, null, null, null)
     {
     }
 
@@ -40,7 +41,8 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         IMemPoolService? memPoolService,
         IElectionEnvelopeCryptoService? electionEnvelopeCryptoService,
         IElectionCastIdempotencyCacheService? castIdempotencyCacheService,
-        IElectionBallotPublicationService? electionBallotPublicationService)
+        IElectionBallotPublicationService? electionBallotPublicationService,
+        IElectionVerificationPackageExportService? verificationPackageExportService = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _ceremonyOptions = ceremonyOptions;
@@ -48,6 +50,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         _electionEnvelopeCryptoService = electionEnvelopeCryptoService;
         _castIdempotencyCacheService = castIdempotencyCacheService;
         _electionBallotPublicationService = electionBallotPublicationService;
+        _verificationPackageExportService = verificationPackageExportService ?? new ElectionVerificationPackageExportService();
     }
 
     private Task TryRepairClosedElectionResultsAsync(ElectionId electionId) =>
@@ -155,7 +158,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var canViewFinalizationOperationalMetadata = canViewGovernedOperationalMetadata;
         var canViewProtocolPackageBinding =
             !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
-            (isOwner || isDesignatedAuditor);
+            (isOwner || acceptedTrustee || isDesignatedAuditor);
         var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(electionId);
         boundaryArtifacts = await EnsureAdminOnlyProtectedTallyBindingPersistedAsync(election, boundaryArtifacts);
         var governedProposals = canViewGovernedOperationalMetadata
@@ -1005,7 +1008,7 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var canViewRestrictedReportArtifacts = isOwner || isDesignatedAuditor;
         var canViewProtocolPackageBinding =
             !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
-            (isOwner || isDesignatedAuditor);
+            (isOwner || acceptedTrustee || isDesignatedAuditor);
 
         var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(electionId);
         var ceremonySnapshot = ResolveResultCeremonySnapshot(election, boundaryArtifacts);
@@ -1068,6 +1071,18 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         if (protocolPackageBinding is not null)
         {
             response.ProtocolPackageBinding = protocolPackageBinding.ToProto();
+        }
+
+        if (BuildVerificationPackageStatusFromLoadedResultView(
+                election,
+                normalizedActorPublicAddress,
+                isOwner,
+                acceptedTrustee,
+                isDesignatedAuditor,
+                latestReportPackage,
+                protocolPackageBinding) is { } verificationPackageStatus)
+        {
+            response.VerificationPackageStatus = verificationPackageStatus;
         }
 
         return response;

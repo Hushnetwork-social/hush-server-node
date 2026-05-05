@@ -33,6 +33,15 @@ public interface IElectionQueryApplicationService
 
     Task<GetElectionResultViewResponse> GetElectionResultViewAsync(ElectionId electionId, string actorPublicAddress);
 
+    Task<GetElectionVerificationPackageStatusResponse> GetElectionVerificationPackageStatusAsync(
+        ElectionId electionId,
+        string actorPublicAddress);
+
+    Task<ExportElectionVerificationPackageResponse> ExportElectionVerificationPackageAsync(
+        ElectionId electionId,
+        string actorPublicAddress,
+        ElectionVerificationPackageViewProto packageView);
+
     Task<GetElectionReportAccessGrantsResponse> GetElectionReportAccessGrantsAsync(ElectionId electionId, string actorPublicAddress);
 
     Task<GetElectionCeremonyActionViewResponse> GetElectionCeremonyActionViewAsync(ElectionId electionId, string actorPublicAddress);

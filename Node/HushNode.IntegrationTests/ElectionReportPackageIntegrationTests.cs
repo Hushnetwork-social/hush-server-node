@@ -13,6 +13,7 @@ using HushServerNode;
 using HushServerNode.Testing;
 using HushServerNode.Testing.Elections;
 using HushShared.Elections.Model;
+using HushShared.Elections.Verification.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Olimpo;
@@ -197,6 +198,102 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         artifacts.Should().Contain(x => x.ArtifactKind == ElectionReportArtifactKind.HumanManifest);
         artifacts.Should().Contain(x => x.ArtifactKind == ElectionReportArtifactKind.MachineEvidenceGraph);
         artifacts.Should().Contain(x => x.ArtifactKind == ElectionReportArtifactKind.HumanNamedParticipationRoster);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-113")]
+    public async Task FinalizeElection_WithSealedPackage_ExportsVerificationPackageAndVerifierReplaysLocalFiles()
+    {
+        var client = await StartClientAsync();
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "FEAT-113 Verification Package Replay",
+            castSubmissionIdempotencyKey: "feat113-cast-001");
+
+        var finalizeProposalId = await StartGovernedProposalAsync(
+            client,
+            context.ElectionId,
+            ElectionGovernedActionType.Finalize);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, Delta);
+
+        var finalizedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        finalizedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Finalized);
+
+        var ownerStatus = await GetElectionVerificationPackageStatusAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice);
+        ownerStatus.Success.Should().BeTrue(ownerStatus.ErrorMessage);
+        ownerStatus.Status.Should().NotBeNull();
+        ownerStatus.Status!.IsVisible.Should().BeTrue();
+        ownerStatus.Status.Status.Should().Be(ElectionVerificationPackageStatusProto.VerificationPackageReady);
+        ownerStatus.Status.PublicPackage.IsAvailable.Should().BeTrue();
+        ownerStatus.Status.PublicPackage.PackageHash.Should().NotBeNullOrWhiteSpace();
+        ownerStatus.Status.RestrictedPackage.IsAvailable.Should().BeTrue();
+        ownerStatus.Status.RestrictedPackage.PackageHash.Should().NotBeNullOrWhiteSpace();
+        ownerStatus.Status.ProtocolPackageBinding.Should().NotBeNull();
+        ownerStatus.Status.ProtocolPackageBinding!.Status.Should().Be(
+            ProtocolPackageBindingStatusProto.ProtocolPackageBindingSealed);
+
+        var publicExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+        publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
+        publicExport.PackageHash.Should().Be(ownerStatus.Status.PublicPackage.PackageHash);
+        publicExport.Files.Should().NotBeEmpty();
+        publicExport.Files.Should().Contain(x => x.RelativePath == VerificationPackageFileNames.AuditPackageManifest);
+        publicExport.Files.Should().Contain(x => x.RelativePath == VerificationPackageFileNames.AcceptedBallotSet);
+        publicExport.Files.Should().Contain(x => x.RelativePath == VerificationPackageFileNames.PublishedBallotStream);
+        publicExport.Files.Should().NotContain(x =>
+            x.RelativePath.StartsWith("artifacts/restricted/", StringComparison.OrdinalIgnoreCase) ||
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+
+        using var packageDirectory = new TemporaryPackageDirectory();
+        WriteVerificationPackageToDirectory(publicExport, packageDirectory.PackagePath);
+        var verifierOutputPath = Path.Combine(packageDirectory.PackagePath, "verifier-output-local");
+        var verification = await new HushVotingPackageVerifier().VerifyAsync(new(
+            packageDirectory.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1,
+            verifierOutputPath));
+        verification.ExitCode.Should().Be(VerificationExitCodes.Pass);
+        verification.Output.PackageId.Should().Be(publicExport.PackageId);
+        verification.Output.ElectionId.Should().Be(context.ElectionId);
+        verification.Output.VerifierProfileId.Should().Be(VerificationProfileIds.PublicAnonymousV1);
+        verification.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        verification.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.PackageManifestValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        verification.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.PublicationProofEvidencePending &&
+            x.Status == VerificationCheckStatus.Warn);
+        File.Exists(Path.Combine(verifierOutputPath, "VerifierOutput.json")).Should().BeTrue();
+        File.Exists(Path.Combine(verifierOutputPath, "VerifierSummary.md")).Should().BeTrue();
+
+        var restrictedAsTrustee = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Bob,
+            ElectionVerificationPackageViewProto.VerificationPackageRestrictedOwnerAuditor);
+        restrictedAsTrustee.Success.Should().BeFalse();
+        restrictedAsTrustee.Blocker.Should().Be(
+            ElectionVerificationPackageBlockerProto.VerificationPackageBlockerUnauthorized);
+        restrictedAsTrustee.ResultCode.Should().Be(VerificationResultCodes.RestrictedExportUnauthorized);
+        restrictedAsTrustee.Files.Should().BeEmpty();
+
+        var restrictedAsOwner = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackageRestrictedOwnerAuditor);
+        restrictedAsOwner.Success.Should().BeTrue(restrictedAsOwner.ErrorMessage);
+        restrictedAsOwner.PackageHash.Should().Be(ownerStatus.Status.RestrictedPackage.PackageHash);
+        restrictedAsOwner.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedRosterCheckoff &&
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
     }
 
     [Fact]
@@ -869,6 +966,72 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         return response;
     }
 
+    private async Task<GetElectionVerificationPackageStatusResponse> GetElectionVerificationPackageStatusAsync(
+        HushElections.HushElectionsClient client,
+        string electionId,
+        TestIdentity actor)
+    {
+        var request = new GetElectionVerificationPackageStatusRequest
+        {
+            ElectionId = electionId,
+            ActorPublicAddress = actor.PublicSigningAddress,
+        };
+
+        return await client.GetElectionVerificationPackageStatusAsync(
+            request,
+            headers: CreateSignedElectionQueryHeaders(
+                nameof(HushElections.HushElectionsClient.GetElectionVerificationPackageStatus),
+                actor,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = request.ElectionId,
+                    ["ActorPublicAddress"] = request.ActorPublicAddress,
+                }));
+    }
+
+    private async Task<ExportElectionVerificationPackageResponse> ExportElectionVerificationPackageAsync(
+        HushElections.HushElectionsClient client,
+        string electionId,
+        TestIdentity actor,
+        ElectionVerificationPackageViewProto packageView)
+    {
+        var request = new ExportElectionVerificationPackageRequest
+        {
+            ElectionId = electionId,
+            ActorPublicAddress = actor.PublicSigningAddress,
+            PackageView = packageView,
+        };
+
+        return await client.ExportElectionVerificationPackageAsync(
+            request,
+            headers: CreateSignedElectionQueryHeaders(
+                nameof(HushElections.HushElectionsClient.ExportElectionVerificationPackage),
+                actor,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = request.ElectionId,
+                    ["ActorPublicAddress"] = request.ActorPublicAddress,
+                    ["PackageView"] = request.PackageView,
+                }));
+    }
+
+    private static void WriteVerificationPackageToDirectory(
+        ExportElectionVerificationPackageResponse response,
+        string packagePath)
+    {
+        response.Success.Should().BeTrue(response.ErrorMessage);
+        Directory.CreateDirectory(packagePath);
+
+        foreach (var file in response.Files)
+        {
+            var fullPath = Path.Combine(
+                packagePath,
+                file.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            File.WriteAllBytes(fullPath, file.Content.ToByteArray());
+        }
+    }
+
     private async Task<GetElectionResponse> ReloadElectionAsync(
         HushElections.HushElectionsClient client,
         string electionId,
@@ -1171,6 +1334,26 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         new ElectionRosterImportItem("voter-charlie", ElectionRosterContactType.Email, "charlie.eligibility@hush.test"),
         new ElectionRosterImportItem("voter-guest", ElectionRosterContactType.Email, "guest.eligibility@hush.test"),
     ];
+
+    private sealed class TemporaryPackageDirectory : IDisposable
+    {
+        public string PackagePath { get; } = Path.Combine(
+            Path.GetTempPath(),
+            $"hush-verification-package-integration-{Guid.NewGuid():N}");
+
+        public TemporaryPackageDirectory()
+        {
+            Directory.CreateDirectory(PackagePath);
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(PackagePath))
+            {
+                Directory.Delete(PackagePath, recursive: true);
+            }
+        }
+    }
 
     private static ElectionDraftSpecification BuildTrusteeThresholdDraftSpecification(string title) =>
         new(
