@@ -24,7 +24,10 @@ public record ElectionVerificationPackageExportRequest(
     VerificationPackageView PackageView,
     string VerifierProfileId,
     bool RestrictedAccessAuthorized,
-    DateTime? ExportedAt = null);
+    DateTime? ExportedAt = null,
+    IReadOnlyList<ElectionVoterCeremonyRecord>? VoterCeremonyRecords = null,
+    IReadOnlyList<ElectionPreparedBallotCommitmentRecord>? PreparedBallotCommitments = null,
+    IReadOnlyList<ElectionSpoiledPreparedBallotRecord>? SpoiledPreparedBallots = null);
 
 public record ElectionVerificationPackageExportResult(
     bool Success,

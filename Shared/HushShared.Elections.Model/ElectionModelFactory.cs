@@ -239,6 +239,12 @@ public static partial class ElectionModelFactory
             throw new ArgumentException("Recorded-by public address is required.", nameof(recordedByPublicAddress));
         }
 
+        var resolvedBallotDefinitionVersion = ballotDefinitionVersion ?? election.BallotDefinitionVersion;
+        var resolvedBallotDefinitionHash = ballotDefinitionHash ?? election.BallotDefinitionHash;
+        var resolvedBallotDefinitionSealedAt = ballotDefinitionSealedAt ?? election.BallotDefinitionSealedAt;
+        var resolvedBallotDefinitionMutationPolicy =
+            ballotDefinitionMutationPolicy ?? election.BallotDefinitionMutationPolicy;
+
         return new ElectionBoundaryArtifactRecord(
             Guid.NewGuid(),
             election.ElectionId,
@@ -286,10 +292,10 @@ public static partial class ElectionModelFactory
             sourceTransactionId,
             sourceBlockHeight,
             sourceBlockId,
-            ballotDefinitionVersion,
-            CloneBytes(ballotDefinitionHash),
-            ballotDefinitionSealedAt,
-            ballotDefinitionMutationPolicy);
+            resolvedBallotDefinitionVersion,
+            CloneBytes(resolvedBallotDefinitionHash),
+            resolvedBallotDefinitionSealedAt,
+            resolvedBallotDefinitionMutationPolicy);
     }
 
     public static ElectionWarningAcknowledgementRecord CreateWarningAcknowledgement(

@@ -180,6 +180,57 @@ public class ElectionModelFactoryTests
     }
 
     [Fact]
+    public void BallotDefinitionCanonicalizer_ChangesHashWhenBallotMeaningChanges()
+    {
+        var election = CreateTrusteeElection();
+        var changedOptionText = election with
+        {
+            Options = election.Options
+                .Select(x => x.OptionId == "yes"
+                    ? x with { DisplayLabel = "Approve" }
+                    : x)
+                .ToArray(),
+        };
+        var changedOutcomeRule = election with
+        {
+            OutcomeRule = election.OutcomeRule with
+            {
+                CalculationBasis = "two_thirds_of_non_blank_votes",
+            },
+        };
+
+        var baselineHash = ElectionBallotDefinitionCanonicalizer.ComputeHash(election);
+
+        ElectionBallotDefinitionCanonicalizer.ComputeHash(changedOptionText)
+            .Should()
+            .NotEqual(baselineHash);
+        ElectionBallotDefinitionCanonicalizer.ComputeHash(changedOutcomeRule)
+            .Should()
+            .NotEqual(baselineHash);
+    }
+
+    [Fact]
+    public void BallotDefinitionCanonicalizer_IgnoresRuntimeElectionState()
+    {
+        var election = CreateTrusteeElection();
+        var runtimeChanged = election with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            LastUpdatedAt = DateTime.UtcNow.AddMinutes(5),
+            OpenedAt = DateTime.UtcNow,
+            OpenArtifactId = Guid.NewGuid(),
+            BallotDefinitionVersion = 99,
+            BallotDefinitionHash = [9, 9, 9],
+            BallotDefinitionSealedAt = DateTime.UtcNow,
+            BallotDefinitionMutationPolicy = ElectionBallotDefinitionMutationPolicy.ImmutableAfterOpen,
+        };
+
+        ElectionBallotDefinitionCanonicalizer.ComputeHash(runtimeChanged)
+            .Should()
+            .Equal(ElectionBallotDefinitionCanonicalizer.ComputeHash(election));
+    }
+
+    [Fact]
     public void CreateGovernedProposalApproval_BindsApprovalToExactProposalTarget()
     {
         var election = CreateTrusteeElection();

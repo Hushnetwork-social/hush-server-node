@@ -20,6 +20,9 @@ public class HushVotingPackageVerifierTamperTests
             { "tamper-accepted-set-hash", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.AcceptedBallotInventoryHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-published-stream-sequence", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublishedBallotSequenceInvalid, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-published-stream-hash", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublishedBallotStreamHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp04-receipt-set-hash", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.ChallengeSpoilReceiptMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp04-count", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.ChallengeSpoilCountMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp04-accepted-binding", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.ChallengeSpoilReceiptMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-named-voter-in-public-artifact", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicRestrictedFieldLeak, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-raw-trustee-share", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicRestrictedFieldLeak, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "missing-sp07-development-warning", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicationProofEvidencePending, VerificationCheckStatus.Warn, VerificationOverallStatus.Warn, 0 },
@@ -149,6 +152,46 @@ public class HushVotingPackageVerifierTamperTests
                     packagePath,
                     VerificationPackageFileNames.PublishedBallotStream,
                     publishedHash with { PublishedBallotStreamHash = new string('0', 64) });
+                return;
+
+            case "tamper-sp04-receipt-set-hash":
+                var sp04EvidenceHash = await ReadArtifactAsync<ElectionSp04EvidenceRecord>(
+                    packagePath,
+                    VerificationPackageFileNames.Sp04Evidence);
+                await WriteArtifactAsync(
+                    packagePath,
+                    VerificationPackageFileNames.Sp04Evidence,
+                    sp04EvidenceHash with { ReceiptCommitmentSetHash = new string('0', 64) });
+                return;
+
+            case "tamper-sp04-count":
+                var sp04EvidenceCount = await ReadArtifactAsync<ElectionSp04EvidenceRecord>(
+                    packagePath,
+                    VerificationPackageFileNames.Sp04Evidence);
+                await WriteArtifactAsync(
+                    packagePath,
+                    VerificationPackageFileNames.Sp04Evidence,
+                    sp04EvidenceCount with { AcceptedBoundReceiptCount = sp04EvidenceCount.AcceptedBoundReceiptCount + 1 });
+                return;
+
+            case "tamper-sp04-accepted-binding":
+                var acceptedBinding = await ReadArtifactAsync<AcceptedBallotSetArtifactRecord>(
+                    packagePath,
+                    VerificationPackageFileNames.AcceptedBallotSet);
+                await WriteArtifactAsync(
+                    packagePath,
+                    VerificationPackageFileNames.AcceptedBallotSet,
+                    acceptedBinding with
+                    {
+                        AcceptedBallots =
+                        [
+                            acceptedBinding.AcceptedBallots[0] with
+                            {
+                                ReceiptCommitment = "tampered-receipt",
+                            },
+                            acceptedBinding.AcceptedBallots[1],
+                        ],
+                    });
                 return;
 
             case "tamper-named-voter-in-public-artifact":

@@ -11,7 +11,16 @@ public record AcceptedBallotArtifactRecord(
     string EncryptedBallotPackage,
     string ProofBundle,
     string EncryptedBallotPackageHash,
-    string ProofBundleHash);
+    string ProofBundleHash,
+    Guid? PreparedBallotId = null,
+    string? PreparedBallotHash = null,
+    string? ReceiptCommitment = null,
+    string? ReceiptCommitmentScheme = null,
+    int? BallotDefinitionVersion = null,
+    byte[]? BallotDefinitionHash = null)
+{
+    public byte[]? BallotDefinitionHash { get; init; } = BallotDefinitionHash?.ToArray();
+}
 
 public record PublishedBallotStreamArtifactRecord(
     string ElectionId,

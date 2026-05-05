@@ -50,6 +50,10 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleActivateRosterEntryAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.RegisterVotingCommitment =>
                 await HandleRegisterVotingCommitmentAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RegisterPreparedBallotCommitment =>
+                await HandleRegisterPreparedBallotCommitmentAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.SpoilPreparedBallot =>
+                await HandleSpoilPreparedBallotAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.AcceptBallotCast =>
                 await HandleAcceptBallotCastAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.InviteTrustee =>
@@ -320,7 +324,13 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 acceptAction.EligibleSetHash,
                 acceptAction.CeremonyVersionId,
                 acceptAction.DkgProfileId,
-                acceptAction.TallyPublicKeyFingerprint));
+                acceptAction.TallyPublicKeyFingerprint,
+                acceptAction.PreparedBallotId,
+                acceptAction.PreparedBallotHash,
+                acceptAction.ReceiptCommitment,
+                acceptAction.ReceiptCommitmentScheme,
+                acceptAction.BallotDefinitionVersion,
+                acceptAction.BallotDefinitionHash));
 
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(
@@ -343,6 +353,92 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                     _ => ElectionCommandErrorCode.ValidationFailed,
                 },
                 result.ErrorMessage ?? "Ballot acceptance failed.");
+    }
+
+    private async Task<ElectionCommandResult> HandleRegisterPreparedBallotCommitmentAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var registerAction = decryptedEnvelope.DeserializeAction<RegisterPreparedBallotCommitmentActionPayload>();
+        if (registerAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Register prepared ballot commitment action payload could not be deserialized.");
+        }
+
+        var result = await _electionLifecycleService.RegisterPreparedBallotCommitmentAsync(
+            new RegisterPreparedBallotCommitmentRequest(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                registerAction.ActorPublicAddress,
+                registerAction.PreparedBallotId,
+                registerAction.PreparedBallotHash,
+                registerAction.BallotDefinitionVersion,
+                registerAction.BallotDefinitionHash,
+                registerAction.CeremonyProfileId,
+                registerAction.ProofStatementId,
+                registerAction.PrecommittedAt,
+                decryptedEnvelope.Transaction.TransactionId.Value,
+                _blockchainCache.LastBlockIndex.Value,
+                _blockchainCache.CurrentBlockId.Value));
+
+        return result.IsSuccess && result.Election is not null
+            ? ElectionCommandResult.Success(result.Election, rosterEntry: result.RosterEntry)
+            : ElectionCommandResult.Failure(
+                result.FailureReason switch
+                {
+                    ElectionPreparedBallotCommitmentFailureReason.NotFound => ElectionCommandErrorCode.NotFound,
+                    ElectionPreparedBallotCommitmentFailureReason.NotLinked => ElectionCommandErrorCode.Forbidden,
+                    ElectionPreparedBallotCommitmentFailureReason.NotActive => ElectionCommandErrorCode.DependencyBlocked,
+                    ElectionPreparedBallotCommitmentFailureReason.CommitmentMissing => ElectionCommandErrorCode.DependencyBlocked,
+                    ElectionPreparedBallotCommitmentFailureReason.ElectionNotOpen => ElectionCommandErrorCode.InvalidState,
+                    ElectionPreparedBallotCommitmentFailureReason.ClosePersisted => ElectionCommandErrorCode.InvalidState,
+                    ElectionPreparedBallotCommitmentFailureReason.DuplicatePreparedBallot => ElectionCommandErrorCode.Conflict,
+                    ElectionPreparedBallotCommitmentFailureReason.UnsupportedCeremonyProfile => ElectionCommandErrorCode.NotSupported,
+                    _ => ElectionCommandErrorCode.ValidationFailed,
+                },
+                result.ErrorMessage ?? "Prepared ballot commitment registration failed.");
+    }
+
+    private async Task<ElectionCommandResult> HandleSpoilPreparedBallotAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var spoilAction = decryptedEnvelope.DeserializeAction<SpoilPreparedBallotActionPayload>();
+        if (spoilAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Spoil prepared ballot action payload could not be deserialized.");
+        }
+
+        var result = await _electionLifecycleService.SpoilPreparedBallotAsync(
+            new SpoilPreparedBallotRequest(
+                decryptedEnvelope.Transaction.Payload.ElectionId,
+                spoilAction.ActorPublicAddress,
+                spoilAction.PreparedBallotId,
+                spoilAction.PreparedBallotHash,
+                spoilAction.SpoiledTranscriptHash,
+                spoilAction.SpoilRecordHash,
+                spoilAction.LocalVerifierVersion,
+                spoilAction.SpoiledAt,
+                decryptedEnvelope.Transaction.TransactionId.Value,
+                _blockchainCache.LastBlockIndex.Value,
+                _blockchainCache.CurrentBlockId.Value));
+
+        return result.IsSuccess && result.Election is not null
+            ? ElectionCommandResult.Success(result.Election, rosterEntry: result.RosterEntry)
+            : ElectionCommandResult.Failure(
+                result.FailureReason switch
+                {
+                    ElectionSpoilPreparedBallotFailureReason.NotFound => ElectionCommandErrorCode.NotFound,
+                    ElectionSpoilPreparedBallotFailureReason.NotLinked => ElectionCommandErrorCode.Forbidden,
+                    ElectionSpoilPreparedBallotFailureReason.NotActive => ElectionCommandErrorCode.DependencyBlocked,
+                    ElectionSpoilPreparedBallotFailureReason.ElectionNotOpen => ElectionCommandErrorCode.InvalidState,
+                    ElectionSpoilPreparedBallotFailureReason.ClosePersisted => ElectionCommandErrorCode.InvalidState,
+                    ElectionSpoilPreparedBallotFailureReason.PreparedBallotAlreadySpoiled => ElectionCommandErrorCode.Conflict,
+                    ElectionSpoilPreparedBallotFailureReason.PreparedBallotAlreadyCast => ElectionCommandErrorCode.Conflict,
+                    _ => ElectionCommandErrorCode.ValidationFailed,
+                },
+                result.ErrorMessage ?? "Prepared ballot spoil failed.");
     }
 
     private async Task<ElectionCommandResult> HandleInviteTrusteeAsync(
