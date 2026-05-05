@@ -21,6 +21,8 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionReportPackage(modelBuilder);
         ConfigureElectionReportArtifact(modelBuilder);
         ConfigureElectionReportAccessGrant(modelBuilder);
+        ConfigureApprovedProtocolPackageCatalogEntry(modelBuilder);
+        ConfigureProtocolPackageBinding(modelBuilder);
         ConfigureElectionRosterEntry(modelBuilder);
         ConfigureElectionEligibilityActivationEvent(modelBuilder);
         ConfigureElectionParticipation(modelBuilder);
@@ -297,6 +299,74 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
 
             entity.HasIndex(x => new { x.ElectionId, x.ActorPublicAddress, x.GrantRole }).IsUnique();
             entity.HasIndex(x => x.ActorPublicAddress);
+        });
+    }
+
+    private static void ConfigureApprovedProtocolPackageCatalogEntry(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ApprovedProtocolPackageCatalogEntryRecord>(entity =>
+        {
+            entity.ToTable("ApprovedProtocolPackageCatalogEntryRecord", "Elections");
+            entity.HasKey(x => new { x.PackageId, x.PackageVersion });
+
+            entity.Property(x => x.PackageId).HasColumnType("varchar(160)");
+            entity.Property(x => x.PackageVersion).HasColumnType("varchar(64)");
+            entity.Property(x => x.SpecPackageHash).HasColumnType("varchar(64)");
+            entity.Property(x => x.ProofPackageHash).HasColumnType("varchar(64)");
+            entity.Property(x => x.ReleaseManifestHash).HasColumnType("varchar(64)");
+            entity.Property(x => x.ApprovalStatus).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.ApprovedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.IsLatestForCompatibleProfiles).HasColumnType("boolean");
+            entity.Property(x => x.ExternalReviewStatus).HasConversion<string>().HasColumnType("varchar(40)");
+
+            ConfigureJsonProperty(entity.Property(x => x.CompatibleProfileIds));
+            ConfigureJsonProperty(entity.Property(x => x.SpecAccessLocations));
+            ConfigureJsonProperty(entity.Property(x => x.ProofAccessLocations));
+
+            entity.HasIndex(x => x.PackageId);
+            entity.HasIndex(x => x.PackageVersion);
+            entity.HasIndex(x => x.ApprovalStatus);
+            entity.HasIndex(x => x.IsLatestForCompatibleProfiles);
+        });
+    }
+
+    private static void ConfigureProtocolPackageBinding(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProtocolPackageBindingRecord>(entity =>
+        {
+            entity.ToTable("ProtocolPackageBindingRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.PackageId).HasColumnType("varchar(160)");
+            entity.Property(x => x.PackageVersion).HasColumnType("varchar(64)");
+            entity.Property(x => x.SelectedProfileId).HasColumnType("varchar(96)");
+            entity.Property(x => x.SpecPackageHash).HasColumnType("varchar(64)");
+            entity.Property(x => x.ProofPackageHash).HasColumnType("varchar(64)");
+            entity.Property(x => x.ReleaseManifestHash).HasColumnType("varchar(64)");
+            entity.Property(x => x.PackageApprovalStatus).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.Source).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.DraftRevision).HasColumnType("integer");
+            entity.Property(x => x.BoundAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SealedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.BoundByPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.ExternalReviewStatus).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            ConfigureJsonProperty(entity.Property(x => x.SpecAccessLocations));
+            ConfigureJsonProperty(entity.Property(x => x.ProofAccessLocations));
+
+            entity.HasIndex(x => new { x.ElectionId, x.BoundAt });
+            entity.HasIndex(x => new { x.ElectionId, x.Status });
+            entity.HasIndex(x => new { x.ElectionId, x.DraftRevision });
         });
     }
 

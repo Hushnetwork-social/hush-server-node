@@ -81,6 +81,36 @@ public interface IElectionsRepository : IRepository
 
     Task SaveReportAccessGrantAsync(ElectionReportAccessGrantRecord reportAccessGrant) => Task.CompletedTask;
 
+    Task<IReadOnlyList<ApprovedProtocolPackageCatalogEntryRecord>> GetApprovedProtocolPackageCatalogEntriesAsync() =>
+        Task.FromResult<IReadOnlyList<ApprovedProtocolPackageCatalogEntryRecord>>(Array.Empty<ApprovedProtocolPackageCatalogEntryRecord>());
+
+    Task<ApprovedProtocolPackageCatalogEntryRecord?> GetApprovedProtocolPackageCatalogEntryAsync(string packageId) =>
+        Task.FromResult<ApprovedProtocolPackageCatalogEntryRecord?>(null);
+
+    Task<ApprovedProtocolPackageCatalogEntryRecord?> GetLatestApprovedProtocolPackageCatalogEntryAsync(string selectedProfileId) =>
+        Task.FromResult<ApprovedProtocolPackageCatalogEntryRecord?>(null);
+
+    Task SaveApprovedProtocolPackageCatalogEntryAsync(ApprovedProtocolPackageCatalogEntryRecord catalogEntry) =>
+        Task.CompletedTask;
+
+    Task UpdateApprovedProtocolPackageCatalogEntryAsync(ApprovedProtocolPackageCatalogEntryRecord catalogEntry) =>
+        Task.CompletedTask;
+
+    Task<IReadOnlyList<ProtocolPackageBindingRecord>> GetProtocolPackageBindingsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ProtocolPackageBindingRecord>>(Array.Empty<ProtocolPackageBindingRecord>());
+
+    Task<ProtocolPackageBindingRecord?> GetLatestProtocolPackageBindingAsync(ElectionId electionId) =>
+        Task.FromResult<ProtocolPackageBindingRecord?>(null);
+
+    Task<ProtocolPackageBindingRecord?> GetSealedProtocolPackageBindingAsync(ElectionId electionId) =>
+        Task.FromResult<ProtocolPackageBindingRecord?>(null);
+
+    Task SaveProtocolPackageBindingAsync(ProtocolPackageBindingRecord bindingRecord) =>
+        Task.CompletedTask;
+
+    Task UpdateProtocolPackageBindingAsync(ProtocolPackageBindingRecord bindingRecord) =>
+        Task.CompletedTask;
+
     Task<IReadOnlyList<ElectionRosterEntryRecord>> GetRosterEntriesAsync(ElectionId electionId) =>
         Task.FromResult<IReadOnlyList<ElectionRosterEntryRecord>>(Array.Empty<ElectionRosterEntryRecord>());
 

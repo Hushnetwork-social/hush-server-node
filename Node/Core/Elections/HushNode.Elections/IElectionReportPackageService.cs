@@ -15,6 +15,7 @@ public sealed record ElectionReportPackageBuildRequest(
     ElectionResultArtifactRecord UnofficialResult,
     ElectionResultArtifactRecord OfficialResult,
     ElectionEligibilitySnapshotRecord? CloseEligibilitySnapshot,
+    ProtocolPackageBindingRecord? ProtocolPackageBinding,
     ElectionFinalizationSessionRecord? FinalizationSession,
     ElectionFinalizationReleaseEvidenceRecord? FinalizationReleaseEvidence,
     ElectionGovernedProposalRecord? FinalizationGovernedProposal,

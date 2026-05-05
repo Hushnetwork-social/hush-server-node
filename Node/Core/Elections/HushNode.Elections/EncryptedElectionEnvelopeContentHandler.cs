@@ -166,6 +166,8 @@ public class EncryptedElectionEnvelopeContentHandler(
                 IsValidCreateDraftAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.UpdateDraft =>
                 IsValidUpdateDraftAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.RefreshProtocolPackageBinding =>
+                IsValidRefreshProtocolPackageBindingAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.ImportRoster =>
                 IsValidImportRosterAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.ClaimRosterEntry =>
@@ -263,6 +265,33 @@ public class EncryptedElectionEnvelopeContentHandler(
             new SignatureInfo(signatory, decryptedEnvelope.Transaction.UserSignature!.Signature));
 
         return _updateElectionDraftContentHandler.ValidateAndSign(signedTransaction) is not null;
+    }
+
+    private bool IsValidRefreshProtocolPackageBindingAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var refreshAction = decryptedEnvelope.DeserializeAction<RefreshProtocolPackageBindingActionPayload>();
+        if (refreshAction is null || !HasMatchingActor(signatory, refreshAction.ActorPublicAddress))
+        {
+            return false;
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId).GetAwaiter().GetResult();
+        if (election is null ||
+            election.LifecycleState != ElectionLifecycleState.Draft ||
+            !string.Equals(election.OwnerPublicAddress, refreshAction.ActorPublicAddress, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var pendingProposal = repository
+            .GetPendingGovernedProposalAsync(decryptedEnvelope.Transaction.Payload.ElectionId)
+            .GetAwaiter()
+            .GetResult();
+        return !IsDraftBlockedByPendingOpenProposal(pendingProposal);
     }
 
     private bool IsValidImportRosterAction(

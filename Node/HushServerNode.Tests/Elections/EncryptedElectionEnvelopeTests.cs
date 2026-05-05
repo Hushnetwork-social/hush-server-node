@@ -267,6 +267,109 @@ public class EncryptedElectionEnvelopeTests
     }
 
     [Fact]
+    public void ValidateAndSign_WithValidRefreshProtocolPackageBindingEnvelope_ReturnsValidatedOuterEnvelope()
+    {
+        var validatorSigningKeys = new DigitalSignature();
+        var validatorEncryptKeys = new EncryptKeys();
+        var election = ElectionModelFactory.CreateDraftRecord(
+            electionId: ElectionId.NewElectionId,
+            title: "Board Election",
+            shortDescription: "Annual board vote",
+            ownerPublicAddress: "owner-address",
+            externalReferenceCode: "ORG-2026-01",
+            electionClass: ElectionClass.OrganizationalRemoteVoting,
+            bindingStatus: ElectionBindingStatus.Binding,
+            governanceMode: ElectionGovernanceMode.AdminOnly,
+            disclosureMode: ElectionDisclosureMode.FinalResultsOnly,
+            participationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
+            voteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
+            eligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            outcomeRule: new OutcomeRuleDefinition(
+                OutcomeRuleKind.SingleWinner,
+                "single_winner",
+                SeatCount: 1,
+                BlankVoteCountsForTurnout: true,
+                BlankVoteExcludedFromWinnerSelection: true,
+                BlankVoteExcludedFromThresholdDenominator: false,
+                TieResolutionRule: "tie_unresolved",
+                CalculationBasis: "highest_non_blank_votes"),
+            approvedClientApplications:
+            [
+                new ApprovedClientApplicationRecord("hushsocial", "1.0.0"),
+            ],
+            protocolOmegaVersion: "omega-v1.0.0",
+            reportingPolicy: ReportingPolicy.DefaultPhaseOnePackage,
+            reviewWindowPolicy: ReviewWindowPolicy.NoReviewWindow,
+            ownerOptions:
+            [
+                new ElectionOptionDefinition("option-a", "Alice", "First option", 1, false),
+                new ElectionOptionDefinition("option-b", "Bob", "Second option", 2, false),
+            ],
+            acknowledgedWarningCodes: []);
+        var signedEnvelope = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            EncryptedElectionEnvelopePayloadHandler.CreateNew(
+                election.ElectionId,
+                EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+                "node-envelope",
+                "actor-envelope",
+                "encrypted-payload"),
+            new SignatureInfo("owner-address", "signature"));
+
+        var cryptoService = new Mock<IElectionEnvelopeCryptoService>();
+        cryptoService
+            .Setup(x => x.TryDecryptSigned(It.IsAny<AbstractTransaction>()))
+            .Returns(new DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>>(
+                signedEnvelope,
+                EncryptedElectionEnvelopeActionTypes.RefreshProtocolPackageBinding,
+                JsonSerializer.Serialize(new RefreshProtocolPackageBindingActionPayload("owner-address"))));
+
+        var repository = new Mock<IElectionsRepository>();
+        repository.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+        repository.Setup(x => x.GetPendingGovernedProposalAsync(election.ElectionId))
+            .ReturnsAsync((ElectionGovernedProposalRecord?)null);
+
+        var readOnlyUnitOfWork = new Mock<Olimpo.EntityFramework.Persistency.IReadOnlyUnitOfWork<ElectionsDbContext>>();
+        readOnlyUnitOfWork
+            .Setup(x => x.GetRepository<IElectionsRepository>())
+            .Returns(repository.Object);
+
+        var unitOfWorkProvider = new Mock<Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext>>();
+        unitOfWorkProvider
+            .Setup(x => x.CreateReadOnly())
+            .Returns(readOnlyUnitOfWork.Object);
+
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        credentialsProvider
+            .Setup(x => x.GetCredentials())
+            .Returns(new CredentialsProfile
+            {
+                PublicSigningAddress = validatorSigningKeys.PublicAddress,
+                PrivateSigningKey = validatorSigningKeys.PrivateKey,
+                PublicEncryptAddress = validatorEncryptKeys.PublicKey,
+                PrivateEncryptKey = validatorEncryptKeys.PrivateKey,
+            });
+
+        var validationService = new Mock<ICreateElectionDraftValidationService>();
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        var sut = CreateContentHandler(
+            cryptoService.Object,
+            validationService.Object,
+            credentialsProvider.Object,
+            unitOfWorkProvider.Object,
+            lifecycleService.Object);
+
+        var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
+
+        validatedTransaction.Should().BeOfType<ValidatedTransaction<EncryptedElectionEnvelopePayload>>();
+        ((ValidatedTransaction<EncryptedElectionEnvelopePayload>)validatedTransaction!)
+            .ValidatorSignature
+            .Signatory
+            .Should()
+            .Be(validatorSigningKeys.PublicAddress);
+    }
+
+    [Fact]
     public void ValidateAndSign_WithValidCreateReportAccessGrantEnvelope_ReturnsValidatedOuterEnvelope()
     {
         var validatorSigningKeys = new DigitalSignature();

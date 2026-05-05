@@ -33,6 +33,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly IAdminOnlyProtectedTallyEnvelopeCrypto _adminOnlyProtectedTallyEnvelopeCrypto;
     private readonly IElectionSensitiveStorageMaintenance? _sensitiveStorageMaintenance;
     private readonly IBabyJubJub _curve;
+    private readonly ProtocolPackageBindingService _protocolPackageBindingService = new();
     private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
 
     public ElectionLifecycleService(
@@ -158,6 +159,14 @@ public class ElectionLifecycleService : IElectionLifecycleService
             await repository.SaveWarningAcknowledgementAsync(acknowledgement);
         }
 
+        var protocolPackageBinding = await _protocolPackageBindingService.CreateInitialDraftBindingAsync(
+            repository,
+            election,
+            request.ActorPublicAddress,
+            request.SourceTransactionId,
+            request.SourceBlockHeight,
+            request.SourceBlockId);
+
         await unitOfWork.CommitAsync();
 
         _logger.LogInformation(
@@ -165,7 +174,10 @@ public class ElectionLifecycleService : IElectionLifecycleService
             election.ElectionId,
             election.CurrentDraftRevision);
 
-        return ElectionCommandResult.Success(election, draftSnapshot: snapshot);
+        return ElectionCommandResult.Success(
+            election,
+            draftSnapshot: snapshot,
+            protocolPackageBinding: protocolPackageBinding);
     }
 
     public async Task<ElectionCommandResult> UpdateDraftAsync(UpdateElectionDraftRequest request)
@@ -275,6 +287,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
             await repository.SaveWarningAcknowledgementAsync(acknowledgement);
         }
 
+        var protocolPackageBinding = await _protocolPackageBindingService.MarkDraftBindingDriftAsync(
+            repository,
+            updated,
+            request.ActorPublicAddress);
+
         await unitOfWork.CommitAsync();
 
         _logger.LogInformation(
@@ -282,7 +299,51 @@ public class ElectionLifecycleService : IElectionLifecycleService
             updated.ElectionId,
             updated.CurrentDraftRevision);
 
-        return ElectionCommandResult.Success(updated, draftSnapshot: snapshot);
+        return ElectionCommandResult.Success(
+            updated,
+            draftSnapshot: snapshot,
+            protocolPackageBinding: protocolPackageBinding);
+    }
+
+    public async Task<ElectionCommandResult> RefreshProtocolPackageBindingAsync(RefreshElectionProtocolPackageBindingRequest request)
+    {
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+        if (election is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Election {request.ElectionId} was not found.");
+        }
+
+        var pendingProposal = await repository.GetPendingGovernedProposalAsync(request.ElectionId);
+        var governedDraftLock = ValidateDraftNotBlockedByGovernedOpenProposal(pendingProposal);
+        if (governedDraftLock is not null)
+        {
+            return governedDraftLock;
+        }
+
+        var refreshOutcome = await _protocolPackageBindingService.RefreshDraftBindingAsync(
+            repository,
+            election,
+            request.ActorPublicAddress,
+            request.SourceTransactionId,
+            request.SourceBlockHeight,
+            request.SourceBlockId);
+        if (!refreshOutcome.IsSuccess)
+        {
+            return ElectionCommandResult.Failure(
+                refreshOutcome.ErrorCode,
+                refreshOutcome.ErrorMessage ?? "Protocol package refs could not be refreshed.");
+        }
+
+        await unitOfWork.CommitAsync();
+
+        return ElectionCommandResult.Success(
+            election,
+            protocolPackageBinding: refreshOutcome.Binding);
     }
 
     public async Task<ElectionCommandResult> ImportRosterAsync(ImportElectionRosterRequest request)
@@ -1731,6 +1792,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
             : await repository.GetCeremonyTrusteeStatesAsync(activeCeremonyVersion.Id);
         var selectedProfile = await ResolveSelectedProfileAsync(repository, election);
+        var protocolPackageValidation = await _protocolPackageBindingService.ValidateForOpenAsync(repository, election);
 
         return EvaluateOpenReadiness(
             election,
@@ -1740,6 +1802,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             activeCeremonyTrusteeStates,
             warningAcknowledgements,
             selectedProfile,
+            protocolPackageValidation,
             request.RequiredWarningCodes,
             blockGovernedWorkflowMissing: false);
     }
@@ -2611,6 +2674,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
                     : await repository.GetCeremonyTrusteeStatesAsync(activeCeremonyVersion.Id);
                 var selectedProfile = await ResolveSelectedProfileAsync(repository, election);
+                var protocolPackageValidation = await _protocolPackageBindingService.ValidateForOpenAsync(repository, election);
                 var readiness = EvaluateOpenReadiness(
                     election,
                     invitations,
@@ -2619,6 +2683,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     activeCeremonyTrusteeStates,
                     warningAcknowledgements,
                     selectedProfile,
+                    protocolPackageValidation,
                     election.AcknowledgedWarningCodes,
                     blockGovernedWorkflowMissing: false);
 
@@ -2814,6 +2879,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
             : await repository.GetCeremonyTrusteeStatesAsync(activeCeremonyVersion.Id);
         var selectedProfile = await ResolveSelectedProfileAsync(repository, election);
+        var protocolPackageValidation = await _protocolPackageBindingService.ValidateForOpenAsync(repository, election);
         var readiness = EvaluateOpenReadiness(
             election,
             invitations,
@@ -2822,6 +2888,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             activeCeremonyTrusteeStates,
             warningAcknowledgements,
             selectedProfile,
+            protocolPackageValidation,
             requiredWarningCodes,
             blockGovernedWorkflowMissing: !allowTrusteeThresholdExecution);
 
@@ -2836,6 +2903,14 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var openedAt = DateTime.UtcNow;
+        var sealedProtocolPackageBinding = await _protocolPackageBindingService.SealLatestBindingForOpenAsync(
+            repository,
+            protocolPackageValidation.Binding!,
+            openedAt,
+            actorPublicAddress,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
         var frozenRosterEntries = rosterEntries
             .Select(x => x.FreezeAtOpen(
                 openedAt,
@@ -2917,7 +2992,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
             openedElection,
             boundaryArtifact: artifact,
             rosterEntries: frozenRosterEntries,
-            eligibilitySnapshot: openSnapshot);
+            eligibilitySnapshot: openSnapshot,
+            protocolPackageBinding: sealedProtocolPackageBinding);
     }
 
     private async Task<(ElectionCeremonyBindingSnapshot? Snapshot, string Error)> ResolveOpenCeremonySnapshotAsync(
@@ -3325,6 +3401,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IReadOnlyList<ElectionCeremonyTrusteeStateRecord> activeCeremonyTrusteeStates,
         IReadOnlyList<ElectionWarningAcknowledgementRecord> warningAcknowledgements,
         ElectionCeremonyProfileRecord? selectedProfile,
+        ProtocolPackageBindingOpenValidation protocolPackageValidation,
         IReadOnlyList<ElectionWarningCode>? requestedWarnings,
         bool blockGovernedWorkflowMissing)
     {
@@ -3357,6 +3434,12 @@ public class ElectionLifecycleService : IElectionLifecycleService
         if (rosterEntries.Count == 0)
         {
             errors.Add("An imported election roster is required before opening the election.");
+        }
+
+        if (!protocolPackageValidation.IsReady)
+        {
+            errors.Add(protocolPackageValidation.ErrorMessage ??
+                $"Protocol Omega package refs are {protocolPackageValidation.Status}.");
         }
 
         if (election.EligibilityMutationPolicy == EligibilityMutationPolicy.FrozenAtOpen &&
@@ -3456,8 +3539,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         return errors.Count == 0
-            ? ElectionOpenValidationResult.Ready(requiredWarnings, ceremonySnapshot)
-            : ElectionOpenValidationResult.NotReady(errors, requiredWarnings, missingWarnings, ceremonySnapshot);
+            ? ElectionOpenValidationResult.Ready(requiredWarnings, ceremonySnapshot, protocolPackageValidation)
+            : ElectionOpenValidationResult.NotReady(errors, requiredWarnings, missingWarnings, ceremonySnapshot, protocolPackageValidation);
     }
 
     private static ElectionCeremonyBindingSnapshot? TryBuildCeremonySnapshot(
@@ -4563,6 +4646,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var trusteeInvitations = await repository.GetTrusteeInvitationsAsync(election.ElectionId);
         var rosterEntries = await repository.GetRosterEntriesAsync(election.ElectionId);
         var participationRecords = await repository.GetParticipationRecordsAsync(election.ElectionId);
+        var sealedProtocolPackageBinding = await repository.GetSealedProtocolPackageBindingAsync(election.ElectionId);
         var reportBuildResult = _electionReportPackageService.Build(new ElectionReportPackageBuildRequest(
             finalizedElection,
             closeArtifact,
@@ -4571,6 +4655,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             unofficialResult,
             officialResult,
             closeEligibilitySnapshot,
+            sealedProtocolPackageBinding,
             finalizationContext.Session,
             finalizationContext.ReleaseEvidence,
             finalizationGovernedProposal,

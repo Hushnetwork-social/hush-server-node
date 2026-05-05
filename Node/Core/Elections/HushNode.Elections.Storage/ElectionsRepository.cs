@@ -260,6 +260,86 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
     public async Task SaveReportAccessGrantAsync(ElectionReportAccessGrantRecord reportAccessGrant) =>
         await Context.ElectionReportAccessGrants.AddAsync(reportAccessGrant);
 
+    public async Task<IReadOnlyList<ApprovedProtocolPackageCatalogEntryRecord>> GetApprovedProtocolPackageCatalogEntriesAsync() =>
+        await Context.ApprovedProtocolPackageCatalogEntries
+            .OrderByDescending(x => x.ApprovedAt)
+            .ThenBy(x => x.PackageId)
+            .ToListAsync();
+
+    public async Task<ApprovedProtocolPackageCatalogEntryRecord?> GetApprovedProtocolPackageCatalogEntryAsync(string packageId) =>
+        await Context.ApprovedProtocolPackageCatalogEntries
+            .Where(x => x.PackageId == packageId)
+            .OrderByDescending(x => x.ApprovedAt)
+            .ThenByDescending(x => x.PackageVersion)
+            .FirstOrDefaultAsync();
+
+    public async Task<ApprovedProtocolPackageCatalogEntryRecord?> GetLatestApprovedProtocolPackageCatalogEntryAsync(string selectedProfileId)
+    {
+        var normalizedProfileId = selectedProfileId.Trim();
+        var latestEntries = await Context.ApprovedProtocolPackageCatalogEntries
+            .Where(x =>
+                x.ApprovalStatus == ProtocolPackageApprovalStatus.ApprovedInternal &&
+                x.IsLatestForCompatibleProfiles)
+            .OrderByDescending(x => x.ApprovedAt)
+            .ThenBy(x => x.PackageId)
+            .ToListAsync();
+
+        return latestEntries.FirstOrDefault(x => x.IsCompatibleWithProfile(normalizedProfileId));
+    }
+
+    public async Task SaveApprovedProtocolPackageCatalogEntryAsync(ApprovedProtocolPackageCatalogEntryRecord catalogEntry) =>
+        await Context.ApprovedProtocolPackageCatalogEntries.AddAsync(catalogEntry);
+
+    public async Task UpdateApprovedProtocolPackageCatalogEntryAsync(ApprovedProtocolPackageCatalogEntryRecord catalogEntry)
+    {
+        var existing = await Context.ApprovedProtocolPackageCatalogEntries
+            .FirstOrDefaultAsync(x =>
+                x.PackageId == catalogEntry.PackageId &&
+                x.PackageVersion == catalogEntry.PackageVersion);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(catalogEntry);
+        }
+    }
+
+    public async Task<IReadOnlyList<ProtocolPackageBindingRecord>> GetProtocolPackageBindingsAsync(ElectionId electionId) =>
+        await Context.ProtocolPackageBindings
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.BoundAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<ProtocolPackageBindingRecord?> GetLatestProtocolPackageBindingAsync(ElectionId electionId) =>
+        await Context.ProtocolPackageBindings
+            .Where(x => x.ElectionId == electionId)
+            .OrderByDescending(x => x.BoundAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+
+    public async Task<ProtocolPackageBindingRecord?> GetSealedProtocolPackageBindingAsync(ElectionId electionId) =>
+        await Context.ProtocolPackageBindings
+            .Where(x =>
+                x.ElectionId == electionId &&
+                x.Status == ProtocolPackageBindingStatus.Sealed)
+            .OrderByDescending(x => x.SealedAt ?? x.BoundAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+
+    public async Task SaveProtocolPackageBindingAsync(ProtocolPackageBindingRecord bindingRecord) =>
+        await Context.ProtocolPackageBindings.AddAsync(bindingRecord);
+
+    public async Task UpdateProtocolPackageBindingAsync(ProtocolPackageBindingRecord bindingRecord)
+    {
+        var existing = await Context.ProtocolPackageBindings
+            .FirstOrDefaultAsync(x => x.Id == bindingRecord.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(bindingRecord);
+        }
+    }
+
     public async Task<IReadOnlyList<ElectionRosterEntryRecord>> GetRosterEntriesAsync(ElectionId electionId) =>
         await Context.ElectionRosterEntries
             .Where(x => x.ElectionId == electionId)

@@ -221,6 +221,44 @@ enum ElectionReportAccessGrantRoleProto {
   ReportAccessGrantDesignatedAuditor = 0;
 }
 
+enum ProtocolPackageApprovalStatusProto {
+  ProtocolPackageDraftPrivate = 0;
+  ProtocolPackageApprovedInternal = 1;
+  ProtocolPackageRetired = 2;
+}
+
+enum ProtocolPackageExternalReviewStatusProto {
+  ProtocolPackageNotReviewed = 0;
+  ProtocolPackageReviewRequested = 1;
+  ProtocolPackageReviewInProgress = 2;
+  ProtocolPackageReviewedWithFindings = 3;
+  ProtocolPackageReviewedAccepted = 4;
+}
+
+enum ProtocolPackageAccessLocationKindProto {
+  ProtocolPackagePublicWebsite = 0;
+  ProtocolPackageAuditorWelcomePackage = 1;
+  ProtocolPackageReviewerPortal = 2;
+  ProtocolPackageControlledDownload = 3;
+  ProtocolPackageRepository = 4;
+}
+
+enum ProtocolPackageBindingStatusProto {
+  ProtocolPackageBindingMissing = 0;
+  ProtocolPackageBindingLatest = 1;
+  ProtocolPackageBindingStale = 2;
+  ProtocolPackageBindingIncompatible = 3;
+  ProtocolPackageBindingSealed = 4;
+  ProtocolPackageBindingReferenceOnly = 5;
+}
+
+enum ProtocolPackageBindingSourceProto {
+  ProtocolPackageBindingCatalogSelection = 0;
+  ProtocolPackageBindingOwnerRefresh = 1;
+  ProtocolPackageBindingSealedAtOpen = 2;
+  ProtocolPackageBindingMigrationBackfill = 3;
+}
+
 enum ElectionClosedProgressStatusProto {
   ClosedProgressNone = 0;
   ClosedProgressWaitingForTrusteeShares = 1;
@@ -702,6 +740,38 @@ message ElectionReportArtifactView {
   google.protobuf.Timestamp RecordedAt = 14;
 }
 
+message ProtocolPackageAccessLocationView {
+  ProtocolPackageAccessLocationKindProto LocationKind = 1;
+  string Label = 2;
+  string Location = 3;
+  string ContentHash = 4;
+}
+
+message ElectionProtocolPackageBindingView {
+  string Id = 1;
+  string ElectionId = 2;
+  string PackageId = 3;
+  string PackageVersion = 4;
+  string SelectedProfileId = 5;
+  string SpecPackageHash = 6;
+  string ProofPackageHash = 7;
+  string ReleaseManifestHash = 8;
+  repeated ProtocolPackageAccessLocationView SpecAccessLocations = 9;
+  repeated ProtocolPackageAccessLocationView ProofAccessLocations = 10;
+  ProtocolPackageApprovalStatusProto PackageApprovalStatus = 11;
+  ProtocolPackageBindingStatusProto Status = 12;
+  ProtocolPackageBindingSourceProto Source = 13;
+  int32 DraftRevision = 14;
+  google.protobuf.Timestamp BoundAt = 15;
+  google.protobuf.Timestamp SealedAt = 16;
+  bool HasSealedAt = 17;
+  string BoundByPublicAddress = 18;
+  ProtocolPackageExternalReviewStatusProto ExternalReviewStatus = 19;
+  string SourceTransactionId = 20;
+  int64 SourceBlockHeight = 21;
+  string SourceBlockId = 22;
+}
+
 message ElectionRecordView {
   string ElectionId = 1;
   string Title = 2;
@@ -1152,6 +1222,7 @@ message GetElectionResultViewResponse {
   ElectionReportPackageSummaryView LatestReportPackage = 11;
   repeated ElectionReportArtifactView VisibleReportArtifacts = 12;
   ElectionCeremonyBindingSnapshot CeremonySnapshot = 13;
+  ElectionProtocolPackageBindingView ProtocolPackageBinding = 14;
 }
 
 message ElectionApplicationRoleFlagsView {
@@ -1350,6 +1421,7 @@ message ElectionCommandResponse {
   ElectionFinalizationSession FinalizationSession = 17;
   ElectionFinalizationShare FinalizationShare = 18;
   ElectionFinalizationReleaseEvidence FinalizationReleaseEvidence = 19;
+  ElectionProtocolPackageBindingView ProtocolPackageBinding = 20;
 }
 
 message GetElectionOpenReadinessResponse {
@@ -1358,6 +1430,9 @@ message GetElectionOpenReadinessResponse {
   repeated ElectionWarningCodeProto RequiredWarningCodes = 3;
   repeated ElectionWarningCodeProto MissingWarningAcknowledgements = 4;
   ElectionCeremonyBindingSnapshot CeremonySnapshot = 5;
+  ElectionProtocolPackageBindingView ProtocolPackageBinding = 6;
+  ProtocolPackageBindingStatusProto ProtocolPackageBindingStatus = 7;
+  string ProtocolPackageBindingMessage = 8;
 }
 
 message GetElectionResponse {
@@ -1378,6 +1453,7 @@ message GetElectionResponse {
   repeated ElectionFinalizationShare FinalizationShares = 15;
   repeated ElectionFinalizationReleaseEvidence FinalizationReleaseEvidenceRecords = 16;
   repeated ElectionResultArtifact ResultArtifacts = 17;
+  ElectionProtocolPackageBindingView ProtocolPackageBinding = 18;
 }
 
 message SearchElectionDirectoryEntryView {

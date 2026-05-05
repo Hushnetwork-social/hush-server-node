@@ -155,6 +155,12 @@ secrets/
 ApplicationSettings.local.json
 local-config/
 
+## Protocol Omega package artifacts
+# Product repositories resolve these from hush-documents during Debug/Release builds.
+/Node/Core/Elections/HushNode.Elections/ProtocolPackages/
+/Node/HushServerNode/ProtocolPackages/
+/ProtocolPackages/
+
 ## Tools
 .qodo/
 .vscode

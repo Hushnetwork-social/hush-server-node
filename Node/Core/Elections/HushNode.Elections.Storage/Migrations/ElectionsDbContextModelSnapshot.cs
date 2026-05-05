@@ -22,6 +22,66 @@ namespace HushNode.Elections.Storage.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("HushShared.Elections.Model.ApprovedProtocolPackageCatalogEntryRecord", b =>
+                {
+                    b.Property<string>("PackageId")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("ApprovalStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<DateTime>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CompatibleProfileIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ExternalReviewStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<bool>("IsLatestForCompatibleProfiles")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PackageVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("ProofAccessLocations")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ProofPackageHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("ReleaseManifestHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("SpecAccessLocations")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SpecPackageHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("PackageId", "PackageVersion");
+
+                    b.HasIndex("ApprovalStatus");
+
+                    b.HasIndex("IsLatestForCompatibleProfiles");
+
+                    b.HasIndex("PackageId");
+
+                    b.HasIndex("PackageVersion");
+
+                    b.ToTable("ApprovedProtocolPackageCatalogEntryRecord", "Elections");
+                });
+
             modelBuilder.Entity("HushShared.Elections.Model.ElectionAcceptedBallotRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2101,6 +2161,97 @@ namespace HushNode.Elections.Storage.Migrations
                         .IsUnique();
 
                     b.ToTable("ElectionWarningAcknowledgementRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ProtocolPackageBindingRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("BoundAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BoundByPublicAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<int>("DraftRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("ExternalReviewStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("PackageId")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("PackageApprovalStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("PackageVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("ProofAccessLocations")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ProofPackageHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("ReleaseManifestHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime?>("SealedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SelectedProfileId")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<long?>("SourceBlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("SourceBlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SourceTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SpecAccessLocations")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SpecPackageHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ElectionId", "BoundAt");
+
+                    b.HasIndex("ElectionId", "DraftRevision");
+
+                    b.HasIndex("ElectionId", "Status");
+
+                    b.ToTable("ProtocolPackageBindingRecord", "Elections");
                 });
 #pragma warning restore 612, 618
         }

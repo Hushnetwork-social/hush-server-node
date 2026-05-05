@@ -40,6 +40,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleCreateDraftAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.UpdateDraft =>
                 await HandleUpdateDraftAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RefreshProtocolPackageBinding =>
+                await HandleRefreshProtocolPackageBindingAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.ImportRoster =>
                 await HandleImportRosterAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.ClaimRosterEntry =>
@@ -164,6 +166,26 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
             SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleRefreshProtocolPackageBindingAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var refreshAction = decryptedEnvelope.DeserializeAction<RefreshProtocolPackageBindingActionPayload>();
+        if (refreshAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Refresh protocol package binding action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.RefreshProtocolPackageBindingAsync(
+            new RefreshElectionProtocolPackageBindingRequest(
+                ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+                ActorPublicAddress: refreshAction.ActorPublicAddress,
+                SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+                SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+                SourceBlockId: _blockchainCache.CurrentBlockId.Value));
     }
 
     private async Task<ElectionCommandResult> HandleImportRosterAsync(
