@@ -74,6 +74,92 @@ public sealed partial class HushVotingPackageVerifier
             "Verifier profile matches the package input manifest.");
     }
 
+    private static async Task<VerifierCheckResultRecord> CheckElectionRecordAsync(
+        string packagePath,
+        AuditPackageManifestRecord manifest,
+        VerifierInputManifestRecord inputManifest,
+        ElectionRecordReferenceRecord electionRecord,
+        CancellationToken cancellationToken)
+    {
+        var electionIds = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["audit_manifest"] = manifest.ElectionId,
+            ["verifier_input_manifest"] = inputManifest.ElectionId,
+            ["election_record"] = electionRecord.ElectionId,
+        };
+
+        var accepted = await ReadJsonAsync<AcceptedBallotSetArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.AcceptedBallotSet,
+            cancellationToken);
+        electionIds["accepted_ballot_set"] = accepted.ElectionId;
+
+        var published = await ReadJsonAsync<PublishedBallotStreamArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.PublishedBallotStream,
+            cancellationToken);
+        electionIds["published_ballot_stream"] = published.ElectionId;
+
+        var tallyReplay = await ReadJsonAsync<TallyReplayArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.TallyReplay,
+            cancellationToken);
+        electionIds["tally_replay"] = tallyReplay.ElectionId;
+
+        var trusteeRelease = await ReadJsonAsync<TrusteeReleaseEvidenceArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.TrusteeReleaseEvidence,
+            cancellationToken);
+        electionIds["trustee_release_evidence"] = trusteeRelease.ElectionId;
+
+        var resultBinding = await ReadJsonAsync<ResultBindingArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.ResultBinding,
+            cancellationToken);
+        electionIds["result_binding"] = resultBinding.ElectionId;
+
+        if (manifest.PackageView == VerificationPackageView.RestrictedOwnerAuditor)
+        {
+            var restricted = await ReadJsonAsync<RestrictedRosterCheckoffArtifactRecord>(
+                packagePath,
+                VerificationPackageFileNames.RestrictedRosterCheckoff,
+                cancellationToken);
+            electionIds["restricted_roster_checkoff"] = restricted.ElectionId;
+        }
+
+        var distinctElectionIds = electionIds.Values
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (distinctElectionIds.Length > 1)
+        {
+            return CreateResult(
+                "VFY-ELECTION-001",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ElectionIdMismatch,
+                "Election id differs across package root files or verifier artifacts.",
+                electionIds);
+        }
+
+        if (!string.Equals(electionRecord.LifecycleState, "Finalized", StringComparison.Ordinal))
+        {
+            return CreateResult(
+                "VFY-ELECTION-002",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ElectionNotFinalized,
+                "Election record lifecycle state must be Finalized for verifier replay.",
+                new Dictionary<string, string>
+                {
+                    ["lifecycle_state"] = electionRecord.LifecycleState,
+                });
+        }
+
+        return CreateResult(
+            "VFY-ELECTION-000",
+            VerificationCheckStatus.Pass,
+            VerificationResultCodes.PackageStructureValid,
+            "Election id and finalized lifecycle are consistent across package files.");
+    }
+
     private static async Task<VerifierCheckResultRecord> CheckAcceptedBallotsAsync(
         string packagePath,
         CancellationToken cancellationToken)
@@ -205,4 +291,3 @@ public sealed partial class HushVotingPackageVerifier
                 : "SP-07 publication proof evidence is pending a later feature.");
     }
 }
-

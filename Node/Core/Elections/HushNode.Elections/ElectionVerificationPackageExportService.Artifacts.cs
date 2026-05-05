@@ -37,6 +37,7 @@ public sealed partial class ElectionVerificationPackageExportService
             RequiredCheckCodes:
             [
                 "VFY-MAN-000",
+                "VFY-ELECTION-000",
                 "VFY-ACCEPTED-000",
                 "VFY-PUBLISHED-000",
                 "VFY-PRIVACY-000",
@@ -133,4 +134,3 @@ public sealed partial class ElectionVerificationPackageExportService
                 .ToArray());
     }
 }
-

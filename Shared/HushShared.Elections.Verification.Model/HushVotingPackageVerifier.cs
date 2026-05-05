@@ -68,7 +68,7 @@ public sealed partial class HushVotingPackageVerifier
                 request.PackagePath,
                 VerificationPackageFileNames.VerifierProfile,
                 cancellationToken);
-            _ = await ReadJsonAsync<ElectionRecordReferenceRecord>(
+            var electionRecord = await ReadJsonAsync<ElectionRecordReferenceRecord>(
                 request.PackagePath,
                 VerificationPackageFileNames.ElectionRecord,
                 cancellationToken);
@@ -89,6 +89,7 @@ public sealed partial class HushVotingPackageVerifier
                 return await WriteOutputAsync(request, missingOutput, cancellationToken);
             }
 
+            results.Add(await CheckElectionRecordAsync(request.PackagePath, manifest, inputManifest, electionRecord, cancellationToken));
             results.Add(await CheckAcceptedBallotsAsync(request.PackagePath, cancellationToken));
             results.Add(await CheckPublishedBallotsAsync(request.PackagePath, cancellationToken));
             results.AddRange(await CheckPrivacyBoundaryAsync(request.PackagePath, manifest, cancellationToken));
