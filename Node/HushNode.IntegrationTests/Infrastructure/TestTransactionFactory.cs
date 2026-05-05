@@ -218,6 +218,56 @@ internal static class TestTransactionFactory
         return CreateEncryptedElectionEnvelopeTransaction(actor, electionId, actionEnvelope);
     }
 
+    public static string RegisterPreparedBallotCommitment(
+        TestIdentity actor,
+        ElectionId electionId,
+        Guid preparedBallotId,
+        string preparedBallotHash,
+        int ballotDefinitionVersion,
+        byte[] ballotDefinitionHash,
+        string ceremonyProfileId,
+        string proofStatementId,
+        DateTime? precommittedAt = null)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RegisterPreparedBallotCommitment,
+            JsonSerializer.SerializeToElement(new RegisterPreparedBallotCommitmentActionPayload(
+                actor.PublicSigningAddress,
+                preparedBallotId,
+                preparedBallotHash,
+                ballotDefinitionVersion,
+                ballotDefinitionHash,
+                ceremonyProfileId,
+                proofStatementId,
+                precommittedAt)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(actor, electionId, actionEnvelope);
+    }
+
+    public static string SpoilPreparedBallot(
+        TestIdentity actor,
+        ElectionId electionId,
+        Guid preparedBallotId,
+        string preparedBallotHash,
+        string spoiledTranscriptHash,
+        string spoilRecordHash,
+        string localVerifierVersion,
+        DateTime? spoiledAt = null)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.SpoilPreparedBallot,
+            JsonSerializer.SerializeToElement(new SpoilPreparedBallotActionPayload(
+                actor.PublicSigningAddress,
+                preparedBallotId,
+                preparedBallotHash,
+                spoiledTranscriptHash,
+                spoilRecordHash,
+                localVerifierVersion,
+                spoiledAt)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(actor, electionId, actionEnvelope);
+    }
+
     public static string AcceptElectionBallotCast(
         TestIdentity actor,
         ElectionId electionId,
@@ -229,7 +279,13 @@ internal static class TestTransactionFactory
         byte[] eligibleSetHash,
         Guid ceremonyVersionId,
         string dkgProfileId,
-        string tallyPublicKeyFingerprint)
+        string tallyPublicKeyFingerprint,
+        Guid? preparedBallotId = null,
+        string? preparedBallotHash = null,
+        string? receiptCommitment = null,
+        string? receiptCommitmentScheme = null,
+        int? ballotDefinitionVersion = null,
+        byte[]? ballotDefinitionHash = null)
     {
         var actionEnvelope = new EncryptedElectionActionEnvelope(
             EncryptedElectionEnvelopeActionTypes.AcceptBallotCast,
@@ -243,7 +299,13 @@ internal static class TestTransactionFactory
                 eligibleSetHash,
                 ceremonyVersionId,
                 dkgProfileId,
-                tallyPublicKeyFingerprint)));
+                tallyPublicKeyFingerprint,
+                preparedBallotId,
+                preparedBallotHash,
+                receiptCommitment,
+                receiptCommitmentScheme,
+                ballotDefinitionVersion,
+                ballotDefinitionHash)));
 
         return CreateEncryptedElectionEnvelopeTransaction(actor, electionId, actionEnvelope);
     }
