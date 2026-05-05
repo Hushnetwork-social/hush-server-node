@@ -410,6 +410,70 @@ public class ElectionsGrpcService(
         }
     }
 
+    public override async Task<GetElectionVerificationPackageStatusResponse> GetElectionVerificationPackageStatus(
+        GetElectionVerificationPackageStatusRequest request,
+        ServerCallContext context)
+    {
+        ValidateSignedQuery(
+            nameof(GetElectionVerificationPackageStatus),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+            },
+            context);
+
+        try
+        {
+            return await _queryApplicationService.GetElectionVerificationPackageStatusAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress);
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionVerificationPackageStatus));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch election verification package status."));
+        }
+    }
+
+    public override async Task<ExportElectionVerificationPackageResponse> ExportElectionVerificationPackage(
+        ExportElectionVerificationPackageRequest request,
+        ServerCallContext context)
+    {
+        ValidateSignedQuery(
+            nameof(ExportElectionVerificationPackage),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+                ["PackageView"] = request.PackageView,
+            },
+            context);
+
+        try
+        {
+            return await _queryApplicationService.ExportElectionVerificationPackageAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress,
+                request.PackageView);
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(ExportElectionVerificationPackage));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to export election verification package."));
+        }
+    }
+
     public override async Task<GetElectionReportAccessGrantsResponse> GetElectionReportAccessGrants(
         GetElectionReportAccessGrantsRequest request,
         ServerCallContext context)

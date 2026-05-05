@@ -41,6 +41,8 @@ service HushElections {
   rpc VerifyElectionReceipt(VerifyElectionReceiptRequest) returns (VerifyElectionReceiptResponse);
   rpc GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest) returns (GetElectionEnvelopeAccessResponse);
   rpc GetElectionResultView(GetElectionResultViewRequest) returns (GetElectionResultViewResponse);
+  rpc GetElectionVerificationPackageStatus(GetElectionVerificationPackageStatusRequest) returns (GetElectionVerificationPackageStatusResponse);
+  rpc ExportElectionVerificationPackage(ExportElectionVerificationPackageRequest) returns (ExportElectionVerificationPackageResponse);
   rpc GetElectionReportAccessGrants(GetElectionReportAccessGrantsRequest) returns (GetElectionReportAccessGrantsResponse);
   rpc GetElectionCeremonyActionView(GetElectionCeremonyActionViewRequest) returns (GetElectionCeremonyActionViewResponse);
   rpc GetElectionsByOwner(GetElectionsByOwnerRequest) returns (GetElectionsByOwnerResponse);
@@ -257,6 +259,43 @@ enum ProtocolPackageBindingSourceProto {
   ProtocolPackageBindingOwnerRefresh = 1;
   ProtocolPackageBindingSealedAtOpen = 2;
   ProtocolPackageBindingMigrationBackfill = 3;
+}
+
+enum ElectionVerificationPackageViewProto {
+  VerificationPackagePublicAnonymous = 0;
+  VerificationPackageRestrictedOwnerAuditor = 1;
+}
+
+enum ElectionVerificationArtifactVisibilityProto {
+  VerificationArtifactPublic = 0;
+  VerificationArtifactRestricted = 1;
+}
+
+enum ElectionVerificationPackageStatusProto {
+  VerificationPackageNotVisible = 0;
+  VerificationPackageNotFinalized = 1;
+  VerificationPackageMissing = 2;
+  VerificationPackageProtocolRefsBlocked = 3;
+  VerificationPackageExportFailed = 4;
+  VerificationPackageReady = 5;
+}
+
+enum ElectionVerificationPackageBlockerProto {
+  VerificationPackageBlockerNone = 0;
+  VerificationPackageBlockerNotVisible = 1;
+  VerificationPackageBlockerNotFinalized = 2;
+  VerificationPackageBlockerMissingPackage = 3;
+  VerificationPackageBlockerProtocolRefs = 4;
+  VerificationPackageBlockerUnauthorized = 5;
+  VerificationPackageBlockerProfileMismatch = 6;
+  VerificationPackageBlockerExportFailed = 7;
+}
+
+enum ElectionVerifierOverallStatusProto {
+  ElectionVerifierPass = 0;
+  ElectionVerifierWarn = 1;
+  ElectionVerifierFail = 2;
+  ElectionVerifierNotAvailable = 3;
 }
 
 enum ElectionClosedProgressStatusProto {
@@ -772,6 +811,50 @@ message ElectionProtocolPackageBindingView {
   string SourceBlockId = 22;
 }
 
+message ElectionVerificationPackageExportAvailabilityView {
+  ElectionVerificationPackageViewProto PackageView = 1;
+  string VerifierProfileId = 2;
+  bool IsAvailable = 3;
+  ElectionVerificationPackageBlockerProto Blocker = 4;
+  string BlockerCode = 5;
+  string Message = 6;
+  string PackageId = 7;
+  string PackageHash = 8;
+  bool CanRetry = 9;
+}
+
+message ElectionVerifierResultSummaryView {
+  ElectionVerifierOverallStatusProto OverallStatus = 1;
+  string VerifierVersion = 2;
+  string PackageHash = 3;
+  int32 PassedCount = 4;
+  int32 WarningCount = 5;
+  int32 FailedCount = 6;
+  int32 NotApplicableCount = 7;
+  string Message = 8;
+  google.protobuf.Timestamp VerifiedAt = 9;
+  bool HasVerifiedAt = 10;
+}
+
+message ElectionVerificationPackageStatusView {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  bool IsVisible = 3;
+  ElectionVerificationPackageStatusProto Status = 4;
+  string StatusMessage = 5;
+  ElectionVerificationPackageExportAvailabilityView PublicPackage = 6;
+  ElectionVerificationPackageExportAvailabilityView RestrictedPackage = 7;
+  ElectionProtocolPackageBindingView ProtocolPackageBinding = 8;
+  ElectionVerifierResultSummaryView LastVerifierResult = 9;
+}
+
+message ElectionVerificationPackageFileView {
+  string RelativePath = 1;
+  string MediaType = 2;
+  ElectionVerificationArtifactVisibilityProto Visibility = 3;
+  bytes Content = 4;
+}
+
 message ElectionRecordView {
   string ElectionId = 1;
   string Title = 2;
@@ -1203,6 +1286,17 @@ message GetElectionResultViewRequest {
   string ActorPublicAddress = 2;
 }
 
+message GetElectionVerificationPackageStatusRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+}
+
+message ExportElectionVerificationPackageRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  ElectionVerificationPackageViewProto PackageView = 3;
+}
+
 message GetElectionReportAccessGrantsRequest {
   string ElectionId = 1;
   string ActorPublicAddress = 2;
@@ -1223,6 +1317,28 @@ message GetElectionResultViewResponse {
   repeated ElectionReportArtifactView VisibleReportArtifacts = 12;
   ElectionCeremonyBindingSnapshot CeremonySnapshot = 13;
   ElectionProtocolPackageBindingView ProtocolPackageBinding = 14;
+  ElectionVerificationPackageStatusView VerificationPackageStatus = 15;
+}
+
+message GetElectionVerificationPackageStatusResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ElectionId = 3;
+  string ActorPublicAddress = 4;
+  ElectionVerificationPackageStatusView Status = 5;
+}
+
+message ExportElectionVerificationPackageResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ElectionId = 3;
+  string ActorPublicAddress = 4;
+  ElectionVerificationPackageViewProto PackageView = 5;
+  ElectionVerificationPackageBlockerProto Blocker = 6;
+  string ResultCode = 7;
+  string PackageId = 8;
+  string PackageHash = 9;
+  repeated ElectionVerificationPackageFileView Files = 10;
 }
 
 message ElectionApplicationRoleFlagsView {
