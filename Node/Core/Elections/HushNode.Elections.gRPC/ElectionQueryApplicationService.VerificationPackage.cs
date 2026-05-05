@@ -299,7 +299,10 @@ public partial class ElectionQueryApplicationService
             context.ParticipationRecords,
             packageView,
             ResolveVerifierProfileId(packageView),
-            context.CanExportRestrictedPackage);
+            context.CanExportRestrictedPackage,
+            context.LatestReportPackage?.SealedAt ??
+            context.LatestReportPackage?.AttemptedAt ??
+            context.Election.FinalizedAt);
 
     private static ElectionVerificationPackageStatusProto ResolvePackageStatus(VerificationPackageContext context)
     {
