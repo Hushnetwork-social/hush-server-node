@@ -854,6 +854,60 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task AcceptBallotCastAsync_WithoutPreparedBallotPrecommit_ReturnsPreparedBallotMissing()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(
+            store,
+            createCommitmentRegistration: true,
+            seedSp04CastGate: false);
+        var request = CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-missing-precommit",
+            ballotNullifier: "nullifier-missing-precommit") with
+        {
+            PreparedBallotId = Guid.NewGuid(),
+            PreparedBallotHash = "prepared-hash-missing-precommit",
+            ReceiptCommitment = "receipt-commitment-missing-precommit",
+            ReceiptCommitmentScheme = "sha256(receipt_secret|prepared_ballot_hash|accepted_ballot_id)",
+            BallotDefinitionVersion = scenario.Election.BallotDefinitionVersion,
+            BallotDefinitionHash = scenario.Election.BallotDefinitionHash!.ToArray(),
+        };
+
+        var result = await service.AcceptBallotCastAsync(request);
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.PreparedBallotMissing);
+        store.AcceptedBallots.Should().BeEmpty();
+        store.CheckoffConsumptions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WithExpiredPreparedBallot_ReturnsPreparedBallotExpired()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        var prepared = scenario.PreparedBallotCommitment!;
+        store.PreparedBallotCommitments.RemoveAll(x => x.PreparedBallotId == prepared.PreparedBallotId);
+        store.PreparedBallotCommitments.Add(prepared with
+        {
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-1),
+        });
+
+        var result = await service.AcceptBallotCastAsync(CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-expired-prepared",
+            ballotNullifier: "nullifier-expired-prepared"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.PreparedBallotExpired);
+        store.AcceptedBallots.Should().BeEmpty();
+        store.CheckoffConsumptions.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task AcceptBallotCastAsync_WithoutReceiptCommitment_ReturnsReceiptCommitmentMissing()
     {
         var store = new ElectionStore();
@@ -871,6 +925,28 @@ public class ElectionLifecycleServiceTests
 
         result.IsSuccess.Should().BeFalse();
         result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.ReceiptCommitmentMissing);
+        store.AcceptedBallots.Should().BeEmpty();
+        store.CheckoffConsumptions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WithWrongBallotDefinitionHash_ReturnsMismatch()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        var request = CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-wrong-ballot-definition",
+            ballotNullifier: "nullifier-wrong-ballot-definition") with
+        {
+            BallotDefinitionHash = [9, 9, 9],
+        };
+
+        var result = await service.AcceptBallotCastAsync(request);
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.BallotDefinitionHashMismatch);
         store.AcceptedBallots.Should().BeEmpty();
         store.CheckoffConsumptions.Should().BeEmpty();
     }
