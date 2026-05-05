@@ -221,6 +221,67 @@ public class ElectionsRepositoryTests
     }
 
     [Fact]
+    public async Task SaveProtocolPackageCatalogAndBinding_ShouldRoundTripAndSelectLatestCompatibleEntry()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection() with
+        {
+            SelectedProfileId = "organizational_remote_voting_trustee_threshold_v1",
+            CurrentDraftRevision = 3,
+        };
+        var retiredEntry = CreateCatalogEntry(
+            packageId: "omega-hushvoting-v1-0-0",
+            packageVersion: "v1.0.0",
+            approvedAt: DateTime.UtcNow.AddDays(-2),
+            isLatest: false);
+        var latestEntry = CreateCatalogEntry(
+            packageId: "omega-hushvoting-v1-0-1",
+            packageVersion: "v1.0.1",
+            approvedAt: DateTime.UtcNow.AddDays(-1),
+            isLatest: true);
+        var binding = ElectionModelFactory.CreateProtocolPackageBindingFromCatalog(
+            election.ElectionId,
+            latestEntry,
+            election.SelectedProfileId,
+            election.CurrentDraftRevision,
+            boundByPublicAddress: election.OwnerPublicAddress,
+            boundAt: DateTime.UtcNow.AddMinutes(-10));
+        var sealedBinding = binding.SealAtOpen(
+            DateTime.UtcNow.AddMinutes(-5),
+            sealedByPublicAddress: election.OwnerPublicAddress);
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveApprovedProtocolPackageCatalogEntryAsync(retiredEntry);
+        await repository.SaveApprovedProtocolPackageCatalogEntryAsync(latestEntry);
+        await repository.SaveProtocolPackageBindingAsync(binding);
+        await context.SaveChangesAsync();
+
+        await repository.UpdateProtocolPackageBindingAsync(sealedBinding);
+        await context.SaveChangesAsync();
+
+        var catalogEntries = await repository.GetApprovedProtocolPackageCatalogEntriesAsync();
+        var catalogEntry = await repository.GetApprovedProtocolPackageCatalogEntryAsync(latestEntry.PackageId);
+        var latestCompatible = await repository.GetLatestApprovedProtocolPackageCatalogEntryAsync(election.SelectedProfileId);
+        var bindings = await repository.GetProtocolPackageBindingsAsync(election.ElectionId);
+        var latestBinding = await repository.GetLatestProtocolPackageBindingAsync(election.ElectionId);
+        var storedSealedBinding = await repository.GetSealedProtocolPackageBindingAsync(election.ElectionId);
+
+        catalogEntries.Should().HaveCount(2);
+        catalogEntry.Should().NotBeNull();
+        catalogEntry!.PackageVersion.Should().Be("v1.0.1");
+        latestCompatible.Should().NotBeNull();
+        latestCompatible!.PackageId.Should().Be(latestEntry.PackageId);
+        bindings.Should().ContainSingle();
+        bindings[0].Status.Should().Be(ProtocolPackageBindingStatus.Sealed);
+        latestBinding.Should().NotBeNull();
+        latestBinding!.Status.Should().Be(ProtocolPackageBindingStatus.Sealed);
+        storedSealedBinding.Should().NotBeNull();
+        storedSealedBinding!.SpecAccessLocations.Should().ContainSingle();
+        storedSealedBinding.ProofAccessLocations.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task ActorScopedElectionQueries_ShouldRoundTripOwnedLinkedTrusteeAndAuditorLookups()
     {
         using var context = CreateContext();
@@ -875,6 +936,43 @@ public class ElectionsRepositoryTests
 
         return new ElectionsDbContext(new ElectionsDbContextConfigurator(), options);
     }
+
+    private static ApprovedProtocolPackageCatalogEntryRecord CreateCatalogEntry(
+        string packageId,
+        string packageVersion,
+        DateTime approvedAt,
+        bool isLatest) =>
+        ElectionModelFactory.CreateApprovedProtocolPackageCatalogEntry(
+            packageId: packageId,
+            packageVersion: packageVersion,
+            specPackageHash: Hash('a'),
+            proofPackageHash: Hash('b'),
+            releaseManifestHash: Hash('c'),
+            compatibleProfileIds:
+            [
+                "organizational_remote_voting_trustee_threshold_v1",
+            ],
+            approvalStatus: ProtocolPackageApprovalStatus.ApprovedInternal,
+            isLatestForCompatibleProfiles: isLatest,
+            specAccessLocations:
+            [
+                CreateProtocolAccessLocation(Hash('d')),
+            ],
+            proofAccessLocations:
+            [
+                CreateProtocolAccessLocation(Hash('e')),
+            ],
+            approvedAt: approvedAt);
+
+    private static ProtocolPackageAccessLocationRecord CreateProtocolAccessLocation(string contentHash) =>
+        ElectionModelFactory.CreateProtocolPackageAccessLocation(
+            ProtocolPackageAccessLocationKind.PublicWebsite,
+            "Website",
+            "https://www.hushnetwork.social/protocol-omega/hushvoting-v1",
+            contentHash);
+
+    private static string Hash(char value) =>
+        new(char.ToLowerInvariant(value), 64);
 
     private static ElectionRecord CreateAdminElection() =>
         ElectionModelFactory.CreateDraftRecord(

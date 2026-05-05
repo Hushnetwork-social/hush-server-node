@@ -138,6 +138,7 @@ public class ElectionReportPackageServiceTests
             unofficialResult,
             officialResult,
             CloseEligibilitySnapshot: null,
+            ProtocolPackageBinding: null,
             FinalizationSession: null,
             FinalizationReleaseEvidence: null,
             FinalizationGovernedProposal: null,
@@ -315,6 +316,7 @@ public class ElectionReportPackageServiceTests
             unofficialResult,
             officialResult,
             CloseEligibilitySnapshot: null,
+            ProtocolPackageBinding: null,
             FinalizationSession: null,
             FinalizationReleaseEvidence: null,
             FinalizationGovernedProposal: null,
@@ -408,6 +410,49 @@ public class ElectionReportPackageServiceTests
         machineEvidenceGraph.Content.Should().Contain("\"circuitClassification\": \"Production\"");
     }
 
+    [Fact]
+    public void Build_WithSealedProtocolPackageBinding_EmitsRefsAndAccessLocationsInAuditArtifacts()
+    {
+        var service = new ElectionReportPackageService();
+        var election = CreateFinalizedElectionForReportPackage();
+        var binding = CreateSealedProtocolPackageBinding(election);
+        var request = CreateReportBuildRequest(election, binding);
+
+        var buildResult = service.Build(request);
+        var buildWithoutBinding = service.Build(request with { ProtocolPackageBinding = null });
+
+        buildResult.IsSuccess.Should().BeTrue();
+        buildWithoutBinding.IsSuccess.Should().BeTrue();
+        buildResult.Package.FrozenEvidenceHash.Should().NotEqual(buildWithoutBinding.Package.FrozenEvidenceHash);
+
+        var machineManifest = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineManifest);
+        machineManifest.Content.Should().Contain("\"protocolPackageBinding\"");
+        machineManifest.Content.Should().Contain("\"packageVersion\": \"v1.0.0\"");
+        machineManifest.Content.Should().Contain($"\"specPackageHash\": \"{Hash('a')}\"");
+        machineManifest.Content.Should().Contain($"\"proofPackageHash\": \"{Hash('b')}\"");
+        machineManifest.Content.Should().Contain($"\"releaseManifestHash\": \"{Hash('c')}\"");
+        machineManifest.Content.Should().Contain("https://www.hushnetwork.social/protocol-omega/hushvoting-v1/spec.zip");
+
+        var machineEvidenceGraph = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineEvidenceGraph);
+        machineEvidenceGraph.Content.Should().Contain("\"protocolPackageBinding\"");
+        machineEvidenceGraph.Content.Should().Contain($"\"releaseManifestHash\": \"{Hash('c')}\"");
+
+        var machineAudit = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineAuditProvenanceReportProjection);
+        machineAudit.Content.Should().Contain("\"protocolPackageBinding\"");
+        machineAudit.Content.Should().Contain("Temporary access-location outage is operational");
+
+        var humanManifest = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanManifest);
+        humanManifest.Content.Should().Contain("Protocol package binding id");
+        humanManifest.Content.Should().Contain($"Spec package hash: `{Hash('a')}`");
+        humanManifest.Content.Should().Contain("Spec access locations: `1`");
+
+        var humanAudit = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport);
+        humanAudit.Content.Should().Contain("## Protocol Omega Package Binding");
+        humanAudit.Content.Should().Contain("Access-location note: Protocol package archives are referenced by immutable hashes");
+        humanAudit.Content.Should().Contain("Website spec package");
+        humanAudit.Content.Should().Contain("Website proof package");
+    }
+
     private static OutcomeRuleDefinition CreatePassFailRule() =>
         new(
             OutcomeRuleKind.PassFail,
@@ -418,4 +463,216 @@ public class ElectionReportPackageServiceTests
             BlankVoteExcludedFromThresholdDenominator: true,
             TieResolutionRule: "tie_unresolved",
             CalculationBasis: "simple_majority_of_non_blank_votes");
+
+    private static ElectionRecord CreateFinalizedElectionForReportPackage()
+    {
+        var electionId = ElectionId.NewElectionId;
+        var draftElection = ElectionModelFactory.CreateDraftRecord(
+            electionId,
+            title: "Protocol package report election",
+            shortDescription: "FEAT-112 report package refs",
+            ownerPublicAddress: "owner-address",
+            externalReferenceCode: "FEAT-112-REPORT",
+            electionClass: ElectionClass.OrganizationalRemoteVoting,
+            bindingStatus: ElectionBindingStatus.Binding,
+            selectedProfileId: ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId,
+            selectedProfileDevOnly: false,
+            governanceMode: ElectionGovernanceMode.AdminOnly,
+            disclosureMode: ElectionDisclosureMode.FinalResultsOnly,
+            participationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
+            voteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
+            eligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            outcomeRule: CreatePassFailRule(),
+            approvedClientApplications:
+            [
+                new ApprovedClientApplicationRecord("hushsocial", "1.0.0"),
+            ],
+            protocolOmegaVersion: "omega-v1.0.0",
+            reportingPolicy: ReportingPolicy.DefaultPhaseOnePackage,
+            reviewWindowPolicy: ReviewWindowPolicy.NoReviewWindow,
+            ownerOptions:
+            [
+                new ElectionOptionDefinition("yes", "Yes", "Approve the proposal", 1, false),
+                new ElectionOptionDefinition("no", "No", "Reject the proposal", 2, false),
+            ],
+            officialResultVisibilityPolicy: OfficialResultVisibilityPolicy.PublicPlaintext);
+
+        return draftElection with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            ClosedAt = new DateTime(2026, 5, 4, 12, 0, 0, DateTimeKind.Utc),
+            TallyReadyAt = new DateTime(2026, 5, 4, 12, 5, 0, DateTimeKind.Utc),
+            FinalizedAt = new DateTime(2026, 5, 4, 12, 10, 0, DateTimeKind.Utc),
+        };
+    }
+
+    private static ElectionReportPackageBuildRequest CreateReportBuildRequest(
+        ElectionRecord election,
+        ProtocolPackageBindingRecord? protocolPackageBinding)
+    {
+        var closeArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Close,
+            election,
+            recordedByPublicAddress: "owner-address",
+            frozenEligibleVoterSetHash: new byte[] { 1, 2, 3 },
+            acceptedBallotCount: 1,
+            acceptedBallotSetHash: new byte[] { 4, 5, 6 },
+            publishedBallotCount: 1,
+            publishedBallotStreamHash: new byte[] { 7, 8, 9 },
+            finalEncryptedTallyHash: new byte[] { 10, 11, 12 });
+        var tallyReadyArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.TallyReady,
+            election,
+            recordedByPublicAddress: "owner-address",
+            acceptedBallotCount: 1,
+            acceptedBallotSetHash: new byte[] { 4, 5, 6 },
+            publishedBallotCount: 1,
+            publishedBallotStreamHash: new byte[] { 7, 8, 9 },
+            finalEncryptedTallyHash: new byte[] { 10, 11, 12 });
+        var finalizeArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Finalize,
+            election,
+            recordedByPublicAddress: "owner-address",
+            acceptedBallotCount: 1,
+            acceptedBallotSetHash: new byte[] { 4, 5, 6 },
+            publishedBallotCount: 1,
+            publishedBallotStreamHash: new byte[] { 7, 8, 9 },
+            finalEncryptedTallyHash: new byte[] { 10, 11, 12 });
+        var finalizedElection = election with
+        {
+            CloseArtifactId = closeArtifact.Id,
+            TallyReadyArtifactId = tallyReadyArtifact.Id,
+            FinalizeArtifactId = finalizeArtifact.Id,
+        };
+        var denominatorEvidence = new ElectionResultDenominatorEvidence(
+            ElectionEligibilitySnapshotType.Close,
+            EligibilitySnapshotId: null,
+            BoundaryArtifactId: closeArtifact.Id,
+            ActiveDenominatorSetHash: new byte[] { 13, 14, 15 });
+        var unofficialResult = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Unofficial,
+            ElectionResultArtifactVisibility.PublicPlaintext,
+            title: "Unofficial result",
+            namedOptionResults:
+            [
+                new ElectionResultOptionCount("yes", "Yes", "Approve the proposal", 1, 1, 1),
+                new ElectionResultOptionCount("no", "No", "Reject the proposal", 2, 2, 0),
+            ],
+            blankCount: 0,
+            totalVotedCount: 1,
+            eligibleToVoteCount: 1,
+            didNotVoteCount: 0,
+            denominatorEvidence,
+            recordedByPublicAddress: "owner-address",
+            tallyReadyArtifactId: tallyReadyArtifact.Id,
+            publicPayload: "{\"mode\":\"protocol-package-report\"}");
+        var officialResult = ElectionModelFactory.CreateResultArtifact(
+            election.ElectionId,
+            ElectionResultArtifactKind.Official,
+            ElectionResultArtifactVisibility.PublicPlaintext,
+            title: "Official result",
+            namedOptionResults: unofficialResult.NamedOptionResults,
+            blankCount: unofficialResult.BlankCount,
+            totalVotedCount: unofficialResult.TotalVotedCount,
+            eligibleToVoteCount: unofficialResult.EligibleToVoteCount,
+            didNotVoteCount: unofficialResult.DidNotVoteCount,
+            denominatorEvidence,
+            recordedByPublicAddress: "owner-address",
+            tallyReadyArtifactId: tallyReadyArtifact.Id,
+            sourceResultArtifactId: unofficialResult.Id,
+            publicPayload: "{\"mode\":\"protocol-package-report\"}");
+
+        return new ElectionReportPackageBuildRequest(
+            finalizedElection with
+            {
+                UnofficialResultArtifactId = unofficialResult.Id,
+                OfficialResultArtifactId = officialResult.Id,
+            },
+            closeArtifact,
+            tallyReadyArtifact,
+            finalizeArtifact,
+            unofficialResult,
+            officialResult,
+            CloseEligibilitySnapshot: null,
+            ProtocolPackageBinding: protocolPackageBinding,
+            FinalizationSession: null,
+            FinalizationReleaseEvidence: null,
+            FinalizationGovernedProposal: null,
+            FinalizationGovernedApprovals: Array.Empty<ElectionGovernedProposalApprovalRecord>(),
+            FinalizationShares: Array.Empty<ElectionFinalizationShareRecord>(),
+            WarningAcknowledgements: Array.Empty<ElectionWarningAcknowledgementRecord>(),
+            TrusteeInvitations: Array.Empty<ElectionTrusteeInvitationRecord>(),
+            RosterEntries:
+            [
+                ElectionModelFactory.CreateRosterEntry(
+                    election.ElectionId,
+                    "voter-alice",
+                    ElectionRosterContactType.Email,
+                    "alice@hush.test"),
+            ],
+            ParticipationRecords:
+            [
+                ElectionModelFactory.CreateParticipationRecord(
+                    election.ElectionId,
+                    "voter-alice",
+                    ElectionParticipationStatus.CountedAsVoted),
+            ],
+            AttemptNumber: 1,
+            PreviousAttemptId: null,
+            AttemptedByPublicAddress: "owner-address",
+            AttemptedAt: new DateTime(2026, 5, 4, 12, 11, 0, DateTimeKind.Utc));
+    }
+
+    private static ProtocolPackageBindingRecord CreateSealedProtocolPackageBinding(ElectionRecord election)
+    {
+        var catalogEntry = ElectionModelFactory.CreateApprovedProtocolPackageCatalogEntry(
+            packageId: "omega-hushvoting-v1",
+            packageVersion: "v1.0.0",
+            specPackageHash: Hash('a'),
+            proofPackageHash: Hash('b'),
+            releaseManifestHash: Hash('c'),
+            compatibleProfileIds:
+            [
+                election.SelectedProfileId,
+            ],
+            approvalStatus: ProtocolPackageApprovalStatus.ApprovedInternal,
+            isLatestForCompatibleProfiles: true,
+            specAccessLocations:
+            [
+                ElectionModelFactory.CreateProtocolPackageAccessLocation(
+                    ProtocolPackageAccessLocationKind.PublicWebsite,
+                    "Website spec package",
+                    "https://www.hushnetwork.social/protocol-omega/hushvoting-v1/spec.zip",
+                    Hash('d')),
+            ],
+            proofAccessLocations:
+            [
+                ElectionModelFactory.CreateProtocolPackageAccessLocation(
+                    ProtocolPackageAccessLocationKind.PublicWebsite,
+                    "Website proof package",
+                    "https://www.hushnetwork.social/protocol-omega/hushvoting-v1/proof.zip",
+                    Hash('e')),
+            ],
+            approvedAt: new DateTime(2026, 5, 4, 11, 30, 0, DateTimeKind.Utc));
+
+        var binding = ElectionModelFactory.CreateProtocolPackageBindingFromCatalog(
+            election.ElectionId,
+            catalogEntry,
+            election.SelectedProfileId,
+            election.CurrentDraftRevision,
+            election.OwnerPublicAddress,
+            boundAt: new DateTime(2026, 5, 4, 11, 45, 0, DateTimeKind.Utc));
+
+        return binding.SealAtOpen(
+            new DateTime(2026, 5, 4, 12, 0, 0, DateTimeKind.Utc),
+            election.OwnerPublicAddress,
+            sourceTransactionId: Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            sourceBlockHeight: 42,
+            sourceBlockId: Guid.Parse("22222222-2222-2222-2222-222222222222"));
+    }
+
+    private static string Hash(char value) =>
+        new(char.ToLowerInvariant(value), 64);
 }

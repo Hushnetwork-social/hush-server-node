@@ -450,6 +450,61 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionAsync_WithOwnerActor_ProjectsProtocolPackageBinding()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection();
+        var binding = CreateLatestProtocolPackageBinding(election);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync([]);
+            repo.Setup(x => x.GetLatestProtocolPackageBindingAsync(election.ElectionId)).ReturnsAsync(binding);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        // Act
+        var response = await sut.GetElectionAsync(election.ElectionId, "owner-address");
+
+        // Assert
+        response.Success.Should().BeTrue();
+        response.ProtocolPackageBinding.Should().NotBeNull();
+        response.ProtocolPackageBinding!.PackageVersion.Should().Be("v1.0.0");
+        response.ProtocolPackageBinding.PackageApprovalStatus.Should().Be(ProtocolPackageApprovalStatusProto.ProtocolPackageApprovedInternal);
+        response.ProtocolPackageBinding.Status.Should().Be(ProtocolPackageBindingStatusProto.ProtocolPackageBindingLatest);
+        response.ProtocolPackageBinding.SpecPackageHash.Should().Be(binding.SpecPackageHash);
+        response.ProtocolPackageBinding.SpecAccessLocations.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task GetElectionAsync_WithVoterOnlyActor_HidesProtocolPackageBinding()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection();
+        var binding = CreateLatestProtocolPackageBinding(election);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId)).ReturnsAsync([]);
+            repo.Setup(x => x.GetLatestProtocolPackageBindingAsync(election.ElectionId)).ReturnsAsync(binding);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        // Act
+        var response = await sut.GetElectionAsync(election.ElectionId, "voter-address");
+
+        // Assert
+        response.Success.Should().BeTrue();
+        response.ProtocolPackageBinding.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetElectionAsync_WithLegacyBindingDraftSnapshotMissingSelectedProfile_UsesCompatibilityFallback()
     {
         var mocker = new AutoMocker();
@@ -2834,6 +2889,10 @@ public class ElectionQueryApplicationServiceTests
             election.ElectionId,
             actorPublicAddress: "auditor-address",
             grantedByPublicAddress: "owner-address");
+        var sealedProtocolPackageBinding = CreateLatestProtocolPackageBinding(election)
+            .SealAtOpen(
+                election.OpenedAt ?? DateTime.UtcNow.AddMinutes(-10),
+                "owner-address");
 
         ConfigureReadOnlyRepository(mocker, repo =>
         {
@@ -2846,6 +2905,8 @@ public class ElectionQueryApplicationServiceTests
                 .ReturnsAsync(official);
             repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
             repo.Setup(x => x.GetReportArtifactsAsync(reportPackage.Id)).ReturnsAsync([trusteeVisibleArtifact, ownerAuditorArtifact]);
+            repo.Setup(x => x.GetSealedProtocolPackageBindingAsync(election.ElectionId))
+                .ReturnsAsync(sealedProtocolPackageBinding);
         });
 
         var sut = CreateQueryService(mocker);
@@ -2860,6 +2921,10 @@ public class ElectionQueryApplicationServiceTests
         response.VisibleReportArtifacts.Should().HaveCount(2);
         response.VisibleReportArtifacts.Select(x => x.ArtifactKind).Should().Contain(
             ElectionReportArtifactKindProto.ReportArtifactHumanNamedParticipationRoster);
+        response.ProtocolPackageBinding.Should().NotBeNull();
+        response.ProtocolPackageBinding!.Status.Should().Be(ProtocolPackageBindingStatusProto.ProtocolPackageBindingSealed);
+        response.ProtocolPackageBinding.SpecPackageHash.Should().Be(sealedProtocolPackageBinding.SpecPackageHash);
+        response.ProtocolPackageBinding.HasSealedAt.Should().BeTrue();
     }
 
     [Fact]
@@ -3138,6 +3203,10 @@ public class ElectionQueryApplicationServiceTests
             .ReturnsAsync(Array.Empty<ElectionReportAccessGrantRecord>());
         repository.Setup(x => x.GetReportAccessGrantAsync(It.IsAny<ElectionId>(), It.IsAny<string>()))
             .ReturnsAsync((ElectionReportAccessGrantRecord?)null);
+        repository.Setup(x => x.GetLatestProtocolPackageBindingAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync((ProtocolPackageBindingRecord?)null);
+        repository.Setup(x => x.GetSealedProtocolPackageBindingAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync((ProtocolPackageBindingRecord?)null);
         repository.Setup(x => x.GetRosterEntriesAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionRosterEntryRecord>());
         repository.Setup(x => x.GetRosterEntriesByLinkedActorAsync(It.IsAny<string>()))
@@ -3255,6 +3324,51 @@ public class ElectionQueryApplicationServiceTests
             ],
             acknowledgedWarningCodes: acknowledgedWarningCodes,
             requiredApprovalCount: 1);
+
+    private static ProtocolPackageBindingRecord CreateLatestProtocolPackageBinding(
+        ElectionRecord election,
+        string packageVersion = "v1.0.0",
+        char hashSeed = 'a')
+    {
+        var catalogEntry = ElectionModelFactory.CreateApprovedProtocolPackageCatalogEntry(
+            packageId: "omega-hushvoting-v1",
+            packageVersion: packageVersion,
+            specPackageHash: Hash(hashSeed),
+            proofPackageHash: Hash((char)(hashSeed + 1)),
+            releaseManifestHash: Hash((char)(hashSeed + 2)),
+            compatibleProfileIds:
+            [
+                election.SelectedProfileId,
+            ],
+            approvalStatus: ProtocolPackageApprovalStatus.ApprovedInternal,
+            isLatestForCompatibleProfiles: true,
+            specAccessLocations:
+            [
+                CreateProtocolPackageAccessLocation(Hash((char)(hashSeed + 3))),
+            ],
+            proofAccessLocations:
+            [
+                CreateProtocolPackageAccessLocation(Hash((char)(hashSeed + 4))),
+            ],
+            approvedAt: DateTime.UtcNow.AddMinutes(-5));
+
+        return ElectionModelFactory.CreateProtocolPackageBindingFromCatalog(
+            election.ElectionId,
+            catalogEntry,
+            election.SelectedProfileId,
+            election.CurrentDraftRevision,
+            "owner-address");
+    }
+
+    private static ProtocolPackageAccessLocationRecord CreateProtocolPackageAccessLocation(string contentHash) =>
+        ElectionModelFactory.CreateProtocolPackageAccessLocation(
+            ProtocolPackageAccessLocationKind.PublicWebsite,
+            "HushNetwork public protocol package",
+            "https://www.hushnetwork.social/protocol-omega/hushvoting-v1/v1.0.0/package.zip",
+            contentHash);
+
+    private static string Hash(char value) =>
+        new(char.ToLowerInvariant(value), 64);
 
     private static string ComputeScopedHash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));

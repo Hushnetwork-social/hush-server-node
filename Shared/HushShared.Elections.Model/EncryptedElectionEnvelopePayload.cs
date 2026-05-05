@@ -30,6 +30,9 @@ public record UpdateElectionDraftActionPayload(
     string SnapshotReason,
     ElectionDraftSpecification Draft);
 
+public record RefreshProtocolPackageBindingActionPayload(
+    string ActorPublicAddress);
+
 public record ImportElectionRosterActionPayload(
     string ActorPublicAddress,
     IReadOnlyList<ElectionRosterImportItem> RosterEntries);
@@ -214,6 +217,7 @@ public static class EncryptedElectionEnvelopeActionTypes
 {
     public const string CreateDraft = "create_draft";
     public const string UpdateDraft = "update_draft";
+    public const string RefreshProtocolPackageBinding = "refresh_protocol_package_binding";
     public const string ImportRoster = "import_roster";
     public const string ClaimRosterEntry = "claim_roster_entry";
     public const string ActivateRosterEntry = "activate_roster_entry";

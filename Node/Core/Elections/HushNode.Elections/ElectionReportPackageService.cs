@@ -72,8 +72,10 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 request.OfficialResult,
                 outcomeProjection,
                 ceremonyPublicKey);
+            var protocolPackageBindingProjection = BuildProtocolPackageBindingProjection(request.ProtocolPackageBinding);
             var auditProjection = BuildAuditProjection(
                 request,
+                protocolPackageBindingProjection,
                 frozenEvidenceFingerprint,
                 trustees,
                 warningEvidence,
@@ -86,6 +88,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 frozenEvidenceFingerprint,
                 trustees.Length,
                 rosterEntries.Length,
+                protocolPackageBindingProjection,
                 outcomeProjection,
                 warningEvidence,
                 governedApprovalProjections,
@@ -97,7 +100,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 rosterEntries.Length,
                 warningEvidence.Length,
                 governedApprovalProjections.Length,
-                finalizationShareProjections.Length);
+                finalizationShareProjections.Length,
+                protocolPackageBindingProjection);
 
             var machineManifestId = Guid.NewGuid();
             var humanManifestId = Guid.NewGuid();
@@ -484,6 +488,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             BuildBoundaryEvidenceProjection(request.TallyReadyArtifact),
             BuildResultArtifactProjection(request.UnofficialResult),
             BuildResultArtifactProjection(request.OfficialResult),
+            BuildProtocolPackageBindingProjection(request.ProtocolPackageBinding),
             request.FinalizationSession is null
                 ? null
                 : new FinalizationSessionProjection(
@@ -629,6 +634,56 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             BuildHashHex(artifact.DenominatorEvidence.ActiveDenominatorSetHash),
             artifact.SourceResultArtifactId);
 
+    private static ProtocolPackageBindingProjection? BuildProtocolPackageBindingProjection(
+        ProtocolPackageBindingRecord? binding)
+    {
+        if (binding is null)
+        {
+            return null;
+        }
+
+        return new ProtocolPackageBindingProjection(
+            binding.Id,
+            binding.PackageId,
+            binding.PackageVersion,
+            binding.SelectedProfileId,
+            binding.SpecPackageHash,
+            binding.ProofPackageHash,
+            binding.ReleaseManifestHash,
+            binding.PackageApprovalStatus.ToString(),
+            binding.ExternalReviewStatus.ToString(),
+            binding.Status.ToString(),
+            binding.Source.ToString(),
+            binding.DraftRevision,
+            binding.BoundAt,
+            binding.SealedAt,
+            binding.BoundByPublicAddress,
+            binding.SourceTransactionId,
+            binding.SourceBlockHeight,
+            binding.SourceBlockId,
+            binding.SpecAccessLocations
+                .OrderBy(x => x.LocationKind)
+                .ThenBy(x => x.Label, StringComparer.Ordinal)
+                .ThenBy(x => x.Location, StringComparer.Ordinal)
+                .Select(BuildProtocolPackageAccessLocationProjection)
+                .ToArray(),
+            binding.ProofAccessLocations
+                .OrderBy(x => x.LocationKind)
+                .ThenBy(x => x.Label, StringComparer.Ordinal)
+                .ThenBy(x => x.Location, StringComparer.Ordinal)
+                .Select(BuildProtocolPackageAccessLocationProjection)
+                .ToArray(),
+            "Protocol package archives are referenced by immutable hashes and access locations; the final election report package does not embed the full protocol packages by default. Temporary access-location outage is operational and does not change the sealed election refs.");
+    }
+
+    private static ProtocolPackageAccessLocationProjection BuildProtocolPackageAccessLocationProjection(
+        ProtocolPackageAccessLocationRecord accessLocation) =>
+        new(
+            accessLocation.LocationKind.ToString(),
+            accessLocation.Label,
+            accessLocation.Location,
+            accessLocation.ContentHash);
+
     private static WarningEvidenceProjection[] BuildWarningEvidenceProjections(ElectionReportPackageBuildRequest request)
     {
         var warningsByCode = request.WarningAcknowledgements
@@ -745,6 +800,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         string frozenEvidenceFingerprint,
         int acceptedTrusteeCount,
         int rosterEntryCount,
+        ProtocolPackageBindingProjection? protocolPackageBinding,
         OutcomeDeterminationProjection outcomeProjection,
         IReadOnlyList<WarningEvidenceProjection> warningEvidence,
         IReadOnlyList<GovernedApprovalProjection> governedApprovals,
@@ -775,6 +831,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             CustodyBoundarySummary: GetGovernanceCustodySummary(request.Election),
             AcceptedTrusteeCount: acceptedTrusteeCount,
             RosterEntryCount: rosterEntryCount,
+            ProtocolPackageBinding: protocolPackageBinding,
             FinalizeArtifactId: request.FinalizeArtifact.Id,
             OfficialResultArtifactId: request.OfficialResult.Id,
             OfficialResultHash: officialResultHash,
@@ -790,7 +847,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         int rosterEntryCount,
         int warningCount,
         int governedApprovalCount,
-        int finalizationShareCount) =>
+        int finalizationShareCount,
+        ProtocolPackageBindingProjection? protocolPackageBinding) =>
         new(
             ArtifactId: Guid.Empty,
             ManifestArtifactId: Guid.Empty,
@@ -817,6 +875,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             WarningCount: warningCount,
             GovernedApprovalCount: governedApprovalCount,
             FinalizationShareCount: finalizationShareCount,
+            ProtocolPackageBinding: protocolPackageBinding,
             Trustees: trustees);
 
     private static ResultReportProjection BuildResultReportProjection(
@@ -880,6 +939,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
 
     private static AuditProvenanceProjection BuildAuditProjection(
         ElectionReportPackageBuildRequest request,
+        ProtocolPackageBindingProjection? protocolPackageBinding,
         string frozenEvidenceFingerprint,
         IReadOnlyList<TrusteeProjection> trustees,
         IReadOnlyList<WarningEvidenceProjection> warningEvidence,
@@ -909,6 +969,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             TrusteeThreshold: request.CloseArtifact.TrusteeSnapshot is null
                 ? null
                 : BuildTrusteeThresholdProjection(request.CloseArtifact.TrusteeSnapshot),
+            ProtocolPackageBinding: protocolPackageBinding,
             FinalizationGovernedProposal: request.FinalizationGovernedProposal is null
                 ? null
                 : BuildGovernedProposalProjection(request.FinalizationGovernedProposal),
@@ -1091,6 +1152,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         - Official visibility: `{manifest.OfficialVisibility}`
         - Secrecy boundary: {manifest.SecrecyBoundarySummary}
         - Custody boundary: {manifest.CustodyBoundarySummary}
+        {BuildHumanProtocolPackageBindingContent(manifest.ProtocolPackageBinding)}
         - Accepted trustee count: `{manifest.AcceptedTrusteeCount}`
         - Roster entry count: `{manifest.RosterEntryCount}`
         - Warning count: `{manifest.WarningCount}`
@@ -1215,6 +1277,10 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         builder.AppendLine($"- Secrecy boundary: {projection.Setup.SecrecyBoundarySummary}");
         builder.AppendLine($"- Custody boundary: {projection.Setup.CustodyBoundarySummary}");
         builder.AppendLine();
+        builder.AppendLine("## Protocol Omega Package Binding");
+        builder.AppendLine();
+        AppendHumanProtocolPackageBindingContent(builder, projection.ProtocolPackageBinding);
+        builder.AppendLine();
         builder.AppendLine("### Approved Clients");
         builder.AppendLine();
         foreach (var client in projection.Setup.ApprovedClients)
@@ -1328,6 +1394,60 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         }
 
         return builder.ToString().TrimEnd();
+    }
+
+    private static string BuildHumanProtocolPackageBindingContent(
+        ProtocolPackageBindingProjection? binding)
+    {
+        var builder = new StringBuilder();
+        AppendHumanProtocolPackageBindingContent(builder, binding);
+        return builder.ToString().TrimEnd();
+    }
+
+    private static void AppendHumanProtocolPackageBindingContent(
+        StringBuilder builder,
+        ProtocolPackageBindingProjection? binding)
+    {
+        if (binding is null)
+        {
+            builder.AppendLine("- Protocol package binding: `not recorded`");
+            return;
+        }
+
+        builder.AppendLine($"- Protocol package binding id: `{binding.BindingId}`");
+        builder.AppendLine($"- Package id: `{binding.PackageId}`");
+        builder.AppendLine($"- Package version: `{binding.PackageVersion}`");
+        builder.AppendLine($"- Selected profile: `{binding.SelectedProfileId}`");
+        builder.AppendLine($"- Status: `{binding.Status}`");
+        builder.AppendLine($"- Source: `{binding.Source}`");
+        builder.AppendLine($"- Approval status: `{binding.ApprovalStatus}`");
+        builder.AppendLine($"- External review status: `{binding.ExternalReviewStatus}`");
+        builder.AppendLine($"- Spec package hash: `{binding.SpecPackageHash}`");
+        builder.AppendLine($"- Proof package hash: `{binding.ProofPackageHash}`");
+        builder.AppendLine($"- Release manifest hash: `{binding.ReleaseManifestHash}`");
+        builder.AppendLine($"- Draft revision: `{binding.DraftRevision}`");
+        builder.AppendLine($"- Bound at: `{binding.BoundAt:O}`");
+        builder.AppendLine($"- Sealed at: `{binding.SealedAt?.ToString("O") ?? "not sealed"}`");
+        builder.AppendLine($"- Bound by: `{binding.BoundByPublicAddress}`");
+        builder.AppendLine($"- Source transaction id: `{binding.SourceTransactionId?.ToString() ?? "none"}`");
+        builder.AppendLine($"- Source block height: `{binding.SourceBlockHeight?.ToString() ?? "none"}`");
+        builder.AppendLine($"- Source block id: `{binding.SourceBlockId?.ToString() ?? "none"}`");
+        builder.AppendLine($"- Access-location note: {binding.AccessLocationOperationalNote}");
+        AppendProtocolPackageAccessLocations(builder, "Spec access locations", binding.SpecAccessLocations);
+        AppendProtocolPackageAccessLocations(builder, "Proof access locations", binding.ProofAccessLocations);
+    }
+
+    private static void AppendProtocolPackageAccessLocations(
+        StringBuilder builder,
+        string title,
+        IReadOnlyList<ProtocolPackageAccessLocationProjection> accessLocations)
+    {
+        builder.AppendLine($"- {title}: `{accessLocations.Count}`");
+        foreach (var accessLocation in accessLocations)
+        {
+            builder.AppendLine(
+                $"  - `{accessLocation.LocationKind}` {accessLocation.Label}: {accessLocation.Location} (content hash `{accessLocation.ContentHash ?? "not recorded"}`)");
+        }
     }
 
     private static string BuildHumanOutcomeContent(
@@ -1457,6 +1577,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         BoundaryEvidenceProjection TallyReadyBoundary,
         ResultArtifactProjection UnofficialResult,
         ResultArtifactProjection OfficialResult,
+        ProtocolPackageBindingProjection? ProtocolPackageBinding,
         FinalizationSessionProjection? FinalizationSession,
         FinalizationReleaseProjection? FinalizationReleaseEvidence,
         IReadOnlyList<WarningEvidenceProjection> WarningEvidence,
@@ -1669,6 +1790,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         string CustodyBoundarySummary,
         int AcceptedTrusteeCount,
         int RosterEntryCount,
+        ProtocolPackageBindingProjection? ProtocolPackageBinding,
         Guid FinalizeArtifactId,
         Guid OfficialResultArtifactId,
         string OfficialResultHash,
@@ -1704,6 +1826,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         int WarningCount,
         int GovernedApprovalCount,
         int FinalizationShareCount,
+        ProtocolPackageBindingProjection? ProtocolPackageBinding,
         IReadOnlyList<TrusteeProjection> Trustees);
 
     private sealed record ResultReportProjection(
@@ -1787,6 +1910,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         IReadOnlyList<TrusteeProjection> Trustees,
         CeremonyPublicKeyProjection? CeremonyPublicKey,
         TrusteeThresholdProjection? TrusteeThreshold,
+        ProtocolPackageBindingProjection? ProtocolPackageBinding,
         GovernedProposalProjection? FinalizationGovernedProposal,
         IReadOnlyList<GovernedApprovalProjection> FinalizationApprovals,
         IReadOnlyList<FinalizationShareProjection> FinalizationShares,
@@ -1818,6 +1942,35 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         decimal TurnoutPercent,
         int BlankCount,
         int DidNotVoteCount);
+
+    private sealed record ProtocolPackageBindingProjection(
+        Guid BindingId,
+        string PackageId,
+        string PackageVersion,
+        string SelectedProfileId,
+        string SpecPackageHash,
+        string ProofPackageHash,
+        string ReleaseManifestHash,
+        string ApprovalStatus,
+        string ExternalReviewStatus,
+        string Status,
+        string Source,
+        int DraftRevision,
+        DateTime BoundAt,
+        DateTime? SealedAt,
+        string BoundByPublicAddress,
+        Guid? SourceTransactionId,
+        long? SourceBlockHeight,
+        Guid? SourceBlockId,
+        IReadOnlyList<ProtocolPackageAccessLocationProjection> SpecAccessLocations,
+        IReadOnlyList<ProtocolPackageAccessLocationProjection> ProofAccessLocations,
+        string AccessLocationOperationalNote);
+
+    private sealed record ProtocolPackageAccessLocationProjection(
+        string LocationKind,
+        string Label,
+        string Location,
+        string? ContentHash);
 
     private sealed record DisputeReviewIndexProjection(
         Guid MachineArtifactId,

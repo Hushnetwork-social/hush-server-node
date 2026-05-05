@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
     <OutputPath>../Release</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <ResolveProtocolPackageOnBuild Condition="'$(ResolveProtocolPackageOnBuild)' == ''">true</ResolveProtocolPackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -48,5 +49,31 @@
     <ProjectReference Include="..\Infrastructure\HushNode.PushNotifications\HushNode.PushNotifications.csproj" />
     <ProjectReference Include="..\Core\UrlMetadata\HushNode.UrlMetadata.gRPC\HushNode.UrlMetadata.gRPC.csproj" />
   </ItemGroup>
+
+  <Target Name="ResolveProtocolPackageForBuildOutput"
+          AfterTargets="Build"
+          Condition="'$(ResolveProtocolPackageOnBuild)' != 'false' and '$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <_ProtocolPackagePowerShell Condition="'$(OS)' == 'Windows_NT'">powershell</_ProtocolPackagePowerShell>
+      <_ProtocolPackagePowerShell Condition="'$(OS)' != 'Windows_NT'">pwsh</_ProtocolPackagePowerShell>
+      <_ProtocolPackageResolverScript>$(MSBuildThisFileDirectory)..\scripts\resolve-protocol-package-for-build.ps1</_ProtocolPackageResolverScript>
+      <_ProtocolPackageServerRoot>$(MSBuildThisFileDirectory)..\..</_ProtocolPackageServerRoot>
+      <_ProtocolPackageOutputRoot>$(OutDir)ProtocolPackages</_ProtocolPackageOutputRoot>
+    </PropertyGroup>
+    <Exec Command="&quot;$(_ProtocolPackagePowerShell)&quot; -NoProfile -ExecutionPolicy Bypass -File &quot;$(_ProtocolPackageResolverScript)&quot; -Configuration &quot;$(Configuration)&quot; -ServerRepositoryRoot &quot;$(_ProtocolPackageServerRoot)&quot; -OutputRoot &quot;$(_ProtocolPackageOutputRoot)&quot;" />
+  </Target>
+
+  <Target Name="ResolveProtocolPackageForPublishOutput"
+          AfterTargets="Publish"
+          Condition="'$(ResolveProtocolPackageOnBuild)' != 'false' and '$(DesignTimeBuild)' != 'true' and '$(PublishDir)' != ''">
+    <PropertyGroup>
+      <_ProtocolPackagePowerShell Condition="'$(OS)' == 'Windows_NT'">powershell</_ProtocolPackagePowerShell>
+      <_ProtocolPackagePowerShell Condition="'$(OS)' != 'Windows_NT'">pwsh</_ProtocolPackagePowerShell>
+      <_ProtocolPackageResolverScript>$(MSBuildThisFileDirectory)..\scripts\resolve-protocol-package-for-build.ps1</_ProtocolPackageResolverScript>
+      <_ProtocolPackageServerRoot>$(MSBuildThisFileDirectory)..\..</_ProtocolPackageServerRoot>
+      <_ProtocolPackagePublishOutputRoot>$(PublishDir)ProtocolPackages</_ProtocolPackagePublishOutputRoot>
+    </PropertyGroup>
+    <Exec Command="&quot;$(_ProtocolPackagePowerShell)&quot; -NoProfile -ExecutionPolicy Bypass -File &quot;$(_ProtocolPackageResolverScript)&quot; -Configuration &quot;$(Configuration)&quot; -ServerRepositoryRoot &quot;$(_ProtocolPackageServerRoot)&quot; -OutputRoot &quot;$(_ProtocolPackagePublishOutputRoot)&quot;" />
+  </Target>
 
 </Project>

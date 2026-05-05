@@ -153,6 +153,9 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
             (isOwner || acceptedTrustee || isDesignatedAuditor);
         var canViewFinalizationOperationalMetadata = canViewGovernedOperationalMetadata;
+        var canViewProtocolPackageBinding =
+            !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
+            (isOwner || isDesignatedAuditor);
         var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(electionId);
         boundaryArtifacts = await EnsureAdminOnlyProtectedTallyBindingPersistedAsync(election, boundaryArtifacts);
         var governedProposals = canViewGovernedOperationalMetadata
@@ -173,6 +176,9 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
             ceremonyTranscriptEvents.AddRange(await repository.GetCeremonyTranscriptEventsAsync(version.Id));
         }
         var resultArtifacts = await repository.GetResultArtifactsAsync(electionId) ?? Array.Empty<ElectionResultArtifactRecord>();
+        var protocolPackageBinding = canViewProtocolPackageBinding
+            ? await repository.GetLatestProtocolPackageBindingAsync(electionId)
+            : null;
 
         var activeCeremonyVersion = await repository.GetActiveCeremonyVersionAsync(electionId);
         var activeCeremonyTrusteeStates = activeCeremonyVersion is null
@@ -254,6 +260,11 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         response.ResultArtifacts.AddRange(resultArtifacts
             .Where(x => x.Visibility == ElectionResultArtifactVisibility.PublicPlaintext)
             .Select(x => x.ToProto()));
+
+        if (protocolPackageBinding is not null)
+        {
+            response.ProtocolPackageBinding = protocolPackageBinding.ToProto();
+        }
 
         return response;
     }
@@ -992,12 +1003,19 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
         var canViewReportPackage = !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
             (isOwner || acceptedTrustee || isDesignatedAuditor);
         var canViewRestrictedReportArtifacts = isOwner || isDesignatedAuditor;
+        var canViewProtocolPackageBinding =
+            !string.IsNullOrWhiteSpace(normalizedActorPublicAddress) &&
+            (isOwner || isDesignatedAuditor);
 
         var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(electionId);
         var ceremonySnapshot = ResolveResultCeremonySnapshot(election, boundaryArtifacts);
         var unofficialResult = await repository.GetResultArtifactAsync(electionId, ElectionResultArtifactKind.Unofficial);
         var officialResult = await repository.GetResultArtifactAsync(electionId, ElectionResultArtifactKind.Official);
         var latestReportPackage = await repository.GetLatestReportPackageAsync(electionId);
+        var protocolPackageBinding = canViewProtocolPackageBinding
+            ? await repository.GetSealedProtocolPackageBindingAsync(electionId) ??
+              await repository.GetLatestProtocolPackageBindingAsync(electionId)
+            : null;
 
         var response = new GetElectionResultViewResponse
         {
@@ -1045,6 +1063,11 @@ public class ElectionQueryApplicationService : IElectionQueryApplicationService
                     .ThenBy(x => x.ArtifactKind)
                     .Select(x => x.ToProto()));
             }
+        }
+
+        if (protocolPackageBinding is not null)
+        {
+            response.ProtocolPackageBinding = protocolPackageBinding.ToProto();
         }
 
         return response;

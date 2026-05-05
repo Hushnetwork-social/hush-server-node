@@ -52,6 +52,7 @@ public class ElectionLifecycleServiceTests
     public async Task CreateDraftAsync_WithPreassignedElectionIdAndTransactionSource_PersistsBoundIdentifiers()
     {
         var store = new ElectionStore();
+        SeedApprovedProtocolPackage(store, "admin-prod-1of1");
         var service = CreateService(store);
         var electionId = ElectionId.NewElectionId;
         var transactionId = Guid.NewGuid();
@@ -79,6 +80,30 @@ public class ElectionLifecycleServiceTests
         store.WarningAcknowledgements[0].SourceTransactionId.Should().Be(transactionId);
         store.WarningAcknowledgements[0].SourceBlockHeight.Should().Be(17);
         store.WarningAcknowledgements[0].SourceBlockId.Should().Be(blockId);
+        result.ProtocolPackageBinding.Should().NotBeNull();
+        result.ProtocolPackageBinding!.SourceTransactionId.Should().Be(transactionId);
+        store.ProtocolPackageBindings.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task CreateDraftAsync_WithApprovedCompatiblePackage_BindsLatestProtocolPackage()
+    {
+        var store = new ElectionStore();
+        var catalogEntry = SeedApprovedProtocolPackage(store, "admin-prod-1of1");
+        var service = CreateService(store);
+
+        var result = await service.CreateDraftAsync(new CreateElectionDraftRequest(
+            OwnerPublicAddress: "owner-address",
+            ActorPublicAddress: "owner-address",
+            SnapshotReason: "initial draft",
+            Draft: CreateAdminDraftSpecification()));
+
+        result.IsSuccess.Should().BeTrue();
+        result.ProtocolPackageBinding.Should().NotBeNull();
+        result.ProtocolPackageBinding!.PackageVersion.Should().Be(catalogEntry.PackageVersion);
+        result.ProtocolPackageBinding.Status.Should().Be(ProtocolPackageBindingStatus.Latest);
+        result.ProtocolPackageBinding.Source.Should().Be(ProtocolPackageBindingSource.CatalogSelection);
+        store.ProtocolPackageBindings.Should().ContainSingle();
     }
 
     [Fact]
@@ -195,6 +220,67 @@ public class ElectionLifecycleServiceTests
         store.WarningAcknowledgements.Single(x => x.DraftRevision == 2).SourceTransactionId.Should().Be(transactionId);
         store.WarningAcknowledgements.Single(x => x.DraftRevision == 2).SourceBlockHeight.Should().Be(19);
         store.WarningAcknowledgements.Single(x => x.DraftRevision == 2).SourceBlockId.Should().Be(blockId);
+    }
+
+    [Fact]
+    public async Task UpdateDraftAsync_WithProfileChange_MarksProtocolPackageBindingIncompatible()
+    {
+        var store = new ElectionStore();
+        SeedApprovedProtocolPackage(store, "dkg-prod-2of2");
+        var service = CreateService(store);
+        var createResult = await service.CreateDraftAsync(new CreateElectionDraftRequest(
+            OwnerPublicAddress: "owner-address",
+            ActorPublicAddress: "owner-address",
+            SnapshotReason: "initial governed draft",
+            Draft: CreateTrusteeDraftSpecification(
+                requiredApprovalCount: 2,
+                selectedProfileId: "dkg-prod-2of2")));
+
+        var updateResult = await service.UpdateDraftAsync(new UpdateElectionDraftRequest(
+            ElectionId: createResult.Election!.ElectionId,
+            ActorPublicAddress: "owner-address",
+            SnapshotReason: "changed trustee profile",
+            Draft: CreateTrusteeDraftSpecification(
+                requiredApprovalCount: 3,
+                selectedProfileId: "dkg-prod-3of5")));
+
+        updateResult.IsSuccess.Should().BeTrue();
+        updateResult.ProtocolPackageBinding.Should().NotBeNull();
+        updateResult.ProtocolPackageBinding!.Status.Should().Be(ProtocolPackageBindingStatus.Incompatible);
+        updateResult.ProtocolPackageBinding.DraftRevision.Should().Be(updateResult.Election!.CurrentDraftRevision);
+        store.ProtocolPackageBindings.Should().ContainSingle(x =>
+            x.Status == ProtocolPackageBindingStatus.Incompatible);
+    }
+
+    [Fact]
+    public async Task RefreshProtocolPackageBindingAsync_WithNewerCatalogEntry_RecordsOwnerRefreshBinding()
+    {
+        var store = new ElectionStore();
+        SeedApprovedProtocolPackage(store, "admin-prod-1of1", packageVersion: "v1.0.0", isLatest: true, hashSeed: 'a');
+        var service = CreateService(store);
+        var createResult = await service.CreateDraftAsync(new CreateElectionDraftRequest(
+            OwnerPublicAddress: "owner-address",
+            ActorPublicAddress: "owner-address",
+            SnapshotReason: "initial draft",
+            Draft: CreateAdminDraftSpecification()));
+        SeedApprovedProtocolPackage(store, "admin-prod-1of1", packageVersion: "v1.0.0", isLatest: false, hashSeed: 'a');
+        var latestCatalog = SeedApprovedProtocolPackage(store, "admin-prod-1of1", packageVersion: "v1.1.0", isLatest: true, hashSeed: 'f');
+        var transactionId = Guid.NewGuid();
+
+        var result = await service.RefreshProtocolPackageBindingAsync(new RefreshElectionProtocolPackageBindingRequest(
+            createResult.Election!.ElectionId,
+            "owner-address",
+            SourceTransactionId: transactionId,
+            SourceBlockHeight: 31,
+            SourceBlockId: Guid.NewGuid()));
+
+        result.IsSuccess.Should().BeTrue();
+        result.ProtocolPackageBinding.Should().NotBeNull();
+        result.ProtocolPackageBinding!.PackageVersion.Should().Be(latestCatalog.PackageVersion);
+        result.ProtocolPackageBinding.Source.Should().Be(ProtocolPackageBindingSource.OwnerRefresh);
+        result.ProtocolPackageBinding.SourceTransactionId.Should().Be(transactionId);
+        store.ProtocolPackageBindings.Should().HaveCount(2);
+        store.ProtocolPackageBindings.OrderByDescending(x => x.BoundAt).First().PackageVersion.Should().Be("v1.1.0");
     }
 
     [Fact]
@@ -1663,6 +1749,7 @@ public class ElectionLifecycleServiceTests
         store.TrusteeInvitations[acceptedInvitation.Id] = acceptedInvitation;
         store.TrusteeInvitations[pendingInvitation.Id] = pendingInvitation;
         store.WarningAcknowledgements.Add(warningAcknowledgement);
+        SeedLatestProtocolPackageBinding(store, store.Elections[election.ElectionId]);
         AddRosterEntries(store, CreateRosterEntry(election, "4001"));
 
         var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
@@ -1805,6 +1892,7 @@ public class ElectionLifecycleServiceTests
         store.Elections[election.ElectionId] = election;
         store.TrusteeInvitations[acceptedTrusteeA.Id] = acceptedTrusteeA;
         store.TrusteeInvitations[acceptedTrusteeB.Id] = acceptedTrusteeB;
+        SeedLatestProtocolPackageBinding(store, election);
         AddRosterEntries(store, CreateRosterEntry(election, "4001"));
 
         var result = await service.StartGovernedProposalAsync(new StartElectionGovernedProposalRequest(
@@ -1825,6 +1913,46 @@ public class ElectionLifecycleServiceTests
         result.GovernedProposal.LatestBlockHeight.Should().Be(43);
         store.GovernedProposals.Should().ContainSingle();
         store.GovernedProposals.Values.Single().Id.Should().Be(proposalId);
+    }
+
+    [Fact]
+    public async Task StartGovernedProposalAsync_WithStaleProtocolPackageBinding_ReturnsValidationFailed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var profile = RegisterCeremonyProfile(store, "dkg-prod-1of2-stale", trusteeCount: 2, requiredApprovalCount: 1);
+        var election = CreateTrusteeElection(
+            requiredApprovalCount: 1,
+            selectedProfileId: profile.ProfileId,
+            selectedProfileDevOnly: false);
+        var acceptedTrusteeA = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
+        var acceptedTrusteeB = CreateAcceptedTrusteeInvitation(election, "trustee-b", "Bob");
+        RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            [acceptedTrusteeA, acceptedTrusteeB],
+            completedTrustees: ["trustee-a", "trustee-b"],
+            ready: true);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedTrusteeA.Id] = acceptedTrusteeA;
+        store.TrusteeInvitations[acceptedTrusteeB.Id] = acceptedTrusteeB;
+        SeedLatestProtocolPackageBinding(store, election, packageVersion: "v1.0.0", hashSeed: 'a');
+        SeedApprovedProtocolPackage(store, election.SelectedProfileId, packageVersion: "v1.0.0", isLatest: false, hashSeed: 'a');
+        SeedApprovedProtocolPackage(store, election.SelectedProfileId, packageVersion: "v1.1.0", isLatest: true, hashSeed: 'f');
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
+
+        var result = await service.StartGovernedProposalAsync(new StartElectionGovernedProposalRequest(
+            election.ElectionId,
+            ElectionGovernedActionType.Open,
+            "owner-address"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains("protocol omega package refs are stale", StringComparison.OrdinalIgnoreCase));
+        store.GovernedProposals.Should().BeEmpty();
     }
 
     [Fact]
@@ -1896,6 +2024,7 @@ public class ElectionLifecycleServiceTests
 
         store.Elections[election.ElectionId] = election;
         store.WarningAcknowledgements.Add(warning);
+        SeedLatestProtocolPackageBinding(store, election);
         AddRosterEntries(store, rosterEntry);
 
         var result = await service.OpenElectionAsync(new OpenElectionRequest(
@@ -1932,12 +2061,114 @@ public class ElectionLifecycleServiceTests
         store.BoundaryArtifacts.Should().ContainSingle();
         store.EligibilitySnapshots.Should().ContainSingle();
         store.Elections[election.ElectionId].OpenArtifactId.Should().Be(result.BoundaryArtifact.Id);
+        result.ProtocolPackageBinding.Should().NotBeNull();
+        result.ProtocolPackageBinding!.Status.Should().Be(ProtocolPackageBindingStatus.Sealed);
+        store.ProtocolPackageBindings.Should().ContainSingle(x =>
+            x.ElectionId == election.ElectionId &&
+            x.Status == ProtocolPackageBindingStatus.Sealed);
         store.AdminOnlyProtectedTallyEnvelopes.Should().ContainSingle();
         var protectedEnvelope = store.AdminOnlyProtectedTallyEnvelopes[election.ElectionId];
         protectedEnvelope.SelectedProfileId.Should().Be(election.SelectedProfileId);
         protectedEnvelope.TallyPublicKeyFingerprint.Should().Be(result.BoundaryArtifact.CeremonySnapshot.TallyPublicKeyFingerprint);
         protectedEnvelope.TallyPublicKey.Should().Equal(result.BoundaryArtifact.CeremonySnapshot.TallyPublicKey);
         protectedEnvelope.SealedTallyPrivateScalar.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task OpenElectionAsync_WithMissingProtocolPackageBinding_ReturnsValidationFailed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection(
+            acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]);
+        SeedApprovedProtocolPackage(store, election.SelectedProfileId);
+        var warning = ElectionModelFactory.CreateWarningAcknowledgement(
+            election.ElectionId,
+            ElectionWarningCode.LowAnonymitySet,
+            election.CurrentDraftRevision,
+            acknowledgedByPublicAddress: "owner-address");
+
+        store.Elections[election.ElectionId] = election;
+        store.WarningAcknowledgements.Add(warning);
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
+
+        var result = await service.OpenElectionAsync(new OpenElectionRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet]));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains("protocol omega package refs are missing", StringComparison.OrdinalIgnoreCase));
+        store.BoundaryArtifacts.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OpenElectionAsync_WithStaleProtocolPackageBinding_ReturnsValidationFailed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection(
+            acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]);
+        var warning = ElectionModelFactory.CreateWarningAcknowledgement(
+            election.ElectionId,
+            ElectionWarningCode.LowAnonymitySet,
+            election.CurrentDraftRevision,
+            acknowledgedByPublicAddress: "owner-address");
+
+        store.Elections[election.ElectionId] = election;
+        store.WarningAcknowledgements.Add(warning);
+        SeedLatestProtocolPackageBinding(store, election, packageVersion: "v1.0.0", hashSeed: 'a');
+        SeedApprovedProtocolPackage(store, election.SelectedProfileId, packageVersion: "v1.0.0", isLatest: false, hashSeed: 'a');
+        SeedApprovedProtocolPackage(store, election.SelectedProfileId, packageVersion: "v1.1.0", isLatest: true, hashSeed: 'f');
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
+
+        var result = await service.OpenElectionAsync(new OpenElectionRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet]));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains("protocol omega package refs are stale", StringComparison.OrdinalIgnoreCase));
+        store.BoundaryArtifacts.Should().BeEmpty();
+        store.ProtocolPackageBindings.Should().ContainSingle(x => x.Status == ProtocolPackageBindingStatus.Latest);
+    }
+
+    [Fact]
+    public async Task RefreshProtocolPackageBindingAsync_AfterOpen_ReturnsInvalidStateAndKeepsSealedBinding()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection(
+            acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]);
+        var warning = ElectionModelFactory.CreateWarningAcknowledgement(
+            election.ElectionId,
+            ElectionWarningCode.LowAnonymitySet,
+            election.CurrentDraftRevision,
+            acknowledgedByPublicAddress: "owner-address");
+
+        store.Elections[election.ElectionId] = election;
+        store.WarningAcknowledgements.Add(warning);
+        SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
+
+        var openResult = await service.OpenElectionAsync(new OpenElectionRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet]));
+        SeedApprovedProtocolPackage(store, election.SelectedProfileId, packageVersion: "v1.1.0", isLatest: true, hashSeed: 'f');
+
+        var refreshResult = await service.RefreshProtocolPackageBindingAsync(new RefreshElectionProtocolPackageBindingRequest(
+            election.ElectionId,
+            "owner-address"));
+
+        openResult.IsSuccess.Should().BeTrue();
+        refreshResult.IsSuccess.Should().BeFalse();
+        refreshResult.ErrorCode.Should().Be(ElectionCommandErrorCode.InvalidState);
+        store.ProtocolPackageBindings.Should().ContainSingle(x => x.Status == ProtocolPackageBindingStatus.Sealed);
     }
 
     [Fact]
@@ -1956,6 +2187,7 @@ public class ElectionLifecycleServiceTests
 
         store.Elections[election.ElectionId] = election;
         store.WarningAcknowledgements.Add(warning);
+        SeedLatestProtocolPackageBinding(store, election);
         AddRosterEntries(store, rosterEntry);
 
         var openResult = await service.OpenElectionAsync(new OpenElectionRequest(
@@ -2062,6 +2294,7 @@ public class ElectionLifecycleServiceTests
         store.TrusteeInvitations[acceptedTrusteeA.Id] = acceptedTrusteeA;
         store.TrusteeInvitations[acceptedTrusteeB.Id] = acceptedTrusteeB;
         store.GovernedProposals[proposal.Id] = proposal;
+        SeedLatestProtocolPackageBinding(store, election);
         AddRosterEntries(store, CreateRosterEntry(election, "4001"));
 
         var result = await service.ApproveGovernedProposalAsync(new ApproveElectionGovernedProposalRequest(
@@ -3413,6 +3646,48 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task FinalizeElectionAsync_AfterCatalogUpdate_UsesSealedProtocolPackageBindingInReportPackage()
+    {
+        var store = new ElectionStore();
+        var setup = await SeedClosedAdminElectionReadyForFinalizeAsync(store);
+        var sealedBinding = SeedSealedProtocolPackageBinding(store, setup.Election, packageVersion: "v1.0.0", hashSeed: 'a');
+        SeedApprovedProtocolPackage(store, setup.Election.SelectedProfileId, packageVersion: "v1.1.0", isLatest: true, hashSeed: 'f');
+        var reportPackageService = new FakeElectionReportPackageService();
+        var service = CreateService(
+            store,
+            electionReportPackageService: reportPackageService);
+
+        var result = await service.FinalizeElectionAsync(new FinalizeElectionRequest(
+            ElectionId: setup.Election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            AcceptedBallotSetHash: setup.AcceptedBallotSetHash,
+            FinalEncryptedTallyHash: setup.FinalEncryptedTallyHash,
+            SourceTransactionId: Guid.NewGuid(),
+            SourceBlockHeight: 73,
+            SourceBlockId: Guid.NewGuid()));
+
+        result.IsSuccess.Should().BeTrue();
+        reportPackageService.Requests.Should().ContainSingle();
+        var requestBinding = reportPackageService.Requests.Single().ProtocolPackageBinding;
+        requestBinding.Should().NotBeNull();
+        requestBinding!.Status.Should().Be(ProtocolPackageBindingStatus.Sealed);
+        requestBinding.PackageVersion.Should().Be(sealedBinding.PackageVersion);
+        requestBinding.SpecPackageHash.Should().Be(sealedBinding.SpecPackageHash);
+        requestBinding.ProofPackageHash.Should().Be(sealedBinding.ProofPackageHash);
+        requestBinding.ReleaseManifestHash.Should().Be(sealedBinding.ReleaseManifestHash);
+        requestBinding.SpecPackageHash.Should().NotBe(Hash('f'));
+
+        var machineManifest = store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineManifest);
+        machineManifest.Content.Should().Contain($"\"packageVersion\": \"{sealedBinding.PackageVersion}\"");
+        machineManifest.Content.Should().Contain($"\"specPackageHash\": \"{sealedBinding.SpecPackageHash}\"");
+        machineManifest.Content.Should().NotContain($"\"specPackageHash\": \"{Hash('f')}\"");
+
+        var humanAudit = store.ReportArtifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport);
+        humanAudit.Content.Should().Contain("Protocol Omega Package Binding");
+        humanAudit.Content.Should().Contain("Temporary access-location outage is operational");
+    }
+
+    [Fact]
     public async Task FinalizeElectionAsync_AfterFailedPackageAttempt_RetriesWithNewAttemptIdOnSameFrozenEvidence()
     {
         var store = new ElectionStore();
@@ -3745,6 +4020,93 @@ public class ElectionLifecycleServiceTests
             OpenArtifactId = Guid.NewGuid(),
             LastUpdatedAt = DateTime.UtcNow,
         };
+
+    private static ApprovedProtocolPackageCatalogEntryRecord SeedApprovedProtocolPackage(
+        ElectionStore store,
+        string selectedProfileId,
+        string packageVersion = "v1.0.0",
+        bool isLatest = true,
+        char hashSeed = 'a')
+    {
+        var catalogEntry = ElectionModelFactory.CreateApprovedProtocolPackageCatalogEntry(
+            packageId: "omega-hushvoting-v1",
+            packageVersion: packageVersion,
+            specPackageHash: Hash(hashSeed),
+            proofPackageHash: Hash((char)(hashSeed + 1)),
+            releaseManifestHash: Hash((char)(hashSeed + 2)),
+            compatibleProfileIds:
+            [
+                selectedProfileId,
+            ],
+            approvalStatus: ProtocolPackageApprovalStatus.ApprovedInternal,
+            isLatestForCompatibleProfiles: isLatest,
+            specAccessLocations:
+            [
+                CreateProtocolAccessLocation(Hash((char)(hashSeed + 3))),
+            ],
+            proofAccessLocations:
+            [
+                CreateProtocolAccessLocation(Hash((char)(hashSeed + 4))),
+            ]);
+
+        store.ApprovedProtocolPackageCatalogEntries.RemoveAll(x =>
+            string.Equals(x.PackageId, catalogEntry.PackageId, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(x.PackageVersion, catalogEntry.PackageVersion, StringComparison.OrdinalIgnoreCase));
+        store.ApprovedProtocolPackageCatalogEntries.Add(catalogEntry);
+        return catalogEntry;
+    }
+
+    private static ProtocolPackageBindingRecord SeedLatestProtocolPackageBinding(
+        ElectionStore store,
+        ElectionRecord election,
+        string packageVersion = "v1.0.0",
+        char hashSeed = 'a')
+    {
+        var catalogEntry = store.ApprovedProtocolPackageCatalogEntries
+            .FirstOrDefault(x =>
+                string.Equals(x.PackageVersion, packageVersion, StringComparison.OrdinalIgnoreCase) &&
+                x.IsCompatibleWithProfile(election.SelectedProfileId)) ??
+            SeedApprovedProtocolPackage(store, election.SelectedProfileId, packageVersion, hashSeed: hashSeed);
+        var binding = ElectionModelFactory.CreateProtocolPackageBindingFromCatalog(
+            election.ElectionId,
+            catalogEntry,
+            election.SelectedProfileId,
+            election.CurrentDraftRevision,
+            election.OwnerPublicAddress);
+
+        store.ProtocolPackageBindings.RemoveAll(x => x.ElectionId == election.ElectionId);
+        store.ProtocolPackageBindings.Add(binding);
+        return binding;
+    }
+
+    private static ProtocolPackageBindingRecord SeedSealedProtocolPackageBinding(
+        ElectionStore store,
+        ElectionRecord election,
+        string packageVersion = "v1.0.0",
+        char hashSeed = 'a')
+    {
+        var latestBinding = SeedLatestProtocolPackageBinding(store, election, packageVersion, hashSeed);
+        var sealedBinding = latestBinding.SealAtOpen(
+            election.OpenedAt ?? DateTime.UtcNow,
+            election.OwnerPublicAddress,
+            sourceTransactionId: Guid.NewGuid(),
+            sourceBlockHeight: 41,
+            sourceBlockId: Guid.NewGuid());
+
+        store.ProtocolPackageBindings.RemoveAll(x => x.Id == latestBinding.Id);
+        store.ProtocolPackageBindings.Add(sealedBinding);
+        return sealedBinding;
+    }
+
+    private static ProtocolPackageAccessLocationRecord CreateProtocolAccessLocation(string contentHash) =>
+        ElectionModelFactory.CreateProtocolPackageAccessLocation(
+            ProtocolPackageAccessLocationKind.PublicWebsite,
+            "Website",
+            "https://www.hushnetwork.social/protocol-omega/hushvoting-v1",
+            contentHash);
+
+    private static string Hash(char value) =>
+        new("0123456789abcdef"[Math.Abs(value) % 16], 64);
 
     private static ElectionRosterImportItem CreateRosterImportItem(
         string organizationVoterId,
@@ -4711,6 +5073,8 @@ public class ElectionLifecycleServiceTests
         public Dictionary<Guid, ElectionReportPackageRecord> ReportPackages { get; } = [];
         public List<ElectionReportArtifactRecord> ReportArtifacts { get; } = [];
         public List<ElectionReportAccessGrantRecord> ReportAccessGrants { get; } = [];
+        public List<ApprovedProtocolPackageCatalogEntryRecord> ApprovedProtocolPackageCatalogEntries { get; } = [];
+        public List<ProtocolPackageBindingRecord> ProtocolPackageBindings { get; } = [];
         public TaskCompletionSource<bool>? GetElectionForUpdateEntered { get; set; }
         public TaskCompletionSource<bool>? ReleaseGetElectionForUpdate { get; set; }
         public int ActiveWritableUnitOfWorkCount { get; set; }
@@ -4833,8 +5197,11 @@ public class ElectionLifecycleServiceTests
         private readonly ElectionReportPackageService _inner = new();
         private int _remainingFailures = failBuildAttempts;
 
+        public List<ElectionReportPackageBuildRequest> Requests { get; } = [];
+
         public ElectionReportPackageBuildResult Build(ElectionReportPackageBuildRequest request)
         {
+            Requests.Add(request);
             var successResult = _inner.Build(request);
             if (_remainingFailures <= 0 || !successResult.IsSuccess)
             {
@@ -5782,5 +6149,81 @@ public class ElectionLifecycleServiceTests
             store.ReportAccessGrants.Add(accessGrant);
             return Task.CompletedTask;
         }
+
+        public Task<IReadOnlyList<ApprovedProtocolPackageCatalogEntryRecord>> GetApprovedProtocolPackageCatalogEntriesAsync() =>
+            Task.FromResult<IReadOnlyList<ApprovedProtocolPackageCatalogEntryRecord>>(
+                store.ApprovedProtocolPackageCatalogEntries
+                    .OrderByDescending(x => x.ApprovedAt)
+                    .ThenBy(x => x.PackageId)
+                    .ToArray());
+
+        public Task<ApprovedProtocolPackageCatalogEntryRecord?> GetApprovedProtocolPackageCatalogEntryAsync(string packageId) =>
+            Task.FromResult(
+                store.ApprovedProtocolPackageCatalogEntries
+                    .Where(x => string.Equals(x.PackageId, packageId, StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(x => x.ApprovedAt)
+                    .ThenByDescending(x => x.PackageVersion)
+                    .FirstOrDefault());
+
+        public Task<ApprovedProtocolPackageCatalogEntryRecord?> GetLatestApprovedProtocolPackageCatalogEntryAsync(string selectedProfileId)
+        {
+            var latestEntries = store.ApprovedProtocolPackageCatalogEntries
+                .Where(x =>
+                    x.ApprovalStatus == ProtocolPackageApprovalStatus.ApprovedInternal &&
+                    x.IsLatestForCompatibleProfiles)
+                .OrderByDescending(x => x.ApprovedAt)
+                .ThenBy(x => x.PackageId)
+                .ToArray();
+
+            return Task.FromResult(latestEntries.FirstOrDefault(x => x.IsCompatibleWithProfile(selectedProfileId)));
+        }
+
+        public Task SaveApprovedProtocolPackageCatalogEntryAsync(ApprovedProtocolPackageCatalogEntryRecord catalogEntry)
+        {
+            store.ApprovedProtocolPackageCatalogEntries.RemoveAll(x =>
+                string.Equals(x.PackageId, catalogEntry.PackageId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(x.PackageVersion, catalogEntry.PackageVersion, StringComparison.OrdinalIgnoreCase));
+            store.ApprovedProtocolPackageCatalogEntries.Add(catalogEntry);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateApprovedProtocolPackageCatalogEntryAsync(ApprovedProtocolPackageCatalogEntryRecord catalogEntry) =>
+            SaveApprovedProtocolPackageCatalogEntryAsync(catalogEntry);
+
+        public Task<IReadOnlyList<ProtocolPackageBindingRecord>> GetProtocolPackageBindingsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ProtocolPackageBindingRecord>>(
+                store.ProtocolPackageBindings
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.BoundAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
+
+        public Task<ProtocolPackageBindingRecord?> GetLatestProtocolPackageBindingAsync(ElectionId electionId) =>
+            Task.FromResult(
+                store.ProtocolPackageBindings
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderByDescending(x => x.BoundAt)
+                    .ThenByDescending(x => x.Id)
+                    .FirstOrDefault());
+
+        public Task<ProtocolPackageBindingRecord?> GetSealedProtocolPackageBindingAsync(ElectionId electionId) =>
+            Task.FromResult(
+                store.ProtocolPackageBindings
+                    .Where(x =>
+                        x.ElectionId == electionId &&
+                        x.Status == ProtocolPackageBindingStatus.Sealed)
+                    .OrderByDescending(x => x.SealedAt ?? x.BoundAt)
+                    .ThenByDescending(x => x.Id)
+                    .FirstOrDefault());
+
+        public Task SaveProtocolPackageBindingAsync(ProtocolPackageBindingRecord bindingRecord)
+        {
+            store.ProtocolPackageBindings.RemoveAll(x => x.Id == bindingRecord.Id);
+            store.ProtocolPackageBindings.Add(bindingRecord);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateProtocolPackageBindingAsync(ProtocolPackageBindingRecord bindingRecord) =>
+            SaveProtocolPackageBindingAsync(bindingRecord);
     }
 }

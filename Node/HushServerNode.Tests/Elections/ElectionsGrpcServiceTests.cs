@@ -250,7 +250,11 @@ public class ElectionsGrpcServiceTests
             .ReturnsAsync(Domain.ElectionOpenValidationResult.NotReady(
                 ["Required warning acknowledgement is missing for LowAnonymitySet."],
                 [ElectionWarningCode.LowAnonymitySet],
-                [ElectionWarningCode.LowAnonymitySet]));
+                [ElectionWarningCode.LowAnonymitySet],
+                protocolPackageValidation: Domain.ProtocolPackageBindingOpenValidation.NotReady(
+                    ProtocolPackageBindingStatus.Missing,
+                    null,
+                    "Latest approved Protocol Omega package refs are missing.")));
 
         var sut = mocker.CreateInstance<ElectionsGrpcService>();
         var request = new GetElectionOpenReadinessRequest
@@ -266,6 +270,50 @@ public class ElectionsGrpcServiceTests
         response.IsReadyToOpen.Should().BeFalse();
         response.RequiredWarningCodes.Should().Contain(ElectionWarningCodeProto.LowAnonymitySet);
         response.MissingWarningAcknowledgements.Should().Contain(ElectionWarningCodeProto.LowAnonymitySet);
+        response.ProtocolPackageBindingStatus.Should().Be(ProtocolPackageBindingStatusProto.ProtocolPackageBindingMissing);
+        response.ProtocolPackageBindingMessage.Should().Contain("Protocol Omega package refs are missing");
+    }
+
+    [Theory]
+    [InlineData(ProtocolPackageBindingStatus.Stale, ProtocolPackageBindingStatusProto.ProtocolPackageBindingStale)]
+    [InlineData(ProtocolPackageBindingStatus.Incompatible, ProtocolPackageBindingStatusProto.ProtocolPackageBindingIncompatible)]
+    [InlineData(ProtocolPackageBindingStatus.ReferenceOnly, ProtocolPackageBindingStatusProto.ProtocolPackageBindingReferenceOnly)]
+    public async Task GetElectionOpenReadiness_WithProtocolPackageBindingGap_MapsBindingProjection(
+        ProtocolPackageBindingStatus bindingStatus,
+        ProtocolPackageBindingStatusProto expectedProtoStatus)
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection();
+        var binding = CreateProtocolPackageBinding(election, bindingStatus);
+
+        mocker.GetMock<Domain.IElectionLifecycleService>()
+            .Setup(x => x.EvaluateOpenReadinessAsync(It.IsAny<Domain.EvaluateElectionOpenReadinessRequest>()))
+            .ReturnsAsync(Domain.ElectionOpenValidationResult.NotReady(
+                [$"Protocol Omega package refs are {bindingStatus}."],
+                [],
+                [],
+                protocolPackageValidation: Domain.ProtocolPackageBindingOpenValidation.NotReady(
+                    bindingStatus,
+                    binding,
+                    $"Protocol Omega package refs are {bindingStatus}.")));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionOpenReadiness(
+            new GetElectionOpenReadinessRequest { ElectionId = election.ElectionId.ToString() },
+            CreateMockServerCallContext());
+
+        response.IsReadyToOpen.Should().BeFalse();
+        response.ProtocolPackageBindingStatus.Should().Be(expectedProtoStatus);
+        response.ProtocolPackageBindingMessage.Should().Contain(bindingStatus.ToString());
+        response.ProtocolPackageBinding.Should().NotBeNull();
+        response.ProtocolPackageBinding!.Status.Should().Be(expectedProtoStatus);
+        response.ProtocolPackageBinding.SpecPackageHash.Should().Be(binding.SpecPackageHash);
+        response.ProtocolPackageBinding.ProofPackageHash.Should().Be(binding.ProofPackageHash);
+        response.ProtocolPackageBinding.ReleaseManifestHash.Should().Be(binding.ReleaseManifestHash);
+        response.ProtocolPackageBinding.SpecAccessLocations.Should().ContainSingle();
+        response.ProtocolPackageBinding.ExternalReviewStatus.Should().Be(
+            ProtocolPackageExternalReviewStatusProto.ProtocolPackageReviewedWithFindings);
     }
 
     [Fact]
@@ -1084,6 +1132,69 @@ public class ElectionsGrpcServiceTests
                 new ElectionOptionDefinition("no", "No", null, 2, IsBlankOption: false),
             ],
             requiredApprovalCount: 2);
+
+    private static ProtocolPackageBindingRecord CreateProtocolPackageBinding(
+        ElectionRecord election,
+        ProtocolPackageBindingStatus status)
+    {
+        var catalogEntry = ElectionModelFactory.CreateApprovedProtocolPackageCatalogEntry(
+            packageId: "omega-hushvoting-v1",
+            packageVersion: "v1.0.0",
+            specPackageHash: Hash('a'),
+            proofPackageHash: Hash('b'),
+            releaseManifestHash: Hash('c'),
+            compatibleProfileIds:
+            [
+                election.SelectedProfileId,
+            ],
+            approvalStatus: ProtocolPackageApprovalStatus.ApprovedInternal,
+            isLatestForCompatibleProfiles: true,
+            specAccessLocations:
+            [
+                CreateProtocolPackageAccessLocation(Hash('d')),
+            ],
+            proofAccessLocations:
+            [
+                CreateProtocolPackageAccessLocation(Hash('e')),
+            ],
+            externalReviewStatus: ProtocolPackageExternalReviewStatus.ReviewedWithFindings,
+            approvedAt: DateTime.UtcNow.AddMinutes(-5));
+
+        if (status == ProtocolPackageBindingStatus.ReferenceOnly)
+        {
+            return ElectionModelFactory.CreateMigrationBackfillProtocolPackageBinding(
+                election.ElectionId,
+                catalogEntry,
+                election.SelectedProfileId,
+                election.CurrentDraftRevision,
+                "owner-address");
+        }
+
+        var binding = ElectionModelFactory.CreateProtocolPackageBindingFromCatalog(
+            election.ElectionId,
+            catalogEntry,
+            election.SelectedProfileId,
+            election.CurrentDraftRevision,
+            "owner-address");
+
+        return status switch
+        {
+            ProtocolPackageBindingStatus.Latest => binding,
+            ProtocolPackageBindingStatus.Stale => binding.MarkStale(DateTime.UtcNow, "owner-address"),
+            ProtocolPackageBindingStatus.Incompatible => binding.MarkIncompatible(DateTime.UtcNow, "owner-address"),
+            _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unsupported test binding status."),
+        };
+    }
+
+    private static ProtocolPackageAccessLocationRecord CreateProtocolPackageAccessLocation(string contentHash) =>
+        ElectionModelFactory.CreateProtocolPackageAccessLocation(
+            ProtocolPackageAccessLocationKind.PublicWebsite,
+            "HushNetwork public protocol package",
+            "https://www.hushnetwork.social/protocol-omega/hushvoting-v1/v1.0.0/package.zip",
+            contentHash);
+
+    private static string Hash(char value) =>
+        new(char.ToLowerInvariant(value), 64);
 
     private static ServerCallContext CreateMockServerCallContext() => new TestServerCallContext();
 

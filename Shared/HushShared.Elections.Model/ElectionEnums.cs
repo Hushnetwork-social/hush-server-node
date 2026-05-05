@@ -311,3 +311,52 @@ public enum ElectionPublicationIssueCode
     UnsupportedBallotPayload = 1,
     ReplayMismatch = 2,
 }
+
+public enum ProtocolPackageKind
+{
+    Specification = 0,
+    ProofAndCryptoReview = 1,
+}
+
+public enum ProtocolPackageApprovalStatus
+{
+    DraftPrivate = 0,
+    ApprovedInternal = 1,
+    Retired = 2,
+}
+
+public enum ProtocolPackageExternalReviewStatus
+{
+    NotReviewed = 0,
+    ReviewRequested = 1,
+    ReviewInProgress = 2,
+    ReviewedWithFindings = 3,
+    ReviewedAccepted = 4,
+}
+
+public enum ProtocolPackageAccessLocationKind
+{
+    PublicWebsite = 0,
+    AuditorWelcomePackage = 1,
+    ReviewerPortal = 2,
+    ControlledDownload = 3,
+    Repository = 4,
+}
+
+public enum ProtocolPackageBindingStatus
+{
+    Missing = 0,
+    Latest = 1,
+    Stale = 2,
+    Incompatible = 3,
+    Sealed = 4,
+    ReferenceOnly = 5,
+}
+
+public enum ProtocolPackageBindingSource
+{
+    CatalogSelection = 0,
+    OwnerRefresh = 1,
+    SealedAtOpen = 2,
+    MigrationBackfill = 3,
+}

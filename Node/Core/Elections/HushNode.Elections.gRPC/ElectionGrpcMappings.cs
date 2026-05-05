@@ -136,6 +136,11 @@ internal static class ElectionGrpcMappings
             response.FinalizationReleaseEvidence = result.FinalizationReleaseEvidence.ToProto();
         }
 
+        if (result.ProtocolPackageBinding is not null)
+        {
+            response.ProtocolPackageBinding = result.ProtocolPackageBinding.ToProto();
+        }
+
         return response;
     }
 
@@ -153,6 +158,15 @@ internal static class ElectionGrpcMappings
         if (result.CeremonySnapshot is not null)
         {
             response.CeremonySnapshot = result.CeremonySnapshot.ToProto();
+        }
+
+        response.ProtocolPackageBindingStatus =
+            (ProtocolPackageBindingStatusProto)(int)result.ProtocolPackageBindingStatus;
+        response.ProtocolPackageBindingMessage = result.ProtocolPackageBindingMessage;
+
+        if (result.ProtocolPackageBinding is not null)
+        {
+            response.ProtocolPackageBinding = result.ProtocolPackageBinding.ToProto();
         }
 
         return response;
@@ -912,6 +926,52 @@ internal static class ElectionGrpcMappings
             PairedArtifactId = reportArtifact.PairedArtifactId?.ToString() ?? string.Empty,
             RecordedAt = ToTimestamp(reportArtifact.RecordedAt),
         };
+
+    public static ProtocolPackageAccessLocationView ToProto(this ProtocolPackageAccessLocationRecord accessLocation) =>
+        new()
+        {
+            LocationKind = (ProtocolPackageAccessLocationKindProto)(int)accessLocation.LocationKind,
+            Label = accessLocation.Label,
+            Location = accessLocation.Location,
+            ContentHash = accessLocation.ContentHash ?? string.Empty,
+        };
+
+    public static ElectionProtocolPackageBindingView ToProto(this ProtocolPackageBindingRecord binding)
+    {
+        var proto = new ElectionProtocolPackageBindingView
+        {
+            Id = binding.Id.ToString(),
+            ElectionId = binding.ElectionId.ToString(),
+            PackageId = binding.PackageId,
+            PackageVersion = binding.PackageVersion,
+            SelectedProfileId = binding.SelectedProfileId,
+            SpecPackageHash = binding.SpecPackageHash,
+            ProofPackageHash = binding.ProofPackageHash,
+            ReleaseManifestHash = binding.ReleaseManifestHash,
+            PackageApprovalStatus = (ProtocolPackageApprovalStatusProto)(int)binding.PackageApprovalStatus,
+            Status = (ProtocolPackageBindingStatusProto)(int)binding.Status,
+            Source = (ProtocolPackageBindingSourceProto)(int)binding.Source,
+            DraftRevision = binding.DraftRevision,
+            BoundAt = ToTimestamp(binding.BoundAt),
+            SealedAt = binding.SealedAt.HasValue
+                ? ToTimestamp(binding.SealedAt.Value)
+                : new Timestamp(),
+            HasSealedAt = binding.SealedAt.HasValue,
+            BoundByPublicAddress = binding.BoundByPublicAddress,
+            ExternalReviewStatus = (ProtocolPackageExternalReviewStatusProto)(int)binding.ExternalReviewStatus,
+            SourceTransactionId = binding.SourceTransactionId?.ToString() ?? string.Empty,
+            SourceBlockId = binding.SourceBlockId?.ToString() ?? string.Empty,
+        };
+
+        if (binding.SourceBlockHeight.HasValue)
+        {
+            proto.SourceBlockHeight = binding.SourceBlockHeight.Value;
+        }
+
+        proto.SpecAccessLocations.AddRange(binding.SpecAccessLocations.Select(x => x.ToProto()));
+        proto.ProofAccessLocations.AddRange(binding.ProofAccessLocations.Select(x => x.ToProto()));
+        return proto;
+    }
 
     public static ElectionReportAccessGrantView ToProto(this ElectionReportAccessGrantRecord reportAccessGrant) =>
         new()

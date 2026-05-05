@@ -8,6 +8,8 @@ public interface IElectionLifecycleService
 
     Task<ElectionCommandResult> UpdateDraftAsync(UpdateElectionDraftRequest request);
 
+    Task<ElectionCommandResult> RefreshProtocolPackageBindingAsync(RefreshElectionProtocolPackageBindingRequest request);
+
     Task<ElectionCommandResult> ImportRosterAsync(ImportElectionRosterRequest request);
 
     Task<ElectionCommandResult> ClaimRosterEntryAsync(ClaimElectionRosterEntryRequest request);
@@ -82,6 +84,13 @@ public record UpdateElectionDraftRequest(
     string ActorPublicAddress,
     string SnapshotReason,
     ElectionDraftSpecification Draft,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
+public record RefreshElectionProtocolPackageBindingRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
     Guid? SourceTransactionId = null,
     long? SourceBlockHeight = null,
     Guid? SourceBlockId = null);
@@ -380,6 +389,7 @@ public record ElectionCommandResult
     public ElectionFinalizationSessionRecord? FinalizationSession { get; init; }
     public ElectionFinalizationShareRecord? FinalizationShare { get; init; }
     public ElectionFinalizationReleaseEvidenceRecord? FinalizationReleaseEvidence { get; init; }
+    public ProtocolPackageBindingRecord? ProtocolPackageBinding { get; init; }
 
     public static ElectionCommandResult Success(
         ElectionRecord election,
@@ -402,7 +412,8 @@ public record ElectionCommandResult
         ElectionCeremonyShareCustodyRecord? ceremonyShareCustody = null,
         ElectionFinalizationSessionRecord? finalizationSession = null,
         ElectionFinalizationShareRecord? finalizationShare = null,
-        ElectionFinalizationReleaseEvidenceRecord? finalizationReleaseEvidence = null) =>
+        ElectionFinalizationReleaseEvidenceRecord? finalizationReleaseEvidence = null,
+        ProtocolPackageBindingRecord? protocolPackageBinding = null) =>
         new()
         {
             IsSuccess = true,
@@ -428,6 +439,7 @@ public record ElectionCommandResult
             FinalizationSession = finalizationSession,
             FinalizationShare = finalizationShare,
             FinalizationReleaseEvidence = finalizationReleaseEvidence,
+            ProtocolPackageBinding = protocolPackageBinding,
         };
 
     public static ElectionCommandResult Failure(
@@ -528,22 +540,30 @@ public record ElectionOpenValidationResult
     public IReadOnlyList<ElectionWarningCode> RequiredWarningCodes { get; init; } = Array.Empty<ElectionWarningCode>();
     public IReadOnlyList<ElectionWarningCode> MissingWarningAcknowledgements { get; init; } = Array.Empty<ElectionWarningCode>();
     public ElectionCeremonyBindingSnapshot? CeremonySnapshot { get; init; }
+    public ProtocolPackageBindingStatus ProtocolPackageBindingStatus { get; init; } = ProtocolPackageBindingStatus.Missing;
+    public string ProtocolPackageBindingMessage { get; init; } = string.Empty;
+    public ProtocolPackageBindingRecord? ProtocolPackageBinding { get; init; }
 
     public static ElectionOpenValidationResult Ready(
         IReadOnlyList<ElectionWarningCode> requiredWarningCodes,
-        ElectionCeremonyBindingSnapshot? ceremonySnapshot = null) =>
+        ElectionCeremonyBindingSnapshot? ceremonySnapshot = null,
+        ProtocolPackageBindingOpenValidation? protocolPackageValidation = null) =>
         new()
         {
             IsReadyToOpen = true,
             RequiredWarningCodes = requiredWarningCodes,
             CeremonySnapshot = ceremonySnapshot,
+            ProtocolPackageBindingStatus = protocolPackageValidation?.Status ?? ProtocolPackageBindingStatus.Missing,
+            ProtocolPackageBindingMessage = protocolPackageValidation?.ErrorMessage ?? string.Empty,
+            ProtocolPackageBinding = protocolPackageValidation?.Binding,
         };
 
     public static ElectionOpenValidationResult NotReady(
         IReadOnlyList<string> validationErrors,
         IReadOnlyList<ElectionWarningCode> requiredWarningCodes,
         IReadOnlyList<ElectionWarningCode> missingWarningAcknowledgements,
-        ElectionCeremonyBindingSnapshot? ceremonySnapshot = null) =>
+        ElectionCeremonyBindingSnapshot? ceremonySnapshot = null,
+        ProtocolPackageBindingOpenValidation? protocolPackageValidation = null) =>
         new()
         {
             IsReadyToOpen = false,
@@ -551,5 +571,8 @@ public record ElectionOpenValidationResult
             RequiredWarningCodes = requiredWarningCodes,
             MissingWarningAcknowledgements = missingWarningAcknowledgements,
             CeremonySnapshot = ceremonySnapshot,
+            ProtocolPackageBindingStatus = protocolPackageValidation?.Status ?? ProtocolPackageBindingStatus.Missing,
+            ProtocolPackageBindingMessage = protocolPackageValidation?.ErrorMessage ?? string.Empty,
+            ProtocolPackageBinding = protocolPackageValidation?.Binding,
         };
 }
