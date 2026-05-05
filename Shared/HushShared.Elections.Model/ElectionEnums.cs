@@ -312,6 +312,26 @@ public enum ElectionPublicationIssueCode
     ReplayMismatch = 2,
 }
 
+public enum ElectionBallotDefinitionMutationPolicy
+{
+    ImmutableAfterOpen = 0,
+}
+
+public enum ElectionPreparedBallotState
+{
+    Prepared = 0,
+    Spoiled = 1,
+    Cast = 2,
+    Expired = 3,
+}
+
+public enum ElectionVoterCeremonyFinalState
+{
+    None = 0,
+    FinalCastAccepted = 1,
+    ExpiredWithoutCast = 2,
+}
+
 public enum ProtocolPackageKind
 {
     Specification = 0,

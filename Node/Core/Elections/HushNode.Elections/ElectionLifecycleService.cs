@@ -791,6 +791,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
     }
 
+    public Task<ElectionPreparedBallotCommitmentResult> RegisterPreparedBallotCommitmentAsync(
+        RegisterPreparedBallotCommitmentRequest request) =>
+        Task.FromResult(ElectionPreparedBallotCommitmentResult.Failure(
+            ElectionPreparedBallotCommitmentFailureReason.ValidationFailed,
+            "SP-04 prepared ballot commitment handling is defined by FEAT-114 and implemented in the business-logic phase."));
+
+    public Task<ElectionSpoilPreparedBallotResult> SpoilPreparedBallotAsync(SpoilPreparedBallotRequest request) =>
+        Task.FromResult(ElectionSpoilPreparedBallotResult.Failure(
+            ElectionSpoilPreparedBallotFailureReason.ValidationFailed,
+            "SP-04 spoil handling is defined by FEAT-114 and implemented in the business-logic phase."));
+
     public async Task<ElectionCastAcceptanceResult> AcceptBallotCastAsync(AcceptElectionBallotCastRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.IdempotencyKey))

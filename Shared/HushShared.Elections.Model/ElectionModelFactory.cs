@@ -228,7 +228,11 @@ public static partial class ElectionModelFactory
         byte[]? finalEncryptedTallyHash = null,
         Guid? sourceTransactionId = null,
         long? sourceBlockHeight = null,
-        Guid? sourceBlockId = null)
+        Guid? sourceBlockId = null,
+        int? ballotDefinitionVersion = null,
+        byte[]? ballotDefinitionHash = null,
+        DateTime? ballotDefinitionSealedAt = null,
+        ElectionBallotDefinitionMutationPolicy? ballotDefinitionMutationPolicy = null)
     {
         if (string.IsNullOrWhiteSpace(recordedByPublicAddress))
         {
@@ -281,7 +285,11 @@ public static partial class ElectionModelFactory
             recordedByPublicAddress.Trim(),
             sourceTransactionId,
             sourceBlockHeight,
-            sourceBlockId);
+            sourceBlockId,
+            ballotDefinitionVersion,
+            CloneBytes(ballotDefinitionHash),
+            ballotDefinitionSealedAt,
+            ballotDefinitionMutationPolicy);
     }
 
     public static ElectionWarningAcknowledgementRecord CreateWarningAcknowledgement(

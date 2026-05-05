@@ -210,6 +210,7 @@ public partial class ElectionQueryApplicationService
             PublicPackage = publicPackage,
             RestrictedPackage = restrictedPackage,
             LastVerifierResult = BuildVerifierResultNotAvailable(),
+            Sp04Evidence = BuildSp04EvidenceStatusPlaceholder(),
         };
 
         if (context.CanViewPackageStatus && context.ProtocolPackageBinding is not null)
@@ -219,6 +220,19 @@ public partial class ElectionQueryApplicationService
 
         return view;
     }
+
+    private static ElectionSp04EvidenceStatusView BuildSp04EvidenceStatusPlaceholder() =>
+        new()
+        {
+            EvidenceExpected = true,
+            PublicEvidenceAvailable = false,
+            RestrictedEvidenceAvailable = false,
+            PreparedPackageCount = 0,
+            SpoiledPackageCount = 0,
+            AcceptedBoundReceiptCount = 0,
+            ReceiptCommitmentSetHash = string.Empty,
+            Message = "SP-04 evidence contracts are available; runtime evidence is produced by FEAT-114 ceremony logic.",
+        };
 
     private ElectionVerificationPackageExportAvailabilityView BuildPackageAvailability(
         VerificationPackageContext context,

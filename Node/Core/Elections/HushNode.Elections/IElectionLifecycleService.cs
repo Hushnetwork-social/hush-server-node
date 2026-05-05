@@ -66,6 +66,11 @@ public interface IElectionLifecycleService
 
     Task<ElectionCommitmentRegistrationResult> RegisterVotingCommitmentAsync(RegisterElectionVotingCommitmentRequest request);
 
+    Task<ElectionPreparedBallotCommitmentResult> RegisterPreparedBallotCommitmentAsync(
+        RegisterPreparedBallotCommitmentRequest request);
+
+    Task<ElectionSpoilPreparedBallotResult> SpoilPreparedBallotAsync(SpoilPreparedBallotRequest request);
+
     Task<ElectionCastAcceptanceResult> AcceptBallotCastAsync(AcceptElectionBallotCastRequest request);
 }
 
@@ -309,6 +314,33 @@ public record RegisterElectionVotingCommitmentRequest(
     string ActorPublicAddress,
     string CommitmentHash);
 
+public record RegisterPreparedBallotCommitmentRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    Guid PreparedBallotId,
+    string PreparedBallotHash,
+    int BallotDefinitionVersion,
+    byte[] BallotDefinitionHash,
+    string CeremonyProfileId,
+    string ProofStatementId,
+    DateTime? PrecommittedAt = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
+public record SpoilPreparedBallotRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    Guid PreparedBallotId,
+    string PreparedBallotHash,
+    string SpoiledTranscriptHash,
+    string SpoilRecordHash,
+    string LocalVerifierVersion,
+    DateTime? SpoiledAt = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
 public record AcceptElectionBallotCastRequest(
     ElectionId ElectionId,
     string ActorPublicAddress,
@@ -320,7 +352,13 @@ public record AcceptElectionBallotCastRequest(
     byte[] EligibleSetHash,
     Guid CeremonyVersionId,
     string DkgProfileId,
-    string TallyPublicKeyFingerprint);
+    string TallyPublicKeyFingerprint,
+    Guid? PreparedBallotId = null,
+    string? PreparedBallotHash = null,
+    string? ReceiptCommitment = null,
+    string? ReceiptCommitmentScheme = null,
+    int? BallotDefinitionVersion = null,
+    byte[]? BallotDefinitionHash = null);
 
 public enum ElectionCommandErrorCode
 {
@@ -360,6 +398,46 @@ public enum ElectionCastAcceptanceFailureReason
     WrongElectionContext = 9,
     ClosePersisted = 10,
     AlreadyVoted = 11,
+    PreparedBallotMissing = 12,
+    PreparedBallotHashMismatch = 13,
+    PreparedBallotExpired = 14,
+    PreparedBallotAlreadySpoiled = 15,
+    PreparedBallotAlreadyCast = 16,
+    ChallengeRequiredBeforeCast = 17,
+    BallotDefinitionHashMismatch = 18,
+    ReceiptCommitmentMissing = 19,
+    UnsupportedCeremonyProfile = 20,
+}
+
+public enum ElectionPreparedBallotCommitmentFailureReason
+{
+    None = 0,
+    ValidationFailed = 1,
+    NotFound = 2,
+    NotLinked = 3,
+    NotActive = 4,
+    CommitmentMissing = 5,
+    ElectionNotOpen = 6,
+    BallotDefinitionHashMismatch = 7,
+    UnsupportedCeremonyProfile = 8,
+    DuplicatePreparedBallot = 9,
+    ClosePersisted = 10,
+}
+
+public enum ElectionSpoilPreparedBallotFailureReason
+{
+    None = 0,
+    ValidationFailed = 1,
+    NotFound = 2,
+    NotLinked = 3,
+    NotActive = 4,
+    PreparedBallotMissing = 5,
+    PreparedBallotHashMismatch = 6,
+    PreparedBallotExpired = 7,
+    PreparedBallotAlreadySpoiled = 8,
+    PreparedBallotAlreadyCast = 9,
+    ElectionNotOpen = 10,
+    ClosePersisted = 11,
 }
 
 public record ElectionCommandResult
@@ -500,6 +578,8 @@ public record ElectionCastAcceptanceResult
     public ElectionCheckoffConsumptionRecord? CheckoffConsumption { get; init; }
     public ElectionAcceptedBallotRecord? AcceptedBallot { get; init; }
     public ElectionCastIdempotencyRecord? CastIdempotencyRecord { get; init; }
+    public ElectionPreparedBallotCommitmentRecord? PreparedBallotCommitment { get; init; }
+    public ElectionBoundReceiptRecord? BoundReceipt { get; init; }
 
     public static ElectionCastAcceptanceResult Success(
         ElectionRecord election,
@@ -508,7 +588,9 @@ public record ElectionCastAcceptanceResult
         ElectionParticipationRecord participationRecord,
         ElectionCheckoffConsumptionRecord checkoffConsumption,
         ElectionAcceptedBallotRecord acceptedBallot,
-        ElectionCastIdempotencyRecord castIdempotencyRecord) =>
+        ElectionCastIdempotencyRecord castIdempotencyRecord,
+        ElectionPreparedBallotCommitmentRecord? preparedBallotCommitment = null,
+        ElectionBoundReceiptRecord? boundReceipt = null) =>
         new()
         {
             IsSuccess = true,
@@ -520,10 +602,90 @@ public record ElectionCastAcceptanceResult
             CheckoffConsumption = checkoffConsumption,
             AcceptedBallot = acceptedBallot,
             CastIdempotencyRecord = castIdempotencyRecord,
+            PreparedBallotCommitment = preparedBallotCommitment,
+            BoundReceipt = boundReceipt,
         };
 
     public static ElectionCastAcceptanceResult Failure(
         ElectionCastAcceptanceFailureReason failureReason,
+        string errorMessage) =>
+        new()
+        {
+            IsSuccess = false,
+            FailureReason = failureReason,
+            ErrorMessage = errorMessage,
+        };
+}
+
+public record ElectionPreparedBallotCommitmentResult
+{
+    public bool IsSuccess { get; init; }
+    public ElectionPreparedBallotCommitmentFailureReason FailureReason { get; init; }
+    public string? ErrorMessage { get; init; }
+    public ElectionRecord? Election { get; init; }
+    public ElectionRosterEntryRecord? RosterEntry { get; init; }
+    public ElectionCommitmentRegistrationRecord? CommitmentRegistration { get; init; }
+    public ElectionVoterCeremonyRecord? CeremonyRecord { get; init; }
+    public ElectionPreparedBallotCommitmentRecord? PreparedBallotCommitment { get; init; }
+
+    public static ElectionPreparedBallotCommitmentResult Success(
+        ElectionRecord election,
+        ElectionRosterEntryRecord rosterEntry,
+        ElectionCommitmentRegistrationRecord commitmentRegistration,
+        ElectionVoterCeremonyRecord ceremonyRecord,
+        ElectionPreparedBallotCommitmentRecord preparedBallotCommitment) =>
+        new()
+        {
+            IsSuccess = true,
+            FailureReason = ElectionPreparedBallotCommitmentFailureReason.None,
+            Election = election,
+            RosterEntry = rosterEntry,
+            CommitmentRegistration = commitmentRegistration,
+            CeremonyRecord = ceremonyRecord,
+            PreparedBallotCommitment = preparedBallotCommitment,
+        };
+
+    public static ElectionPreparedBallotCommitmentResult Failure(
+        ElectionPreparedBallotCommitmentFailureReason failureReason,
+        string errorMessage) =>
+        new()
+        {
+            IsSuccess = false,
+            FailureReason = failureReason,
+            ErrorMessage = errorMessage,
+        };
+}
+
+public record ElectionSpoilPreparedBallotResult
+{
+    public bool IsSuccess { get; init; }
+    public ElectionSpoilPreparedBallotFailureReason FailureReason { get; init; }
+    public string? ErrorMessage { get; init; }
+    public ElectionRecord? Election { get; init; }
+    public ElectionRosterEntryRecord? RosterEntry { get; init; }
+    public ElectionPreparedBallotCommitmentRecord? PreparedBallotCommitment { get; init; }
+    public ElectionSpoiledPreparedBallotRecord? SpoiledPreparedBallot { get; init; }
+    public ElectionVoterCeremonyRecord? CeremonyRecord { get; init; }
+
+    public static ElectionSpoilPreparedBallotResult Success(
+        ElectionRecord election,
+        ElectionRosterEntryRecord rosterEntry,
+        ElectionPreparedBallotCommitmentRecord preparedBallotCommitment,
+        ElectionSpoiledPreparedBallotRecord spoiledPreparedBallot,
+        ElectionVoterCeremonyRecord ceremonyRecord) =>
+        new()
+        {
+            IsSuccess = true,
+            FailureReason = ElectionSpoilPreparedBallotFailureReason.None,
+            Election = election,
+            RosterEntry = rosterEntry,
+            PreparedBallotCommitment = preparedBallotCommitment,
+            SpoiledPreparedBallot = spoiledPreparedBallot,
+            CeremonyRecord = ceremonyRecord,
+        };
+
+    public static ElectionSpoilPreparedBallotResult Failure(
+        ElectionSpoilPreparedBallotFailureReason failureReason,
         string errorMessage) =>
         new()
         {

@@ -32,6 +32,8 @@ service HushElections {
   rpc CloseElection(CloseElectionRequest) returns (ElectionCommandResponse);
   rpc FinalizeElection(FinalizeElectionRequest) returns (ElectionCommandResponse);
   rpc RegisterElectionVotingCommitment(RegisterElectionVotingCommitmentRequest) returns (RegisterElectionVotingCommitmentResponse);
+  rpc RegisterPreparedBallotCommitment(RegisterPreparedBallotCommitmentRequest) returns (RegisterPreparedBallotCommitmentResponse);
+  rpc SpoilPreparedBallot(SpoilPreparedBallotRequest) returns (SpoilPreparedBallotResponse);
   rpc AcceptElectionBallotCast(AcceptElectionBallotCastRequest) returns (AcceptElectionBallotCastResponse);
   rpc GetElection(GetElectionRequest) returns (GetElectionResponse);
   rpc SearchElectionDirectory(SearchElectionDirectoryRequest) returns (SearchElectionDirectoryResponse);
@@ -150,6 +152,55 @@ enum ElectionCastAcceptanceFailureReasonProto {
   CastAcceptanceFailureReasonWrongElectionContext = 9;
   CastAcceptanceFailureReasonClosePersisted = 10;
   CastAcceptanceFailureReasonAlreadyVoted = 11;
+  CastAcceptanceFailureReasonPreparedBallotMissing = 12;
+  CastAcceptanceFailureReasonPreparedBallotHashMismatch = 13;
+  CastAcceptanceFailureReasonPreparedBallotExpired = 14;
+  CastAcceptanceFailureReasonPreparedBallotAlreadySpoiled = 15;
+  CastAcceptanceFailureReasonPreparedBallotAlreadyCast = 16;
+  CastAcceptanceFailureReasonChallengeRequiredBeforeCast = 17;
+  CastAcceptanceFailureReasonBallotDefinitionHashMismatch = 18;
+  CastAcceptanceFailureReasonReceiptCommitmentMissing = 19;
+  CastAcceptanceFailureReasonUnsupportedCeremonyProfile = 20;
+}
+
+enum PreparedBallotCommitmentFailureReasonProto {
+  PreparedBallotCommitmentFailureReasonNone = 0;
+  PreparedBallotCommitmentFailureReasonValidationFailed = 1;
+  PreparedBallotCommitmentFailureReasonNotFound = 2;
+  PreparedBallotCommitmentFailureReasonNotLinked = 3;
+  PreparedBallotCommitmentFailureReasonNotActive = 4;
+  PreparedBallotCommitmentFailureReasonCommitmentMissing = 5;
+  PreparedBallotCommitmentFailureReasonElectionNotOpen = 6;
+  PreparedBallotCommitmentFailureReasonBallotDefinitionHashMismatch = 7;
+  PreparedBallotCommitmentFailureReasonUnsupportedCeremonyProfile = 8;
+  PreparedBallotCommitmentFailureReasonDuplicatePreparedBallot = 9;
+  PreparedBallotCommitmentFailureReasonClosePersisted = 10;
+}
+
+enum SpoilPreparedBallotFailureReasonProto {
+  SpoilPreparedBallotFailureReasonNone = 0;
+  SpoilPreparedBallotFailureReasonValidationFailed = 1;
+  SpoilPreparedBallotFailureReasonNotFound = 2;
+  SpoilPreparedBallotFailureReasonNotLinked = 3;
+  SpoilPreparedBallotFailureReasonNotActive = 4;
+  SpoilPreparedBallotFailureReasonPreparedBallotMissing = 5;
+  SpoilPreparedBallotFailureReasonPreparedBallotHashMismatch = 6;
+  SpoilPreparedBallotFailureReasonPreparedBallotExpired = 7;
+  SpoilPreparedBallotFailureReasonPreparedBallotAlreadySpoiled = 8;
+  SpoilPreparedBallotFailureReasonPreparedBallotAlreadyCast = 9;
+  SpoilPreparedBallotFailureReasonElectionNotOpen = 10;
+  SpoilPreparedBallotFailureReasonClosePersisted = 11;
+}
+
+enum BallotDefinitionMutationPolicyProto {
+  BallotDefinitionImmutableAfterOpen = 0;
+}
+
+enum PreparedBallotStateProto {
+  PreparedBallotPrepared = 0;
+  PreparedBallotSpoiled = 1;
+  PreparedBallotCast = 2;
+  PreparedBallotExpired = 3;
 }
 
 enum ElectionVotingSubmissionStatusProto {
@@ -846,6 +897,18 @@ message ElectionVerificationPackageStatusView {
   ElectionVerificationPackageExportAvailabilityView RestrictedPackage = 7;
   ElectionProtocolPackageBindingView ProtocolPackageBinding = 8;
   ElectionVerifierResultSummaryView LastVerifierResult = 9;
+  ElectionSp04EvidenceStatusView Sp04Evidence = 10;
+}
+
+message ElectionSp04EvidenceStatusView {
+  bool EvidenceExpected = 1;
+  bool PublicEvidenceAvailable = 2;
+  bool RestrictedEvidenceAvailable = 3;
+  int32 PreparedPackageCount = 4;
+  int32 SpoiledPackageCount = 5;
+  int32 AcceptedBoundReceiptCount = 6;
+  string ReceiptCommitmentSetHash = 7;
+  string Message = 8;
 }
 
 message ElectionVerificationPackageFileView {
@@ -888,6 +951,12 @@ message ElectionRecordView {
   string CloseArtifactId = 30;
   string FinalizeArtifactId = 31;
   google.protobuf.Timestamp TallyReadyAt = 32;
+  int32 BallotDefinitionVersion = 41;
+  bytes BallotDefinitionHash = 42;
+  google.protobuf.Timestamp BallotDefinitionSealedAt = 43;
+  bool HasBallotDefinitionSealedAt = 44;
+  BallotDefinitionMutationPolicyProto BallotDefinitionMutationPolicy = 45;
+  bool HasBallotDefinitionSeal = 46;
   google.protobuf.Timestamp VoteAcceptanceLockedAt = 33;
   string TallyReadyArtifactId = 34;
   OfficialResultVisibilityPolicyProto OfficialResultVisibilityPolicy = 35;
@@ -1196,6 +1265,50 @@ message RegisterElectionVotingCommitmentResponse {
   bool HasCommitmentRegisteredAt = 7;
 }
 
+message RegisterPreparedBallotCommitmentRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string PreparedBallotId = 3;
+  string PreparedBallotHash = 4;
+  int32 BallotDefinitionVersion = 5;
+  bytes BallotDefinitionHash = 6;
+  string CeremonyProfileId = 7;
+  string ProofStatementId = 8;
+}
+
+message RegisterPreparedBallotCommitmentResponse {
+  bool Success = 1;
+  PreparedBallotCommitmentFailureReasonProto FailureReason = 2;
+  string ErrorMessage = 3;
+  ElectionRecordView Election = 4;
+  ElectionRosterEntryView SelfRosterEntry = 5;
+  string PreparedBallotId = 6;
+  string PreparedBallotHash = 7;
+  google.protobuf.Timestamp PrecommittedAt = 8;
+  google.protobuf.Timestamp ExpiresAt = 9;
+}
+
+message SpoilPreparedBallotRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string PreparedBallotId = 3;
+  string PreparedBallotHash = 4;
+  string SpoiledTranscriptHash = 5;
+  string SpoilRecordHash = 6;
+  string LocalVerifierVersion = 7;
+}
+
+message SpoilPreparedBallotResponse {
+  bool Success = 1;
+  SpoilPreparedBallotFailureReasonProto FailureReason = 2;
+  string ErrorMessage = 3;
+  ElectionRecordView Election = 4;
+  ElectionRosterEntryView SelfRosterEntry = 5;
+  string PreparedBallotId = 6;
+  PreparedBallotStateProto PreparedBallotState = 7;
+  google.protobuf.Timestamp SpoiledAt = 8;
+}
+
 message AcceptElectionBallotCastRequest {
   string ElectionId = 1;
   string ActorPublicAddress = 2;
@@ -1208,6 +1321,12 @@ message AcceptElectionBallotCastRequest {
   string CeremonyVersionId = 9;
   string DkgProfileId = 10;
   string TallyPublicKeyFingerprint = 11;
+  string PreparedBallotId = 12;
+  string PreparedBallotHash = 13;
+  string ReceiptCommitment = 14;
+  string ReceiptCommitmentScheme = 15;
+  int32 BallotDefinitionVersion = 16;
+  bytes BallotDefinitionHash = 17;
 }
 
 message AcceptElectionBallotCastResponse {
@@ -1219,6 +1338,9 @@ message AcceptElectionBallotCastResponse {
   ElectionParticipationStatusProto PersonalParticipationStatus = 6;
   google.protobuf.Timestamp AcceptedAt = 7;
   bool HasAcceptedAt = 8;
+  string PreparedBallotId = 9;
+  string ReceiptCommitment = 10;
+  string ReceiptCommitmentScheme = 11;
 }
 
 message GetElectionRequest {
@@ -1506,6 +1628,20 @@ message GetElectionVotingViewResponse {
   string AcceptanceId = 19;
   string ServerProof = 20;
   ElectionCurvePoint TallyPublicKey = 21;
+  int32 BallotDefinitionVersion = 22;
+  bytes BallotDefinitionHash = 23;
+  google.protobuf.Timestamp BallotDefinitionSealedAt = 24;
+  bool HasBallotDefinitionSealedAt = 25;
+  BallotDefinitionMutationPolicyProto BallotDefinitionMutationPolicy = 26;
+  bool Sp04Required = 27;
+  string CeremonyProfileId = 28;
+  string PreparedBallotId = 29;
+  string PreparedBallotHash = 30;
+  PreparedBallotStateProto PreparedBallotState = 31;
+  google.protobuf.Timestamp PreparedBallotExpiresAt = 32;
+  bool HasPreparedBallotExpiresAt = 33;
+  string ReceiptCommitment = 34;
+  string ReceiptCommitmentScheme = 35;
 }
 
 message GetElectionCeremonyActionViewRequest {

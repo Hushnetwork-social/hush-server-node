@@ -808,6 +808,21 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
         {
             response.OpenArtifactId = openArtifact.Id.ToString();
             response.EligibleSetHash = EncodeHash(openArtifact.FrozenEligibleVoterSetHash);
+            response.BallotDefinitionVersion = openArtifact.BallotDefinitionVersion ?? 0;
+            response.BallotDefinitionHash = openArtifact.BallotDefinitionHash is { Length: > 0 }
+                ? Google.Protobuf.ByteString.CopyFrom(openArtifact.BallotDefinitionHash)
+                : Google.Protobuf.ByteString.Empty;
+            response.BallotDefinitionMutationPolicy =
+                (BallotDefinitionMutationPolicyProto)(int)(openArtifact.BallotDefinitionMutationPolicy
+                    ?? ElectionBallotDefinitionMutationPolicy.ImmutableAfterOpen);
+            response.Sp04Required = openArtifact.BallotDefinitionVersion.HasValue &&
+                openArtifact.BallotDefinitionHash is { Length: > 0 };
+
+            if (openArtifact.BallotDefinitionSealedAt.HasValue)
+            {
+                response.BallotDefinitionSealedAt = ToProtoTimestamp(openArtifact.BallotDefinitionSealedAt.Value);
+                response.HasBallotDefinitionSealedAt = true;
+            }
 
             var ceremonySnapshot = ElectionProtectedTallyBinding.ResolveOpenBoundaryBinding(election, openArtifact);
             if (ceremonySnapshot is not null)
@@ -815,6 +830,7 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
                 response.CeremonyVersionId = ceremonySnapshot.CeremonyVersionId.ToString();
                 response.DkgProfileId = ceremonySnapshot.ProfileId;
                 response.TallyPublicKeyFingerprint = ceremonySnapshot.TallyPublicKeyFingerprint;
+                response.CeremonyProfileId = ElectionSp04ProfileIds.ChallengeSpoilV1;
                 if (ceremonySnapshot.TallyPublicKey is { Length: > 0 })
                 {
                     response.TallyPublicKey = HushNode.Elections.gRPC.ElectionGrpcMappings.ToProto(ceremonySnapshot).TallyPublicKey;

@@ -40,7 +40,14 @@ public record ElectionRecord(
     Guid? TallyReadyArtifactId,
     Guid? FinalizeArtifactId,
     Guid? UnofficialResultArtifactId,
-    Guid? OfficialResultArtifactId);
+    Guid? OfficialResultArtifactId,
+    int? BallotDefinitionVersion = null,
+    byte[]? BallotDefinitionHash = null,
+    DateTime? BallotDefinitionSealedAt = null,
+    ElectionBallotDefinitionMutationPolicy? BallotDefinitionMutationPolicy = null)
+{
+    public byte[]? BallotDefinitionHash { get; init; } = BallotDefinitionHash?.ToArray();
+}
 
 public record ElectionDraftSnapshotRecord(
     Guid Id,
@@ -82,7 +89,14 @@ public record ElectionBoundaryArtifactRecord(
     string RecordedByPublicAddress,
     Guid? SourceTransactionId,
     long? SourceBlockHeight,
-    Guid? SourceBlockId);
+    Guid? SourceBlockId,
+    int? BallotDefinitionVersion = null,
+    byte[]? BallotDefinitionHash = null,
+    DateTime? BallotDefinitionSealedAt = null,
+    ElectionBallotDefinitionMutationPolicy? BallotDefinitionMutationPolicy = null)
+{
+    public byte[]? BallotDefinitionHash { get; init; } = BallotDefinitionHash?.ToArray();
+}
 
 public record ElectionAcceptedBallotRecord(
     Guid Id,
@@ -90,7 +104,13 @@ public record ElectionAcceptedBallotRecord(
     string EncryptedBallotPackage,
     string ProofBundle,
     string BallotNullifier,
-    DateTime AcceptedAt)
+    DateTime AcceptedAt,
+    Guid? PreparedBallotId = null,
+    string? PreparedBallotHash = null,
+    string? ReceiptCommitment = null,
+    string? ReceiptCommitmentScheme = null,
+    int? BallotDefinitionVersion = null,
+    byte[]? BallotDefinitionHash = null)
 {
     public string EncryptedBallotPackage { get; init; } =
         ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
@@ -106,6 +126,17 @@ public record ElectionAcceptedBallotRecord(
         ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
             BallotNullifier,
             nameof(BallotNullifier));
+
+    public string? PreparedBallotHash { get; init; } =
+        string.IsNullOrWhiteSpace(PreparedBallotHash) ? null : PreparedBallotHash.Trim();
+
+    public string? ReceiptCommitment { get; init; } =
+        string.IsNullOrWhiteSpace(ReceiptCommitment) ? null : ReceiptCommitment.Trim();
+
+    public string? ReceiptCommitmentScheme { get; init; } =
+        string.IsNullOrWhiteSpace(ReceiptCommitmentScheme) ? null : ReceiptCommitmentScheme.Trim();
+
+    public byte[]? BallotDefinitionHash { get; init; } = BallotDefinitionHash?.ToArray();
 }
 
 public record ElectionBallotMemPoolRecord(

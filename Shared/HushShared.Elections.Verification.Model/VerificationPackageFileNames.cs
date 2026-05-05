@@ -18,7 +18,12 @@ public static class VerificationPackageFileNames
     public const string TallyReplay = "artifacts/election-record/tally-replay.json";
     public const string TrusteeReleaseEvidence = "artifacts/election-record/trustee-release-evidence.json";
     public const string ResultBinding = "artifacts/election-record/result-binding.json";
+    public const string Sp04Evidence = "artifacts/election-record/sp04-evidence.json";
+    public const string Sp04ReceiptCommitments = "artifacts/election-record/sp04-receipt-commitments.json";
     public const string RestrictedRosterCheckoff = "artifacts/restricted/roster-checkoff.json";
+    public const string RestrictedSp04CeremonyRecords = "artifacts/restricted/sp04-ceremony-records.json";
+    public const string RestrictedSp04PreparedBallotCommitments = "artifacts/restricted/sp04-prepared-ballot-commitments.json";
+    public const string RestrictedSp04SpoilMarkers = "artifacts/restricted/sp04-spoil-markers.json";
 
     public static IReadOnlyList<string> RootFiles { get; } =
     [
