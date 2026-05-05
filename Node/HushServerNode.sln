@@ -143,6 +143,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Elections", "Core\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushNode.Elections.gRPC", "Core\Elections\HushNode.Elections.gRPC\HushNode.Elections.gRPC.csproj", "{682F0297-CFD3-4C87-BC11-379906A39BE3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushShared.Elections.Verification.Model", "..\Shared\HushShared.Elections.Verification.Model\HushShared.Elections.Verification.Model.csproj", "{75348360-00F6-4192-9322-72703C39026D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -861,6 +863,18 @@ Global
 		{682F0297-CFD3-4C87-BC11-379906A39BE3}.Release|x64.Build.0 = Release|Any CPU
 		{682F0297-CFD3-4C87-BC11-379906A39BE3}.Release|x86.ActiveCfg = Release|Any CPU
 		{682F0297-CFD3-4C87-BC11-379906A39BE3}.Release|x86.Build.0 = Release|Any CPU
+		{75348360-00F6-4192-9322-72703C39026D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{75348360-00F6-4192-9322-72703C39026D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{75348360-00F6-4192-9322-72703C39026D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{75348360-00F6-4192-9322-72703C39026D}.Debug|x64.Build.0 = Debug|Any CPU
+		{75348360-00F6-4192-9322-72703C39026D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{75348360-00F6-4192-9322-72703C39026D}.Debug|x86.Build.0 = Debug|Any CPU
+		{75348360-00F6-4192-9322-72703C39026D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{75348360-00F6-4192-9322-72703C39026D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{75348360-00F6-4192-9322-72703C39026D}.Release|x64.ActiveCfg = Release|Any CPU
+		{75348360-00F6-4192-9322-72703C39026D}.Release|x64.Build.0 = Release|Any CPU
+		{75348360-00F6-4192-9322-72703C39026D}.Release|x86.ActiveCfg = Release|Any CPU
+		{75348360-00F6-4192-9322-72703C39026D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
