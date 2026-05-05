@@ -4538,7 +4538,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             {
                 return ElectionCommandResult.Failure(
                     ElectionCommandErrorCode.DependencyBlocked,
-                    "Official participant-encrypted result publication requires the FEAT-101 result crypto service.");
+                    "Official participant-encrypted result publication requires the result crypto service.");
             }
 
             var ownerAccess = await repository.GetElectionEnvelopeAccessAsync(election.ElectionId, election.OwnerPublicAddress);
@@ -4580,7 +4580,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.Conflict,
-                "A sealed FEAT-102 report package already exists for this election.");
+                "A sealed report package already exists for this election.");
         }
 
         var reportAttemptNumber = (priorReportAttempt?.AttemptNumber ?? 0) + 1;
@@ -5047,7 +5047,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.DependencyBlocked,
-                "Close-counting completion requires the FEAT-101 result crypto service.");
+                "Close-counting completion requires the result crypto service.");
         }
 
         var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(election.ElectionId);
@@ -5421,7 +5421,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         if (_electionResultCryptoService is null)
         {
             return AggregateReleaseAttemptResolution.NoAttempt(
-                "Close-counting aggregate release requires the FEAT-101 result crypto service.");
+                "Close-counting aggregate release requires the result crypto service.");
         }
 
         if (requiredShareCount < 1)

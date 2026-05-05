@@ -38,9 +38,9 @@ public static class VerificationResultCodes
     public const string RestrictedExportUnauthorized = "restricted_export_unauthorized";
     public const string UnsupportedLiveDependency = "unsupported_live_dependency";
     public const string FutureEvidencePending = "future_evidence_pending";
-    public const string PublicationProofPendingFeat117 = "not_implemented_pending_FEAT_117";
-    public const string ReleaseIntegrityPendingFeat118 = "not_implemented_pending_FEAT_118";
-    public const string ChallengeSpoilPendingFeat114 = "not_implemented_pending_FEAT_114";
+    public const string PublicationProofEvidencePending = "publication_proof_evidence_pending";
+    public const string ReleaseIntegrityEvidencePending = "release_integrity_evidence_pending";
+    public const string ChallengeSpoilEvidencePending = "challenge_spoil_evidence_pending";
 }
 
 public static class VerificationExitCodes

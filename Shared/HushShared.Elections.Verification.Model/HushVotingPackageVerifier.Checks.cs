@@ -272,7 +272,7 @@ public sealed partial class HushVotingPackageVerifier
             VerificationPackageFileNames.TallyReplay,
             cancellationToken);
 
-        if (!string.Equals(tallyReplay.ResultCode, VerificationResultCodes.PublicationProofPendingFeat117, StringComparison.Ordinal))
+        if (!string.Equals(tallyReplay.ResultCode, VerificationResultCodes.PublicationProofEvidencePending, StringComparison.Ordinal))
         {
             return CreateResult(
                 "VFY-SP07-000",
@@ -285,9 +285,9 @@ public sealed partial class HushVotingPackageVerifier
         return CreateResult(
             "VFY-SP07-001",
             isHighAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn,
-            VerificationResultCodes.PublicationProofPendingFeat117,
+            VerificationResultCodes.PublicationProofEvidencePending,
             isHighAssurance
                 ? "High-assurance profile requires SP-07 publication proof evidence."
-                : "SP-07 publication proof evidence is pending a later feature.");
+                : "SP-07 publication proof evidence is pending a later protocol package revision.");
     }
 }

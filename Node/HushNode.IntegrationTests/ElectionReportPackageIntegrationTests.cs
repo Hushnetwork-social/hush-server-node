@@ -268,7 +268,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             x.ResultCode == VerificationResultCodes.PackageManifestValid &&
             x.Status == VerificationCheckStatus.Pass);
         verification.Output.Results.Should().Contain(x =>
-            x.ResultCode == VerificationResultCodes.PublicationProofPendingFeat117 &&
+            x.ResultCode == VerificationResultCodes.PublicationProofEvidencePending &&
             x.Status == VerificationCheckStatus.Warn);
         File.Exists(Path.Combine(verifierOutputPath, "VerifierOutput.json")).Should().BeTrue();
         File.Exists(Path.Combine(verifierOutputPath, "VerifierSummary.md")).Should().BeTrue();

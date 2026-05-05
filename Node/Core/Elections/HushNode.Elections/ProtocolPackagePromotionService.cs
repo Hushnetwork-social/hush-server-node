@@ -14,6 +14,7 @@ public sealed class ProtocolPackagePromotionService
     public const string ReleaseManifestFileName = "ProtocolOmegaPackageManifest.json";
     public const string PackageManifestFileName = "PackageManifest.json";
     public const string PackageManifestSchemaFileName = "PackageManifest.schema.json";
+    public const string ReleasePackageFolderName = "Protocol-Omega-HushVoting-v1-Artifacts";
 
     private static readonly DateTimeOffset FixedZipTimestamp = new(
         1980,
@@ -59,7 +60,6 @@ public sealed class ProtocolPackagePromotionService
         "Tamper-Test-Catalog.md",
         "Known-Limitations-And-Non-Claims.md",
         "Versioning-And-Compatibility.md",
-        "ChangeLog.md",
     ];
 
     public static readonly IReadOnlyList<string> RequiredProofFiles =
@@ -76,6 +76,11 @@ public sealed class ProtocolPackagePromotionService
         "External-Review-Questions.md",
         "External-Review-Status.md",
         "Claim-Wording-Policy.md",
+    ];
+
+    public static readonly IReadOnlyList<string> RequiredReleaseFiles =
+    [
+        "ChangeLog.md",
     ];
 
     public ProtocolPackagePromotionResult Promote(ProtocolPackagePromotionOptions options)
@@ -108,10 +113,20 @@ public sealed class ProtocolPackagePromotionService
         }
 
         var officialVersionRoot = Path.Combine(options.Paths.OfficialArtifactsRoot, promotionPlan.PackageVersion);
+        if (Directory.Exists(officialVersionRoot))
+        {
+            Directory.Delete(officialVersionRoot, recursive: true);
+        }
+
         Directory.CreateDirectory(officialVersionRoot);
         Directory.CreateDirectory(Path.GetDirectoryName(options.Paths.ServerCatalogPath)!);
 
         var writtenFiles = new List<string>();
+        var releaseFiles = PromoteReleaseFiles(
+            options,
+            promotionPlan,
+            officialVersionRoot,
+            writtenFiles);
         var specification = PromoteChildPackage(
             options,
             promotionPlan,
@@ -129,7 +144,12 @@ public sealed class ProtocolPackagePromotionService
             RequiredProofFiles,
             writtenFiles);
 
-        var releaseHash = ComputeReleaseManifestHash(options, promotionPlan, specification.Manifest, proof.Manifest);
+        var releaseHash = ComputeReleaseManifestHash(
+            options,
+            promotionPlan,
+            specification.Manifest,
+            proof.Manifest,
+            releaseFiles);
         var releaseManifest = ElectionModelFactory.CreateProtocolOmegaPackageReleaseManifest(
             options.PackageId,
             promotionPlan.PackageVersion,
@@ -140,8 +160,9 @@ public sealed class ProtocolPackagePromotionService
             GetCompatibleProfileIds(),
             specification.Manifest.AccessLocations,
             proof.Manifest.AccessLocations,
-            proof.Manifest.ExternalReviewStatus,
-            promotionPlan.GeneratedAt);
+            releaseFiles,
+            externalReviewStatus: proof.Manifest.ExternalReviewStatus,
+            releasedAt: promotionPlan.GeneratedAt);
         var releaseManifestPath = Path.Combine(officialVersionRoot, ReleaseManifestFileName);
         WriteJson(releaseManifestPath, releaseManifest);
         writtenFiles.Add(releaseManifestPath);
@@ -185,6 +206,41 @@ public sealed class ProtocolPackagePromotionService
             .Where(x => !File.Exists(x.FullPath))
             .Select(x => x.RelativePath)
             .OrderBy(x => x, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<ProtocolPackageFileHashRecord> PromoteReleaseFiles(
+        ProtocolPackagePromotionOptions options,
+        ProtocolPackagePromotionPlan promotionPlan,
+        string officialVersionRoot,
+        List<string> writtenFiles)
+    {
+        return RequiredReleaseFiles
+            .Select(relativePath =>
+            {
+                var sourcePath = Path.Combine(options.Paths.WorkingSourceRoot, relativePath);
+                var outputPath = Path.Combine(officialVersionRoot, relativePath);
+                var bytes = ReadAndNormalizePackageSourceBytes(
+                    sourcePath,
+                    relativePath,
+                    promotionPlan.PackageVersion,
+                    out var sourceRewritten);
+                if (sourceRewritten)
+                {
+                    writtenFiles.Add(sourcePath);
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+                File.WriteAllBytes(outputPath, bytes);
+                writtenFiles.Add(outputPath);
+
+                return ElectionModelFactory.CreateProtocolPackageFileHash(
+                    NormalizeArchivePath(relativePath),
+                    ComputeSha256Hex(bytes),
+                    bytes.Length,
+                    ResolveMediaType(relativePath));
+            })
+            .OrderBy(x => x.RelativePath, StringComparer.Ordinal)
             .ToArray();
     }
 
@@ -376,7 +432,8 @@ public sealed class ProtocolPackagePromotionService
         ProtocolPackagePromotionOptions options,
         ProtocolPackagePromotionPlan promotionPlan,
         ProtocolPackageManifestRecord specificationManifest,
-        ProtocolPackageManifestRecord proofManifest)
+        ProtocolPackageManifestRecord proofManifest,
+        IReadOnlyList<ProtocolPackageFileHashRecord> releaseFiles)
     {
         var hashPayload = new
         {
@@ -384,6 +441,7 @@ public sealed class ProtocolPackagePromotionService
             promotionPlan.PackageVersion,
             specificationPackageHash = specificationManifest.PackageHash,
             proofPackageHash = proofManifest.PackageHash,
+            releaseFiles = NormalizeFileHashes(releaseFiles),
             compatibleProfileIds = GetCompatibleProfileIds(),
             approvalStatus = promotionPlan.ApprovalStatus.ToString(),
             specificationAccessLocations = NormalizeAccessLocations(specificationManifest.AccessLocations),
@@ -407,6 +465,20 @@ public sealed class ProtocolPackagePromotionService
                 x.Label,
                 x.Location,
                 x.ContentHash,
+            })
+            .Cast<object>()
+            .ToArray();
+
+    private static IReadOnlyList<object> NormalizeFileHashes(
+        IReadOnlyList<ProtocolPackageFileHashRecord> files) =>
+        files
+            .OrderBy(x => x.RelativePath, StringComparer.Ordinal)
+            .Select(x => new
+            {
+                x.RelativePath,
+                x.Sha256Hash,
+                x.SizeBytes,
+                x.MediaType,
             })
             .Cast<object>()
             .ToArray();
@@ -555,6 +627,23 @@ public sealed class ProtocolPackagePromotionService
         var fileHashes = new Dictionary<string, string>(StringComparer.Ordinal);
         var incompleteFiles = new List<string>();
 
+        foreach (var relativePath in RequiredReleaseFiles)
+        {
+            var fullPath = Path.Combine(versionRoot, relativePath);
+            if (!File.Exists(fullPath))
+            {
+                continue;
+            }
+
+            var bytes = File.ReadAllBytes(fullPath);
+            var normalizedRelativePath = NormalizeArchivePath(relativePath);
+            fileHashes[normalizedRelativePath] = ComputeSha256Hex(bytes);
+            if (ContainsIncompleteMarker(bytes))
+            {
+                incompleteFiles.Add(normalizedRelativePath);
+            }
+        }
+
         foreach (var packageFolder in new[] { SpecificationPackageFolderName, ProofPackageFolderName })
         {
             var manifestPath = Path.Combine(versionRoot, packageFolder, PackageManifestFileName);
@@ -641,6 +730,11 @@ public sealed class ProtocolPackagePromotionService
         string packageVersion)
     {
         ScaffoldPackageFiles(
+            options.Paths.WorkingSourceRoot,
+            ReleasePackageFolderName,
+            packageVersion,
+            RequiredReleaseFiles);
+        ScaffoldPackageFiles(
             Path.Combine(options.Paths.WorkingSourceRoot, SpecificationPackageFolderName),
             SpecificationPackageFolderName,
             packageVersion,
@@ -679,6 +773,9 @@ public sealed class ProtocolPackagePromotionService
     private static IReadOnlyList<RequiredSourceFile> GetRequiredSourceFiles(
         ProtocolPackagePromotionOptions options) =>
     [
+        .. RequiredReleaseFiles.Select(x => new RequiredSourceFile(
+            NormalizeArchivePath(x),
+            Path.Combine(options.Paths.WorkingSourceRoot, x))),
         .. RequiredSpecificationFiles.Select(x => new RequiredSourceFile(
             $"{SpecificationPackageFolderName}/{NormalizeArchivePath(x)}",
             Path.Combine(options.Paths.WorkingSourceRoot, SpecificationPackageFolderName, x))),

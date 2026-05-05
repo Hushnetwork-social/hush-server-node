@@ -54,6 +54,7 @@ Each generated version folder contains:
 
 ```text
 vX.Y.Z/
+  ChangeLog.md
   ProtocolOmegaPackageManifest.json
   Protocol-Specification-Package/
     PackageManifest.json
@@ -66,6 +67,10 @@ vX.Y.Z/
     Protocol-Proof-And-Crypto-Review.zip
     ...
 ```
+
+`ChangeLog.md` is a release-level artifact. It lives at the version root because one Protocol Omega
+version can update files in both child packages. Child package manifests and ZIPs should not include
+the release ChangeLog.
 
 ## Versioning Policy
 

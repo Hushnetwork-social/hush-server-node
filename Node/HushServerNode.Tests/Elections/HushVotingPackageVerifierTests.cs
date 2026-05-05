@@ -39,7 +39,7 @@ public class HushVotingPackageVerifierTests
         result.ExitCode.Should().Be(1);
         result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Fail);
         result.Output.Results.Should().Contain(x =>
-            x.ResultCode == VerificationResultCodes.PublicationProofPendingFeat117 &&
+            x.ResultCode == VerificationResultCodes.PublicationProofEvidencePending &&
             x.Status == VerificationCheckStatus.Fail);
     }
 

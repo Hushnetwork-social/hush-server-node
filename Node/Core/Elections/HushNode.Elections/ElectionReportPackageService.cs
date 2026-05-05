@@ -1477,8 +1477,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         - Did not vote: `{projection.DidNotVoteCount}`
         - Turnout percent: `{projection.TurnoutPercent:F2}`
 
-        The platform conclusion above is derived from frozen FEAT-101 official counts and the frozen
-        FEAT-094 outcome rule for `{election.Title}`.
+        The platform conclusion above is derived from frozen official counts and the frozen outcome
+        rule for `{election.Title}`.
         """;
 
     private static string BuildHumanDisputeIndexContent(

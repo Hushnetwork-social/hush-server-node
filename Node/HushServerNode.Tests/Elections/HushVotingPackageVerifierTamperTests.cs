@@ -22,8 +22,8 @@ public class HushVotingPackageVerifierTamperTests
             { "tamper-published-stream-hash", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublishedBallotStreamHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-named-voter-in-public-artifact", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicRestrictedFieldLeak, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-raw-trustee-share", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicRestrictedFieldLeak, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
-            { "missing-sp07-development-warning", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicationProofPendingFeat117, VerificationCheckStatus.Warn, VerificationOverallStatus.Warn, 0 },
-            { "missing-sp07-high-assurance-fail-closed", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.PublicationProofPendingFeat117, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "missing-sp07-development-warning", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicationProofEvidencePending, VerificationCheckStatus.Warn, VerificationOverallStatus.Warn, 0 },
+            { "missing-sp07-high-assurance-fail-closed", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.PublicationProofEvidencePending, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
         };
 
     [Theory]

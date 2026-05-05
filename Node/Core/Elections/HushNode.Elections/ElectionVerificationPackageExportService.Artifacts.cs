@@ -85,10 +85,10 @@ public sealed partial class ElectionVerificationPackageExportService
             request.Election.ElectionId.ToString(),
             PublicationProofMode: "zk_rerandomization_shuffle_v1",
             highAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn,
-            VerificationResultCodes.PublicationProofPendingFeat117,
+            VerificationResultCodes.PublicationProofEvidencePending,
             highAssurance
                 ? "High-assurance profile requires SP-07 publication proof evidence."
-                : "SP-07 publication proof evidence is pending FEAT-117.");
+                : "SP-07 publication proof evidence is pending a later protocol package revision.");
     }
 
     private static TrusteeReleaseEvidenceArtifactRecord BuildTrusteeReleaseEvidence(
