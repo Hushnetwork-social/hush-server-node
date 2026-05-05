@@ -1375,6 +1375,8 @@ message VerifyElectionReceiptRequest {
   string ReceiptId = 3;
   string AcceptanceId = 4;
   string ServerProof = 5;
+  string ReceiptCommitment = 6;
+  string PreparedBallotId = 7;
 }
 
 message VerifyElectionReceiptResponse {
@@ -1390,6 +1392,11 @@ message VerifyElectionReceiptResponse {
   string VerifiedReceiptId = 10;
   string VerifiedAcceptanceId = 11;
   string VerifiedServerProof = 12;
+  bool HasBoundReceipt = 13;
+  bool ReceiptCommitmentInAcceptedSet = 14;
+  string VerifiedReceiptCommitment = 15;
+  string VerifiedReceiptCommitmentScheme = 16;
+  string VerifiedPreparedBallotId = 17;
 }
 
 message GetElectionEnvelopeAccessRequest {
@@ -1642,6 +1649,13 @@ message GetElectionVotingViewResponse {
   bool HasPreparedBallotExpiresAt = 33;
   string ReceiptCommitment = 34;
   string ReceiptCommitmentScheme = 35;
+  google.protobuf.Timestamp PreparedBallotPrecommittedAt = 36;
+  bool HasPreparedBallotPrecommittedAt = 37;
+  int32 RequiredChallengeCount = 38;
+  int32 SpoiledPackageCount = 39;
+  bool ChallengeSatisfied = 40;
+  string Sp04BlockerCode = 41;
+  string Sp04BlockerMessage = 42;
 }
 
 message GetElectionCeremonyActionViewRequest {

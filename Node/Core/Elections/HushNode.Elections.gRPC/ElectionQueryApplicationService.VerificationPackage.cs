@@ -125,7 +125,10 @@ public partial class ElectionQueryApplicationService
             FinalizationShares: [],
             ReleaseEvidenceRecords: [],
             RosterEntries: [],
-            ParticipationRecords: []);
+            ParticipationRecords: [],
+            VoterCeremonyRecords: [],
+            PreparedBallotCommitments: [],
+            SpoiledPreparedBallots: []);
 
         return BuildVerificationPackageStatusView(context, includePackageHashes: false);
     }
@@ -167,6 +170,9 @@ public partial class ElectionQueryApplicationService
         var releaseEvidence = await repository.GetFinalizationReleaseEvidenceRecordsAsync(election.ElectionId);
         var rosterEntries = await repository.GetRosterEntriesAsync(election.ElectionId);
         var participationRecords = await repository.GetParticipationRecordsAsync(election.ElectionId);
+        var voterCeremonyRecords = await repository.GetVoterCeremonyRecordsAsync(election.ElectionId);
+        var preparedBallotCommitments = await repository.GetPreparedBallotCommitmentsAsync(election.ElectionId);
+        var spoiledPreparedBallots = await repository.GetSpoiledPreparedBallotsAsync(election.ElectionId);
 
         return new VerificationPackageContext(
             election,
@@ -184,7 +190,10 @@ public partial class ElectionQueryApplicationService
             finalizationShares,
             releaseEvidence,
             rosterEntries,
-            participationRecords);
+            participationRecords,
+            voterCeremonyRecords,
+            preparedBallotCommitments,
+            spoiledPreparedBallots);
     }
 
     private ElectionVerificationPackageStatusView BuildVerificationPackageStatusView(
@@ -210,7 +219,7 @@ public partial class ElectionQueryApplicationService
             PublicPackage = publicPackage,
             RestrictedPackage = restrictedPackage,
             LastVerifierResult = BuildVerifierResultNotAvailable(),
-            Sp04Evidence = BuildSp04EvidenceStatusPlaceholder(),
+            Sp04Evidence = BuildSp04EvidenceStatus(context),
         };
 
         if (context.CanViewPackageStatus && context.ProtocolPackageBinding is not null)
@@ -221,18 +230,35 @@ public partial class ElectionQueryApplicationService
         return view;
     }
 
-    private static ElectionSp04EvidenceStatusView BuildSp04EvidenceStatusPlaceholder() =>
-        new()
+    private static ElectionSp04EvidenceStatusView BuildSp04EvidenceStatus(VerificationPackageContext context)
+    {
+        var receiptCommitments = BuildSp04ReceiptCommitments(context.AcceptedBallots);
+        var hasSealedBallotDefinition = HasSealedBallotDefinition(context);
+        var packageReady =
+            context.Election.LifecycleState == ElectionLifecycleState.Finalized &&
+            context.LatestReportPackage?.Status == ElectionReportPackageStatus.Sealed &&
+            context.ProtocolPackageBinding?.Status == ProtocolPackageBindingStatus.Sealed &&
+            hasSealedBallotDefinition;
+        var message = !context.CanViewPackageStatus
+            ? "SP-04 evidence status is not visible to this actor."
+            : !hasSealedBallotDefinition
+                ? "SP-04 evidence is waiting for a sealed ballot definition."
+                : packageReady
+                    ? "SP-04 evidence is available for verification package export."
+                    : "SP-04 evidence is being collected and becomes exportable after finalization.";
+
+        return new ElectionSp04EvidenceStatusView
         {
             EvidenceExpected = true,
-            PublicEvidenceAvailable = false,
-            RestrictedEvidenceAvailable = false,
-            PreparedPackageCount = 0,
-            SpoiledPackageCount = 0,
-            AcceptedBoundReceiptCount = 0,
-            ReceiptCommitmentSetHash = string.Empty,
-            Message = "SP-04 evidence contracts are available; runtime evidence is produced by FEAT-114 ceremony logic.",
+            PublicEvidenceAvailable = packageReady,
+            RestrictedEvidenceAvailable = packageReady && context.CanExportRestrictedPackage,
+            PreparedPackageCount = context.PreparedBallotCommitments.Count,
+            SpoiledPackageCount = context.SpoiledPreparedBallots.Count,
+            AcceptedBoundReceiptCount = receiptCommitments.Count,
+            ReceiptCommitmentSetHash = ComputeReceiptCommitmentSetHash(receiptCommitments),
+            Message = message,
         };
+    }
 
     private ElectionVerificationPackageExportAvailabilityView BuildPackageAvailability(
         VerificationPackageContext context,
@@ -316,7 +342,42 @@ public partial class ElectionQueryApplicationService
             context.CanExportRestrictedPackage,
             context.LatestReportPackage?.SealedAt ??
             context.LatestReportPackage?.AttemptedAt ??
-            context.Election.FinalizedAt);
+            context.Election.FinalizedAt,
+            context.VoterCeremonyRecords,
+            context.PreparedBallotCommitments,
+            context.SpoiledPreparedBallots);
+
+    private static IReadOnlyList<ElectionSp04ReceiptCommitmentRecord> BuildSp04ReceiptCommitments(
+        IReadOnlyList<ElectionAcceptedBallotRecord> acceptedBallots) =>
+        acceptedBallots
+            .Where(x =>
+                x.PreparedBallotId.HasValue &&
+                !string.IsNullOrWhiteSpace(x.PreparedBallotHash) &&
+                !string.IsNullOrWhiteSpace(x.ReceiptCommitment) &&
+                !string.IsNullOrWhiteSpace(x.ReceiptCommitmentScheme))
+            .OrderBy(x => x.AcceptedAt)
+            .ThenBy(x => x.Id)
+            .Select(x => new ElectionSp04ReceiptCommitmentRecord(
+                x.Id,
+                x.PreparedBallotId!.Value,
+                x.PreparedBallotHash!,
+                x.ReceiptCommitment!,
+                x.ReceiptCommitmentScheme!,
+                x.AcceptedAt))
+            .ToArray();
+
+    private static string ComputeReceiptCommitmentSetHash(
+        IReadOnlyList<ElectionSp04ReceiptCommitmentRecord> receiptCommitments)
+    {
+        var payload = string.Join(
+            '\n',
+            receiptCommitments
+                .OrderBy(x => x.AcceptedBallotId)
+                .Select(x =>
+                    $"{x.AcceptedBallotId:N}|{x.PreparedBallotId:N}|{x.PreparedBallotHash}|{x.ReceiptCommitment}|{x.ReceiptCommitmentScheme}|{x.AcceptedAt:O}"));
+
+        return VerificationCanonicalHash.ComputeSha256UpperHex(payload);
+    }
 
     private static ElectionVerificationPackageStatusProto ResolvePackageStatus(VerificationPackageContext context)
     {
@@ -336,6 +397,11 @@ public partial class ElectionQueryApplicationService
         }
 
         if (context.LatestReportPackage?.Status != ElectionReportPackageStatus.Sealed)
+        {
+            return ElectionVerificationPackageStatusProto.VerificationPackageMissing;
+        }
+
+        if (!HasSealedBallotDefinition(context))
         {
             return ElectionVerificationPackageStatusProto.VerificationPackageMissing;
         }
@@ -375,6 +441,11 @@ public partial class ElectionQueryApplicationService
         }
 
         if (context.LatestReportPackage?.Status != ElectionReportPackageStatus.Sealed)
+        {
+            return ElectionVerificationPackageBlockerProto.VerificationPackageBlockerMissingPackage;
+        }
+
+        if (!HasSealedBallotDefinition(context))
         {
             return ElectionVerificationPackageBlockerProto.VerificationPackageBlockerMissingPackage;
         }
@@ -438,7 +509,9 @@ public partial class ElectionQueryApplicationService
             ElectionVerificationPackageBlockerProto.VerificationPackageBlockerNotFinalized =>
                 "The election must be finalized before a verification package can be exported.",
             ElectionVerificationPackageBlockerProto.VerificationPackageBlockerMissingPackage =>
-                "A sealed report package is required before verification package export.",
+                context.LatestReportPackage?.Status == ElectionReportPackageStatus.Sealed
+                    ? "A sealed ballot definition is required before verification package export."
+                    : "A sealed report package is required before verification package export.",
             ElectionVerificationPackageBlockerProto.VerificationPackageBlockerProtocolRefs =>
                 "Sealed Protocol Omega package refs are required before verification package export.",
             ElectionVerificationPackageBlockerProto.VerificationPackageBlockerUnauthorized
@@ -448,6 +521,11 @@ public partial class ElectionQueryApplicationService
                 context.LatestReportPackage?.FailureReason ?? "Verification package export is currently blocked.",
             _ => string.Empty,
         };
+
+    private static bool HasSealedBallotDefinition(VerificationPackageContext context) =>
+        context.Election.BallotDefinitionVersion.HasValue &&
+        context.Election.BallotDefinitionHash is { Length: > 0 } &&
+        context.Election.BallotDefinitionSealedAt.HasValue;
 
     private static string ResolvePackageStatusMessage(
         ElectionVerificationPackageStatusProto status,
@@ -459,7 +537,9 @@ public partial class ElectionQueryApplicationService
             ElectionVerificationPackageStatusProto.VerificationPackageNotFinalized =>
                 "Verification package export becomes available after finalization.",
             ElectionVerificationPackageStatusProto.VerificationPackageMissing =>
-                "A sealed report package is missing for this finalized election.",
+                context.LatestReportPackage?.Status == ElectionReportPackageStatus.Sealed
+                    ? "A sealed ballot definition is missing for this finalized election."
+                    : "A sealed report package is missing for this finalized election.",
             ElectionVerificationPackageStatusProto.VerificationPackageProtocolRefsBlocked =>
                 "Sealed Protocol Omega package refs are missing or incompatible.",
             ElectionVerificationPackageStatusProto.VerificationPackageExportFailed =>
@@ -511,7 +591,10 @@ public partial class ElectionQueryApplicationService
         IReadOnlyList<ElectionFinalizationShareRecord> FinalizationShares,
         IReadOnlyList<ElectionFinalizationReleaseEvidenceRecord> ReleaseEvidenceRecords,
         IReadOnlyList<ElectionRosterEntryRecord> RosterEntries,
-        IReadOnlyList<ElectionParticipationRecord> ParticipationRecords)
+        IReadOnlyList<ElectionParticipationRecord> ParticipationRecords,
+        IReadOnlyList<ElectionVoterCeremonyRecord> VoterCeremonyRecords,
+        IReadOnlyList<ElectionPreparedBallotCommitmentRecord> PreparedBallotCommitments,
+        IReadOnlyList<ElectionSpoiledPreparedBallotRecord> SpoiledPreparedBallots)
     {
         public bool CanViewPackageStatus => IsVerificationPackageVisible(IsOwner, AcceptedTrustee, IsDesignatedAuditor);
 

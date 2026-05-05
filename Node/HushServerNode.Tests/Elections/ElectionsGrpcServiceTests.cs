@@ -221,6 +221,53 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task RegisterPreparedBallotCommitment_RejectsDirectCommandPath()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new Proto.RegisterPreparedBallotCommitmentRequest
+        {
+            ElectionId = ElectionId.NewElectionId.ToString(),
+            ActorPublicAddress = "voter-address",
+            PreparedBallotId = Guid.NewGuid().ToString(),
+            PreparedBallotHash = "prepared-hash-1",
+            BallotDefinitionVersion = 1,
+            BallotDefinitionHash = Google.Protobuf.ByteString.CopyFrom(new byte[] { 1, 2, 3, 4 }),
+            CeremonyProfileId = ElectionSp04ProfileIds.ChallengeSpoilV1,
+            ProofStatementId = "sp04-proof-v1",
+        };
+
+        var act = async () => await sut.RegisterPreparedBallotCommitment(request, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
+    }
+
+    [Fact]
+    public async Task SpoilPreparedBallot_RejectsDirectCommandPath()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new Proto.SpoilPreparedBallotRequest
+        {
+            ElectionId = ElectionId.NewElectionId.ToString(),
+            ActorPublicAddress = "voter-address",
+            PreparedBallotId = Guid.NewGuid().ToString(),
+            PreparedBallotHash = "prepared-hash-1",
+            SpoiledTranscriptHash = "spoiled-transcript-hash",
+            SpoilRecordHash = "spoil-record-hash",
+            LocalVerifierVersion = "local-verifier-v1",
+        };
+
+        var act = async () => await sut.SpoilPreparedBallot(request, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.FailedPrecondition);
+        exception.Which.Status.Detail.Should().Contain("SubmitSignedTransaction");
+    }
+
+    [Fact]
     public async Task StartElectionCeremony_RejectsDirectCommandPath()
     {
         var mocker = new AutoMocker();
@@ -707,7 +754,9 @@ public class ElectionsGrpcServiceTests
                 TestActorPublicAddress,
                 "receipt-1",
                 "acceptance-1",
-                "proof-1"))
+                "proof-1",
+                string.Empty,
+                string.Empty))
             .ReturnsAsync(new VerifyElectionReceiptResponse
             {
                 Success = true,
@@ -742,6 +791,8 @@ public class ElectionsGrpcServiceTests
                 ["ReceiptId"] = "receipt-1",
                 ["AcceptanceId"] = "acceptance-1",
                 ["ServerProof"] = "proof-1",
+                ["ReceiptCommitment"] = string.Empty,
+                ["PreparedBallotId"] = string.Empty,
             }));
 
         response.Success.Should().BeTrue();
