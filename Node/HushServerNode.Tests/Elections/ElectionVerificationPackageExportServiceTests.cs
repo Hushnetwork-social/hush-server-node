@@ -47,6 +47,40 @@ public class ElectionVerificationPackageExportServiceTests
     }
 
     [Fact]
+    public void Export_TrusteeThresholdWithoutSp06Profile_ShouldTreatControlEvidenceAsNotApplicable()
+    {
+        var request = CreateRequest(VerificationPackageView.PublicAnonymous);
+        request = request with
+        {
+            Election = request.Election with
+            {
+                GovernanceMode = ElectionGovernanceMode.TrusteeThreshold,
+                SelectedProfileId = ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+                RequiredApprovalCount = 3,
+            },
+        };
+
+        var result = Export(request);
+
+        result.Success.Should().BeTrue();
+        var profile = ReadFile<ElectionSp06ControlProfileArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp06TrusteeControlProfile);
+        profile.HighAssuranceClaimed.Should().BeFalse();
+        profile.ControlDomainProfileId.Should().Be("not_applicable");
+
+        var verifierOutput = ReadFile<ElectionSp06VerifierOutputArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp06TrusteeVerifierOutput);
+        verifierOutput.Results.Should().Contain(x =>
+            x.CheckCode == "CTRL-000" &&
+            x.Status == VerificationCheckStatus.NotApplicable);
+        verifierOutput.Results.Should().NotContain(x =>
+            x.ResultCode == VerificationResultCodes.TrusteeAcceptanceIncomplete &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
     public void Export_RestrictedPackageWithoutAuthorization_ShouldFailDeterministically()
     {
         var result = Export(CreateRequest(

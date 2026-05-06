@@ -854,7 +854,10 @@ public sealed partial class ElectionVerificationPackageExportService
             .ToArray();
 
     private static bool IsSp06EvidenceExpected(ElectionVerificationPackageExportRequest request) =>
-        request.Election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold ||
+        string.Equals(
+            request.Election.ControlDomainProfileId,
+            ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+            StringComparison.Ordinal) ||
         string.Equals(request.VerifierProfileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal);
 
     private static int ResolveSessionTrusteeCount(ElectionVerificationPackageExportRequest request) =>
