@@ -61,6 +61,19 @@ public static class VerificationResultCodes
     public const string EligibilityPublicPrivacyBoundaryViolation = "eligibility_public_privacy_boundary_violation";
     public const string EligibilityBallotPrivacyBoundaryViolation = "eligibility_ballot_privacy_boundary_violation";
     public const string EligibilityDevOnlyVerificationBlocked = "eligibility_dev_only_verification_blocked";
+    public const string TrusteeControlDomainEvidenceValid = "trustee_control_domain_evidence_valid";
+    public const string TrusteeControlProfileMissing = "trustee_control_profile_missing";
+    public const string TrusteeThresholdProfileMismatch = "trustee_threshold_profile_mismatch";
+    public const string TrusteeAcceptanceIncomplete = "trustee_acceptance_incomplete";
+    public const string TrusteeDuplicateAccount = "trustee_duplicate_account";
+    public const string TrusteeDuplicatePerson = "trustee_duplicate_person";
+    public const string TrusteeDuplicateCustodyDomain = "trustee_duplicate_custody_domain";
+    public const string TrusteeAdminDomainThresholdViolation = "trustee_admin_domain_threshold_violation";
+    public const string TrusteeCustodyModeUnsupported = "trustee_custody_mode_unsupported";
+    public const string TrusteeReleaseWrongTarget = "trustee_release_wrong_target";
+    public const string TrusteeReleaseThresholdNotMet = "trustee_release_threshold_not_met";
+    public const string TrusteeRawMaterialLeaked = "trustee_raw_material_leaked";
+    public const string TrusteeExceptionPolicyViolation = "trustee_exception_policy_violation";
 }
 
 public static class VerificationExitCodes
