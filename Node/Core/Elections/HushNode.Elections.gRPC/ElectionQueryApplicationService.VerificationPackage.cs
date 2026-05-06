@@ -240,10 +240,113 @@ public partial class ElectionQueryApplicationService
             Sp04Evidence = BuildSp04EvidenceStatus(context),
             Sp05Evidence = BuildSp05EvidenceStatus(context),
         };
+        view.Sp06Evidence = BuildSp06EvidenceStatus(context, publicPackage.IsAvailable, restrictedPackage.IsAvailable);
 
         if (context.CanViewPackageStatus && context.ProtocolPackageBinding is not null)
         {
             view.ProtocolPackageBinding = context.ProtocolPackageBinding.ToProto();
+        }
+
+        return view;
+    }
+
+    private static ElectionSp06EvidenceStatusView BuildSp06EvidenceStatus(
+        VerificationPackageContext context,
+        bool publicPackageAvailable,
+        bool restrictedPackageAvailable)
+    {
+        var expected = IsSp06EvidenceExpected(context.Election);
+        var latestSession = context.FinalizationSessions
+            .OrderByDescending(x => x.CompletedAt ?? x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+        var sessionShares = latestSession is null
+            ? Array.Empty<ElectionFinalizationShareRecord>()
+            : context.FinalizationShares
+                .Where(x => x.FinalizationSessionId == latestSession.Id)
+                .ToArray();
+        var acceptedReleaseCount = sessionShares.Count(x => x.Status == ElectionFinalizationShareStatus.Accepted);
+        var rejectedReleaseCount = sessionShares.Count(x => x.Status == ElectionFinalizationShareStatus.Rejected);
+        var trusteeCount = expected
+            ? ElectionSp06ControlDomainPolicy.HighAssuranceV1TrusteeCount
+            : latestSession?.EligibleTrustees.Count ?? 0;
+        var threshold = expected
+            ? ElectionSp06ControlDomainPolicy.HighAssuranceV1Threshold
+            : latestSession?.RequiredShareCount ?? context.Election.RequiredApprovalCount ?? 0;
+        var missingReleaseCount = latestSession is null
+            ? 0
+            : Math.Max(
+                0,
+                latestSession.EligibleTrustees.Count - sessionShares
+                    .Select(x => x.TrusteeUserAddress)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count());
+        var missingEvidenceCount = expected
+            ? ElectionSp06ControlDomainPolicy.HighAssuranceV1TrusteeCount
+            : 0;
+        var latestCtrlCode = !expected
+            ? VerificationResultCodes.PackageStructureValid
+            : missingEvidenceCount > 0
+                ? VerificationResultCodes.TrusteeAcceptanceIncomplete
+                : acceptedReleaseCount < ElectionSp06ControlDomainPolicy.HighAssuranceV1Threshold
+                    ? VerificationResultCodes.TrusteeReleaseThresholdNotMet
+                    : VerificationResultCodes.TrusteeControlDomainEvidenceValid;
+        var message = !context.CanViewPackageStatus
+            ? "SP-06 trustee evidence status is not visible to this actor."
+            : !expected
+                ? "SP-06 high-assurance trustee control profile is not claimed by this election."
+                : publicPackageAvailable
+                    ? "SP-06 trustee evidence is available for verification package export."
+                    : "SP-06 trustee evidence is being collected and becomes exportable after finalization.";
+
+        var view = new ElectionSp06EvidenceStatusView
+        {
+            EvidenceExpected = expected,
+            PublicEvidenceAvailable = expected && publicPackageAvailable,
+            RestrictedEvidenceAvailable = expected && restrictedPackageAvailable && context.CanExportRestrictedPackage,
+            ControlDomainProfileId = context.Election.ControlDomainProfileId ??
+                (expected ? ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1 : string.Empty),
+            ControlDomainProfileVersion = context.Election.ControlDomainProfileVersion ??
+                (expected ? ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1Version : string.Empty),
+            ThresholdProfileId = context.Election.ThresholdProfileId ?? context.Election.SelectedProfileId,
+            TrusteeCount = trusteeCount,
+            TrusteeThreshold = threshold,
+            AcceptedBeforeOpenCount = 0,
+            CompleteEvidenceCount = 0,
+            MissingEvidenceCount = missingEvidenceCount,
+            StaleEvidenceCount = 0,
+            IncompatibleEvidenceCount = 0,
+            AcceptedReleaseArtifactCount = acceptedReleaseCount,
+            MissingReleaseArtifactCount = missingReleaseCount,
+            RejectedReleaseArtifactCount = rejectedReleaseCount,
+            LatestCtrlResultCode = latestCtrlCode,
+            Message = message,
+        };
+
+        if (expected && missingEvidenceCount > 0)
+        {
+            view.Blockers.Add(new ElectionSp06ReadinessBlockerView
+            {
+                Code = "control_domain_evidence_missing",
+                Message = "SP-06 high-assurance trustee control-domain evidence is not yet persisted for every required trustee.",
+                TrusteeRef = string.Empty,
+                BlocksOpen = true,
+                BlocksFinalization = false,
+            });
+        }
+
+        if (expected &&
+            context.Election.LifecycleState == ElectionLifecycleState.Finalized &&
+            acceptedReleaseCount < ElectionSp06ControlDomainPolicy.HighAssuranceV1Threshold)
+        {
+            view.Blockers.Add(new ElectionSp06ReadinessBlockerView
+            {
+                Code = "trustee_release_threshold_not_met",
+                Message = "SP-06 high-assurance finalization has fewer than three accepted trustee release artifacts.",
+                TrusteeRef = string.Empty,
+                BlocksOpen = false,
+                BlocksFinalization = true,
+            });
         }
 
         return view;
@@ -326,6 +429,12 @@ public partial class ElectionQueryApplicationService
             Message = message,
         };
     }
+
+    private static bool IsSp06EvidenceExpected(ElectionRecord election) =>
+        string.Equals(
+            election.ControlDomainProfileId,
+            ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+            StringComparison.Ordinal);
 
     private ElectionVerificationPackageExportAvailabilityView BuildPackageAvailability(
         VerificationPackageContext context,

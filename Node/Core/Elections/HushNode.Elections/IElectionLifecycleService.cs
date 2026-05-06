@@ -714,11 +714,13 @@ public record ElectionOpenValidationResult
     public ProtocolPackageBindingStatus ProtocolPackageBindingStatus { get; init; } = ProtocolPackageBindingStatus.Missing;
     public string ProtocolPackageBindingMessage { get; init; } = string.Empty;
     public ProtocolPackageBindingRecord? ProtocolPackageBinding { get; init; }
+    public ElectionTrusteeControlDomainSummaryRecord? Sp06Summary { get; init; }
 
     public static ElectionOpenValidationResult Ready(
         IReadOnlyList<ElectionWarningCode> requiredWarningCodes,
         ElectionCeremonyBindingSnapshot? ceremonySnapshot = null,
-        ProtocolPackageBindingOpenValidation? protocolPackageValidation = null) =>
+        ProtocolPackageBindingOpenValidation? protocolPackageValidation = null,
+        ElectionTrusteeControlDomainSummaryRecord? sp06Summary = null) =>
         new()
         {
             IsReadyToOpen = true,
@@ -727,6 +729,7 @@ public record ElectionOpenValidationResult
             ProtocolPackageBindingStatus = protocolPackageValidation?.Status ?? ProtocolPackageBindingStatus.Missing,
             ProtocolPackageBindingMessage = protocolPackageValidation?.ErrorMessage ?? string.Empty,
             ProtocolPackageBinding = protocolPackageValidation?.Binding,
+            Sp06Summary = sp06Summary,
         };
 
     public static ElectionOpenValidationResult NotReady(
@@ -734,7 +737,8 @@ public record ElectionOpenValidationResult
         IReadOnlyList<ElectionWarningCode> requiredWarningCodes,
         IReadOnlyList<ElectionWarningCode> missingWarningAcknowledgements,
         ElectionCeremonyBindingSnapshot? ceremonySnapshot = null,
-        ProtocolPackageBindingOpenValidation? protocolPackageValidation = null) =>
+        ProtocolPackageBindingOpenValidation? protocolPackageValidation = null,
+        ElectionTrusteeControlDomainSummaryRecord? sp06Summary = null) =>
         new()
         {
             IsReadyToOpen = false,
@@ -745,5 +749,6 @@ public record ElectionOpenValidationResult
             ProtocolPackageBindingStatus = protocolPackageValidation?.Status ?? ProtocolPackageBindingStatus.Missing,
             ProtocolPackageBindingMessage = protocolPackageValidation?.ErrorMessage ?? string.Empty,
             ProtocolPackageBinding = protocolPackageValidation?.Binding,
+            Sp06Summary = sp06Summary,
         };
 }

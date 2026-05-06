@@ -2,6 +2,7 @@ using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using HushNetwork.proto;
 using HushShared.Elections.Model;
+using HushShared.Elections.Verification.Model;
 using HushShared.Reactions.Model;
 using ReactionECPoint = HushShared.Reactions.Model.ECPoint;
 
@@ -54,7 +55,10 @@ internal static partial class ElectionGrpcMappings
             IdentityLinkPolicy: (ElectionIdentityLinkPolicy)(int)draft.IdentityLinkPolicy,
             CheckoffVisibilityPolicy: (ElectionCheckoffVisibilityPolicy)(int)draft.CheckoffVisibilityPolicy,
             ActorLinkMultiplicityPolicy: (ElectionActorLinkMultiplicityPolicy)(int)draft.ActorLinkMultiplicityPolicy,
-            ContactCodeProviderReadiness: (ElectionContactCodeProviderReadiness)(int)draft.ContactCodeProviderReadiness);
+            ContactCodeProviderReadiness: (ElectionContactCodeProviderReadiness)(int)draft.ContactCodeProviderReadiness,
+            ControlDomainProfileId: NormalizeOptionalString(draft.ControlDomainProfileId),
+            ControlDomainProfileVersion: NormalizeOptionalString(draft.ControlDomainProfileVersion),
+            ThresholdProfileId: NormalizeOptionalString(draft.SelectedProfileId));
     }
 
     public static ElectionCommandResponse ToProto(this ElectionCommandResult result)
@@ -148,6 +152,45 @@ internal static partial class ElectionGrpcMappings
         return response;
     }
 
+    public static ElectionSp06EvidenceStatusView ToProto(
+        this ElectionTrusteeControlDomainSummaryRecord summary,
+        bool evidenceExpected,
+        bool publicEvidenceAvailable,
+        bool restrictedEvidenceAvailable,
+        string latestCtrlResultCode,
+        string message)
+    {
+        var view = new ElectionSp06EvidenceStatusView
+        {
+            EvidenceExpected = evidenceExpected,
+            PublicEvidenceAvailable = publicEvidenceAvailable,
+            RestrictedEvidenceAvailable = restrictedEvidenceAvailable,
+            ControlDomainProfileId = summary.ControlDomainProfileId,
+            ControlDomainProfileVersion = summary.ControlDomainProfileVersion,
+            ThresholdProfileId = summary.ThresholdProfileId,
+            TrusteeCount = summary.RequiredTrusteeCount,
+            TrusteeThreshold = summary.RequiredThreshold,
+            AcceptedBeforeOpenCount = summary.AcceptedBeforeOpenCount,
+            CompleteEvidenceCount = summary.CompleteEvidenceCount,
+            MissingEvidenceCount = summary.MissingEvidenceCount,
+            StaleEvidenceCount = summary.StaleEvidenceCount,
+            IncompatibleEvidenceCount = summary.IncompatibleEvidenceCount,
+            LatestCtrlResultCode = latestCtrlResultCode,
+            Message = message,
+        };
+
+        view.Blockers.AddRange(summary.ReadinessBlockers.Select(x => new ElectionSp06ReadinessBlockerView
+        {
+            Code = x.Code,
+            Message = x.Message,
+            TrusteeRef = x.TrusteeId ?? string.Empty,
+            BlocksOpen = x.BlocksOpen,
+            BlocksFinalization = x.BlocksFinalization,
+        }));
+
+        return view;
+    }
+
     public static GetElectionOpenReadinessResponse ToProto(this ElectionOpenValidationResult result)
     {
         var response = new GetElectionOpenReadinessResponse
@@ -171,6 +214,20 @@ internal static partial class ElectionGrpcMappings
         if (result.ProtocolPackageBinding is not null)
         {
             response.ProtocolPackageBinding = result.ProtocolPackageBinding.ToProto();
+        }
+
+        if (result.Sp06Summary is not null)
+        {
+            response.Sp06Evidence = result.Sp06Summary.ToProto(
+                evidenceExpected: true,
+                publicEvidenceAvailable: false,
+                restrictedEvidenceAvailable: false,
+                latestCtrlResultCode: result.Sp06Summary.IsReadyForOpen
+                    ? VerificationResultCodes.TrusteeControlDomainEvidenceValid
+                    : VerificationResultCodes.TrusteeAcceptanceIncomplete,
+                message: result.Sp06Summary.IsReadyForOpen
+                    ? "SP-06 trustee control-domain evidence is ready for election open."
+                    : "SP-06 trustee control-domain evidence has blockers before election open.");
         }
 
         return response;
@@ -206,6 +263,9 @@ internal static partial class ElectionGrpcMappings
             CheckoffVisibilityPolicy = (ElectionCheckoffVisibilityPolicyProto)(int)election.CheckoffVisibilityPolicy,
             ActorLinkMultiplicityPolicy = (ElectionActorLinkMultiplicityPolicyProto)(int)election.ActorLinkMultiplicityPolicy,
             ContactCodeProviderReadiness = (ElectionContactCodeProviderReadinessProto)(int)election.ContactCodeProviderReadiness,
+            ControlDomainProfileId = election.ControlDomainProfileId ?? string.Empty,
+            ControlDomainProfileVersion = election.ControlDomainProfileVersion ?? string.Empty,
+            ThresholdProfileId = election.ThresholdProfileId ?? election.SelectedProfileId,
             OutcomeRule = election.OutcomeRule.ToProto(),
             ProtocolOmegaVersion = election.ProtocolOmegaVersion,
             ReportingPolicy = (ReportingPolicyProto)(int)election.ReportingPolicy,
@@ -479,6 +539,9 @@ internal static partial class ElectionGrpcMappings
             CheckoffVisibilityPolicy = (ElectionCheckoffVisibilityPolicyProto)(int)policy.CheckoffVisibilityPolicy,
             ActorLinkMultiplicityPolicy = (ElectionActorLinkMultiplicityPolicyProto)(int)policy.ActorLinkMultiplicityPolicy,
             ContactCodeProviderReadiness = (ElectionContactCodeProviderReadinessProto)(int)policy.ContactCodeProviderReadiness,
+            ControlDomainProfileId = policy.ControlDomainProfileId ?? string.Empty,
+            ControlDomainProfileVersion = policy.ControlDomainProfileVersion ?? string.Empty,
+            ThresholdProfileId = policy.ThresholdProfileId ?? selectedProfile.SelectedProfileId,
             OutcomeRule = policy.OutcomeRule.ToProto(),
             ProtocolOmegaVersion = policy.ProtocolOmegaVersion,
             ReportingPolicy = (ReportingPolicyProto)(int)policy.ReportingPolicy,
@@ -759,8 +822,19 @@ internal static partial class ElectionGrpcMappings
     public static ElectionFinalizationSession ToProto(
         this ElectionFinalizationSessionRecord session,
         ElectionCloseCountingJobRecord? closeCountingJob = null,
-        ElectionExecutorSessionKeyEnvelopeRecord? executorSessionKeyEnvelope = null)
+        ElectionExecutorSessionKeyEnvelopeRecord? executorSessionKeyEnvelope = null,
+        IReadOnlyList<ElectionFinalizationShareRecord>? finalizationShares = null,
+        ElectionRecord? election = null)
     {
+        var sessionShares = finalizationShares?
+            .Where(x => x.FinalizationSessionId == session.Id)
+            .ToArray() ?? Array.Empty<ElectionFinalizationShareRecord>();
+        var acceptedReleaseCount = sessionShares.Count(x => x.Status == ElectionFinalizationShareStatus.Accepted);
+        var rejectedReleaseCount = sessionShares.Count(x => x.Status == ElectionFinalizationShareStatus.Rejected);
+        var missingReleaseCount = Math.Max(0, session.EligibleTrustees.Count - sessionShares
+            .Select(x => x.TrusteeUserAddress)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count());
         var proto = new ElectionFinalizationSession
         {
             Id = session.Id.ToString(),
@@ -779,6 +853,14 @@ internal static partial class ElectionGrpcMappings
             ReleaseEvidenceId = session.ReleaseEvidenceId?.ToString() ?? string.Empty,
             LatestTransactionId = session.LatestTransactionId?.ToString() ?? string.Empty,
             LatestBlockId = session.LatestBlockId?.ToString() ?? string.Empty,
+            ControlDomainProfileId = election?.ControlDomainProfileId ?? string.Empty,
+            ControlDomainProfileVersion = election?.ControlDomainProfileVersion ?? string.Empty,
+            ThresholdProfileId = session.CeremonySnapshot?.ProfileId ?? election?.ThresholdProfileId ?? election?.SelectedProfileId ?? string.Empty,
+            TrusteeCount = session.EligibleTrustees.Count,
+            TrusteeThreshold = session.RequiredShareCount,
+            AcceptedReleaseArtifactCount = acceptedReleaseCount,
+            MissingReleaseArtifactCount = missingReleaseCount,
+            RejectedReleaseArtifactCount = rejectedReleaseCount,
         };
 
         proto.EligibleTrustees.AddRange(session.EligibleTrustees.Select(x => x.ToProto()));
@@ -1090,7 +1172,7 @@ internal static partial class ElectionGrpcMappings
     public static byte[]? ToNullableBytes(this ByteString value) =>
         value is null || value.Length == 0 ? null : value.ToByteArray();
 
-    private static string? NormalizeOptionalString(string value) =>
+    private static string? NormalizeOptionalString(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;
 
     private static Timestamp ToTimestamp(DateTime value) =>

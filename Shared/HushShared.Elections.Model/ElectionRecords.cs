@@ -48,9 +48,21 @@ public record ElectionRecord(
     ElectionIdentityLinkPolicy IdentityLinkPolicy = ElectionIdentityLinkPolicy.ContactCodeV1,
     ElectionCheckoffVisibilityPolicy CheckoffVisibilityPolicy = ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor,
     ElectionActorLinkMultiplicityPolicy ActorLinkMultiplicityPolicy = ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor,
-    ElectionContactCodeProviderReadiness ContactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly)
+    ElectionContactCodeProviderReadiness ContactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly,
+    string? ControlDomainProfileId = null,
+    string? ControlDomainProfileVersion = null,
+    string? ThresholdProfileId = null)
 {
     public byte[]? BallotDefinitionHash { get; init; } = BallotDefinitionHash?.ToArray();
+
+    public string? ControlDomainProfileId { get; init; } =
+        string.IsNullOrWhiteSpace(ControlDomainProfileId) ? null : ControlDomainProfileId.Trim();
+
+    public string? ControlDomainProfileVersion { get; init; } =
+        string.IsNullOrWhiteSpace(ControlDomainProfileVersion) ? null : ControlDomainProfileVersion.Trim();
+
+    public string? ThresholdProfileId { get; init; } =
+        string.IsNullOrWhiteSpace(ThresholdProfileId) ? null : ThresholdProfileId.Trim();
 }
 
 public record ElectionDraftSnapshotRecord(

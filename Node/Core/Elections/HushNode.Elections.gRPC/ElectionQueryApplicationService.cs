@@ -256,7 +256,11 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             var executorSessionKeyEnvelope = closeCountingJob is null
                 ? null
                 : executorSessionKeyEnvelopeByJobId.GetValueOrDefault(closeCountingJob.Id);
-            return session.ToProto(closeCountingJob, executorSessionKeyEnvelope);
+            return session.ToProto(
+                closeCountingJob,
+                executorSessionKeyEnvelope,
+                finalizationShares,
+                election);
         }));
         response.FinalizationShares.AddRange(finalizationShares.Select(x => x.ToProto()));
         response.FinalizationReleaseEvidenceRecords.AddRange(finalizationReleaseEvidenceRecords.Select(x => x.ToProto()));

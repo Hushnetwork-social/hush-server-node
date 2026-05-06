@@ -1115,6 +1115,9 @@ message ElectionRecordView {
   ElectionCheckoffVisibilityPolicyProto CheckoffVisibilityPolicy = 48;
   ElectionActorLinkMultiplicityPolicyProto ActorLinkMultiplicityPolicy = 49;
   ElectionContactCodeProviderReadinessProto ContactCodeProviderReadiness = 50;
+  string ControlDomainProfileId = 51;
+  string ControlDomainProfileVersion = 52;
+  string ThresholdProfileId = 53;
 }
 
 message ElectionSummary {

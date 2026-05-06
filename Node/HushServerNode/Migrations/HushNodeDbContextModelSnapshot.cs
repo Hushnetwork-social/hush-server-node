@@ -1956,6 +1956,12 @@ namespace HushServerNode.Migrations
                         .HasColumnType("varchar(40)")
                         .HasDefaultValue("DevOnly");
 
+                    b.Property<string>("ControlDomainProfileId")
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("ControlDomainProfileVersion")
+                        .HasColumnType("varchar(32)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2063,6 +2069,9 @@ namespace HushServerNode.Migrations
 
                     b.Property<DateTime?>("TallyReadyAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ThresholdProfileId")
+                        .HasColumnType("varchar(96)");
 
                     b.Property<string>("Title")
                         .IsRequired()

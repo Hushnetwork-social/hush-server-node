@@ -84,8 +84,47 @@ internal static class ElectionDraftValidator
             errors.Add("Trustee-threshold elections require a required approval count of at least 1.");
         }
 
+        errors.AddRange(ValidateControlDomainProfile(draft));
+
         errors.AddRange(ValidateOutcomeRule(draft.OutcomeRule));
         errors.AddRange(ValidateOwnerOptions(draft.OwnerOptions));
+
+        return errors;
+    }
+
+    private static IReadOnlyList<string> ValidateControlDomainProfile(ElectionDraftSpecification draft)
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(draft.ControlDomainProfileId))
+        {
+            return errors;
+        }
+
+        if (!string.Equals(
+                draft.ControlDomainProfileId,
+                ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+                StringComparison.Ordinal))
+        {
+            errors.Add("Unsupported trustee control-domain profile.");
+        }
+
+        if (draft.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold)
+        {
+            errors.Add("SP-06 high-assurance control-domain profile requires trustee-threshold governance.");
+        }
+
+        if (!string.Equals(
+                draft.SelectedProfileId,
+                ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+                StringComparison.Ordinal))
+        {
+            errors.Add("SP-06 high-assurance control-domain profile requires dkg-prod-3of5.");
+        }
+
+        if (draft.RequiredApprovalCount != ElectionSp06ControlDomainPolicy.HighAssuranceV1Threshold)
+        {
+            errors.Add("SP-06 high-assurance control-domain profile requires a 3-of-5 trustee threshold.");
+        }
 
         return errors;
     }

@@ -105,6 +105,9 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
                 .HasColumnType("varchar(40)")
                 .HasSentinel((ElectionContactCodeProviderReadiness)(-1))
                 .HasDefaultValue(ElectionContactCodeProviderReadiness.DevOnly);
+            entity.Property(x => x.ControlDomainProfileId).HasColumnType("varchar(96)");
+            entity.Property(x => x.ControlDomainProfileVersion).HasColumnType("varchar(32)");
+            entity.Property(x => x.ThresholdProfileId).HasColumnType("varchar(96)");
             entity.Property(x => x.ProtocolOmegaVersion).HasColumnType("varchar(64)");
             entity.Property(x => x.ReportingPolicy).HasConversion<string>().HasColumnType("varchar(64)");
             entity.Property(x => x.ReviewWindowPolicy).HasConversion<string>().HasColumnType("varchar(64)");
