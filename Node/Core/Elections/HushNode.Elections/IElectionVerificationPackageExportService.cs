@@ -35,7 +35,10 @@ public record ElectionVerificationPackageExportRequest(
     IReadOnlyList<ElectionCheckoffConsumptionRecord>? CheckoffConsumptions = null,
     IReadOnlyList<ElectionEligibilityActivationEventRecord>? EligibilityActivationEvents = null,
     IReadOnlyList<ElectionTrusteeControlDomainRecord>? TrusteeControlDomainRecords = null,
-    IReadOnlyList<ElectionTrusteeReleaseArtifactRecord>? TrusteeReleaseArtifacts = null);
+    IReadOnlyList<ElectionTrusteeReleaseArtifactRecord>? TrusteeReleaseArtifacts = null,
+    IReadOnlyList<ElectionPublicationProofTranscriptRecord>? PublicationProofTranscripts = null,
+    IReadOnlyList<ElectionPublicationProofSessionRecord>? PublicationProofSessions = null,
+    IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord>? PublicationWitnessDeletionReceipts = null);
 
 public record ElectionVerificationPackageExportResult(
     bool Success,

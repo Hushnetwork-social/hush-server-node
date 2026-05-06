@@ -294,6 +294,43 @@ public interface IElectionsRepository : IRepository
 
     Task UpdatePublicationIssueAsync(ElectionPublicationIssueRecord publicationIssue) => Task.CompletedTask;
 
+    Task<IReadOnlyList<ElectionPublicationWitnessRecord>> GetPublicationWitnessesAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionPublicationWitnessRecord>>(Array.Empty<ElectionPublicationWitnessRecord>());
+
+    Task<IReadOnlyList<ElectionPublicationWitnessRecord>> GetPublicationWitnessesAsync(ElectionId electionId, Guid witnessSetId) =>
+        Task.FromResult<IReadOnlyList<ElectionPublicationWitnessRecord>>(Array.Empty<ElectionPublicationWitnessRecord>());
+
+    Task SavePublicationWitnessAsync(ElectionPublicationWitnessRecord witnessRecord) => Task.CompletedTask;
+
+    Task UpdatePublicationWitnessAsync(ElectionPublicationWitnessRecord witnessRecord) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionPublicationProofSessionRecord>> GetPublicationProofSessionsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionPublicationProofSessionRecord>>(Array.Empty<ElectionPublicationProofSessionRecord>());
+
+    Task<ElectionPublicationProofSessionRecord?> GetLatestPublicationProofSessionAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionPublicationProofSessionRecord?>(null);
+
+    Task SavePublicationProofSessionAsync(ElectionPublicationProofSessionRecord proofSession) => Task.CompletedTask;
+
+    Task UpdatePublicationProofSessionAsync(ElectionPublicationProofSessionRecord proofSession) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionPublicationProofTranscriptRecord>> GetPublicationProofTranscriptsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionPublicationProofTranscriptRecord>>(Array.Empty<ElectionPublicationProofTranscriptRecord>());
+
+    Task<ElectionPublicationProofTranscriptRecord?> GetLatestPublicationProofTranscriptAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionPublicationProofTranscriptRecord?>(null);
+
+    Task SavePublicationProofTranscriptAsync(ElectionPublicationProofTranscriptRecord proofTranscript) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord>> GetPublicationWitnessDeletionReceiptsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord>>(Array.Empty<ElectionPublicationWitnessDeletionReceiptRecord>());
+
+    Task<ElectionPublicationWitnessDeletionReceiptRecord?> GetLatestPublicationWitnessDeletionReceiptAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionPublicationWitnessDeletionReceiptRecord?>(null);
+
+    Task SavePublicationWitnessDeletionReceiptAsync(ElectionPublicationWitnessDeletionReceiptRecord deletionReceipt) =>
+        Task.CompletedTask;
+
     Task<IReadOnlyList<ElectionBoundaryArtifactRecord>> GetBoundaryArtifactsAsync(ElectionId electionId);
 
     Task SaveBoundaryArtifactAsync(ElectionBoundaryArtifactRecord artifact);

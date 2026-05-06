@@ -159,6 +159,11 @@ public enum ElectionClosedProgressStatus
     None = 0,
     WaitingForTrusteeShares = 1,
     TallyCalculationInProgress = 2,
+    PublicationProofPending = 3,
+    PublicationProofGenerating = 4,
+    PublicationProofSelfVerifying = 5,
+    PublicationProofFailed = 6,
+    PublicationProofVerified = 7,
 }
 
 public enum ElectionBoundaryArtifactType

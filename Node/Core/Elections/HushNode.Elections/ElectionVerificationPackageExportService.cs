@@ -36,6 +36,31 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
         AddJson(files, VerificationPackageFileNames.Sp06TrusteeControlProfile, BuildSp06ControlProfile(request), VerificationArtifactVisibility.Public);
         AddJson(files, VerificationPackageFileNames.Sp06TrusteeControlSummary, BuildSp06ControlSummary(request), VerificationArtifactVisibility.Public);
         AddJson(files, VerificationPackageFileNames.Sp06TrusteeVerifierOutput, BuildSp06VerifierOutput(request, exportedAt), VerificationArtifactVisibility.Public);
+        var latestPublicationTranscript = ResolveLatestPublicationProofTranscript(request);
+        if (latestPublicationTranscript is not null)
+        {
+            AddJson(
+                files,
+                VerificationPackageFileNames.Sp07PublicationProofTranscript,
+                BuildSp07PublicationProofTranscript(request, latestPublicationTranscript),
+                VerificationArtifactVisibility.Public);
+        }
+
+        AddJson(
+            files,
+            VerificationPackageFileNames.Sp07PublicationProofVerifierOutput,
+            BuildSp07VerifierOutput(request, exportedAt),
+            VerificationArtifactVisibility.Public);
+
+        var latestPublicationDeletionReceipt = ResolveLatestPublicationWitnessDeletionReceipt(request);
+        if (latestPublicationDeletionReceipt is not null)
+        {
+            AddJson(
+                files,
+                VerificationPackageFileNames.Sp07WitnessDeletionReceipt,
+                BuildSp07WitnessDeletionReceipt(request, latestPublicationDeletionReceipt),
+                VerificationArtifactVisibility.Public);
+        }
 
         if (request.PackageView == VerificationPackageView.RestrictedOwnerAuditor)
         {
@@ -98,6 +123,16 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
                 files,
                 VerificationPackageFileNames.RestrictedSp06TrusteeReleaseArtifacts,
                 BuildRestrictedSp06ReleaseArtifacts(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp07PublicationProofSession,
+                BuildRestrictedSp07PublicationProofSessions(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp07WitnessDeletionLog,
+                BuildRestrictedSp07WitnessDeletionLog(request),
                 VerificationArtifactVisibility.Restricted);
         }
 

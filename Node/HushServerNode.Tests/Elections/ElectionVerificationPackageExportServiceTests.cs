@@ -137,6 +137,61 @@ public class ElectionVerificationPackageExportServiceTests
         result.Files.Should().Contain(x =>
             x.RelativePath == VerificationPackageFileNames.RestrictedSp06TrusteeReleaseArtifacts &&
             x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp07PublicationProofSession &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp07WitnessDeletionLog &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+    }
+
+    [Fact]
+    public void Export_PublicPackageWithSp07Evidence_ShouldIncludePublicationProofArtifacts()
+    {
+        var request = CreateHighAssuranceTrusteeRequest();
+        var witnessSetId = Guid.NewGuid();
+        var session = CreatePublicationProofSession(request, witnessSetId);
+        var transcript = CreatePublicationProofTranscript(request, session);
+        var deletionReceipt = CreatePublicationWitnessDeletionReceipt(request, session, transcript);
+        request = request with
+        {
+            PublicationProofSessions = [session],
+            PublicationProofTranscripts = [transcript],
+            PublicationWitnessDeletionReceipts = [deletionReceipt],
+        };
+
+        var result = Export(request);
+
+        result.Success.Should().BeTrue();
+        result.Files.Select(x => x.RelativePath).Should().Contain([
+            VerificationPackageFileNames.Sp07PublicationProofTranscript,
+            VerificationPackageFileNames.Sp07PublicationProofVerifierOutput,
+            VerificationPackageFileNames.Sp07WitnessDeletionReceipt,
+        ]);
+
+        var tallyReplay = ReadFile<TallyReplayArtifactRecord>(result, VerificationPackageFileNames.TallyReplay);
+        tallyReplay.EvidenceStatus.Should().Be(VerificationCheckStatus.Pass);
+        tallyReplay.ResultCode.Should().Be(VerificationResultCodes.PublicationProofEvidenceValid);
+        tallyReplay.PublicationProofTranscriptHash.Should().Be(transcript.TranscriptHash);
+
+        var verifierOutput = ReadFile<ElectionSp07VerifierOutputArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp07PublicationProofVerifierOutput);
+        verifierOutput.Results.Should().ContainSingle(x =>
+            x.CheckCode == "VFY-SP07-000" &&
+            x.Status == VerificationCheckStatus.Pass &&
+            x.ResultCode == VerificationResultCodes.PublicationProofEvidenceValid);
+
+        var publicPayload = string.Join(
+            '\n',
+            result.Files
+                .Where(x => x.Visibility == VerificationArtifactVisibility.Public)
+                .Select(x => x.ContentText));
+        publicPayload.Should().NotContain("hiddenPermutation");
+        publicPayload.Should().NotContain("shuffleMap");
+        publicPayload.Should().NotContain("rerandomizationRandomness");
+        publicPayload.Should().NotContain("sealedWitnessMaterial");
+        publicPayload.Should().NotContain("plaintextVote");
     }
 
     [Fact]
@@ -623,6 +678,90 @@ public class ElectionVerificationPackageExportServiceTests
             TrusteeControlDomainRecords = controlDomains,
         };
     }
+
+    private static ElectionPublicationProofSessionRecord CreatePublicationProofSession(
+        ElectionVerificationPackageExportRequest request,
+        Guid witnessSetId) =>
+        new(
+            Guid.NewGuid(),
+            request.Election.ElectionId,
+            witnessSetId,
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            ElectionPublicationProofSessionStatus.WitnessDeleted,
+            DateTime.UnixEpoch.AddHours(3),
+            DateTime.UnixEpoch.AddHours(3).AddMinutes(2),
+            request.AcceptedBallots.Count,
+            request.PublishedBallots.Count,
+            ChunkCount: 1,
+            RetryCount: 0,
+            FailureCode: null,
+            FailureReason: null,
+            VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputeAcceptedBallotInventoryHash(request.AcceptedBallots)),
+            VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputePublishedBallotStreamHash(request.PublishedBallots)),
+            TranscriptHash: "sp07-transcript-hash",
+            ProofHash: "sp07-proof-hash",
+            ServerVerifierOutputHash: "sp07-server-verifier-output-hash",
+            DeletionReceiptId: null);
+
+    private static ElectionPublicationProofTranscriptRecord CreatePublicationProofTranscript(
+        ElectionVerificationPackageExportRequest request,
+        ElectionPublicationProofSessionRecord session) =>
+        new(
+            Guid.NewGuid(),
+            request.Election.ElectionId,
+            session.Id,
+            session.WitnessSetId,
+            ElectionSp07ProfileIds.TranscriptVersion,
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            VerificationProfileIds.HighAssuranceV1,
+            VerificationCanonicalHash.ToLowerHex(request.Election.BallotDefinitionHash),
+            BallotEncryptionSchemeVersion: "babyjubjub-elgamal-vector-ballot-v1",
+            ElectionPublicKeyId: "election-public-key-id",
+            session.AcceptedBallotSetHash!,
+            session.PublishedBallotStreamHash!,
+            request.AcceptedBallots.Count,
+            request.PublishedBallots.Count,
+            CiphertextSlotCount: request.Election.Options.Count,
+            ElectionSp07ProfileIds.ProofSystemVersion,
+            ProofBytes: "synthetic-proof-bytes",
+            session.ProofHash!,
+            session.TranscriptHash!,
+            ElectionSp07ProfileIds.ExternalReviewStatus,
+            DateTime.UnixEpoch.AddHours(3).AddMinutes(1),
+            GeneratorReleaseHash: "generator-release-hash",
+            VerifierReleaseHash: "verifier-release-hash",
+            PublicPrivacyBoundary:
+            [
+                "no_hidden_permutation",
+                "no_shuffle_map",
+                "no_rerandomization_randomness",
+                "no_raw_witness",
+            ]);
+
+    private static ElectionPublicationWitnessDeletionReceiptRecord CreatePublicationWitnessDeletionReceipt(
+        ElectionVerificationPackageExportRequest request,
+        ElectionPublicationProofSessionRecord session,
+        ElectionPublicationProofTranscriptRecord transcript) =>
+        new(
+            Guid.NewGuid(),
+            request.Election.ElectionId,
+            session.Id,
+            session.WitnessSetId,
+            WitnessSetHash: "witness-set-hash",
+            WitnessCount: request.AcceptedBallots.Count,
+            transcript.TranscriptHash,
+            transcript.ProofHash,
+            ElectionPublicationWitnessDeletionStatus.Completed,
+            DateTime.UnixEpoch.AddHours(3).AddMinutes(3),
+            DeletionActorRef: "proof-worker",
+            FailureCode: null,
+            FailureReason: null);
 
     private static ProtocolPackageBindingRecord CreateSealedProtocolBinding(
         ElectionId electionId,

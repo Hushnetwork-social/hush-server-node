@@ -36,6 +36,10 @@ public class ElectionsDbContext(
     public DbSet<ElectionPublishedBallotRecord> ElectionPublishedBallots { get; set; }
     public DbSet<ElectionCastIdempotencyRecord> ElectionCastIdempotencyRecords { get; set; }
     public DbSet<ElectionPublicationIssueRecord> ElectionPublicationIssues { get; set; }
+    public DbSet<ElectionPublicationWitnessRecord> ElectionPublicationWitnesses { get; set; }
+    public DbSet<ElectionPublicationProofSessionRecord> ElectionPublicationProofSessions { get; set; }
+    public DbSet<ElectionPublicationProofTranscriptRecord> ElectionPublicationProofTranscripts { get; set; }
+    public DbSet<ElectionPublicationWitnessDeletionReceiptRecord> ElectionPublicationWitnessDeletionReceipts { get; set; }
     public DbSet<ElectionWarningAcknowledgementRecord> ElectionWarningAcknowledgements { get; set; }
     public DbSet<ElectionTrusteeInvitationRecord> ElectionTrusteeInvitations { get; set; }
     public DbSet<ElectionGovernedProposalRecord> ElectionGovernedProposals { get; set; }

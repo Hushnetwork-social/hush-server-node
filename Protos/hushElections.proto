@@ -389,6 +389,11 @@ enum ElectionClosedProgressStatusProto {
   ClosedProgressNone = 0;
   ClosedProgressWaitingForTrusteeShares = 1;
   ClosedProgressTallyCalculationInProgress = 2;
+  ClosedProgressPublicationProofPending = 3;
+  ClosedProgressPublicationProofGenerating = 4;
+  ClosedProgressPublicationProofSelfVerifying = 5;
+  ClosedProgressPublicationProofFailed = 6;
+  ClosedProgressPublicationProofVerified = 7;
 }
 
 enum ElectionBoundaryArtifactTypeProto {
@@ -951,6 +956,7 @@ message ElectionVerificationPackageStatusView {
   ElectionSp04EvidenceStatusView Sp04Evidence = 10;
   ElectionSp05EvidenceStatusView Sp05Evidence = 11;
   ElectionSp06EvidenceStatusView Sp06Evidence = 12;
+  ElectionSp07EvidenceStatusView Sp07Evidence = 13;
 }
 
 message ElectionSp04EvidenceStatusView {
@@ -1008,6 +1014,37 @@ message ElectionSp06ReadinessBlockerView {
   string TrusteeRef = 3;
   bool BlocksOpen = 4;
   bool BlocksFinalization = 5;
+}
+
+message ElectionSp07EvidenceStatusView {
+  bool EvidenceExpected = 1;
+  bool PublicEvidenceAvailable = 2;
+  bool RestrictedEvidenceAvailable = 3;
+  string PublicationProofMode = 4;
+  string ProofConstruction = 5;
+  string StatementId = 6;
+  string ExternalReviewStatus = 7;
+  int32 AcceptedBallotCount = 8;
+  int32 PublishedBallotCount = 9;
+  int32 CiphertextSlotCount = 10;
+  int32 ChunkCount = 11;
+  string AcceptedBallotSetHash = 12;
+  string PublishedBallotStreamHash = 13;
+  string TranscriptHash = 14;
+  string ProofHash = 15;
+  string WitnessDeletionReceiptHash = 16;
+  string LatestPubResultCode = 17;
+  ElectionClosedProgressStatusProto ProgressStatus = 18;
+  bool CanRetry = 19;
+  repeated ElectionSp07ReadinessBlockerView Blockers = 20;
+  string Message = 21;
+}
+
+message ElectionSp07ReadinessBlockerView {
+  string Code = 1;
+  string Message = 2;
+  bool BlocksOpen = 3;
+  bool BlocksFinalization = 4;
 }
 
 message ElectionTrusteeControlDomainEvidenceView {

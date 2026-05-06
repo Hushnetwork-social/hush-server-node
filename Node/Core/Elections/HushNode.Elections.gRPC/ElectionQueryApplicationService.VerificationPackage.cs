@@ -139,7 +139,11 @@ public partial class ElectionQueryApplicationService
             CommitmentSchemeEvidences: [],
             CommitmentRegistrations: [],
             CheckoffConsumptions: [],
-            EligibilityActivationEvents: []);
+            EligibilityActivationEvents: [],
+            PublicationWitnesses: [],
+            PublicationProofSessions: [],
+            PublicationProofTranscripts: [],
+            PublicationWitnessDeletionReceipts: []);
 
         return BuildVerificationPackageStatusView(context, includePackageHashes: false);
     }
@@ -199,6 +203,11 @@ public partial class ElectionQueryApplicationService
         var commitmentRegistrations = await repository.GetCommitmentRegistrationsAsync(election.ElectionId);
         var checkoffConsumptions = await repository.GetCheckoffConsumptionsAsync(election.ElectionId);
         var eligibilityActivationEvents = await repository.GetEligibilityActivationEventsAsync(election.ElectionId);
+        var publicationWitnesses = await repository.GetPublicationWitnessesAsync(election.ElectionId);
+        var publicationProofSessions = await repository.GetPublicationProofSessionsAsync(election.ElectionId);
+        var publicationProofTranscripts = await repository.GetPublicationProofTranscriptsAsync(election.ElectionId);
+        var publicationWitnessDeletionReceipts =
+            await repository.GetPublicationWitnessDeletionReceiptsAsync(election.ElectionId);
 
         return new VerificationPackageContext(
             election,
@@ -229,7 +238,11 @@ public partial class ElectionQueryApplicationService
             commitmentSchemeEvidences,
             commitmentRegistrations,
             checkoffConsumptions,
-            eligibilityActivationEvents);
+            eligibilityActivationEvents,
+            publicationWitnesses,
+            publicationProofSessions,
+            publicationProofTranscripts,
+            publicationWitnessDeletionReceipts);
     }
 
     private ElectionVerificationPackageStatusView BuildVerificationPackageStatusView(
@@ -259,6 +272,7 @@ public partial class ElectionQueryApplicationService
             Sp05Evidence = BuildSp05EvidenceStatus(context),
         };
         view.Sp06Evidence = BuildSp06EvidenceStatus(context, publicPackage.IsAvailable, restrictedPackage.IsAvailable);
+        view.Sp07Evidence = BuildSp07EvidenceStatus(context, publicPackage.IsAvailable, restrictedPackage.IsAvailable);
 
         if (context.CanViewPackageStatus && context.ProtocolPackageBinding is not null)
         {
@@ -404,6 +418,291 @@ public partial class ElectionQueryApplicationService
 
         return view;
     }
+
+    private static ElectionSp07EvidenceStatusView BuildSp07EvidenceStatus(
+        VerificationPackageContext context,
+        bool publicPackageAvailable,
+        bool restrictedPackageAvailable)
+    {
+        var expected = IsSp07EvidenceExpected(context.Election);
+        var latestSession = context.PublicationProofSessions
+            .OrderByDescending(x => x.CompletedAt ?? x.StartedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+        var latestTranscript = context.PublicationProofTranscripts
+            .OrderByDescending(x => x.GeneratedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+        var latestDeletionReceipt = context.PublicationWitnessDeletionReceipts
+            .OrderByDescending(x => x.DeletedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+        var acceptedBallotCount = latestTranscript?.AcceptedBallotCount ??
+            latestSession?.AcceptedBallotCount ??
+            context.AcceptedBallots.Count;
+        var publishedBallotCount = latestTranscript?.PublishedBallotCount ??
+            latestSession?.PublishedBallotCount ??
+            context.PublishedBallots.Count;
+        var chunkCount = latestSession?.ChunkCount ??
+            (publishedBallotCount > 0 ? 1 : 0);
+        var latestPubCode = ResolveSp07ResultCode(expected, latestSession, latestTranscript, latestDeletionReceipt);
+        var verified = string.Equals(
+            latestPubCode,
+            VerificationResultCodes.PublicationProofEvidenceValid,
+            StringComparison.Ordinal);
+
+        var view = new ElectionSp07EvidenceStatusView
+        {
+            EvidenceExpected = expected,
+            PublicEvidenceAvailable = expected && publicPackageAvailable && verified,
+            RestrictedEvidenceAvailable = expected && restrictedPackageAvailable && context.CanExportRestrictedPackage,
+            PublicationProofMode = latestTranscript?.ProofMode ??
+                latestSession?.ProofMode ??
+                ElectionSp07ProfileIds.PublicationProofMode,
+            ProofConstruction = latestTranscript?.ProofConstruction ??
+                latestSession?.ProofConstruction ??
+                ElectionSp07ProfileIds.ProofConstruction,
+            StatementId = latestTranscript?.StatementId ??
+                latestSession?.StatementId ??
+                ElectionSp07ProfileIds.StatementId,
+            ExternalReviewStatus = latestTranscript?.ExternalReviewStatus ??
+                ElectionSp07ProfileIds.ExternalReviewStatus,
+            AcceptedBallotCount = acceptedBallotCount,
+            PublishedBallotCount = publishedBallotCount,
+            CiphertextSlotCount = latestTranscript?.CiphertextSlotCount ??
+                Math.Min(context.Election.Options.Count, ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots),
+            ChunkCount = chunkCount,
+            AcceptedBallotSetHash = latestTranscript?.AcceptedBallotSetHash ??
+                latestSession?.AcceptedBallotSetHash ??
+                ComputeAcceptedBallotSetHash(context.AcceptedBallots),
+            PublishedBallotStreamHash = latestTranscript?.PublishedBallotStreamHash ??
+                latestSession?.PublishedBallotStreamHash ??
+                ComputePublishedBallotStreamHash(context.PublishedBallots),
+            TranscriptHash = latestTranscript?.TranscriptHash ??
+                latestSession?.TranscriptHash ??
+                string.Empty,
+            ProofHash = latestTranscript?.ProofHash ??
+                latestSession?.ProofHash ??
+                string.Empty,
+            WitnessDeletionReceiptHash = latestDeletionReceipt is null
+                ? string.Empty
+                : ComputeWitnessDeletionReceiptHash(latestDeletionReceipt),
+            LatestPubResultCode = latestPubCode,
+            ProgressStatus = ResolveSp07ProgressStatus(context.Election, latestSession),
+            CanRetry = context.IsOwner &&
+                latestSession?.Status == ElectionPublicationProofSessionStatus.Failed &&
+                context.PublicationWitnesses.Any(x =>
+                    x.CustodyStatus == ElectionPublicationWitnessCustodyStatus.Sealed),
+            Message = ResolveSp07Message(context, expected, latestSession, latestTranscript, latestDeletionReceipt),
+        };
+
+        foreach (var blocker in BuildSp07Blockers(
+            context,
+            expected,
+            latestSession,
+            latestTranscript,
+            latestDeletionReceipt,
+            acceptedBallotCount,
+            chunkCount))
+        {
+            view.Blockers.Add(blocker);
+        }
+
+        return view;
+    }
+
+    private static IReadOnlyList<ElectionSp07ReadinessBlockerView> BuildSp07Blockers(
+        VerificationPackageContext context,
+        bool expected,
+        ElectionPublicationProofSessionRecord? latestSession,
+        ElectionPublicationProofTranscriptRecord? latestTranscript,
+        ElectionPublicationWitnessDeletionReceiptRecord? latestDeletionReceipt,
+        int acceptedBallotCount,
+        int chunkCount)
+    {
+        if (!expected)
+        {
+            return Array.Empty<ElectionSp07ReadinessBlockerView>();
+        }
+
+        var blockers = new List<ElectionSp07ReadinessBlockerView>();
+        if (acceptedBallotCount > ElectionSp07ProfileIds.HighAssuranceV1MaxAcceptedBallots)
+        {
+            blockers.Add(new ElectionSp07ReadinessBlockerView
+            {
+                Code = VerificationResultCodes.PublicationProofEnvelopeExceeded,
+                Message = $"SP-07 high-assurance v1 supports up to {ElectionSp07ProfileIds.HighAssuranceV1MaxAcceptedBallots} accepted ballots.",
+                BlocksOpen = true,
+                BlocksFinalization = true,
+            });
+        }
+
+        if (context.Election.Options.Count > ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots)
+        {
+            blockers.Add(new ElectionSp07ReadinessBlockerView
+            {
+                Code = VerificationResultCodes.PublicationProofEnvelopeExceeded,
+                Message = $"SP-07 high-assurance v1 supports up to {ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots} encrypted ballot slots.",
+                BlocksOpen = true,
+                BlocksFinalization = true,
+            });
+        }
+
+        if (chunkCount > ElectionSp07ProfileIds.HighAssuranceV1MaxPublicationChunks)
+        {
+            blockers.Add(new ElectionSp07ReadinessBlockerView
+            {
+                Code = VerificationResultCodes.PublicationProofEnvelopeExceeded,
+                Message = $"SP-07 high-assurance v1 supports up to {ElectionSp07ProfileIds.HighAssuranceV1MaxPublicationChunks} publication chunks.",
+                BlocksOpen = false,
+                BlocksFinalization = true,
+            });
+        }
+
+        if (latestSession?.Status == ElectionPublicationProofSessionStatus.Failed)
+        {
+            blockers.Add(new ElectionSp07ReadinessBlockerView
+            {
+                Code = latestSession.FailureCode ?? VerificationResultCodes.PublicationProofVerificationFailed,
+                Message = latestSession.FailureReason ?? "SP-07 publication proof generation or self-verification failed.",
+                BlocksOpen = false,
+                BlocksFinalization = true,
+            });
+        }
+
+        if (context.Election.LifecycleState == ElectionLifecycleState.Finalized && latestTranscript is null)
+        {
+            blockers.Add(new ElectionSp07ReadinessBlockerView
+            {
+                Code = VerificationResultCodes.PublicationProofTranscriptMissing,
+                Message = "A finalized high-assurance election requires a public SP-07 publication-proof transcript.",
+                BlocksOpen = false,
+                BlocksFinalization = true,
+            });
+        }
+
+        if (latestTranscript is not null &&
+            latestDeletionReceipt?.DeletionStatus != ElectionPublicationWitnessDeletionStatus.Completed)
+        {
+            blockers.Add(new ElectionSp07ReadinessBlockerView
+            {
+                Code = VerificationResultCodes.PublicationProofWitnessDeletionMissing,
+                Message = "A verified SP-07 proof requires a witness deletion receipt after successful self-verification.",
+                BlocksOpen = false,
+                BlocksFinalization = true,
+            });
+        }
+
+        return blockers;
+    }
+
+    private static string ResolveSp07ResultCode(
+        bool expected,
+        ElectionPublicationProofSessionRecord? latestSession,
+        ElectionPublicationProofTranscriptRecord? latestTranscript,
+        ElectionPublicationWitnessDeletionReceiptRecord? latestDeletionReceipt)
+    {
+        if (!expected)
+        {
+            return VerificationResultCodes.PackageStructureValid;
+        }
+
+        if (latestSession?.Status == ElectionPublicationProofSessionStatus.Failed)
+        {
+            return latestSession.FailureCode ?? VerificationResultCodes.PublicationProofVerificationFailed;
+        }
+
+        if (latestTranscript is null)
+        {
+            return VerificationResultCodes.PublicationProofEvidencePending;
+        }
+
+        if (latestDeletionReceipt?.DeletionStatus != ElectionPublicationWitnessDeletionStatus.Completed)
+        {
+            return VerificationResultCodes.PublicationProofWitnessDeletionMissing;
+        }
+
+        return VerificationResultCodes.PublicationProofEvidenceValid;
+    }
+
+    private static ElectionClosedProgressStatusProto ResolveSp07ProgressStatus(
+        ElectionRecord election,
+        ElectionPublicationProofSessionRecord? latestSession) =>
+        latestSession?.Status switch
+        {
+            ElectionPublicationProofSessionStatus.Pending =>
+                ElectionClosedProgressStatusProto.ClosedProgressPublicationProofPending,
+            ElectionPublicationProofSessionStatus.Generating =>
+                ElectionClosedProgressStatusProto.ClosedProgressPublicationProofGenerating,
+            ElectionPublicationProofSessionStatus.SelfVerifying =>
+                ElectionClosedProgressStatusProto.ClosedProgressPublicationProofSelfVerifying,
+            ElectionPublicationProofSessionStatus.Failed =>
+                ElectionClosedProgressStatusProto.ClosedProgressPublicationProofFailed,
+            ElectionPublicationProofSessionStatus.Verified or
+                ElectionPublicationProofSessionStatus.WitnessDeleted =>
+                ElectionClosedProgressStatusProto.ClosedProgressPublicationProofVerified,
+            _ => (ElectionClosedProgressStatusProto)(int)election.ClosedProgressStatus,
+        };
+
+    private static string ResolveSp07Message(
+        VerificationPackageContext context,
+        bool expected,
+        ElectionPublicationProofSessionRecord? latestSession,
+        ElectionPublicationProofTranscriptRecord? latestTranscript,
+        ElectionPublicationWitnessDeletionReceiptRecord? latestDeletionReceipt)
+    {
+        if (!context.CanViewPackageStatus)
+        {
+            return "SP-07 publication-proof status is not visible to this actor.";
+        }
+
+        if (!expected)
+        {
+            return "SP-07 high-assurance publication proof is not claimed by this election profile.";
+        }
+
+        if (latestSession?.Status == ElectionPublicationProofSessionStatus.Failed)
+        {
+            return latestSession.FailureReason ?? "SP-07 publication proof generation or self-verification failed.";
+        }
+
+        if (latestTranscript is null)
+        {
+            return "SP-07 publication-proof evidence is pending.";
+        }
+
+        if (latestDeletionReceipt?.DeletionStatus != ElectionPublicationWitnessDeletionStatus.Completed)
+        {
+            return "SP-07 proof transcript is available, but witness deletion receipt is not complete.";
+        }
+
+        return "SP-07 publication-proof evidence is available for verification package export.";
+    }
+
+    private static bool IsSp07EvidenceExpected(ElectionRecord election) =>
+        !election.SelectedProfileDevOnly &&
+        (string.Equals(election.SelectedProfileId, ElectionSelectableProfileCatalog.TrusteeProductionProfileId, StringComparison.Ordinal) ||
+         string.Equals(election.SelectedProfileId, ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId, StringComparison.Ordinal) ||
+         string.Equals(election.ControlDomainProfileId, ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1, StringComparison.Ordinal));
+
+    private static string ComputeAcceptedBallotSetHash(
+        IReadOnlyList<ElectionAcceptedBallotRecord> acceptedBallots) =>
+        acceptedBallots.Count == 0
+            ? string.Empty
+            : VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputeAcceptedBallotInventoryHash(acceptedBallots));
+
+    private static string ComputePublishedBallotStreamHash(
+        IReadOnlyList<ElectionPublishedBallotRecord> publishedBallots) =>
+        publishedBallots.Count == 0
+            ? string.Empty
+            : VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputePublishedBallotStreamHash(publishedBallots));
+
+    private static string ComputeWitnessDeletionReceiptHash(
+        ElectionPublicationWitnessDeletionReceiptRecord receipt) =>
+        VerificationCanonicalHash.ComputeSha256UpperHex(
+            $"{receipt.ElectionId}|{receipt.ProofSessionId:N}|{receipt.WitnessSetId:N}|{receipt.WitnessSetHash}|{receipt.WitnessCount}|{receipt.TranscriptHash}|{receipt.ProofHash}|{receipt.DeletionStatus}|{receipt.DeletedAt:O}");
 
     private static ElectionSp04EvidenceStatusView BuildSp04EvidenceStatus(VerificationPackageContext context)
     {
@@ -581,7 +880,10 @@ public partial class ElectionQueryApplicationService
             context.CommitmentRegistrations,
             context.CheckoffConsumptions,
             context.EligibilityActivationEvents,
-            TrusteeControlDomainRecords: BuildSp06ControlDomainRecords(context));
+            TrusteeControlDomainRecords: BuildSp06ControlDomainRecords(context),
+            PublicationProofTranscripts: context.PublicationProofTranscripts,
+            PublicationProofSessions: context.PublicationProofSessions,
+            PublicationWitnessDeletionReceipts: context.PublicationWitnessDeletionReceipts);
 
     private static IReadOnlyList<ElectionTrusteeControlDomainRecord> BuildSp06ControlDomainRecords(
         VerificationPackageContext context)
@@ -908,7 +1210,11 @@ public partial class ElectionQueryApplicationService
         IReadOnlyList<ElectionCommitmentSchemeEvidenceRecord> CommitmentSchemeEvidences,
         IReadOnlyList<ElectionCommitmentRegistrationRecord> CommitmentRegistrations,
         IReadOnlyList<ElectionCheckoffConsumptionRecord> CheckoffConsumptions,
-        IReadOnlyList<ElectionEligibilityActivationEventRecord> EligibilityActivationEvents)
+        IReadOnlyList<ElectionEligibilityActivationEventRecord> EligibilityActivationEvents,
+        IReadOnlyList<ElectionPublicationWitnessRecord> PublicationWitnesses,
+        IReadOnlyList<ElectionPublicationProofSessionRecord> PublicationProofSessions,
+        IReadOnlyList<ElectionPublicationProofTranscriptRecord> PublicationProofTranscripts,
+        IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord> PublicationWitnessDeletionReceipts)
     {
         public bool CanViewPackageStatus => IsVerificationPackageVisible(IsOwner, AcceptedTrustee, IsDesignatedAuditor);
 

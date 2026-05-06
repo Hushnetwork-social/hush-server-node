@@ -74,6 +74,21 @@ public static class VerificationResultCodes
     public const string TrusteeReleaseThresholdNotMet = "trustee_release_threshold_not_met";
     public const string TrusteeRawMaterialLeaked = "trustee_raw_material_leaked";
     public const string TrusteeExceptionPolicyViolation = "trustee_exception_policy_violation";
+    public const string PublicationProofEvidenceValid = "publication_proof_evidence_valid";
+    public const string PublicationProofTranscriptMissing = "publication_proof_transcript_missing";
+    public const string PublicationProofTranscriptInvalid = "publication_proof_transcript_invalid";
+    public const string PublicationProofTranscriptHashMismatch = "publication_proof_transcript_hash_mismatch";
+    public const string PublicationProofAcceptedSetMismatch = "publication_proof_accepted_set_mismatch";
+    public const string PublicationProofPublishedStreamMismatch = "publication_proof_published_stream_mismatch";
+    public const string PublicationProofCountMismatch = "publication_proof_count_mismatch";
+    public const string PublicationProofPublicKeyMismatch = "publication_proof_public_key_mismatch";
+    public const string PublicationProofVerificationFailed = "publication_proof_verification_failed";
+    public const string PublicationProofTallyReplayMismatch = "publication_proof_tally_replay_mismatch";
+    public const string PublicationProofForbiddenFieldLeak = "publication_proof_forbidden_field_leak";
+    public const string PublicationProofWitnessDeletionMissing = "publication_proof_witness_deletion_missing";
+    public const string PublicationProofWitnessDeletionInvalid = "publication_proof_witness_deletion_invalid";
+    public const string PublicationProofExternalReviewPending = "publication_proof_external_review_pending";
+    public const string PublicationProofEnvelopeExceeded = "publication_proof_envelope_exceeded";
 }
 
 public static class VerificationExitCodes

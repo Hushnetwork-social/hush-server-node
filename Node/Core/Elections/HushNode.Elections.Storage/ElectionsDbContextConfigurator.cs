@@ -41,6 +41,10 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionPublishedBallot(modelBuilder);
         ConfigureElectionCastIdempotency(modelBuilder);
         ConfigureElectionPublicationIssue(modelBuilder);
+        ConfigureElectionPublicationWitness(modelBuilder);
+        ConfigureElectionPublicationProofSession(modelBuilder);
+        ConfigureElectionPublicationProofTranscript(modelBuilder);
+        ConfigureElectionPublicationWitnessDeletionReceipt(modelBuilder);
         ConfigureElectionWarningAcknowledgement(modelBuilder);
         ConfigureElectionTrusteeInvitation(modelBuilder);
         ConfigureElectionGovernedProposal(modelBuilder);
@@ -933,6 +937,155 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.LatestBlockId).HasColumnType("uuid");
 
             entity.HasIndex(x => new { x.ElectionId, x.IssueCode }).IsUnique();
+        });
+    }
+
+    private static void ConfigureElectionPublicationWitness(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionPublicationWitnessRecord>(entity =>
+        {
+            entity.ToTable("ElectionPublicationWitnessRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.WitnessSetId).HasColumnType("uuid");
+            entity.Property(x => x.AcceptedBallotId).HasColumnType("uuid");
+            entity.Property(x => x.PublishedSequence).HasColumnType("bigint");
+            entity.Property(x => x.AcceptedEncryptedBallotHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.PublishedEncryptedBallotHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.ProofMode).HasColumnType("varchar(96)");
+            entity.Property(x => x.ProofConstruction).HasColumnType("varchar(128)");
+            entity.Property(x => x.StatementId).HasColumnType("varchar(128)");
+            entity.Property(x => x.ProofProfileVersion).HasColumnType("varchar(64)");
+            entity.Property(x => x.SealedWitnessMaterial).HasColumnType("text");
+            entity.Property(x => x.SealedWitnessMaterialHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.SealAlgorithm).HasColumnType("varchar(96)");
+            entity.Property(x => x.CustodyStatus).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.CreatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.DeletedAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.ElectionId, x.WitnessSetId });
+            entity.HasIndex(x => new { x.ElectionId, x.AcceptedBallotId }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.CustodyStatus });
+        });
+    }
+
+    private static void ConfigureElectionPublicationProofSession(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionPublicationProofSessionRecord>(entity =>
+        {
+            entity.ToTable("ElectionPublicationProofSessionRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.WitnessSetId).HasColumnType("uuid");
+            entity.Property(x => x.ProofMode).HasColumnType("varchar(96)");
+            entity.Property(x => x.ProofConstruction).HasColumnType("varchar(128)");
+            entity.Property(x => x.StatementId).HasColumnType("varchar(128)");
+            entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.StartedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.CompletedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.AcceptedBallotCount).HasColumnType("integer");
+            entity.Property(x => x.PublishedBallotCount).HasColumnType("integer");
+            entity.Property(x => x.ChunkCount).HasColumnType("integer");
+            entity.Property(x => x.RetryCount).HasColumnType("integer");
+            entity.Property(x => x.FailureCode).HasColumnType("varchar(128)");
+            entity.Property(x => x.FailureReason).HasColumnType("text");
+            entity.Property(x => x.AcceptedBallotSetHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.PublishedBallotStreamHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.TranscriptHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.ProofHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.ServerVerifierOutputHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.DeletionReceiptId).HasColumnType("uuid");
+
+            entity.HasIndex(x => new { x.ElectionId, x.StartedAt });
+            entity.HasIndex(x => new { x.ElectionId, x.Status });
+            entity.HasIndex(x => new { x.ElectionId, x.WitnessSetId });
+        });
+    }
+
+    private static void ConfigureElectionPublicationProofTranscript(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionPublicationProofTranscriptRecord>(entity =>
+        {
+            entity.ToTable("ElectionPublicationProofTranscriptRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.ProofSessionId).HasColumnType("uuid");
+            entity.Property(x => x.WitnessSetId).HasColumnType("uuid");
+            entity.Property(x => x.TranscriptVersion).HasColumnType("varchar(96)");
+            entity.Property(x => x.ProofMode).HasColumnType("varchar(96)");
+            entity.Property(x => x.ProofConstruction).HasColumnType("varchar(128)");
+            entity.Property(x => x.StatementId).HasColumnType("varchar(128)");
+            entity.Property(x => x.ProfileId).HasColumnType("varchar(96)");
+            entity.Property(x => x.BallotDefinitionHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.BallotEncryptionSchemeVersion).HasColumnType("varchar(96)");
+            entity.Property(x => x.ElectionPublicKeyId).HasColumnType("varchar(128)");
+            entity.Property(x => x.AcceptedBallotSetHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.PublishedBallotStreamHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.AcceptedBallotCount).HasColumnType("integer");
+            entity.Property(x => x.PublishedBallotCount).HasColumnType("integer");
+            entity.Property(x => x.CiphertextSlotCount).HasColumnType("integer");
+            entity.Property(x => x.ProofSystemVersion).HasColumnType("varchar(128)");
+            entity.Property(x => x.ProofBytes).HasColumnType("text");
+            entity.Property(x => x.ProofHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.TranscriptHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.ExternalReviewStatus).HasColumnType("varchar(64)");
+            entity.Property(x => x.GeneratedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.GeneratorReleaseHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.VerifierReleaseHash).HasColumnType("varchar(128)");
+
+            ConfigureJsonProperty(entity.Property(x => x.PublicPrivacyBoundary));
+
+            entity.HasIndex(x => x.ProofSessionId).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.GeneratedAt });
+            entity.HasIndex(x => new { x.ElectionId, x.TranscriptHash });
+        });
+    }
+
+    private static void ConfigureElectionPublicationWitnessDeletionReceipt(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionPublicationWitnessDeletionReceiptRecord>(entity =>
+        {
+            entity.ToTable("ElectionPublicationWitnessDeletionReceiptRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.ProofSessionId).HasColumnType("uuid");
+            entity.Property(x => x.WitnessSetId).HasColumnType("uuid");
+            entity.Property(x => x.WitnessSetHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.WitnessCount).HasColumnType("integer");
+            entity.Property(x => x.TranscriptHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.ProofHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.DeletionStatus).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.DeletedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.DeletionActorRef).HasColumnType("varchar(160)");
+            entity.Property(x => x.FailureCode).HasColumnType("varchar(128)");
+            entity.Property(x => x.FailureReason).HasColumnType("text");
+
+            entity.HasIndex(x => x.ProofSessionId).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.DeletedAt });
         });
     }
 

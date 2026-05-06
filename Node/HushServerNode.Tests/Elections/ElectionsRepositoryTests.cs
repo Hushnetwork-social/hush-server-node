@@ -1,6 +1,7 @@
 using FluentAssertions;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
+using HushShared.Elections.Verification.Model;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -218,6 +219,141 @@ public class ElectionsRepositoryTests
         grants[0].GrantRole.Should().Be(ElectionReportAccessGrantRole.DesignatedAuditor);
         grant.Should().NotBeNull();
         grant!.GrantedByPublicAddress.Should().Be("owner-address");
+    }
+
+    [Fact]
+    public async Task SavePublicationProofRecords_ShouldRoundTrip()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedAt = DateTime.UtcNow,
+            ClosedProgressStatus = ElectionClosedProgressStatus.PublicationProofPending,
+        };
+        var witnessSetId = Guid.NewGuid();
+        var witness = new ElectionPublicationWitnessRecord(
+            Guid.NewGuid(),
+            election.ElectionId,
+            witnessSetId,
+            AcceptedBallotId: Guid.NewGuid(),
+            PublishedSequence: null,
+            AcceptedEncryptedBallotHash: "accepted-ballot-hash",
+            PublishedEncryptedBallotHash: null,
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            ElectionSp07ProfileIds.ProofSystemVersion,
+            SealedWitnessMaterial: "sealed-witness-material",
+            SealedWitnessMaterialHash: "sealed-witness-hash",
+            SealAlgorithm: "local-protected-json-v1",
+            ElectionPublicationWitnessCustodyStatus.Sealed,
+            CreatedAt: DateTime.UtcNow);
+        var session = new ElectionPublicationProofSessionRecord(
+            Guid.NewGuid(),
+            election.ElectionId,
+            witnessSetId,
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            ElectionPublicationProofSessionStatus.Verified,
+            StartedAt: DateTime.UtcNow,
+            CompletedAt: DateTime.UtcNow.AddMinutes(1),
+            AcceptedBallotCount: 1,
+            PublishedBallotCount: 1,
+            ChunkCount: 1,
+            RetryCount: 0,
+            FailureCode: null,
+            FailureReason: null,
+            AcceptedBallotSetHash: "accepted-set-hash",
+            PublishedBallotStreamHash: "published-stream-hash",
+            TranscriptHash: "transcript-hash",
+            ProofHash: "proof-hash",
+            ServerVerifierOutputHash: "server-verifier-output-hash",
+            DeletionReceiptId: null);
+        var transcript = new ElectionPublicationProofTranscriptRecord(
+            Guid.NewGuid(),
+            election.ElectionId,
+            session.Id,
+            witnessSetId,
+            ElectionSp07ProfileIds.TranscriptVersion,
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            VerificationProfileIds.HighAssuranceV1,
+            BallotDefinitionHash: "ballot-definition-hash",
+            BallotEncryptionSchemeVersion: "babyjubjub-elgamal-vector-ballot-v1",
+            ElectionPublicKeyId: "election-public-key-id",
+            session.AcceptedBallotSetHash!,
+            session.PublishedBallotStreamHash!,
+            AcceptedBallotCount: 1,
+            PublishedBallotCount: 1,
+            CiphertextSlotCount: 2,
+            ElectionSp07ProfileIds.ProofSystemVersion,
+            ProofBytes: "proof-bytes",
+            session.ProofHash!,
+            session.TranscriptHash!,
+            ElectionSp07ProfileIds.ExternalReviewStatus,
+            GeneratedAt: DateTime.UtcNow.AddMinutes(1),
+            GeneratorReleaseHash: "generator-release-hash",
+            VerifierReleaseHash: "verifier-release-hash",
+            PublicPrivacyBoundary:
+            [
+                "no_hidden_permutation",
+                "no_shuffle_map",
+                "no_rerandomization_randomness",
+            ]);
+        var receipt = new ElectionPublicationWitnessDeletionReceiptRecord(
+            Guid.NewGuid(),
+            election.ElectionId,
+            session.Id,
+            witnessSetId,
+            WitnessSetHash: "witness-set-hash",
+            WitnessCount: 1,
+            transcript.TranscriptHash,
+            transcript.ProofHash,
+            ElectionPublicationWitnessDeletionStatus.Completed,
+            DeletedAt: DateTime.UtcNow.AddMinutes(2),
+            DeletionActorRef: "proof-worker",
+            FailureCode: null,
+            FailureReason: null);
+
+        await repository.SaveElectionAsync(election);
+        await repository.SavePublicationWitnessAsync(witness);
+        await repository.SavePublicationProofSessionAsync(session);
+        await repository.SavePublicationProofTranscriptAsync(transcript);
+        await repository.SavePublicationWitnessDeletionReceiptAsync(receipt);
+        await context.SaveChangesAsync();
+
+        await repository.UpdatePublicationWitnessAsync(witness with
+        {
+            CustodyStatus = ElectionPublicationWitnessCustodyStatus.Deleted,
+            DeletedAt = DateTime.UtcNow.AddMinutes(3),
+        });
+        await repository.UpdatePublicationProofSessionAsync(session with
+        {
+            Status = ElectionPublicationProofSessionStatus.WitnessDeleted,
+            DeletionReceiptId = receipt.Id,
+        });
+        await context.SaveChangesAsync();
+
+        var witnesses = await repository.GetPublicationWitnessesAsync(election.ElectionId, witnessSetId);
+        var latestSession = await repository.GetLatestPublicationProofSessionAsync(election.ElectionId);
+        var latestTranscript = await repository.GetLatestPublicationProofTranscriptAsync(election.ElectionId);
+        var latestReceipt = await repository.GetLatestPublicationWitnessDeletionReceiptAsync(election.ElectionId);
+
+        witnesses.Should().ContainSingle();
+        witnesses[0].CustodyStatus.Should().Be(ElectionPublicationWitnessCustodyStatus.Deleted);
+        witnesses[0].SealedWitnessMaterial.Should().Be("sealed-witness-material");
+        latestSession.Should().NotBeNull();
+        latestSession!.Status.Should().Be(ElectionPublicationProofSessionStatus.WitnessDeleted);
+        latestSession.DeletionReceiptId.Should().Be(receipt.Id);
+        latestTranscript.Should().NotBeNull();
+        latestTranscript!.PublicPrivacyBoundary.Should().Contain("no_hidden_permutation");
+        latestReceipt.Should().NotBeNull();
+        latestReceipt!.DeletionStatus.Should().Be(ElectionPublicationWitnessDeletionStatus.Completed);
+        latestReceipt.WitnessSetHash.Should().Be("witness-set-hash");
     }
 
     [Fact]

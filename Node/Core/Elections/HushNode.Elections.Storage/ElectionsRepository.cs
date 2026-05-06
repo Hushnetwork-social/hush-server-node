@@ -825,6 +825,108 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         }
     }
 
+    public async Task<IReadOnlyList<ElectionPublicationWitnessRecord>> GetPublicationWitnessesAsync(
+        ElectionId electionId) =>
+        await Context.ElectionPublicationWitnesses
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.WitnessSetId)
+            .ThenBy(x => x.AcceptedBallotId)
+            .ToListAsync();
+
+    public async Task<IReadOnlyList<ElectionPublicationWitnessRecord>> GetPublicationWitnessesAsync(
+        ElectionId electionId,
+        Guid witnessSetId) =>
+        await Context.ElectionPublicationWitnesses
+            .Where(x =>
+                x.ElectionId == electionId &&
+                x.WitnessSetId == witnessSetId)
+            .OrderBy(x => x.AcceptedBallotId)
+            .ToListAsync();
+
+    public async Task SavePublicationWitnessAsync(ElectionPublicationWitnessRecord witnessRecord) =>
+        await Context.ElectionPublicationWitnesses.AddAsync(witnessRecord);
+
+    public async Task UpdatePublicationWitnessAsync(ElectionPublicationWitnessRecord witnessRecord)
+    {
+        var existing = await Context.ElectionPublicationWitnesses
+            .FirstOrDefaultAsync(x => x.Id == witnessRecord.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(witnessRecord);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionPublicationProofSessionRecord>> GetPublicationProofSessionsAsync(
+        ElectionId electionId) =>
+        await Context.ElectionPublicationProofSessions
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.StartedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<ElectionPublicationProofSessionRecord?> GetLatestPublicationProofSessionAsync(
+        ElectionId electionId) =>
+        await Context.ElectionPublicationProofSessions
+            .Where(x => x.ElectionId == electionId)
+            .OrderByDescending(x => x.StartedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+
+    public async Task SavePublicationProofSessionAsync(ElectionPublicationProofSessionRecord proofSession) =>
+        await Context.ElectionPublicationProofSessions.AddAsync(proofSession);
+
+    public async Task UpdatePublicationProofSessionAsync(ElectionPublicationProofSessionRecord proofSession)
+    {
+        var existing = await Context.ElectionPublicationProofSessions
+            .FirstOrDefaultAsync(x => x.Id == proofSession.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(proofSession);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionPublicationProofTranscriptRecord>> GetPublicationProofTranscriptsAsync(
+        ElectionId electionId) =>
+        await Context.ElectionPublicationProofTranscripts
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.GeneratedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<ElectionPublicationProofTranscriptRecord?> GetLatestPublicationProofTranscriptAsync(
+        ElectionId electionId) =>
+        await Context.ElectionPublicationProofTranscripts
+            .Where(x => x.ElectionId == electionId)
+            .OrderByDescending(x => x.GeneratedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+
+    public async Task SavePublicationProofTranscriptAsync(
+        ElectionPublicationProofTranscriptRecord proofTranscript) =>
+        await Context.ElectionPublicationProofTranscripts.AddAsync(proofTranscript);
+
+    public async Task<IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord>> GetPublicationWitnessDeletionReceiptsAsync(
+        ElectionId electionId) =>
+        await Context.ElectionPublicationWitnessDeletionReceipts
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.DeletedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<ElectionPublicationWitnessDeletionReceiptRecord?> GetLatestPublicationWitnessDeletionReceiptAsync(
+        ElectionId electionId) =>
+        await Context.ElectionPublicationWitnessDeletionReceipts
+            .Where(x => x.ElectionId == electionId)
+            .OrderByDescending(x => x.DeletedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+
+    public async Task SavePublicationWitnessDeletionReceiptAsync(
+        ElectionPublicationWitnessDeletionReceiptRecord deletionReceipt) =>
+        await Context.ElectionPublicationWitnessDeletionReceipts.AddAsync(deletionReceipt);
+
     public async Task<IReadOnlyList<ElectionBoundaryArtifactRecord>> GetBoundaryArtifactsAsync(ElectionId electionId) =>
         await Context.ElectionBoundaryArtifacts
             .Where(x => x.ElectionId == electionId)

@@ -40,7 +40,12 @@ public record TallyReplayArtifactRecord(
     string PublicationProofMode,
     VerificationCheckStatus EvidenceStatus,
     string ResultCode,
-    string Message);
+    string Message,
+    string? AcceptedBallotSetHash = null,
+    string? PublishedBallotStreamHash = null,
+    string? PublicationProofTranscriptHash = null,
+    string? PublicationProofHash = null,
+    string? FinalEncryptedTallyHash = null);
 
 public record TrusteeReleaseEvidenceArtifactRecord(
     string ElectionId,

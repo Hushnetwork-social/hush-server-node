@@ -92,15 +92,180 @@ public sealed partial class ElectionVerificationPackageExportService
     private static TallyReplayArtifactRecord BuildTallyReplay(ElectionVerificationPackageExportRequest request)
     {
         var highAssurance = string.Equals(request.VerifierProfileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal);
+        var latestTranscript = ResolveLatestPublicationProofTranscript(request);
+        var latestDeletionReceipt = ResolveLatestPublicationWitnessDeletionReceipt(request);
+        var hasVerifiedPublicationProof =
+            latestTranscript is not null &&
+            latestDeletionReceipt?.DeletionStatus == ElectionPublicationWitnessDeletionStatus.Completed;
+
         return new TallyReplayArtifactRecord(
             request.Election.ElectionId.ToString(),
-            PublicationProofMode: "zk_rerandomization_shuffle_v1",
-            highAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn,
-            VerificationResultCodes.PublicationProofEvidencePending,
-            highAssurance
+            ElectionSp07ProfileIds.PublicationProofMode,
+            hasVerifiedPublicationProof
+                ? VerificationCheckStatus.Pass
+                : highAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn,
+            hasVerifiedPublicationProof
+                ? VerificationResultCodes.PublicationProofEvidenceValid
+                : VerificationResultCodes.PublicationProofEvidencePending,
+            hasVerifiedPublicationProof
+                ? "SP-07 publication proof binds the accepted set, published stream, and tally replay input."
+                : highAssurance
                 ? "High-assurance profile requires SP-07 publication proof evidence."
-                : "SP-07 publication proof evidence is pending a later protocol package revision.");
+                : "SP-07 publication proof evidence is pending a later protocol package revision.",
+            latestTranscript?.AcceptedBallotSetHash ?? VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputeAcceptedBallotInventoryHash(request.AcceptedBallots)),
+            latestTranscript?.PublishedBallotStreamHash ?? VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputePublishedBallotStreamHash(request.PublishedBallots)),
+            latestTranscript?.TranscriptHash,
+            latestTranscript?.ProofHash,
+            ResolveFinalEncryptedTallyHash(request));
     }
+
+    private static ElectionSp07PublicationProofTranscriptArtifactRecord BuildSp07PublicationProofTranscript(
+        ElectionVerificationPackageExportRequest request,
+        ElectionPublicationProofTranscriptRecord transcript) =>
+        new(
+            request.Election.ElectionId.ToString(),
+            transcript.TranscriptVersion,
+            transcript.ProofMode,
+            transcript.ProofConstruction,
+            transcript.StatementId,
+            transcript.ProfileId,
+            transcript.BallotDefinitionHash,
+            transcript.BallotEncryptionSchemeVersion,
+            transcript.ElectionPublicKeyId,
+            transcript.AcceptedBallotSetHash,
+            transcript.PublishedBallotStreamHash,
+            transcript.AcceptedBallotCount,
+            transcript.PublishedBallotCount,
+            transcript.CiphertextSlotCount,
+            transcript.ProofSystemVersion,
+            transcript.ProofBytes,
+            transcript.ProofHash,
+            transcript.TranscriptHash,
+            transcript.ExternalReviewStatus,
+            transcript.GeneratedAt,
+            transcript.GeneratorReleaseHash,
+            transcript.VerifierReleaseHash,
+            transcript.PublicPrivacyBoundary);
+
+    private static ElectionSp07VerifierOutputArtifactRecord BuildSp07VerifierOutput(
+        ElectionVerificationPackageExportRequest request,
+        DateTime verifiedAt)
+    {
+        var latestTranscript = ResolveLatestPublicationProofTranscript(request);
+        var latestDeletionReceipt = ResolveLatestPublicationWitnessDeletionReceipt(request);
+        var highAssurance = string.Equals(request.VerifierProfileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal);
+        var status = latestTranscript is null
+            ? highAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn
+            : latestDeletionReceipt?.DeletionStatus == ElectionPublicationWitnessDeletionStatus.Completed
+                ? VerificationCheckStatus.Pass
+                : VerificationCheckStatus.Fail;
+        var resultCode = latestTranscript is null
+            ? VerificationResultCodes.PublicationProofEvidencePending
+            : latestDeletionReceipt?.DeletionStatus == ElectionPublicationWitnessDeletionStatus.Completed
+                ? VerificationResultCodes.PublicationProofEvidenceValid
+                : VerificationResultCodes.PublicationProofWitnessDeletionMissing;
+
+        return new ElectionSp07VerifierOutputArtifactRecord(
+            request.Election.ElectionId.ToString(),
+            request.VerifierProfileId,
+            latestTranscript?.StatementId ?? ElectionSp07ProfileIds.StatementId,
+            verifiedAt,
+            [
+                new VerifierCheckResultRecord(
+                    "VFY-SP07-000",
+                    status,
+                    resultCode,
+                    ResolveSp07VerifierMessage(latestTranscript, latestDeletionReceipt, highAssurance),
+                    new Dictionary<string, string>
+                    {
+                        ["publication_proof_mode"] = latestTranscript?.ProofMode ?? ElectionSp07ProfileIds.PublicationProofMode,
+                        ["proof_construction"] = latestTranscript?.ProofConstruction ?? ElectionSp07ProfileIds.ProofConstruction,
+                        ["statement_id"] = latestTranscript?.StatementId ?? ElectionSp07ProfileIds.StatementId,
+                        ["external_review_status"] = latestTranscript?.ExternalReviewStatus ?? ElectionSp07ProfileIds.ExternalReviewStatus,
+                        ["accepted_ballot_count"] = (latestTranscript?.AcceptedBallotCount ?? request.AcceptedBallots.Count).ToString(),
+                        ["published_ballot_count"] = (latestTranscript?.PublishedBallotCount ?? request.PublishedBallots.Count).ToString(),
+                    }),
+            ]);
+    }
+
+    private static ElectionSp07WitnessDeletionReceiptArtifactRecord BuildSp07WitnessDeletionReceipt(
+        ElectionVerificationPackageExportRequest request,
+        ElectionPublicationWitnessDeletionReceiptRecord receipt) =>
+        new(
+            request.Election.ElectionId.ToString(),
+            receipt.WitnessSetHash,
+            receipt.WitnessCount,
+            receipt.TranscriptHash,
+            receipt.ProofHash,
+            receipt.DeletionStatus.ToString(),
+            receipt.DeletedAt,
+            PublicPrivacyBoundary:
+            [
+                "no_hidden_permutation",
+                "no_shuffle_map",
+                "no_rerandomization_randomness",
+                "no_raw_witness",
+                "no_voter_identity",
+                "no_plaintext_choice",
+            ]);
+
+    private static ElectionSp07RestrictedProofSessionArtifactRecord BuildRestrictedSp07PublicationProofSessions(
+        ElectionVerificationPackageExportRequest request) =>
+        new(
+            request.Election.ElectionId.ToString(),
+            request.PublicationProofSessions ?? Array.Empty<ElectionPublicationProofSessionRecord>());
+
+    private static ElectionSp07RestrictedDeletionLogArtifactRecord BuildRestrictedSp07WitnessDeletionLog(
+        ElectionVerificationPackageExportRequest request) =>
+        new(
+            request.Election.ElectionId.ToString(),
+            request.PublicationWitnessDeletionReceipts ??
+                Array.Empty<ElectionPublicationWitnessDeletionReceiptRecord>());
+
+    private static ElectionPublicationProofTranscriptRecord? ResolveLatestPublicationProofTranscript(
+        ElectionVerificationPackageExportRequest request) =>
+        (request.PublicationProofTranscripts ?? Array.Empty<ElectionPublicationProofTranscriptRecord>())
+            .OrderByDescending(x => x.GeneratedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+
+    private static ElectionPublicationWitnessDeletionReceiptRecord? ResolveLatestPublicationWitnessDeletionReceipt(
+        ElectionVerificationPackageExportRequest request) =>
+        (request.PublicationWitnessDeletionReceipts ?? Array.Empty<ElectionPublicationWitnessDeletionReceiptRecord>())
+            .OrderByDescending(x => x.DeletedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+
+    private static string ResolveSp07VerifierMessage(
+        ElectionPublicationProofTranscriptRecord? latestTranscript,
+        ElectionPublicationWitnessDeletionReceiptRecord? latestDeletionReceipt,
+        bool highAssurance)
+    {
+        if (latestTranscript is null)
+        {
+            return highAssurance
+                ? "High-assurance profile requires SP-07 publication proof evidence."
+                : "SP-07 publication proof evidence is pending a later protocol package revision.";
+        }
+
+        if (latestDeletionReceipt?.DeletionStatus != ElectionPublicationWitnessDeletionStatus.Completed)
+        {
+            return "SP-07 transcript exists but witness deletion receipt is missing or incomplete.";
+        }
+
+        return "SP-07 publication proof transcript and witness deletion receipt are available.";
+    }
+
+    private static string? ResolveFinalEncryptedTallyHash(ElectionVerificationPackageExportRequest request) =>
+        request.FinalizationSessions
+            .OrderByDescending(x => x.CompletedAt ?? x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .Select(x => x.FinalEncryptedTallyHash is { Length: > 0 }
+                ? VerificationCanonicalHash.ToLowerHex(x.FinalEncryptedTallyHash)
+                : null)
+            .FirstOrDefault();
 
     private static TrusteeReleaseEvidenceArtifactRecord BuildTrusteeReleaseEvidence(
         ElectionVerificationPackageExportRequest request)

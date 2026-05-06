@@ -26,6 +26,9 @@ public static class VerificationPackageFileNames
     public const string Sp06TrusteeControlProfile = "artifacts/election-record/trustee-control-profile.json";
     public const string Sp06TrusteeControlSummary = "artifacts/election-record/trustee-control-summary.json";
     public const string Sp06TrusteeVerifierOutput = "artifacts/election-record/trustee-verifier-output.json";
+    public const string Sp07PublicationProofTranscript = "artifacts/election-record/publication-proof-transcript.json";
+    public const string Sp07PublicationProofVerifierOutput = "artifacts/election-record/publication-proof-verifier-output.json";
+    public const string Sp07WitnessDeletionReceipt = "artifacts/election-record/witness-deletion-receipt.json";
     public const string RestrictedRosterCheckoff = "artifacts/restricted/roster-checkoff.json";
     public const string RestrictedRosterImportEvidence = "artifacts/restricted/roster-import-evidence.json";
     public const string RestrictedRoster = "artifacts/restricted/restricted-roster.json";
@@ -38,6 +41,8 @@ public static class VerificationPackageFileNames
     public const string RestrictedSp04SpoilMarkers = "artifacts/restricted/sp04-spoil-markers.json";
     public const string RestrictedSp06TrusteeControlDomains = "artifacts/restricted/trustee-control-domains.json";
     public const string RestrictedSp06TrusteeReleaseArtifacts = "artifacts/restricted/trustee-release-artifacts.json";
+    public const string RestrictedSp07PublicationProofSession = "artifacts/restricted/publication-proof-session.json";
+    public const string RestrictedSp07WitnessDeletionLog = "artifacts/restricted/publication-proof-deletion-log.json";
 
     public static IReadOnlyList<string> RootFiles { get; } =
     [
