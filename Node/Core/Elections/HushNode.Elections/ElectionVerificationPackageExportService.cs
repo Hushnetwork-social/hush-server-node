@@ -30,6 +30,9 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
         AddJson(files, VerificationPackageFileNames.ResultBinding, BuildResultBinding(request), VerificationArtifactVisibility.Public);
         AddJson(files, VerificationPackageFileNames.Sp04Evidence, BuildSp04Evidence(request), VerificationArtifactVisibility.Public);
         AddJson(files, VerificationPackageFileNames.Sp04ReceiptCommitments, BuildSp04ReceiptCommitments(request), VerificationArtifactVisibility.Public);
+        AddJson(files, VerificationPackageFileNames.Sp05EligibilityPolicy, BuildSp05EligibilityPolicy(request), VerificationArtifactVisibility.Public);
+        AddJson(files, VerificationPackageFileNames.Sp05EligibilitySummary, BuildSp05EligibilitySummary(request), VerificationArtifactVisibility.Public);
+        AddJson(files, VerificationPackageFileNames.Sp05EligibilityVerifierOutput, BuildSp05VerifierOutput(request, exportedAt), VerificationArtifactVisibility.Public);
 
         if (request.PackageView == VerificationPackageView.RestrictedOwnerAuditor)
         {
@@ -52,6 +55,36 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
                 files,
                 VerificationPackageFileNames.RestrictedSp04SpoilMarkers,
                 BuildRestrictedSp04SpoilMarkers(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedRosterImportEvidence,
+                BuildRestrictedSp05RosterImportEvidence(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedRoster,
+                BuildRestrictedSp05Roster(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedLinkingEvidence,
+                BuildRestrictedSp05LinkingEvidence(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedActivationEvents,
+                BuildRestrictedSp05ActivationEvents(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedCheckoffLedger,
+                BuildRestrictedSp05CheckoffLedger(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedDisputes,
+                new ElectionSp05RestrictedDisputesArtifactRecord(request.Election.ElectionId.ToString(), []),
                 VerificationArtifactVisibility.Restricted);
         }
 

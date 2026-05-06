@@ -385,7 +385,8 @@ public class EncryptedElectionEnvelopeContentHandler(
             .GetRosterEntryByLinkedActorAsync(decryptedEnvelope.Transaction.Payload.ElectionId, claimAction.ActorPublicAddress)
             .GetAwaiter()
             .GetResult();
-        return actorExistingEntry is null
+        return election.ActorLinkMultiplicityPolicy == ElectionActorLinkMultiplicityPolicy.MultipleRosterEntriesPerActorAllowed
+            || actorExistingEntry is null
             || string.Equals(
                 actorExistingEntry.OrganizationVoterId,
                 claimAction.OrganizationVoterId,
@@ -488,12 +489,20 @@ public class EncryptedElectionEnvelopeContentHandler(
             return false;
         }
 
-        var rosterEntry = repository
-            .GetRosterEntryByLinkedActorAsync(
-                decryptedEnvelope.Transaction.Payload.ElectionId,
-                registerAction.ActorPublicAddress)
-            .GetAwaiter()
-            .GetResult();
+        if (!HasSealedBallotDefinition(election))
+        {
+            RecordValidationFailure(
+                transactionId,
+                "election_commitment_ballot_definition_missing",
+                "Voting commitment registration requires the open election ballot definition seal.");
+            return false;
+        }
+
+        var rosterEntry = ResolveLinkedRosterEntryForValidation(
+            repository,
+            election,
+            registerAction.ActorPublicAddress,
+            registerAction.OrganizationVoterId);
         if (rosterEntry is null)
         {
             RecordValidationFailure(
@@ -732,12 +741,11 @@ public class EncryptedElectionEnvelopeContentHandler(
             return false;
         }
 
-        var rosterEntry = repository
-            .GetRosterEntryByLinkedActorAsync(
-                decryptedEnvelope.Transaction.Payload.ElectionId,
-                acceptAction.ActorPublicAddress)
-            .GetAwaiter()
-            .GetResult();
+        var rosterEntry = ResolveLinkedRosterEntryForValidation(
+            repository,
+            election,
+            acceptAction.ActorPublicAddress,
+            acceptAction.OrganizationVoterId);
         if (rosterEntry is null)
         {
             RecordValidationFailure(
@@ -2009,6 +2017,47 @@ public class EncryptedElectionEnvelopeContentHandler(
             EligibilityMutationPolicy.LateActivationForRosteredVotersOnly => rosterEntry.IsActive,
             _ => false,
         };
+    }
+
+    private static bool HasSealedBallotDefinition(ElectionRecord election) =>
+        election.BallotDefinitionVersion.HasValue &&
+        election.BallotDefinitionHash is { Length: > 0 } &&
+        election.BallotDefinitionSealedAt.HasValue;
+
+    private static ElectionRosterEntryRecord? ResolveLinkedRosterEntryForValidation(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        string actorPublicAddress,
+        string? organizationVoterId)
+    {
+        if (election.ActorLinkMultiplicityPolicy == ElectionActorLinkMultiplicityPolicy.MultipleRosterEntriesPerActorAllowed)
+        {
+            if (string.IsNullOrWhiteSpace(organizationVoterId))
+            {
+                return null;
+            }
+
+            var requestedEntry = repository.GetRosterEntryAsync(election.ElectionId, organizationVoterId.Trim())
+                .GetAwaiter()
+                .GetResult();
+            return requestedEntry is not null &&
+                   string.Equals(requestedEntry.LinkedActorPublicAddress, actorPublicAddress, StringComparison.Ordinal)
+                ? requestedEntry
+                : null;
+        }
+
+        var linkedEntry = repository.GetRosterEntryByLinkedActorAsync(election.ElectionId, actorPublicAddress)
+            .GetAwaiter()
+            .GetResult();
+        if (linkedEntry is null)
+        {
+            return null;
+        }
+
+        return string.IsNullOrWhiteSpace(organizationVoterId) ||
+               string.Equals(linkedEntry.OrganizationVoterId, organizationVoterId.Trim(), StringComparison.OrdinalIgnoreCase)
+            ? linkedEntry
+            : null;
     }
 
     private static string ComputeScopedHash(string value) =>

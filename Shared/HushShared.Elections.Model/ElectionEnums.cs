@@ -56,6 +56,32 @@ public enum EligibilityMutationPolicy
     LateActivationForRosteredVotersOnly = 1,
 }
 
+public enum ElectionActorLinkMultiplicityPolicy
+{
+    SingleRosterEntryPerActor = 0,
+    MultipleRosterEntriesPerActorAllowed = 1,
+}
+
+public enum ElectionIdentityLinkPolicy
+{
+    ContactCodeV1 = 0,
+    PrelinkedHushAccountV1 = 1,
+    OwnerManualVerificationV1 = 2,
+}
+
+public enum ElectionCheckoffVisibilityPolicy
+{
+    RestrictedOwnerAuditor = 0,
+}
+
+public enum ElectionContactCodeProviderReadiness
+{
+    Missing = 0,
+    DevOnly = 1,
+    Degraded = 2,
+    Ready = 3,
+}
+
 public enum ElectionRosterContactType
 {
     Email = 0,

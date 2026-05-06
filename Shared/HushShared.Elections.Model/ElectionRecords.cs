@@ -44,7 +44,11 @@ public record ElectionRecord(
     int? BallotDefinitionVersion = null,
     byte[]? BallotDefinitionHash = null,
     DateTime? BallotDefinitionSealedAt = null,
-    ElectionBallotDefinitionMutationPolicy? BallotDefinitionMutationPolicy = null)
+    ElectionBallotDefinitionMutationPolicy? BallotDefinitionMutationPolicy = null,
+    ElectionIdentityLinkPolicy IdentityLinkPolicy = ElectionIdentityLinkPolicy.ContactCodeV1,
+    ElectionCheckoffVisibilityPolicy CheckoffVisibilityPolicy = ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor,
+    ElectionActorLinkMultiplicityPolicy ActorLinkMultiplicityPolicy = ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor,
+    ElectionContactCodeProviderReadiness ContactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly)
 {
     public byte[]? BallotDefinitionHash { get; init; } = BallotDefinitionHash?.ToArray();
 }

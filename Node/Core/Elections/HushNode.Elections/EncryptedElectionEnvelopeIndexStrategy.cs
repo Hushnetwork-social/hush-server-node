@@ -283,7 +283,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             new RegisterElectionVotingCommitmentRequest(
                 decryptedEnvelope.Transaction.Payload.ElectionId,
                 registerAction.ActorPublicAddress,
-                registerAction.CommitmentHash));
+                registerAction.CommitmentHash,
+                registerAction.OrganizationVoterId));
 
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(result.Election, rosterEntry: result.RosterEntry)
@@ -330,7 +331,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 acceptAction.ReceiptCommitment,
                 acceptAction.ReceiptCommitmentScheme,
                 acceptAction.BallotDefinitionVersion,
-                acceptAction.BallotDefinitionHash));
+                acceptAction.BallotDefinitionHash,
+                acceptAction.OrganizationVoterId));
 
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(
@@ -379,7 +381,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 registerAction.PrecommittedAt,
                 decryptedEnvelope.Transaction.TransactionId.Value,
                 _blockchainCache.LastBlockIndex.Value,
-                _blockchainCache.CurrentBlockId.Value));
+                _blockchainCache.CurrentBlockId.Value,
+                registerAction.OrganizationVoterId));
 
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(result.Election, rosterEntry: result.RosterEntry)
@@ -422,7 +425,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 spoilAction.SpoiledAt,
                 decryptedEnvelope.Transaction.TransactionId.Value,
                 _blockchainCache.LastBlockIndex.Value,
-                _blockchainCache.CurrentBlockId.Value));
+                _blockchainCache.CurrentBlockId.Value,
+                spoilAction.OrganizationVoterId));
 
         return result.IsSuccess && result.Election is not null
             ? ElectionCommandResult.Success(result.Election, rosterEntry: result.RosterEntry)

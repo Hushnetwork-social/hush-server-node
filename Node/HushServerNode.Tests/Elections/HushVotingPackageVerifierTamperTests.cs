@@ -28,6 +28,9 @@ public class HushVotingPackageVerifierTamperTests
             { "tamper-sp04-missing-receipt-commitment", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.ChallengeSpoilReceiptMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-sp04-wrong-ballot-definition-hash", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.ChallengeSpoilReceiptMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-sp04-missing-ballot-definition-seal", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.ChallengeSpoilBallotDefinitionMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp05-public-named-field", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.EligibilityPublicPrivacyBoundaryViolation, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp05-count-reconciliation", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.EligibilityCountReconciliationMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp05-high-assurance-dev-provider", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.EligibilityDevOnlyVerificationBlocked, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-named-voter-in-public-artifact", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicRestrictedFieldLeak, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-raw-trustee-share", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicRestrictedFieldLeak, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "missing-sp07-development-warning", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicationProofEvidencePending, VerificationCheckStatus.Warn, VerificationOverallStatus.Warn, 0 },
@@ -276,6 +279,37 @@ public class HushVotingPackageVerifierTamperTests
                     missingSeal with
                     {
                         BallotDefinitionVersion = 0,
+                    });
+                return;
+
+            case "tamper-sp05-public-named-field":
+                await AddJsonPropertyAsync(
+                    packagePath,
+                    VerificationPackageFileNames.Sp05EligibilitySummary,
+                    "displayLabel",
+                    "Alice Example");
+                return;
+
+            case "tamper-sp05-count-reconciliation":
+                var sp05Summary = await ReadArtifactAsync<ElectionSp05SummaryArtifactRecord>(
+                    packagePath,
+                    VerificationPackageFileNames.Sp05EligibilitySummary);
+                await WriteArtifactAsync(
+                    packagePath,
+                    VerificationPackageFileNames.Sp05EligibilitySummary,
+                    sp05Summary with { DidNotVoteCount = sp05Summary.DidNotVoteCount + 1 });
+                return;
+
+            case "tamper-sp05-high-assurance-dev-provider":
+                var sp05Policy = await ReadArtifactAsync<ElectionSp05PolicyArtifactRecord>(
+                    packagePath,
+                    VerificationPackageFileNames.Sp05EligibilityPolicy);
+                await WriteArtifactAsync(
+                    packagePath,
+                    VerificationPackageFileNames.Sp05EligibilityPolicy,
+                    sp05Policy with
+                    {
+                        ContactCodeProviderReadiness = HushShared.Elections.Model.ElectionContactCodeProviderReadiness.DevOnly,
                     });
                 return;
 

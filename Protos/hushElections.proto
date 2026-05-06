@@ -219,6 +219,28 @@ enum EligibilityMutationPolicyProto {
   LateActivationForRosteredVotersOnly = 1;
 }
 
+enum ElectionActorLinkMultiplicityPolicyProto {
+  SingleRosterEntryPerActor = 0;
+  MultipleRosterEntriesPerActorAllowed = 1;
+}
+
+enum ElectionIdentityLinkPolicyProto {
+  ContactCodeV1 = 0;
+  PrelinkedHushAccountV1 = 1;
+  OwnerManualVerificationV1 = 2;
+}
+
+enum ElectionCheckoffVisibilityPolicyProto {
+  RestrictedOwnerAuditor = 0;
+}
+
+enum ElectionContactCodeProviderReadinessProto {
+  ContactCodeProviderMissing = 0;
+  ContactCodeProviderDevOnly = 1;
+  ContactCodeProviderDegraded = 2;
+  ContactCodeProviderReady = 3;
+}
+
 enum OutcomeRuleKindProto {
   SingleWinner = 0;
   PassFail = 1;
@@ -546,6 +568,10 @@ message ElectionFrozenPolicy {
   optional int32 RequiredApprovalCount = 14;
   string SelectedProfileId = 15;
   bool SelectedProfileDevOnly = 16;
+  ElectionIdentityLinkPolicyProto IdentityLinkPolicy = 17;
+  ElectionCheckoffVisibilityPolicyProto CheckoffVisibilityPolicy = 18;
+  ElectionActorLinkMultiplicityPolicyProto ActorLinkMultiplicityPolicy = 19;
+  ElectionContactCodeProviderReadinessProto ContactCodeProviderReadiness = 20;
 }
 
 message ElectionTrusteeReference {
@@ -898,6 +924,7 @@ message ElectionVerificationPackageStatusView {
   ElectionProtocolPackageBindingView ProtocolPackageBinding = 8;
   ElectionVerifierResultSummaryView LastVerifierResult = 9;
   ElectionSp04EvidenceStatusView Sp04Evidence = 10;
+  ElectionSp05EvidenceStatusView Sp05Evidence = 11;
 }
 
 message ElectionSp04EvidenceStatusView {
@@ -909,6 +936,46 @@ message ElectionSp04EvidenceStatusView {
   int32 AcceptedBoundReceiptCount = 6;
   string ReceiptCommitmentSetHash = 7;
   string Message = 8;
+}
+
+message ElectionSp05EvidenceStatusView {
+  bool EvidenceExpected = 1;
+  bool PublicEvidenceAvailable = 2;
+  bool RestrictedEvidenceAvailable = 3;
+  int32 RosteredCount = 4;
+  int32 LinkedCount = 5;
+  int32 ActiveDenominatorCount = 6;
+  int32 CommitmentCount = 7;
+  int32 CountedParticipationCount = 8;
+  int32 DuplicateContactWarningCount = 9;
+  string RosterCanonicalHash = 10;
+  string CommitmentTreeRoot = 11;
+  string LatestEliResultCode = 12;
+  string Message = 13;
+}
+
+message ElectionRosterImportEvidenceView {
+  string RosterSourceFileHash = 1;
+  string RosterCanonicalHash = 2;
+  string RosterCanonicalizationVersion = 3;
+  int32 AcceptedRowCount = 4;
+  int32 RejectedRowCount = 5;
+  int32 DuplicateContactWarningCount = 6;
+  bool HasBlockingErrors = 7;
+  google.protobuf.Timestamp ImportedAt = 8;
+  string ImportedByActor = 9;
+}
+
+message ElectionEligibilityPolicyEvidenceView {
+  string EligibilityPolicyId = 1;
+  string EligibilityPolicyVersion = 2;
+  EligibilityMutationPolicyProto EligibilityMutationPolicy = 3;
+  ElectionIdentityLinkPolicyProto IdentityLinkPolicy = 4;
+  ElectionCheckoffVisibilityPolicyProto CheckoffVisibilityPolicy = 5;
+  ElectionActorLinkMultiplicityPolicyProto ActorLinkMultiplicityPolicy = 6;
+  ElectionContactCodeProviderReadinessProto ContactCodeProviderReadiness = 7;
+  bool HighAssuranceAvailable = 8;
+  repeated string OpenBlockers = 9;
 }
 
 message ElectionVerificationPackageFileView {
@@ -965,6 +1032,10 @@ message ElectionRecordView {
   string OfficialResultArtifactId = 38;
   string SelectedProfileId = 39;
   bool SelectedProfileDevOnly = 40;
+  ElectionIdentityLinkPolicyProto IdentityLinkPolicy = 47;
+  ElectionCheckoffVisibilityPolicyProto CheckoffVisibilityPolicy = 48;
+  ElectionActorLinkMultiplicityPolicyProto ActorLinkMultiplicityPolicy = 49;
+  ElectionContactCodeProviderReadinessProto ContactCodeProviderReadiness = 50;
 }
 
 message ElectionSummary {
@@ -1087,6 +1158,10 @@ message ElectionDraftInput {
   repeated ElectionWarningCodeProto AcknowledgedWarningCodes = 18;
   optional int32 RequiredApprovalCount = 19;
   string SelectedProfileId = 20;
+  ElectionIdentityLinkPolicyProto IdentityLinkPolicy = 21;
+  ElectionCheckoffVisibilityPolicyProto CheckoffVisibilityPolicy = 22;
+  ElectionActorLinkMultiplicityPolicyProto ActorLinkMultiplicityPolicy = 23;
+  ElectionContactCodeProviderReadinessProto ContactCodeProviderReadiness = 24;
 }
 
 message CreateElectionDraftRequest {
@@ -1611,6 +1686,9 @@ message GetElectionEligibilityViewResponse {
   repeated ElectionRosterEntryView RestrictedRosterEntries = 13;
   repeated ElectionEligibilityActivationEventView ActivationEvents = 14;
   repeated ElectionEligibilitySnapshotView EligibilitySnapshots = 15;
+  ElectionRosterImportEvidenceView LatestRosterImportEvidence = 16;
+  ElectionEligibilityPolicyEvidenceView EligibilityPolicyEvidence = 17;
+  ElectionSp05EvidenceStatusView Sp05Evidence = 18;
 }
 
 message GetElectionVotingViewResponse {

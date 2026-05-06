@@ -46,6 +46,21 @@ public static class VerificationResultCodes
     public const string ChallengeSpoilCountMismatch = "challenge_spoil_count_mismatch";
     public const string ChallengeSpoilReceiptMismatch = "challenge_spoil_receipt_mismatch";
     public const string ChallengeSpoilRestrictedEvidenceMismatch = "challenge_spoil_restricted_evidence_mismatch";
+    public const string EligibilityEvidenceValid = "eligibility_evidence_valid";
+    public const string EligibilitySchemaInvalid = "eligibility_schema_invalid";
+    public const string EligibilityPolicyMissing = "eligibility_policy_missing";
+    public const string EligibilityRosterHashMismatch = "eligibility_roster_hash_mismatch";
+    public const string EligibilityOpenFreezeViolation = "eligibility_open_freeze_violation";
+    public const string EligibilityLateActivationPolicyViolation = "eligibility_late_activation_policy_violation";
+    public const string EligibilityLinkEvidenceMissing = "eligibility_link_evidence_missing";
+    public const string EligibilityCommitmentInvalid = "eligibility_commitment_invalid";
+    public const string EligibilityCommitmentConsumedRight = "eligibility_commitment_consumed_right";
+    public const string EligibilityConsumptionWithoutAcceptedCast = "eligibility_consumption_without_accepted_cast";
+    public const string EligibilityFailedCastConsumedRight = "eligibility_failed_cast_consumed_right";
+    public const string EligibilityCountReconciliationMismatch = "eligibility_count_reconciliation_mismatch";
+    public const string EligibilityPublicPrivacyBoundaryViolation = "eligibility_public_privacy_boundary_violation";
+    public const string EligibilityBallotPrivacyBoundaryViolation = "eligibility_ballot_privacy_boundary_violation";
+    public const string EligibilityDevOnlyVerificationBlocked = "eligibility_dev_only_verification_blocked";
 }
 
 public static class VerificationExitCodes

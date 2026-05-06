@@ -19,6 +19,9 @@ public class HushVotingPackageVerifierTests
 
         result.ExitCode.Should().Be(0);
         result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        result.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.EligibilityEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
         File.Exists(Path.Combine(package.PackagePath, "verifier-output", "VerifierOutput.json"))
             .Should()
             .BeTrue();

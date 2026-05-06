@@ -27,7 +27,13 @@ public record ElectionVerificationPackageExportRequest(
     DateTime? ExportedAt = null,
     IReadOnlyList<ElectionVoterCeremonyRecord>? VoterCeremonyRecords = null,
     IReadOnlyList<ElectionPreparedBallotCommitmentRecord>? PreparedBallotCommitments = null,
-    IReadOnlyList<ElectionSpoiledPreparedBallotRecord>? SpoiledPreparedBallots = null);
+    IReadOnlyList<ElectionSpoiledPreparedBallotRecord>? SpoiledPreparedBallots = null,
+    IReadOnlyList<ElectionRosterImportEvidenceRecord>? RosterImportEvidences = null,
+    IReadOnlyList<ElectionEligibilityPolicyEvidenceRecord>? EligibilityPolicyEvidences = null,
+    IReadOnlyList<ElectionCommitmentSchemeEvidenceRecord>? CommitmentSchemeEvidences = null,
+    IReadOnlyList<ElectionCommitmentRegistrationRecord>? CommitmentRegistrations = null,
+    IReadOnlyList<ElectionCheckoffConsumptionRecord>? CheckoffConsumptions = null,
+    IReadOnlyList<ElectionEligibilityActivationEventRecord>? EligibilityActivationEvents = null);
 
 public record ElectionVerificationPackageExportResult(
     bool Success,

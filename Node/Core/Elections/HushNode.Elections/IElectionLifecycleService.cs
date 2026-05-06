@@ -312,7 +312,8 @@ public record ExecuteElectionCloseCountingJobRequest(
 public record RegisterElectionVotingCommitmentRequest(
     ElectionId ElectionId,
     string ActorPublicAddress,
-    string CommitmentHash);
+    string CommitmentHash,
+    string? OrganizationVoterId = null);
 
 public record RegisterPreparedBallotCommitmentRequest(
     ElectionId ElectionId,
@@ -326,7 +327,8 @@ public record RegisterPreparedBallotCommitmentRequest(
     DateTime? PrecommittedAt = null,
     Guid? SourceTransactionId = null,
     long? SourceBlockHeight = null,
-    Guid? SourceBlockId = null);
+    Guid? SourceBlockId = null,
+    string? OrganizationVoterId = null);
 
 public record SpoilPreparedBallotRequest(
     ElectionId ElectionId,
@@ -339,7 +341,8 @@ public record SpoilPreparedBallotRequest(
     DateTime? SpoiledAt = null,
     Guid? SourceTransactionId = null,
     long? SourceBlockHeight = null,
-    Guid? SourceBlockId = null);
+    Guid? SourceBlockId = null,
+    string? OrganizationVoterId = null);
 
 public record AcceptElectionBallotCastRequest(
     ElectionId ElectionId,
@@ -358,7 +361,8 @@ public record AcceptElectionBallotCastRequest(
     string? ReceiptCommitment = null,
     string? ReceiptCommitmentScheme = null,
     int? BallotDefinitionVersion = null,
-    byte[]? BallotDefinitionHash = null);
+    byte[]? BallotDefinitionHash = null,
+    string? OrganizationVoterId = null);
 
 public enum ElectionCommandErrorCode
 {
@@ -451,6 +455,7 @@ public record ElectionCommandResult
     public ElectionBoundaryArtifactRecord? BoundaryArtifact { get; init; }
     public ElectionRosterEntryRecord? RosterEntry { get; init; }
     public IReadOnlyList<ElectionRosterEntryRecord> RosterEntries { get; init; } = Array.Empty<ElectionRosterEntryRecord>();
+    public ElectionRosterImportEvidenceRecord? RosterImportEvidence { get; init; }
     public ElectionEligibilityActivationEventRecord? EligibilityActivationEvent { get; init; }
     public ElectionParticipationRecord? ParticipationRecord { get; init; }
     public ElectionEligibilitySnapshotRecord? EligibilitySnapshot { get; init; }
@@ -475,6 +480,7 @@ public record ElectionCommandResult
         ElectionBoundaryArtifactRecord? boundaryArtifact = null,
         ElectionRosterEntryRecord? rosterEntry = null,
         IReadOnlyList<ElectionRosterEntryRecord>? rosterEntries = null,
+        ElectionRosterImportEvidenceRecord? rosterImportEvidence = null,
         ElectionEligibilityActivationEventRecord? eligibilityActivationEvent = null,
         ElectionParticipationRecord? participationRecord = null,
         ElectionEligibilitySnapshotRecord? eligibilitySnapshot = null,
@@ -501,6 +507,7 @@ public record ElectionCommandResult
             BoundaryArtifact = boundaryArtifact,
             RosterEntry = rosterEntry,
             RosterEntries = rosterEntries ?? Array.Empty<ElectionRosterEntryRecord>(),
+            RosterImportEvidence = rosterImportEvidence,
             EligibilityActivationEvent = eligibilityActivationEvent,
             ParticipationRecord = participationRecord,
             EligibilitySnapshot = eligibilitySnapshot,
@@ -523,13 +530,15 @@ public record ElectionCommandResult
     public static ElectionCommandResult Failure(
         ElectionCommandErrorCode errorCode,
         string errorMessage,
-        IReadOnlyList<string>? validationErrors = null) =>
+        IReadOnlyList<string>? validationErrors = null,
+        ElectionRosterImportEvidenceRecord? rosterImportEvidence = null) =>
         new()
         {
             IsSuccess = false,
             ErrorCode = errorCode,
             ErrorMessage = errorMessage,
             ValidationErrors = validationErrors ?? Array.Empty<string>(),
+            RosterImportEvidence = rosterImportEvidence,
         };
 }
 

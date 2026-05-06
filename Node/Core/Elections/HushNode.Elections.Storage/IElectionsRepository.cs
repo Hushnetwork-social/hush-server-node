@@ -217,6 +217,30 @@ public interface IElectionsRepository : IRepository
 
     Task SaveEligibilitySnapshotAsync(ElectionEligibilitySnapshotRecord snapshot) => Task.CompletedTask;
 
+    Task<IReadOnlyList<ElectionRosterImportEvidenceRecord>> GetRosterImportEvidencesAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionRosterImportEvidenceRecord>>(Array.Empty<ElectionRosterImportEvidenceRecord>());
+
+    Task<ElectionRosterImportEvidenceRecord?> GetLatestRosterImportEvidenceAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionRosterImportEvidenceRecord?>(null);
+
+    Task SaveRosterImportEvidenceAsync(ElectionRosterImportEvidenceRecord evidence) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionEligibilityPolicyEvidenceRecord>> GetEligibilityPolicyEvidencesAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionEligibilityPolicyEvidenceRecord>>(Array.Empty<ElectionEligibilityPolicyEvidenceRecord>());
+
+    Task<ElectionEligibilityPolicyEvidenceRecord?> GetLatestEligibilityPolicyEvidenceAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionEligibilityPolicyEvidenceRecord?>(null);
+
+    Task SaveEligibilityPolicyEvidenceAsync(ElectionEligibilityPolicyEvidenceRecord evidence) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionCommitmentSchemeEvidenceRecord>> GetCommitmentSchemeEvidencesAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionCommitmentSchemeEvidenceRecord>>(Array.Empty<ElectionCommitmentSchemeEvidenceRecord>());
+
+    Task<ElectionCommitmentSchemeEvidenceRecord?> GetLatestCommitmentSchemeEvidenceAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionCommitmentSchemeEvidenceRecord?>(null);
+
+    Task SaveCommitmentSchemeEvidenceAsync(ElectionCommitmentSchemeEvidenceRecord evidence) => Task.CompletedTask;
+
     Task<IReadOnlyList<ElectionAcceptedBallotRecord>> GetAcceptedBallotsAsync(ElectionId electionId) =>
         Task.FromResult<IReadOnlyList<ElectionAcceptedBallotRecord>>(Array.Empty<ElectionAcceptedBallotRecord>());
 

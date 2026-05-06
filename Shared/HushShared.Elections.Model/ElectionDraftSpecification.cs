@@ -21,6 +21,10 @@ public record ElectionDraftSpecification(
     IReadOnlyList<ElectionOptionDefinition> OwnerOptions,
     IReadOnlyList<ElectionWarningCode>? AcknowledgedWarningCodes = null,
     int? RequiredApprovalCount = null,
-    OfficialResultVisibilityPolicy OfficialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly)
+    OfficialResultVisibilityPolicy OfficialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly,
+    ElectionIdentityLinkPolicy IdentityLinkPolicy = ElectionIdentityLinkPolicy.ContactCodeV1,
+    ElectionCheckoffVisibilityPolicy CheckoffVisibilityPolicy = ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor,
+    ElectionActorLinkMultiplicityPolicy ActorLinkMultiplicityPolicy = ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor,
+    ElectionContactCodeProviderReadiness ContactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly)
 {
 }

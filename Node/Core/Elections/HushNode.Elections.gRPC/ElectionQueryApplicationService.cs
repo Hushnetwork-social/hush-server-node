@@ -674,6 +674,26 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
         var canReviewRestrictedRoster =
             actorRole == ElectionEligibilityActorRoleProto.EligibilityActorOwner ||
             actorRole == ElectionEligibilityActorRoleProto.EligibilityActorRestrictedReviewer;
+        IReadOnlyList<ElectionRosterImportEvidenceRecord> rosterImportEvidences = [];
+        IReadOnlyList<ElectionEligibilityPolicyEvidenceRecord> eligibilityPolicyEvidences = [];
+
+        if (canReviewRestrictedRoster)
+        {
+            rosterImportEvidences = await repository.GetRosterImportEvidencesAsync(electionId);
+            eligibilityPolicyEvidences = await repository.GetEligibilityPolicyEvidencesAsync(electionId);
+        }
+
+        var latestRosterImportEvidence = rosterImportEvidences
+            .OrderByDescending(x => x.RosterImportVersion)
+            .ThenByDescending(x => x.ImportedAt)
+            .FirstOrDefault();
+        var latestPolicyEvidence = eligibilityPolicyEvidences
+            .OrderByDescending(x => x.DeclaredAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+        var eligibilityOpenBlockers = canReviewRestrictedRoster
+            ? BuildEligibilityPolicyOpenBlockers(election, rosterEntries, latestRosterImportEvidence)
+            : Array.Empty<string>();
 
         var response = new GetElectionEligibilityViewResponse
         {
@@ -726,6 +746,23 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
                 .OrderBy(x => x.RecordedAt)
                 .ThenBy(x => x.SnapshotType)
                 .Select(ToEligibilitySnapshotView));
+
+            if (latestRosterImportEvidence is not null)
+            {
+                response.LatestRosterImportEvidence = ToEligibilityRosterImportEvidenceView(latestRosterImportEvidence);
+            }
+
+            response.EligibilityPolicyEvidence = BuildEligibilityPolicyEvidenceView(
+                election,
+                latestPolicyEvidence,
+                eligibilityOpenBlockers);
+            response.Sp05Evidence = BuildEligibilitySp05EvidenceStatus(
+                election,
+                rosterEntries,
+                participationRecords,
+                latestRosterImportEvidence,
+                eligibilityOpenBlockers,
+                canReviewRestrictedRoster);
         }
 
         return response;
@@ -1857,6 +1894,146 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             DidNotVoteCount = Math.Max(0, denominatorEntries.Count - countedParticipationCount),
             ActivationEventCount = activationEventCount,
         };
+    }
+
+    private static IReadOnlyList<string> BuildEligibilityPolicyOpenBlockers(
+        ElectionRecord election,
+        IReadOnlyList<ElectionRosterEntryRecord> rosterEntries,
+        ElectionRosterImportEvidenceRecord? latestRosterImportEvidence)
+    {
+        var blockers = new List<string>();
+
+        if (latestRosterImportEvidence is null)
+        {
+            blockers.Add("Roster import evidence is missing.");
+        }
+        else if (latestRosterImportEvidence.RejectedRowCount > 0)
+        {
+            blockers.Add("Latest roster import evidence contains rejected rows.");
+        }
+
+        if (election.ContactCodeProviderReadiness != ElectionContactCodeProviderReadiness.Ready)
+        {
+            blockers.Add($"Contact-code provider readiness is {election.ContactCodeProviderReadiness}.");
+        }
+
+        if (election.ActorLinkMultiplicityPolicy == ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor)
+        {
+            var hasDuplicateLinkedActors = rosterEntries
+                .Where(x => x.IsLinked)
+                .GroupBy(x => x.LinkedActorPublicAddress!.Trim(), StringComparer.Ordinal)
+                .Any(x => x.Count() > 1);
+            if (hasDuplicateLinkedActors)
+            {
+                blockers.Add("Single-roster-entry actor policy has duplicate linked actors.");
+            }
+        }
+
+        return blockers;
+    }
+
+    private static ElectionRosterImportEvidenceView ToEligibilityRosterImportEvidenceView(
+        ElectionRosterImportEvidenceRecord evidence) =>
+        new()
+        {
+            RosterSourceFileHash = evidence.RosterSourceFileHash,
+            RosterCanonicalHash = evidence.RosterCanonicalHash,
+            RosterCanonicalizationVersion = evidence.RosterCanonicalizationVersion,
+            AcceptedRowCount = evidence.AcceptedRowCount,
+            RejectedRowCount = evidence.RejectedRowCount,
+            DuplicateContactWarningCount = evidence.DuplicateContactWarningCount,
+            HasBlockingErrors = evidence.RejectedRowCount > 0,
+            ImportedAt = ToProtoTimestamp(evidence.ImportedAt),
+            ImportedByActor = evidence.ImportedByActor,
+        };
+
+    private static ElectionEligibilityPolicyEvidenceView BuildEligibilityPolicyEvidenceView(
+        ElectionRecord election,
+        ElectionEligibilityPolicyEvidenceRecord? latestPolicyEvidence,
+        IReadOnlyList<string> openBlockers)
+    {
+        var view = new ElectionEligibilityPolicyEvidenceView
+        {
+            EligibilityPolicyId = latestPolicyEvidence?.EligibilityPolicyId ??
+                ElectionSp05ProfileIds.OrganizationalEligibilityCheckoffV1,
+            EligibilityPolicyVersion = latestPolicyEvidence?.EligibilityPolicyVersion ?? "draft",
+            EligibilityMutationPolicy = (EligibilityMutationPolicyProto)(int)election.EligibilityMutationPolicy,
+            IdentityLinkPolicy = (ElectionIdentityLinkPolicyProto)(int)election.IdentityLinkPolicy,
+            CheckoffVisibilityPolicy = (ElectionCheckoffVisibilityPolicyProto)(int)election.CheckoffVisibilityPolicy,
+            ActorLinkMultiplicityPolicy = (ElectionActorLinkMultiplicityPolicyProto)(int)election.ActorLinkMultiplicityPolicy,
+            ContactCodeProviderReadiness =
+                (ElectionContactCodeProviderReadinessProto)(int)election.ContactCodeProviderReadiness,
+            HighAssuranceAvailable =
+                election.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.Ready &&
+                openBlockers.Count == 0,
+        };
+
+        view.OpenBlockers.AddRange(openBlockers);
+        return view;
+    }
+
+    private static ElectionSp05EvidenceStatusView BuildEligibilitySp05EvidenceStatus(
+        ElectionRecord election,
+        IReadOnlyList<ElectionRosterEntryRecord> rosterEntries,
+        IReadOnlyList<ElectionParticipationRecord> participationRecords,
+        ElectionRosterImportEvidenceRecord? latestRosterImportEvidence,
+        IReadOnlyList<string> openBlockers,
+        bool canReviewRestrictedRoster)
+    {
+        var denominatorEntries = ResolveCurrentDenominatorEntries(election, rosterEntries);
+        var countedParticipationCount = participationRecords.Count(x =>
+            x.ParticipationStatus == ElectionParticipationStatus.CountedAsVoted);
+        var message = !canReviewRestrictedRoster
+            ? "SP-05 eligibility evidence status is not visible to this actor."
+            : openBlockers.Count > 0
+                ? "SP-05 eligibility evidence has readiness blockers."
+                : "SP-05 eligibility evidence is available in the owner/auditor eligibility view.";
+
+        return new ElectionSp05EvidenceStatusView
+        {
+            EvidenceExpected = true,
+            PublicEvidenceAvailable = latestRosterImportEvidence is not null,
+            RestrictedEvidenceAvailable = canReviewRestrictedRoster && latestRosterImportEvidence is not null,
+            RosteredCount = rosterEntries.Count,
+            LinkedCount = rosterEntries.Count(x => x.IsLinked),
+            ActiveDenominatorCount = denominatorEntries.Count,
+            CommitmentCount = 0,
+            CountedParticipationCount = countedParticipationCount,
+            DuplicateContactWarningCount = latestRosterImportEvidence?.DuplicateContactWarningCount ?? 0,
+            RosterCanonicalHash = latestRosterImportEvidence?.RosterCanonicalHash ??
+                ElectionEligibilityContracts.ComputeRosterCanonicalHash(rosterEntries),
+            CommitmentTreeRoot = string.Empty,
+            LatestEliResultCode = ResolveEligibilityStatusResultCode(
+                election,
+                latestRosterImportEvidence,
+                openBlockers),
+            Message = message,
+        };
+    }
+
+    private static string ResolveEligibilityStatusResultCode(
+        ElectionRecord election,
+        ElectionRosterImportEvidenceRecord? latestRosterImportEvidence,
+        IReadOnlyList<string> openBlockers)
+    {
+        if (latestRosterImportEvidence is null)
+        {
+            return HushShared.Elections.Verification.Model.VerificationResultCodes.EligibilityPolicyMissing;
+        }
+
+        if (election.ContactCodeProviderReadiness != ElectionContactCodeProviderReadiness.Ready)
+        {
+            return HushShared.Elections.Verification.Model.VerificationResultCodes.EligibilityDevOnlyVerificationBlocked;
+        }
+
+        if (openBlockers.Any(x => x.Contains("duplicate linked actors", StringComparison.OrdinalIgnoreCase)))
+        {
+            return HushShared.Elections.Verification.Model.VerificationResultCodes.EligibilityLinkEvidenceMissing;
+        }
+
+        return openBlockers.Count == 0
+            ? HushShared.Elections.Verification.Model.VerificationResultCodes.EligibilityEvidenceValid
+            : HushShared.Elections.Verification.Model.VerificationResultCodes.EligibilitySchemaInvalid;
     }
 
     private IReadOnlyList<ElectionCeremonyProfileRecord> FilterVisibleCeremonyProfiles(

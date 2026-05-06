@@ -48,7 +48,8 @@ public record ActivateElectionRosterEntryActionPayload(
 
 public record RegisterElectionVotingCommitmentActionPayload(
     string ActorPublicAddress,
-    string CommitmentHash);
+    string CommitmentHash,
+    string? OrganizationVoterId = null);
 
 public record RegisterPreparedBallotCommitmentActionPayload(
     string ActorPublicAddress,
@@ -58,7 +59,8 @@ public record RegisterPreparedBallotCommitmentActionPayload(
     byte[] BallotDefinitionHash,
     string CeremonyProfileId,
     string ProofStatementId,
-    DateTime? PrecommittedAt = null);
+    DateTime? PrecommittedAt = null,
+    string? OrganizationVoterId = null);
 
 public record SpoilPreparedBallotActionPayload(
     string ActorPublicAddress,
@@ -67,7 +69,8 @@ public record SpoilPreparedBallotActionPayload(
     string SpoiledTranscriptHash,
     string SpoilRecordHash,
     string LocalVerifierVersion,
-    DateTime? SpoiledAt = null);
+    DateTime? SpoiledAt = null,
+    string? OrganizationVoterId = null);
 
 public record AcceptElectionBallotCastActionPayload(
     string ActorPublicAddress,
@@ -85,7 +88,8 @@ public record AcceptElectionBallotCastActionPayload(
     string? ReceiptCommitment = null,
     string? ReceiptCommitmentScheme = null,
     int? BallotDefinitionVersion = null,
-    byte[]? BallotDefinitionHash = null);
+    byte[]? BallotDefinitionHash = null,
+    string? OrganizationVoterId = null);
 
 public record InviteElectionTrusteeActionPayload(
     Guid InvitationId,
