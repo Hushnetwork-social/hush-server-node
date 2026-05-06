@@ -24,6 +24,9 @@ public class ElectionVerificationPackageExportServiceTests
             VerificationPackageFileNames.Sp05EligibilityPolicy,
             VerificationPackageFileNames.Sp05EligibilitySummary,
             VerificationPackageFileNames.Sp05EligibilityVerifierOutput,
+            VerificationPackageFileNames.Sp06TrusteeControlProfile,
+            VerificationPackageFileNames.Sp06TrusteeControlSummary,
+            VerificationPackageFileNames.Sp06TrusteeVerifierOutput,
         ]);
         result.Files.Should().NotContain(x => x.RelativePath.StartsWith("artifacts/restricted/", StringComparison.OrdinalIgnoreCase));
         var publicPayload = string.Join(
@@ -93,6 +96,12 @@ public class ElectionVerificationPackageExportServiceTests
             x.Visibility == VerificationArtifactVisibility.Restricted);
         result.Files.Should().Contain(x =>
             x.RelativePath == VerificationPackageFileNames.RestrictedDisputes &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp06TrusteeControlDomains &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp06TrusteeReleaseArtifacts &&
             x.Visibility == VerificationArtifactVisibility.Restricted);
     }
 
@@ -483,6 +492,102 @@ public class ElectionVerificationPackageExportServiceTests
             CommitmentRegistrations: commitmentRegistrations,
             CheckoffConsumptions: checkoffConsumptions,
             EligibilityActivationEvents: []);
+    }
+
+    internal static ElectionVerificationPackageExportRequest CreateHighAssuranceTrusteeRequest()
+    {
+        var request = CreateRequest(
+            VerificationPackageView.PublicAnonymous,
+            profileId: VerificationProfileIds.HighAssuranceV1);
+        var trusteeElection = request.Election with
+        {
+            GovernanceMode = ElectionGovernanceMode.TrusteeThreshold,
+            SelectedProfileId = ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+            SelectedProfileDevOnly = false,
+            RequiredApprovalCount = 3,
+        };
+        var trustees = Enumerable.Range(1, 5)
+            .Select(x => new ElectionTrusteeReference($"trustee-{x}@hush.test", $"Trustee {x}"))
+            .ToArray();
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            Guid.NewGuid(),
+            ceremonyVersionNumber: 1,
+            ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+            boundTrusteeCount: 5,
+            requiredApprovalCount: 3,
+            trustees,
+            tallyPublicKeyFingerprint: "tally-public-key-fingerprint",
+            tallyPublicKey: [1, 2, 3, 4]);
+        var closeArtifact = request.BoundaryArtifacts.Single(x => x.ArtifactType == ElectionBoundaryArtifactType.Close);
+        var finalizationSession = ElectionModelFactory.CreateFinalizationSession(
+            trusteeElection,
+            closeArtifact.Id,
+            closeArtifact.AcceptedBallotSetHash!,
+            closeArtifact.FinalEncryptedTallyHash!,
+            ElectionFinalizationSessionPurpose.CloseCounting,
+            ceremonySnapshot,
+            requiredShareCount: 3,
+            trustees,
+            createdByPublicAddress: "owner-address",
+            createdAt: DateTime.UnixEpoch.AddHours(1));
+        var shares = trustees.Take(3)
+            .Select((trustee, index) => ElectionModelFactory.CreateAcceptedFinalizationShare(
+                finalizationSession.Id,
+                trusteeElection.ElectionId,
+                trustee.TrusteeUserAddress,
+                trustee.TrusteeDisplayName,
+                trustee.TrusteeUserAddress,
+                shareIndex: index + 1,
+                shareVersion: "share-v1",
+                ElectionFinalizationTargetType.AggregateTally,
+                finalizationSession.CloseArtifactId,
+                finalizationSession.AcceptedBallotSetHash,
+                finalizationSession.FinalEncryptedTallyHash,
+                finalizationSession.TargetTallyId,
+                ceremonySnapshot.CeremonyVersionId,
+                ceremonySnapshot.TallyPublicKeyFingerprint,
+                shareMaterial: $"executor-encrypted-share-{index + 1}",
+                executorKeyAlgorithm: "ecies-secp256k1-v1",
+                submittedAt: DateTime.UnixEpoch.AddHours(2).AddMinutes(index)))
+            .ToArray();
+        var controlDomains = trustees
+            .Select((trustee, index) => new ElectionTrusteeControlDomainRecord(
+                Guid.NewGuid(),
+                trusteeElection.ElectionId,
+                ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+                ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1Version,
+                ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+                ceremonySnapshot.CeremonyVersionId,
+                TrusteeId: $"trustee-{index + 1:00}",
+                TrusteeAccountId: trustee.TrusteeUserAddress,
+                TrusteePersonRef: $"person-ref-{index + 1}",
+                ElectionTrusteeRole.ExternalTrustee,
+                CustodyMode: ElectionSp06ProfileIds.TrusteeLocalSecureVaultV1,
+                CustodyDomainRefHash: $"custody-domain-hash-{index + 1}",
+                AdminDomainRefHash: $"admin-domain-hash-{index + 1}",
+                LegalEntityRefHash: null,
+                PublicKeyCommitmentHash: $"public-key-commitment-{index + 1}",
+                AcceptedAt: DateTime.UnixEpoch.AddMinutes(index),
+                AcceptedBeforeOpen: true,
+                ElectionTrusteeBackupStatus.Registered,
+                ElectionTrusteeExceptionStatus.None,
+                ElectionTrusteeControlDomainEvidenceStatus.Accepted,
+                EvidenceFailureCode: null,
+                EvidenceFailureReason: null,
+                RecordedAt: DateTime.UnixEpoch.AddMinutes(index),
+                RecordedByPublicAddress: "owner-address",
+                SourceTransactionId: null,
+                SourceBlockHeight: null,
+                SourceBlockId: null))
+            .ToArray();
+
+        return request with
+        {
+            Election = trusteeElection,
+            FinalizationSessions = [finalizationSession],
+            FinalizationShares = shares,
+            TrusteeControlDomainRecords = controlDomains,
+        };
     }
 
     private static ProtocolPackageBindingRecord CreateSealedProtocolBinding(

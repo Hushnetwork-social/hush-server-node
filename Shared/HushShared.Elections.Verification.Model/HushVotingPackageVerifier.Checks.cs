@@ -127,6 +127,18 @@ public sealed partial class HushVotingPackageVerifier
             cancellationToken);
         electionIds["sp04_evidence"] = sp04Evidence.ElectionId.ToString();
 
+        var sp06Profile = await ReadJsonAsync<ElectionSp06ControlProfileArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp06TrusteeControlProfile,
+            cancellationToken);
+        electionIds["sp06_trustee_control_profile"] = sp06Profile.ElectionId;
+
+        var sp06Summary = await ReadJsonAsync<ElectionSp06TrusteeControlSummaryArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp06TrusteeControlSummary,
+            cancellationToken);
+        electionIds["sp06_trustee_control_summary"] = sp06Summary.ElectionId;
+
         if (manifest.PackageView == VerificationPackageView.RestrictedOwnerAuditor)
         {
             var restricted = await ReadJsonAsync<RestrictedRosterCheckoffArtifactRecord>(
@@ -143,6 +155,12 @@ public sealed partial class HushVotingPackageVerifier
             {
                 electionIds[$"restricted_sp04_ceremony:{group.Key}"] = group.Key;
             }
+
+            var restrictedSp06 = await ReadJsonAsync<ElectionSp06RestrictedControlDomainEvidenceArtifactRecord>(
+                packagePath,
+                VerificationPackageFileNames.RestrictedSp06TrusteeControlDomains,
+                cancellationToken);
+            electionIds["restricted_sp06_trustee_control_domains"] = restrictedSp06.ElectionId;
         }
 
         var distinctElectionIds = electionIds.Values
@@ -816,6 +834,219 @@ public sealed partial class HushVotingPackageVerifier
 
     private static string EncodeCanonicalField(string? value) =>
         Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? string.Empty));
+
+    private static async Task<IReadOnlyList<VerifierCheckResultRecord>> CheckSp06EvidenceAsync(
+        string packagePath,
+        AuditPackageManifestRecord manifest,
+        string profileId,
+        CancellationToken cancellationToken)
+    {
+        var requiredFiles = new[]
+        {
+            VerificationPackageFileNames.Sp06TrusteeControlProfile,
+            VerificationPackageFileNames.Sp06TrusteeControlSummary,
+            VerificationPackageFileNames.Sp06TrusteeVerifierOutput,
+        };
+        var missingFiles = requiredFiles
+            .Where(x => !File.Exists(ResolvePackagePath(packagePath, x)))
+            .ToArray();
+        if (missingFiles.Length > 0)
+        {
+            return
+            [
+                CreateResult(
+                    "CTRL-000",
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.TrusteeControlProfileMissing,
+                    "SP-06 public trustee control-domain evidence files are missing.",
+                    missingFiles.ToDictionary(x => x, x => "missing", StringComparer.Ordinal)),
+            ];
+        }
+
+        var results = new List<VerifierCheckResultRecord>();
+        var profile = await ReadJsonAsync<ElectionSp06ControlProfileArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp06TrusteeControlProfile,
+            cancellationToken);
+        var summary = await ReadJsonAsync<ElectionSp06TrusteeControlSummaryArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp06TrusteeControlSummary,
+            cancellationToken);
+        var verifierOutput = await ReadJsonAsync<ElectionSp06VerifierOutputArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp06TrusteeVerifierOutput,
+            cancellationToken);
+        var highAssurance = string.Equals(profileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal) ||
+            profile.HighAssuranceClaimed;
+
+        if (!profile.HighAssuranceClaimed && !highAssurance)
+        {
+            return
+            [
+                CreateResult(
+                    "CTRL-000",
+                    VerificationCheckStatus.NotApplicable,
+                    VerificationResultCodes.PackageStructureValid,
+                    "SP-06 trustee control-domain profile is not claimed by this package."),
+            ];
+        }
+
+        if (string.IsNullOrWhiteSpace(profile.ControlDomainProfileId) ||
+            !string.Equals(
+                profile.ControlDomainProfileId,
+                ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+                StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                "CTRL-000",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.TrusteeControlProfileMissing,
+                "High-assurance verification requires the SP-06 control-domain profile id."));
+        }
+
+        if (profile.TrusteeCount != 5 ||
+            profile.TrusteeThreshold != 3 ||
+            !string.Equals(profile.ThresholdProfileId, ElectionSelectableProfileCatalog.TrusteeProductionProfileId, StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                "CTRL-001",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.TrusteeThresholdProfileMismatch,
+                "SP-06 high-assurance v1 requires five trustees, threshold three, and dkg-prod-3of5.",
+                new Dictionary<string, string>
+                {
+                    ["trustee_count"] = profile.TrusteeCount.ToString(),
+                    ["trustee_threshold"] = profile.TrusteeThreshold.ToString(),
+                    ["threshold_profile_id"] = profile.ThresholdProfileId,
+                }));
+        }
+
+        if (summary.AcceptedBeforeOpenCount < 5 || summary.CompleteEvidenceCount < 5)
+        {
+            results.Add(CreateResult(
+                "CTRL-002",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.TrusteeAcceptanceIncomplete,
+                "SP-06 requires all five trustee control-domain declarations to be accepted before open.",
+                new Dictionary<string, string>
+                {
+                    ["accepted_before_open_count"] = summary.AcceptedBeforeOpenCount.ToString(),
+                    ["complete_evidence_count"] = summary.CompleteEvidenceCount.ToString(),
+                }));
+        }
+
+        var unsupportedCustodyModes = profile.AllowedCustodyModes
+            .Where(x => !ElectionSp06ProfileIds.IsHighAssuranceV1AllowedCustodyMode(x))
+            .ToArray();
+        if (unsupportedCustodyModes.Length > 0)
+        {
+            results.Add(CreateResult(
+                "CTRL-007",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.TrusteeCustodyModeUnsupported,
+                "SP-06 package declares unsupported custody modes for high assurance.",
+                unsupportedCustodyModes.ToDictionary(x => x, x => "unsupported", StringComparer.Ordinal)));
+        }
+
+        if (summary.Trustees.Any(x =>
+                x.ReleaseArtifactStatus == ElectionTrusteeReleaseArtifactStatus.Rejected &&
+                string.Equals(x.FailureCode, "WRONG_TARGET_SHARE", StringComparison.OrdinalIgnoreCase)))
+        {
+            results.Add(CreateResult(
+                "CTRL-008",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.TrusteeReleaseWrongTarget,
+                "At least one trustee release artifact targets a different tally or ceremony."));
+        }
+
+        if (summary.AcceptedReleaseArtifactCount < 3)
+        {
+            results.Add(CreateResult(
+                "CTRL-009",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.TrusteeReleaseThresholdNotMet,
+                "SP-06 requires at least three accepted trustee release artifacts.",
+                new Dictionary<string, string>
+                {
+                    ["accepted_release_artifact_count"] = summary.AcceptedReleaseArtifactCount.ToString(),
+                }));
+        }
+
+        if (!string.Equals(verifierOutput.ElectionId, manifest.ElectionId, StringComparison.Ordinal) ||
+            !string.Equals(verifierOutput.VerifierProfileId, profileId, StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                "CTRL-011",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.TrusteeExceptionPolicyViolation,
+                "SP-06 verifier output does not match the package election id or verifier profile."));
+        }
+
+        if (manifest.PackageView == VerificationPackageView.RestrictedOwnerAuditor)
+        {
+            results.AddRange(await CheckRestrictedSp06EvidenceAsync(
+                packagePath,
+                summary,
+                cancellationToken));
+        }
+
+        if (results.Count == 0)
+        {
+            results.Add(CreateResult(
+                "CTRL-000",
+                VerificationCheckStatus.Pass,
+                VerificationResultCodes.TrusteeControlDomainEvidenceValid,
+                "SP-06 trustee profile, control-domain counts, custody policy, release target, and threshold checks passed."));
+        }
+
+        return results;
+    }
+
+    private static async Task<IReadOnlyList<VerifierCheckResultRecord>> CheckRestrictedSp06EvidenceAsync(
+        string packagePath,
+        ElectionSp06TrusteeControlSummaryArtifactRecord summary,
+        CancellationToken cancellationToken)
+    {
+        var requiredFiles = new[]
+        {
+            VerificationPackageFileNames.RestrictedSp06TrusteeControlDomains,
+            VerificationPackageFileNames.RestrictedSp06TrusteeReleaseArtifacts,
+        };
+        var missingFiles = requiredFiles
+            .Where(x => !File.Exists(ResolvePackagePath(packagePath, x)))
+            .ToArray();
+        if (missingFiles.Length > 0)
+        {
+            return
+            [
+                CreateResult(
+                    "CTRL-002",
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.RestrictedEvidenceMissing,
+                    "Restricted SP-06 evidence files are missing.",
+                    missingFiles.ToDictionary(x => x, x => "missing", StringComparer.Ordinal)),
+            ];
+        }
+
+        var controlDomains = await ReadJsonAsync<ElectionSp06RestrictedControlDomainEvidenceArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.RestrictedSp06TrusteeControlDomains,
+            cancellationToken);
+
+        if (controlDomains.ControlDomains.Count < summary.CompleteEvidenceCount)
+        {
+            return
+            [
+                CreateResult(
+                    "CTRL-002",
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.TrusteeAcceptanceIncomplete,
+                    "Restricted SP-06 control-domain records do not support the public complete-evidence count."),
+            ];
+        }
+
+        return Array.Empty<VerifierCheckResultRecord>();
+    }
 
     private static bool BytesEqual(byte[]? left, byte[]? right)
     {

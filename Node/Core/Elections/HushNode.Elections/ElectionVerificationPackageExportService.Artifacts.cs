@@ -42,6 +42,7 @@ public sealed partial class ElectionVerificationPackageExportService
                 "VFY-ACCEPTED-000",
                 "VFY-PUBLISHED-000",
                 "VFY-SP04-000",
+                "CTRL-000",
                 "VFY-PRIVACY-000",
             ]);
     }
@@ -522,4 +523,363 @@ public sealed partial class ElectionVerificationPackageExportService
                     participation.GetValueOrDefault(x.OrganizationVoterId)?.ParticipationStatus.ToString()))
                 .ToArray());
     }
+
+    private static ElectionSp06ControlProfileArtifactRecord BuildSp06ControlProfile(
+        ElectionVerificationPackageExportRequest request)
+    {
+        var expected = IsSp06EvidenceExpected(request);
+        return new ElectionSp06ControlProfileArtifactRecord(
+            request.Election.ElectionId.ToString(),
+            expected
+                ? ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1
+                : "not_applicable",
+            expected
+                ? ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1Version
+                : "not_applicable",
+            request.Election.SelectedProfileId,
+            TrusteeCount: expected ? 5 : ResolveSessionTrusteeCount(request),
+            TrusteeThreshold: expected ? 3 : ResolveSessionThreshold(request),
+            HighAssuranceClaimed: expected,
+            AllowedCustodyModes: expected
+                ? ElectionSp06ProfileIds.HighAssuranceV1AllowedCustodyModes.ToArray()
+                : [],
+            PublicPrivacyBoundary:
+            [
+                "no_trustee_account_id",
+                "no_trustee_person_ref",
+                "no_custody_domain_ref",
+                "no_admin_domain_ref",
+                "no_raw_trustee_share",
+                "no_private_key",
+            ]);
+    }
+
+    private static ElectionSp06TrusteeControlSummaryArtifactRecord BuildSp06ControlSummary(
+        ElectionVerificationPackageExportRequest request)
+    {
+        var expected = IsSp06EvidenceExpected(request);
+        var controlDomains = request.TrusteeControlDomainRecords ?? Array.Empty<ElectionTrusteeControlDomainRecord>();
+        var releaseArtifacts = request.TrusteeReleaseArtifacts ?? BuildSp06ReleaseArtifactsFromFinalizationShares(request);
+        var trusteeRows = BuildSp06TrusteeRows(request, controlDomains, releaseArtifacts);
+        var finalizationSession = request.FinalizationSessions
+            .OrderByDescending(x => x.CompletedAt ?? x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+        var acceptedReleaseCount = releaseArtifacts.Count(x => x.Status == ElectionTrusteeReleaseArtifactStatus.Accepted);
+        var missingReleaseCount = Math.Max(0, trusteeRows.Count(x => x.ReleaseArtifactStatus == ElectionTrusteeReleaseArtifactStatus.Missing));
+        var rejectedReleaseCount = releaseArtifacts.Count(x => x.Status == ElectionTrusteeReleaseArtifactStatus.Rejected);
+        var blockers = BuildSp06ReadinessBlockers(request, controlDomains, releaseArtifacts);
+
+        return new ElectionSp06TrusteeControlSummaryArtifactRecord(
+            request.Election.ElectionId.ToString(),
+            expected
+                ? ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1
+                : "not_applicable",
+            expected
+                ? ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1Version
+                : "not_applicable",
+            request.Election.SelectedProfileId,
+            TrusteeCount: expected ? 5 : ResolveSessionTrusteeCount(request),
+            TrusteeThreshold: expected ? 3 : ResolveSessionThreshold(request),
+            AcceptedBeforeOpenCount: controlDomains.Count(x => x.AcceptedBeforeOpen),
+            CompleteEvidenceCount: controlDomains.Count(x => x.EvidenceStatus == ElectionTrusteeControlDomainEvidenceStatus.Accepted),
+            MissingEvidenceCount: expected ? Math.Max(0, 5 - controlDomains.Count) : 0,
+            StaleEvidenceCount: controlDomains.Count(x => x.EvidenceStatus == ElectionTrusteeControlDomainEvidenceStatus.Stale),
+            IncompatibleEvidenceCount: controlDomains.Count(x => x.EvidenceStatus == ElectionTrusteeControlDomainEvidenceStatus.Incompatible),
+            acceptedReleaseCount,
+            missingReleaseCount,
+            rejectedReleaseCount,
+            FinalEncryptedTallyHash: finalizationSession is null
+                ? "not_available"
+                : VerificationCanonicalHash.ToLowerHex(finalizationSession.FinalEncryptedTallyHash),
+            TargetTallyId: finalizationSession?.TargetTallyId ?? "not_available",
+            ExecutorSessionPublicKeyHash: ResolveExecutorSessionPublicKeyHash(releaseArtifacts),
+            ExecutorKeyAlgorithm: request.FinalizationShares
+                .Where(x => !string.IsNullOrWhiteSpace(x.ExecutorKeyAlgorithm))
+                .OrderByDescending(x => x.SubmittedAt)
+                .Select(x => x.ExecutorKeyAlgorithm)
+                .FirstOrDefault(),
+            trusteeRows,
+            blockers,
+            PublicPrivacyBoundary:
+            [
+                "no_trustee_account_id",
+                "no_trustee_person_ref",
+                "no_custody_domain_ref",
+                "no_admin_domain_ref",
+                "no_raw_trustee_share",
+                "no_private_key",
+            ]);
+    }
+
+    private static ElectionSp06VerifierOutputArtifactRecord BuildSp06VerifierOutput(
+        ElectionVerificationPackageExportRequest request,
+        DateTime verifiedAt)
+    {
+        var summary = BuildSp06ControlSummary(request);
+        var expected = IsSp06EvidenceExpected(request);
+        var status = expected && summary.CompleteEvidenceCount < 5
+            ? VerificationCheckStatus.Fail
+            : VerificationCheckStatus.Pass;
+        var resultCode = status == VerificationCheckStatus.Pass
+            ? VerificationResultCodes.TrusteeControlDomainEvidenceValid
+            : VerificationResultCodes.TrusteeAcceptanceIncomplete;
+
+        return new ElectionSp06VerifierOutputArtifactRecord(
+            request.Election.ElectionId.ToString(),
+            request.VerifierProfileId,
+            verifiedAt,
+            [
+                new VerifierCheckResultRecord(
+                    "CTRL-000",
+                    expected ? VerificationCheckStatus.Pass : VerificationCheckStatus.NotApplicable,
+                    expected
+                        ? VerificationResultCodes.TrusteeControlDomainEvidenceValid
+                        : VerificationResultCodes.PackageStructureValid,
+                    expected
+                        ? "SP-06 control-domain profile is declared for the package."
+                        : "SP-06 control-domain evidence is not expected for this package.",
+                    new Dictionary<string, string>
+                    {
+                        ["control_domain_profile_id"] = summary.ControlDomainProfileId,
+                    }),
+                new VerifierCheckResultRecord(
+                    "CTRL-002",
+                    status,
+                    resultCode,
+                    status == VerificationCheckStatus.Pass
+                        ? "Required trustee control-domain evidence is complete."
+                        : "Required trustee control-domain evidence is incomplete.",
+                    new Dictionary<string, string>
+                    {
+                        ["complete_evidence_count"] = summary.CompleteEvidenceCount.ToString(),
+                        ["trustee_count"] = summary.TrusteeCount.ToString(),
+                    }),
+            ]);
+    }
+
+    private static ElectionSp06RestrictedControlDomainEvidenceArtifactRecord BuildRestrictedSp06ControlDomains(
+        ElectionVerificationPackageExportRequest request) =>
+        new(
+            request.Election.ElectionId.ToString(),
+            request.TrusteeControlDomainRecords ?? Array.Empty<ElectionTrusteeControlDomainRecord>());
+
+    private static ElectionSp06RestrictedReleaseArtifactEvidenceRecord BuildRestrictedSp06ReleaseArtifacts(
+        ElectionVerificationPackageExportRequest request) =>
+        new(
+            request.Election.ElectionId.ToString(),
+            request.TrusteeReleaseArtifacts ?? BuildSp06ReleaseArtifactsFromFinalizationShares(request));
+
+    private static IReadOnlyList<ElectionSp06ReadinessBlockerArtifactRecord> BuildSp06ReadinessBlockers(
+        ElectionVerificationPackageExportRequest request,
+        IReadOnlyList<ElectionTrusteeControlDomainRecord> controlDomains,
+        IReadOnlyList<ElectionTrusteeReleaseArtifactRecord> releaseArtifacts)
+    {
+        if (!IsSp06EvidenceExpected(request))
+        {
+            return Array.Empty<ElectionSp06ReadinessBlockerArtifactRecord>();
+        }
+
+        var blockers = new List<ElectionSp06ReadinessBlockerArtifactRecord>();
+        if (!string.Equals(request.Election.SelectedProfileId, ElectionSelectableProfileCatalog.TrusteeProductionProfileId, StringComparison.Ordinal))
+        {
+            blockers.Add(new ElectionSp06ReadinessBlockerArtifactRecord(
+                "trustee_threshold_profile_mismatch",
+                "High-assurance trustee control requires dkg-prod-3of5.",
+                TrusteeId: null,
+                BlocksOpen: true,
+                BlocksFinalization: true));
+        }
+
+        if (controlDomains.Count < 5)
+        {
+            blockers.Add(new ElectionSp06ReadinessBlockerArtifactRecord(
+                "control_domain_evidence_missing",
+                "High-assurance trustee control requires five accepted control-domain records.",
+                TrusteeId: null,
+                BlocksOpen: true,
+                BlocksFinalization: false));
+        }
+
+        if (controlDomains.Any(x => !x.AcceptedBeforeOpen))
+        {
+            blockers.Add(new ElectionSp06ReadinessBlockerArtifactRecord(
+                "trustee_acceptance_incomplete",
+                "Every high-assurance trustee must accept before election open.",
+                TrusteeId: null,
+                BlocksOpen: true,
+                BlocksFinalization: false));
+        }
+
+        if (releaseArtifacts.Count(x => x.Status == ElectionTrusteeReleaseArtifactStatus.Accepted) < 3)
+        {
+            blockers.Add(new ElectionSp06ReadinessBlockerArtifactRecord(
+                "trustee_release_threshold_not_met",
+                "Fewer than three accepted trustee release artifacts are available.",
+                TrusteeId: null,
+                BlocksOpen: false,
+                BlocksFinalization: true));
+        }
+
+        return blockers;
+    }
+
+    private static IReadOnlyList<ElectionSp06TrusteeControlSummaryRowArtifactRecord> BuildSp06TrusteeRows(
+        ElectionVerificationPackageExportRequest request,
+        IReadOnlyList<ElectionTrusteeControlDomainRecord> controlDomains,
+        IReadOnlyList<ElectionTrusteeReleaseArtifactRecord> releaseArtifacts)
+    {
+        var domainByTrusteeId = controlDomains.ToDictionary(x => x.TrusteeId, StringComparer.Ordinal);
+        var releaseByTrusteeId = releaseArtifacts
+            .GroupBy(x => x.TrusteeId, StringComparer.Ordinal)
+            .ToDictionary(
+                x => x.Key,
+                x => x
+                    .OrderByDescending(y => y.Status == ElectionTrusteeReleaseArtifactStatus.Accepted)
+                    .ThenByDescending(y => y.RecordedAt)
+                    .First(),
+                StringComparer.Ordinal);
+        var trusteeIds = controlDomains
+            .Select(x => x.TrusteeId)
+            .Concat(releaseArtifacts.Select(x => x.TrusteeId))
+            .Concat(BuildSessionTrusteeIds(request))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToArray();
+
+        if (trusteeIds.Length == 0 && IsSp06EvidenceExpected(request))
+        {
+            trusteeIds = Enumerable.Range(1, 5).Select(x => $"trustee-{x:00}").ToArray();
+        }
+
+        return trusteeIds
+            .Select(trusteeId =>
+            {
+                domainByTrusteeId.TryGetValue(trusteeId, out var domain);
+                releaseByTrusteeId.TryGetValue(trusteeId, out var release);
+                return new ElectionSp06TrusteeControlSummaryRowArtifactRecord(
+                    trusteeId,
+                    domain is null ? trusteeId : BuildTrusteePseudonym(domain.TrusteeAccountId),
+                    domain?.EvidenceStatus ?? ElectionTrusteeControlDomainEvidenceStatus.Missing,
+                    release?.Status ?? ElectionTrusteeReleaseArtifactStatus.Missing,
+                    domain?.AcceptedBeforeOpen ?? false,
+                    domain?.AcceptedAt,
+                    domain?.PublicKeyCommitmentHash,
+                    domain is null ? null : VerificationCanonicalHash.ComputeSha256UpperHex(domain.CustodyDomainRefHash),
+                    domain is null ? null : VerificationCanonicalHash.ComputeSha256UpperHex(domain.AdminDomainRefHash),
+                    release?.ArtifactHash,
+                    release?.ShareMaterialHash,
+                    domain?.EvidenceFailureCode ?? release?.FailureCode);
+            })
+            .ToArray();
+    }
+
+    private static IReadOnlyList<ElectionTrusteeReleaseArtifactRecord> BuildSp06ReleaseArtifactsFromFinalizationShares(
+        ElectionVerificationPackageExportRequest request)
+    {
+        var latestSession = request.FinalizationSessions
+            .OrderByDescending(x => x.CompletedAt ?? x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+        if (latestSession is null)
+        {
+            return Array.Empty<ElectionTrusteeReleaseArtifactRecord>();
+        }
+
+        var records = request.FinalizationShares
+            .Where(x => x.FinalizationSessionId == latestSession.Id)
+            .Select(x => new ElectionTrusteeReleaseArtifactRecord(
+                x.Id,
+                x.ElectionId,
+                x.FinalizationSessionId,
+                ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+                latestSession.CeremonySnapshot?.ProfileId ?? request.Election.SelectedProfileId,
+                BuildTrusteeId(x.TrusteeUserAddress),
+                BuildTrusteePseudonym(x.TrusteeUserAddress),
+                x.Status == ElectionFinalizationShareStatus.Accepted
+                    ? ElectionTrusteeReleaseArtifactStatus.Accepted
+                    : ElectionTrusteeReleaseArtifactStatus.Rejected,
+                x.ShareMaterialHash,
+                VerificationCanonicalHash.ComputeSha256UpperHex($"{x.Id:N}|{x.ShareMaterialHash}|{x.Status}"),
+                x.FailureCode,
+                x.FailureReason,
+                x.ClaimedCloseArtifactId,
+                x.ClaimedAcceptedBallotSetHash,
+                x.ClaimedFinalEncryptedTallyHash,
+                x.ClaimedTargetTallyId,
+                x.ClaimedCeremonyVersionId,
+                x.ClaimedTallyPublicKeyFingerprint,
+                null,
+                x.ExecutorKeyAlgorithm,
+                x.SubmittedAt))
+            .ToList();
+
+        var acceptedTrusteeIds = records
+            .Select(x => x.TrusteeId)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var missingTrustee in latestSession.EligibleTrustees
+            .Where(x => !acceptedTrusteeIds.Contains(BuildTrusteeId(x.TrusteeUserAddress))))
+        {
+            records.Add(new ElectionTrusteeReleaseArtifactRecord(
+                Guid.NewGuid(),
+                latestSession.ElectionId,
+                latestSession.Id,
+                ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+                latestSession.CeremonySnapshot?.ProfileId ?? request.Election.SelectedProfileId,
+                BuildTrusteeId(missingTrustee.TrusteeUserAddress),
+                BuildTrusteePseudonym(missingTrustee.TrusteeUserAddress),
+                ElectionTrusteeReleaseArtifactStatus.Missing,
+                ShareMaterialHash: null,
+                ArtifactHash: null,
+                FailureCode: "trustee_release_missing",
+                FailureReason: "Trustee did not submit a release artifact for the finalization session.",
+                latestSession.CloseArtifactId,
+                latestSession.AcceptedBallotSetHash,
+                latestSession.FinalEncryptedTallyHash,
+                latestSession.TargetTallyId,
+                latestSession.CeremonySnapshot?.CeremonyVersionId,
+                latestSession.CeremonySnapshot?.TallyPublicKeyFingerprint,
+                ExecutorSessionPublicKeyHash: null,
+                ExecutorKeyAlgorithm: null,
+                latestSession.CompletedAt ?? latestSession.CreatedAt));
+        }
+
+        return records;
+    }
+
+    private static IReadOnlyList<string> BuildSessionTrusteeIds(ElectionVerificationPackageExportRequest request) =>
+        request.FinalizationSessions
+            .SelectMany(x => x.EligibleTrustees)
+            .Select(x => BuildTrusteeId(x.TrusteeUserAddress))
+            .ToArray();
+
+    private static bool IsSp06EvidenceExpected(ElectionVerificationPackageExportRequest request) =>
+        request.Election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold ||
+        string.Equals(request.VerifierProfileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal);
+
+    private static int ResolveSessionTrusteeCount(ElectionVerificationPackageExportRequest request) =>
+        request.FinalizationSessions
+            .OrderByDescending(x => x.CompletedAt ?? x.CreatedAt)
+            .Select(x => x.EligibleTrustees.Count)
+            .FirstOrDefault();
+
+    private static int ResolveSessionThreshold(ElectionVerificationPackageExportRequest request) =>
+        request.FinalizationSessions
+            .OrderByDescending(x => x.CompletedAt ?? x.CreatedAt)
+            .Select(x => x.RequiredShareCount)
+            .FirstOrDefault();
+
+    private static string? ResolveExecutorSessionPublicKeyHash(
+        IReadOnlyList<ElectionTrusteeReleaseArtifactRecord> releaseArtifacts) =>
+        releaseArtifacts
+            .Where(x => !string.IsNullOrWhiteSpace(x.ExecutorSessionPublicKeyHash))
+            .OrderByDescending(x => x.RecordedAt)
+            .Select(x => x.ExecutorSessionPublicKeyHash)
+            .FirstOrDefault();
+
+    private static string BuildTrusteeId(string trusteeUserAddress) =>
+        $"trustee-{VerificationCanonicalHash.ComputeSha256UpperHex(trusteeUserAddress)[..12].ToLowerInvariant()}";
+
+    private static string BuildTrusteePseudonym(string trusteeUserAddress) =>
+        $"trustee-ref-{VerificationCanonicalHash.ComputeSha256UpperHex(trusteeUserAddress)[..12].ToLowerInvariant()}";
 }
