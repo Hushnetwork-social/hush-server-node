@@ -2256,6 +2256,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var activeCeremonyTrusteeStates = activeCeremonyVersion is null
             ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
             : await repository.GetCeremonyTrusteeStatesAsync(activeCeremonyVersion.Id);
+        var activeCeremonyShareCustodyRecords = activeCeremonyVersion is null
+            ? Array.Empty<ElectionCeremonyShareCustodyRecord>()
+            : await repository.GetCeremonyShareCustodyRecordsAsync(activeCeremonyVersion.Id);
         var selectedProfile = await ResolveSelectedProfileAsync(repository, election);
         var protocolPackageValidation = await _protocolPackageBindingService.ValidateForOpenAsync(repository, election);
 
@@ -2265,6 +2268,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             rosterEntries,
             activeCeremonyVersion,
             activeCeremonyTrusteeStates,
+            activeCeremonyShareCustodyRecords,
             warningAcknowledgements,
             selectedProfile,
             protocolPackageValidation,
@@ -3138,6 +3142,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 var activeCeremonyTrusteeStates = activeCeremonyVersion is null
                     ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
                     : await repository.GetCeremonyTrusteeStatesAsync(activeCeremonyVersion.Id);
+                var activeCeremonyShareCustodyRecords = activeCeremonyVersion is null
+                    ? Array.Empty<ElectionCeremonyShareCustodyRecord>()
+                    : await repository.GetCeremonyShareCustodyRecordsAsync(activeCeremonyVersion.Id);
                 var selectedProfile = await ResolveSelectedProfileAsync(repository, election);
                 var protocolPackageValidation = await _protocolPackageBindingService.ValidateForOpenAsync(repository, election);
                 var readiness = EvaluateOpenReadiness(
@@ -3146,6 +3153,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     rosterEntries,
                     activeCeremonyVersion,
                     activeCeremonyTrusteeStates,
+                    activeCeremonyShareCustodyRecords,
                     warningAcknowledgements,
                     selectedProfile,
                     protocolPackageValidation,
@@ -3343,6 +3351,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var activeCeremonyTrusteeStates = activeCeremonyVersion is null
             ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
             : await repository.GetCeremonyTrusteeStatesAsync(activeCeremonyVersion.Id);
+        var activeCeremonyShareCustodyRecords = activeCeremonyVersion is null
+            ? Array.Empty<ElectionCeremonyShareCustodyRecord>()
+            : await repository.GetCeremonyShareCustodyRecordsAsync(activeCeremonyVersion.Id);
         var selectedProfile = await ResolveSelectedProfileAsync(repository, election);
         var protocolPackageValidation = await _protocolPackageBindingService.ValidateForOpenAsync(repository, election);
         var readiness = EvaluateOpenReadiness(
@@ -3351,6 +3362,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             rosterEntries,
             activeCeremonyVersion,
             activeCeremonyTrusteeStates,
+            activeCeremonyShareCustodyRecords,
             warningAcknowledgements,
             selectedProfile,
             protocolPackageValidation,
@@ -4079,6 +4091,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IReadOnlyList<ElectionRosterEntryRecord> rosterEntries,
         ElectionCeremonyVersionRecord? activeCeremonyVersion,
         IReadOnlyList<ElectionCeremonyTrusteeStateRecord> activeCeremonyTrusteeStates,
+        IReadOnlyList<ElectionCeremonyShareCustodyRecord> activeCeremonyShareCustodyRecords,
         IReadOnlyList<ElectionWarningAcknowledgementRecord> warningAcknowledgements,
         ElectionCeremonyProfileRecord? selectedProfile,
         ProtocolPackageBindingOpenValidation protocolPackageValidation,
@@ -4208,11 +4221,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
             var requiredTrustees = ceremonySnapshot?.ActiveTrustees ??
                 activeCeremonyVersion?.BoundTrustees ??
                 Array.Empty<ElectionTrusteeReference>();
+            var controlDomains = ElectionSp06ControlDomainMaterializer.BuildFromCeremonyEvidence(
+                election,
+                activeCeremonyVersion,
+                invitations,
+                activeCeremonyTrusteeStates,
+                activeCeremonyShareCustodyRecords);
             sp06Summary = ElectionSp06ControlDomainPolicy.EvaluateHighAssuranceV1(
                 election,
                 selectedProfile,
                 requiredTrustees,
-                controlDomains: []);
+                controlDomains);
             foreach (var blocker in sp06Summary.ReadinessBlockers.Where(x => x.BlocksOpen))
             {
                 errors.Add($"{blocker.Code}: {blocker.Message}");

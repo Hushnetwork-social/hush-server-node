@@ -1,4 +1,5 @@
 using HushNetwork.proto;
+using HushNode.Elections;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
 using HushShared.Elections.Verification.Model;
@@ -117,6 +118,7 @@ public partial class ElectionQueryApplicationService
             isDesignatedAuditor,
             latestReportPackage,
             protocolPackageBinding,
+            TrusteeInvitations: [],
             ReportArtifacts: [],
             BoundaryArtifacts: [],
             AcceptedBallots: [],
@@ -124,6 +126,9 @@ public partial class ElectionQueryApplicationService
             FinalizationSessions: [],
             FinalizationShares: [],
             ReleaseEvidenceRecords: [],
+            CeremonyVersions: [],
+            CeremonyTrusteeStates: [],
+            CeremonyShareCustodyRecords: [],
             RosterEntries: [],
             ParticipationRecords: [],
             VoterCeremonyRecords: [],
@@ -174,6 +179,15 @@ public partial class ElectionQueryApplicationService
         }
 
         var releaseEvidence = await repository.GetFinalizationReleaseEvidenceRecordsAsync(election.ElectionId);
+        var ceremonyVersions = await repository.GetCeremonyVersionsAsync(election.ElectionId);
+        var ceremonyTrusteeStates = new List<ElectionCeremonyTrusteeStateRecord>();
+        var ceremonyShareCustodyRecords = new List<ElectionCeremonyShareCustodyRecord>();
+        foreach (var ceremonyVersion in ceremonyVersions)
+        {
+            ceremonyTrusteeStates.AddRange(await repository.GetCeremonyTrusteeStatesAsync(ceremonyVersion.Id));
+            ceremonyShareCustodyRecords.AddRange(await repository.GetCeremonyShareCustodyRecordsAsync(ceremonyVersion.Id));
+        }
+
         var rosterEntries = await repository.GetRosterEntriesAsync(election.ElectionId);
         var participationRecords = await repository.GetParticipationRecordsAsync(election.ElectionId);
         var voterCeremonyRecords = await repository.GetVoterCeremonyRecordsAsync(election.ElectionId);
@@ -194,6 +208,7 @@ public partial class ElectionQueryApplicationService
             isDesignatedAuditor,
             latestReportPackage,
             protocolPackageBinding,
+            trusteeInvitations,
             reportArtifacts,
             boundaryArtifacts,
             acceptedBallots,
@@ -201,6 +216,9 @@ public partial class ElectionQueryApplicationService
             finalizationSessions,
             finalizationShares,
             releaseEvidence,
+            ceremonyVersions,
+            ceremonyTrusteeStates,
+            ceremonyShareCustodyRecords,
             rosterEntries,
             participationRecords,
             voterCeremonyRecords,
@@ -256,6 +274,18 @@ public partial class ElectionQueryApplicationService
         bool restrictedPackageAvailable)
     {
         var expected = IsSp06EvidenceExpected(context.Election);
+        var controlDomains = BuildSp06ControlDomainRecords(context);
+        var ceremonyVersion = ResolveSp06CeremonyVersion(context);
+        var thresholdProfile = BuildSp06ThresholdProfile(context.Election, ceremonyVersion);
+        var requiredTrustees = ceremonyVersion?.BoundTrustees ??
+            Array.Empty<HushShared.Elections.Model.ElectionTrusteeReference>();
+        var controlSummary = expected
+            ? ElectionSp06ControlDomainPolicy.EvaluateHighAssuranceV1(
+                context.Election,
+                thresholdProfile,
+                requiredTrustees,
+                controlDomains)
+            : null;
         var latestSession = context.FinalizationSessions
             .OrderByDescending(x => x.CompletedAt ?? x.CreatedAt)
             .ThenByDescending(x => x.Id)
@@ -282,11 +312,20 @@ public partial class ElectionQueryApplicationService
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .Count());
         var missingEvidenceCount = expected
-            ? ElectionSp06ControlDomainPolicy.HighAssuranceV1TrusteeCount
+            ? Math.Max(
+                controlSummary?.MissingEvidenceCount ?? 0,
+                ElectionSp06ControlDomainPolicy.HighAssuranceV1TrusteeCount - controlDomains.Count)
             : 0;
+        var staleEvidenceCount = controlSummary?.StaleEvidenceCount ?? 0;
+        var incompatibleEvidenceCount = controlSummary?.IncompatibleEvidenceCount ?? 0;
+        var incompleteControlEvidence =
+            missingEvidenceCount > 0 ||
+            staleEvidenceCount > 0 ||
+            incompatibleEvidenceCount > 0 ||
+            controlDomains.Count(x => !x.AcceptedBeforeOpen) > 0;
         var latestCtrlCode = !expected
             ? VerificationResultCodes.PackageStructureValid
-            : missingEvidenceCount > 0
+            : incompleteControlEvidence
                 ? VerificationResultCodes.TrusteeAcceptanceIncomplete
                 : acceptedReleaseCount < ElectionSp06ControlDomainPolicy.HighAssuranceV1Threshold
                     ? VerificationResultCodes.TrusteeReleaseThresholdNotMet
@@ -311,11 +350,11 @@ public partial class ElectionQueryApplicationService
             ThresholdProfileId = context.Election.ThresholdProfileId ?? context.Election.SelectedProfileId,
             TrusteeCount = trusteeCount,
             TrusteeThreshold = threshold,
-            AcceptedBeforeOpenCount = 0,
-            CompleteEvidenceCount = 0,
+            AcceptedBeforeOpenCount = controlSummary?.AcceptedBeforeOpenCount ?? 0,
+            CompleteEvidenceCount = controlSummary?.CompleteEvidenceCount ?? 0,
             MissingEvidenceCount = missingEvidenceCount,
-            StaleEvidenceCount = 0,
-            IncompatibleEvidenceCount = 0,
+            StaleEvidenceCount = staleEvidenceCount,
+            IncompatibleEvidenceCount = incompatibleEvidenceCount,
             AcceptedReleaseArtifactCount = acceptedReleaseCount,
             MissingReleaseArtifactCount = missingReleaseCount,
             RejectedReleaseArtifactCount = rejectedReleaseCount,
@@ -323,7 +362,21 @@ public partial class ElectionQueryApplicationService
             Message = message,
         };
 
-        if (expected && missingEvidenceCount > 0)
+        if (controlSummary is not null)
+        {
+            view.Blockers.AddRange(controlSummary.ReadinessBlockers.Select(x => new ElectionSp06ReadinessBlockerView
+            {
+                Code = x.Code,
+                Message = x.Message,
+                TrusteeRef = x.TrusteeId ?? string.Empty,
+                BlocksOpen = x.BlocksOpen,
+                BlocksFinalization = x.BlocksFinalization,
+            }));
+        }
+
+        if (expected &&
+            missingEvidenceCount > 0 &&
+            view.Blockers.All(x => x.Code != "control_domain_evidence_missing"))
         {
             view.Blockers.Add(new ElectionSp06ReadinessBlockerView
             {
@@ -527,7 +580,65 @@ public partial class ElectionQueryApplicationService
             context.CommitmentSchemeEvidences,
             context.CommitmentRegistrations,
             context.CheckoffConsumptions,
-            context.EligibilityActivationEvents);
+            context.EligibilityActivationEvents,
+            TrusteeControlDomainRecords: BuildSp06ControlDomainRecords(context));
+
+    private static IReadOnlyList<ElectionTrusteeControlDomainRecord> BuildSp06ControlDomainRecords(
+        VerificationPackageContext context)
+    {
+        var ceremonyVersion = ResolveSp06CeremonyVersion(context);
+        var trusteeStates = ceremonyVersion is null
+            ? Array.Empty<ElectionCeremonyTrusteeStateRecord>()
+            : context.CeremonyTrusteeStates
+                .Where(x => x.CeremonyVersionId == ceremonyVersion.Id)
+                .ToArray();
+        var shareCustodyRecords = ceremonyVersion is null
+            ? Array.Empty<ElectionCeremonyShareCustodyRecord>()
+            : context.CeremonyShareCustodyRecords
+                .Where(x => x.CeremonyVersionId == ceremonyVersion.Id)
+                .ToArray();
+
+        return ElectionSp06ControlDomainMaterializer.BuildFromCeremonyEvidence(
+            context.Election,
+            ceremonyVersion,
+            context.TrusteeInvitations,
+            trusteeStates,
+            shareCustodyRecords);
+    }
+
+    private static ElectionCeremonyVersionRecord? ResolveSp06CeremonyVersion(VerificationPackageContext context) =>
+        context.CeremonyVersions
+            .Where(x => x.IsActive)
+            .OrderByDescending(x => x.CompletedAt ?? x.StartedAt)
+            .ThenByDescending(x => x.VersionNumber)
+            .FirstOrDefault() ??
+        context.CeremonyVersions
+            .OrderByDescending(x => x.CompletedAt ?? x.StartedAt)
+            .ThenByDescending(x => x.VersionNumber)
+            .FirstOrDefault();
+
+    private static ElectionCeremonyProfileRecord? BuildSp06ThresholdProfile(
+        ElectionRecord election,
+        ElectionCeremonyVersionRecord? ceremonyVersion)
+    {
+        if (ceremonyVersion is null)
+        {
+            return null;
+        }
+
+        var timestamp = ceremonyVersion.StartedAt;
+        return new ElectionCeremonyProfileRecord(
+            ceremonyVersion.ProfileId,
+            ceremonyVersion.ProfileId,
+            "Materialized ceremony profile used for SP-06 package/readiness projection.",
+            "ceremony-version",
+            ceremonyVersion.ProfileId,
+            ceremonyVersion.TrusteeCount,
+            ceremonyVersion.RequiredApprovalCount,
+            election.SelectedProfileDevOnly,
+            timestamp,
+            ceremonyVersion.CompletedAt ?? timestamp);
+    }
 
     private static IReadOnlyList<ElectionSp04ReceiptCommitmentRecord> BuildSp04ReceiptCommitments(
         IReadOnlyList<ElectionAcceptedBallotRecord> acceptedBallots) =>
@@ -776,6 +887,7 @@ public partial class ElectionQueryApplicationService
         bool IsDesignatedAuditor,
         ElectionReportPackageRecord? LatestReportPackage,
         ProtocolPackageBindingRecord? ProtocolPackageBinding,
+        IReadOnlyList<ElectionTrusteeInvitationRecord> TrusteeInvitations,
         IReadOnlyList<ElectionReportArtifactRecord> ReportArtifacts,
         IReadOnlyList<ElectionBoundaryArtifactRecord> BoundaryArtifacts,
         IReadOnlyList<ElectionAcceptedBallotRecord> AcceptedBallots,
@@ -783,6 +895,9 @@ public partial class ElectionQueryApplicationService
         IReadOnlyList<ElectionFinalizationSessionRecord> FinalizationSessions,
         IReadOnlyList<ElectionFinalizationShareRecord> FinalizationShares,
         IReadOnlyList<ElectionFinalizationReleaseEvidenceRecord> ReleaseEvidenceRecords,
+        IReadOnlyList<ElectionCeremonyVersionRecord> CeremonyVersions,
+        IReadOnlyList<ElectionCeremonyTrusteeStateRecord> CeremonyTrusteeStates,
+        IReadOnlyList<ElectionCeremonyShareCustodyRecord> CeremonyShareCustodyRecords,
         IReadOnlyList<ElectionRosterEntryRecord> RosterEntries,
         IReadOnlyList<ElectionParticipationRecord> ParticipationRecords,
         IReadOnlyList<ElectionVoterCeremonyRecord> VoterCeremonyRecords,

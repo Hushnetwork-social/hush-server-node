@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using HushShared.Elections.Model;
 using HushShared.Elections.Verification.Model;
 
@@ -101,8 +103,10 @@ public sealed partial class ElectionVerificationPackageExportService
     }
 
     private static TrusteeReleaseEvidenceArtifactRecord BuildTrusteeReleaseEvidence(
-        ElectionVerificationPackageExportRequest request) =>
-        new(
+        ElectionVerificationPackageExportRequest request)
+    {
+        var highAssurance = IsSp06EvidenceExpected(request);
+        return new TrusteeReleaseEvidenceArtifactRecord(
             request.Election.ElectionId.ToString(),
             request.FinalizationSessions.Count,
             request.FinalizationShares.Count(x => x.IsAccepted),
@@ -110,11 +114,12 @@ public sealed partial class ElectionVerificationPackageExportService
                 .Where(x => x.IsAccepted)
                 .OrderBy(x => x.ShareIndex)
                 .Select(x => new TrusteeReleaseShareEvidenceRecord(
-                    x.TrusteeUserAddress,
+                    highAssurance ? BuildTrusteeId(x.TrusteeUserAddress) : x.TrusteeUserAddress,
                     x.ShareIndex,
                     x.ShareMaterialHash,
                     x.Status.ToString()))
                 .ToArray());
+    }
 
     private static ResultBindingArtifactRecord BuildResultBinding(ElectionVerificationPackageExportRequest request) =>
         new(
@@ -821,7 +826,9 @@ public sealed partial class ElectionVerificationPackageExportService
             .Where(x => !acceptedTrusteeIds.Contains(BuildTrusteeId(x.TrusteeUserAddress))))
         {
             records.Add(new ElectionTrusteeReleaseArtifactRecord(
-                Guid.NewGuid(),
+                BuildDeterministicGuid(
+                    "sp06-missing-release",
+                    $"{latestSession.ElectionId}|{latestSession.Id:N}|{missingTrustee.TrusteeUserAddress}"),
                 latestSession.ElectionId,
                 latestSession.Id,
                 ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
@@ -885,4 +892,10 @@ public sealed partial class ElectionVerificationPackageExportService
 
     private static string BuildTrusteePseudonym(string trusteeUserAddress) =>
         $"trustee-ref-{VerificationCanonicalHash.ComputeSha256UpperHex(trusteeUserAddress)[..12].ToLowerInvariant()}";
+
+    private static Guid BuildDeterministicGuid(string scope, string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"{scope}|{value}".Trim().ToLowerInvariant()));
+        return new Guid(bytes[..16]);
+    }
 }
