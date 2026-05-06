@@ -2257,6 +2257,89 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithHighAssuranceProfileAndMissingCustodyEvidence_ReturnsSp06Blocker()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateHighAssuranceTrusteeElection();
+        var invitations = CreateHighAssuranceTrusteeInvitations(election);
+        var profile = RegisterCeremonyProfile(
+            store,
+            ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+            trusteeCount: 5,
+            requiredApprovalCount: 3);
+        RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            invitations,
+            completedTrustees: invitations.Select(x => x.TrusteeUserAddress).ToArray(),
+            ready: true);
+        var missingCustody = store.CeremonyShareCustodyRecords.Values.Single(x =>
+            string.Equals(x.TrusteeUserAddress, invitations[^1].TrusteeUserAddress, StringComparison.OrdinalIgnoreCase));
+        store.CeremonyShareCustodyRecords.Remove(missingCustody.Id);
+
+        store.Elections[election.ElectionId] = election;
+        foreach (var invitation in invitations)
+        {
+            store.TrusteeInvitations[invitation.Id] = invitation;
+        }
+
+        SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            election.ElectionId,
+            RequiredWarningCodes: []));
+
+        result.IsReadyToOpen.Should().BeFalse();
+        result.Sp06Summary.Should().NotBeNull();
+        result.Sp06Summary!.MissingEvidenceCount.Should().Be(1);
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains("control_domain_evidence_missing", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithHighAssuranceProfileAndCompleteCustodyEvidence_ReturnsReady()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateHighAssuranceTrusteeElection();
+        var invitations = CreateHighAssuranceTrusteeInvitations(election);
+        var profile = RegisterCeremonyProfile(
+            store,
+            ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+            trusteeCount: 5,
+            requiredApprovalCount: 3);
+        RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            invitations,
+            completedTrustees: invitations.Select(x => x.TrusteeUserAddress).ToArray(),
+            ready: true);
+
+        store.Elections[election.ElectionId] = election;
+        foreach (var invitation in invitations)
+        {
+            store.TrusteeInvitations[invitation.Id] = invitation;
+        }
+
+        SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            election.ElectionId,
+            RequiredWarningCodes: []));
+
+        result.IsReadyToOpen.Should().BeTrue();
+        result.ValidationErrors.Should().BeEmpty();
+        result.Sp06Summary.Should().NotBeNull();
+        result.Sp06Summary!.CompleteEvidenceCount.Should().Be(5);
+        result.Sp06Summary.MissingEvidenceCount.Should().Be(0);
+    }
+
+    [Fact]
     public async Task EvaluateOpenReadinessAsync_WithoutImportedRoster_ReturnsNotReady()
     {
         var store = new ElectionStore();
@@ -5443,6 +5526,27 @@ public class ElectionLifecycleServiceTests
             ],
             acknowledgedWarningCodes: acknowledgedWarningCodes,
             requiredApprovalCount: requiredApprovalCount);
+
+    private static ElectionRecord CreateHighAssuranceTrusteeElection() =>
+        CreateTrusteeElection(
+            requiredApprovalCount: ElectionSp06ControlDomainPolicy.HighAssuranceV1Threshold,
+            selectedProfileId: ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+            selectedProfileDevOnly: false) with
+        {
+            ControlDomainProfileId = ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+            ControlDomainProfileVersion = ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1Version,
+            ThresholdProfileId = ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+        };
+
+    private static IReadOnlyList<ElectionTrusteeInvitationRecord> CreateHighAssuranceTrusteeInvitations(
+        ElectionRecord election) =>
+    [
+        CreateAcceptedTrusteeInvitation(election, "trustee-1@hush.test", "Trustee 1"),
+        CreateAcceptedTrusteeInvitation(election, "trustee-2@hush.test", "Trustee 2"),
+        CreateAcceptedTrusteeInvitation(election, "trustee-3@hush.test", "Trustee 3"),
+        CreateAcceptedTrusteeInvitation(election, "trustee-4@hush.test", "Trustee 4"),
+        CreateAcceptedTrusteeInvitation(election, "trustee-5@hush.test", "Trustee 5"),
+    ];
 
     private static ElectionTrusteeInvitationRecord CreateAcceptedTrusteeInvitation(
         ElectionRecord election,

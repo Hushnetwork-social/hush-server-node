@@ -60,7 +60,10 @@ public record ElectionFrozenPolicySnapshot(
     ElectionIdentityLinkPolicy IdentityLinkPolicy = ElectionIdentityLinkPolicy.ContactCodeV1,
     ElectionCheckoffVisibilityPolicy CheckoffVisibilityPolicy = ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor,
     ElectionActorLinkMultiplicityPolicy ActorLinkMultiplicityPolicy = ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor,
-    ElectionContactCodeProviderReadiness ContactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly);
+    ElectionContactCodeProviderReadiness ContactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly,
+    string? ControlDomainProfileId = null,
+    string? ControlDomainProfileVersion = null,
+    string? ThresholdProfileId = null);
 
 public record ElectionTrusteeReference(
     string TrusteeUserAddress,

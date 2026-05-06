@@ -304,6 +304,49 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionAsync_WithHighAssuranceFinalizationSession_ProjectsSp06ReleaseCounts()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateHighAssuranceTrusteeElection();
+        var trustees = CreateHighAssuranceTrustees();
+        var ceremonySnapshot = CreateHighAssuranceCeremonySnapshot(trustees);
+        var finalizationSession = ElectionModelFactory.CreateFinalizationSession(
+            election,
+            closeArtifactId: Guid.NewGuid(),
+            acceptedBallotSetHash: [1, 2, 3],
+            finalEncryptedTallyHash: [4, 5, 6],
+            sessionPurpose: ElectionFinalizationSessionPurpose.CloseCounting,
+            ceremonySnapshot,
+            requiredShareCount: 3,
+            eligibleTrustees: trustees,
+            createdByPublicAddress: "owner-address");
+        var finalizationShares = CreateHighAssuranceFinalizationShares(finalizationSession, trustees, acceptedCount: 3, rejectedCount: 1);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetFinalizationSessionsAsync(election.ElectionId)).ReturnsAsync([finalizationSession]);
+            repo.Setup(x => x.GetFinalizationSharesAsync(finalizationSession.Id)).ReturnsAsync(finalizationShares);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionAsync(election.ElectionId, "owner-address");
+
+        response.Success.Should().BeTrue();
+        response.FinalizationSessions.Should().ContainSingle();
+        var session = response.FinalizationSessions[0];
+        session.ControlDomainProfileId.Should().Be(ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1);
+        session.ControlDomainProfileVersion.Should().Be(ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1Version);
+        session.ThresholdProfileId.Should().Be(ElectionSelectableProfileCatalog.TrusteeProductionProfileId);
+        session.TrusteeCount.Should().Be(5);
+        session.TrusteeThreshold.Should().Be(3);
+        session.AcceptedReleaseArtifactCount.Should().Be(3);
+        session.MissingReleaseArtifactCount.Should().Be(1);
+        session.RejectedReleaseArtifactCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task GetElectionAsync_WithoutSignedActor_HidesOpenCloseAndFinalizeOperationalMetadata()
     {
         var mocker = new AutoMocker();
@@ -3347,6 +3390,184 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionVerificationPackageStatusAsync_WithHighAssuranceTrusteeProfile_ReturnsSp06EvidenceStatus()
+    {
+        var mocker = new AutoMocker();
+        var election = WithSealedBallotDefinition(CreateHighAssuranceTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = DateTime.UtcNow.AddMinutes(-1),
+            TallyReadyArtifactId = Guid.NewGuid(),
+            UnofficialResultArtifactId = Guid.NewGuid(),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            FinalizeArtifactId = Guid.NewGuid(),
+        });
+        var trustees = CreateHighAssuranceTrustees();
+        var ceremonySnapshot = CreateHighAssuranceCeremonySnapshot(trustees);
+        var ceremonyEvidence = CreateHighAssuranceCeremonyEvidence(
+            election,
+            trustees,
+            ceremonySnapshot.CeremonyVersionId);
+        var finalizationSession = ElectionModelFactory.CreateFinalizationSession(
+            election,
+            closeArtifactId: Guid.NewGuid(),
+            acceptedBallotSetHash: [1, 2, 3],
+            finalEncryptedTallyHash: [4, 5, 6],
+            sessionPurpose: ElectionFinalizationSessionPurpose.CloseCounting,
+            ceremonySnapshot,
+            requiredShareCount: 3,
+            eligibleTrustees: trustees,
+            createdByPublicAddress: "owner-address",
+            createdAt: DateTime.UtcNow.AddMinutes(-3));
+        var finalizationShares = CreateHighAssuranceFinalizationShares(finalizationSession, trustees, acceptedCount: 3, rejectedCount: 0);
+        var reportPackage = CreateSealedVerificationReportPackage(election);
+        var sealedProtocolPackageBinding = CreateLatestProtocolPackageBinding(election)
+            .SealAtOpen(DateTime.UtcNow.AddMinutes(-10), "owner-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetSealedProtocolPackageBindingAsync(election.ElectionId))
+                .ReturnsAsync(sealedProtocolPackageBinding);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId))
+                .ReturnsAsync(ceremonyEvidence.Invitations);
+            repo.Setup(x => x.GetCeremonyVersionsAsync(election.ElectionId))
+                .ReturnsAsync([ceremonyEvidence.Version]);
+            repo.Setup(x => x.GetCeremonyTrusteeStatesAsync(ceremonyEvidence.Version.Id))
+                .ReturnsAsync(ceremonyEvidence.TrusteeStates);
+            repo.Setup(x => x.GetCeremonyShareCustodyRecordsAsync(ceremonyEvidence.Version.Id))
+                .ReturnsAsync(ceremonyEvidence.ShareCustodyRecords);
+            repo.Setup(x => x.GetFinalizationSessionsAsync(election.ElectionId)).ReturnsAsync([finalizationSession]);
+            repo.Setup(x => x.GetFinalizationSharesAsync(finalizationSession.Id)).ReturnsAsync(finalizationShares);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionVerificationPackageStatusAsync(election.ElectionId, "owner-address");
+
+        response.Success.Should().BeTrue();
+        response.Status.Sp06Evidence.Should().NotBeNull();
+        var sp06 = response.Status.Sp06Evidence;
+        sp06.EvidenceExpected.Should().BeTrue();
+        sp06.PublicEvidenceAvailable.Should().BeTrue();
+        sp06.RestrictedEvidenceAvailable.Should().BeTrue();
+        sp06.ControlDomainProfileId.Should().Be(ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1);
+        sp06.ControlDomainProfileVersion.Should().Be(ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1Version);
+        sp06.ThresholdProfileId.Should().Be(ElectionSelectableProfileCatalog.TrusteeProductionProfileId);
+        sp06.TrusteeCount.Should().Be(5);
+        sp06.TrusteeThreshold.Should().Be(3);
+        sp06.AcceptedReleaseArtifactCount.Should().Be(3);
+        sp06.MissingReleaseArtifactCount.Should().Be(2);
+        sp06.RejectedReleaseArtifactCount.Should().Be(0);
+        sp06.AcceptedBeforeOpenCount.Should().Be(5);
+        sp06.CompleteEvidenceCount.Should().Be(5);
+        sp06.MissingEvidenceCount.Should().Be(0);
+        sp06.LatestCtrlResultCode.Should().Be(VerificationResultCodes.TrusteeControlDomainEvidenceValid);
+        sp06.Blockers.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ExportElectionVerificationPackageAsync_WithHighAssuranceTrusteeEvidence_VerifiesPublicAndRestrictedPackages()
+    {
+        var mocker = new AutoMocker();
+        var election = WithSealedBallotDefinition(CreateHighAssuranceTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = DateTime.UtcNow.AddMinutes(-1),
+            TallyReadyArtifactId = Guid.NewGuid(),
+            UnofficialResultArtifactId = Guid.NewGuid(),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            FinalizeArtifactId = Guid.NewGuid(),
+        });
+        var trustees = CreateHighAssuranceTrustees();
+        var ceremonySnapshot = CreateHighAssuranceCeremonySnapshot(trustees);
+        var ceremonyEvidence = CreateHighAssuranceCeremonyEvidence(
+            election,
+            trustees,
+            ceremonySnapshot.CeremonyVersionId);
+        var finalizationSession = ElectionModelFactory.CreateFinalizationSession(
+            election,
+            closeArtifactId: Guid.NewGuid(),
+            acceptedBallotSetHash: [1, 2, 3],
+            finalEncryptedTallyHash: [4, 5, 6],
+            sessionPurpose: ElectionFinalizationSessionPurpose.CloseCounting,
+            ceremonySnapshot,
+            requiredShareCount: 3,
+            eligibleTrustees: trustees,
+            createdByPublicAddress: "owner-address",
+            createdAt: DateTime.UtcNow.AddMinutes(-3));
+        var finalizationShares = CreateHighAssuranceFinalizationShares(finalizationSession, trustees, acceptedCount: 3, rejectedCount: 0);
+        var reportPackage = CreateSealedVerificationReportPackage(election);
+        var sealedProtocolPackageBinding = CreateLatestProtocolPackageBinding(election)
+            .SealAtOpen(DateTime.UtcNow.AddMinutes(-10), "owner-address");
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetSealedProtocolPackageBindingAsync(election.ElectionId))
+                .ReturnsAsync(sealedProtocolPackageBinding);
+            repo.Setup(x => x.GetTrusteeInvitationsAsync(election.ElectionId))
+                .ReturnsAsync(ceremonyEvidence.Invitations);
+            repo.Setup(x => x.GetCeremonyVersionsAsync(election.ElectionId))
+                .ReturnsAsync([ceremonyEvidence.Version]);
+            repo.Setup(x => x.GetCeremonyTrusteeStatesAsync(ceremonyEvidence.Version.Id))
+                .ReturnsAsync(ceremonyEvidence.TrusteeStates);
+            repo.Setup(x => x.GetCeremonyShareCustodyRecordsAsync(ceremonyEvidence.Version.Id))
+                .ReturnsAsync(ceremonyEvidence.ShareCustodyRecords);
+            repo.Setup(x => x.GetFinalizationSessionsAsync(election.ElectionId)).ReturnsAsync([finalizationSession]);
+            repo.Setup(x => x.GetFinalizationSharesAsync(finalizationSession.Id)).ReturnsAsync(finalizationShares);
+        });
+        var sut = CreateQueryService(mocker);
+
+        var publicExport = await sut.ExportElectionVerificationPackageAsync(
+            election.ElectionId,
+            "owner-address",
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+        var restrictedExport = await sut.ExportElectionVerificationPackageAsync(
+            election.ElectionId,
+            "owner-address",
+            ElectionVerificationPackageViewProto.VerificationPackageRestrictedOwnerAuditor);
+
+        publicExport.Success.Should().BeTrue();
+        restrictedExport.Success.Should().BeTrue();
+        publicExport.Files.Select(x => x.RelativePath)
+            .Should()
+            .Contain(VerificationPackageFileNames.Sp06TrusteeVerifierOutput);
+        publicExport.Files.Select(x => x.RelativePath)
+            .Should()
+            .NotContain(VerificationPackageFileNames.RestrictedSp06TrusteeControlDomains);
+        restrictedExport.Files.Select(x => x.RelativePath)
+            .Should()
+            .Contain(VerificationPackageFileNames.RestrictedSp06TrusteeControlDomains);
+        var publicPackageText = string.Join(
+            '\n',
+            publicExport.Files.Select(x => Encoding.UTF8.GetString(x.Content.ToByteArray())));
+        publicPackageText.Should().NotContain("trustee-1@hush.test");
+        publicPackageText.Should().NotContain("TrusteeAccountId");
+        publicPackageText.Should().NotContain("CustodyDomainRefHash");
+
+        using var publicPackage = WriteVerificationPackage(publicExport);
+        using var restrictedPackage = WriteVerificationPackage(restrictedExport);
+        var publicVerification = await new HushVotingPackageVerifier().VerifyAsync(new(
+            publicPackage.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1));
+        var restrictedVerification = await new HushVotingPackageVerifier().VerifyAsync(new(
+            restrictedPackage.PackagePath,
+            VerificationProfileIds.RestrictedOwnerAuditorV1));
+
+        publicVerification.Output.Results.Should().Contain(x =>
+            x.CheckCode == "CTRL-000" &&
+            x.ResultCode == VerificationResultCodes.TrusteeControlDomainEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        restrictedVerification.Output.Results.Should().Contain(x =>
+            x.CheckCode == "CTRL-000" &&
+            x.ResultCode == VerificationResultCodes.TrusteeControlDomainEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
+    }
+
+    [Fact]
     public async Task GetElectionVerificationPackageStatusAsync_WithTrusteeRole_AllowsPublicAndDeniesRestricted()
     {
         var mocker = new AutoMocker();
@@ -3828,6 +4049,8 @@ public class ElectionQueryApplicationServiceTests
             .ReturnsAsync((ElectionRosterEntryRecord?)null);
         repository.Setup(x => x.GetCeremonyShareCustodyRecordAsync(It.IsAny<Guid>(), It.IsAny<string>()))
             .ReturnsAsync((ElectionCeremonyShareCustodyRecord?)null);
+        repository.Setup(x => x.GetCeremonyShareCustodyRecordsAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(Array.Empty<ElectionCeremonyShareCustodyRecord>());
         repository.Setup(x => x.GetCeremonyMessageEnvelopesForRecipientAsync(It.IsAny<Guid>(), It.IsAny<string>()))
             .ReturnsAsync(Array.Empty<ElectionCeremonyMessageEnvelopeRecord>());
 
@@ -3929,6 +4152,152 @@ public class ElectionQueryApplicationServiceTests
             ],
             acknowledgedWarningCodes: acknowledgedWarningCodes,
             requiredApprovalCount: 1);
+
+    private static ElectionRecord CreateHighAssuranceTrusteeElection(string title = "High Assurance Trustee Election") =>
+        CreateTrusteeElection(title) with
+        {
+            SelectedProfileId = ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+            SelectedProfileDevOnly = false,
+            RequiredApprovalCount = 3,
+            ControlDomainProfileId = ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+            ControlDomainProfileVersion = ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1Version,
+            ThresholdProfileId = ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+        };
+
+    private static IReadOnlyList<SharedTrusteeReference> CreateHighAssuranceTrustees() =>
+    [
+        new("trustee-1@hush.test", "Trustee 1"),
+        new("trustee-2@hush.test", "Trustee 2"),
+        new("trustee-3@hush.test", "Trustee 3"),
+        new("trustee-4@hush.test", "Trustee 4"),
+        new("trustee-5@hush.test", "Trustee 5"),
+    ];
+
+    private static HushShared.Elections.Model.ElectionCeremonyBindingSnapshot CreateHighAssuranceCeremonySnapshot(
+        IReadOnlyList<SharedTrusteeReference> trustees) =>
+        ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            Guid.NewGuid(),
+            ceremonyVersionNumber: 1,
+            profileId: ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+            boundTrusteeCount: trustees.Count,
+            requiredApprovalCount: 3,
+            activeTrustees: trustees,
+            tallyPublicKeyFingerprint: CeremonyTestKeyFixtures.Fingerprint,
+            tallyPublicKey: CeremonyTestKeyFixtures.PublicKeyBytes);
+
+    private static HighAssuranceCeremonyEvidence CreateHighAssuranceCeremonyEvidence(
+        ElectionRecord election,
+        IReadOnlyList<SharedTrusteeReference> trustees,
+        Guid ceremonyVersionId)
+    {
+        var completedAt = DateTime.UtcNow.AddMinutes(-15);
+        var invitations = trustees
+            .Select(x => ElectionModelFactory.CreateTrusteeInvitation(
+                    election.ElectionId,
+                    x.TrusteeUserAddress,
+                    x.TrusteeDisplayName,
+                    "owner-address",
+                    election.CurrentDraftRevision)
+                .Accept(
+                    completedAt.AddMinutes(-5),
+                    election.CurrentDraftRevision,
+                    ElectionLifecycleState.Draft))
+            .ToArray();
+        var version = ElectionModelFactory.CreateCeremonyVersion(
+                election.ElectionId,
+                versionNumber: 1,
+                ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+                requiredApprovalCount: 3,
+                trustees,
+                startedByPublicAddress: "owner-address",
+                startedAt: completedAt.AddMinutes(-10))
+            .MarkReady(
+                completedAt,
+                CeremonyTestKeyFixtures.Fingerprint,
+                CeremonyTestKeyFixtures.PublicKeyBytes) with
+            {
+                Id = ceremonyVersionId,
+            };
+        var trusteeStates = trustees
+            .Select((trustee, index) => ElectionModelFactory.CreateCeremonyTrusteeState(
+                    election.ElectionId,
+                    ceremonyVersionId,
+                    trustee.TrusteeUserAddress,
+                    trustee.TrusteeDisplayName,
+                    ElectionTrusteeCeremonyState.AcceptedTrustee)
+                .PublishTransportKey($"transport-{index + 1}", completedAt.AddMinutes(-9))
+                .MarkJoined(completedAt.AddMinutes(-8))
+                .RecordSelfTestSuccess(completedAt.AddMinutes(-7))
+                .RecordMaterialSubmitted(completedAt.AddMinutes(-6), "share-v1", [1, 2, 3, (byte)(index + 1)])
+                .MarkCompleted(completedAt.AddMinutes(-5), "share-v1"))
+            .ToArray();
+        var shareCustodyRecords = trustees
+            .Select(x => ElectionModelFactory.CreateCeremonyShareCustodyRecord(
+                election.ElectionId,
+                ceremonyVersionId,
+                x.TrusteeUserAddress,
+                "share-v1"))
+            .ToArray();
+
+        return new HighAssuranceCeremonyEvidence(version, invitations, trusteeStates, shareCustodyRecords);
+    }
+
+    private static IReadOnlyList<ElectionFinalizationShareRecord> CreateHighAssuranceFinalizationShares(
+        ElectionFinalizationSessionRecord session,
+        IReadOnlyList<SharedTrusteeReference> trustees,
+        int acceptedCount,
+        int rejectedCount)
+    {
+        var accepted = trustees.Take(acceptedCount)
+            .Select((trustee, index) => ElectionModelFactory.CreateAcceptedFinalizationShare(
+                session.Id,
+                session.ElectionId,
+                trustee.TrusteeUserAddress,
+                trustee.TrusteeDisplayName,
+                trustee.TrusteeUserAddress,
+                shareIndex: index + 1,
+                shareVersion: "share-v1",
+                targetType: ElectionFinalizationTargetType.AggregateTally,
+                claimedCloseArtifactId: session.CloseArtifactId,
+                claimedAcceptedBallotSetHash: session.AcceptedBallotSetHash,
+                claimedFinalEncryptedTallyHash: session.FinalEncryptedTallyHash,
+                claimedTargetTallyId: session.TargetTallyId,
+                claimedCeremonyVersionId: session.CeremonySnapshot?.CeremonyVersionId,
+                claimedTallyPublicKeyFingerprint: session.CeremonySnapshot?.TallyPublicKeyFingerprint,
+                shareMaterial: $"executor-encrypted-share-{index + 1}",
+                executorKeyAlgorithm: "ecies-secp256k1-v1"))
+            .ToList();
+
+        var rejected = trustees.Skip(acceptedCount).Take(rejectedCount)
+            .Select((trustee, index) => ElectionModelFactory.CreateRejectedFinalizationShare(
+                session.Id,
+                session.ElectionId,
+                trustee.TrusteeUserAddress,
+                trustee.TrusteeDisplayName,
+                trustee.TrusteeUserAddress,
+                shareIndex: acceptedCount + index + 1,
+                shareVersion: "share-v1",
+                targetType: ElectionFinalizationTargetType.AggregateTally,
+                claimedCloseArtifactId: session.CloseArtifactId,
+                claimedAcceptedBallotSetHash: session.AcceptedBallotSetHash,
+                claimedFinalEncryptedTallyHash: session.FinalEncryptedTallyHash,
+                claimedTargetTallyId: session.TargetTallyId,
+                claimedCeremonyVersionId: session.CeremonySnapshot?.CeremonyVersionId,
+                claimedTallyPublicKeyFingerprint: session.CeremonySnapshot?.TallyPublicKeyFingerprint,
+                shareMaterial: $"rejected-share-{index + 1}",
+                failureCode: "TEST_REJECTED_SHARE",
+                failureReason: "Rejected for projection test.",
+                executorKeyAlgorithm: "ecies-secp256k1-v1"));
+
+        accepted.AddRange(rejected);
+        return accepted;
+    }
+
+    private sealed record HighAssuranceCeremonyEvidence(
+        ElectionCeremonyVersionRecord Version,
+        IReadOnlyList<ElectionTrusteeInvitationRecord> Invitations,
+        IReadOnlyList<ElectionCeremonyTrusteeStateRecord> TrusteeStates,
+        IReadOnlyList<ElectionCeremonyShareCustodyRecord> ShareCustodyRecords);
 
     private static ProtocolPackageBindingRecord CreateLatestProtocolPackageBinding(
         ElectionRecord election,
@@ -4033,5 +4402,40 @@ public class ElectionQueryApplicationServiceTests
             checkoffConsumption.ConsumedAt.ToUniversalTime().ToString("O"),
             checkoffConsumption.ParticipationStatus);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(proofSeed))).ToLowerInvariant();
+    }
+
+    private static TemporaryPackageDirectory WriteVerificationPackage(ExportElectionVerificationPackageResponse response)
+    {
+        var directory = new TemporaryPackageDirectory();
+        foreach (var file in response.Files)
+        {
+            var targetPath = Path.Combine(
+                directory.PackagePath,
+                file.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+            File.WriteAllBytes(targetPath, file.Content.ToByteArray());
+        }
+
+        return directory;
+    }
+
+    private sealed class TemporaryPackageDirectory : IDisposable
+    {
+        public string PackagePath { get; } = Path.Combine(
+            Path.GetTempPath(),
+            $"hush-query-package-{Guid.NewGuid():N}");
+
+        public TemporaryPackageDirectory()
+        {
+            Directory.CreateDirectory(PackagePath);
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(PackagePath))
+            {
+                Directory.Delete(PackagePath, recursive: true);
+            }
+        }
     }
 }

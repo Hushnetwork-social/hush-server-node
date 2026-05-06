@@ -47,6 +47,21 @@ public class HushVotingPackageVerifierTests
     }
 
     [Fact]
+    public async Task Verify_HighAssuranceTrusteePackage_ShouldPassSp06CtrlChecks()
+    {
+        using var package = CreateHighAssuranceTrusteePackage();
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.HighAssuranceV1));
+
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "CTRL-000" &&
+            x.ResultCode == VerificationResultCodes.TrusteeControlDomainEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
+    }
+
+    [Fact]
     public async Task Verify_MissingArtifact_ShouldFailWithManifestMissingArtifact()
     {
         using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
@@ -162,6 +177,15 @@ public class HushVotingPackageVerifierTests
             ElectionVerificationPackageExportServiceTests.CreateRequest(
                 VerificationPackageView.PublicAnonymous,
                 profileId: profileId));
+        ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
+        return directory;
+    }
+
+    private static TemporaryPackageDirectory CreateHighAssuranceTrusteePackage()
+    {
+        var directory = new TemporaryPackageDirectory();
+        var export = new ElectionVerificationPackageExportService().Export(
+            ElectionVerificationPackageExportServiceTests.CreateHighAssuranceTrusteeRequest());
         ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
         return directory;
     }

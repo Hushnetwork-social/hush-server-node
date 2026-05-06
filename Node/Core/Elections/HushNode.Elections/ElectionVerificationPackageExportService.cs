@@ -33,6 +33,9 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
         AddJson(files, VerificationPackageFileNames.Sp05EligibilityPolicy, BuildSp05EligibilityPolicy(request), VerificationArtifactVisibility.Public);
         AddJson(files, VerificationPackageFileNames.Sp05EligibilitySummary, BuildSp05EligibilitySummary(request), VerificationArtifactVisibility.Public);
         AddJson(files, VerificationPackageFileNames.Sp05EligibilityVerifierOutput, BuildSp05VerifierOutput(request, exportedAt), VerificationArtifactVisibility.Public);
+        AddJson(files, VerificationPackageFileNames.Sp06TrusteeControlProfile, BuildSp06ControlProfile(request), VerificationArtifactVisibility.Public);
+        AddJson(files, VerificationPackageFileNames.Sp06TrusteeControlSummary, BuildSp06ControlSummary(request), VerificationArtifactVisibility.Public);
+        AddJson(files, VerificationPackageFileNames.Sp06TrusteeVerifierOutput, BuildSp06VerifierOutput(request, exportedAt), VerificationArtifactVisibility.Public);
 
         if (request.PackageView == VerificationPackageView.RestrictedOwnerAuditor)
         {
@@ -85,6 +88,16 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
                 files,
                 VerificationPackageFileNames.RestrictedDisputes,
                 new ElectionSp05RestrictedDisputesArtifactRecord(request.Election.ElectionId.ToString(), []),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp06TrusteeControlDomains,
+                BuildRestrictedSp06ControlDomains(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp06TrusteeReleaseArtifacts,
+                BuildRestrictedSp06ReleaseArtifacts(request),
                 VerificationArtifactVisibility.Restricted);
         }
 

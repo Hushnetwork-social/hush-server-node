@@ -30,7 +30,10 @@ public static partial class ElectionModelFactory
         ElectionIdentityLinkPolicy identityLinkPolicy = ElectionIdentityLinkPolicy.ContactCodeV1,
         ElectionCheckoffVisibilityPolicy checkoffVisibilityPolicy = ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor,
         ElectionActorLinkMultiplicityPolicy actorLinkMultiplicityPolicy = ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor,
-        ElectionContactCodeProviderReadiness contactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly) =>
+        ElectionContactCodeProviderReadiness contactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly,
+        string? controlDomainProfileId = null,
+        string? controlDomainProfileVersion = null,
+        string? thresholdProfileId = null) =>
         CreateDraftRecord(
             electionId,
             title,
@@ -63,7 +66,10 @@ public static partial class ElectionModelFactory
             identityLinkPolicy,
             checkoffVisibilityPolicy,
             actorLinkMultiplicityPolicy,
-            contactCodeProviderReadiness);
+            contactCodeProviderReadiness,
+            controlDomainProfileId,
+            controlDomainProfileVersion,
+            thresholdProfileId);
 
     public static ElectionRecord CreateDraftRecord(
         ElectionId electionId,
@@ -95,7 +101,10 @@ public static partial class ElectionModelFactory
         ElectionIdentityLinkPolicy identityLinkPolicy = ElectionIdentityLinkPolicy.ContactCodeV1,
         ElectionCheckoffVisibilityPolicy checkoffVisibilityPolicy = ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor,
         ElectionActorLinkMultiplicityPolicy actorLinkMultiplicityPolicy = ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor,
-        ElectionContactCodeProviderReadiness contactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly)
+        ElectionContactCodeProviderReadiness contactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly,
+        string? controlDomainProfileId = null,
+        string? controlDomainProfileVersion = null,
+        string? thresholdProfileId = null)
     {
         if (string.IsNullOrWhiteSpace(title))
         {
@@ -171,7 +180,10 @@ public static partial class ElectionModelFactory
             identityLinkPolicy,
             checkoffVisibilityPolicy,
             actorLinkMultiplicityPolicy,
-            contactCodeProviderReadiness);
+            contactCodeProviderReadiness,
+            NormalizeOptionalText(controlDomainProfileId),
+            NormalizeOptionalText(controlDomainProfileVersion),
+            NormalizeOptionalText(thresholdProfileId));
     }
 
     public static ElectionDraftSnapshotRecord CreateDraftSnapshot(
@@ -223,7 +235,10 @@ public static partial class ElectionModelFactory
                 election.IdentityLinkPolicy,
                 election.CheckoffVisibilityPolicy,
                 election.ActorLinkMultiplicityPolicy,
-                election.ContactCodeProviderReadiness),
+                election.ContactCodeProviderReadiness,
+                election.ControlDomainProfileId,
+                election.ControlDomainProfileVersion,
+                election.ThresholdProfileId),
             CloneOptions(election.Options),
             NormalizeWarningCodes(election.AcknowledgedWarningCodes),
             snapshotReason.Trim(),
@@ -301,7 +316,10 @@ public static partial class ElectionModelFactory
                 election.IdentityLinkPolicy,
                 election.CheckoffVisibilityPolicy,
                 election.ActorLinkMultiplicityPolicy,
-                election.ContactCodeProviderReadiness),
+                election.ContactCodeProviderReadiness,
+                election.ControlDomainProfileId,
+                election.ControlDomainProfileVersion,
+                election.ThresholdProfileId),
             CloneOptions(election.Options),
             NormalizeWarningCodes(election.AcknowledgedWarningCodes),
             CloneTrusteeSnapshot(trusteeSnapshot),

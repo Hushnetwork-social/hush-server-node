@@ -31,6 +31,9 @@ public class HushVotingPackageVerifierTamperTests
             { "tamper-sp05-public-named-field", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.EligibilityPublicPrivacyBoundaryViolation, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-sp05-count-reconciliation", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.EligibilityCountReconciliationMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-sp05-high-assurance-dev-provider", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.EligibilityDevOnlyVerificationBlocked, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp06-missing-control-evidence", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.TrusteeAcceptanceIncomplete, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp06-release-wrong-target", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.TrusteeReleaseWrongTarget, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp06-public-restricted-field", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.PublicRestrictedFieldLeak, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-named-voter-in-public-artifact", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicRestrictedFieldLeak, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-raw-trustee-share", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicRestrictedFieldLeak, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "missing-sp07-development-warning", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicationProofEvidencePending, VerificationCheckStatus.Warn, VerificationOverallStatus.Warn, 0 },
@@ -47,7 +50,7 @@ public class HushVotingPackageVerifierTamperTests
         VerificationOverallStatus expectedOverallStatus,
         int expectedExitCode)
     {
-        using var package = CreatePackage(profileId);
+        using var package = CreatePackage(profileId, fixtureName);
         await ApplyTamperFixtureAsync(package.PackagePath, fixtureName);
 
         var result = await new HushVotingPackageVerifier().VerifyAsync(new(
@@ -61,16 +64,21 @@ public class HushVotingPackageVerifierTamperTests
             fixtureName);
     }
 
-    private static TemporaryPackageDirectory CreatePackage(string profileId)
+    private static TemporaryPackageDirectory CreatePackage(string profileId, string fixtureName)
     {
         var directory = new TemporaryPackageDirectory();
         var export = new ElectionVerificationPackageExportService().Export(
-            ElectionVerificationPackageExportServiceTests.CreateRequest(
-                VerificationPackageView.PublicAnonymous,
-                profileId: profileId));
+            IsSp06Fixture(fixtureName)
+                ? ElectionVerificationPackageExportServiceTests.CreateHighAssuranceTrusteeRequest()
+                : ElectionVerificationPackageExportServiceTests.CreateRequest(
+                    VerificationPackageView.PublicAnonymous,
+                    profileId: profileId));
         ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
         return directory;
     }
+
+    private static bool IsSp06Fixture(string fixtureName) =>
+        fixtureName.StartsWith("tamper-sp06-", StringComparison.OrdinalIgnoreCase);
 
     private static async Task ApplyTamperFixtureAsync(string packagePath, string fixtureName)
     {
@@ -311,6 +319,61 @@ public class HushVotingPackageVerifierTamperTests
                     {
                         ContactCodeProviderReadiness = HushShared.Elections.Model.ElectionContactCodeProviderReadiness.DevOnly,
                     });
+                return;
+
+            case "tamper-sp06-missing-control-evidence":
+                var sp06MissingSummary = await ReadArtifactAsync<ElectionSp06TrusteeControlSummaryArtifactRecord>(
+                    packagePath,
+                    VerificationPackageFileNames.Sp06TrusteeControlSummary);
+                await WriteArtifactAsync(
+                    packagePath,
+                    VerificationPackageFileNames.Sp06TrusteeControlSummary,
+                    sp06MissingSummary with
+                    {
+                        AcceptedBeforeOpenCount = 4,
+                        CompleteEvidenceCount = 4,
+                        MissingEvidenceCount = 1,
+                        Trustees =
+                        [
+                            .. sp06MissingSummary.Trustees.Take(4),
+                            sp06MissingSummary.Trustees[4] with
+                            {
+                                EvidenceStatus = HushShared.Elections.Model.ElectionTrusteeControlDomainEvidenceStatus.Missing,
+                                AcceptedBeforeOpen = false,
+                                FailureCode = "control_domain_evidence_missing",
+                            },
+                        ],
+                    });
+                return;
+
+            case "tamper-sp06-release-wrong-target":
+                var sp06WrongTargetSummary = await ReadArtifactAsync<ElectionSp06TrusteeControlSummaryArtifactRecord>(
+                    packagePath,
+                    VerificationPackageFileNames.Sp06TrusteeControlSummary);
+                await WriteArtifactAsync(
+                    packagePath,
+                    VerificationPackageFileNames.Sp06TrusteeControlSummary,
+                    sp06WrongTargetSummary with
+                    {
+                        RejectedReleaseArtifactCount = sp06WrongTargetSummary.RejectedReleaseArtifactCount + 1,
+                        Trustees =
+                        [
+                            sp06WrongTargetSummary.Trustees[0] with
+                            {
+                                ReleaseArtifactStatus = HushShared.Elections.Model.ElectionTrusteeReleaseArtifactStatus.Rejected,
+                                FailureCode = "WRONG_TARGET_SHARE",
+                            },
+                            .. sp06WrongTargetSummary.Trustees.Skip(1),
+                        ],
+                    });
+                return;
+
+            case "tamper-sp06-public-restricted-field":
+                await AddJsonPropertyAsync(
+                    packagePath,
+                    VerificationPackageFileNames.Sp06TrusteeControlSummary,
+                    "trusteeAccountId",
+                    "trustee-1@hush.test");
                 return;
 
             case "tamper-named-voter-in-public-artifact":

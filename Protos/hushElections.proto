@@ -371,6 +371,20 @@ enum ElectionVerifierOverallStatusProto {
   ElectionVerifierNotAvailable = 3;
 }
 
+enum ElectionTrusteeControlDomainEvidenceStatusProto {
+  TrusteeControlDomainEvidenceAccepted = 0;
+  TrusteeControlDomainEvidenceMissing = 1;
+  TrusteeControlDomainEvidenceStale = 2;
+  TrusteeControlDomainEvidenceIncompatible = 3;
+  TrusteeControlDomainEvidenceRejected = 4;
+}
+
+enum ElectionTrusteeReleaseArtifactStatusProto {
+  TrusteeReleaseArtifactAccepted = 0;
+  TrusteeReleaseArtifactMissing = 1;
+  TrusteeReleaseArtifactRejected = 2;
+}
+
 enum ElectionClosedProgressStatusProto {
   ClosedProgressNone = 0;
   ClosedProgressWaitingForTrusteeShares = 1;
@@ -572,6 +586,9 @@ message ElectionFrozenPolicy {
   ElectionCheckoffVisibilityPolicyProto CheckoffVisibilityPolicy = 18;
   ElectionActorLinkMultiplicityPolicyProto ActorLinkMultiplicityPolicy = 19;
   ElectionContactCodeProviderReadinessProto ContactCodeProviderReadiness = 20;
+  string ControlDomainProfileId = 21;
+  string ControlDomainProfileVersion = 22;
+  string ThresholdProfileId = 23;
 }
 
 message ElectionTrusteeReference {
@@ -732,6 +749,14 @@ message ElectionFinalizationSession {
   ElectionCloseCountingJobStatusProto CloseCountingJobStatus = 22;
   string ExecutorSessionPublicKey = 23;
   string ExecutorKeyAlgorithm = 24;
+  string ControlDomainProfileId = 25;
+  string ControlDomainProfileVersion = 26;
+  string ThresholdProfileId = 27;
+  int32 TrusteeCount = 28;
+  int32 TrusteeThreshold = 29;
+  int32 AcceptedReleaseArtifactCount = 30;
+  int32 MissingReleaseArtifactCount = 31;
+  int32 RejectedReleaseArtifactCount = 32;
 }
 
 message ElectionFinalizationShare {
@@ -925,6 +950,7 @@ message ElectionVerificationPackageStatusView {
   ElectionVerifierResultSummaryView LastVerifierResult = 9;
   ElectionSp04EvidenceStatusView Sp04Evidence = 10;
   ElectionSp05EvidenceStatusView Sp05Evidence = 11;
+  ElectionSp06EvidenceStatusView Sp06Evidence = 12;
 }
 
 message ElectionSp04EvidenceStatusView {
@@ -952,6 +978,59 @@ message ElectionSp05EvidenceStatusView {
   string CommitmentTreeRoot = 11;
   string LatestEliResultCode = 12;
   string Message = 13;
+}
+
+message ElectionSp06EvidenceStatusView {
+  bool EvidenceExpected = 1;
+  bool PublicEvidenceAvailable = 2;
+  bool RestrictedEvidenceAvailable = 3;
+  string ControlDomainProfileId = 4;
+  string ControlDomainProfileVersion = 5;
+  string ThresholdProfileId = 6;
+  int32 TrusteeCount = 7;
+  int32 TrusteeThreshold = 8;
+  int32 AcceptedBeforeOpenCount = 9;
+  int32 CompleteEvidenceCount = 10;
+  int32 MissingEvidenceCount = 11;
+  int32 StaleEvidenceCount = 12;
+  int32 IncompatibleEvidenceCount = 13;
+  int32 AcceptedReleaseArtifactCount = 14;
+  int32 MissingReleaseArtifactCount = 15;
+  int32 RejectedReleaseArtifactCount = 16;
+  string LatestCtrlResultCode = 17;
+  repeated ElectionSp06ReadinessBlockerView Blockers = 18;
+  string Message = 19;
+}
+
+message ElectionSp06ReadinessBlockerView {
+  string Code = 1;
+  string Message = 2;
+  string TrusteeRef = 3;
+  bool BlocksOpen = 4;
+  bool BlocksFinalization = 5;
+}
+
+message ElectionTrusteeControlDomainEvidenceView {
+  string TrusteeRef = 1;
+  string TrusteePseudonym = 2;
+  ElectionTrusteeControlDomainEvidenceStatusProto EvidenceStatus = 3;
+  bool AcceptedBeforeOpen = 4;
+  google.protobuf.Timestamp AcceptedAt = 5;
+  bool HasAcceptedAt = 6;
+  string PublicKeyCommitmentHash = 7;
+  string CustodyDomainEvidenceHash = 8;
+  string AdminDomainEvidenceHash = 9;
+  string FailureCode = 10;
+}
+
+message ElectionTrusteeReleaseArtifactStatusView {
+  string TrusteeRef = 1;
+  string TrusteePseudonym = 2;
+  ElectionTrusteeReleaseArtifactStatusProto Status = 3;
+  string ReleaseArtifactHash = 4;
+  string ShareMaterialHash = 5;
+  string FailureCode = 6;
+  string FailureReason = 7;
 }
 
 message ElectionRosterImportEvidenceView {
@@ -1036,6 +1115,9 @@ message ElectionRecordView {
   ElectionCheckoffVisibilityPolicyProto CheckoffVisibilityPolicy = 48;
   ElectionActorLinkMultiplicityPolicyProto ActorLinkMultiplicityPolicy = 49;
   ElectionContactCodeProviderReadinessProto ContactCodeProviderReadiness = 50;
+  string ControlDomainProfileId = 51;
+  string ControlDomainProfileVersion = 52;
+  string ThresholdProfileId = 53;
 }
 
 message ElectionSummary {
@@ -1162,6 +1244,8 @@ message ElectionDraftInput {
   ElectionCheckoffVisibilityPolicyProto CheckoffVisibilityPolicy = 22;
   ElectionActorLinkMultiplicityPolicyProto ActorLinkMultiplicityPolicy = 23;
   ElectionContactCodeProviderReadinessProto ContactCodeProviderReadiness = 24;
+  string ControlDomainProfileId = 25;
+  string ControlDomainProfileVersion = 26;
 }
 
 message CreateElectionDraftRequest {
@@ -1777,6 +1861,7 @@ message GetElectionOpenReadinessResponse {
   ElectionProtocolPackageBindingView ProtocolPackageBinding = 6;
   ProtocolPackageBindingStatusProto ProtocolPackageBindingStatus = 7;
   string ProtocolPackageBindingMessage = 8;
+  ElectionSp06EvidenceStatusView Sp06Evidence = 9;
 }
 
 message GetElectionResponse {
