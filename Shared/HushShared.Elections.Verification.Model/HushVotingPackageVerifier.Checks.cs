@@ -1,3 +1,6 @@
+using System.Text;
+using HushShared.Elections.Model;
+
 namespace HushShared.Elections.Verification.Model;
 
 public sealed partial class HushVotingPackageVerifier
@@ -525,6 +528,264 @@ public sealed partial class HushVotingPackageVerifier
         return Array.Empty<VerifierCheckResultRecord>();
     }
 
+    private static async Task<IReadOnlyList<VerifierCheckResultRecord>> CheckSp05EvidenceAsync(
+        string packagePath,
+        AuditPackageManifestRecord manifest,
+        string profileId,
+        CancellationToken cancellationToken)
+    {
+        var requiredFiles = new[]
+        {
+            VerificationPackageFileNames.Sp05EligibilityPolicy,
+            VerificationPackageFileNames.Sp05EligibilitySummary,
+            VerificationPackageFileNames.Sp05EligibilityVerifierOutput,
+        };
+        var missingFiles = requiredFiles
+            .Where(x => !File.Exists(ResolvePackagePath(packagePath, x)))
+            .ToArray();
+        if (missingFiles.Length > 0)
+        {
+            return
+            [
+                CreateResult(
+                    "ELI-002",
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.EligibilityPolicyMissing,
+                    "SP-05 public eligibility files are missing.",
+                    missingFiles.ToDictionary(x => x, x => "missing", StringComparer.Ordinal)),
+            ];
+        }
+
+        var results = new List<VerifierCheckResultRecord>();
+        var policy = await ReadJsonAsync<ElectionSp05PolicyArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp05EligibilityPolicy,
+            cancellationToken);
+        var summary = await ReadJsonAsync<ElectionSp05SummaryArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp05EligibilitySummary,
+            cancellationToken);
+        var verifierOutput = await ReadJsonAsync<ElectionSp05VerifierOutputArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp05EligibilityVerifierOutput,
+            cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(policy.EligibilityPolicyId) ||
+            string.IsNullOrWhiteSpace(policy.RosterCanonicalizationVersionHash) ||
+            string.IsNullOrWhiteSpace(policy.CommitmentSchemeVersionHash) ||
+            string.IsNullOrWhiteSpace(policy.NullifierSchemeVersionHash))
+        {
+            results.Add(CreateResult(
+                "ELI-002",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.EligibilityPolicyMissing,
+                "SP-05 eligibility policy is incomplete."));
+        }
+
+        if (summary.RosteredCount < 0 ||
+            summary.LinkedCount < 0 ||
+            summary.ActiveDenominatorCount < 0 ||
+            summary.CommitmentCount < 0 ||
+            summary.CountedParticipationCount < 0 ||
+            summary.BlankCount < 0 ||
+            summary.DidNotVoteCount < 0 ||
+            summary.LinkedCount > summary.RosteredCount ||
+            summary.ActiveDenominatorCount > summary.RosteredCount ||
+            summary.CountedParticipationCount + summary.BlankCount + summary.DidNotVoteCount != summary.ActiveDenominatorCount)
+        {
+            results.Add(CreateResult(
+                "ELI-012",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.EligibilityCountReconciliationMismatch,
+                "SP-05 public eligibility counts are not internally consistent."));
+        }
+
+        if (!string.Equals(verifierOutput.ElectionId, manifest.ElectionId, StringComparison.Ordinal) ||
+            !string.Equals(verifierOutput.VerifierProfileId, profileId, StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                "ELI-001",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.EligibilitySchemaInvalid,
+                "SP-05 verifier output does not match the package election id or verifier profile."));
+        }
+
+        var providerReady = policy.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.Ready;
+        if (!providerReady)
+        {
+            var highAssurance = string.Equals(profileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal);
+            results.Add(CreateResult(
+                "ELI-013",
+                highAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn,
+                VerificationResultCodes.EligibilityDevOnlyVerificationBlocked,
+                highAssurance
+                    ? "High-assurance profile cannot accept a dev-only or missing contact-code provider."
+                    : "Contact-code provider is not marked production-ready; development profile records this as a warning.",
+                new Dictionary<string, string>
+                {
+                    ["contact_code_provider_readiness"] = policy.ContactCodeProviderReadiness.ToString(),
+                }));
+        }
+
+        if (manifest.PackageView == VerificationPackageView.PublicAnonymous)
+        {
+            var forbiddenFields = new List<string>();
+            foreach (var file in requiredFiles)
+            {
+                var text = await File.ReadAllTextAsync(ResolvePackagePath(packagePath, file), cancellationToken);
+                forbiddenFields.AddRange(VerificationPrivacyBoundary.FindForbiddenSp05PublicFields(CollectJsonPropertyNames(text)));
+            }
+
+            var distinctForbiddenFields = forbiddenFields
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (distinctForbiddenFields.Length > 0)
+            {
+                results.Add(CreateResult(
+                    "ELI-011",
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.EligibilityPublicPrivacyBoundaryViolation,
+                    "SP-05 public eligibility files contain named eligibility fields.",
+                    distinctForbiddenFields.ToDictionary(x => x, x => "forbidden", StringComparer.OrdinalIgnoreCase)));
+            }
+        }
+        else if (manifest.PackageView == VerificationPackageView.RestrictedOwnerAuditor)
+        {
+            results.AddRange(await CheckRestrictedSp05EvidenceAsync(
+                packagePath,
+                policy,
+                summary,
+                cancellationToken));
+        }
+
+        if (results.Count == 0)
+        {
+            results.Add(CreateResult(
+                "ELI-000",
+                VerificationCheckStatus.Pass,
+                VerificationResultCodes.EligibilityEvidenceValid,
+                "SP-05 eligibility policy, public summary, provider readiness, and evidence boundaries passed."));
+        }
+
+        return results;
+    }
+
+    private static async Task<IReadOnlyList<VerifierCheckResultRecord>> CheckRestrictedSp05EvidenceAsync(
+        string packagePath,
+        ElectionSp05PolicyArtifactRecord policy,
+        ElectionSp05SummaryArtifactRecord summary,
+        CancellationToken cancellationToken)
+    {
+        var requiredFiles = new[]
+        {
+            VerificationPackageFileNames.RestrictedRosterImportEvidence,
+            VerificationPackageFileNames.RestrictedRoster,
+            VerificationPackageFileNames.RestrictedLinkingEvidence,
+            VerificationPackageFileNames.RestrictedActivationEvents,
+            VerificationPackageFileNames.RestrictedCheckoffLedger,
+            VerificationPackageFileNames.RestrictedDisputes,
+        };
+        var missingFiles = requiredFiles
+            .Where(x => !File.Exists(ResolvePackagePath(packagePath, x)))
+            .ToArray();
+        if (missingFiles.Length > 0)
+        {
+            return
+            [
+                CreateResult(
+                    "ELI-007",
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.RestrictedEvidenceMissing,
+                    "Restricted SP-05 evidence files are missing.",
+                    missingFiles.ToDictionary(x => x, x => "missing", StringComparer.Ordinal)),
+            ];
+        }
+
+        var results = new List<VerifierCheckResultRecord>();
+        var importEvidence = await ReadJsonAsync<ElectionSp05RestrictedRosterImportEvidenceArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.RestrictedRosterImportEvidence,
+            cancellationToken);
+        var roster = await ReadJsonAsync<ElectionSp05RestrictedRosterArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.RestrictedRoster,
+            cancellationToken);
+        var checkoff = await ReadJsonAsync<ElectionSp05RestrictedCheckoffLedgerArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.RestrictedCheckoffLedger,
+            cancellationToken);
+
+        var rosterHash = ComputeRestrictedRosterCanonicalHash(roster.Entries);
+        if (!string.Equals(rosterHash, importEvidence.ImportEvidence.RosterCanonicalHash, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(rosterHash, summary.RosterCanonicalHash, StringComparison.OrdinalIgnoreCase))
+        {
+            results.Add(CreateResult(
+                "ELI-003",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.EligibilityRosterHashMismatch,
+                "Restricted roster canonical hash does not reproduce the public SP-05 roster hash.",
+                new Dictionary<string, string>
+                {
+                    ["public_summary_hash"] = summary.RosterCanonicalHash,
+                    ["restricted_import_hash"] = importEvidence.ImportEvidence.RosterCanonicalHash,
+                    ["recomputed_hash"] = rosterHash,
+                }));
+        }
+
+        if (policy.ActorLinkMultiplicityPolicy == ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor)
+        {
+            var duplicateActor = roster.Entries
+                .Where(x => !string.IsNullOrWhiteSpace(x.LinkedActorPublicAddress))
+                .GroupBy(x => x.LinkedActorPublicAddress!, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(x => x.Count() > 1);
+            if (duplicateActor is not null)
+            {
+                results.Add(CreateResult(
+                    "ELI-007",
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.EligibilityLinkEvidenceMissing,
+                    "Strict actor multiplicity policy was declared, but one actor controls multiple roster entries.",
+                    new Dictionary<string, string>
+                    {
+                        ["linked_actor_hash"] = VerificationCanonicalHash.ComputeSha256UpperHex(duplicateActor.Key),
+                        ["linked_entry_count"] = duplicateActor.Count().ToString(),
+                    }));
+            }
+        }
+
+        var countedCheckoffCount = checkoff.Entries.Count(x =>
+            x.ParticipationStatus == ElectionParticipationStatus.CountedAsVoted &&
+            x.CheckoffConsumptionId.HasValue);
+        if (countedCheckoffCount != summary.CountedParticipationCount)
+        {
+            results.Add(CreateResult(
+                "ELI-012",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.EligibilityCountReconciliationMismatch,
+                "Restricted checkoff count does not match public counted participation count.",
+                new Dictionary<string, string>
+                {
+                    ["public_counted_participation_count"] = summary.CountedParticipationCount.ToString(),
+                    ["restricted_counted_checkoff_count"] = countedCheckoffCount.ToString(),
+                }));
+        }
+
+        var unsupportedConsumption = checkoff.Entries.FirstOrDefault(x =>
+            x.CheckoffConsumptionId.HasValue &&
+            string.IsNullOrWhiteSpace(x.AcceptedBallotReference));
+        if (unsupportedConsumption is not null)
+        {
+            results.Add(CreateResult(
+                "ELI-010",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.EligibilityConsumptionWithoutAcceptedCast,
+                "Restricted checkoff consumption exists without accepted ballot reference evidence."));
+        }
+
+        return results;
+    }
+
     private static string ComputeReceiptCommitmentSetHash(
         IReadOnlyList<ElectionSp04ReceiptCommitmentRecord> receiptCommitments)
     {
@@ -537,6 +798,24 @@ public sealed partial class HushVotingPackageVerifier
 
         return VerificationCanonicalHash.ComputeSha256UpperHex(payload);
     }
+
+    private static string ComputeRestrictedRosterCanonicalHash(
+        IReadOnlyList<ElectionSp05RestrictedRosterEntryArtifactRecord> rosterEntries)
+    {
+        var lines = rosterEntries
+            .OrderBy(x => x.OrganizationVoterId, StringComparer.Ordinal)
+            .Select(x => string.Join(
+                '\t',
+                EncodeCanonicalField(x.OrganizationVoterId),
+                x.ContactType.ToString().ToLowerInvariant(),
+                EncodeCanonicalField(x.ContactValue),
+                x.VotingRightStatus == ElectionVotingRightStatus.Active ? "active" : "inactive"));
+
+        return VerificationCanonicalHash.ComputeSha256LowerHex($"HUSH_ROSTER_CANONICAL_V1\n{string.Join('\n', lines)}");
+    }
+
+    private static string EncodeCanonicalField(string? value) =>
+        Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? string.Empty));
 
     private static bool BytesEqual(byte[]? left, byte[]? right)
     {

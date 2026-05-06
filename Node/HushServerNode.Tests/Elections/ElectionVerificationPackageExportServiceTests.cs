@@ -21,8 +21,19 @@ public class ElectionVerificationPackageExportServiceTests
         result.Files.Select(x => x.RelativePath).Should().Contain([
             VerificationPackageFileNames.Sp04Evidence,
             VerificationPackageFileNames.Sp04ReceiptCommitments,
+            VerificationPackageFileNames.Sp05EligibilityPolicy,
+            VerificationPackageFileNames.Sp05EligibilitySummary,
+            VerificationPackageFileNames.Sp05EligibilityVerifierOutput,
         ]);
         result.Files.Should().NotContain(x => x.RelativePath.StartsWith("artifacts/restricted/", StringComparison.OrdinalIgnoreCase));
+        var publicPayload = string.Join(
+            '\n',
+            result.Files
+                .Where(x => x.Visibility == VerificationArtifactVisibility.Public)
+                .Select(x => x.ContentText));
+        publicPayload.Should().NotContain("voter-1");
+        publicPayload.Should().NotContain("actor-voter-1");
+        publicPayload.Should().NotContain("voter-1@example.test");
 
         var manifest = ReadFile<AuditPackageManifestRecord>(result, VerificationPackageFileNames.AuditPackageManifest);
         foreach (var entry in manifest.Entries)
@@ -64,6 +75,24 @@ public class ElectionVerificationPackageExportServiceTests
             x.Visibility == VerificationArtifactVisibility.Restricted);
         result.Files.Should().Contain(x =>
             x.RelativePath == VerificationPackageFileNames.RestrictedSp04SpoilMarkers &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedRosterImportEvidence &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedRoster &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedLinkingEvidence &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedActivationEvents &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedCheckoffLedger &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedDisputes &&
             x.Visibility == VerificationArtifactVisibility.Restricted);
     }
 
@@ -343,6 +372,51 @@ public class ElectionVerificationPackageExportServiceTests
             mediaType: "application/json",
             contentHash: HashBytes("{\"ok\":true}"),
             content: "{\"ok\":true}");
+        var rosterEntries = new[]
+        {
+            CreateRosterEntry(electionId, "voter-1", "actor-voter-1"),
+            CreateRosterEntry(electionId, "voter-2", "actor-voter-2"),
+        };
+        var participationRecords = new[]
+        {
+            ElectionModelFactory.CreateParticipationRecord(
+                electionId,
+                "voter-1",
+                ElectionParticipationStatus.CountedAsVoted,
+                recordedAt: DateTime.UtcNow),
+            ElectionModelFactory.CreateParticipationRecord(
+                electionId,
+                "voter-2",
+                ElectionParticipationStatus.CountedAsVoted,
+                recordedAt: DateTime.UtcNow),
+        };
+        var commitmentRegistrations = new[]
+        {
+            ElectionModelFactory.CreateCommitmentRegistrationRecord(
+                electionId,
+                "voter-1",
+                "actor-voter-1",
+                "commitment-a",
+                registeredAt: openedAt.AddMinutes(3)),
+            ElectionModelFactory.CreateCommitmentRegistrationRecord(
+                electionId,
+                "voter-2",
+                "actor-voter-2",
+                "commitment-b",
+                registeredAt: openedAt.AddMinutes(3)),
+        };
+        var checkoffConsumptions = new[]
+        {
+            ElectionModelFactory.CreateCheckoffConsumptionRecord(
+                electionId,
+                "voter-1",
+                consumedAt: openedAt.AddMinutes(4)),
+            ElectionModelFactory.CreateCheckoffConsumptionRecord(
+                electionId,
+                "voter-2",
+                consumedAt: openedAt.AddMinutes(4)),
+        };
+        var rosterCanonicalHash = ElectionEligibilityContracts.ComputeRosterCanonicalHash(rosterEntries);
 
         return new ElectionVerificationPackageExportRequest(
             finalizedElection,
@@ -355,39 +429,60 @@ public class ElectionVerificationPackageExportServiceTests
             FinalizationSessions: [],
             FinalizationShares: [],
             ReleaseEvidenceRecords: [],
-            RosterEntries:
-            [
-                CreateRosterEntry(electionId, "voter-1", "actor-voter-1"),
-                CreateRosterEntry(electionId, "voter-2", "actor-voter-2"),
-            ],
-            ParticipationRecords:
-            [
-                new ElectionParticipationRecord(
-                    electionId,
-                    "voter-1",
-                    ElectionParticipationStatus.CountedAsVoted,
-                    DateTime.UtcNow,
-                    DateTime.UtcNow,
-                    LatestTransactionId: null,
-                    LatestBlockHeight: null,
-                    LatestBlockId: null),
-                new ElectionParticipationRecord(
-                    electionId,
-                    "voter-2",
-                    ElectionParticipationStatus.CountedAsVoted,
-                    DateTime.UtcNow,
-                    DateTime.UtcNow,
-                    LatestTransactionId: null,
-                    LatestBlockHeight: null,
-                    LatestBlockId: null),
-            ],
+            RosterEntries: rosterEntries,
+            ParticipationRecords: participationRecords,
             view,
             profileId,
             restrictedAccessAuthorized,
             ExportedAt: DateTime.UnixEpoch,
             VoterCeremonyRecords: ceremonies,
             PreparedBallotCommitments: preparedBallots,
-            SpoiledPreparedBallots: spoiledPreparedBallots);
+            SpoiledPreparedBallots: spoiledPreparedBallots,
+            RosterImportEvidences:
+            [
+                ElectionModelFactory.CreateRosterImportEvidence(
+                    electionId,
+                    rosterImportVersion: 1,
+                    rosterSourceFileHash: HashHex("source-roster"),
+                    rosterCanonicalHash,
+                    ElectionSp05ProfileIds.RosterCanonicalizationV1,
+                    ElectionEligibilityContracts.RosterCanonicalizationVersionHash,
+                    acceptedRowCount: 2,
+                    rejectedRowCount: 0,
+                    invalidRowRejectionCount: 0,
+                    duplicateIdRejectionCount: 0,
+                    duplicateContactWarningCount: 0,
+                    importedByActor: "owner-address",
+                    importedAt: openedAt)
+            ],
+            EligibilityPolicyEvidences:
+            [
+                ElectionModelFactory.CreateEligibilityPolicyEvidence(
+                    electionId,
+                    eligibilityPolicyVersion: "1.0.0",
+                    EligibilityMutationPolicy.FrozenAtOpen,
+                    ElectionIdentityLinkPolicy.ContactCodeV1,
+                    ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor,
+                    ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor,
+                    ElectionContactCodeProviderReadiness.Ready,
+                    ElectionEligibilityContracts.EligibilityPolicyCanonicalizationVersionHash,
+                    declaredByActor: "owner-address",
+                    declaredAt: openedAt)
+            ],
+            CommitmentSchemeEvidences:
+            [
+                ElectionModelFactory.CreateCommitmentSchemeEvidence(
+                    electionId,
+                    ElectionEligibilityContracts.CommitmentSchemeVersionHash,
+                    ElectionEligibilityContracts.NullifierSchemeVersionHash,
+                    ElectionEligibilityContracts.RosterCanonicalizationVersionHash,
+                    ElectionEligibilityContracts.EligibilityPolicyCanonicalizationVersionHash,
+                    declaredByActor: "owner-address",
+                    declaredAt: openedAt)
+            ],
+            CommitmentRegistrations: commitmentRegistrations,
+            CheckoffConsumptions: checkoffConsumptions,
+            EligibilityActivationEvents: []);
     }
 
     private static ProtocolPackageBindingRecord CreateSealedProtocolBinding(

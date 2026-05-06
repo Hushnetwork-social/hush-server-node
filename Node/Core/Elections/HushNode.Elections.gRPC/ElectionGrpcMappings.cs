@@ -50,7 +50,11 @@ internal static partial class ElectionGrpcMappings
                     x.IsBlankOption))
                 .ToArray(),
             AcknowledgedWarningCodes: draft.AcknowledgedWarningCodes.Select(x => (ElectionWarningCode)(int)x).ToArray(),
-            RequiredApprovalCount: draft.HasRequiredApprovalCount ? draft.RequiredApprovalCount : null);
+            RequiredApprovalCount: draft.HasRequiredApprovalCount ? draft.RequiredApprovalCount : null,
+            IdentityLinkPolicy: (ElectionIdentityLinkPolicy)(int)draft.IdentityLinkPolicy,
+            CheckoffVisibilityPolicy: (ElectionCheckoffVisibilityPolicy)(int)draft.CheckoffVisibilityPolicy,
+            ActorLinkMultiplicityPolicy: (ElectionActorLinkMultiplicityPolicy)(int)draft.ActorLinkMultiplicityPolicy,
+            ContactCodeProviderReadiness: (ElectionContactCodeProviderReadiness)(int)draft.ContactCodeProviderReadiness);
     }
 
     public static ElectionCommandResponse ToProto(this ElectionCommandResult result)
@@ -198,6 +202,10 @@ internal static partial class ElectionGrpcMappings
             VoteUpdatePolicy = (VoteUpdatePolicyProto)(int)election.VoteUpdatePolicy,
             EligibilitySourceType = (EligibilitySourceTypeProto)(int)election.EligibilitySourceType,
             EligibilityMutationPolicy = (EligibilityMutationPolicyProto)(int)election.EligibilityMutationPolicy,
+            IdentityLinkPolicy = (ElectionIdentityLinkPolicyProto)(int)election.IdentityLinkPolicy,
+            CheckoffVisibilityPolicy = (ElectionCheckoffVisibilityPolicyProto)(int)election.CheckoffVisibilityPolicy,
+            ActorLinkMultiplicityPolicy = (ElectionActorLinkMultiplicityPolicyProto)(int)election.ActorLinkMultiplicityPolicy,
+            ContactCodeProviderReadiness = (ElectionContactCodeProviderReadinessProto)(int)election.ContactCodeProviderReadiness,
             OutcomeRule = election.OutcomeRule.ToProto(),
             ProtocolOmegaVersion = election.ProtocolOmegaVersion,
             ReportingPolicy = (ReportingPolicyProto)(int)election.ReportingPolicy,
@@ -467,6 +475,10 @@ internal static partial class ElectionGrpcMappings
             VoteUpdatePolicy = (VoteUpdatePolicyProto)(int)policy.VoteUpdatePolicy,
             EligibilitySourceType = (EligibilitySourceTypeProto)(int)policy.EligibilitySourceType,
             EligibilityMutationPolicy = (EligibilityMutationPolicyProto)(int)policy.EligibilityMutationPolicy,
+            IdentityLinkPolicy = (ElectionIdentityLinkPolicyProto)(int)policy.IdentityLinkPolicy,
+            CheckoffVisibilityPolicy = (ElectionCheckoffVisibilityPolicyProto)(int)policy.CheckoffVisibilityPolicy,
+            ActorLinkMultiplicityPolicy = (ElectionActorLinkMultiplicityPolicyProto)(int)policy.ActorLinkMultiplicityPolicy,
+            ContactCodeProviderReadiness = (ElectionContactCodeProviderReadinessProto)(int)policy.ContactCodeProviderReadiness,
             OutcomeRule = policy.OutcomeRule.ToProto(),
             ProtocolOmegaVersion = policy.ProtocolOmegaVersion,
             ReportingPolicy = (ReportingPolicyProto)(int)policy.ReportingPolicy,

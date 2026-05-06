@@ -622,6 +622,62 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
     public async Task SaveEligibilitySnapshotAsync(ElectionEligibilitySnapshotRecord snapshot) =>
         await Context.ElectionEligibilitySnapshots.AddAsync(snapshot);
 
+    public async Task<IReadOnlyList<ElectionRosterImportEvidenceRecord>> GetRosterImportEvidencesAsync(
+        ElectionId electionId) =>
+        await Context.ElectionRosterImportEvidences
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.RosterImportVersion)
+            .ThenBy(x => x.ImportedAt)
+            .ToListAsync();
+
+    public async Task<ElectionRosterImportEvidenceRecord?> GetLatestRosterImportEvidenceAsync(ElectionId electionId) =>
+        await Context.ElectionRosterImportEvidences
+            .Where(x => x.ElectionId == electionId)
+            .OrderByDescending(x => x.RosterImportVersion)
+            .ThenByDescending(x => x.ImportedAt)
+            .FirstOrDefaultAsync();
+
+    public async Task SaveRosterImportEvidenceAsync(ElectionRosterImportEvidenceRecord evidence) =>
+        await Context.ElectionRosterImportEvidences.AddAsync(evidence);
+
+    public async Task<IReadOnlyList<ElectionEligibilityPolicyEvidenceRecord>> GetEligibilityPolicyEvidencesAsync(
+        ElectionId electionId) =>
+        await Context.ElectionEligibilityPolicyEvidences
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.DeclaredAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<ElectionEligibilityPolicyEvidenceRecord?> GetLatestEligibilityPolicyEvidenceAsync(
+        ElectionId electionId) =>
+        await Context.ElectionEligibilityPolicyEvidences
+            .Where(x => x.ElectionId == electionId)
+            .OrderByDescending(x => x.DeclaredAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+
+    public async Task SaveEligibilityPolicyEvidenceAsync(ElectionEligibilityPolicyEvidenceRecord evidence) =>
+        await Context.ElectionEligibilityPolicyEvidences.AddAsync(evidence);
+
+    public async Task<IReadOnlyList<ElectionCommitmentSchemeEvidenceRecord>> GetCommitmentSchemeEvidencesAsync(
+        ElectionId electionId) =>
+        await Context.ElectionCommitmentSchemeEvidences
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.DeclaredAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<ElectionCommitmentSchemeEvidenceRecord?> GetLatestCommitmentSchemeEvidenceAsync(
+        ElectionId electionId) =>
+        await Context.ElectionCommitmentSchemeEvidences
+            .Where(x => x.ElectionId == electionId)
+            .OrderByDescending(x => x.DeclaredAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+
+    public async Task SaveCommitmentSchemeEvidenceAsync(ElectionCommitmentSchemeEvidenceRecord evidence) =>
+        await Context.ElectionCommitmentSchemeEvidences.AddAsync(evidence);
+
     public async Task<IReadOnlyList<ElectionAcceptedBallotRecord>> GetAcceptedBallotsAsync(ElectionId electionId) =>
         await Context.ElectionAcceptedBallots
             .Where(x => x.ElectionId == electionId)

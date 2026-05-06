@@ -128,7 +128,13 @@ public partial class ElectionQueryApplicationService
             ParticipationRecords: [],
             VoterCeremonyRecords: [],
             PreparedBallotCommitments: [],
-            SpoiledPreparedBallots: []);
+            SpoiledPreparedBallots: [],
+            RosterImportEvidences: [],
+            EligibilityPolicyEvidences: [],
+            CommitmentSchemeEvidences: [],
+            CommitmentRegistrations: [],
+            CheckoffConsumptions: [],
+            EligibilityActivationEvents: []);
 
         return BuildVerificationPackageStatusView(context, includePackageHashes: false);
     }
@@ -173,6 +179,12 @@ public partial class ElectionQueryApplicationService
         var voterCeremonyRecords = await repository.GetVoterCeremonyRecordsAsync(election.ElectionId);
         var preparedBallotCommitments = await repository.GetPreparedBallotCommitmentsAsync(election.ElectionId);
         var spoiledPreparedBallots = await repository.GetSpoiledPreparedBallotsAsync(election.ElectionId);
+        var rosterImportEvidences = await repository.GetRosterImportEvidencesAsync(election.ElectionId);
+        var eligibilityPolicyEvidences = await repository.GetEligibilityPolicyEvidencesAsync(election.ElectionId);
+        var commitmentSchemeEvidences = await repository.GetCommitmentSchemeEvidencesAsync(election.ElectionId);
+        var commitmentRegistrations = await repository.GetCommitmentRegistrationsAsync(election.ElectionId);
+        var checkoffConsumptions = await repository.GetCheckoffConsumptionsAsync(election.ElectionId);
+        var eligibilityActivationEvents = await repository.GetEligibilityActivationEventsAsync(election.ElectionId);
 
         return new VerificationPackageContext(
             election,
@@ -193,7 +205,13 @@ public partial class ElectionQueryApplicationService
             participationRecords,
             voterCeremonyRecords,
             preparedBallotCommitments,
-            spoiledPreparedBallots);
+            spoiledPreparedBallots,
+            rosterImportEvidences,
+            eligibilityPolicyEvidences,
+            commitmentSchemeEvidences,
+            commitmentRegistrations,
+            checkoffConsumptions,
+            eligibilityActivationEvents);
     }
 
     private ElectionVerificationPackageStatusView BuildVerificationPackageStatusView(
@@ -220,6 +238,7 @@ public partial class ElectionQueryApplicationService
             RestrictedPackage = restrictedPackage,
             LastVerifierResult = BuildVerifierResultNotAvailable(),
             Sp04Evidence = BuildSp04EvidenceStatus(context),
+            Sp05Evidence = BuildSp05EvidenceStatus(context),
         };
 
         if (context.CanViewPackageStatus && context.ProtocolPackageBinding is not null)
@@ -256,6 +275,54 @@ public partial class ElectionQueryApplicationService
             SpoiledPackageCount = context.SpoiledPreparedBallots.Count,
             AcceptedBoundReceiptCount = receiptCommitments.Count,
             ReceiptCommitmentSetHash = ComputeReceiptCommitmentSetHash(receiptCommitments),
+            Message = message,
+        };
+    }
+
+    private static ElectionSp05EvidenceStatusView BuildSp05EvidenceStatus(VerificationPackageContext context)
+    {
+        var latestImportEvidence = context.RosterImportEvidences
+            .OrderByDescending(x => x.RosterImportVersion)
+            .ThenByDescending(x => x.ImportedAt)
+            .FirstOrDefault();
+        var activeDenominatorEntries = context.Election.EligibilityMutationPolicy == EligibilityMutationPolicy.FrozenAtOpen
+            ? context.RosterEntries.Where(x => x.WasPresentAtOpen && x.WasActiveAtOpen).ToArray()
+            : context.RosterEntries.Where(x => x.WasPresentAtOpen && x.IsActive).ToArray();
+        var countedParticipationCount = context.ParticipationRecords.Count(x =>
+            x.ParticipationStatus == ElectionParticipationStatus.CountedAsVoted);
+        var packageReady =
+            context.Election.LifecycleState == ElectionLifecycleState.Finalized &&
+            context.LatestReportPackage?.Status == ElectionReportPackageStatus.Sealed &&
+            context.ProtocolPackageBinding?.Status == ProtocolPackageBindingStatus.Sealed &&
+            HasSealedBallotDefinition(context);
+        var providerReady =
+            context.Election.ContactCodeProviderReadiness == ElectionContactCodeProviderReadiness.Ready;
+        var latestResultCode = providerReady
+            ? VerificationResultCodes.EligibilityEvidenceValid
+            : VerificationResultCodes.EligibilityDevOnlyVerificationBlocked;
+        var message = !context.CanViewPackageStatus
+            ? "SP-05 eligibility evidence status is not visible to this actor."
+            : latestImportEvidence is null
+                ? "SP-05 eligibility evidence is waiting for roster import evidence."
+                : packageReady
+                    ? "SP-05 eligibility evidence is available for verification package export."
+                    : "SP-05 eligibility evidence is being collected and becomes exportable after finalization.";
+
+        return new ElectionSp05EvidenceStatusView
+        {
+            EvidenceExpected = true,
+            PublicEvidenceAvailable = packageReady,
+            RestrictedEvidenceAvailable = packageReady && context.CanExportRestrictedPackage,
+            RosteredCount = context.RosterEntries.Count,
+            LinkedCount = context.RosterEntries.Count(x => x.IsLinked),
+            ActiveDenominatorCount = activeDenominatorEntries.Length,
+            CommitmentCount = context.CommitmentRegistrations.Count,
+            CountedParticipationCount = countedParticipationCount,
+            DuplicateContactWarningCount = latestImportEvidence?.DuplicateContactWarningCount ?? 0,
+            RosterCanonicalHash = latestImportEvidence?.RosterCanonicalHash ??
+                ElectionEligibilityContracts.ComputeRosterCanonicalHash(context.RosterEntries),
+            CommitmentTreeRoot = ComputeCommitmentRootHash(context.CommitmentRegistrations),
+            LatestEliResultCode = latestResultCode,
             Message = message,
         };
     }
@@ -345,7 +412,13 @@ public partial class ElectionQueryApplicationService
             context.Election.FinalizedAt,
             context.VoterCeremonyRecords,
             context.PreparedBallotCommitments,
-            context.SpoiledPreparedBallots);
+            context.SpoiledPreparedBallots,
+            context.RosterImportEvidences,
+            context.EligibilityPolicyEvidences,
+            context.CommitmentSchemeEvidences,
+            context.CommitmentRegistrations,
+            context.CheckoffConsumptions,
+            context.EligibilityActivationEvents);
 
     private static IReadOnlyList<ElectionSp04ReceiptCommitmentRecord> BuildSp04ReceiptCommitments(
         IReadOnlyList<ElectionAcceptedBallotRecord> acceptedBallots) =>
@@ -375,6 +448,17 @@ public partial class ElectionQueryApplicationService
                 .OrderBy(x => x.AcceptedBallotId)
                 .Select(x =>
                     $"{x.AcceptedBallotId:N}|{x.PreparedBallotId:N}|{x.PreparedBallotHash}|{x.ReceiptCommitment}|{x.ReceiptCommitmentScheme}|{x.AcceptedAt:O}"));
+
+        return VerificationCanonicalHash.ComputeSha256UpperHex(payload);
+    }
+
+    private static string ComputeCommitmentRootHash(IReadOnlyList<ElectionCommitmentRegistrationRecord> commitments)
+    {
+        var payload = string.Join(
+            '\n',
+            commitments
+                .OrderBy(x => x.CommitmentHash, StringComparer.Ordinal)
+                .Select(x => x.CommitmentHash));
 
         return VerificationCanonicalHash.ComputeSha256UpperHex(payload);
     }
@@ -594,7 +678,13 @@ public partial class ElectionQueryApplicationService
         IReadOnlyList<ElectionParticipationRecord> ParticipationRecords,
         IReadOnlyList<ElectionVoterCeremonyRecord> VoterCeremonyRecords,
         IReadOnlyList<ElectionPreparedBallotCommitmentRecord> PreparedBallotCommitments,
-        IReadOnlyList<ElectionSpoiledPreparedBallotRecord> SpoiledPreparedBallots)
+        IReadOnlyList<ElectionSpoiledPreparedBallotRecord> SpoiledPreparedBallots,
+        IReadOnlyList<ElectionRosterImportEvidenceRecord> RosterImportEvidences,
+        IReadOnlyList<ElectionEligibilityPolicyEvidenceRecord> EligibilityPolicyEvidences,
+        IReadOnlyList<ElectionCommitmentSchemeEvidenceRecord> CommitmentSchemeEvidences,
+        IReadOnlyList<ElectionCommitmentRegistrationRecord> CommitmentRegistrations,
+        IReadOnlyList<ElectionCheckoffConsumptionRecord> CheckoffConsumptions,
+        IReadOnlyList<ElectionEligibilityActivationEventRecord> EligibilityActivationEvents)
     {
         public bool CanViewPackageStatus => IsVerificationPackageVisible(IsOwner, AcceptedTrustee, IsDesignatedAuditor);
 

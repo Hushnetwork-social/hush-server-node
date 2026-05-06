@@ -342,6 +342,11 @@ public class ElectionLifecycleServiceTests
 
         result.IsSuccess.Should().BeTrue();
         result.RosterEntries.Should().HaveCount(2);
+        result.RosterImportEvidence.Should().NotBeNull();
+        result.RosterImportEvidence!.AcceptedRowCount.Should().Be(2);
+        result.RosterImportEvidence.RosterSourceFileHash.Should().NotBeNullOrWhiteSpace();
+        result.RosterImportEvidence.RosterCanonicalHash.Should().NotBeNullOrWhiteSpace();
+        store.RosterImportEvidences.Should().ContainSingle();
         store.RosterEntries
             .Where(x => x.ElectionId == election.ElectionId)
             .Select(x => x.OrganizationVoterId)
@@ -357,7 +362,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
-    public async Task ImportRosterAsync_WithExistingOrganizationVoterIds_KeepsExistingRowsAndSkipsDuplicates()
+    public async Task ImportRosterAsync_WithExistingOrganizationVoterIds_RejectsImportAndRecordsEvidence()
     {
         var store = new ElectionStore();
         var service = CreateService(store);
@@ -376,14 +381,18 @@ public class ElectionLifecycleServiceTests
                 CreateRosterImportItem("2001"),
             ]));
 
-        result.IsSuccess.Should().BeTrue();
-        result.RosterEntries.Should().ContainSingle();
-        result.RosterEntries[0].OrganizationVoterId.Should().Be("2001");
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        result.RosterImportEvidence.Should().NotBeNull();
+        result.RosterImportEvidence!.RejectedRows.Should().ContainSingle(x =>
+            x.OrganizationVoterId == "1001" &&
+            x.ReasonCode.Contains("existing_organization_voter_id", StringComparison.Ordinal));
         store.RosterEntries
             .Where(x => x.ElectionId == election.ElectionId)
             .Select(x => x.OrganizationVoterId)
             .Should()
-            .BeEquivalentTo("1001", "2001");
+            .BeEquivalentTo("1001");
+        store.RosterImportEvidences.Should().ContainSingle();
 
         var preservedEntry = store.RosterEntries.Single(x =>
             x.ElectionId == election.ElectionId &&
@@ -413,6 +422,56 @@ public class ElectionLifecycleServiceTests
         result.RosterEntry!.IsLinked.Should().BeTrue();
         result.RosterEntry.LinkedActorPublicAddress.Should().Be("voter-address");
         store.RosterEntries.Single(x => x.ElectionId == election.ElectionId).LinkedActorPublicAddress.Should().Be("voter-address");
+    }
+
+    [Fact]
+    public async Task ClaimRosterEntryAsync_WithStrictActorPolicy_RejectsSecondEntryForSameActor()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection();
+        var linkedEntry = CreateRosterEntry(election, "2001").LinkToActor("voter-address", DateTime.UtcNow);
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, linkedEntry, CreateRosterEntry(election, "2002"));
+
+        var result = await service.ClaimRosterEntryAsync(new ClaimElectionRosterEntryRequest(
+            election.ElectionId,
+            "voter-address",
+            "2002",
+            "1111"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+        store.RosterEntries.Single(x => x.OrganizationVoterId == "2002").IsLinked.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ClaimRosterEntryAsync_WithMultipleActorPolicy_AllowsSameActorForSeparateEntries()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection() with
+        {
+            ActorLinkMultiplicityPolicy = ElectionActorLinkMultiplicityPolicy.MultipleRosterEntriesPerActorAllowed,
+        };
+        var linkedEntry = CreateRosterEntry(election, "2001").LinkToActor("voter-address", DateTime.UtcNow);
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, linkedEntry, CreateRosterEntry(election, "2002"));
+
+        var result = await service.ClaimRosterEntryAsync(new ClaimElectionRosterEntryRequest(
+            election.ElectionId,
+            "voter-address",
+            "2002",
+            "1111"));
+
+        result.IsSuccess.Should().BeTrue();
+        store.RosterEntries
+            .Where(x => x.LinkedActorPublicAddress == "voter-address")
+            .Select(x => x.OrganizationVoterId)
+            .Should()
+            .BeEquivalentTo("2001", "2002");
     }
 
     [Fact]
@@ -577,6 +636,83 @@ public class ElectionLifecycleServiceTests
         result.CommitmentRegistration.LinkedActorPublicAddress.Should().Be("voter-address");
         store.CommitmentRegistrations.Should().ContainSingle();
         store.ParticipationRecords.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RegisterVotingCommitmentAsync_WithMultipleActorPolicy_RequiresOrganizationVoterId()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: false);
+        var election = scenario.Election with
+        {
+            ActorLinkMultiplicityPolicy = ElectionActorLinkMultiplicityPolicy.MultipleRosterEntriesPerActorAllowed,
+        };
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.RegisterVotingCommitmentAsync(new RegisterElectionVotingCommitmentRequest(
+            election.ElectionId,
+            "voter-address",
+            "commitment-hash-1"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCommitmentRegistrationFailureReason.ValidationFailed);
+        result.ErrorMessage.Should().Contain("organization voter id");
+        store.CommitmentRegistrations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RegisterVotingCommitmentAsync_WithMultipleActorPolicy_UsesRequestedRosterEntry()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: false);
+        var election = scenario.Election with
+        {
+            ActorLinkMultiplicityPolicy = ElectionActorLinkMultiplicityPolicy.MultipleRosterEntriesPerActorAllowed,
+        };
+        var openedAt = election.OpenedAt!.Value;
+        var secondEntry = CreateRosterEntry(election, "4002")
+            .FreezeAtOpen(openedAt)
+            .LinkToActor("voter-address", openedAt.AddMinutes(1));
+
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, secondEntry);
+
+        var result = await service.RegisterVotingCommitmentAsync(new RegisterElectionVotingCommitmentRequest(
+            election.ElectionId,
+            "voter-address",
+            "commitment-hash-2",
+            "4002"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.CommitmentRegistration.Should().NotBeNull();
+        result.CommitmentRegistration!.OrganizationVoterId.Should().Be("4002");
+        store.CommitmentRegistrations.Should().ContainSingle(x => x.OrganizationVoterId == "4002");
+    }
+
+    [Fact]
+    public async Task RegisterVotingCommitmentAsync_WithoutBallotDefinitionSeal_ReturnsNotOpenable()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: false);
+        store.Elections[scenario.Election.ElectionId] = scenario.Election with
+        {
+            BallotDefinitionVersion = null,
+            BallotDefinitionHash = null,
+            BallotDefinitionSealedAt = null,
+        };
+
+        var result = await service.RegisterVotingCommitmentAsync(new RegisterElectionVotingCommitmentRequest(
+            scenario.Election.ElectionId,
+            "voter-address",
+            "commitment-hash-1"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCommitmentRegistrationFailureReason.ElectionNotOpenableForRegistration);
+        result.ErrorMessage.Should().Contain("ballot definition seal");
+        store.CommitmentRegistrations.Should().BeEmpty();
     }
 
     [Fact]
@@ -2163,6 +2299,66 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithStrictActorPolicyAndDuplicateLinkedActors_ReturnsNotReady()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection();
+        var openedAt = DateTime.UtcNow;
+
+        store.Elections[election.ElectionId] = election;
+        SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(
+            store,
+            CreateRosterEntry(election, "4001").LinkToActor("voter-address", openedAt),
+            CreateRosterEntry(election, "4002").LinkToActor("voter-address", openedAt));
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            election.ElectionId,
+            RequiredWarningCodes: []));
+
+        result.IsReadyToOpen.Should().BeFalse();
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains("single-roster-entry actor policy", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task OpenElectionAsync_WithStrictActorPolicyAndDuplicateLinkedActors_ReturnsValidationFailed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateAdminElection(
+            acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]);
+        var linkedAt = DateTime.UtcNow;
+        var warning = ElectionModelFactory.CreateWarningAcknowledgement(
+            election.ElectionId,
+            ElectionWarningCode.LowAnonymitySet,
+            election.CurrentDraftRevision,
+            acknowledgedByPublicAddress: "owner-address");
+
+        store.Elections[election.ElectionId] = election;
+        store.WarningAcknowledgements.Add(warning);
+        SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(
+            store,
+            CreateRosterEntry(election, "4001").LinkToActor("voter-address", linkedAt),
+            CreateRosterEntry(election, "4002").LinkToActor("voter-address", linkedAt));
+
+        var result = await service.OpenElectionAsync(new OpenElectionRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet]));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains("single-roster-entry actor policy", StringComparison.OrdinalIgnoreCase));
+        store.BoundaryArtifacts.Should().BeEmpty();
+        store.EligibilityPolicyEvidences.Should().BeEmpty();
+        store.CommitmentSchemeEvidences.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task EvaluateOpenReadinessAsync_WithAdminOnlyProtectedProfileAndUnavailableCustody_ReturnsNotReady()
     {
         var store = new ElectionStore();
@@ -2381,6 +2577,12 @@ public class ElectionLifecycleServiceTests
         result.BoundaryArtifact.BallotDefinitionMutationPolicy.Should().Be(ElectionBallotDefinitionMutationPolicy.ImmutableAfterOpen);
         store.BoundaryArtifacts.Should().ContainSingle();
         store.EligibilitySnapshots.Should().ContainSingle();
+        store.EligibilityPolicyEvidences.Should().ContainSingle();
+        store.EligibilityPolicyEvidences[0].ActorLinkMultiplicityPolicy.Should()
+            .Be(ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor);
+        store.CommitmentSchemeEvidences.Should().ContainSingle();
+        store.CommitmentSchemeEvidences[0].CommitmentSchemeVersion.Should()
+            .Be(ElectionSp05ProfileIds.VoteCommitmentPreimageV1);
         store.Elections[election.ElectionId].OpenArtifactId.Should().Be(result.BoundaryArtifact.Id);
         store.Elections[election.ElectionId].BallotDefinitionVersion.Should().Be(ElectionBallotDefinitionCanonicalizer.CurrentVersion);
         store.Elections[election.ElectionId].BallotDefinitionHash.Should().Equal(expectedBallotDefinitionHash);
@@ -5577,6 +5779,9 @@ public class ElectionLifecycleServiceTests
         public List<ElectionSpoiledPreparedBallotRecord> SpoiledPreparedBallots { get; } = [];
         public List<ElectionCheckoffConsumptionRecord> CheckoffConsumptions { get; } = [];
         public List<ElectionEligibilitySnapshotRecord> EligibilitySnapshots { get; } = [];
+        public List<ElectionRosterImportEvidenceRecord> RosterImportEvidences { get; } = [];
+        public List<ElectionEligibilityPolicyEvidenceRecord> EligibilityPolicyEvidences { get; } = [];
+        public List<ElectionCommitmentSchemeEvidenceRecord> CommitmentSchemeEvidences { get; } = [];
         public List<ElectionBoundaryArtifactRecord> BoundaryArtifacts { get; } = [];
         public List<ElectionAcceptedBallotRecord> AcceptedBallots { get; } = [];
         public List<ElectionBallotMemPoolRecord> BallotMemPoolEntries { get; } = [];
@@ -6188,6 +6393,72 @@ public class ElectionLifecycleServiceTests
                 x.ElectionId == snapshot.ElectionId &&
                 x.SnapshotType == snapshot.SnapshotType);
             store.EligibilitySnapshots.Add(snapshot);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionRosterImportEvidenceRecord>> GetRosterImportEvidencesAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionRosterImportEvidenceRecord>>(
+                store.RosterImportEvidences
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.RosterImportVersion)
+                    .ThenBy(x => x.ImportedAt)
+                    .ToArray());
+
+        public Task<ElectionRosterImportEvidenceRecord?> GetLatestRosterImportEvidenceAsync(ElectionId electionId) =>
+            Task.FromResult(
+                store.RosterImportEvidences
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderByDescending(x => x.RosterImportVersion)
+                    .ThenByDescending(x => x.ImportedAt)
+                    .FirstOrDefault());
+
+        public Task SaveRosterImportEvidenceAsync(ElectionRosterImportEvidenceRecord evidence)
+        {
+            store.RosterImportEvidences.Add(evidence);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionEligibilityPolicyEvidenceRecord>> GetEligibilityPolicyEvidencesAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionEligibilityPolicyEvidenceRecord>>(
+                store.EligibilityPolicyEvidences
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.DeclaredAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
+
+        public Task<ElectionEligibilityPolicyEvidenceRecord?> GetLatestEligibilityPolicyEvidenceAsync(ElectionId electionId) =>
+            Task.FromResult(
+                store.EligibilityPolicyEvidences
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderByDescending(x => x.DeclaredAt)
+                    .ThenByDescending(x => x.Id)
+                    .FirstOrDefault());
+
+        public Task SaveEligibilityPolicyEvidenceAsync(ElectionEligibilityPolicyEvidenceRecord evidence)
+        {
+            store.EligibilityPolicyEvidences.Add(evidence);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionCommitmentSchemeEvidenceRecord>> GetCommitmentSchemeEvidencesAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionCommitmentSchemeEvidenceRecord>>(
+                store.CommitmentSchemeEvidences
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.DeclaredAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
+
+        public Task<ElectionCommitmentSchemeEvidenceRecord?> GetLatestCommitmentSchemeEvidenceAsync(ElectionId electionId) =>
+            Task.FromResult(
+                store.CommitmentSchemeEvidences
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderByDescending(x => x.DeclaredAt)
+                    .ThenByDescending(x => x.Id)
+                    .FirstOrDefault());
+
+        public Task SaveCommitmentSchemeEvidenceAsync(ElectionCommitmentSchemeEvidenceRecord evidence)
+        {
+            store.CommitmentSchemeEvidences.Add(evidence);
             return Task.CompletedTask;
         }
 

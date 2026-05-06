@@ -134,7 +134,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
             reviewWindowPolicy: request.Draft.ReviewWindowPolicy,
             ownerOptions: NormalizeOwnerOptions(request.Draft.OwnerOptions),
             acknowledgedWarningCodes: NormalizeWarningCodes(request.Draft.AcknowledgedWarningCodes),
-            requiredApprovalCount: request.Draft.RequiredApprovalCount);
+            requiredApprovalCount: request.Draft.RequiredApprovalCount,
+            identityLinkPolicy: request.Draft.IdentityLinkPolicy,
+            checkoffVisibilityPolicy: request.Draft.CheckoffVisibilityPolicy,
+            actorLinkMultiplicityPolicy: request.Draft.ActorLinkMultiplicityPolicy,
+            contactCodeProviderReadiness: request.Draft.ContactCodeProviderReadiness);
 
         var snapshot = ElectionModelFactory.CreateDraftSnapshot(
             election,
@@ -259,7 +263,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
             acknowledgedWarningCodes: NormalizeWarningCodes(request.Draft.AcknowledgedWarningCodes),
             currentDraftRevision: existing.CurrentDraftRevision + 1,
             requiredApprovalCount: request.Draft.RequiredApprovalCount,
-            createdAt: existing.CreatedAt) with
+            createdAt: existing.CreatedAt,
+            identityLinkPolicy: request.Draft.IdentityLinkPolicy,
+            checkoffVisibilityPolicy: request.Draft.CheckoffVisibilityPolicy,
+            actorLinkMultiplicityPolicy: request.Draft.ActorLinkMultiplicityPolicy,
+            contactCodeProviderReadiness: request.Draft.ContactCodeProviderReadiness) with
         {
             LastUpdatedAt = DateTime.UtcNow,
         };
@@ -348,15 +356,6 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
     public async Task<ElectionCommandResult> ImportRosterAsync(ImportElectionRosterRequest request)
     {
-        var validationErrors = ElectionEligibilityContracts.ValidateRosterImportEntries(request.RosterEntries);
-        if (validationErrors.Count > 0)
-        {
-            return ElectionCommandResult.Failure(
-                ElectionCommandErrorCode.ValidationFailed,
-                "Election roster import validation failed.",
-                validationErrors);
-        }
-
         using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
@@ -393,24 +392,36 @@ public class ElectionLifecycleService : IElectionLifecycleService
         try
         {
             var existingRosterEntries = await repository.GetRosterEntriesAsync(request.ElectionId);
-            var existingOrganizationVoterIds = new HashSet<string>(
-                existingRosterEntries.Select(x => x.OrganizationVoterId.Trim()),
-                StringComparer.OrdinalIgnoreCase);
             var importedAt = DateTime.UtcNow;
-            rosterEntries = request.RosterEntries
-                .Where(entry => existingOrganizationVoterIds.Add(entry.OrganizationVoterId.Trim()))
-                .Select(entry => ElectionModelFactory.CreateRosterEntry(
-                    request.ElectionId,
-                    entry.OrganizationVoterId,
-                    entry.ContactType,
-                    entry.ContactValue,
-                    entry.IsInitiallyActive
-                        ? ElectionVotingRightStatus.Active
-                        : ElectionVotingRightStatus.Inactive,
-                    importedAt,
-                    request.SourceTransactionId,
-                    request.SourceBlockHeight,
-                    request.SourceBlockId))
+            var latestImportEvidence = await repository.GetLatestRosterImportEvidenceAsync(request.ElectionId);
+            var importAnalysis = ElectionEligibilityContracts.AnalyzeRosterImportEntries(
+                request.ElectionId,
+                request.RosterEntries,
+                existingRosterEntries,
+                rosterImportVersion: (latestImportEvidence?.RosterImportVersion ?? 0) + 1,
+                request.ActorPublicAddress,
+                importedAt);
+
+            await repository.SaveRosterImportEvidenceAsync(importAnalysis.Evidence);
+
+            if (importAnalysis.ValidationErrors.Count > 0)
+            {
+                await unitOfWork.CommitAsync();
+
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.ValidationFailed,
+                    "Election roster import validation failed.",
+                    importAnalysis.ValidationErrors,
+                    importAnalysis.Evidence);
+            }
+
+            rosterEntries = importAnalysis.AcceptedRosterEntries
+                .Select(entry => entry with
+                {
+                    LatestTransactionId = request.SourceTransactionId,
+                    LatestBlockHeight = request.SourceBlockHeight,
+                    LatestBlockId = request.SourceBlockId,
+                })
                 .ToArray();
 
             foreach (var rosterEntry in rosterEntries)
@@ -441,7 +452,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         return ElectionCommandResult.Success(
             election,
-            rosterEntries: rosterEntries);
+            rosterEntries: rosterEntries,
+            rosterImportEvidence: await repository.GetLatestRosterImportEvidenceAsync(request.ElectionId));
     }
 
     public async Task<ElectionCommandResult> ClaimRosterEntryAsync(ClaimElectionRosterEntryRequest request)
@@ -495,7 +507,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var actorExistingEntry = await repository.GetRosterEntryByLinkedActorAsync(
             request.ElectionId,
             request.ActorPublicAddress);
-        if (actorExistingEntry is not null &&
+        if (election.ActorLinkMultiplicityPolicy == ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor &&
+            actorExistingEntry is not null &&
             !string.Equals(actorExistingEntry.OrganizationVoterId, request.OrganizationVoterId, StringComparison.OrdinalIgnoreCase))
         {
             return ElectionCommandResult.Failure(
@@ -727,13 +740,28 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Voting commitment registration is only available while the election is open.");
         }
 
-        var rosterEntry = await repository.GetRosterEntryByLinkedActorAsync(request.ElectionId, request.ActorPublicAddress);
-        if (rosterEntry is null)
+        if (!HasSealedBallotDefinition(election))
         {
             return ElectionCommitmentRegistrationResult.Failure(
-                ElectionCommitmentRegistrationFailureReason.NotLinked,
-                "The authenticated Hush account is not linked to a roster entry for this election.");
+                ElectionCommitmentRegistrationFailureReason.ElectionNotOpenableForRegistration,
+                "Voting commitment registration requires the open election ballot definition seal.");
         }
+
+        var rosterEntryResolution = await ResolveLinkedRosterEntryAsync(
+            repository,
+            election,
+            request.ActorPublicAddress,
+            request.OrganizationVoterId);
+        if (!rosterEntryResolution.IsSuccess)
+        {
+            return ElectionCommitmentRegistrationResult.Failure(
+                rosterEntryResolution.IsValidationFailure
+                    ? ElectionCommitmentRegistrationFailureReason.ValidationFailed
+                    : ElectionCommitmentRegistrationFailureReason.NotLinked,
+                rosterEntryResolution.ErrorMessage);
+        }
+
+        var rosterEntry = rosterEntryResolution.RosterEntry!;
 
         if (!rosterEntry.WasPresentAtOpen)
         {
@@ -856,13 +884,21 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Prepared ballot registration is bound to a different ballot definition than the open election.");
         }
 
-        var rosterEntry = await repository.GetRosterEntryByLinkedActorAsync(request.ElectionId, request.ActorPublicAddress);
-        if (rosterEntry is null)
+        var rosterEntryResolution = await ResolveLinkedRosterEntryAsync(
+            repository,
+            election,
+            request.ActorPublicAddress,
+            request.OrganizationVoterId);
+        if (!rosterEntryResolution.IsSuccess)
         {
             return ElectionPreparedBallotCommitmentResult.Failure(
-                ElectionPreparedBallotCommitmentFailureReason.NotLinked,
-                "The authenticated Hush account is not linked to a roster entry for this election.");
+                rosterEntryResolution.IsValidationFailure
+                    ? ElectionPreparedBallotCommitmentFailureReason.ValidationFailed
+                    : ElectionPreparedBallotCommitmentFailureReason.NotLinked,
+                rosterEntryResolution.ErrorMessage);
         }
+
+        var rosterEntry = rosterEntryResolution.RosterEntry!;
 
         if (!IsRosterEntryEligibleForCommitmentRegistration(election, rosterEntry))
         {
@@ -1021,13 +1057,21 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Prepared ballot spoil is only available while the election is open.");
         }
 
-        var rosterEntry = await repository.GetRosterEntryByLinkedActorAsync(request.ElectionId, request.ActorPublicAddress);
-        if (rosterEntry is null)
+        var rosterEntryResolution = await ResolveLinkedRosterEntryAsync(
+            repository,
+            election,
+            request.ActorPublicAddress,
+            request.OrganizationVoterId);
+        if (!rosterEntryResolution.IsSuccess)
         {
             return ElectionSpoilPreparedBallotResult.Failure(
-                ElectionSpoilPreparedBallotFailureReason.NotLinked,
-                "The authenticated Hush account is not linked to a roster entry for this election.");
+                rosterEntryResolution.IsValidationFailure
+                    ? ElectionSpoilPreparedBallotFailureReason.ValidationFailed
+                    : ElectionSpoilPreparedBallotFailureReason.NotLinked,
+                rosterEntryResolution.ErrorMessage);
         }
+
+        var rosterEntry = rosterEntryResolution.RosterEntry!;
 
         if (!IsRosterEntryEligibleForCommitmentRegistration(election, rosterEntry))
         {
@@ -1242,13 +1286,21 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     "This election-scoped submission key has already been used.");
             }
 
-            var rosterEntry = await repository.GetRosterEntryByLinkedActorAsync(request.ElectionId, request.ActorPublicAddress);
-            if (rosterEntry is null)
+            var rosterEntryResolution = await ResolveLinkedRosterEntryAsync(
+                repository,
+                election,
+                request.ActorPublicAddress,
+                request.OrganizationVoterId);
+            if (!rosterEntryResolution.IsSuccess)
             {
                 return ElectionCastAcceptanceResult.Failure(
-                    ElectionCastAcceptanceFailureReason.NotLinked,
-                    "The authenticated Hush account is not linked to a roster entry for this election.");
+                    rosterEntryResolution.IsValidationFailure
+                        ? ElectionCastAcceptanceFailureReason.ValidationFailed
+                        : ElectionCastAcceptanceFailureReason.NotLinked,
+                    rosterEntryResolution.ErrorMessage);
             }
+
+            var rosterEntry = rosterEntryResolution.RosterEntry!;
 
             if (!IsRosterEntryEligibleForCommitmentRegistration(election, rosterEntry))
             {
@@ -3386,6 +3438,31 @@ public class ElectionLifecycleService : IElectionLifecycleService
             sourceTransactionId,
             sourceBlockHeight,
             sourceBlockId);
+        var eligibilityPolicyEvidence = ElectionModelFactory.CreateEligibilityPolicyEvidence(
+            election.ElectionId,
+            eligibilityPolicyVersion: "1.0.0",
+            election.EligibilityMutationPolicy,
+            election.IdentityLinkPolicy,
+            election.CheckoffVisibilityPolicy,
+            election.ActorLinkMultiplicityPolicy,
+            election.ContactCodeProviderReadiness,
+            ElectionEligibilityContracts.EligibilityPolicyCanonicalizationVersionHash,
+            actorPublicAddress,
+            declaredAt: openedAt,
+            sourceTransactionId: sourceTransactionId,
+            sourceBlockHeight: sourceBlockHeight,
+            sourceBlockId: sourceBlockId);
+        var commitmentSchemeEvidence = ElectionModelFactory.CreateCommitmentSchemeEvidence(
+            election.ElectionId,
+            ElectionEligibilityContracts.CommitmentSchemeVersionHash,
+            ElectionEligibilityContracts.NullifierSchemeVersionHash,
+            ElectionEligibilityContracts.RosterCanonicalizationVersionHash,
+            ElectionEligibilityContracts.EligibilityPolicyCanonicalizationVersionHash,
+            actorPublicAddress,
+            declaredAt: openedAt,
+            sourceTransactionId: sourceTransactionId,
+            sourceBlockHeight: sourceBlockHeight,
+            sourceBlockId: sourceBlockId);
 
         var openedElection = election with
         {
@@ -3407,6 +3484,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         await repository.SaveBoundaryArtifactAsync(artifact);
         await repository.SaveEligibilitySnapshotAsync(openSnapshot);
+        await repository.SaveEligibilityPolicyEvidenceAsync(eligibilityPolicyEvidence);
+        await repository.SaveCommitmentSchemeEvidenceAsync(commitmentSchemeEvidence);
         await repository.SaveElectionAsync(openedElection);
 
         return ElectionCommandResult.Success(
@@ -3528,6 +3607,53 @@ public class ElectionLifecycleService : IElectionLifecycleService
             EligibilityMutationPolicy.LateActivationForRosteredVotersOnly => rosterEntry.IsActive,
             _ => false,
         };
+    }
+
+    private static bool HasSealedBallotDefinition(ElectionRecord election) =>
+        election.BallotDefinitionVersion.HasValue &&
+        election.BallotDefinitionHash is { Length: > 0 } &&
+        election.BallotDefinitionSealedAt.HasValue;
+
+    private static async Task<LinkedRosterEntryResolution> ResolveLinkedRosterEntryAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        string actorPublicAddress,
+        string? organizationVoterId)
+    {
+        if (election.ActorLinkMultiplicityPolicy == ElectionActorLinkMultiplicityPolicy.MultipleRosterEntriesPerActorAllowed)
+        {
+            if (string.IsNullOrWhiteSpace(organizationVoterId))
+            {
+                return LinkedRosterEntryResolution.ValidationFailure(
+                    "Multiple-entry actor policy requires the request to identify the organization voter id.");
+            }
+
+            var requestedEntry = await repository.GetRosterEntryAsync(election.ElectionId, organizationVoterId.Trim());
+            if (requestedEntry is null ||
+                !string.Equals(requestedEntry.LinkedActorPublicAddress, actorPublicAddress, StringComparison.Ordinal))
+            {
+                return LinkedRosterEntryResolution.NotLinked(
+                    "The authenticated Hush account is not linked to the requested roster entry for this election.");
+            }
+
+            return LinkedRosterEntryResolution.Success(requestedEntry);
+        }
+
+        var linkedEntry = await repository.GetRosterEntryByLinkedActorAsync(election.ElectionId, actorPublicAddress);
+        if (linkedEntry is null)
+        {
+            return LinkedRosterEntryResolution.NotLinked(
+                "The authenticated Hush account is not linked to a roster entry for this election.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(organizationVoterId) &&
+            !string.Equals(linkedEntry.OrganizationVoterId, organizationVoterId.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return LinkedRosterEntryResolution.ValidationFailure(
+                "The request is bound to a different roster entry than the authenticated Hush account.");
+        }
+
+        return LinkedRosterEntryResolution.Success(linkedEntry);
     }
 
     private static bool MatchesBallotDefinitionSeal(
@@ -3984,6 +4110,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
             errors.Add("An imported election roster is required before opening the election.");
         }
 
+        AddActorMultiplicityReadinessErrors(election, rosterEntries, errors);
+
         if (!protocolPackageValidation.IsReady)
         {
             errors.Add(protocolPackageValidation.ErrorMessage ??
@@ -4089,6 +4217,33 @@ public class ElectionLifecycleService : IElectionLifecycleService
         return errors.Count == 0
             ? ElectionOpenValidationResult.Ready(requiredWarnings, ceremonySnapshot, protocolPackageValidation)
             : ElectionOpenValidationResult.NotReady(errors, requiredWarnings, missingWarnings, ceremonySnapshot, protocolPackageValidation);
+    }
+
+    private static void AddActorMultiplicityReadinessErrors(
+        ElectionRecord election,
+        IReadOnlyList<ElectionRosterEntryRecord> rosterEntries,
+        List<string> errors)
+    {
+        if (election.ActorLinkMultiplicityPolicy != ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor)
+        {
+            return;
+        }
+
+        var duplicateLinkedActors = rosterEntries
+            .Where(x => x.IsLinked)
+            .GroupBy(x => x.LinkedActorPublicAddress!.Trim(), StringComparer.Ordinal)
+            .Where(x => x.Count() > 1)
+            .Select(x => x.Key)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        if (duplicateLinkedActors.Length == 0)
+        {
+            return;
+        }
+
+        errors.Add(
+            "Single-roster-entry actor policy requires each linked actor to be bound to only one roster entry before open.");
     }
 
     private static ElectionCeremonyBindingSnapshot? TryBuildCeremonySnapshot(
@@ -6775,6 +6930,22 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private sealed record CeremonyTrusteeUpdateOutcome(
         ElectionCeremonyTrusteeStateRecord TrusteeState,
         ElectionCeremonyTranscriptEventRecord TranscriptEvent);
+
+    private sealed record LinkedRosterEntryResolution(
+        bool IsSuccess,
+        bool IsValidationFailure,
+        string ErrorMessage,
+        ElectionRosterEntryRecord? RosterEntry)
+    {
+        public static LinkedRosterEntryResolution Success(ElectionRosterEntryRecord rosterEntry) =>
+            new(true, false, string.Empty, rosterEntry);
+
+        public static LinkedRosterEntryResolution NotLinked(string message) =>
+            new(false, false, message, null);
+
+        public static LinkedRosterEntryResolution ValidationFailure(string message) =>
+            new(false, true, message, null);
+    }
 
     private sealed record CeremonyTrusteeContextLoadResult(
         bool IsSuccess,

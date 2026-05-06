@@ -32,6 +32,9 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionSpoiledPreparedBallot(modelBuilder);
         ConfigureElectionCheckoffConsumption(modelBuilder);
         ConfigureElectionEligibilitySnapshot(modelBuilder);
+        ConfigureElectionRosterImportEvidence(modelBuilder);
+        ConfigureElectionEligibilityPolicyEvidence(modelBuilder);
+        ConfigureElectionCommitmentSchemeEvidence(modelBuilder);
         ConfigureElectionBoundaryArtifact(modelBuilder);
         ConfigureElectionAcceptedBallot(modelBuilder);
         ConfigureElectionBallotMemPool(modelBuilder);
@@ -85,6 +88,23 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.VoteUpdatePolicy).HasConversion<string>().HasColumnType("varchar(64)");
             entity.Property(x => x.EligibilitySourceType).HasConversion<string>().HasColumnType("varchar(64)");
             entity.Property(x => x.EligibilityMutationPolicy).HasConversion<string>().HasColumnType("varchar(96)");
+            entity.Property(x => x.IdentityLinkPolicy)
+                .HasConversion<string>()
+                .HasColumnType("varchar(96)")
+                .HasDefaultValue(ElectionIdentityLinkPolicy.ContactCodeV1);
+            entity.Property(x => x.CheckoffVisibilityPolicy)
+                .HasConversion<string>()
+                .HasColumnType("varchar(96)")
+                .HasDefaultValue(ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor);
+            entity.Property(x => x.ActorLinkMultiplicityPolicy)
+                .HasConversion<string>()
+                .HasColumnType("varchar(96)")
+                .HasDefaultValue(ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor);
+            entity.Property(x => x.ContactCodeProviderReadiness)
+                .HasConversion<string>()
+                .HasColumnType("varchar(40)")
+                .HasSentinel((ElectionContactCodeProviderReadiness)(-1))
+                .HasDefaultValue(ElectionContactCodeProviderReadiness.DevOnly);
             entity.Property(x => x.ProtocolOmegaVersion).HasColumnType("varchar(64)");
             entity.Property(x => x.ReportingPolicy).HasConversion<string>().HasColumnType("varchar(64)");
             entity.Property(x => x.ReviewWindowPolicy).HasConversion<string>().HasColumnType("varchar(64)");
@@ -452,7 +472,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
 
             entity.HasIndex(x => new { x.ElectionId, x.OrganizationVoterId }).IsUnique();
-            entity.HasIndex(x => new { x.ElectionId, x.LinkedActorPublicAddress }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.LinkedActorPublicAddress });
             entity.HasIndex(x => new { x.ElectionId, x.FinalState });
         });
     }
@@ -554,7 +574,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
 
             entity.HasIndex(x => new { x.ElectionId, x.LinkStatus });
             entity.HasIndex(x => new { x.ElectionId, x.VotingRightStatus });
-            entity.HasIndex(x => new { x.ElectionId, x.LinkedActorPublicAddress }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.LinkedActorPublicAddress });
             entity.HasIndex(x => new { x.ElectionId, x.WasPresentAtOpen, x.VotingRightStatus });
         });
     }
@@ -629,7 +649,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.CommitmentHash).HasColumnType("varchar(256)");
             entity.Property(x => x.RegisteredAt).HasColumnType("timestamp with time zone");
 
-            entity.HasIndex(x => new { x.ElectionId, x.LinkedActorPublicAddress }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.LinkedActorPublicAddress });
             entity.HasIndex(x => new { x.ElectionId, x.CommitmentHash }).IsUnique();
             entity.HasIndex(x => new { x.ElectionId, x.RegisteredAt });
         });
@@ -690,6 +710,106 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
 
             entity.HasIndex(x => new { x.ElectionId, x.SnapshotType }).IsUnique();
             entity.HasIndex(x => new { x.ElectionId, x.RecordedAt });
+        });
+    }
+
+    private static void ConfigureElectionRosterImportEvidence(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionRosterImportEvidenceRecord>(entity =>
+        {
+            entity.ToTable("ElectionRosterImportEvidenceRecord", "Elections");
+            entity.HasKey(x => x.RosterImportId);
+
+            entity.Property(x => x.RosterImportId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.RosterImportVersion).HasColumnType("integer");
+            entity.Property(x => x.RosterSourceFileHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.RosterCanonicalHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.RosterCanonicalizationVersion).HasColumnType("varchar(128)");
+            entity.Property(x => x.RosterCanonicalizationVersionHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.AcceptedRowCount).HasColumnType("integer");
+            entity.Property(x => x.RejectedRowCount).HasColumnType("integer");
+            entity.Property(x => x.InvalidRowRejectionCount).HasColumnType("integer");
+            entity.Property(x => x.DuplicateIdRejectionCount).HasColumnType("integer");
+            entity.Property(x => x.DuplicateContactWarningCount).HasColumnType("integer");
+            entity.Property(x => x.ImportedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ImportedByActor).HasColumnType("varchar(160)");
+
+            ConfigureJsonProperty(entity.Property(x => x.RejectedRows));
+            ConfigureJsonProperty(entity.Property(x => x.DuplicateContactWarnings));
+
+            entity.HasIndex(x => new { x.ElectionId, x.RosterImportVersion }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.ImportedAt });
+            entity.HasIndex(x => new { x.ElectionId, x.RosterCanonicalHash });
+        });
+    }
+
+    private static void ConfigureElectionEligibilityPolicyEvidence(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionEligibilityPolicyEvidenceRecord>(entity =>
+        {
+            entity.ToTable("ElectionEligibilityPolicyEvidenceRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.EligibilityPolicyId).HasColumnType("varchar(128)");
+            entity.Property(x => x.EligibilityPolicyVersion).HasColumnType("varchar(64)");
+            entity.Property(x => x.EligibilityMutationPolicy).HasConversion<string>().HasColumnType("varchar(96)");
+            entity.Property(x => x.IdentityLinkPolicy).HasConversion<string>().HasColumnType("varchar(96)");
+            entity.Property(x => x.CheckoffVisibilityPolicy).HasConversion<string>().HasColumnType("varchar(96)");
+            entity.Property(x => x.ActorLinkMultiplicityPolicy).HasConversion<string>().HasColumnType("varchar(96)");
+            entity.Property(x => x.ContactCodeProviderReadiness).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.EligibilityPolicyCanonicalizationVersion).HasColumnType("varchar(128)");
+            entity.Property(x => x.EligibilityPolicyCanonicalizationVersionHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.DeclaredAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.DeclaredByActor).HasColumnType("varchar(160)");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            entity.HasIndex(x => new { x.ElectionId, x.DeclaredAt });
+            entity.HasIndex(x => new { x.ElectionId, x.EligibilityPolicyId });
+        });
+    }
+
+    private static void ConfigureElectionCommitmentSchemeEvidence(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionCommitmentSchemeEvidenceRecord>(entity =>
+        {
+            entity.ToTable("ElectionCommitmentSchemeEvidenceRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.CommitmentSchemeVersion).HasColumnType("varchar(128)");
+            entity.Property(x => x.CommitmentSchemeVersionHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.NullifierSchemeVersion).HasColumnType("varchar(128)");
+            entity.Property(x => x.NullifierSchemeVersionHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.RosterCanonicalizationVersion).HasColumnType("varchar(128)");
+            entity.Property(x => x.RosterCanonicalizationVersionHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.EligibilityPolicyCanonicalizationVersion).HasColumnType("varchar(128)");
+            entity.Property(x => x.EligibilityPolicyCanonicalizationVersionHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.DeclaredAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.DeclaredByActor).HasColumnType("varchar(160)");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            entity.HasIndex(x => new { x.ElectionId, x.DeclaredAt });
+            entity.HasIndex(x => new { x.ElectionId, x.CommitmentSchemeVersion });
         });
     }
 

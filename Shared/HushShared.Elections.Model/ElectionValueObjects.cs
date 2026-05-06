@@ -56,7 +56,11 @@ public record ElectionFrozenPolicySnapshot(
     ReportingPolicy ReportingPolicy,
     ReviewWindowPolicy ReviewWindowPolicy,
     OfficialResultVisibilityPolicy OfficialResultVisibilityPolicy,
-    int? RequiredApprovalCount);
+    int? RequiredApprovalCount,
+    ElectionIdentityLinkPolicy IdentityLinkPolicy = ElectionIdentityLinkPolicy.ContactCodeV1,
+    ElectionCheckoffVisibilityPolicy CheckoffVisibilityPolicy = ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor,
+    ElectionActorLinkMultiplicityPolicy ActorLinkMultiplicityPolicy = ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor,
+    ElectionContactCodeProviderReadiness ContactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly);
 
 public record ElectionTrusteeReference(
     string TrusteeUserAddress,

@@ -425,6 +425,132 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "FEAT-115")]
+    [Trait("Category", "TwinTest")]
+    [Trait("Category", "NON_E2E")]
+    public async Task EligibilityCheckoffSeparation_ExportsSp05EvidenceAndKeepsPublicPackageAnonymous()
+    {
+        var client = await StartClientAsync();
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "FEAT-115 Eligibility Checkoff Separation",
+            castSubmissionIdempotencyKey: "feat115-cast-001");
+
+        var finalizeProposalId = await StartGovernedProposalAsync(
+            client,
+            context.ElectionId,
+            ElectionGovernedActionType.Finalize);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, Delta);
+
+        var finalizedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        finalizedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Finalized);
+
+        var duplicateStrictLink = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.ClaimElectionRosterEntry(
+                TestIdentities.Alice,
+                new ElectionId(Guid.Parse(context.ElectionId)),
+                "voter-charlie",
+                "1111"));
+        duplicateStrictLink.Successfull.Should().BeFalse();
+
+        var ownerStatus = await GetElectionVerificationPackageStatusAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice);
+        ownerStatus.Success.Should().BeTrue(ownerStatus.ErrorMessage);
+        ownerStatus.Status.Should().NotBeNull();
+        ownerStatus.Status!.Sp05Evidence.EvidenceExpected.Should().BeTrue();
+        ownerStatus.Status.Sp05Evidence.PublicEvidenceAvailable.Should().BeTrue();
+        ownerStatus.Status.Sp05Evidence.RestrictedEvidenceAvailable.Should().BeTrue();
+        ownerStatus.Status.Sp05Evidence.RosteredCount.Should().Be(4);
+        ownerStatus.Status.Sp05Evidence.LinkedCount.Should().Be(2);
+        ownerStatus.Status.Sp05Evidence.ActiveDenominatorCount.Should().Be(3);
+        ownerStatus.Status.Sp05Evidence.CommitmentCount.Should().Be(1);
+        ownerStatus.Status.Sp05Evidence.CountedParticipationCount.Should().Be(1);
+        ownerStatus.Status.Sp05Evidence.RosterCanonicalHash.Should().NotBeNullOrWhiteSpace();
+        ownerStatus.Status.Sp05Evidence.CommitmentTreeRoot.Should().NotBeNullOrWhiteSpace();
+        ownerStatus.Status.Sp05Evidence.LatestEliResultCode.Should().Be(
+            VerificationResultCodes.EligibilityDevOnlyVerificationBlocked);
+
+        var publicExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+        publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
+        publicExport.Files.Should().Contain(x => x.RelativePath == VerificationPackageFileNames.Sp05EligibilityPolicy);
+        publicExport.Files.Should().Contain(x => x.RelativePath == VerificationPackageFileNames.Sp05EligibilitySummary);
+        publicExport.Files.Should().Contain(x => x.RelativePath == VerificationPackageFileNames.Sp05EligibilityVerifierOutput);
+        publicExport.Files.Should().NotContain(x =>
+            x.RelativePath.StartsWith("artifacts/restricted/", StringComparison.OrdinalIgnoreCase) ||
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+
+        using (var publicSummary = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp05EligibilitySummary))
+        {
+            publicSummary.RootElement.GetProperty("rosteredCount").GetInt32().Should().Be(4);
+            publicSummary.RootElement.GetProperty("linkedCount").GetInt32().Should().Be(2);
+            publicSummary.RootElement.GetProperty("activeDenominatorCount").GetInt32().Should().Be(3);
+            publicSummary.RootElement.GetProperty("commitmentCount").GetInt32().Should().Be(1);
+            publicSummary.RootElement.GetProperty("countedParticipationCount").GetInt32().Should().Be(1);
+            publicSummary.RootElement.GetProperty("publicPrivacyBoundary").EnumerateArray()
+                .Select(x => x.GetString())
+                .Should()
+                .Contain("no_organization_voter_id");
+        }
+
+        var publicPayload = string.Join(
+            '\n',
+            publicExport.Files.Select(x => Encoding.UTF8.GetString(x.Content.ToByteArray())));
+        publicPayload.Should().NotContain("voter-alice");
+        publicPayload.Should().NotContain("voter-guest");
+        publicPayload.Should().NotContain("alice.eligibility@hush.test");
+        publicPayload.Should().NotContain("guest.eligibility@hush.test");
+
+        using var packageDirectory = new TemporaryPackageDirectory();
+        WriteVerificationPackageToDirectory(publicExport, packageDirectory.PackagePath);
+        var verifierOutputPath = Path.Combine(packageDirectory.PackagePath, "verifier-output-local");
+        var verification = await new HushVotingPackageVerifier().VerifyAsync(new(
+            packageDirectory.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1,
+            verifierOutputPath));
+        verification.ExitCode.Should().Be(
+            VerificationExitCodes.Pass,
+            string.Join(
+                " | ",
+                verification.Output.Results.Select(x =>
+                    $"{x.ResultCode}:{x.Status}:{x.Message}:{string.Join(",", x.Evidence.Select(pair => $"{pair.Key}={pair.Value}"))}")));
+        verification.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.EligibilityDevOnlyVerificationBlocked &&
+            x.Status == VerificationCheckStatus.Warn);
+        verification.Output.Results.Should().NotContain(x =>
+            x.ResultCode == VerificationResultCodes.EligibilityPublicPrivacyBoundaryViolation);
+
+        var restrictedExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackageRestrictedOwnerAuditor);
+        restrictedExport.Success.Should().BeTrue(restrictedExport.ErrorMessage);
+        restrictedExport.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedRosterImportEvidence &&
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+        restrictedExport.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedRoster &&
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+        restrictedExport.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedCheckoffLedger &&
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+
+        var restrictedCheckoff = GetPackageFileText(
+            restrictedExport,
+            VerificationPackageFileNames.RestrictedCheckoffLedger);
+        restrictedCheckoff.Should().Contain("voter-alice");
+        restrictedCheckoff.Should().Contain("countedAsVoted");
+    }
+
+    [Fact]
     public async Task FinalizeElection_WhenPackageGenerationFails_PersistsFailedAttemptAndRetrySealsANewAttempt()
     {
         var client = await StartClientAsync();

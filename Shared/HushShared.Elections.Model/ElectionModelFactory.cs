@@ -26,7 +26,11 @@ public static partial class ElectionModelFactory
         int currentDraftRevision = 1,
         int? requiredApprovalCount = null,
         DateTime? createdAt = null,
-        OfficialResultVisibilityPolicy officialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly) =>
+        OfficialResultVisibilityPolicy officialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly,
+        ElectionIdentityLinkPolicy identityLinkPolicy = ElectionIdentityLinkPolicy.ContactCodeV1,
+        ElectionCheckoffVisibilityPolicy checkoffVisibilityPolicy = ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor,
+        ElectionActorLinkMultiplicityPolicy actorLinkMultiplicityPolicy = ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor,
+        ElectionContactCodeProviderReadiness contactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly) =>
         CreateDraftRecord(
             electionId,
             title,
@@ -55,7 +59,11 @@ public static partial class ElectionModelFactory
             currentDraftRevision,
             requiredApprovalCount,
             createdAt,
-            officialResultVisibilityPolicy);
+            officialResultVisibilityPolicy,
+            identityLinkPolicy,
+            checkoffVisibilityPolicy,
+            actorLinkMultiplicityPolicy,
+            contactCodeProviderReadiness);
 
     public static ElectionRecord CreateDraftRecord(
         ElectionId electionId,
@@ -83,7 +91,11 @@ public static partial class ElectionModelFactory
         int currentDraftRevision = 1,
         int? requiredApprovalCount = null,
         DateTime? createdAt = null,
-        OfficialResultVisibilityPolicy officialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly)
+        OfficialResultVisibilityPolicy officialResultVisibilityPolicy = OfficialResultVisibilityPolicy.ParticipantEncryptedOnly,
+        ElectionIdentityLinkPolicy identityLinkPolicy = ElectionIdentityLinkPolicy.ContactCodeV1,
+        ElectionCheckoffVisibilityPolicy checkoffVisibilityPolicy = ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor,
+        ElectionActorLinkMultiplicityPolicy actorLinkMultiplicityPolicy = ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor,
+        ElectionContactCodeProviderReadiness contactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly)
     {
         if (string.IsNullOrWhiteSpace(title))
         {
@@ -151,7 +163,15 @@ public static partial class ElectionModelFactory
             TallyReadyArtifactId: null,
             FinalizeArtifactId: null,
             UnofficialResultArtifactId: null,
-            OfficialResultArtifactId: null);
+            OfficialResultArtifactId: null,
+            BallotDefinitionVersion: null,
+            BallotDefinitionHash: null,
+            BallotDefinitionSealedAt: null,
+            BallotDefinitionMutationPolicy: null,
+            identityLinkPolicy,
+            checkoffVisibilityPolicy,
+            actorLinkMultiplicityPolicy,
+            contactCodeProviderReadiness);
     }
 
     public static ElectionDraftSnapshotRecord CreateDraftSnapshot(
@@ -199,7 +219,11 @@ public static partial class ElectionModelFactory
                 election.ReportingPolicy,
                 election.ReviewWindowPolicy,
                 election.OfficialResultVisibilityPolicy,
-                election.RequiredApprovalCount),
+                election.RequiredApprovalCount,
+                election.IdentityLinkPolicy,
+                election.CheckoffVisibilityPolicy,
+                election.ActorLinkMultiplicityPolicy,
+                election.ContactCodeProviderReadiness),
             CloneOptions(election.Options),
             NormalizeWarningCodes(election.AcknowledgedWarningCodes),
             snapshotReason.Trim(),
@@ -273,7 +297,11 @@ public static partial class ElectionModelFactory
                 election.ReportingPolicy,
                 election.ReviewWindowPolicy,
                 election.OfficialResultVisibilityPolicy,
-                election.RequiredApprovalCount),
+                election.RequiredApprovalCount,
+                election.IdentityLinkPolicy,
+                election.CheckoffVisibilityPolicy,
+                election.ActorLinkMultiplicityPolicy,
+                election.ContactCodeProviderReadiness),
             CloneOptions(election.Options),
             NormalizeWarningCodes(election.AcknowledgedWarningCodes),
             CloneTrusteeSnapshot(trusteeSnapshot),

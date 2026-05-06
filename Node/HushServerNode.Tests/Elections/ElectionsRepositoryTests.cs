@@ -921,6 +921,103 @@ public class ElectionsRepositoryTests
         storedReleaseEvidence!.ReleaseMode.Should().Be(ElectionFinalizationReleaseMode.AggregateTallyOnly);
     }
 
+    [Fact]
+    public async Task SaveSp05EvidenceRecords_ShouldRoundTripRestrictedAndPolicyEvidence()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection();
+        var importedAt = DateTime.UtcNow.AddMinutes(-10);
+        var declaredAt = DateTime.UtcNow.AddMinutes(-5);
+        var importEvidence = ElectionModelFactory.CreateRosterImportEvidence(
+            election.ElectionId,
+            rosterImportVersion: 1,
+            rosterSourceFileHash: "source-file-hash",
+            rosterCanonicalHash: "canonical-roster-hash",
+            rosterCanonicalizationVersion: ElectionSp05ProfileIds.RosterCanonicalizationV1,
+            rosterCanonicalizationVersionHash: "canonicalization-version-hash",
+            acceptedRowCount: 2,
+            rejectedRowCount: 1,
+            invalidRowRejectionCount: 1,
+            duplicateIdRejectionCount: 0,
+            duplicateContactWarningCount: 1,
+            importedByActor: election.OwnerPublicAddress,
+            rejectedRows:
+            [
+                new ElectionRosterRejectedRowRecord(
+                    SourceRowNumber: 3,
+                    OrganizationVoterId: "member-003",
+                    ReasonCode: "invalid_phone",
+                    Reason: "Phone must be E.164.",
+                    RestrictedRowValues: new Dictionary<string, string>
+                    {
+                        ["organization_voter_id"] = "member-003",
+                        ["contact_value"] = "555-0103",
+                    }),
+            ],
+            duplicateContactWarnings:
+            [
+                new ElectionRosterDuplicateContactWarningRecord(
+                    ElectionRosterContactType.Email,
+                    ContactMatchKey: "shared@example.test",
+                    OrganizationVoterIds: ["member-001", "member-002"],
+                    WarningCode: "duplicate_contact",
+                    Warning: "Two accepted rows share the same contact channel."),
+            ],
+            importedAt: importedAt);
+        var policyEvidence = ElectionModelFactory.CreateEligibilityPolicyEvidence(
+            election.ElectionId,
+            eligibilityPolicyVersion: "1.0.0",
+            EligibilityMutationPolicy.FrozenAtOpen,
+            ElectionIdentityLinkPolicy.ContactCodeV1,
+            ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor,
+            ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor,
+            ElectionContactCodeProviderReadiness.Ready,
+            eligibilityPolicyCanonicalizationVersionHash: "policy-version-hash",
+            declaredByActor: election.OwnerPublicAddress,
+            declaredAt: declaredAt);
+        var schemeEvidence = ElectionModelFactory.CreateCommitmentSchemeEvidence(
+            election.ElectionId,
+            commitmentSchemeVersionHash: "commitment-version-hash",
+            nullifierSchemeVersionHash: "nullifier-version-hash",
+            rosterCanonicalizationVersionHash: "roster-version-hash",
+            eligibilityPolicyCanonicalizationVersionHash: "policy-version-hash",
+            declaredByActor: election.OwnerPublicAddress,
+            declaredAt: declaredAt.AddSeconds(1));
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveRosterImportEvidenceAsync(importEvidence);
+        await repository.SaveEligibilityPolicyEvidenceAsync(policyEvidence);
+        await repository.SaveCommitmentSchemeEvidenceAsync(schemeEvidence);
+        await context.SaveChangesAsync();
+
+        var latestImport = await repository.GetLatestRosterImportEvidenceAsync(election.ElectionId);
+        var latestPolicy = await repository.GetLatestEligibilityPolicyEvidenceAsync(election.ElectionId);
+        var latestScheme = await repository.GetLatestCommitmentSchemeEvidenceAsync(election.ElectionId);
+        var imports = await repository.GetRosterImportEvidencesAsync(election.ElectionId);
+        var policies = await repository.GetEligibilityPolicyEvidencesAsync(election.ElectionId);
+        var schemes = await repository.GetCommitmentSchemeEvidencesAsync(election.ElectionId);
+
+        latestImport.Should().NotBeNull();
+        latestImport!.RosterCanonicalHash.Should().Be("canonical-roster-hash");
+        latestImport.RejectedRows.Should().ContainSingle();
+        latestImport.RejectedRows[0].RestrictedRowValues["contact_value"].Should().Be("555-0103");
+        latestImport.DuplicateContactWarnings.Should().ContainSingle();
+        latestImport.DuplicateContactWarnings[0].OrganizationVoterIds.Should().BeEquivalentTo("member-001", "member-002");
+
+        latestPolicy.Should().NotBeNull();
+        latestPolicy!.ActorLinkMultiplicityPolicy.Should().Be(ElectionActorLinkMultiplicityPolicy.SingleRosterEntryPerActor);
+        latestPolicy.ContactCodeProviderReadiness.Should().Be(ElectionContactCodeProviderReadiness.Ready);
+        latestPolicy.CheckoffVisibilityPolicy.Should().Be(ElectionCheckoffVisibilityPolicy.RestrictedOwnerAuditor);
+
+        latestScheme.Should().NotBeNull();
+        latestScheme!.CommitmentSchemeVersion.Should().Be(ElectionSp05ProfileIds.VoteCommitmentPreimageV1);
+        latestScheme.NullifierSchemeVersion.Should().Be(ElectionSp05ProfileIds.VoteNullifierPreimageV1);
+        imports.Should().ContainSingle();
+        policies.Should().ContainSingle();
+        schemes.Should().ContainSingle();
+    }
+
     private static ElectionsRepository CreateRepository(ElectionsDbContext context)
     {
         var repository = new ElectionsRepository();

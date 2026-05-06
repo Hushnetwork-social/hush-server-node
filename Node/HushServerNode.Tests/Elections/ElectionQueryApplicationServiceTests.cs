@@ -1618,6 +1618,31 @@ public class ElectionQueryApplicationServiceTests
             recordedByPublicAddress: "owner-address",
             boundaryArtifactId: election.OpenArtifactId,
             recordedAt: openedAt);
+        var rosterImportEvidence = ElectionModelFactory.CreateRosterImportEvidence(
+            election.ElectionId,
+            rosterImportVersion: 1,
+            rosterSourceFileHash: "source-hash",
+            rosterCanonicalHash: "canonical-hash",
+            rosterCanonicalizationVersion: ElectionSp05ProfileIds.RosterCanonicalizationV1,
+            rosterCanonicalizationVersionHash: ElectionEligibilityContracts.RosterCanonicalizationVersionHash,
+            acceptedRowCount: 2,
+            rejectedRowCount: 0,
+            invalidRowRejectionCount: 0,
+            duplicateIdRejectionCount: 0,
+            duplicateContactWarningCount: 1,
+            importedByActor: "owner-address",
+            importedAt: openedAt.AddHours(-2));
+        var policyEvidence = ElectionModelFactory.CreateEligibilityPolicyEvidence(
+            election.ElectionId,
+            eligibilityPolicyVersion: "1.0.0",
+            election.EligibilityMutationPolicy,
+            election.IdentityLinkPolicy,
+            election.CheckoffVisibilityPolicy,
+            election.ActorLinkMultiplicityPolicy,
+            election.ContactCodeProviderReadiness,
+            ElectionEligibilityContracts.EligibilityPolicyCanonicalizationVersionHash,
+            declaredByActor: "owner-address",
+            declaredAt: openedAt);
 
         ConfigureReadOnlyRepository(mocker, repo =>
         {
@@ -1626,6 +1651,8 @@ public class ElectionQueryApplicationServiceTests
             repo.Setup(x => x.GetParticipationRecordsAsync(election.ElectionId)).ReturnsAsync([participation]);
             repo.Setup(x => x.GetEligibilityActivationEventsAsync(election.ElectionId)).ReturnsAsync([activationEvent]);
             repo.Setup(x => x.GetEligibilitySnapshotsAsync(election.ElectionId)).ReturnsAsync([snapshot]);
+            repo.Setup(x => x.GetRosterImportEvidencesAsync(election.ElectionId)).ReturnsAsync([rosterImportEvidence]);
+            repo.Setup(x => x.GetEligibilityPolicyEvidencesAsync(election.ElectionId)).ReturnsAsync([policyEvidence]);
         });
 
         var sut = CreateQueryService(mocker);
@@ -1649,6 +1676,20 @@ public class ElectionQueryApplicationServiceTests
         response.Summary.CurrentDenominatorCount.Should().Be(2);
         response.Summary.CountedParticipationCount.Should().Be(1);
         response.Summary.DidNotVoteCount.Should().Be(1);
+        response.LatestRosterImportEvidence.Should().NotBeNull();
+        response.LatestRosterImportEvidence!.RosterCanonicalHash.Should().Be("canonical-hash");
+        response.LatestRosterImportEvidence.DuplicateContactWarningCount.Should().Be(1);
+        response.EligibilityPolicyEvidence.Should().NotBeNull();
+        response.EligibilityPolicyEvidence!.ActorLinkMultiplicityPolicy.Should()
+            .Be(ElectionActorLinkMultiplicityPolicyProto.SingleRosterEntryPerActor);
+        response.EligibilityPolicyEvidence.HighAssuranceAvailable.Should().BeFalse();
+        response.EligibilityPolicyEvidence.OpenBlockers.Should().Contain(x =>
+            x.Contains("Contact-code provider readiness", StringComparison.OrdinalIgnoreCase));
+        response.Sp05Evidence.Should().NotBeNull();
+        response.Sp05Evidence!.RosterCanonicalHash.Should().Be("canonical-hash");
+        response.Sp05Evidence.RestrictedEvidenceAvailable.Should().BeTrue();
+        response.Sp05Evidence.LatestEliResultCode.Should()
+            .Be(VerificationResultCodes.EligibilityDevOnlyVerificationBlocked);
     }
 
     [Fact]
@@ -1690,6 +1731,9 @@ public class ElectionQueryApplicationServiceTests
         response.RestrictedRosterEntries.Should().BeEmpty();
         response.ActivationEvents.Should().BeEmpty();
         response.EligibilitySnapshots.Should().BeEmpty();
+        response.LatestRosterImportEvidence.Should().BeNull();
+        response.EligibilityPolicyEvidence.Should().BeNull();
+        response.Sp05Evidence.Should().BeNull();
     }
 
     [Fact]
@@ -3766,6 +3810,16 @@ public class ElectionQueryApplicationServiceTests
             .ReturnsAsync(Array.Empty<ElectionEligibilityActivationEventRecord>());
         repository.Setup(x => x.GetEligibilitySnapshotsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionEligibilitySnapshotRecord>());
+        repository.Setup(x => x.GetRosterImportEvidencesAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionRosterImportEvidenceRecord>());
+        repository.Setup(x => x.GetEligibilityPolicyEvidencesAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionEligibilityPolicyEvidenceRecord>());
+        repository.Setup(x => x.GetCommitmentSchemeEvidencesAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionCommitmentSchemeEvidenceRecord>());
+        repository.Setup(x => x.GetCommitmentRegistrationsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionCommitmentRegistrationRecord>());
+        repository.Setup(x => x.GetCheckoffConsumptionsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionCheckoffConsumptionRecord>());
         repository.Setup(x => x.GetAcceptedBallotsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionAcceptedBallotRecord>());
         repository.Setup(x => x.GetPublishedBallotsAsync(It.IsAny<ElectionId>()))

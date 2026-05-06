@@ -8,6 +8,8 @@ public static class VerificationPrivacyBoundary
             "roster",
             "roster_entries",
             "rosterEntry",
+            "restricted_roster",
+            "restrictedRoster",
             "organization_voter_id",
             "organizationVoterId",
             "stable_voter_id",
@@ -16,8 +18,28 @@ public static class VerificationPrivacyBoundary
             "voterId",
             "voter_name",
             "voterName",
+            "contact_value",
+            "contactValue",
+            "contact_match_key",
+            "contactMatchKey",
+            "recipient_contact_hash",
+            "recipientContactHash",
             "linked_actor_public_address",
             "linkedActorPublicAddress",
+            "eligibility_link_id",
+            "eligibilityLinkId",
+            "identity_code",
+            "identityCode",
+            "code_challenge_hash",
+            "codeChallengeHash",
+            "provider_message_id",
+            "providerMessageId",
+            "checkoff_id",
+            "checkoffId",
+            "checkoff_record_id",
+            "checkoffRecordId",
+            "link_id",
+            "linkId",
             "actor_public_address",
             "actorPublicAddress",
             "ip_address",
@@ -28,6 +50,8 @@ public static class VerificationPrivacyBoundary
             "debugCorrelationId",
             "plaintext_vote",
             "plaintextVote",
+            "vote_secret",
+            "voteSecret",
             "raw_trustee_share",
             "rawTrusteeShare",
             "private_key",
@@ -39,8 +63,19 @@ public static class VerificationPrivacyBoundary
         ],
         StringComparer.OrdinalIgnoreCase);
 
+    public static IReadOnlySet<string> Sp05PublicEligibilityForbiddenFieldNames { get; } = new HashSet<string>(
+        PublicPackageForbiddenFieldNames.Concat(
+        [
+            "display_label",
+            "displayLabel",
+        ]),
+        StringComparer.OrdinalIgnoreCase);
+
     public static bool IsForbiddenInPublicPackage(string fieldName) =>
         PublicPackageForbiddenFieldNames.Contains(NormalizeFieldName(fieldName));
+
+    public static bool IsForbiddenInSp05PublicEligibilityArtifact(string fieldName) =>
+        Sp05PublicEligibilityForbiddenFieldNames.Contains(NormalizeFieldName(fieldName));
 
     public static IReadOnlyList<string> FindForbiddenPublicFields(IEnumerable<string> fieldNames)
     {
@@ -49,6 +84,18 @@ public static class VerificationPrivacyBoundary
         return fieldNames
             .Select(NormalizeFieldName)
             .Where(PublicPackageForbiddenFieldNames.Contains)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    public static IReadOnlyList<string> FindForbiddenSp05PublicFields(IEnumerable<string> fieldNames)
+    {
+        ArgumentNullException.ThrowIfNull(fieldNames);
+
+        return fieldNames
+            .Select(NormalizeFieldName)
+            .Where(Sp05PublicEligibilityForbiddenFieldNames.Contains)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
             .ToArray();
