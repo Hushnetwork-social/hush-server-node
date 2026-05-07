@@ -39,6 +39,7 @@
     <ProjectReference Include="..\Core\Elections\HushNode.Elections.Storage\HushNode.Elections.Storage.csproj" />
     <ProjectReference Include="..\..\Shared\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
     <ProjectReference Include="..\..\Shared\HushShared.Elections.Verification.Model\HushShared.Elections.Verification.Model.csproj" />
+    <ProjectReference Include="..\..\Shared\HushShared.Elections.PublicationProof\HushShared.Elections.PublicationProof.csproj" />
   </ItemGroup>
 
 </Project>

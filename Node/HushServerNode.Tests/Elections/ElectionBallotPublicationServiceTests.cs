@@ -6,11 +6,14 @@ using HushNode.Elections.Storage;
 using HushNode.Reactions.Crypto;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Elections.Model;
+using HushShared.Elections.PublicationProof;
+using HushShared.Elections.Verification.Model;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Olimpo;
 using Olimpo.EntityFramework.Persistency;
 using System.Security.Cryptography;
+using System.Text;
 using Xunit;
 
 namespace HushServerNode.Tests.Elections;
@@ -57,6 +60,71 @@ public class ElectionBallotPublicationServiceTests
         store.PublicationIssues.Should().BeEmpty();
         store.Elections[election.ElectionId].TallyReadyAt.Should().BeNull();
         crypto.ReplayCallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ProcessPendingPublicationAsync_WhenPublicationReturnsWitness_SealsAndStoresPublicationWitness()
+    {
+        var store = new PublicationStore();
+        var election = CreateOpenElection();
+        var acceptedBallots = SeedAcceptedBallots(store, election, 1);
+        var crypto = new FakePublicationCryptoService
+        {
+            PrepareBehavior = (ballot, proof, _) => ElectionBallotPublicationPreparationResult.Success(
+                $"{ballot}|published",
+                $"{proof}|proof-published",
+                """{"version":"sp07-publication-rerandomization-witness-v1","nonce":["1","2"]}"""),
+        };
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 1, LowWaterMark: 0, MaxBatchPerBlock: 5),
+            publicationWitnessEnvelopeCrypto: new TransparentTestElectionPublicationWitnessEnvelopeCrypto());
+
+        await service.ProcessPendingPublicationAsync(new BlockIndex(12));
+
+        store.PublishedBallots.Should().ContainSingle();
+        store.PublicationWitnesses.Should().ContainSingle();
+        var witness = store.PublicationWitnesses[0];
+        witness.ElectionId.Should().Be(election.ElectionId);
+        witness.AcceptedBallotId.Should().Be(acceptedBallots[0].Id);
+        witness.PublishedSequence.Should().Be(store.PublishedBallots[0].PublicationSequence);
+        witness.ProofMode.Should().Be(ElectionSp07ProfileIds.PublicationProofMode);
+        witness.ProofConstruction.Should().Be(ElectionSp07ProfileIds.ProofConstruction);
+        witness.StatementId.Should().Be(ElectionSp07ProfileIds.StatementId);
+        witness.CustodyStatus.Should().Be(ElectionPublicationWitnessCustodyStatus.Sealed);
+        witness.SealAlgorithm.Should().Be("test-transparent-sp07-publication-witness-v1");
+        witness.SealedWitnessMaterial.Should().NotContain("nonce");
+        witness.SealedWitnessMaterialHash.Should().HaveLength(128);
+        store.PublicationIssues.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ProcessPendingPublicationAsync_WhenWitnessSealUnavailable_LeavesBallotQueuedAndRegistersIssue()
+    {
+        var store = new PublicationStore();
+        var election = CreateOpenElection();
+        SeedAcceptedBallots(store, election, 1);
+        var crypto = new FakePublicationCryptoService
+        {
+            PrepareBehavior = (ballot, proof, _) => ElectionBallotPublicationPreparationResult.Success(
+                $"{ballot}|published",
+                $"{proof}|proof-published",
+                """{"version":"sp07-publication-rerandomization-witness-v1","nonce":["1","2"]}"""),
+        };
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 1, LowWaterMark: 0, MaxBatchPerBlock: 5),
+            publicationWitnessEnvelopeCrypto: new UnavailableElectionPublicationWitnessEnvelopeCrypto());
+
+        await service.ProcessPendingPublicationAsync(new BlockIndex(12));
+
+        store.PublishedBallots.Should().BeEmpty();
+        store.PublicationWitnesses.Should().BeEmpty();
+        store.BallotMemPoolEntries.Should().ContainSingle();
+        store.PublicationIssues.Should().ContainSingle(x =>
+            x.IssueCode == ElectionPublicationIssueCode.WitnessSealUnavailable);
     }
 
     [Fact]
@@ -184,7 +252,15 @@ public class ElectionBallotPublicationServiceTests
         {
             ReplayBehavior = _ => ElectionBallotReplayResult.Success(expectedTallyHash),
         };
-        var service = CreateService(store, crypto, new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10));
+        SeedSealedProtocolPackageBinding(store, election);
+        var proofSessionRunner = new FakeAdminOnlySp07PublicationProofSessionRunner(store);
+        var deletionService = new FakePublicationWitnessDeletionService(store);
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10),
+            publicationWitnessDeletionService: deletionService,
+            publicationProofSessionRunner: proofSessionRunner);
 
         await service.ProcessPendingPublicationAsync(new BlockIndex(26));
 
@@ -237,7 +313,10 @@ public class ElectionBallotPublicationServiceTests
             new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10),
             resultCrypto,
             rotatedCredentials,
-            adminOnlyProtectedTallyEnvelopeCrypto: envelopeCrypto);
+            adminOnlyProtectedTallyEnvelopeCrypto: envelopeCrypto,
+            publicationWitnessDeletionService: new FakePublicationWitnessDeletionService(store),
+            publicationProofSessionRunner: new FakeAdminOnlySp07PublicationProofSessionRunner(store));
+        SeedSealedProtocolPackageBinding(store, election);
 
         await service.ProcessPendingPublicationAsync(new BlockIndex(26));
 
@@ -247,6 +326,87 @@ public class ElectionBallotPublicationServiceTests
         store.ResultArtifacts[0].EncryptedPayload.Should().StartWith("enc::");
         store.PublicationIssues.Should().BeEmpty();
         resultCrypto.EncryptCallCount.Should().Be(1);
+    }
+
+    [Theory]
+    [Trait("Category", "FEAT-117")]
+    [InlineData("admin-dev-1of1", false)]
+    [InlineData("admin-prod-1of1", true)]
+    public async Task ProcessPendingPublicationAsync_Feat117AdminOnlyProfileMatrix_UsesExpectedSp07Path(
+        string selectedProfileId,
+        bool expectsSp07)
+    {
+        var bindingStatus = expectsSp07 ? ElectionBindingStatus.Binding : ElectionBindingStatus.NonBinding;
+        var store = new PublicationStore();
+        var election = CreateClosedElection(bindingStatus);
+        election.SelectedProfileId.Should().Be(selectedProfileId);
+        SeedAcceptedBallots(store, election, 2);
+        SeedCloseResultContext(
+            store,
+            election,
+            activeDenominatorCount: 3,
+            countedParticipationCount: 2,
+            blankCount: 0,
+            didNotVoteCount: 1);
+
+        var envelopeCrypto = new TransparentTestAdminOnlyProtectedTallyEnvelopeCrypto();
+        if (expectsSp07)
+        {
+            SeedAdminOnlyProtectedOpenArtifact(store, election, envelopeCrypto);
+            SeedSealedProtocolPackageBinding(store, election);
+        }
+
+        var expectedTallyHash = new byte[] { 4, 3, 2, 1 };
+        var crypto = new FakePublicationCryptoService
+        {
+            PrepareBehavior = (encryptedBallotPackage, proofBundle, _) =>
+            {
+                if (expectsSp07)
+                {
+                    return ElectionBallotPublicationPreparationResult.Success(
+                        $"{encryptedBallotPackage}|published",
+                        $"{proofBundle}|proof-published",
+                        publicationWitnessMaterial: $$"""
+                        {"version":"sp07-publication-rerandomization-witness-v1","acceptedEncryptedBallotHash":"{{ComputeSha256Upper(encryptedBallotPackage)}}","publishedEncryptedBallotHash":"{{ComputeSha256Upper($"{encryptedBallotPackage}|published")}}","sourceProofBundleHash":"{{ComputeSha256Upper(proofBundle)}}","publishedProofBundleHash":"{{ComputeSha256Upper($"{proofBundle}|proof-published")}}","selectionCount":2,"rerandomizationNonces":["nonce-a","nonce-b"]}
+                        """);
+                }
+
+                var publishedPayload = encryptedBallotPackage.EndsWith("1", StringComparison.Ordinal)
+                    ? CreateDevModePublishedBallotPackage(election, "yes", ballotOrder: 1, actorPublicAddress: "alice-address")
+                    : CreateDevModePublishedBallotPackage(election, "no", ballotOrder: 2, actorPublicAddress: "bob-address");
+                return ElectionBallotPublicationPreparationResult.Success(
+                    publishedPayload,
+                    $"{proofBundle}|proof-published");
+            },
+            ReplayBehavior = _ => expectsSp07
+                ? ElectionBallotReplayResult.Success(expectedTallyHash)
+                : ElectionBallotReplayResult.Failure("UNSUPPORTED_BALLOT_PAYLOAD", "dev ballots require fallback recovery"),
+        };
+        var resultCrypto = new FakeElectionResultCryptoService
+        {
+            ReleaseBehavior = (_, _, _) => ElectionAggregateReleaseResult.Success(expectedTallyHash, [1, 1, 0]),
+        };
+        var proofSessionRunner = new FakeAdminOnlySp07PublicationProofSessionRunner(store);
+        var service = CreateService(
+            store,
+            crypto,
+            new ElectionBallotPublicationOptions(HighWaterMark: 4, LowWaterMark: 2, MaxBatchPerBlock: 10),
+            resultCrypto,
+            adminOnlyProtectedTallyEnvelopeCrypto: envelopeCrypto,
+            publicationWitnessDeletionService: new FakePublicationWitnessDeletionService(store),
+            publicationProofSessionRunner: proofSessionRunner);
+
+        await service.ProcessPendingPublicationAsync(new BlockIndex(26));
+
+        store.BallotMemPoolEntries.Should().BeEmpty();
+        store.PublishedBallots.Should().HaveCount(2);
+        store.BoundaryArtifacts.Should().ContainSingle(x => x.ArtifactType == ElectionBoundaryArtifactType.TallyReady);
+        store.ResultArtifacts.Should().ContainSingle(x => x.ArtifactKind == ElectionResultArtifactKind.Unofficial);
+        store.Elections[election.ElectionId].TallyReadyAt.Should().NotBeNull();
+        proofSessionRunner.RunCount.Should().Be(expectsSp07 ? 1 : 0);
+        store.PublicationProofSessions.Should().HaveCount(expectsSp07 ? 1 : 0);
+        store.PublicationProofTranscripts.Should().HaveCount(expectsSp07 ? 1 : 0);
+        store.PublicationWitnessDeletionReceipts.Should().HaveCount(expectsSp07 ? 1 : 0);
     }
 
     [Fact]
@@ -632,7 +792,10 @@ public class ElectionBallotPublicationServiceTests
         FakeElectionResultCryptoService? resultCrypto = null,
         ICredentialsProvider? credentialsProvider = null,
         ICloseCountingExecutorEnvelopeCrypto? closeCountingExecutorEnvelopeCrypto = null,
-        IAdminOnlyProtectedTallyEnvelopeCrypto? adminOnlyProtectedTallyEnvelopeCrypto = null)
+        IAdminOnlyProtectedTallyEnvelopeCrypto? adminOnlyProtectedTallyEnvelopeCrypto = null,
+        IElectionPublicationWitnessEnvelopeCrypto? publicationWitnessEnvelopeCrypto = null,
+        IElectionPublicationWitnessDeletionService? publicationWitnessDeletionService = null,
+        IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null)
     {
         var repository = CreateRepository(store);
         var provider = new FakeUnitOfWorkProvider(repository.Object);
@@ -646,7 +809,10 @@ public class ElectionBallotPublicationServiceTests
             NullLogger<ElectionBallotPublicationService>.Instance,
             resultCrypto,
             closeCountingExecutorEnvelopeCrypto: closeCountingExecutorEnvelopeCrypto ?? new TransparentTestCloseCountingExecutorEnvelopeCrypto(),
-            adminOnlyProtectedTallyEnvelopeCrypto: adminOnlyProtectedTallyEnvelopeCrypto ?? new TransparentTestAdminOnlyProtectedTallyEnvelopeCrypto());
+            adminOnlyProtectedTallyEnvelopeCrypto: adminOnlyProtectedTallyEnvelopeCrypto ?? new TransparentTestAdminOnlyProtectedTallyEnvelopeCrypto(),
+            publicationWitnessEnvelopeCrypto: publicationWitnessEnvelopeCrypto ?? new TransparentTestElectionPublicationWitnessEnvelopeCrypto(),
+            publicationWitnessDeletionService: publicationWitnessDeletionService,
+            publicationProofSessionRunner: publicationProofSessionRunner);
     }
 
     private static Mock<IElectionsRepository> CreateRepository(PublicationStore store)
@@ -691,6 +857,87 @@ public class ElectionBallotPublicationServiceTests
             .Returns((ElectionPublishedBallotRecord publishedBallot) =>
             {
                 store.PublishedBallots.Add(publishedBallot);
+                return Task.CompletedTask;
+            });
+
+        repository
+            .Setup(x => x.SavePublicationWitnessAsync(It.IsAny<ElectionPublicationWitnessRecord>()))
+            .Returns((ElectionPublicationWitnessRecord witness) =>
+            {
+                store.PublicationWitnesses.Add(witness);
+                return Task.CompletedTask;
+            });
+
+        repository
+            .Setup(x => x.GetPublicationProofSessionsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync((ElectionId electionId) =>
+                (IReadOnlyList<ElectionPublicationProofSessionRecord>)store.PublicationProofSessions
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.StartedAt)
+                    .ToArray());
+
+        repository
+            .Setup(x => x.GetPublicationProofTranscriptsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync((ElectionId electionId) =>
+                (IReadOnlyList<ElectionPublicationProofTranscriptRecord>)store.PublicationProofTranscripts
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.GeneratedAt)
+                    .ToArray());
+
+        repository
+            .Setup(x => x.GetPublicationWitnessDeletionReceiptsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync((ElectionId electionId) =>
+                (IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord>)store.PublicationWitnessDeletionReceipts
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.DeletedAt)
+                    .ToArray());
+
+        repository
+            .Setup(x => x.GetSealedProtocolPackageBindingAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync((ElectionId electionId) =>
+                store.ProtocolPackageBindings
+                    .Where(x => x.ElectionId == electionId && x.Status == ProtocolPackageBindingStatus.Sealed)
+                    .OrderByDescending(x => x.SealedAt ?? x.BoundAt)
+                    .FirstOrDefault());
+
+        repository
+            .Setup(x => x.SavePublicationProofSessionAsync(It.IsAny<ElectionPublicationProofSessionRecord>()))
+            .Returns((ElectionPublicationProofSessionRecord session) =>
+            {
+                store.PublicationProofSessions.Add(session);
+                return Task.CompletedTask;
+            });
+
+        repository
+            .Setup(x => x.UpdatePublicationProofSessionAsync(It.IsAny<ElectionPublicationProofSessionRecord>()))
+            .Returns((ElectionPublicationProofSessionRecord session) =>
+            {
+                var index = store.PublicationProofSessions.FindIndex(x => x.Id == session.Id);
+                if (index >= 0)
+                {
+                    store.PublicationProofSessions[index] = session;
+                }
+                else
+                {
+                    store.PublicationProofSessions.Add(session);
+                }
+
+                return Task.CompletedTask;
+            });
+
+        repository
+            .Setup(x => x.SavePublicationProofTranscriptAsync(It.IsAny<ElectionPublicationProofTranscriptRecord>()))
+            .Returns((ElectionPublicationProofTranscriptRecord transcript) =>
+            {
+                store.PublicationProofTranscripts.Add(transcript);
+                return Task.CompletedTask;
+            });
+
+        repository
+            .Setup(x => x.SavePublicationWitnessDeletionReceiptAsync(It.IsAny<ElectionPublicationWitnessDeletionReceiptRecord>()))
+            .Returns((ElectionPublicationWitnessDeletionReceiptRecord receipt) =>
+            {
+                store.PublicationWitnessDeletionReceipts.Add(receipt);
                 return Task.CompletedTask;
             });
 
@@ -1184,6 +1431,209 @@ public class ElectionBallotPublicationServiceTests
         {"mode":"election-dev-mode-v1","packageType":"dev-published-ballot","electionId":"{{election.ElectionId}}","optionId":"{{optionId}}","optionLabel":"{{optionLabel ?? optionId}}","optionDescription":"","ballotOrder":{{ballotOrder}},"isBlankOption":{{isBlankOption.ToString().ToLowerInvariant()}},"publicationNonce":"published-{{optionId}}"}
         """;
 
+    private static ProtocolPackageBindingRecord SeedSealedProtocolPackageBinding(
+        PublicationStore store,
+        ElectionRecord election)
+    {
+        var sealedAt = election.OpenedAt ?? DateTime.UtcNow.AddMinutes(-15);
+        var binding = new ProtocolPackageBindingRecord(
+            Guid.NewGuid(),
+            election.ElectionId,
+            "omega-hushvoting-v1",
+            "v1.1.8",
+            VerificationProfileIds.HighAssuranceV1,
+            new string('1', 64),
+            new string('2', 64),
+            new string('3', 64),
+            [
+                ElectionModelFactory.CreateProtocolPackageAccessLocation(
+                    ProtocolPackageAccessLocationKind.PublicWebsite,
+                    "spec",
+                    "https://www.hushnetwork.social/protocol-omega/hushvoting-v1/v1.1.8/spec.zip",
+                    new string('1', 64)),
+            ],
+            [
+                ElectionModelFactory.CreateProtocolPackageAccessLocation(
+                    ProtocolPackageAccessLocationKind.PublicWebsite,
+                    "proof",
+                    "https://www.hushnetwork.social/protocol-omega/hushvoting-v1/v1.1.8/proof.zip",
+                    new string('2', 64)),
+            ],
+            ProtocolPackageApprovalStatus.DraftPrivate,
+            ProtocolPackageBindingStatus.Sealed,
+            ProtocolPackageBindingSource.SealedAtOpen,
+            election.CurrentDraftRevision,
+            sealedAt,
+            sealedAt,
+            election.OwnerPublicAddress,
+            ProtocolPackageExternalReviewStatus.NotReviewed,
+            SourceTransactionId: null,
+            SourceBlockHeight: null,
+            SourceBlockId: null);
+
+        store.ProtocolPackageBindings.RemoveAll(x => x.ElectionId == election.ElectionId);
+        store.ProtocolPackageBindings.Add(binding);
+        return binding;
+    }
+
+    private static string ComputeSha256Upper(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+
+    private sealed class FakeAdminOnlySp07PublicationProofSessionRunner(PublicationStore store)
+        : IElectionSp07PublicationProofSessionRunner
+    {
+        public int RunCount { get; private set; }
+        public ProtocolPackageBindingRecord? LastProtocolPackageBinding { get; private set; }
+
+        public Task<ElectionSp07PublicationProofSessionRunnerResult> RunAsync(
+            ElectionSp07PublicationProofSessionRunnerRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            RunCount++;
+            LastProtocolPackageBinding = request.ProtocolPackageBinding;
+
+            var acceptedBallots = store.AcceptedBallots
+                .Where(x => x.ElectionId == request.Election.ElectionId)
+                .OrderBy(x => x.AcceptedAt)
+                .ThenBy(x => x.Id)
+                .ToArray();
+            var publishedBallots = store.PublishedBallots
+                .Where(x => x.ElectionId == request.Election.ElectionId)
+                .OrderBy(x => x.PublicationSequence)
+                .ToArray();
+            var acceptedHash = VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputeAcceptedBallotInventoryHash(acceptedBallots));
+            var publishedHash = VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputePublishedBallotStreamHash(publishedBallots));
+            var proofSessionId = Guid.NewGuid();
+            var witnessSetId = Guid.NewGuid();
+            var generatedAt = DateTime.UtcNow;
+            var proofHash = VerificationCanonicalHash.ComputeSha256LowerHex(
+                $"admin-sp07-proof|{request.Election.ElectionId}|{acceptedHash}|{publishedHash}");
+            var transcriptHash = VerificationCanonicalHash.ComputeSha256LowerHex(
+                $"admin-sp07-transcript|{request.Election.ElectionId}|{acceptedHash}|{publishedHash}|{proofHash}");
+
+            var session = new ElectionPublicationProofSessionRecord(
+                proofSessionId,
+                request.Election.ElectionId,
+                witnessSetId,
+                ElectionSp07ProfileIds.PublicationProofMode,
+                ElectionSp07ProfileIds.ProofConstruction,
+                ElectionSp07ProfileIds.StatementId,
+                ElectionPublicationProofSessionStatus.Verified,
+                request.StartedAt,
+                generatedAt,
+                acceptedBallots.Length,
+                publishedBallots.Length,
+                ChunkCount: 1,
+                RetryCount: 0,
+                FailureCode: null,
+                FailureReason: null,
+                acceptedHash,
+                publishedHash,
+                transcriptHash,
+                proofHash,
+                ServerVerifierOutputHash: VerificationCanonicalHash.ComputeSha256LowerHex("admin-sp07-verifier-output"),
+                DeletionReceiptId: null);
+            var transcript = new ElectionPublicationProofTranscriptRecord(
+                Guid.NewGuid(),
+                request.Election.ElectionId,
+                proofSessionId,
+                witnessSetId,
+                ElectionSp07ProfileIds.TranscriptVersion,
+                ElectionSp07ProfileIds.PublicationProofMode,
+                ElectionSp07ProfileIds.ProofConstruction,
+                ElectionSp07ProfileIds.StatementId,
+                request.ProfileId,
+                BallotDefinitionHash: request.Election.BallotDefinitionHash is { Length: > 0 }
+                    ? Convert.ToHexString(request.Election.BallotDefinitionHash).ToLowerInvariant()
+                    : "admin-ballot-definition-hash",
+                BallotEncryptionSchemeVersion: "babyjubjub-elgamal-vector-ballot-v1",
+                ElectionPublicKeyId: "admin-test-election-public-key",
+                acceptedHash,
+                publishedHash,
+                acceptedBallots.Length,
+                publishedBallots.Length,
+                request.Election.Options.Count,
+                ElectionSp07ProfileIds.ProofSystemVersion,
+                ProofBytes: "admin-sp07-proof-bytes",
+                proofHash,
+                transcriptHash,
+                ElectionSp07ProfileIds.ExternalReviewStatus,
+                generatedAt,
+                GeneratorReleaseHash: request.ProtocolPackageBinding?.ReleaseManifestHash,
+                VerifierReleaseHash: request.ProtocolPackageBinding?.ReleaseManifestHash,
+                PublicPrivacyBoundary:
+                [
+                    "no_hidden_permutation",
+                    "no_shuffle_map",
+                    "no_rerandomization_randomness",
+                    "no_raw_witness",
+                ]);
+
+            store.PublicationProofSessions.Add(session);
+            store.PublicationProofTranscripts.Add(transcript);
+
+            var workerResult = new Sp07PublicationProofSessionRunResult(
+                request.Election.ElectionId.ToString(),
+                proofSessionId.ToString("N"),
+                "admin-sp07-test-plan",
+                Passed: true,
+                ChunkCount: 1,
+                CompletedChunkCount: 1,
+                FailedChunkCount: 0,
+                SlowestChunkMilliseconds: 1,
+                Chunks: Array.Empty<Sp07PublicationProofChunkRunResult>());
+
+            return Task.FromResult(ElectionSp07PublicationProofSessionRunnerResult.Success(
+                session,
+                transcript,
+                workerResult));
+        }
+    }
+
+    private sealed class FakePublicationWitnessDeletionService(PublicationStore store)
+        : IElectionPublicationWitnessDeletionService
+    {
+        public Task<ElectionPublicationWitnessDeletionResult> TryDeleteVerifiedWitnessesAsync(
+            IElectionsRepository repository,
+            ElectionId electionId,
+            DateTime deletedAt)
+        {
+            var latestSession = store.PublicationProofSessions
+                .Where(x => x.ElectionId == electionId)
+                .OrderByDescending(x => x.StartedAt)
+                .ThenByDescending(x => x.Id)
+                .First();
+            var latestTranscript = store.PublicationProofTranscripts.Single(x => x.ProofSessionId == latestSession.Id);
+            var receipt = new ElectionPublicationWitnessDeletionReceiptRecord(
+                Guid.NewGuid(),
+                electionId,
+                latestSession.Id,
+                latestSession.WitnessSetId,
+                WitnessSetHash: VerificationCanonicalHash.ComputeSha256LowerHex("admin-sp07-test-witness-set"),
+                WitnessCount: latestSession.AcceptedBallotCount,
+                latestTranscript.TranscriptHash,
+                latestTranscript.ProofHash,
+                ElectionPublicationWitnessDeletionStatus.Completed,
+                deletedAt,
+                DeletionActorRef: "test-sp07-deletion-service",
+                FailureCode: null,
+                FailureReason: null);
+            store.PublicationWitnessDeletionReceipts.Add(receipt);
+
+            var index = store.PublicationProofSessions.FindIndex(x => x.Id == latestSession.Id);
+            store.PublicationProofSessions[index] = latestSession with
+            {
+                Status = ElectionPublicationProofSessionStatus.WitnessDeleted,
+                CompletedAt = deletedAt,
+                DeletionReceiptId = receipt.Id,
+            };
+
+            return Task.FromResult(ElectionPublicationWitnessDeletionResult.Completed(receipt));
+        }
+    }
+
     private sealed class PublicationStore
     {
         public Dictionary<ElectionId, ElectionRecord> Elections { get; } = [];
@@ -1197,6 +1647,11 @@ public class ElectionBallotPublicationServiceTests
         public List<ElectionCloseCountingJobRecord> CloseCountingJobs { get; } = [];
         public List<ElectionExecutorSessionKeyEnvelopeRecord> ExecutorSessionKeyEnvelopes { get; } = [];
         public List<ElectionAdminOnlyProtectedTallyEnvelopeRecord> AdminOnlyProtectedTallyEnvelopes { get; } = [];
+        public List<ElectionPublicationWitnessRecord> PublicationWitnesses { get; } = [];
+        public List<ElectionPublicationProofSessionRecord> PublicationProofSessions { get; } = [];
+        public List<ElectionPublicationProofTranscriptRecord> PublicationProofTranscripts { get; } = [];
+        public List<ElectionPublicationWitnessDeletionReceiptRecord> PublicationWitnessDeletionReceipts { get; } = [];
+        public List<ProtocolPackageBindingRecord> ProtocolPackageBindings { get; } = [];
         public List<ElectionPublicationIssueRecord> PublicationIssues { get; } = [];
         public List<ElectionBoundaryArtifactRecord> BoundaryArtifacts { get; } = [];
         public List<ElectionId> ClosedAwaitingTallyReadyElectionIds { get; } = [];

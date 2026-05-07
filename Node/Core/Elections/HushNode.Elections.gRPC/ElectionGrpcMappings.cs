@@ -191,6 +191,42 @@ internal static partial class ElectionGrpcMappings
         return view;
     }
 
+    public static ElectionSp07EvidenceStatusView ToProto(this ElectionSp07OpenReadinessSummary summary)
+    {
+        var view = new ElectionSp07EvidenceStatusView
+        {
+            EvidenceExpected = summary.EvidenceExpected,
+            PublicEvidenceAvailable = false,
+            RestrictedEvidenceAvailable = false,
+            PublicationProofMode = summary.PublicationProofMode,
+            ProofConstruction = summary.ProofConstruction,
+            StatementId = summary.StatementId,
+            ExternalReviewStatus = summary.ExternalReviewStatus,
+            AcceptedBallotCount = summary.IntendedAcceptedBallotCount,
+            PublishedBallotCount = 0,
+            CiphertextSlotCount = summary.CiphertextSlotCount,
+            ChunkCount = summary.PlannedChunkCount,
+            LatestPubResultCode = summary.IsReadyForOpen
+                ? VerificationResultCodes.PublicationProofEvidencePending
+                : VerificationResultCodes.PublicationProofEnvelopeExceeded,
+            ProgressStatus = ElectionClosedProgressStatusProto.ClosedProgressNone,
+            CanRetry = false,
+            Message = summary.IsReadyForOpen
+                ? "SP-07 publication-proof profile is ready for election open."
+                : "SP-07 publication-proof profile has blockers before election open.",
+        };
+
+        view.Blockers.AddRange(summary.ReadinessBlockers.Select(x => new ElectionSp07ReadinessBlockerView
+        {
+            Code = x.Code,
+            Message = x.Message,
+            BlocksOpen = x.BlocksOpen,
+            BlocksFinalization = x.BlocksFinalization,
+        }));
+
+        return view;
+    }
+
     public static GetElectionOpenReadinessResponse ToProto(this ElectionOpenValidationResult result)
     {
         var response = new GetElectionOpenReadinessResponse
@@ -228,6 +264,11 @@ internal static partial class ElectionGrpcMappings
                 message: result.Sp06Summary.IsReadyForOpen
                     ? "SP-06 trustee control-domain evidence is ready for election open."
                     : "SP-06 trustee control-domain evidence has blockers before election open.");
+        }
+
+        if (result.Sp07Summary is not null)
+        {
+            response.Sp07Evidence = result.Sp07Summary.ToProto();
         }
 
         return response;

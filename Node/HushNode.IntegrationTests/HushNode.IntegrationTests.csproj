@@ -29,6 +29,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="6.12.1" />
+    <PackageReference Include="Moq" Version="4.20.72" />
 
     <!-- TestContainers for PostgreSQL and Redis -->
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.3.0" />
@@ -77,6 +78,8 @@
   <ItemGroup>
     <!-- Reference HushServerNode for internal class access via InternalsVisibleTo -->
     <ProjectReference Include="..\HushServerNode\HushServerNode.csproj" />
+    <ProjectReference Include="..\..\Shared\HushShared.Elections.PublicationProof\HushShared.Elections.PublicationProof.csproj" />
+    <ProjectReference Include="..\..\Shared\HushShared.Elections.Verification.Model\HushShared.Elections.Verification.Model.csproj" />
   </ItemGroup>
 
 </Project>

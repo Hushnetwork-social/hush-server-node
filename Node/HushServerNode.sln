@@ -147,6 +147,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushShared.Elections.Verifi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushVotingVerifier", "..\Tools\HushVotingVerifier\HushVotingVerifier.csproj", "{4A87AE0E-F435-44F2-9D1E-8EADDD21DC41}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushVotingPublicationProofPoc", "..\Tools\HushVotingPublicationProofPoc\HushVotingPublicationProofPoc.csproj", "{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushShared.Elections.PublicationProof", "..\Shared\HushShared.Elections.PublicationProof\HushShared.Elections.PublicationProof.csproj", "{270DA534-3DE3-4974-B507-FDEC1D76710C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -889,6 +893,30 @@ Global
 		{4A87AE0E-F435-44F2-9D1E-8EADDD21DC41}.Release|x64.Build.0 = Release|Any CPU
 		{4A87AE0E-F435-44F2-9D1E-8EADDD21DC41}.Release|x86.ActiveCfg = Release|Any CPU
 		{4A87AE0E-F435-44F2-9D1E-8EADDD21DC41}.Release|x86.Build.0 = Release|Any CPU
+		{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}.Debug|x64.Build.0 = Debug|Any CPU
+		{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}.Debug|x86.Build.0 = Debug|Any CPU
+		{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}.Release|x64.ActiveCfg = Release|Any CPU
+		{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}.Release|x64.Build.0 = Release|Any CPU
+		{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}.Release|x86.ActiveCfg = Release|Any CPU
+		{48A7A15E-3BDB-42BD-A8CB-F171966CD9B0}.Release|x86.Build.0 = Release|Any CPU
+		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Debug|x64.Build.0 = Debug|Any CPU
+		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Debug|x86.Build.0 = Debug|Any CPU
+		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Release|x64.ActiveCfg = Release|Any CPU
+		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Release|x64.Build.0 = Release|Any CPU
+		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Release|x86.ActiveCfg = Release|Any CPU
+		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

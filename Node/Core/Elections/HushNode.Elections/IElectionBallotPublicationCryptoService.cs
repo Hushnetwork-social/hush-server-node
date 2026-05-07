@@ -14,16 +14,19 @@ public sealed record ElectionBallotPublicationPreparationResult(
     bool IsSuccessful,
     string? PublishedEncryptedBallotPackage,
     string? PublishedProofBundle,
+    string? PublicationWitnessMaterial,
     string? FailureCode,
     string? FailureReason)
 {
     public static ElectionBallotPublicationPreparationResult Success(
         string publishedEncryptedBallotPackage,
-        string publishedProofBundle) =>
+        string publishedProofBundle,
+        string? publicationWitnessMaterial = null) =>
         new(
             true,
             publishedEncryptedBallotPackage,
             publishedProofBundle,
+            publicationWitnessMaterial,
             null,
             null);
 
@@ -32,6 +35,7 @@ public sealed record ElectionBallotPublicationPreparationResult(
         string failureReason) =>
         new(
             false,
+            null,
             null,
             null,
             failureCode,

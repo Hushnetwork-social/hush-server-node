@@ -23,10 +23,12 @@ public sealed class ElectionBallotPublicationCryptoService(
         {
             var parsedBallot = ParseBallotPackage(encryptedBallotPackage);
             var rerandomizedSlots = new PublishedElectionCipherPointPair[parsedBallot.Ciphertext.C1.Length];
+            var rerandomizationNonces = new string[parsedBallot.Ciphertext.C1.Length];
 
             for (var index = 0; index < rerandomizedSlots.Length; index++)
             {
                 var nonce = CreateRandomNonce();
+                rerandomizationNonces[index] = nonce.ToString(CultureInfo.InvariantCulture);
                 var zeroCipher = EncryptZero(parsedBallot.PublicKey, nonce);
                 var c1 = _curve.Add(parsedBallot.Ciphertext.C1[index], zeroCipher.C1);
                 var c2 = _curve.Add(parsedBallot.Ciphertext.C2[index], zeroCipher.C2);
@@ -51,10 +53,21 @@ public sealed class ElectionBallotPublicationCryptoService(
                     SourceProofBundleHash: ComputeHexSha256(proofBundle),
                     PublishedBallotHash: ComputeHexSha256(serializedPackage)),
                 JsonOptions);
+            var witnessMaterial = JsonSerializer.Serialize(
+                new PublicationRerandomizationWitnessMaterial(
+                    Version: "sp07-publication-rerandomization-witness-v1",
+                    AcceptedEncryptedBallotHash: ComputeHexSha256(encryptedBallotPackage),
+                    PublishedEncryptedBallotHash: ComputeHexSha256(serializedPackage),
+                    SourceProofBundleHash: ComputeHexSha256(proofBundle),
+                    PublishedProofBundleHash: ComputeHexSha256(publishedProofBundle),
+                    SelectionCount: parsedBallot.SelectionCount,
+                    RerandomizationNonces: rerandomizationNonces),
+                JsonOptions);
 
             return ElectionBallotPublicationPreparationResult.Success(
                 serializedPackage,
-                publishedProofBundle);
+                publishedProofBundle,
+                witnessMaterial);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
         {
@@ -207,6 +220,15 @@ public sealed class ElectionBallotPublicationCryptoService(
         string Mode,
         string SourceProofBundleHash,
         string PublishedBallotHash);
+
+    private sealed record PublicationRerandomizationWitnessMaterial(
+        string Version,
+        string AcceptedEncryptedBallotHash,
+        string PublishedEncryptedBallotHash,
+        string SourceProofBundleHash,
+        string PublishedProofBundleHash,
+        int SelectionCount,
+        IReadOnlyList<string> RerandomizationNonces);
 
     private sealed record ParsedElectionBallotPackage(
         string Version,

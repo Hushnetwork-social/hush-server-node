@@ -1,7 +1,9 @@
+using System.Text.Json;
 using HushNetwork.proto;
 using HushNode.Elections;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
+using HushShared.Elections.PublicationProof;
 using HushShared.Elections.Verification.Model;
 
 namespace HushNode.Elections.gRPC;
@@ -443,8 +445,20 @@ public partial class ElectionQueryApplicationService
         var publishedBallotCount = latestTranscript?.PublishedBallotCount ??
             latestSession?.PublishedBallotCount ??
             context.PublishedBallots.Count;
+        var ciphertextSlotCount = latestTranscript?.CiphertextSlotCount ??
+            context.Election.Options.Count;
+        var plannedChunkCount = TryCreateSp07ChunkPlan(
+            acceptedBallotCount,
+            ciphertextSlotCount,
+            out var chunkPlanningFailureMessage)?.Chunks.Count ?? 0;
         var chunkCount = latestSession?.ChunkCount ??
-            (publishedBallotCount > 0 ? 1 : 0);
+            (plannedChunkCount > 0 ? plannedChunkCount : publishedBallotCount > 0 ? 1 : 0);
+        var latestManifest = TryReadSp07Manifest(latestTranscript);
+        var completedChunkCount = latestManifest?.CompletedChunkCount ??
+            ResolveCompletedSp07ChunkCount(latestSession, chunkCount);
+        var failedChunkCount = latestManifest?.FailedChunkCount ??
+            ResolveFailedSp07ChunkCount(latestSession, chunkCount);
+        var slowestChunkMilliseconds = latestManifest?.SlowestChunkMilliseconds ?? 0;
         var latestPubCode = ResolveSp07ResultCode(expected, latestSession, latestTranscript, latestDeletionReceipt);
         var verified = string.Equals(
             latestPubCode,
@@ -469,8 +483,7 @@ public partial class ElectionQueryApplicationService
                 ElectionSp07ProfileIds.ExternalReviewStatus,
             AcceptedBallotCount = acceptedBallotCount,
             PublishedBallotCount = publishedBallotCount,
-            CiphertextSlotCount = latestTranscript?.CiphertextSlotCount ??
-                Math.Min(context.Election.Options.Count, ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots),
+            CiphertextSlotCount = ciphertextSlotCount,
             ChunkCount = chunkCount,
             AcceptedBallotSetHash = latestTranscript?.AcceptedBallotSetHash ??
                 latestSession?.AcceptedBallotSetHash ??
@@ -492,7 +505,11 @@ public partial class ElectionQueryApplicationService
             CanRetry = context.IsOwner &&
                 latestSession?.Status == ElectionPublicationProofSessionStatus.Failed &&
                 context.PublicationWitnesses.Any(x =>
+                    x.WitnessSetId == latestSession.WitnessSetId &&
                     x.CustodyStatus == ElectionPublicationWitnessCustodyStatus.Sealed),
+            CompletedChunkCount = completedChunkCount,
+            FailedChunkCount = failedChunkCount,
+            SlowestChunkMilliseconds = slowestChunkMilliseconds,
             Message = ResolveSp07Message(context, expected, latestSession, latestTranscript, latestDeletionReceipt),
         };
 
@@ -503,7 +520,9 @@ public partial class ElectionQueryApplicationService
             latestTranscript,
             latestDeletionReceipt,
             acceptedBallotCount,
-            chunkCount))
+            ciphertextSlotCount,
+            chunkCount,
+            chunkPlanningFailureMessage))
         {
             view.Blockers.Add(blocker);
         }
@@ -518,7 +537,9 @@ public partial class ElectionQueryApplicationService
         ElectionPublicationProofTranscriptRecord? latestTranscript,
         ElectionPublicationWitnessDeletionReceiptRecord? latestDeletionReceipt,
         int acceptedBallotCount,
-        int chunkCount)
+        int ciphertextSlotCount,
+        int chunkCount,
+        string? chunkPlanningFailureMessage)
     {
         if (!expected)
         {
@@ -537,12 +558,23 @@ public partial class ElectionQueryApplicationService
             });
         }
 
-        if (context.Election.Options.Count > ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots)
+        if (ciphertextSlotCount > ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots)
         {
             blockers.Add(new ElectionSp07ReadinessBlockerView
             {
                 Code = VerificationResultCodes.PublicationProofEnvelopeExceeded,
                 Message = $"SP-07 high-assurance v1 supports up to {ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots} encrypted ballot slots.",
+                BlocksOpen = true,
+                BlocksFinalization = true,
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(chunkPlanningFailureMessage))
+        {
+            blockers.Add(new ElectionSp07ReadinessBlockerView
+            {
+                Code = VerificationResultCodes.PublicationProofEnvelopeExceeded,
+                Message = chunkPlanningFailureMessage,
                 BlocksOpen = true,
                 BlocksFinalization = true,
             });
@@ -596,6 +628,45 @@ public partial class ElectionQueryApplicationService
         return blockers;
     }
 
+    private static Sp07PublicationChunkPlan? TryCreateSp07ChunkPlan(
+        int acceptedBallotCount,
+        int ciphertextSlotCount,
+        out string? failureMessage)
+    {
+        failureMessage = null;
+        if (acceptedBallotCount < 1)
+        {
+            return null;
+        }
+
+        if (acceptedBallotCount > ElectionSp07ProfileIds.HighAssuranceV1MaxAcceptedBallots ||
+            ciphertextSlotCount > ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots)
+        {
+            return null;
+        }
+
+        var options = new Sp07PublicationChunkPlannerOptions(
+            MaxBallotsPerChunk: Math.Max(
+                1,
+                (int)Math.Ceiling(
+                    (double)ElectionSp07ProfileIds.HighAssuranceV1MaxAcceptedBallots /
+                    ElectionSp07ProfileIds.HighAssuranceV1MaxPublicationChunks)),
+            MinBallotsPerChunk: 2,
+            MaxChunks: ElectionSp07ProfileIds.HighAssuranceV1MaxPublicationChunks,
+            MaxEncryptedSlots: ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots);
+
+        try
+        {
+            return new Sp07PublicationChunkPlanner(options)
+                .CreatePlan(acceptedBallotCount, ciphertextSlotCount);
+        }
+        catch (Sp07PublicationProofException ex)
+        {
+            failureMessage = ex.Message;
+            return null;
+        }
+    }
+
     private static string ResolveSp07ResultCode(
         bool expected,
         ElectionPublicationProofSessionRecord? latestSession,
@@ -624,6 +695,45 @@ public partial class ElectionQueryApplicationService
 
         return VerificationResultCodes.PublicationProofEvidenceValid;
     }
+
+    private static ElectionSp07PublicationProofManifestArtifactRecord? TryReadSp07Manifest(
+        ElectionPublicationProofTranscriptRecord? transcript)
+    {
+        if (transcript is null ||
+            string.IsNullOrWhiteSpace(transcript.ProofBytes) ||
+            !transcript.ProofBytes.Contains(
+                ElectionSp07PublicationProofManifestArtifactRecord.SchemaVersion,
+                StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<ElectionSp07PublicationProofManifestArtifactRecord>(
+                transcript.ProofBytes,
+                VerificationJson.Options);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static int ResolveCompletedSp07ChunkCount(
+        ElectionPublicationProofSessionRecord? latestSession,
+        int chunkCount) =>
+        latestSession?.Status is ElectionPublicationProofSessionStatus.Verified or
+            ElectionPublicationProofSessionStatus.WitnessDeleted
+            ? chunkCount
+            : 0;
+
+    private static int ResolveFailedSp07ChunkCount(
+        ElectionPublicationProofSessionRecord? latestSession,
+        int chunkCount) =>
+        latestSession?.Status == ElectionPublicationProofSessionStatus.Failed && chunkCount > 0
+            ? 1
+            : 0;
 
     private static ElectionClosedProgressStatusProto ResolveSp07ProgressStatus(
         ElectionRecord election,

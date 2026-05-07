@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
+    <ProjectReference Include="..\HushShared.Elections.PublicationProof\HushShared.Elections.PublicationProof.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

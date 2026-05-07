@@ -1038,6 +1038,9 @@ message ElectionSp07EvidenceStatusView {
   bool CanRetry = 19;
   repeated ElectionSp07ReadinessBlockerView Blockers = 20;
   string Message = 21;
+  int32 CompletedChunkCount = 22;
+  int32 FailedChunkCount = 23;
+  double SlowestChunkMilliseconds = 24;
 }
 
 message ElectionSp07ReadinessBlockerView {
@@ -1899,6 +1902,7 @@ message GetElectionOpenReadinessResponse {
   ProtocolPackageBindingStatusProto ProtocolPackageBindingStatus = 7;
   string ProtocolPackageBindingMessage = 8;
   ElectionSp06EvidenceStatusView Sp06Evidence = 9;
+  ElectionSp07EvidenceStatusView Sp07Evidence = 10;
 }
 
 message GetElectionResponse {

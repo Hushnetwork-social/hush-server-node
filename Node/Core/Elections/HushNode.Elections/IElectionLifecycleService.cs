@@ -715,12 +715,14 @@ public record ElectionOpenValidationResult
     public string ProtocolPackageBindingMessage { get; init; } = string.Empty;
     public ProtocolPackageBindingRecord? ProtocolPackageBinding { get; init; }
     public ElectionTrusteeControlDomainSummaryRecord? Sp06Summary { get; init; }
+    public ElectionSp07OpenReadinessSummary? Sp07Summary { get; init; }
 
     public static ElectionOpenValidationResult Ready(
         IReadOnlyList<ElectionWarningCode> requiredWarningCodes,
         ElectionCeremonyBindingSnapshot? ceremonySnapshot = null,
         ProtocolPackageBindingOpenValidation? protocolPackageValidation = null,
-        ElectionTrusteeControlDomainSummaryRecord? sp06Summary = null) =>
+        ElectionTrusteeControlDomainSummaryRecord? sp06Summary = null,
+        ElectionSp07OpenReadinessSummary? sp07Summary = null) =>
         new()
         {
             IsReadyToOpen = true,
@@ -730,6 +732,7 @@ public record ElectionOpenValidationResult
             ProtocolPackageBindingMessage = protocolPackageValidation?.ErrorMessage ?? string.Empty,
             ProtocolPackageBinding = protocolPackageValidation?.Binding,
             Sp06Summary = sp06Summary,
+            Sp07Summary = sp07Summary,
         };
 
     public static ElectionOpenValidationResult NotReady(
@@ -738,7 +741,8 @@ public record ElectionOpenValidationResult
         IReadOnlyList<ElectionWarningCode> missingWarningAcknowledgements,
         ElectionCeremonyBindingSnapshot? ceremonySnapshot = null,
         ProtocolPackageBindingOpenValidation? protocolPackageValidation = null,
-        ElectionTrusteeControlDomainSummaryRecord? sp06Summary = null) =>
+        ElectionTrusteeControlDomainSummaryRecord? sp06Summary = null,
+        ElectionSp07OpenReadinessSummary? sp07Summary = null) =>
         new()
         {
             IsReadyToOpen = false,
@@ -750,5 +754,26 @@ public record ElectionOpenValidationResult
             ProtocolPackageBindingMessage = protocolPackageValidation?.ErrorMessage ?? string.Empty,
             ProtocolPackageBinding = protocolPackageValidation?.Binding,
             Sp06Summary = sp06Summary,
+            Sp07Summary = sp07Summary,
         };
 }
+
+public sealed record ElectionSp07OpenReadinessSummary(
+    bool EvidenceExpected,
+    string PublicationProofMode,
+    string ProofConstruction,
+    string StatementId,
+    string ExternalReviewStatus,
+    int IntendedAcceptedBallotCount,
+    int CiphertextSlotCount,
+    int PlannedChunkCount,
+    IReadOnlyList<ElectionSp07OpenReadinessBlocker> ReadinessBlockers)
+{
+    public bool IsReadyForOpen => ReadinessBlockers.All(x => !x.BlocksOpen);
+}
+
+public sealed record ElectionSp07OpenReadinessBlocker(
+    string Code,
+    string Message,
+    bool BlocksOpen,
+    bool BlocksFinalization);

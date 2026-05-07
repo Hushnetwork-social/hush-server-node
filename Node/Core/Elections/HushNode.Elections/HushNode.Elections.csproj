@@ -8,6 +8,7 @@
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Caching\HushNode.Caching.csproj" />
     <ProjectReference Include="..\..\..\Infrastructure\HushNode.Credentials\HushNode.Credentials.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
+    <ProjectReference Include="..\..\..\..\Shared\HushShared.Elections.PublicationProof\HushShared.Elections.PublicationProof.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Elections.Verification.Model\HushShared.Elections.Verification.Model.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Reactions.Model\HushShared.Reactions.Model.csproj" />
     <ProjectReference Include="..\..\..\..\Shared\HushShared.Blockchain.TransactionModel\HushShared.Blockchain.TransactionModel.csproj" />

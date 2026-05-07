@@ -4,6 +4,7 @@ using Grpc.Core;
 using HushNetwork.proto;
 using HushNode.Elections.gRPC;
 using HushShared.Elections.Model;
+using HushShared.Elections.Verification.Model;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.AutoMock;
@@ -320,6 +321,54 @@ public class ElectionsGrpcServiceTests
         response.MissingWarningAcknowledgements.Should().Contain(ElectionWarningCodeProto.LowAnonymitySet);
         response.ProtocolPackageBindingStatus.Should().Be(ProtocolPackageBindingStatusProto.ProtocolPackageBindingMissing);
         response.ProtocolPackageBindingMessage.Should().Contain("Protocol Omega package refs are missing");
+    }
+
+    [Fact]
+    public async Task GetElectionOpenReadiness_WithSp07ReadinessSummary_MapsPublicationProofProjection()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var sp07Summary = new Domain.ElectionSp07OpenReadinessSummary(
+            EvidenceExpected: true,
+            PublicationProofMode: ElectionSp07ProfileIds.PublicationProofMode,
+            ProofConstruction: ElectionSp07ProfileIds.ProofConstruction,
+            StatementId: ElectionSp07ProfileIds.StatementId,
+            ExternalReviewStatus: ElectionSp07ProfileIds.ExternalReviewStatus,
+            IntendedAcceptedBallotCount: 501,
+            CiphertextSlotCount: 8,
+            PlannedChunkCount: 0,
+            ReadinessBlockers:
+            [
+                new Domain.ElectionSp07OpenReadinessBlocker(
+                    VerificationResultCodes.PublicationProofEnvelopeExceeded,
+                    "SP-07 high-assurance v1 supports up to 500 accepted ballots.",
+                    BlocksOpen: true,
+                    BlocksFinalization: true)
+            ]);
+
+        mocker.GetMock<Domain.IElectionLifecycleService>()
+            .Setup(x => x.EvaluateOpenReadinessAsync(It.IsAny<Domain.EvaluateElectionOpenReadinessRequest>()))
+            .ReturnsAsync(Domain.ElectionOpenValidationResult.NotReady(
+                ["sp07_publication_proof_envelope_exceeded: SP-07 high-assurance v1 supports up to 500 accepted ballots."],
+                [],
+                [],
+                sp07Summary: sp07Summary));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionOpenReadiness(
+            new GetElectionOpenReadinessRequest { ElectionId = electionId.ToString() },
+            CreateMockServerCallContext());
+
+        response.IsReadyToOpen.Should().BeFalse();
+        response.Sp07Evidence.Should().NotBeNull();
+        response.Sp07Evidence.PublicationProofMode.Should().Be(ElectionSp07ProfileIds.PublicationProofMode);
+        response.Sp07Evidence.AcceptedBallotCount.Should().Be(501);
+        response.Sp07Evidence.CiphertextSlotCount.Should().Be(8);
+        response.Sp07Evidence.LatestPubResultCode.Should().Be(VerificationResultCodes.PublicationProofEnvelopeExceeded);
+        response.Sp07Evidence.Blockers.Should().ContainSingle(x =>
+            x.Code == VerificationResultCodes.PublicationProofEnvelopeExceeded &&
+            x.BlocksOpen);
     }
 
     [Theory]

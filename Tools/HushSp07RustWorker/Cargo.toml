@@ -1,0 +1,19 @@
+[package]
+name = "hush-sp07-rust-worker"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ark-ec = { version = "0.6.0", features = ["std", "parallel"] }
+ark-ed-on-bn254 = { version = "0.6.0", features = ["std"] }
+ark-ff = { version = "0.6.0", features = ["std"] }
+clap = { version = "4.5.50", features = ["derive"] }
+num-bigint = "0.4.6"
+num-integer = "0.1.46"
+num-traits = "0.2.19"
+once_cell = "1.21.3"
+rayon = "1.11.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+sha2 = "0.10.9"

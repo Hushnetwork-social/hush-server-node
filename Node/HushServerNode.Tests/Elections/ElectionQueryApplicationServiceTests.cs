@@ -13,6 +13,7 @@ using Olimpo.EntityFramework.Persistency;
 using System.Data;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace HushServerNode.Tests.Elections;
@@ -3468,6 +3469,212 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionVerificationPackageStatusAsync_WithHighAssuranceAcceptedBallots_PlansSp07ChunksFromAcceptedSet()
+    {
+        var mocker = new AutoMocker();
+        var election = WithSealedBallotDefinition(CreateHighAssuranceTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+        });
+        var acceptedBallots = Enumerable.Range(0, 250)
+            .Select(index => ElectionModelFactory.CreateAcceptedBallotRecord(
+                election.ElectionId,
+                $"ciphertext-{index:D4}",
+                $"proof-{index:D4}",
+                $"nullifier-{index:D4}",
+                acceptedAt: DateTime.UtcNow.AddMinutes(-index),
+                ballotDefinitionVersion: election.BallotDefinitionVersion,
+                ballotDefinitionHash: election.BallotDefinitionHash))
+            .ToArray();
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetAcceptedBallotsAsync(election.ElectionId)).ReturnsAsync(acceptedBallots);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionVerificationPackageStatusAsync(election.ElectionId, "owner-address");
+
+        response.Success.Should().BeTrue();
+        response.Status.Sp07Evidence.Should().NotBeNull();
+        var sp07 = response.Status.Sp07Evidence;
+        sp07.EvidenceExpected.Should().BeTrue();
+        sp07.AcceptedBallotCount.Should().Be(250);
+        sp07.CiphertextSlotCount.Should().Be(election.Options.Count);
+        sp07.ChunkCount.Should().Be(3);
+        sp07.Blockers.Should().NotContain(x =>
+            x.Code == VerificationResultCodes.PublicationProofEnvelopeExceeded);
+    }
+
+    [Fact]
+    public async Task GetElectionVerificationPackageStatusAsync_WithSp07Manifest_ProjectsChunkProgress()
+    {
+        var mocker = new AutoMocker();
+        var election = WithSealedBallotDefinition(CreateHighAssuranceTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedProgressStatus = ElectionClosedProgressStatus.PublicationProofVerified,
+        });
+        var proofSessionId = Guid.NewGuid();
+        var witnessSetId = Guid.NewGuid();
+        var acceptedHash = VerificationCanonicalHash.ComputeSha256LowerHex("accepted-set");
+        var publishedHash = VerificationCanonicalHash.ComputeSha256LowerHex("published-stream");
+        var manifest = CreateSp07Manifest(
+            election,
+            proofSessionId,
+            acceptedHash,
+            publishedHash,
+            acceptedBallotCount: 250,
+            publishedBallotCount: 250,
+            chunkCount: 3,
+            completedChunkCount: 3,
+            failedChunkCount: 0,
+            slowestChunkMilliseconds: 18.75);
+        var proofBytes = JsonSerializer.Serialize(manifest, VerificationJson.Options);
+        var proofHash = VerificationCanonicalHash.ComputeSha256LowerHex(proofBytes);
+        var transcriptHash = VerificationCanonicalHash.ComputeSha256LowerHex(
+            $"{election.ElectionId}|{proofSessionId:N}|{proofHash}");
+        var receiptId = Guid.NewGuid();
+        var session = new ElectionPublicationProofSessionRecord(
+            proofSessionId,
+            election.ElectionId,
+            witnessSetId,
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            ElectionPublicationProofSessionStatus.WitnessDeleted,
+            StartedAt: DateTime.UtcNow.AddMinutes(-2),
+            CompletedAt: DateTime.UtcNow.AddMinutes(-1),
+            AcceptedBallotCount: 250,
+            PublishedBallotCount: 250,
+            ChunkCount: 3,
+            RetryCount: 0,
+            FailureCode: null,
+            FailureReason: null,
+            AcceptedBallotSetHash: acceptedHash,
+            PublishedBallotStreamHash: publishedHash,
+            TranscriptHash: transcriptHash,
+            ProofHash: proofHash,
+            ServerVerifierOutputHash: VerificationCanonicalHash.ComputeSha256LowerHex("sp07-verifier-output"),
+            DeletionReceiptId: receiptId);
+        var transcript = CreateSp07Transcript(
+            election,
+            proofSessionId,
+            witnessSetId,
+            acceptedHash,
+            publishedHash,
+            proofBytes,
+            proofHash,
+            transcriptHash,
+            acceptedBallotCount: 250,
+            publishedBallotCount: 250);
+        var receipt = new ElectionPublicationWitnessDeletionReceiptRecord(
+            receiptId,
+            election.ElectionId,
+            proofSessionId,
+            witnessSetId,
+            WitnessSetHash: VerificationCanonicalHash.ComputeSha256LowerHex("witness-set"),
+            WitnessCount: 250,
+            transcriptHash,
+            proofHash,
+            ElectionPublicationWitnessDeletionStatus.Completed,
+            DeletedAt: DateTime.UtcNow,
+            DeletionActorRef: "test",
+            FailureCode: null,
+            FailureReason: null);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetPublicationProofSessionsAsync(election.ElectionId)).ReturnsAsync([session]);
+            repo.Setup(x => x.GetPublicationProofTranscriptsAsync(election.ElectionId)).ReturnsAsync([transcript]);
+            repo.Setup(x => x.GetPublicationWitnessDeletionReceiptsAsync(election.ElectionId)).ReturnsAsync([receipt]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionVerificationPackageStatusAsync(election.ElectionId, "owner-address");
+
+        response.Success.Should().BeTrue();
+        var sp07 = response.Status.Sp07Evidence;
+        sp07.ChunkCount.Should().Be(3);
+        sp07.CompletedChunkCount.Should().Be(3);
+        sp07.FailedChunkCount.Should().Be(0);
+        sp07.SlowestChunkMilliseconds.Should().BeApproximately(18.75, 0.001);
+        sp07.ProgressStatus.Should().Be(ElectionClosedProgressStatusProto.ClosedProgressPublicationProofVerified);
+        sp07.CanRetry.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    public async Task GetElectionVerificationPackageStatusAsync_WithFailedSp07Session_AllowsRetryOnlyWithSealedWitness(
+        bool sealedWitness,
+        bool matchingWitnessSet,
+        bool expectedCanRetry)
+    {
+        var mocker = new AutoMocker();
+        var election = WithSealedBallotDefinition(CreateHighAssuranceTrusteeElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedProgressStatus = ElectionClosedProgressStatus.PublicationProofFailed,
+        });
+        var proofSessionId = Guid.NewGuid();
+        var witnessSetId = Guid.NewGuid();
+        var session = new ElectionPublicationProofSessionRecord(
+            proofSessionId,
+            election.ElectionId,
+            witnessSetId,
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            ElectionPublicationProofSessionStatus.Failed,
+            StartedAt: DateTime.UtcNow.AddMinutes(-2),
+            CompletedAt: DateTime.UtcNow.AddMinutes(-1),
+            AcceptedBallotCount: 2,
+            PublishedBallotCount: 2,
+            ChunkCount: 2,
+            RetryCount: 1,
+            FailureCode: VerificationResultCodes.PublicationProofVerificationFailed,
+            FailureReason: "SP-07 chunk proof failed.",
+            AcceptedBallotSetHash: VerificationCanonicalHash.ComputeSha256LowerHex("accepted-set"),
+            PublishedBallotStreamHash: VerificationCanonicalHash.ComputeSha256LowerHex("published-stream"),
+            TranscriptHash: null,
+            ProofHash: null,
+            ServerVerifierOutputHash: null,
+            DeletionReceiptId: null);
+        var witness = CreateSp07PublicationWitness(
+            election,
+            matchingWitnessSet ? witnessSetId : Guid.NewGuid(),
+            custodyStatus: sealedWitness
+                ? ElectionPublicationWitnessCustodyStatus.Sealed
+                : ElectionPublicationWitnessCustodyStatus.Deleted);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetPublicationProofSessionsAsync(election.ElectionId)).ReturnsAsync([session]);
+            repo.Setup(x => x.GetPublicationWitnessesAsync(election.ElectionId)).ReturnsAsync([witness]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionVerificationPackageStatusAsync(election.ElectionId, "owner-address");
+
+        response.Success.Should().BeTrue();
+        var sp07 = response.Status.Sp07Evidence;
+        sp07.ProgressStatus.Should().Be(ElectionClosedProgressStatusProto.ClosedProgressPublicationProofFailed);
+        sp07.LatestPubResultCode.Should().Be(VerificationResultCodes.PublicationProofVerificationFailed);
+        sp07.ChunkCount.Should().Be(2);
+        sp07.CompletedChunkCount.Should().Be(0);
+        sp07.FailedChunkCount.Should().Be(1);
+        sp07.CanRetry.Should().Be(expectedCanRetry);
+    }
+
+    [Fact]
     public async Task ExportElectionVerificationPackageAsync_WithHighAssuranceTrusteeEvidence_VerifiesPublicAndRestrictedPackages()
     {
         var mocker = new AutoMocker();
@@ -4031,6 +4238,14 @@ public class ElectionQueryApplicationServiceTests
             .ReturnsAsync(Array.Empty<ElectionEligibilityActivationEventRecord>());
         repository.Setup(x => x.GetEligibilitySnapshotsAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionEligibilitySnapshotRecord>());
+        repository.Setup(x => x.GetPublicationWitnessesAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionPublicationWitnessRecord>());
+        repository.Setup(x => x.GetPublicationProofSessionsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionPublicationProofSessionRecord>());
+        repository.Setup(x => x.GetPublicationProofTranscriptsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionPublicationProofTranscriptRecord>());
+        repository.Setup(x => x.GetPublicationWitnessDeletionReceiptsAsync(It.IsAny<ElectionId>()))
+            .ReturnsAsync(Array.Empty<ElectionPublicationWitnessDeletionReceiptRecord>());
         repository.Setup(x => x.GetRosterImportEvidencesAsync(It.IsAny<ElectionId>()))
             .ReturnsAsync(Array.Empty<ElectionRosterImportEvidenceRecord>());
         repository.Setup(x => x.GetEligibilityPolicyEvidencesAsync(It.IsAny<ElectionId>()))
@@ -4360,6 +4575,153 @@ public class ElectionQueryApplicationServiceTests
 
     private static string Hash(char value) =>
         new(char.ToLowerInvariant(value), 64);
+
+    private static ElectionSp07PublicationProofManifestArtifactRecord CreateSp07Manifest(
+        ElectionRecord election,
+        Guid proofSessionId,
+        string acceptedHash,
+        string publishedHash,
+        int acceptedBallotCount,
+        int publishedBallotCount,
+        int chunkCount,
+        int completedChunkCount,
+        int failedChunkCount,
+        double slowestChunkMilliseconds)
+    {
+        var chunks = Enumerable.Range(0, chunkCount)
+            .Select(index =>
+            {
+                var proofBytes = Encoding.UTF8.GetBytes($"sp07-proof-chunk-{index}");
+                var proofHash = Convert.ToHexString(SHA512.HashData(proofBytes)).ToLowerInvariant();
+                var passed = index >= failedChunkCount;
+
+                return new ElectionSp07PublicationProofManifestChunkArtifactRecord(
+                    $"chunk-{index:D3}",
+                    index,
+                    Offset: index * 100,
+                    Count: index == chunkCount - 1
+                        ? acceptedBallotCount - (index * 100)
+                        : Math.Min(100, acceptedBallotCount),
+                    Passed: passed,
+                    ResultCode: passed
+                        ? VerificationResultCodes.PublicationProofEvidenceValid
+                        : VerificationResultCodes.PublicationProofVerificationFailed,
+                    ProofProfileId: "matrix_m_1_publication_proof_v1",
+                    WorkerKind: "rust_arkworks_m1_process_worker",
+                    WorkerVersion: "test",
+                    WorkerThreadCount: 8,
+                    StatementHashSha512: new string('a', 128),
+                    FiatShamirTranscriptHashSha512: new string('b', 128),
+                    CanonicalProofHashSha512: proofHash,
+                    CanonicalProofByteLength: proofBytes.Length,
+                    CanonicalProofBytesHex: Convert.ToHexString(proofBytes).ToLowerInvariant(),
+                    PublishedBallotStreamHash: publishedHash,
+                    ElapsedMilliseconds: index == 0
+                        ? slowestChunkMilliseconds
+                        : Math.Max(1, slowestChunkMilliseconds - index));
+            })
+            .ToArray();
+
+        return new ElectionSp07PublicationProofManifestArtifactRecord(
+            ElectionSp07PublicationProofManifestArtifactRecord.SchemaVersion,
+            election.ElectionId.ToString(),
+            proofSessionId.ToString("N"),
+            "sp07-test-plan",
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            VerificationProfileIds.HighAssuranceV1,
+            acceptedHash,
+            publishedHash,
+            acceptedBallotCount,
+            publishedBallotCount,
+            election.Options.Count,
+            chunkCount,
+            completedChunkCount,
+            failedChunkCount,
+            slowestChunkMilliseconds,
+            chunks,
+            [
+                "no_hidden_permutation",
+                "no_shuffle_map",
+                "no_rerandomization_randomness",
+                "no_raw_witness",
+            ]);
+    }
+
+    private static ElectionPublicationProofTranscriptRecord CreateSp07Transcript(
+        ElectionRecord election,
+        Guid proofSessionId,
+        Guid witnessSetId,
+        string acceptedHash,
+        string publishedHash,
+        string proofBytes,
+        string proofHash,
+        string transcriptHash,
+        int acceptedBallotCount,
+        int publishedBallotCount) =>
+        new(
+            Guid.NewGuid(),
+            election.ElectionId,
+            proofSessionId,
+            witnessSetId,
+            ElectionSp07ProfileIds.TranscriptVersion,
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            VerificationProfileIds.HighAssuranceV1,
+            BallotDefinitionHash: VerificationCanonicalHash.ToLowerHex(election.BallotDefinitionHash!),
+            BallotEncryptionSchemeVersion: "babyjubjub-elgamal-vector-ballot-v1",
+            ElectionPublicKeyId: "babyjubjub-elgamal-pk-test",
+            AcceptedBallotSetHash: acceptedHash,
+            PublishedBallotStreamHash: publishedHash,
+            AcceptedBallotCount: acceptedBallotCount,
+            PublishedBallotCount: publishedBallotCount,
+            CiphertextSlotCount: election.Options.Count,
+            ProofSystemVersion: ElectionSp07ProfileIds.ProofSystemVersion,
+            ProofBytes: proofBytes,
+            ProofHash: proofHash,
+            TranscriptHash: transcriptHash,
+            ExternalReviewStatus: ElectionSp07ProfileIds.ExternalReviewStatus,
+            GeneratedAt: DateTime.UtcNow,
+            GeneratorReleaseHash: "generator-release-hash",
+            VerifierReleaseHash: "verifier-release-hash",
+            PublicPrivacyBoundary:
+            [
+                "no_hidden_permutation",
+                "no_shuffle_map",
+                "no_rerandomization_randomness",
+                "no_raw_witness",
+            ]);
+
+    private static ElectionPublicationWitnessRecord CreateSp07PublicationWitness(
+        ElectionRecord election,
+        Guid witnessSetId,
+        ElectionPublicationWitnessCustodyStatus custodyStatus)
+    {
+        var sealedMaterial = $"sp07-witness|{election.ElectionId}|{witnessSetId:N}";
+
+        return new ElectionPublicationWitnessRecord(
+            Guid.NewGuid(),
+            election.ElectionId,
+            witnessSetId,
+            AcceptedBallotId: Guid.NewGuid(),
+            PublishedSequence: 1,
+            AcceptedEncryptedBallotHash: VerificationCanonicalHash.ComputeSha256LowerHex("accepted-ballot"),
+            PublishedEncryptedBallotHash: VerificationCanonicalHash.ComputeSha256LowerHex("published-ballot"),
+            ProofMode: ElectionSp07ProfileIds.PublicationProofMode,
+            ProofConstruction: ElectionSp07ProfileIds.ProofConstruction,
+            StatementId: ElectionSp07ProfileIds.StatementId,
+            ProofProfileVersion: ElectionSp07ProfileIds.ProofSystemVersion,
+            SealedWitnessMaterial: sealedMaterial,
+            SealedWitnessMaterialHash: VerificationCanonicalHash.ComputeSha256LowerHex(sealedMaterial),
+            SealAlgorithm: "transparent-test",
+            CustodyStatus: custodyStatus,
+            CreatedAt: DateTime.UtcNow.AddMinutes(-5),
+            DeletedAt: custodyStatus == ElectionPublicationWitnessCustodyStatus.Deleted
+                ? DateTime.UtcNow.AddMinutes(-1)
+                : null);
+    }
 
     private static ElectionRecord WithSealedBallotDefinition(ElectionRecord election)
     {

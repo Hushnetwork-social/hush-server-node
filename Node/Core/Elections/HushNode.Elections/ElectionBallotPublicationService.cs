@@ -12,6 +12,7 @@ using HushNode.Elections.Storage;
 using HushNode.Events;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Elections.Model;
+using HushShared.Elections.Verification.Model;
 using Microsoft.Extensions.Logging;
 using Olimpo;
 using Olimpo.EntityFramework.Persistency;
@@ -29,6 +30,9 @@ public sealed class ElectionBallotPublicationService(
     ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null,
     ICloseCountingExecutorEnvelopeCrypto? closeCountingExecutorEnvelopeCrypto = null,
     IAdminOnlyProtectedTallyEnvelopeCrypto? adminOnlyProtectedTallyEnvelopeCrypto = null,
+    IElectionPublicationWitnessEnvelopeCrypto? publicationWitnessEnvelopeCrypto = null,
+    IElectionPublicationWitnessDeletionService? publicationWitnessDeletionService = null,
+    IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null,
     IBabyJubJub? curve = null) :
     IElectionBallotPublicationService,
     IHandleAsync<BlockIndexCompletedEvent>
@@ -54,6 +58,12 @@ public sealed class ElectionBallotPublicationService(
         closeCountingExecutorEnvelopeCrypto ?? new UnavailableCloseCountingExecutorEnvelopeCrypto();
     private readonly IAdminOnlyProtectedTallyEnvelopeCrypto _adminOnlyProtectedTallyEnvelopeCrypto =
         adminOnlyProtectedTallyEnvelopeCrypto ?? new UnavailableAdminOnlyProtectedTallyEnvelopeCrypto();
+    private readonly IElectionPublicationWitnessEnvelopeCrypto _publicationWitnessEnvelopeCrypto =
+        publicationWitnessEnvelopeCrypto ?? new UnavailableElectionPublicationWitnessEnvelopeCrypto();
+    private readonly IElectionPublicationWitnessDeletionService? _publicationWitnessDeletionService =
+        publicationWitnessDeletionService;
+    private readonly IElectionSp07PublicationProofSessionRunner? _publicationProofSessionRunner =
+        publicationProofSessionRunner;
 
     public Task HandleAsync(BlockIndexCompletedEvent message) =>
         ProcessPendingPublicationAsync(message.BlockIndex);
@@ -112,6 +122,7 @@ public sealed class ElectionBallotPublicationService(
             var nextSequence = await repository.GetNextPublishedBallotSequenceAsync(electionId);
             var publishedAt = DateTime.UtcNow;
             var selectedAcceptedBallots = new List<(ElectionBallotMemPoolRecord Entry, ElectionAcceptedBallotRecord AcceptedBallot)>(selectedEntries.Count);
+            var witnessSetId = Guid.NewGuid();
 
             foreach (var entry in selectedEntries)
             {
@@ -162,7 +173,28 @@ public sealed class ElectionBallotPublicationService(
                     blockIndex.Value,
                     _blockchainCache.CurrentBlockId.Value);
 
+                var publicationWitness = await TryCreatePublicationWitnessAsync(
+                    repository,
+                    electionId,
+                    witnessSetId,
+                    acceptedBallot,
+                    publishedBallot,
+                    publicationPayload,
+                    publishedAt,
+                    blockIndex.Value,
+                    _blockchainCache.CurrentBlockId.Value);
+                if (publicationPayload.WitnessMaterial is not null && publicationWitness is null)
+                {
+                    nextSequence--;
+                    continue;
+                }
+
                 await repository.SavePublishedBallotAsync(publishedBallot);
+                if (publicationWitness is not null)
+                {
+                    await repository.SavePublicationWitnessAsync(publicationWitness);
+                }
+
                 await repository.DeleteBallotMemPoolEntryAsync(entry.Id);
                 newlyPublishedBallots.Add(publishedBallot);
             }
@@ -279,7 +311,8 @@ public sealed class ElectionBallotPublicationService(
         {
             return new PublicationPayload(
                 attempt.PublishedEncryptedBallotPackage!,
-                attempt.PublishedProofBundle!);
+                attempt.PublishedProofBundle!,
+                attempt.PublicationWitnessMaterial);
         }
 
         await RegisterIssueAsync(
@@ -299,6 +332,97 @@ public sealed class ElectionBallotPublicationService(
         return new PublicationPayload(
             acceptedBallot.EncryptedBallotPackage,
             acceptedBallot.ProofBundle);
+    }
+
+    private async Task<ElectionPublicationWitnessRecord?> TryCreatePublicationWitnessAsync(
+        IElectionsRepository repository,
+        ElectionId electionId,
+        Guid witnessSetId,
+        ElectionAcceptedBallotRecord acceptedBallot,
+        ElectionPublishedBallotRecord publishedBallot,
+        PublicationPayload publicationPayload,
+        DateTime observedAt,
+        long blockHeight,
+        Guid blockId)
+    {
+        if (publicationPayload.WitnessMaterial is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(publicationPayload.WitnessMaterial))
+        {
+            await RegisterIssueAsync(
+                repository,
+                electionId,
+                ElectionPublicationIssueCode.WitnessSealUnavailable,
+                observedAt,
+                blockHeight,
+                blockId);
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] SP-07 publication witness custody cannot continue for election {ElectionId} because witness material is empty.",
+                electionId);
+            return null;
+        }
+
+        if (!_publicationWitnessEnvelopeCrypto.IsAvailable(out var unavailableReason))
+        {
+            await RegisterIssueAsync(
+                repository,
+                electionId,
+                ElectionPublicationIssueCode.WitnessSealUnavailable,
+                observedAt,
+                blockHeight,
+                blockId);
+            _logger.LogWarning(
+                "[ElectionBallotPublicationService] SP-07 publication witness custody is unavailable for election {ElectionId}: {Reason}",
+                electionId,
+                unavailableReason);
+            return null;
+        }
+
+        var witnessId = Guid.NewGuid();
+        string sealedWitnessMaterial;
+        try
+        {
+            sealedWitnessMaterial = _publicationWitnessEnvelopeCrypto.SealWitnessMaterial(
+                publicationPayload.WitnessMaterial,
+                electionId,
+                witnessId);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or CryptographicException)
+        {
+            await RegisterIssueAsync(
+                repository,
+                electionId,
+                ElectionPublicationIssueCode.WitnessSealUnavailable,
+                observedAt,
+                blockHeight,
+                blockId);
+            _logger.LogWarning(
+                ex,
+                "[ElectionBallotPublicationService] SP-07 publication witness sealing failed for election {ElectionId}.",
+                electionId);
+            return null;
+        }
+
+        return new ElectionPublicationWitnessRecord(
+            witnessId,
+            electionId,
+            witnessSetId,
+            acceptedBallot.Id,
+            publishedBallot.PublicationSequence,
+            ComputeLowerHexSha256(acceptedBallot.EncryptedBallotPackage),
+            ComputeLowerHexSha256(publishedBallot.EncryptedBallotPackage),
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            ElectionSp07ProfileIds.ProofSystemVersion,
+            sealedWitnessMaterial,
+            ComputeLowerHexSha512(publicationPayload.WitnessMaterial),
+            _publicationWitnessEnvelopeCrypto.SealAlgorithm,
+            ElectionPublicationWitnessCustodyStatus.Sealed,
+            observedAt);
     }
 
     private static AdminOnlyDevModeBallotPackage? TryParseDevModeAcceptedBallotPackage(ElectionAcceptedBallotRecord acceptedBallot)
@@ -473,6 +597,16 @@ public sealed class ElectionBallotPublicationService(
 
         if (election.GovernanceMode != ElectionGovernanceMode.TrusteeThreshold)
         {
+            if (!await TrySatisfySp07PublicationProofGateAsync(
+                    repository,
+                    election,
+                    acceptedBallots,
+                    publishedBallots,
+                    DateTime.UtcNow))
+            {
+                return;
+            }
+
             var recordedAt = DateTime.UtcNow;
             var artifact = ElectionModelFactory.CreateBoundaryArtifact(
                 ElectionBoundaryArtifactType.TallyReady,
@@ -623,6 +757,104 @@ public sealed class ElectionBallotPublicationService(
             election.ElectionId,
             session.Id,
             acceptedBallots.Count);
+    }
+
+    private async Task<bool> TrySatisfySp07PublicationProofGateAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        IReadOnlyList<ElectionAcceptedBallotRecord> acceptedBallots,
+        IReadOnlyList<ElectionPublishedBallotRecord> publishedBallots,
+        DateTime observedAt)
+    {
+        if (!ElectionSp07PublicationProofGate.IsEvidenceExpected(election) || acceptedBallots.Count == 0)
+        {
+            return true;
+        }
+
+        if (_publicationProofSessionRunner is not null)
+        {
+            var latestSession = (await repository.GetPublicationProofSessionsAsync(election.ElectionId))
+                .OrderByDescending(x => x.CompletedAt ?? x.StartedAt)
+                .ThenByDescending(x => x.Id)
+                .FirstOrDefault();
+            if (latestSession is null || latestSession.Status == ElectionPublicationProofSessionStatus.Failed)
+            {
+                var protocolPackageBinding = await repository.GetSealedProtocolPackageBindingAsync(election.ElectionId);
+                if (protocolPackageBinding is null)
+                {
+                    await repository.SaveElectionAsync(election with
+                    {
+                        LastUpdatedAt = observedAt,
+                        ClosedProgressStatus = ElectionClosedProgressStatus.PublicationProofPending,
+                    });
+
+                    _logger.LogWarning(
+                        "[ElectionBallotPublicationService] Admin-only high-assurance election {ElectionId} cannot reach tally_ready because the sealed Protocol Omega package binding is missing.",
+                        election.ElectionId);
+                    return false;
+                }
+
+                await repository.SaveElectionAsync(election with
+                {
+                    LastUpdatedAt = observedAt,
+                    ClosedProgressStatus = ElectionClosedProgressStatus.PublicationProofGenerating,
+                });
+
+                var runResult = await _publicationProofSessionRunner.RunAsync(
+                    new ElectionSp07PublicationProofSessionRunnerRequest(
+                        repository,
+                        election,
+                        protocolPackageBinding,
+                        VerificationProfileIds.HighAssuranceV1,
+                        observedAt));
+                if (!runResult.IsSuccessful)
+                {
+                    await repository.SaveElectionAsync(election with
+                    {
+                        LastUpdatedAt = observedAt,
+                        ClosedProgressStatus = ElectionClosedProgressStatus.PublicationProofFailed,
+                    });
+
+                    _logger.LogWarning(
+                        "[ElectionBallotPublicationService] Admin-only high-assurance election {ElectionId} failed SP-07 publication-proof generation before tally_ready: {FailureReason}",
+                        election.ElectionId,
+                        runResult.FailureReason ?? runResult.FailureCode ?? "unknown failure");
+                    return false;
+                }
+            }
+        }
+
+        if (_publicationWitnessDeletionService is not null)
+        {
+            await _publicationWitnessDeletionService.TryDeleteVerifiedWitnessesAsync(
+                repository,
+                election.ElectionId,
+                observedAt);
+        }
+
+        var sp07Gate = ElectionSp07PublicationProofGate.EvaluateTallyReady(
+            election,
+            acceptedBallots,
+            publishedBallots,
+            await repository.GetPublicationProofSessionsAsync(election.ElectionId),
+            await repository.GetPublicationProofTranscriptsAsync(election.ElectionId),
+            await repository.GetPublicationWitnessDeletionReceiptsAsync(election.ElectionId));
+        if (sp07Gate.IsSatisfied)
+        {
+            return true;
+        }
+
+        await repository.SaveElectionAsync(election with
+        {
+            LastUpdatedAt = observedAt,
+            ClosedProgressStatus = sp07Gate.ProgressStatus,
+        });
+
+        _logger.LogWarning(
+            "[ElectionBallotPublicationService] Admin-only high-assurance election {ElectionId} cannot reach tally_ready because SP-07 evidence is not satisfied: {FailureMessage}",
+            election.ElectionId,
+            sp07Gate.FailureMessage ?? sp07Gate.FailureCode ?? "unknown SP-07 gate failure");
+        return false;
     }
 
     private async Task<bool> TryCreateAdminOnlyClosedElectionArtifactsAsync(
@@ -1451,6 +1683,12 @@ public sealed class ElectionBallotPublicationService(
     private static string ComputeHexSha256(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty)));
 
+    private static string ComputeLowerHexSha256(string value) =>
+        ComputeHexSha256(value).ToLowerInvariant();
+
+    private static string ComputeLowerHexSha512(string value) =>
+        Convert.ToHexString(SHA512.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty))).ToLowerInvariant();
+
     private static string SerializeResultArtifactPayload(
         string title,
         IReadOnlyList<ElectionResultOptionCount> namedOptionResults,
@@ -1484,7 +1722,8 @@ public sealed class ElectionBallotPublicationService(
 
     private sealed record PublicationPayload(
         string EncryptedBallotPackage,
-        string ProofBundle);
+        string ProofBundle,
+        string? WitnessMaterial = null);
 
     private sealed record AdminOnlyDevModeBallotPackage(
         string? Mode,

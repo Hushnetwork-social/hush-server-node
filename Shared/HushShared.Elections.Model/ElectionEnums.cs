@@ -341,6 +341,7 @@ public enum ElectionPublicationIssueCode
     RerandomizationFallback = 0,
     UnsupportedBallotPayload = 1,
     ReplayMismatch = 2,
+    WitnessSealUnavailable = 3,
 }
 
 public enum ElectionBallotDefinitionMutationPolicy

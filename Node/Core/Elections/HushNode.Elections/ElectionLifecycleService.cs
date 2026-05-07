@@ -9,6 +9,8 @@ using HushNode.Identity.Storage;
 using HushNode.Reactions.Crypto;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
+using HushShared.Elections.PublicationProof;
+using HushShared.Elections.Verification.Model;
 using HushShared.Identity.Model;
 using Microsoft.Extensions.Logging;
 using Olimpo;
@@ -32,6 +34,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly ICloseCountingExecutorEnvelopeCrypto _closeCountingExecutorEnvelopeCrypto;
     private readonly IAdminOnlyProtectedTallyEnvelopeCrypto _adminOnlyProtectedTallyEnvelopeCrypto;
     private readonly IElectionSensitiveStorageMaintenance? _sensitiveStorageMaintenance;
+    private readonly IElectionPublicationWitnessDeletionService _publicationWitnessDeletionService;
+    private readonly IElectionSp07PublicationProofSessionRunner? _publicationProofSessionRunner;
     private readonly IBabyJubJub _curve;
     private readonly ProtocolPackageBindingService _protocolPackageBindingService = new();
     private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
@@ -64,7 +68,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ICloseCountingExecutorEnvelopeCrypto? closeCountingExecutorEnvelopeCrypto = null,
         IAdminOnlyProtectedTallyEnvelopeCrypto? adminOnlyProtectedTallyEnvelopeCrypto = null,
         IBabyJubJub? curve = null,
-        IElectionSensitiveStorageMaintenance? sensitiveStorageMaintenance = null)
+        IElectionSensitiveStorageMaintenance? sensitiveStorageMaintenance = null,
+        IElectionPublicationWitnessDeletionService? publicationWitnessDeletionService = null,
+        IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _logger = logger;
@@ -78,6 +84,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
         _closeCountingExecutorEnvelopeCrypto = closeCountingExecutorEnvelopeCrypto ?? new UnavailableCloseCountingExecutorEnvelopeCrypto();
         _adminOnlyProtectedTallyEnvelopeCrypto = adminOnlyProtectedTallyEnvelopeCrypto ?? new UnavailableAdminOnlyProtectedTallyEnvelopeCrypto();
         _sensitiveStorageMaintenance = sensitiveStorageMaintenance;
+        _publicationWitnessDeletionService =
+            publicationWitnessDeletionService ?? new ElectionPublicationWitnessDeletionService();
+        _publicationProofSessionRunner = publicationProofSessionRunner;
         _curve = curve ?? new BabyJubJubCurve();
     }
 
@@ -4103,6 +4112,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var nonBlankOptions = election.Options.Where(x => !x.IsBlankOption).ToArray();
         ElectionCeremonyBindingSnapshot? ceremonySnapshot = null;
         ElectionTrusteeControlDomainSummaryRecord? sp06Summary = null;
+        ElectionSp07OpenReadinessSummary? sp07Summary = null;
 
         if (election.LifecycleState != ElectionLifecycleState.Draft)
         {
@@ -4238,6 +4248,15 @@ public class ElectionLifecycleService : IElectionLifecycleService
             }
         }
 
+        if (IsSp07HighAssuranceClaimed(election))
+        {
+            sp07Summary = BuildSp07OpenReadinessSummary(election, rosterEntries);
+            foreach (var blocker in sp07Summary.ReadinessBlockers.Where(x => x.BlocksOpen))
+            {
+                errors.Add($"{blocker.Code}: {blocker.Message}");
+            }
+        }
+
         requiredWarnings = NormalizeWarningCodes(requiredWarnings).ToList();
         var currentRevisionAcknowledgements = warningAcknowledgements
             .Where(x => x.DraftRevision == election.CurrentDraftRevision)
@@ -4261,14 +4280,16 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 requiredWarnings,
                 ceremonySnapshot,
                 protocolPackageValidation,
-                sp06Summary)
+                sp06Summary,
+                sp07Summary)
             : ElectionOpenValidationResult.NotReady(
                 errors,
                 requiredWarnings,
                 missingWarnings,
                 ceremonySnapshot,
                 protocolPackageValidation,
-                sp06Summary);
+                sp06Summary,
+                sp07Summary);
     }
 
     private static bool IsSp06HighAssuranceClaimed(ElectionRecord election) =>
@@ -4276,6 +4297,88 @@ public class ElectionLifecycleService : IElectionLifecycleService
             election.ControlDomainProfileId,
             ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
             StringComparison.Ordinal);
+
+    private static bool IsSp07HighAssuranceClaimed(ElectionRecord election) =>
+        !election.SelectedProfileDevOnly &&
+        (string.Equals(election.SelectedProfileId, ElectionSelectableProfileCatalog.TrusteeProductionProfileId, StringComparison.Ordinal) ||
+         string.Equals(election.SelectedProfileId, ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId, StringComparison.Ordinal) ||
+         string.Equals(election.ControlDomainProfileId, ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1, StringComparison.Ordinal));
+
+    private static ElectionSp07OpenReadinessSummary BuildSp07OpenReadinessSummary(
+        ElectionRecord election,
+        IReadOnlyList<ElectionRosterEntryRecord> rosterEntries)
+    {
+        var intendedAcceptedBallotCount = rosterEntries.Count(x => x.IsActive);
+        var ciphertextSlotCount = election.Options.Count;
+        var blockers = new List<ElectionSp07OpenReadinessBlocker>();
+        var plannedChunkCount = 0;
+
+        if (intendedAcceptedBallotCount > ElectionSp07ProfileIds.HighAssuranceV1MaxAcceptedBallots)
+        {
+            blockers.Add(new ElectionSp07OpenReadinessBlocker(
+                VerificationResultCodes.PublicationProofEnvelopeExceeded,
+                $"SP-07 high-assurance v1 supports up to {ElectionSp07ProfileIds.HighAssuranceV1MaxAcceptedBallots} accepted ballots.",
+                BlocksOpen: true,
+                BlocksFinalization: true));
+        }
+
+        if (ciphertextSlotCount > ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots)
+        {
+            blockers.Add(new ElectionSp07OpenReadinessBlocker(
+                VerificationResultCodes.PublicationProofEnvelopeExceeded,
+                $"SP-07 high-assurance v1 supports up to {ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots} encrypted ballot slots.",
+                BlocksOpen: true,
+                BlocksFinalization: true));
+        }
+
+        if (intendedAcceptedBallotCount > 0 &&
+            intendedAcceptedBallotCount <= ElectionSp07ProfileIds.HighAssuranceV1MaxAcceptedBallots &&
+            ciphertextSlotCount <= ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots)
+        {
+            try
+            {
+                plannedChunkCount = CreateSp07OpenReadinessChunkPlan(
+                    intendedAcceptedBallotCount,
+                    ciphertextSlotCount).Chunks.Count;
+            }
+            catch (Sp07PublicationProofException ex)
+            {
+                blockers.Add(new ElectionSp07OpenReadinessBlocker(
+                    VerificationResultCodes.PublicationProofEnvelopeExceeded,
+                    ex.Message,
+                    BlocksOpen: true,
+                    BlocksFinalization: true));
+            }
+        }
+
+        return new ElectionSp07OpenReadinessSummary(
+            EvidenceExpected: true,
+            PublicationProofMode: ElectionSp07ProfileIds.PublicationProofMode,
+            ProofConstruction: ElectionSp07ProfileIds.ProofConstruction,
+            StatementId: ElectionSp07ProfileIds.StatementId,
+            ExternalReviewStatus: ElectionSp07ProfileIds.ExternalReviewStatus,
+            IntendedAcceptedBallotCount: intendedAcceptedBallotCount,
+            CiphertextSlotCount: ciphertextSlotCount,
+            PlannedChunkCount: plannedChunkCount,
+            ReadinessBlockers: blockers);
+    }
+
+    private static Sp07PublicationChunkPlan CreateSp07OpenReadinessChunkPlan(
+        int acceptedBallotCount,
+        int ciphertextSlotCount)
+    {
+        var options = new Sp07PublicationChunkPlannerOptions(
+            MaxBallotsPerChunk: Math.Max(
+                1,
+                (int)Math.Ceiling(
+                    (double)ElectionSp07ProfileIds.HighAssuranceV1MaxAcceptedBallots /
+                    ElectionSp07ProfileIds.HighAssuranceV1MaxPublicationChunks)),
+            MinBallotsPerChunk: 2,
+            MaxChunks: ElectionSp07ProfileIds.HighAssuranceV1MaxPublicationChunks,
+            MaxEncryptedSlots: ElectionSp07ProfileIds.HighAssuranceV1MaxEncryptedSlots);
+
+        return new Sp07PublicationChunkPlanner(options).CreatePlan(acceptedBallotCount, ciphertextSlotCount);
+    }
 
     private static void AddActorMultiplicityReadinessErrors(
         ElectionRecord election,
@@ -5916,6 +6019,43 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var publishedHash = ComputePublishedBallotStreamHash(publishedBallots);
+        if (ElectionSp07PublicationProofGate.IsEvidenceExpected(election) && acceptedBallots.Count > 0)
+        {
+            var proofSessionResult = await TryRunMissingSp07PublicationProofSessionAsync(
+                repository,
+                election,
+                completedAt);
+            if (!proofSessionResult.IsSuccess)
+            {
+                return proofSessionResult;
+            }
+
+            await _publicationWitnessDeletionService.TryDeleteVerifiedWitnessesAsync(
+                repository,
+                election.ElectionId,
+                completedAt);
+        }
+
+        var sp07Gate = ElectionSp07PublicationProofGate.EvaluateTallyReady(
+            election,
+            acceptedBallots,
+            publishedBallots,
+            await repository.GetPublicationProofSessionsAsync(election.ElectionId),
+            await repository.GetPublicationProofTranscriptsAsync(election.ElectionId),
+            await repository.GetPublicationWitnessDeletionReceiptsAsync(election.ElectionId));
+        if (!sp07Gate.IsSatisfied)
+        {
+            await repository.SaveElectionAsync(election with
+            {
+                LastUpdatedAt = completedAt,
+                ClosedProgressStatus = sp07Gate.ProgressStatus,
+            });
+
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                sp07Gate.FailureMessage ?? "SP-07 publication-proof evidence blocks close-counting completion.");
+        }
+
         var aggregateReleaseAttempt = TryResolveAggregateReleaseForSession(
             publishedBallots.Select(x => x.EncryptedBallotPackage).ToArray(),
             releaseSharesResolution.ReleaseShares!,
@@ -6171,6 +6311,69 @@ public class ElectionLifecycleService : IElectionLifecycleService
             finalizationSession: completedSession,
             finalizationShare: finalizationShare,
             finalizationReleaseEvidence: releaseEvidence);
+    }
+
+    private async Task<ElectionCommandResult> TryRunMissingSp07PublicationProofSessionAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        DateTime startedAt)
+    {
+        if (_publicationProofSessionRunner is null)
+        {
+            return ElectionCommandResult.Success(election);
+        }
+
+        var latestSession = (await repository.GetPublicationProofSessionsAsync(election.ElectionId))
+            .OrderByDescending(x => x.CompletedAt ?? x.StartedAt)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+        if (latestSession is not null &&
+            latestSession.Status is not ElectionPublicationProofSessionStatus.Failed)
+        {
+            return ElectionCommandResult.Success(election);
+        }
+
+        var protocolPackageBinding = await repository.GetSealedProtocolPackageBindingAsync(election.ElectionId);
+        if (protocolPackageBinding is null)
+        {
+            await repository.SaveElectionAsync(election with
+            {
+                LastUpdatedAt = startedAt,
+                ClosedProgressStatus = ElectionClosedProgressStatus.PublicationProofPending,
+            });
+
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "SP-07 publication-proof session requires the sealed Protocol Omega package binding.");
+        }
+
+        await repository.SaveElectionAsync(election with
+        {
+            LastUpdatedAt = startedAt,
+            ClosedProgressStatus = ElectionClosedProgressStatus.PublicationProofGenerating,
+        });
+
+        var runResult = await _publicationProofSessionRunner.RunAsync(
+            new ElectionSp07PublicationProofSessionRunnerRequest(
+                repository,
+                election,
+                protocolPackageBinding,
+                VerificationProfileIds.HighAssuranceV1,
+                startedAt));
+        if (runResult.IsSuccessful)
+        {
+            return ElectionCommandResult.Success(election);
+        }
+
+        await repository.SaveElectionAsync(election with
+        {
+            LastUpdatedAt = startedAt,
+            ClosedProgressStatus = ElectionClosedProgressStatus.PublicationProofFailed,
+        });
+
+        return ElectionCommandResult.Failure(
+            ElectionCommandErrorCode.DependencyBlocked,
+            runResult.FailureReason ?? "SP-07 publication-proof session failed before tally_ready.");
     }
 
     private AggregateReleaseAttemptResolution TryResolveAggregateReleaseForSession(

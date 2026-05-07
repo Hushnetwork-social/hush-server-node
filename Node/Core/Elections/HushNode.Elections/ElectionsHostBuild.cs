@@ -4,6 +4,7 @@ using HushNode.Identity.Storage;
 using HushNode.Elections.Storage;
 using HushNode.Indexing.Interfaces;
 using HushShared.Blockchain.TransactionModel;
+using HushShared.Elections.PublicationProof;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -25,6 +26,12 @@ public static class ElectionsHostBuild
             services.AddSingleton(CreateEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreateAdminOnlyProtectedTallyEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreateCloseCountingExecutorEnvelopeOptions(hostContext.Configuration));
+            services.AddSingleton(CreatePublicationWitnessEnvelopeOptions(hostContext.Configuration));
+            services.AddSingleton(CreateSp07PublicationProofChunkCoordinatorOptions(hostContext.Configuration));
+            services.AddSingleton(_ => Sp07RustWorkerProcessOptions.FromEnvironment(
+                defaultWorkingDirectory: AppContext.BaseDirectory));
+            services.AddSingleton<ISp07RustWorkerClient, Sp07RustWorkerProcessClient>();
+            services.AddSingleton<Sp07PublicationProofChunkCoordinator>();
             services.AddSingleton<IBootstrapper, ElectionCeremonyProfileRegistryBootstrapper>();
             services.AddSingleton<IBootstrapper, ProtocolPackageCatalogBootstrapper>();
             services.AddSingleton<IBootstrapper, ElectionBallotPublicationBootstrapper>();
@@ -92,6 +99,13 @@ public static class ElectionsHostBuild
             AdminOnlyProtectedTallyEnvelopeCryptoFactory.Create(
                 sp.GetRequiredService<AdminOnlyProtectedTallyEnvelopeCryptoOptions>()));
         services.AddSingleton<ICloseCountingExecutorKeyRegistry, InMemoryCloseCountingExecutorKeyRegistry>();
+        services.AddSingleton<IElectionPublicationWitnessEnvelopeCrypto>(sp =>
+            ElectionPublicationWitnessEnvelopeCryptoFactory.Create(
+                sp.GetRequiredService<ElectionPublicationWitnessEnvelopeCryptoOptions>()));
+        services.AddSingleton<IElectionSp07ProductionProofInputBuilder, ElectionSp07ProductionProofInputBuilder>();
+        services.AddSingleton<IElectionSp07PublicationProofManifestBuilder, ElectionSp07PublicationProofManifestBuilder>();
+        services.AddSingleton<IElectionSp07PublicationProofSessionRunner, ElectionSp07PublicationProofSessionRunner>();
+        services.AddSingleton<IElectionPublicationWitnessDeletionService, ElectionPublicationWitnessDeletionService>();
         services.AddSingleton<ElectionBallotPublicationService>();
         services.AddSingleton<IElectionBallotPublicationService>(sp => sp.GetRequiredService<ElectionBallotPublicationService>());
         services.AddSingleton<IElectionLifecycleService>(sp =>
@@ -107,7 +121,9 @@ public static class ElectionsHostBuild
                 sp.GetRequiredService<ICloseCountingExecutorKeyRegistry>(),
                 sp.GetRequiredService<ICloseCountingExecutorEnvelopeCrypto>(),
                 sp.GetRequiredService<IAdminOnlyProtectedTallyEnvelopeCrypto>(),
-                sensitiveStorageMaintenance: sp.GetService<IElectionSensitiveStorageMaintenance>()));
+                sensitiveStorageMaintenance: sp.GetService<IElectionSensitiveStorageMaintenance>(),
+                publicationWitnessDeletionService: sp.GetRequiredService<IElectionPublicationWitnessDeletionService>(),
+                publicationProofSessionRunner: sp.GetRequiredService<IElectionSp07PublicationProofSessionRunner>()));
         services.AddHostedService<TallyExecutorBackgroundService>();
     }
 
@@ -200,6 +216,53 @@ public static class ElectionsHostBuild
                 configuration,
                 "Elections:CloseCountingExecutorEnvelope:AwsKmsServiceIdentityLabel",
                 "HUSH_ELECTIONS_CLOSE_COUNTING_EXECUTOR_KMS_SERVICE_IDENTITY"));
+
+    private static ElectionPublicationWitnessEnvelopeCryptoOptions CreatePublicationWitnessEnvelopeOptions(
+        IConfiguration configuration) =>
+        new(
+            Provider: GetConfigValue(
+                configuration,
+                "Elections:PublicationWitnessEnvelope:Provider",
+                "HUSH_ELECTIONS_PUBLICATION_WITNESS_ENVELOPE_PROVIDER")
+                ?? ElectionPublicationWitnessEnvelopeCryptoOptions.ProviderAuto,
+            AwsKmsKeyId: GetConfigValue(
+                configuration,
+                "Elections:PublicationWitnessEnvelope:AwsKmsKeyId",
+                "HUSH_ELECTIONS_PUBLICATION_WITNESS_KMS_KEY_ID"),
+            AwsKmsRegion: GetConfigValue(
+                configuration,
+                "Elections:PublicationWitnessEnvelope:AwsKmsRegion",
+                "HUSH_ELECTIONS_PUBLICATION_WITNESS_KMS_REGION"),
+            AwsKmsServiceUrl: GetConfigValue(
+                configuration,
+                "Elections:PublicationWitnessEnvelope:AwsKmsServiceUrl",
+                "HUSH_ELECTIONS_PUBLICATION_WITNESS_KMS_SERVICE_URL"),
+            AwsKmsServiceIdentityLabel: GetConfigValue(
+                configuration,
+                "Elections:PublicationWitnessEnvelope:AwsKmsServiceIdentityLabel",
+                "HUSH_ELECTIONS_PUBLICATION_WITNESS_KMS_SERVICE_IDENTITY"));
+
+    private static Sp07PublicationProofChunkCoordinatorOptions CreateSp07PublicationProofChunkCoordinatorOptions(
+        IConfiguration configuration)
+    {
+        var defaultWorkRoot = Path.Combine(AppContext.BaseDirectory, "ProofWork", "sp07");
+        var maxParallelWorkers = configuration.GetValue(
+            "Elections:Sp07PublicationProof:MaxParallelWorkers",
+            defaultValue: 1);
+        if (maxParallelWorkers < 1)
+        {
+            maxParallelWorkers = 1;
+        }
+
+        return new Sp07PublicationProofChunkCoordinatorOptions(
+            WorkRoot: configuration.GetValue(
+                "Elections:Sp07PublicationProof:WorkRoot",
+                defaultValue: defaultWorkRoot)!,
+            MaxParallelWorkers: maxParallelWorkers,
+            VerifyAfterProve: configuration.GetValue(
+                "Elections:Sp07PublicationProof:VerifyAfterProve",
+                defaultValue: true));
+    }
 
     private static string? GetConfigValue(
         IConfiguration configuration,

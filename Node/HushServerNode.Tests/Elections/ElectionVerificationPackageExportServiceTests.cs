@@ -703,7 +703,7 @@ public class ElectionVerificationPackageExportServiceTests
             VerificationCanonicalHash.ToLowerHex(
                 VerificationCanonicalHash.ComputePublishedBallotStreamHash(request.PublishedBallots)),
             TranscriptHash: "sp07-transcript-hash",
-            ProofHash: "sp07-proof-hash",
+            ProofHash: HashHex("synthetic-proof-bytes"),
             ServerVerifierOutputHash: "sp07-server-verifier-output-hash",
             DeletionReceiptId: null);
 

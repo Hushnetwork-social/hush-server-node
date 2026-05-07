@@ -1,6 +1,12 @@
+using System.Security.Cryptography;
+using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentAssertions;
 using HushNode.Elections;
+using HushShared.Elections.Model;
+using HushShared.Elections.PublicationProof;
 using HushShared.Elections.Verification.Model;
 using Xunit;
 
@@ -8,6 +14,13 @@ namespace HushServerNode.Tests.Elections;
 
 public class HushVotingPackageVerifierTests
 {
+    private static readonly JsonSerializerOptions RustWorkerJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
     [Fact]
     public async Task Verify_ValidDevelopmentPackage_ShouldWriteDeterministicOutputAndExitSuccessfully()
     {
@@ -43,6 +56,254 @@ public class HushVotingPackageVerifierTests
         result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Fail);
         result.Output.Results.Should().Contain(x =>
             x.ResultCode == VerificationResultCodes.PublicationProofEvidencePending &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_HighAssurancePackageWithSp07Evidence_ShouldPassStructuralSp07AndWarnExternalReview()
+    {
+        using var package = CreateHighAssuranceTrusteePackageWithSp07Evidence();
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.HighAssuranceV1));
+
+        result.ExitCode.Should().Be(0);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "VFY-SP07-000" &&
+            x.ResultCode == VerificationResultCodes.PublicationProofEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        result.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.PublicationProofExternalReviewPending &&
+            x.Status == VerificationCheckStatus.Warn);
+    }
+
+    [Fact]
+    public async Task Verify_HighAssurancePackageWithCanonicalSp07Evidence_ShouldInvokePublicProofVerifier()
+    {
+        using var package = CreateHighAssuranceTrusteePackageWithSp07Evidence(
+            includeCanonicalProofVerifierInput: true);
+        var publicProofVerifier = new FakeSp07PackagePublicProofVerifier(passed: true);
+
+        var result = await new HushVotingPackageVerifier(publicProofVerifier).VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.HighAssuranceV1));
+
+        result.ExitCode.Should().Be(0);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        publicProofVerifier.Requests.Should().HaveCount(1);
+        publicProofVerifier.Requests[0].CanonicalProofBytesHex.Should().NotBeNullOrWhiteSpace();
+        publicProofVerifier.Requests[0].AcceptedBallotSetHash.Should().Be(
+            await ReadPackageAcceptedBallotSetHashAsync(package.PackagePath));
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "VFY-SP07-070" &&
+            x.ResultCode == VerificationResultCodes.PublicationProofEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
+    }
+
+    [Fact]
+    public async Task Verify_HighAssurancePackageWithManifestSp07Evidence_ShouldInvokePublicProofVerifierForEveryChunk()
+    {
+        using var package = CreateHighAssuranceTrusteePackageWithSp07Evidence(
+            includeManifestProofVerifierInput: true);
+        var publicProofVerifier = new FakeSp07PackagePublicProofVerifier(passed: true);
+
+        var result = await new HushVotingPackageVerifier(publicProofVerifier).VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.HighAssuranceV1));
+
+        result.ExitCode.Should().Be(0);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        publicProofVerifier.Requests.Should().HaveCount(2);
+        publicProofVerifier.Requests.Select(x => x.ChunkId).Should().Equal("chunk-0001", "chunk-0002");
+        publicProofVerifier.Requests.Select(x => x.AcceptedBallotSetHash).Should().AllBe(
+            await ReadPackageAcceptedBallotSetHashAsync(package.PackagePath));
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "VFY-SP07-070" &&
+            x.ResultCode == VerificationResultCodes.PublicationProofEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass &&
+            x.Evidence.GetValueOrDefault("verified_chunk_count") == "2");
+    }
+
+    [Fact]
+    public async Task Verify_HighAssurancePackageWithManifestSp07Evidence_WhenChunkStatementHashDiffersFromPackageStatement_ShouldFail()
+    {
+        using var package = CreateHighAssuranceTrusteePackageWithSp07Evidence(
+            includeManifestProofVerifierInput: true);
+        var transcriptPath = ResolvePackagePath(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp07PublicationProofTranscript);
+        var transcript = JsonSerializer.Deserialize<ElectionSp07PublicationProofTranscriptArtifactRecord>(
+            await File.ReadAllTextAsync(transcriptPath),
+            VerificationJson.Options)!;
+        var manifest = JsonSerializer.Deserialize<ElectionSp07PublicationProofManifestArtifactRecord>(
+            transcript.ProofBytes,
+            VerificationJson.Options)!;
+        var tamperedManifest = manifest with
+        {
+            Chunks =
+            [
+                manifest.Chunks[0] with { StatementHashSha512 = new string('f', 128) },
+                manifest.Chunks[1],
+            ],
+        };
+        await File.WriteAllTextAsync(
+            transcriptPath,
+            JsonSerializer.Serialize(
+                transcript with
+                {
+                    ProofBytes = JsonSerializer.Serialize(tamperedManifest, VerificationJson.Options),
+                    ProofHash = HashHex(JsonSerializer.Serialize(tamperedManifest, VerificationJson.Options)),
+                },
+                VerificationJson.Options));
+
+        var result = await new HushVotingPackageVerifier(new FakeSp07PackagePublicProofVerifier(passed: true))
+            .VerifyAsync(new(package.PackagePath, VerificationProfileIds.HighAssuranceV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Fail);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "VFY-SP07-073" &&
+            x.ResultCode == VerificationResultCodes.PublicationProofTranscriptHashMismatch &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Theory]
+    [InlineData("insert")]
+    [InlineData("remove")]
+    [InlineData("duplicate")]
+    [InlineData("replace")]
+    public async Task Verify_HighAssurancePackageWithManifestSp07Evidence_WhenPublishedStreamIsTampered_ShouldFailAtSp07Boundary(
+        string tamperKind)
+    {
+        using var package = CreateHighAssuranceTrusteePackageWithSp07Evidence(
+            includeManifestProofVerifierInput: true);
+        await TamperPublishedStreamAndRefreshPackageAsync(package.PackagePath, tamperKind);
+
+        var result = await new HushVotingPackageVerifier(new FakeSp07PackagePublicProofVerifier(passed: true))
+            .VerifyAsync(new(package.PackagePath, VerificationProfileIds.HighAssuranceV1));
+
+        result.ExitCode.Should().Be(1, tamperKind);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Fail, tamperKind);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "VFY-SP07-073" &&
+            x.ResultCode == VerificationResultCodes.PublicationProofTranscriptHashMismatch &&
+            x.Status == VerificationCheckStatus.Fail,
+            tamperKind);
+    }
+
+    [Theory]
+    [InlineData("insert")]
+    [InlineData("remove")]
+    [InlineData("duplicate")]
+    [InlineData("replace")]
+    public async Task Verify_HighAssurancePackageWithRealManifestSp07Evidence_WhenPublishedStreamIsTampered_ShouldFailAtSp07Boundary(
+        string tamperKind)
+    {
+        var workerPath = ResolveAvailableWorkerPath();
+        if (string.IsNullOrWhiteSpace(workerPath))
+        {
+            return;
+        }
+
+        using var package = await CreateHighAssuranceTrusteePackageWithRealSp07ManifestEvidenceAsync(workerPath);
+        await TamperPublishedStreamAndRefreshPackageAsync(package.PackagePath, tamperKind);
+
+        var result = await new HushVotingPackageVerifier(new WorkerBackedSp07PackagePublicProofVerifier(workerPath))
+            .VerifyAsync(new(package.PackagePath, VerificationProfileIds.HighAssuranceV1));
+
+        result.ExitCode.Should().Be(1, tamperKind);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Fail, tamperKind);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "VFY-SP07-073" &&
+            x.ResultCode == VerificationResultCodes.PublicationProofTranscriptHashMismatch &&
+            x.Status == VerificationCheckStatus.Fail,
+            tamperKind);
+    }
+
+    [Fact]
+    public async Task Verify_HighAssurancePackageWithRealManifestSp07Evidence_ShouldInvokeRustVerifierAndPassSp07()
+    {
+        var workerPath = ResolveAvailableWorkerPath();
+        if (string.IsNullOrWhiteSpace(workerPath))
+        {
+            return;
+        }
+
+        using var package = await CreateHighAssuranceTrusteePackageWithRealSp07ManifestEvidenceAsync(workerPath);
+        var publicProofVerifier = new WorkerBackedSp07PackagePublicProofVerifier(workerPath);
+
+        var result = await new HushVotingPackageVerifier(publicProofVerifier)
+            .VerifyAsync(new(package.PackagePath, VerificationProfileIds.HighAssuranceV1));
+
+        result.ExitCode.Should().Be(0);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        publicProofVerifier.Requests.Should().HaveCount(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "VFY-SP07-070" &&
+            x.ResultCode == VerificationResultCodes.PublicationProofEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
+    }
+
+    [Fact]
+    public async Task Verify_HighAssurancePackageWithCanonicalSp07Evidence_WhenPublicProofVerifierRejects_ShouldFail()
+    {
+        using var package = CreateHighAssuranceTrusteePackageWithSp07Evidence(
+            includeCanonicalProofVerifierInput: true);
+        var publicProofVerifier = new FakeSp07PackagePublicProofVerifier(passed: false);
+
+        var result = await new HushVotingPackageVerifier(publicProofVerifier).VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.HighAssuranceV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Fail);
+        publicProofVerifier.Requests.Should().HaveCount(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "VFY-SP07-071" &&
+            x.ResultCode == VerificationResultCodes.PublicationProofVerificationFailed &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_HighAssurancePackageWithSp07AcceptedSetMismatch_ShouldFail()
+    {
+        using var package = CreateHighAssuranceTrusteePackageWithSp07Evidence();
+        var transcriptPath = ResolvePackagePath(package.PackagePath, VerificationPackageFileNames.Sp07PublicationProofTranscript);
+        var transcript = JsonSerializer.Deserialize<ElectionSp07PublicationProofTranscriptArtifactRecord>(
+            await File.ReadAllTextAsync(transcriptPath),
+            VerificationJson.Options)!;
+        await File.WriteAllTextAsync(
+            transcriptPath,
+            JsonSerializer.Serialize(
+                transcript with { AcceptedBallotSetHash = new string('0', 64) },
+                VerificationJson.Options));
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.HighAssuranceV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Fail);
+        result.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.PublicationProofAcceptedSetMismatch &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_HighAssurancePackageWithSp07TranscriptButNoDeletionReceipt_ShouldFail()
+    {
+        using var package = CreateHighAssuranceTrusteePackageWithSp07Evidence(includeDeletionReceipt: false);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.HighAssuranceV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Fail);
+        result.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.PublicationProofWitnessDeletionMissing &&
             x.Status == VerificationCheckStatus.Fail);
     }
 
@@ -188,6 +449,1015 @@ public class HushVotingPackageVerifierTests
             ElectionVerificationPackageExportServiceTests.CreateHighAssuranceTrusteeRequest());
         ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
         return directory;
+    }
+
+    private static TemporaryPackageDirectory CreateHighAssuranceTrusteePackageWithSp07Evidence(
+        bool includeDeletionReceipt = true,
+        bool includeCanonicalProofVerifierInput = false,
+        bool includeManifestProofVerifierInput = false)
+    {
+        var directory = new TemporaryPackageDirectory();
+        var request = ElectionVerificationPackageExportServiceTests.CreateHighAssuranceTrusteeRequest();
+        var witnessSetId = Guid.NewGuid();
+        var proofBytes = "synthetic-proof-bytes";
+        var canonicalProofBytes = Encoding.UTF8.GetBytes("canonical-sp07-proof-fixture");
+        var canonicalProofBytesHex = Convert.ToHexString(canonicalProofBytes).ToLowerInvariant();
+        var canonicalProofHashSha512 = Convert.ToHexString(SHA512.HashData(canonicalProofBytes)).ToLowerInvariant();
+        var statementHashSha512 = new string('b', 128);
+        var fiatShamirTranscriptHashSha512 = new string('c', 128);
+        if (includeManifestProofVerifierInput)
+        {
+            request = WithSp07PublicCiphertextPackages(request);
+            var acceptedHash = VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputeAcceptedBallotInventoryHash(request.AcceptedBallots));
+            var publishedHash = VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputePublishedBallotStreamHash(request.PublishedBallots));
+            var manifest = new ElectionSp07PublicationProofManifestArtifactRecord(
+                ElectionSp07PublicationProofManifestArtifactRecord.SchemaVersion,
+                request.Election.ElectionId.ToString(),
+                ProofSessionId: "manifest-session",
+                PlanId: "sp07-plan-test",
+                ElectionSp07ProfileIds.PublicationProofMode,
+                ElectionSp07ProfileIds.ProofConstruction,
+                ElectionSp07ProfileIds.StatementId,
+                VerificationProfileIds.HighAssuranceV1,
+                acceptedHash,
+                publishedHash,
+                request.AcceptedBallots.Count,
+                request.PublishedBallots.Count,
+                request.Election.Options.Count,
+                ChunkCount: 2,
+                CompletedChunkCount: 2,
+                FailedChunkCount: 0,
+                SlowestChunkMilliseconds: 8.5,
+                [
+                    CreateManifestChunk(request, "chunk-0001", 0, 0, 1, "manifest-proof-1", acceptedHash, publishedHash),
+                    CreateManifestChunk(request, "chunk-0002", 1, 1, 1, "manifest-proof-2", acceptedHash, publishedHash),
+                ],
+                PublicPrivacyBoundary:
+                [
+                    "no_hidden_permutation",
+                    "no_shuffle_map",
+                    "no_rerandomization_randomness",
+                    "no_raw_witness",
+                ]);
+            proofBytes = JsonSerializer.Serialize(manifest, VerificationJson.Options);
+        }
+
+        var proofHash = HashHex(proofBytes);
+        var session = new ElectionPublicationProofSessionRecord(
+            Guid.NewGuid(),
+            request.Election.ElectionId,
+            witnessSetId,
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            includeDeletionReceipt
+                ? ElectionPublicationProofSessionStatus.WitnessDeleted
+                : ElectionPublicationProofSessionStatus.Verified,
+            DateTime.UnixEpoch.AddHours(3),
+            DateTime.UnixEpoch.AddHours(3).AddMinutes(2),
+            request.AcceptedBallots.Count,
+            request.PublishedBallots.Count,
+            ChunkCount: 1,
+            RetryCount: 0,
+            FailureCode: null,
+            FailureReason: null,
+            VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputeAcceptedBallotInventoryHash(request.AcceptedBallots)),
+            VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputePublishedBallotStreamHash(request.PublishedBallots)),
+            TranscriptHash: "sp07-transcript-hash",
+            ProofHash: proofHash,
+            ServerVerifierOutputHash: "sp07-server-verifier-output-hash",
+            DeletionReceiptId: null);
+        var transcript = new ElectionPublicationProofTranscriptRecord(
+            Guid.NewGuid(),
+            request.Election.ElectionId,
+            session.Id,
+            session.WitnessSetId,
+            ElectionSp07ProfileIds.TranscriptVersion,
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            VerificationProfileIds.HighAssuranceV1,
+            VerificationCanonicalHash.ToLowerHex(request.Election.BallotDefinitionHash),
+            BallotEncryptionSchemeVersion: "babyjubjub-elgamal-vector-ballot-v1",
+            ElectionPublicKeyId: "election-public-key-id",
+            session.AcceptedBallotSetHash!,
+            session.PublishedBallotStreamHash!,
+            request.AcceptedBallots.Count,
+            request.PublishedBallots.Count,
+            CiphertextSlotCount: request.Election.Options.Count,
+            ElectionSp07ProfileIds.ProofSystemVersion,
+            proofBytes,
+            proofHash,
+            session.TranscriptHash!,
+            ElectionSp07ProfileIds.ExternalReviewStatus,
+            DateTime.UnixEpoch.AddHours(3).AddMinutes(1),
+            GeneratorReleaseHash: "generator-release-hash",
+            VerifierReleaseHash: "verifier-release-hash",
+            PublicPrivacyBoundary:
+            [
+                "no_hidden_permutation",
+                "no_shuffle_map",
+                "no_rerandomization_randomness",
+                "no_raw_witness",
+            ],
+            StatementHashSha512: includeCanonicalProofVerifierInput ? statementHashSha512 : null,
+            FiatShamirTranscriptHashSha512: includeCanonicalProofVerifierInput ? fiatShamirTranscriptHashSha512 : null,
+            CanonicalProofBytesHex: includeCanonicalProofVerifierInput ? canonicalProofBytesHex : null,
+            CanonicalProofHashSha512: includeCanonicalProofVerifierInput ? canonicalProofHashSha512 : null,
+            CanonicalProofByteLength: includeCanonicalProofVerifierInput ? canonicalProofBytes.Length : null);
+        var receipts = includeDeletionReceipt
+            ? new[]
+            {
+                new ElectionPublicationWitnessDeletionReceiptRecord(
+                    Guid.NewGuid(),
+                    request.Election.ElectionId,
+                    session.Id,
+                    session.WitnessSetId,
+                    WitnessSetHash: "witness-set-hash",
+                    WitnessCount: request.AcceptedBallots.Count,
+                    transcript.TranscriptHash,
+                    transcript.ProofHash,
+                    ElectionPublicationWitnessDeletionStatus.Completed,
+                    DateTime.UnixEpoch.AddHours(3).AddMinutes(3),
+                    DeletionActorRef: "proof-worker",
+                    FailureCode: null,
+                    FailureReason: null),
+            }
+            : [];
+        request = request with
+        {
+            PublicationProofSessions = [session],
+            PublicationProofTranscripts = [transcript],
+            PublicationWitnessDeletionReceipts = receipts,
+        };
+
+        var export = new ElectionVerificationPackageExportService().Export(request);
+        ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
+        return directory;
+    }
+
+    private static async Task<TemporaryPackageDirectory> CreateHighAssuranceTrusteePackageWithRealSp07ManifestEvidenceAsync(
+        string workerPath)
+    {
+        var directory = new TemporaryPackageDirectory();
+        try
+        {
+            var request = ElectionVerificationPackageExportServiceTests.CreateHighAssuranceTrusteeRequest();
+            var fixture = await GenerateRustProductionFixtureAsync(
+                workerPath,
+                directory.PackagePath,
+                request.PublishedBallots.Count,
+                request.Election.Options.Count);
+            request = WithSp07ProductionFixturePackages(request, fixture.ProductionProofInput);
+            var acceptedHash = VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputeAcceptedBallotInventoryHash(request.AcceptedBallots));
+            var publishedHash = VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputePublishedBallotStreamHash(request.PublishedBallots));
+            var proofSessionId = "real-manifest-session";
+            var chunkId = "chunk-0001";
+            var proof = await GenerateRustWorkerProofAsync(
+                workerPath,
+                request,
+                proofSessionId,
+                chunkId,
+                acceptedHash,
+                publishedHash,
+                fixture.ProductionProofInput);
+            var manifest = new ElectionSp07PublicationProofManifestArtifactRecord(
+                ElectionSp07PublicationProofManifestArtifactRecord.SchemaVersion,
+                request.Election.ElectionId.ToString(),
+                proofSessionId,
+                PlanId: "sp07-plan-real-test",
+                ElectionSp07ProfileIds.PublicationProofMode,
+                ElectionSp07ProfileIds.ProofConstruction,
+                ElectionSp07ProfileIds.StatementId,
+                VerificationProfileIds.HighAssuranceV1,
+                acceptedHash,
+                publishedHash,
+                request.AcceptedBallots.Count,
+                request.PublishedBallots.Count,
+                request.Election.Options.Count,
+                ChunkCount: 1,
+                CompletedChunkCount: 1,
+                FailedChunkCount: 0,
+                SlowestChunkMilliseconds: proof.ElapsedMilliseconds,
+                [
+                    CreateManifestChunkFromWorkerProof(request, chunkId, proof, publishedHash),
+                ],
+                PublicPrivacyBoundary:
+                [
+                    "no_hidden_permutation",
+                    "no_shuffle_map",
+                    "no_rerandomization_randomness",
+                    "no_raw_witness",
+                ]);
+            DeleteRustWorkerProofTemp(proof);
+            var proofBytes = JsonSerializer.Serialize(manifest, VerificationJson.Options);
+            var proofHash = HashHex(proofBytes);
+            var witnessSetId = Guid.NewGuid();
+            var session = new ElectionPublicationProofSessionRecord(
+                Guid.NewGuid(),
+                request.Election.ElectionId,
+                witnessSetId,
+                ElectionSp07ProfileIds.PublicationProofMode,
+                ElectionSp07ProfileIds.ProofConstruction,
+                ElectionSp07ProfileIds.StatementId,
+                ElectionPublicationProofSessionStatus.WitnessDeleted,
+                DateTime.UnixEpoch.AddHours(3),
+                DateTime.UnixEpoch.AddHours(3).AddMinutes(2),
+                request.AcceptedBallots.Count,
+                request.PublishedBallots.Count,
+                ChunkCount: 1,
+                RetryCount: 0,
+                FailureCode: null,
+                FailureReason: null,
+                acceptedHash,
+                publishedHash,
+                TranscriptHash: "sp07-transcript-hash",
+                ProofHash: proofHash,
+                ServerVerifierOutputHash: "sp07-server-verifier-output-hash",
+                DeletionReceiptId: null);
+            var transcript = new ElectionPublicationProofTranscriptRecord(
+                Guid.NewGuid(),
+                request.Election.ElectionId,
+                session.Id,
+                session.WitnessSetId,
+                ElectionSp07ProfileIds.TranscriptVersion,
+                ElectionSp07ProfileIds.PublicationProofMode,
+                ElectionSp07ProfileIds.ProofConstruction,
+                ElectionSp07ProfileIds.StatementId,
+                VerificationProfileIds.HighAssuranceV1,
+                VerificationCanonicalHash.ToLowerHex(request.Election.BallotDefinitionHash),
+                BallotEncryptionSchemeVersion: "babyjubjub-elgamal-vector-ballot-v1",
+                ElectionPublicKeyId: "election-public-key-id",
+                acceptedHash,
+                publishedHash,
+                request.AcceptedBallots.Count,
+                request.PublishedBallots.Count,
+                CiphertextSlotCount: request.Election.Options.Count,
+                ElectionSp07ProfileIds.ProofSystemVersion,
+                proofBytes,
+                proofHash,
+                session.TranscriptHash!,
+                ElectionSp07ProfileIds.ExternalReviewStatus,
+                DateTime.UnixEpoch.AddHours(3).AddMinutes(1),
+                GeneratorReleaseHash: "generator-release-hash",
+                VerifierReleaseHash: "verifier-release-hash",
+                PublicPrivacyBoundary:
+                [
+                    "no_hidden_permutation",
+                    "no_shuffle_map",
+                    "no_rerandomization_randomness",
+                    "no_raw_witness",
+                ]);
+            var receipt = new ElectionPublicationWitnessDeletionReceiptRecord(
+                Guid.NewGuid(),
+                request.Election.ElectionId,
+                session.Id,
+                session.WitnessSetId,
+                WitnessSetHash: "witness-set-hash",
+                WitnessCount: request.AcceptedBallots.Count,
+                transcript.TranscriptHash,
+                transcript.ProofHash,
+                ElectionPublicationWitnessDeletionStatus.Completed,
+                DateTime.UnixEpoch.AddHours(3).AddMinutes(3),
+                DeletionActorRef: "proof-worker",
+                FailureCode: null,
+                FailureReason: null);
+            request = request with
+            {
+                PublicationProofSessions = [session],
+                PublicationProofTranscripts = [transcript],
+                PublicationWitnessDeletionReceipts = [receipt],
+            };
+
+            var export = new ElectionVerificationPackageExportService().Export(request);
+            ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
+            return directory;
+        }
+        catch
+        {
+            directory.Dispose();
+            throw;
+        }
+    }
+
+    private static string ResolvePackagePath(string packagePath, string relativePath) =>
+        Path.Combine(packagePath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+
+    private static string HashHex(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+
+    private static async Task<string> ReadPackageAcceptedBallotSetHashAsync(string packagePath)
+    {
+        var accepted = JsonSerializer.Deserialize<AcceptedBallotSetArtifactRecord>(
+            await File.ReadAllTextAsync(ResolvePackagePath(packagePath, VerificationPackageFileNames.AcceptedBallotSet)),
+            VerificationJson.Options)!;
+        return accepted.AcceptedBallotInventoryHash;
+    }
+
+    private static async Task TamperPublishedStreamAndRefreshPackageAsync(string packagePath, string tamperKind)
+    {
+        var published = await ReadPackageArtifactAsync<PublishedBallotStreamArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.PublishedBallotStream);
+        var transcript = await ReadPackageArtifactAsync<ElectionSp07PublicationProofTranscriptArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp07PublicationProofTranscript);
+        var ballots = published.PublishedBallots.ToList();
+        var publicKey = ReadSp07PackagePublicKey(ballots[0].EncryptedBallotPackage);
+        switch (tamperKind)
+        {
+            case "insert":
+                ballots.Insert(1, ballots[0] with
+                {
+                    PublicationSequence = 2,
+                    EncryptedBallotPackage = CreateSp07CiphertextPackage(
+                        999,
+                        transcript.CiphertextSlotCount,
+                        publicKey),
+                });
+                break;
+
+            case "remove":
+                ballots.RemoveAt(1);
+                break;
+
+            case "duplicate":
+                ballots[1] = ballots[0] with
+                {
+                    PublicationSequence = ballots[1].PublicationSequence,
+                };
+                break;
+
+            case "replace":
+                ballots[1] = ballots[1] with
+                {
+                    EncryptedBallotPackage = CreateSp07CiphertextPackage(
+                        998,
+                        transcript.CiphertextSlotCount,
+                        publicKey),
+                };
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(tamperKind), tamperKind, "Unsupported tamper kind.");
+        }
+
+        var normalized = ballots
+            .Select((ballot, index) => ballot with
+            {
+                PublicationSequence = index + 1,
+                EncryptedBallotPackageHash = VerificationCanonicalHash.ComputeSha256UpperHex(ballot.EncryptedBallotPackage),
+                ProofBundleHash = VerificationCanonicalHash.ComputeSha256UpperHex(ballot.ProofBundle),
+            })
+            .ToArray();
+        var republished = published with
+        {
+            PublishedBallotCount = normalized.Length,
+            PublishedBallots = normalized,
+            PublishedBallotStreamHash = ComputePublishedArtifactHash(published.ElectionId, normalized),
+        };
+        await WritePackageArtifactAsync(packagePath, VerificationPackageFileNames.PublishedBallotStream, republished);
+
+        var manifest = JsonSerializer.Deserialize<ElectionSp07PublicationProofManifestArtifactRecord>(
+            transcript.ProofBytes,
+            VerificationJson.Options)!;
+        var remappedManifest = manifest with
+        {
+            ChunkCount = 1,
+            CompletedChunkCount = 1,
+            PublishedBallotCount = normalized.Length,
+            PublishedBallotStreamHash = republished.PublishedBallotStreamHash,
+            Chunks =
+            [
+                manifest.Chunks[0] with
+                {
+                    Count = normalized.Length,
+                    PublishedBallotStreamHash = republished.PublishedBallotStreamHash,
+                },
+            ],
+        };
+        var manifestBytes = JsonSerializer.Serialize(remappedManifest, VerificationJson.Options);
+        var proofHash = HashHex(manifestBytes);
+        var updatedTranscript = transcript with
+        {
+            PublishedBallotCount = normalized.Length,
+            PublishedBallotStreamHash = republished.PublishedBallotStreamHash,
+            ProofBytes = manifestBytes,
+            ProofHash = proofHash,
+            TranscriptHash = ComputeTamperedTranscriptHash(transcript, proofHash),
+        };
+        await WritePackageArtifactAsync(
+            packagePath,
+            VerificationPackageFileNames.Sp07PublicationProofTranscript,
+            updatedTranscript);
+
+        var tallyReplay = await ReadPackageArtifactAsync<TallyReplayArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.TallyReplay);
+        await WritePackageArtifactAsync(
+            packagePath,
+            VerificationPackageFileNames.TallyReplay,
+            tallyReplay with
+            {
+                PublishedBallotStreamHash = republished.PublishedBallotStreamHash,
+                PublicationProofTranscriptHash = updatedTranscript.TranscriptHash,
+                PublicationProofHash = updatedTranscript.ProofHash,
+            });
+
+        var deletionReceipt = await ReadPackageArtifactAsync<ElectionSp07WitnessDeletionReceiptArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp07WitnessDeletionReceipt);
+        await WritePackageArtifactAsync(
+            packagePath,
+            VerificationPackageFileNames.Sp07WitnessDeletionReceipt,
+            deletionReceipt with
+            {
+                WitnessCount = updatedTranscript.AcceptedBallotCount,
+                TranscriptHash = updatedTranscript.TranscriptHash,
+                ProofHash = updatedTranscript.ProofHash,
+            });
+
+        await RefreshAuditManifestAsync(packagePath);
+    }
+
+    private static string ComputePublishedArtifactHash(
+        string electionId,
+        IReadOnlyList<PublishedBallotArtifactRecord> ballots)
+    {
+        var records = ballots
+            .Select(x => new ElectionPublishedBallotRecord(
+                Guid.NewGuid(),
+                new ElectionId(Guid.Parse(electionId)),
+                x.PublicationSequence,
+                x.EncryptedBallotPackage,
+                x.ProofBundle,
+                DateTime.UnixEpoch,
+                SourceBlockHeight: null,
+                SourceBlockId: null))
+            .ToArray();
+
+        return VerificationCanonicalHash.ToLowerHex(VerificationCanonicalHash.ComputePublishedBallotStreamHash(records));
+    }
+
+    private static string ComputeTamperedTranscriptHash(
+        ElectionSp07PublicationProofTranscriptArtifactRecord transcript,
+        string proofHash) =>
+        VerificationCanonicalHash.ComputeSha256LowerHex(string.Join(
+            '\n',
+            "HUSH_SP07_PUBLICATION_PROOF_TRANSCRIPT_V1",
+            transcript.ElectionId,
+            "unknown-package-proof-session",
+            "unknown-witness-set",
+            transcript.ProfileId,
+            transcript.BallotDefinitionHash,
+            transcript.AcceptedBallotSetHash,
+            transcript.PublishedBallotStreamHash,
+            proofHash));
+
+    private static async Task<T> ReadPackageArtifactAsync<T>(string packagePath, string relativePath) =>
+        JsonSerializer.Deserialize<T>(
+            await File.ReadAllTextAsync(ResolvePackagePath(packagePath, relativePath)),
+            VerificationJson.Options)!;
+
+    private static async Task WritePackageArtifactAsync<T>(string packagePath, string relativePath, T value) =>
+        await File.WriteAllTextAsync(
+            ResolvePackagePath(packagePath, relativePath),
+            JsonSerializer.Serialize(value, VerificationJson.Options));
+
+    private static async Task RefreshAuditManifestAsync(string packagePath)
+    {
+        var manifest = await ReadPackageArtifactAsync<AuditPackageManifestRecord>(
+            packagePath,
+            VerificationPackageFileNames.AuditPackageManifest);
+        var entries = new List<AuditPackageManifestEntryRecord>();
+        foreach (var entry in manifest.Entries)
+        {
+            var bytes = await File.ReadAllBytesAsync(ResolvePackagePath(packagePath, entry.Path));
+            entries.Add(entry with
+            {
+                Sha256Hash = VerificationCanonicalHash.ComputeManifestFileSha256(bytes),
+                SizeBytes = bytes.Length,
+            });
+        }
+
+        await WritePackageArtifactAsync(
+            packagePath,
+            VerificationPackageFileNames.AuditPackageManifest,
+            manifest with { Entries = entries });
+    }
+
+    private static ElectionSp07PublicationProofManifestChunkArtifactRecord CreateManifestChunk(
+        ElectionVerificationPackageExportRequest request,
+        string chunkId,
+        int chunkIndex,
+        int offset,
+        int count,
+        string proofText,
+        string acceptedBallotSetHash,
+        string publishedBallotStreamHash)
+    {
+        var proofBytes = Encoding.UTF8.GetBytes(proofText);
+        var publicKey = new Sp07PackagePublicPoint("111", "222");
+        var statementHash = Sp07PackagePublicStatementHasher.ComputeStatementHashSha512(
+            new Sp07PackagePublicStatementHashInput(
+                request.Election.ElectionId.ToString(),
+                chunkId,
+                request.ProtocolPackageBinding!.ReleaseManifestHash,
+                VerificationCanonicalHash.ToLowerHex(request.Election.BallotDefinitionHash),
+                publicKey,
+                count,
+                request.Election.Options.Count,
+                acceptedBallotSetHash,
+                publishedBallotStreamHash));
+        return new ElectionSp07PublicationProofManifestChunkArtifactRecord(
+            chunkId,
+            chunkIndex,
+            offset,
+            count,
+            Passed: true,
+            "PUB-005",
+            "matrix_m_1_publication_proof_v1",
+            "rust_arkworks_m1_process_worker",
+            "0.1.0",
+            WorkerThreadCount: 2,
+            StatementHashSha512: statementHash,
+            FiatShamirTranscriptHashSha512: new string((char)('c' + chunkIndex), 128),
+            CanonicalProofHashSha512: Convert.ToHexString(SHA512.HashData(proofBytes)).ToLowerInvariant(),
+            CanonicalProofByteLength: proofBytes.Length,
+            CanonicalProofBytesHex: Convert.ToHexString(proofBytes).ToLowerInvariant(),
+            publishedBallotStreamHash,
+            ElapsedMilliseconds: 4.5 + chunkIndex);
+    }
+
+    private static ElectionSp07PublicationProofManifestChunkArtifactRecord CreateManifestChunkFromWorkerProof(
+        ElectionVerificationPackageExportRequest request,
+        string chunkId,
+        TestRustWorkerProofResult proof,
+        string publishedBallotStreamHash) =>
+        new(
+            chunkId,
+            ChunkIndex: 0,
+            Offset: 0,
+            Count: request.PublishedBallots.Count,
+            Passed: proof.Passed,
+            proof.ResultCode,
+            proof.ProofProfileId,
+            proof.WorkerKind,
+            proof.WorkerVersion,
+            proof.WorkerThreadCount,
+            proof.StatementHashSha512,
+            proof.TranscriptHashSha512,
+            proof.ProofHashSha512,
+            proof.CanonicalProofByteLength,
+            proof.CanonicalProofBytesHex!,
+            publishedBallotStreamHash,
+            proof.ElapsedMilliseconds);
+
+    private static ElectionVerificationPackageExportRequest WithSp07PublicCiphertextPackages(
+        ElectionVerificationPackageExportRequest request,
+        Sp07PackagePublicPoint? publicKey = null)
+    {
+        var accepted = request.AcceptedBallots
+            .Select((ballot, index) => ballot with
+            {
+                EncryptedBallotPackage = CreateSp07CiphertextPackage(
+                    index + 1,
+                    request.Election.Options.Count,
+                    publicKey),
+            })
+            .ToArray();
+        var published = request.PublishedBallots
+            .Select((ballot, index) => ballot with
+            {
+                EncryptedBallotPackage = CreateSp07CiphertextPackage(
+                    index + 101,
+                    request.Election.Options.Count,
+                    publicKey),
+            })
+            .ToArray();
+
+        return request with
+        {
+            AcceptedBallots = accepted,
+            PublishedBallots = published,
+        };
+    }
+
+    private static ElectionVerificationPackageExportRequest WithSp07ProductionFixturePackages(
+        ElectionVerificationPackageExportRequest request,
+        Sp07RustWorkerProductionProofInput fixture)
+    {
+        var accepted = request.AcceptedBallots
+            .Select((ballot, index) => ballot with
+            {
+                EncryptedBallotPackage = CreateSp07CiphertextPackage(
+                    fixture.PublicKey,
+                    fixture.AcceptedBallots[index]),
+            })
+            .ToArray();
+        var published = request.PublishedBallots
+            .Select((ballot, index) => ballot with
+            {
+                EncryptedBallotPackage = CreateSp07CiphertextPackage(
+                    fixture.PublicKey,
+                    fixture.PublishedBallots[index]),
+            })
+            .ToArray();
+
+        return request with
+        {
+            AcceptedBallots = accepted,
+            PublishedBallots = published,
+        };
+    }
+
+    private static string CreateSp07CiphertextPackage(
+        int seed,
+        int selectionCount,
+        Sp07PackagePublicPoint? publicKey = null)
+    {
+        var points = Enumerable.Range(0, selectionCount)
+            .Select(index => new
+            {
+                x = (seed * 1000 + index * 10 + 1).ToString(),
+                y = (seed * 1000 + index * 10 + 2).ToString(),
+            })
+            .ToArray();
+        var points2 = Enumerable.Range(0, selectionCount)
+            .Select(index => new
+            {
+                x = (seed * 1000 + index * 10 + 3).ToString(),
+                y = (seed * 1000 + index * 10 + 4).ToString(),
+            })
+            .ToArray();
+
+        return JsonSerializer.Serialize(
+            new
+            {
+                version = "babyjubjub-elgamal-vector-ballot-v1",
+                publicKey = new { x = publicKey?.X ?? "111", y = publicKey?.Y ?? "222" },
+                selectionCount,
+                ciphertext = new
+                {
+                    c1 = points,
+                    c2 = points2,
+                },
+            },
+            VerificationJson.Options);
+    }
+
+    private static string CreateSp07CiphertextPackage(
+        Sp07PointPayload publicKey,
+        Sp07CipherBallotPayload ballot) =>
+        JsonSerializer.Serialize(
+            new
+            {
+                version = "babyjubjub-elgamal-vector-ballot-v1",
+                publicKey = new { x = publicKey.X, y = publicKey.Y },
+                selectionCount = ballot.Slots.Count,
+                ciphertext = new
+                {
+                    c1 = ballot.Slots.Select(slot => new { x = slot.C1.X, y = slot.C1.Y }).ToArray(),
+                    c2 = ballot.Slots.Select(slot => new { x = slot.C2.X, y = slot.C2.Y }).ToArray(),
+                },
+            },
+            VerificationJson.Options);
+
+    private static Sp07PackagePublicPoint ReadSp07PackagePublicKey(string encryptedBallotPackage)
+    {
+        using var document = JsonDocument.Parse(encryptedBallotPackage);
+        var publicKey = document.RootElement.GetProperty("publicKey");
+        return new Sp07PackagePublicPoint(
+            publicKey.GetProperty("x").GetString()!,
+            publicKey.GetProperty("y").GetString()!);
+    }
+
+    private static async Task<RustProductionFixture> GenerateRustProductionFixtureAsync(
+        string workerPath,
+        string temp,
+        int ballots,
+        int slots)
+    {
+        var output = Path.Combine(temp, "sp07-production-fixture.json");
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = workerPath,
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+            }
+        };
+        process.StartInfo.ArgumentList.Add("fixture");
+        process.StartInfo.ArgumentList.Add("--ballots");
+        process.StartInfo.ArgumentList.Add(ballots.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        process.StartInfo.ArgumentList.Add("--slots");
+        process.StartInfo.ArgumentList.Add(slots.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        process.StartInfo.ArgumentList.Add("--output");
+        process.StartInfo.ArgumentList.Add(output);
+
+        process.Start();
+        var stdout = await process.StandardOutput.ReadToEndAsync();
+        var stderr = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        process.ExitCode.Should().Be(0, $"Rust fixture command failed. stdout: {stdout}; stderr: {stderr}");
+        var fixture = JsonSerializer.Deserialize<RustProductionFixture>(
+            await File.ReadAllTextAsync(output),
+            RustWorkerJsonOptions);
+        fixture.Should().NotBeNull();
+        fixture!.Schema.Should().Be("HushSp07ProductionProofInputFixtureV1");
+        fixture.Ballots.Should().Be(ballots);
+        fixture.Slots.Should().Be(slots);
+        return fixture;
+    }
+
+    private static async Task<Sp07PackagePublicPoint> GenerateRustWorkerPublicKeyAsync(string workerPath)
+    {
+        var proof = await GenerateRustWorkerProofAsync(
+            workerPath,
+            ElectionVerificationPackageExportServiceTests.CreateHighAssuranceTrusteeRequest(),
+            proofSessionId: "bootstrap-session",
+            chunkId: "chunk-bootstrap",
+            acceptedBallotSetHash: "bootstrap-accepted-hash",
+            publishedBallotStreamHash: "bootstrap-published-hash");
+        using var document = JsonDocument.Parse(
+            await File.ReadAllTextAsync(proof.ProofExampleResultPath!));
+        var publicKey = document.RootElement
+            .GetProperty("proof_example")
+            .GetProperty("statement")
+            .GetProperty("public_key");
+        var result = new Sp07PackagePublicPoint(
+            publicKey.GetProperty("x").GetString()!,
+            publicKey.GetProperty("y").GetString()!);
+        DeleteRustWorkerProofTemp(proof);
+        return result;
+    }
+
+    private static async Task<TestRustWorkerProofResult> GenerateRustWorkerProofAsync(
+        string workerPath,
+        ElectionVerificationPackageExportRequest request,
+        string proofSessionId,
+        string chunkId,
+        string acceptedBallotSetHash,
+        string publishedBallotStreamHash,
+        Sp07RustWorkerProductionProofInput? productionProofInput = null)
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "hush-sp07-package-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temp);
+        var job = new Sp07RustWorkerProofJob(
+            request.Election.ElectionId.ToString(),
+            proofSessionId,
+            chunkId,
+            request.PublishedBallots.Count,
+            request.Election.Options.Count,
+            WorkDirectory: Path.Combine(temp, "work"),
+            RequestPath: Path.Combine(temp, "work", "proof-request.json"),
+            ResultPath: Path.Combine(temp, "work", "proof-result.json"),
+            IncludeTamperVectors: true,
+            IncludeLegacyPhaseArtifacts: false,
+            ProtocolPackageHash: request.ProtocolPackageBinding!.ReleaseManifestHash,
+            BallotDefinitionHash: VerificationCanonicalHash.ToLowerHex(request.Election.BallotDefinitionHash),
+            AcceptedBallotSetHash: acceptedBallotSetHash,
+            PublishedBallotStreamHash: publishedBallotStreamHash,
+            ProductionProofInput: productionProofInput);
+        var client = new Sp07RustWorkerProcessClient(new Sp07RustWorkerProcessOptions(
+            workerPath,
+            TimeSpan.FromSeconds(60),
+            WorkingDirectory: temp,
+            Threads: 2));
+        var proof = await client.ProveAsync(job);
+        return new TestRustWorkerProofResult(proof, job.ResultPath);
+    }
+
+    private static void DeleteRustWorkerProofTemp(TestRustWorkerProofResult proof)
+    {
+        if (string.IsNullOrWhiteSpace(proof.ProofExampleResultPath))
+        {
+            return;
+        }
+
+        var workDirectory = Directory.GetParent(proof.ProofExampleResultPath);
+        var tempDirectory = workDirectory?.Parent;
+        if (tempDirectory is not null && Directory.Exists(tempDirectory.FullName))
+        {
+            Directory.Delete(tempDirectory.FullName, recursive: true);
+        }
+    }
+
+    private static string? ResolveAvailableWorkerPath()
+    {
+        var configured = Environment.GetEnvironmentVariable(
+            Sp07RustWorkerProcessOptions.WorkerPathEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured.Trim();
+        }
+
+        var repositoryRoot = FindRepositoryRoot();
+        if (repositoryRoot is null)
+        {
+            return null;
+        }
+
+        var localDebugWorker = Path.Combine(
+            repositoryRoot,
+            "Tools",
+            "HushSp07RustWorker",
+            "target",
+            "debug",
+            OperatingSystem.IsWindows()
+                ? "hush-sp07-rust-worker.exe"
+                : "hush-sp07-rust-worker");
+        return File.Exists(localDebugWorker) ? localDebugWorker : null;
+    }
+
+    private static string? FindRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "Tools", "HushSp07RustWorker", "Cargo.toml")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        return null;
+    }
+
+    private sealed record RustProductionFixture(
+        string Schema,
+        int Ballots,
+        int Slots,
+        Sp07RustWorkerProductionProofInput ProductionProofInput);
+
+    private sealed record TestRustWorkerProofResult(
+        string Schema,
+        string WorkerKind,
+        string Command,
+        string Status,
+        bool Passed,
+        string ResultCode,
+        string Message,
+        string ElectionId,
+        string ProofSessionId,
+        string ChunkId,
+        string ProofProfileId,
+        string WorkerVersion,
+        int WorkerThreadCount,
+        string StatementHashSha512,
+        string TranscriptHashSha512,
+        string ProofHashSha512,
+        string AcceptedBallotSetHash,
+        string PublishedBallotStreamHash,
+        int CanonicalProofByteLength,
+        string? CanonicalProofBytesHex,
+        string ProofExampleHashSha512,
+        double ElapsedMilliseconds,
+        Sp07RustWorkerTelemetry? Telemetry,
+        string? ProofExampleResultPath)
+    {
+        public TestRustWorkerProofResult(Sp07RustWorkerCommandResult result, string proofExampleResultPath)
+            : this(
+                result.Schema,
+                result.WorkerKind,
+                result.Command,
+                result.Status,
+                result.Passed,
+                result.ResultCode,
+                result.Message,
+                result.ElectionId,
+                result.ProofSessionId,
+                result.ChunkId,
+                result.ProofProfileId,
+                result.WorkerVersion,
+                result.WorkerThreadCount,
+                result.StatementHashSha512,
+                result.TranscriptHashSha512,
+                result.ProofHashSha512,
+                result.AcceptedBallotSetHash,
+                result.PublishedBallotStreamHash,
+                result.CanonicalProofByteLength,
+                result.CanonicalProofBytesHex,
+                result.ProofExampleHashSha512,
+                result.ElapsedMilliseconds,
+                result.Telemetry,
+                proofExampleResultPath)
+        {
+        }
+    }
+
+    private sealed class WorkerBackedSp07PackagePublicProofVerifier(string workerPath) : ISp07PackagePublicProofVerifier
+    {
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            WriteIndented = true,
+        };
+
+        public List<Sp07PackagePublicProofVerificationRequest> Requests { get; } = [];
+
+        public async Task<Sp07PackagePublicProofVerificationResult> VerifyAsync(
+            Sp07PackagePublicProofVerificationRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            var temp = Path.Combine(
+                Path.GetTempPath(),
+                "hush-sp07-package-public-verifier-tests",
+                Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(temp);
+                var inputPath = Path.Combine(temp, "verify-input.json");
+                var outputPath = Path.Combine(temp, "verify-output.json");
+                await File.WriteAllTextAsync(
+                    inputPath,
+                    JsonSerializer.Serialize(BuildWorkerVerifyInput(request), JsonOptions),
+                    cancellationToken);
+                var client = new Sp07RustWorkerProcessClient(new Sp07RustWorkerProcessOptions(
+                    workerPath,
+                    TimeSpan.FromSeconds(60),
+                    WorkingDirectory: temp,
+                    Threads: 2));
+                var result = await client.VerifyAsync(
+                    new Sp07RustWorkerVerifyJob(
+                        request.ElectionId,
+                        request.ProofSessionId,
+                        request.ChunkId,
+                        inputPath,
+                        outputPath),
+                    cancellationToken);
+
+                return new Sp07PackagePublicProofVerificationResult(
+                    result.Passed,
+                    result.ResultCode,
+                    result.Message,
+                    new Dictionary<string, string>
+                    {
+                        ["worker_kind"] = result.WorkerKind,
+                        ["worker_version"] = result.WorkerVersion,
+                        ["statement_hash_sha512"] = result.StatementHashSha512,
+                        ["proof_hash_sha512"] = result.ProofHashSha512,
+                    });
+            }
+            finally
+            {
+                if (Directory.Exists(temp))
+                {
+                    Directory.Delete(temp, recursive: true);
+                }
+            }
+        }
+
+        private static object BuildWorkerVerifyInput(Sp07PackagePublicProofVerificationRequest request) =>
+            new
+            {
+                Passed = true,
+                ResultCode = "PUB-005",
+                ElectionId = request.ElectionId,
+                ProofSessionId = request.ProofSessionId,
+                ChunkId = request.ChunkId,
+                ProofProfileId = "matrix_m_1_publication_proof_v1",
+                StatementHashSha512 = request.StatementHashSha512,
+                TranscriptHashSha512 = request.FiatShamirTranscriptHashSha512,
+                ProofHashSha512 = request.CanonicalProofHashSha512,
+                PublishedBallotStreamHash = request.PublishedBallotStreamHash,
+                AcceptedBallotSetHash = request.AcceptedBallotSetHash,
+                CanonicalProofByteLength = request.CanonicalProofByteLength,
+                CanonicalProofBytesHex = request.CanonicalProofBytesHex,
+            };
+    }
+
+    private sealed class FakeSp07PackagePublicProofVerifier(bool passed) : ISp07PackagePublicProofVerifier
+    {
+        public List<Sp07PackagePublicProofVerificationRequest> Requests { get; } = [];
+
+        public Task<Sp07PackagePublicProofVerificationResult> VerifyAsync(
+            Sp07PackagePublicProofVerificationRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            return Task.FromResult(new Sp07PackagePublicProofVerificationResult(
+                passed,
+                passed ? "PUB-005" : "PUB-015",
+                passed
+                    ? "fake public verifier accepted canonical proof bytes"
+                    : "fake public verifier rejected canonical proof bytes",
+                new Dictionary<string, string>
+                {
+                    ["test_public_verifier"] = "fake",
+                }));
+        }
     }
 
     private sealed class TemporaryPackageDirectory : IDisposable

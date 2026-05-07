@@ -147,7 +147,12 @@ public sealed partial class ElectionVerificationPackageExportService
             transcript.GeneratedAt,
             transcript.GeneratorReleaseHash,
             transcript.VerifierReleaseHash,
-            transcript.PublicPrivacyBoundary);
+            transcript.PublicPrivacyBoundary,
+            transcript.StatementHashSha512,
+            transcript.FiatShamirTranscriptHashSha512,
+            transcript.CanonicalProofBytesHex,
+            transcript.CanonicalProofHashSha512,
+            transcript.CanonicalProofByteLength);
 
     private static ElectionSp07VerifierOutputArtifactRecord BuildSp07VerifierOutput(
         ElectionVerificationPackageExportRequest request,

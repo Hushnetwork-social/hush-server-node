@@ -14,6 +14,14 @@ public record HushVotingPackageVerificationResult(
 
 public sealed partial class HushVotingPackageVerifier
 {
+    private readonly ISp07PackagePublicProofVerifier _sp07PublicProofVerifier;
+
+    public HushVotingPackageVerifier(
+        ISp07PackagePublicProofVerifier? sp07PublicProofVerifier = null)
+    {
+        _sp07PublicProofVerifier = sp07PublicProofVerifier ?? new EnvironmentSp07RustPackagePublicProofVerifier();
+    }
+
     public async Task<HushVotingPackageVerificationResult> VerifyAsync(
         HushVotingPackageVerificationRequest request,
         CancellationToken cancellationToken = default)
@@ -108,7 +116,12 @@ public sealed partial class HushVotingPackageVerifier
                 request.VerifierProfileId,
                 cancellationToken));
             results.AddRange(await CheckPrivacyBoundaryAsync(request.PackagePath, manifest, cancellationToken));
-            results.Add(await CheckFuturePublicationProofAsync(request.PackagePath, request.VerifierProfileId, cancellationToken));
+            results.AddRange(await CheckSp07PublicationProofEvidenceAsync(
+                request.PackagePath,
+                request.VerifierProfileId,
+                electionRecord,
+                _sp07PublicProofVerifier,
+                cancellationToken));
 
             var overall = CalculateOverallStatus(results);
             var output = CreateOutput(

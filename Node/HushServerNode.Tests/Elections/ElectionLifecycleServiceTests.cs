@@ -11,6 +11,8 @@ using HushNode.Identity.Storage;
 using HushNode.Reactions.Crypto;
 using HushShared.Blockchain.BlockModel;
 using HushShared.Elections.Model;
+using HushShared.Elections.PublicationProof;
+using HushShared.Elections.Verification.Model;
 using HushShared.Identity.Model;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -2337,6 +2339,60 @@ public class ElectionLifecycleServiceTests
         result.Sp06Summary.Should().NotBeNull();
         result.Sp06Summary!.CompleteEvidenceCount.Should().Be(5);
         result.Sp06Summary.MissingEvidenceCount.Should().Be(0);
+        result.Sp07Summary.Should().NotBeNull();
+        result.Sp07Summary!.PublicationProofMode.Should().Be(ElectionSp07ProfileIds.PublicationProofMode);
+        result.Sp07Summary.IntendedAcceptedBallotCount.Should().Be(1);
+        result.Sp07Summary.CiphertextSlotCount.Should().Be(election.Options.Count);
+        result.Sp07Summary.PlannedChunkCount.Should().Be(1);
+        result.Sp07Summary.ReadinessBlockers.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithHighAssuranceProfileAndSp07EnvelopeExceeded_ReturnsSp07Blocker()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateHighAssuranceTrusteeElection();
+        var invitations = CreateHighAssuranceTrusteeInvitations(election);
+        var profile = RegisterCeremonyProfile(
+            store,
+            ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+            trusteeCount: 5,
+            requiredApprovalCount: 3);
+        RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            invitations,
+            completedTrustees: invitations.Select(x => x.TrusteeUserAddress).ToArray(),
+            ready: true);
+
+        store.Elections[election.ElectionId] = election;
+        foreach (var invitation in invitations)
+        {
+            store.TrusteeInvitations[invitation.Id] = invitation;
+        }
+
+        SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(
+            store,
+            Enumerable.Range(1, ElectionSp07ProfileIds.HighAssuranceV1MaxAcceptedBallots + 1)
+                .Select(x => CreateRosterEntry(election, x.ToString("D4")))
+                .ToArray());
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            election.ElectionId,
+            RequiredWarningCodes: []));
+
+        result.IsReadyToOpen.Should().BeFalse();
+        result.Sp07Summary.Should().NotBeNull();
+        result.Sp07Summary!.IntendedAcceptedBallotCount.Should().Be(
+            ElectionSp07ProfileIds.HighAssuranceV1MaxAcceptedBallots + 1);
+        result.Sp07Summary.ReadinessBlockers.Should().ContainSingle(x =>
+            x.Code == VerificationResultCodes.PublicationProofEnvelopeExceeded &&
+            x.BlocksOpen);
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains(VerificationResultCodes.PublicationProofEnvelopeExceeded, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -3445,6 +3501,304 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task ExecuteCloseCountingJobAsync_WhenHighAssuranceSp07EvidenceMissing_BlocksTallyReady()
+    {
+        var store = new ElectionStore();
+        var closeCountingExecutorKeyRegistry = new InMemoryCloseCountingExecutorKeyRegistry();
+        var scenario = RequireSp07Evidence(
+            store,
+            SeedClosedTrusteeElectionForCloseCountingSession(
+                store,
+                requiredApprovalCount: 1,
+                closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry));
+        var service = CreateService(
+            store,
+            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
+
+        var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            sourceTransactionId: Guid.NewGuid(),
+            sourceBlockHeight: 71,
+            sourceBlockId: Guid.NewGuid()));
+
+        submitResult.IsSuccess.Should().BeTrue();
+
+        var executeResult = await service.ExecuteCloseCountingJobAsync(new ExecuteElectionCloseCountingJobRequest(
+            scenario.CloseCountingJob.Id,
+            LeaseHolderId: "tally-executor:test-node"));
+
+        executeResult.IsSuccess.Should().BeFalse();
+        executeResult.ErrorCode.Should().Be(ElectionCommandErrorCode.DependencyBlocked);
+        executeResult.ErrorMessage.Should().Contain("SP-07 publication-proof session");
+        store.Elections[scenario.Election.ElectionId].TallyReadyAt.Should().BeNull();
+        store.Elections[scenario.Election.ElectionId].ClosedProgressStatus.Should()
+            .Be(ElectionClosedProgressStatus.PublicationProofPending);
+        store.CloseCountingJobs[scenario.CloseCountingJob.Id].Status.Should().Be(ElectionCloseCountingJobStatus.Failed);
+        store.BoundaryArtifacts.Should().NotContain(x =>
+            x.ElectionId == scenario.Election.ElectionId &&
+            x.ArtifactType == ElectionBoundaryArtifactType.TallyReady);
+    }
+
+    [Fact]
+    public async Task ExecuteCloseCountingJobAsync_WhenHighAssuranceSp07RunnerAvailable_GeneratesEvidenceBeforeTallyReady()
+    {
+        var store = new ElectionStore();
+        var closeCountingExecutorKeyRegistry = new InMemoryCloseCountingExecutorKeyRegistry();
+        var scenario = RequireSp07Evidence(
+            store,
+            SeedClosedTrusteeElectionForCloseCountingSession(
+                store,
+                requiredApprovalCount: 1,
+                closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry));
+        SeedSealedProtocolPackageBinding(store, scenario.Election);
+        var proofSessionRunner = new FakeSp07PublicationProofSessionRunner(store, scenario);
+        var service = CreateService(
+            store,
+            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry,
+            publicationWitnessDeletionService: new FakePublicationWitnessDeletionService(store),
+            publicationProofSessionRunner: proofSessionRunner);
+
+        var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            sourceTransactionId: Guid.NewGuid(),
+            sourceBlockHeight: 71,
+            sourceBlockId: Guid.NewGuid()));
+
+        submitResult.IsSuccess.Should().BeTrue();
+
+        var executeResult = await service.ExecuteCloseCountingJobAsync(new ExecuteElectionCloseCountingJobRequest(
+            scenario.CloseCountingJob.Id,
+            LeaseHolderId: "tally-executor:test-node"));
+
+        executeResult.IsSuccess.Should().BeTrue();
+        proofSessionRunner.RunCount.Should().Be(1);
+        proofSessionRunner.LastProtocolPackageBinding.Should().NotBeNull();
+        store.PublicationProofSessions.Should().ContainSingle(x =>
+            x.ElectionId == scenario.Election.ElectionId &&
+            x.Status == ElectionPublicationProofSessionStatus.WitnessDeleted);
+        store.PublicationProofTranscripts.Should().ContainSingle(x => x.ElectionId == scenario.Election.ElectionId);
+        store.PublicationWitnessDeletionReceipts.Should().ContainSingle(x => x.ElectionId == scenario.Election.ElectionId);
+        store.Elections[scenario.Election.ElectionId].TallyReadyAt.Should().NotBeNull();
+        store.CloseCountingJobs[scenario.CloseCountingJob.Id].Status.Should().Be(ElectionCloseCountingJobStatus.Completed);
+    }
+
+    [Theory]
+    [Trait("Category", "FEAT-117")]
+    [InlineData("dkg-dev-1of1", false)]
+    [InlineData("dkg-prod-3of5", true)]
+    public async Task ExecuteCloseCountingJobAsync_Feat117TrusteeProfileMatrix_UsesExpectedSp07Path(
+        string expectedProfileId,
+        bool expectsSp07)
+    {
+        var store = new ElectionStore();
+        var closeCountingExecutorKeyRegistry = new InMemoryCloseCountingExecutorKeyRegistry();
+        var scenario = SeedClosedTrusteeElectionForCloseCountingSession(
+            store,
+            requiredApprovalCount: 1,
+            bindingStatus: expectsSp07 ? ElectionBindingStatus.Binding : ElectionBindingStatus.NonBinding,
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
+
+        if (expectsSp07)
+        {
+            scenario = RequireSp07Evidence(store, scenario);
+            SeedSealedProtocolPackageBinding(store, scenario.Election);
+        }
+        else
+        {
+            scenario = RewriteTrusteeCloseCountingScenarioToDevModePublishedBallots(store, scenario);
+        }
+
+        scenario.Election.SelectedProfileId.Should().Be(expectedProfileId);
+        scenario.Election.SelectedProfileDevOnly.Should().Be(!expectsSp07);
+
+        var proofSessionRunner = new FakeSp07PublicationProofSessionRunner(store, scenario);
+        var service = CreateService(
+            store,
+            electionResultCryptoService: expectsSp07
+                ? new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash)
+                : new DevModeFallbackElectionResultCryptoService(),
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry,
+            publicationWitnessDeletionService: new FakePublicationWitnessDeletionService(store),
+            publicationProofSessionRunner: proofSessionRunner);
+
+        var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            sourceTransactionId: Guid.NewGuid(),
+            sourceBlockHeight: 71,
+            sourceBlockId: Guid.NewGuid()));
+
+        submitResult.IsSuccess.Should().BeTrue();
+
+        var executeResult = await service.ExecuteCloseCountingJobAsync(new ExecuteElectionCloseCountingJobRequest(
+            scenario.CloseCountingJob.Id,
+            LeaseHolderId: "tally-executor:test-node"));
+
+        executeResult.IsSuccess.Should().BeTrue(executeResult.ErrorMessage);
+        executeResult.BoundaryArtifact.Should().NotBeNull();
+        executeResult.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
+        store.Elections[scenario.Election.ElectionId].TallyReadyAt.Should().NotBeNull();
+        store.BoundaryArtifacts.Should().Contain(x =>
+            x.ElectionId == scenario.Election.ElectionId &&
+            x.ArtifactType == ElectionBoundaryArtifactType.TallyReady);
+        store.ResultArtifacts.Should().ContainSingle(x =>
+            x.ElectionId == scenario.Election.ElectionId &&
+            x.ArtifactKind == ElectionResultArtifactKind.Unofficial);
+        store.CloseCountingJobs[scenario.CloseCountingJob.Id].Status.Should().Be(ElectionCloseCountingJobStatus.Completed);
+        proofSessionRunner.RunCount.Should().Be(expectsSp07 ? 1 : 0);
+        store.PublicationProofSessions.Should().HaveCount(expectsSp07 ? 1 : 0);
+        store.PublicationProofTranscripts.Should().HaveCount(expectsSp07 ? 1 : 0);
+        store.PublicationWitnessDeletionReceipts.Should().HaveCount(expectsSp07 ? 1 : 0);
+    }
+
+    [Fact]
+    public async Task ExecuteCloseCountingJobAsync_WhenHighAssuranceSp07SessionFailed_BlocksTallyReady()
+    {
+        var store = new ElectionStore();
+        var closeCountingExecutorKeyRegistry = new InMemoryCloseCountingExecutorKeyRegistry();
+        var scenario = RequireSp07Evidence(
+            store,
+            SeedClosedTrusteeElectionForCloseCountingSession(
+                store,
+                requiredApprovalCount: 1,
+                closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry));
+        AddFailedSp07Evidence(store, scenario);
+        var service = CreateService(
+            store,
+            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
+
+        var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            sourceTransactionId: Guid.NewGuid(),
+            sourceBlockHeight: 71,
+            sourceBlockId: Guid.NewGuid()));
+
+        submitResult.IsSuccess.Should().BeTrue();
+
+        var executeResult = await service.ExecuteCloseCountingJobAsync(new ExecuteElectionCloseCountingJobRequest(
+            scenario.CloseCountingJob.Id,
+            LeaseHolderId: "tally-executor:test-node"));
+
+        executeResult.IsSuccess.Should().BeFalse();
+        executeResult.ErrorCode.Should().Be(ElectionCommandErrorCode.DependencyBlocked);
+        executeResult.ErrorMessage.Should().Contain("SP-07 self-verification failed");
+        store.Elections[scenario.Election.ElectionId].TallyReadyAt.Should().BeNull();
+        store.Elections[scenario.Election.ElectionId].ClosedProgressStatus.Should()
+            .Be(ElectionClosedProgressStatus.PublicationProofFailed);
+        store.CloseCountingJobs[scenario.CloseCountingJob.Id].Status.Should().Be(ElectionCloseCountingJobStatus.Failed);
+    }
+
+    [Fact]
+    public async Task ExecuteCloseCountingJobAsync_WhenHighAssuranceSp07DeletionReceiptMissing_BlocksTallyReady()
+    {
+        var store = new ElectionStore();
+        var closeCountingExecutorKeyRegistry = new InMemoryCloseCountingExecutorKeyRegistry();
+        var scenario = RequireSp07Evidence(
+            store,
+            SeedClosedTrusteeElectionForCloseCountingSession(
+                store,
+                requiredApprovalCount: 1,
+                closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry));
+        AddVerifiedSp07Evidence(
+            store,
+            scenario,
+            sessionStatus: ElectionPublicationProofSessionStatus.Verified,
+            includeDeletionReceipt: false);
+        var service = CreateService(
+            store,
+            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
+
+        var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            sourceTransactionId: Guid.NewGuid(),
+            sourceBlockHeight: 71,
+            sourceBlockId: Guid.NewGuid()));
+
+        submitResult.IsSuccess.Should().BeTrue();
+
+        var executeResult = await service.ExecuteCloseCountingJobAsync(new ExecuteElectionCloseCountingJobRequest(
+            scenario.CloseCountingJob.Id,
+            LeaseHolderId: "tally-executor:test-node"));
+
+        executeResult.IsSuccess.Should().BeFalse();
+        executeResult.ErrorCode.Should().Be(ElectionCommandErrorCode.DependencyBlocked);
+        executeResult.ErrorMessage.Should().Contain("witness deletion receipt");
+        store.Elections[scenario.Election.ElectionId].TallyReadyAt.Should().BeNull();
+        store.Elections[scenario.Election.ElectionId].ClosedProgressStatus.Should()
+            .Be(ElectionClosedProgressStatus.PublicationProofSelfVerifying);
+        store.CloseCountingJobs[scenario.CloseCountingJob.Id].Status.Should().Be(ElectionCloseCountingJobStatus.Failed);
+    }
+
+    [Fact]
+    public async Task ExecuteCloseCountingJobAsync_WhenHighAssuranceSp07EvidenceVerified_AllowsTallyReady()
+    {
+        var store = new ElectionStore();
+        var closeCountingExecutorKeyRegistry = new InMemoryCloseCountingExecutorKeyRegistry();
+        var scenario = RequireSp07Evidence(
+            store,
+            SeedClosedTrusteeElectionForCloseCountingSession(
+                store,
+                requiredApprovalCount: 1,
+                closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry));
+        AddVerifiedSp07Evidence(store, scenario);
+        var service = CreateService(
+            store,
+            electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
+            closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry);
+
+        var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
+            scenario,
+            actorPublicAddress: "trustee-a",
+            shareIndex: 1,
+            shareVersion: "share-v1",
+            shareMaterial: "ciphertext-share-material",
+            targetType: ElectionFinalizationTargetType.AggregateTally,
+            sourceTransactionId: Guid.NewGuid(),
+            sourceBlockHeight: 71,
+            sourceBlockId: Guid.NewGuid()));
+
+        submitResult.IsSuccess.Should().BeTrue();
+
+        var executeResult = await service.ExecuteCloseCountingJobAsync(new ExecuteElectionCloseCountingJobRequest(
+            scenario.CloseCountingJob.Id,
+            LeaseHolderId: "tally-executor:test-node"));
+
+        executeResult.IsSuccess.Should().BeTrue();
+        executeResult.BoundaryArtifact.Should().NotBeNull();
+        executeResult.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.TallyReady);
+        store.Elections[scenario.Election.ElectionId].TallyReadyAt.Should().NotBeNull();
+        store.CloseCountingJobs[scenario.CloseCountingJob.Id].Status.Should().Be(ElectionCloseCountingJobStatus.Completed);
+    }
+
+    [Fact]
     public async Task ExecuteCloseCountingJobAsync_WhenThresholdReachedWithZeroBallots_PublishesZeroVoteUnofficialResult()
     {
         var store = new ElectionStore();
@@ -4540,7 +4894,9 @@ public class ElectionLifecycleServiceTests
         IIdentityService? identityService = null,
         ICloseCountingExecutorEnvelopeCrypto? closeCountingExecutorEnvelopeCrypto = null,
         IAdminOnlyProtectedTallyEnvelopeCrypto? adminOnlyProtectedTallyEnvelopeCrypto = null,
-        IElectionSensitiveStorageMaintenance? sensitiveStorageMaintenance = null)
+        IElectionSensitiveStorageMaintenance? sensitiveStorageMaintenance = null,
+        IElectionPublicationWitnessDeletionService? publicationWitnessDeletionService = null,
+        IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null)
     {
         SeedStandardCeremonyProfiles(store);
 
@@ -4556,7 +4912,9 @@ public class ElectionLifecycleServiceTests
             closeCountingExecutorKeyRegistry,
             closeCountingExecutorEnvelopeCrypto ?? new TransparentTestCloseCountingExecutorEnvelopeCrypto(),
             adminOnlyProtectedTallyEnvelopeCrypto ?? new TransparentTestAdminOnlyProtectedTallyEnvelopeCrypto(),
-            sensitiveStorageMaintenance: sensitiveStorageMaintenance);
+            sensitiveStorageMaintenance: sensitiveStorageMaintenance,
+            publicationWitnessDeletionService: publicationWitnessDeletionService,
+            publicationProofSessionRunner: publicationProofSessionRunner);
     }
 
     private sealed class FakeElectionSensitiveStorageMaintenance : IElectionSensitiveStorageMaintenance
@@ -4576,6 +4934,96 @@ public class ElectionLifecycleServiceTests
             AdminOnlyProtectedTallyEnvelopeCompactionCount++;
             WasCalledAfterWritableUnitDisposed = _hasActiveWritableUnitOfWork?.Invoke() == false;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeSp07PublicationProofSessionRunner(
+        ElectionStore store,
+        TrusteeCloseCountingScenario scenario) : IElectionSp07PublicationProofSessionRunner
+    {
+        public int RunCount { get; private set; }
+        public ProtocolPackageBindingRecord? LastProtocolPackageBinding { get; private set; }
+
+        public Task<ElectionSp07PublicationProofSessionRunnerResult> RunAsync(
+            ElectionSp07PublicationProofSessionRunnerRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            RunCount++;
+            LastProtocolPackageBinding = request.ProtocolPackageBinding;
+            AddVerifiedSp07Evidence(
+                store,
+                scenario,
+                sessionStatus: ElectionPublicationProofSessionStatus.Verified,
+                includeDeletionReceipt: false);
+
+            var session = store.PublicationProofSessions
+                .Where(x => x.ElectionId == scenario.Election.ElectionId)
+                .OrderByDescending(x => x.StartedAt)
+                .First();
+            var transcript = store.PublicationProofTranscripts
+                .Single(x => x.ProofSessionId == session.Id);
+            var workerResult = new Sp07PublicationProofSessionRunResult(
+                scenario.Election.ElectionId.ToString(),
+                session.Id.ToString("N"),
+                "sp07-test-plan",
+                Passed: true,
+                ChunkCount: 1,
+                CompletedChunkCount: 1,
+                FailedChunkCount: 0,
+                SlowestChunkMilliseconds: 1,
+                Chunks: Array.Empty<Sp07PublicationProofChunkRunResult>());
+
+            return Task.FromResult(ElectionSp07PublicationProofSessionRunnerResult.Success(
+                session,
+                transcript,
+                workerResult));
+        }
+    }
+
+    private sealed class FakePublicationWitnessDeletionService(ElectionStore store) : IElectionPublicationWitnessDeletionService
+    {
+        public Task<ElectionPublicationWitnessDeletionResult> TryDeleteVerifiedWitnessesAsync(
+            IElectionsRepository repository,
+            ElectionId electionId,
+            DateTime deletedAt)
+        {
+            var latestSession = store.PublicationProofSessions
+                .Where(x => x.ElectionId == electionId)
+                .OrderByDescending(x => x.StartedAt)
+                .ThenByDescending(x => x.Id)
+                .First();
+            var latestTranscript = store.PublicationProofTranscripts
+                .Single(x => x.ProofSessionId == latestSession.Id);
+            var existingReceipt = store.PublicationWitnessDeletionReceipts
+                .FirstOrDefault(x => x.ProofSessionId == latestSession.Id);
+            var receipt = existingReceipt ?? new ElectionPublicationWitnessDeletionReceiptRecord(
+                Guid.NewGuid(),
+                electionId,
+                latestSession.Id,
+                latestSession.WitnessSetId,
+                WitnessSetHash: VerificationCanonicalHash.ComputeSha256LowerHex("sp07-test-witness-set"),
+                WitnessCount: latestSession.AcceptedBallotCount,
+                latestTranscript.TranscriptHash,
+                latestTranscript.ProofHash,
+                ElectionPublicationWitnessDeletionStatus.Completed,
+                deletedAt,
+                DeletionActorRef: "test-sp07-deletion-service",
+                FailureCode: null,
+                FailureReason: null);
+            if (existingReceipt is null)
+            {
+                store.PublicationWitnessDeletionReceipts.Add(receipt);
+            }
+
+            var index = store.PublicationProofSessions.FindIndex(x => x.Id == latestSession.Id);
+            store.PublicationProofSessions[index] = latestSession with
+            {
+                Status = ElectionPublicationProofSessionStatus.WitnessDeleted,
+                CompletedAt = deletedAt,
+                DeletionReceiptId = receipt.Id,
+            };
+
+            return Task.FromResult(ElectionPublicationWitnessDeletionResult.Completed(receipt));
         }
     }
 
@@ -5435,6 +5883,216 @@ public class ElectionLifecycleServiceTests
             resolvedFinalEncryptedTallyHash);
     }
 
+    private static TrusteeCloseCountingScenario RequireSp07Evidence(
+        ElectionStore store,
+        TrusteeCloseCountingScenario scenario)
+    {
+        var election = scenario.Election with
+        {
+            SelectedProfileId = ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+            SelectedProfileDevOnly = false,
+            ControlDomainProfileId = ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+            ControlDomainProfileVersion = ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1Version,
+            ThresholdProfileId = ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+        };
+        store.Elections[election.ElectionId] = election;
+        return scenario with
+        {
+            Election = election,
+        };
+    }
+
+    private static TrusteeCloseCountingScenario RewriteTrusteeCloseCountingScenarioToDevModePublishedBallots(
+        ElectionStore store,
+        TrusteeCloseCountingScenario scenario)
+    {
+        var expectedTallyHash = ComputeDevModePublishedTallyHashForTests(
+            scenario.Election,
+            new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["yes"] = 2,
+                ["no"] = 1,
+            });
+        var updatedSession = scenario.Session with
+        {
+            FinalEncryptedTallyHash = expectedTallyHash,
+        };
+        var updatedJob = scenario.CloseCountingJob with
+        {
+            FinalEncryptedTallyHash = expectedTallyHash,
+        };
+        var publishedBallots = new[]
+        {
+            ElectionModelFactory.CreatePublishedBallotRecord(
+                scenario.Election.ElectionId,
+                publicationSequence: 1,
+                encryptedBallotPackage: CreateDevModePublishedBallotPackageForTests(
+                    scenario.Election,
+                    "yes",
+                    ballotOrder: 1,
+                    actorPublicAddress: "voter-a"),
+                proofBundle: "proof-1",
+                publishedAt: DateTime.UtcNow.AddMinutes(-6)),
+            ElectionModelFactory.CreatePublishedBallotRecord(
+                scenario.Election.ElectionId,
+                publicationSequence: 2,
+                encryptedBallotPackage: CreateDevModePublishedBallotPackageForTests(
+                    scenario.Election,
+                    "no",
+                    ballotOrder: 2,
+                    actorPublicAddress: "voter-b"),
+                proofBundle: "proof-2",
+                publishedAt: DateTime.UtcNow.AddMinutes(-6)),
+            ElectionModelFactory.CreatePublishedBallotRecord(
+                scenario.Election.ElectionId,
+                publicationSequence: 3,
+                encryptedBallotPackage: CreateDevModePublishedBallotPackageForTests(
+                    scenario.Election,
+                    "yes",
+                    ballotOrder: 1,
+                    actorPublicAddress: "voter-c"),
+                proofBundle: "proof-3",
+                publishedAt: DateTime.UtcNow.AddMinutes(-6)),
+        };
+
+        store.FinalizationSessions[updatedSession.Id] = updatedSession;
+        store.CloseCountingJobs[updatedJob.Id] = updatedJob;
+        store.PublishedBallots.Clear();
+        store.PublishedBallots.AddRange(publishedBallots);
+
+        return scenario with
+        {
+            Session = updatedSession,
+            CloseCountingJob = updatedJob,
+            PublishedBallots = publishedBallots,
+            FinalEncryptedTallyHash = expectedTallyHash,
+        };
+    }
+
+    private static void AddVerifiedSp07Evidence(
+        ElectionStore store,
+        TrusteeCloseCountingScenario scenario,
+        ElectionPublicationProofSessionStatus sessionStatus = ElectionPublicationProofSessionStatus.WitnessDeleted,
+        bool includeDeletionReceipt = true)
+    {
+        var proofSessionId = Guid.NewGuid();
+        var witnessSetId = Guid.NewGuid();
+        var generatedAt = DateTime.UtcNow.AddMinutes(-2);
+        var acceptedHash = VerificationCanonicalHash.ToLowerHex(
+            VerificationCanonicalHash.ComputeAcceptedBallotInventoryHash(scenario.AcceptedBallots));
+        var publishedHash = VerificationCanonicalHash.ToLowerHex(
+            VerificationCanonicalHash.ComputePublishedBallotStreamHash(scenario.PublishedBallots));
+        var proofHash = VerificationCanonicalHash.ComputeSha256LowerHex("sp07-proof-bytes");
+        var transcriptHash = VerificationCanonicalHash.ComputeSha256LowerHex(
+            $"{scenario.Election.ElectionId}|{acceptedHash}|{publishedHash}|{proofHash}");
+
+        store.PublicationProofSessions.Add(new ElectionPublicationProofSessionRecord(
+            proofSessionId,
+            scenario.Election.ElectionId,
+            witnessSetId,
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            sessionStatus,
+            StartedAt: generatedAt.AddMinutes(-1),
+            CompletedAt: generatedAt,
+            AcceptedBallotCount: scenario.AcceptedBallots.Count,
+            PublishedBallotCount: scenario.PublishedBallots.Count,
+            ChunkCount: 1,
+            RetryCount: 0,
+            FailureCode: null,
+            FailureReason: null,
+            AcceptedBallotSetHash: acceptedHash,
+            PublishedBallotStreamHash: publishedHash,
+            TranscriptHash: transcriptHash,
+            ProofHash: proofHash,
+            ServerVerifierOutputHash: VerificationCanonicalHash.ComputeSha256LowerHex("sp07-verifier-output"),
+            DeletionReceiptId: null));
+
+        store.PublicationProofTranscripts.Add(new ElectionPublicationProofTranscriptRecord(
+            Guid.NewGuid(),
+            scenario.Election.ElectionId,
+            proofSessionId,
+            witnessSetId,
+            ElectionSp07ProfileIds.TranscriptVersion,
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            VerificationProfileIds.HighAssuranceV1,
+            BallotDefinitionHash: "ballot-definition-hash",
+            BallotEncryptionSchemeVersion: "babyjubjub-elgamal-vector-ballot-v1",
+            ElectionPublicKeyId: "election-public-key-id",
+            AcceptedBallotSetHash: acceptedHash,
+            PublishedBallotStreamHash: publishedHash,
+            AcceptedBallotCount: scenario.AcceptedBallots.Count,
+            PublishedBallotCount: scenario.PublishedBallots.Count,
+            CiphertextSlotCount: scenario.Election.Options.Count,
+            ProofSystemVersion: ElectionSp07ProfileIds.ProofSystemVersion,
+            ProofBytes: "sp07-proof-bytes",
+            ProofHash: proofHash,
+            TranscriptHash: transcriptHash,
+            ExternalReviewStatus: ElectionSp07ProfileIds.ExternalReviewStatus,
+            GeneratedAt: generatedAt,
+            GeneratorReleaseHash: "generator-release-hash",
+            VerifierReleaseHash: "verifier-release-hash",
+            PublicPrivacyBoundary:
+            [
+                "no_hidden_permutation",
+                "no_shuffle_map",
+                "no_rerandomization_randomness",
+                "no_raw_witness",
+            ]));
+
+        if (includeDeletionReceipt)
+        {
+            store.PublicationWitnessDeletionReceipts.Add(new ElectionPublicationWitnessDeletionReceiptRecord(
+                Guid.NewGuid(),
+                scenario.Election.ElectionId,
+                proofSessionId,
+                witnessSetId,
+                WitnessSetHash: VerificationCanonicalHash.ComputeSha256LowerHex("sp07-witness-set"),
+                WitnessCount: scenario.AcceptedBallots.Count,
+                TranscriptHash: transcriptHash,
+                ProofHash: proofHash,
+                DeletionStatus: ElectionPublicationWitnessDeletionStatus.Completed,
+                DeletedAt: generatedAt.AddSeconds(30),
+                DeletionActorRef: "tally-executor:test-node",
+                FailureCode: null,
+                FailureReason: null));
+        }
+    }
+
+    private static void AddFailedSp07Evidence(
+        ElectionStore store,
+        TrusteeCloseCountingScenario scenario)
+    {
+        var generatedAt = DateTime.UtcNow.AddMinutes(-2);
+        store.PublicationProofSessions.Add(new ElectionPublicationProofSessionRecord(
+            Guid.NewGuid(),
+            scenario.Election.ElectionId,
+            Guid.NewGuid(),
+            ElectionSp07ProfileIds.PublicationProofMode,
+            ElectionSp07ProfileIds.ProofConstruction,
+            ElectionSp07ProfileIds.StatementId,
+            ElectionPublicationProofSessionStatus.Failed,
+            StartedAt: generatedAt.AddMinutes(-1),
+            CompletedAt: generatedAt,
+            AcceptedBallotCount: scenario.AcceptedBallots.Count,
+            PublishedBallotCount: scenario.PublishedBallots.Count,
+            ChunkCount: 1,
+            RetryCount: 1,
+            FailureCode: VerificationResultCodes.PublicationProofVerificationFailed,
+            FailureReason: "SP-07 self-verification failed for chunk 1.",
+            AcceptedBallotSetHash: VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputeAcceptedBallotInventoryHash(scenario.AcceptedBallots)),
+            PublishedBallotStreamHash: VerificationCanonicalHash.ToLowerHex(
+                VerificationCanonicalHash.ComputePublishedBallotStreamHash(scenario.PublishedBallots)),
+            TranscriptHash: null,
+            ProofHash: null,
+            ServerVerifierOutputHash: null,
+            DeletionReceiptId: null));
+    }
+
     private static SubmitElectionFinalizationShareRequest CreateExecutorBoundFinalizationShareRequest(
         TrusteeCloseCountingScenario scenario,
         string actorPublicAddress,
@@ -5908,6 +6566,9 @@ public class ElectionLifecycleServiceTests
         public Dictionary<Guid, ElectionFinalizationSessionRecord> FinalizationSessions { get; } = [];
         public List<ElectionFinalizationShareRecord> FinalizationShares { get; } = [];
         public List<ElectionFinalizationReleaseEvidenceRecord> FinalizationReleaseEvidenceRecords { get; } = [];
+        public List<ElectionPublicationProofSessionRecord> PublicationProofSessions { get; } = [];
+        public List<ElectionPublicationProofTranscriptRecord> PublicationProofTranscripts { get; } = [];
+        public List<ElectionPublicationWitnessDeletionReceiptRecord> PublicationWitnessDeletionReceipts { get; } = [];
         public Dictionary<Guid, ElectionReportPackageRecord> ReportPackages { get; } = [];
         public List<ElectionReportArtifactRecord> ReportArtifacts { get; } = [];
         public List<ElectionReportAccessGrantRecord> ReportAccessGrants { get; } = [];
@@ -7070,6 +7731,30 @@ public class ElectionLifecycleServiceTests
             store.FinalizationReleaseEvidenceRecords.Add(releaseEvidenceRecord);
             return Task.CompletedTask;
         }
+
+        public Task<IReadOnlyList<ElectionPublicationProofSessionRecord>> GetPublicationProofSessionsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionPublicationProofSessionRecord>>(
+                store.PublicationProofSessions
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.StartedAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
+
+        public Task<IReadOnlyList<ElectionPublicationProofTranscriptRecord>> GetPublicationProofTranscriptsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionPublicationProofTranscriptRecord>>(
+                store.PublicationProofTranscripts
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.GeneratedAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
+
+        public Task<IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord>> GetPublicationWitnessDeletionReceiptsAsync(ElectionId electionId) =>
+            Task.FromResult<IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord>>(
+                store.PublicationWitnessDeletionReceipts
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderBy(x => x.DeletedAt)
+                    .ThenBy(x => x.Id)
+                    .ToArray());
 
         public Task<IReadOnlyList<ElectionReportPackageRecord>> GetReportPackagesAsync(ElectionId electionId) =>
             Task.FromResult<IReadOnlyList<ElectionReportPackageRecord>>(

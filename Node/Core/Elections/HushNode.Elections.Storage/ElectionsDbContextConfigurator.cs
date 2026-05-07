@@ -1050,6 +1050,11 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.GeneratedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.GeneratorReleaseHash).HasColumnType("varchar(128)");
             entity.Property(x => x.VerifierReleaseHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.StatementHashSha512).HasColumnType("varchar(128)");
+            entity.Property(x => x.FiatShamirTranscriptHashSha512).HasColumnType("varchar(128)");
+            entity.Property(x => x.CanonicalProofBytesHex).HasColumnType("text");
+            entity.Property(x => x.CanonicalProofHashSha512).HasColumnType("varchar(128)");
+            entity.Property(x => x.CanonicalProofByteLength).HasColumnType("integer");
 
             ConfigureJsonProperty(entity.Property(x => x.PublicPrivacyBoundary));
 

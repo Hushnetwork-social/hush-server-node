@@ -175,7 +175,12 @@ public record ElectionPublicationProofTranscriptRecord(
     DateTime GeneratedAt,
     string? GeneratorReleaseHash,
     string? VerifierReleaseHash,
-    IReadOnlyList<string> PublicPrivacyBoundary)
+    IReadOnlyList<string> PublicPrivacyBoundary,
+    string? StatementHashSha512 = null,
+    string? FiatShamirTranscriptHashSha512 = null,
+    string? CanonicalProofBytesHex = null,
+    string? CanonicalProofHashSha512 = null,
+    int? CanonicalProofByteLength = null)
 {
     public string TranscriptVersion { get; init; } =
         ElectionPublicationWitnessRecord.NormalizeRequiredValue(TranscriptVersion, nameof(TranscriptVersion));
@@ -231,6 +236,15 @@ public record ElectionPublicationProofTranscriptRecord(
 
     public string? VerifierReleaseHash { get; init; } =
         ElectionPublicationWitnessRecord.NormalizeOptionalValue(VerifierReleaseHash);
+    public string? StatementHashSha512 { get; init; } =
+        ElectionPublicationWitnessRecord.NormalizeOptionalValue(StatementHashSha512);
+    public string? FiatShamirTranscriptHashSha512 { get; init; } =
+        ElectionPublicationWitnessRecord.NormalizeOptionalValue(FiatShamirTranscriptHashSha512);
+    public string? CanonicalProofBytesHex { get; init; } =
+        ElectionPublicationWitnessRecord.NormalizeOptionalValue(CanonicalProofBytesHex);
+    public string? CanonicalProofHashSha512 { get; init; } =
+        ElectionPublicationWitnessRecord.NormalizeOptionalValue(CanonicalProofHashSha512);
+    public int? CanonicalProofByteLength { get; init; } = CanonicalProofByteLength;
 
     public IReadOnlyList<string> PublicPrivacyBoundary { get; init; } =
         PublicPrivacyBoundary is null
