@@ -388,12 +388,12 @@ public sealed partial class HushVotingPackageVerifier
             VerificationPackageFileNames.PublishedBallotStream,
             cancellationToken);
 
-        ValidateSp07TranscriptShape(results, profileId, transcript);
+        ValidateSp07TranscriptShape(results, transcript);
         ValidateSp07CanonicalProofFields(results, transcript);
         var proofManifest = TryReadSp07PublicationProofManifest(transcript, results);
         if (proofManifest is not null)
         {
-            ValidateSp07PublicationProofManifest(results, profileId, transcript, proofManifest);
+            ValidateSp07PublicationProofManifest(results, transcript, proofManifest);
         }
 
         ValidateSp07AcceptedSetBinding(results, transcript, accepted);
@@ -502,7 +502,6 @@ public sealed partial class HushVotingPackageVerifier
 
     private static void ValidateSp07TranscriptShape(
         List<VerifierCheckResultRecord> results,
-        string profileId,
         ElectionSp07PublicationProofTranscriptArtifactRecord transcript)
     {
         if (!string.Equals(transcript.TranscriptVersion, ElectionSp07ProfileIds.TranscriptVersion, StringComparison.Ordinal) ||
@@ -510,7 +509,7 @@ public sealed partial class HushVotingPackageVerifier
             !string.Equals(transcript.ProofConstruction, ElectionSp07ProfileIds.ProofConstruction, StringComparison.Ordinal) ||
             !string.Equals(transcript.StatementId, ElectionSp07ProfileIds.StatementId, StringComparison.Ordinal) ||
             !string.Equals(transcript.ProofSystemVersion, ElectionSp07ProfileIds.ProofSystemVersion, StringComparison.Ordinal) ||
-            !string.Equals(transcript.ProfileId, profileId, StringComparison.Ordinal))
+            !IsSupportedSp07TranscriptProfile(transcript.ProfileId))
         {
             results.Add(CreateResult(
                 "VFY-SP07-010",
@@ -543,6 +542,9 @@ public sealed partial class HushVotingPackageVerifier
                 }));
         }
     }
+
+    private static bool IsSupportedSp07TranscriptProfile(string profileId) =>
+        string.Equals(profileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal);
 
     private static void ValidateSp07CanonicalProofFields(
         List<VerifierCheckResultRecord> results,
@@ -625,7 +627,6 @@ public sealed partial class HushVotingPackageVerifier
 
     private static void ValidateSp07PublicationProofManifest(
         List<VerifierCheckResultRecord> results,
-        string profileId,
         ElectionSp07PublicationProofTranscriptArtifactRecord transcript,
         ElectionSp07PublicationProofManifestArtifactRecord manifest)
     {
@@ -637,7 +638,7 @@ public sealed partial class HushVotingPackageVerifier
             !string.Equals(manifest.PublicationProofMode, transcript.PublicationProofMode, StringComparison.Ordinal) ||
             !string.Equals(manifest.ProofConstruction, transcript.ProofConstruction, StringComparison.Ordinal) ||
             !string.Equals(manifest.StatementId, transcript.StatementId, StringComparison.Ordinal) ||
-            !string.Equals(manifest.ProfileId, profileId, StringComparison.Ordinal) ||
+            !string.Equals(manifest.ProfileId, transcript.ProfileId, StringComparison.Ordinal) ||
             !string.Equals(
                 manifest.AcceptedBallotSetHash,
                 transcript.AcceptedBallotSetHash,

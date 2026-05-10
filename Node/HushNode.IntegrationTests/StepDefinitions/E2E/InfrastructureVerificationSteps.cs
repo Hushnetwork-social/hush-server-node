@@ -96,7 +96,7 @@ public class InfrastructureVerificationSteps
     public void ThenThePageShouldLoadSuccessfully()
     {
         _page.Should().NotBeNull("Page must exist");
-        _page!.Url.Should().StartWith("http://localhost:3000", "Page should be at the web client URL");
+        _page!.Url.Should().StartWith(GetWebClient().BaseUrl, "Page should be at the web client URL");
     }
 
     [Then(@"the page title should contain ""(.*)""")]

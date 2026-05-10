@@ -856,6 +856,15 @@ public sealed class ElectionApplicationSurfacesIntegrationTests : IAsyncLifetime
                 TestIdentities.Alice,
                 "feat103-cast-001");
             castSubmitResponse.Successfull.Should().BeTrue(castSubmitResponse.Message);
+
+            await ClaimRosterEntryAsync(electionId, TestIdentities.Charlie, "voter-charlie");
+            await RegisterVotingCommitmentAsync(client, electionId, TestIdentities.Charlie, "feat103-charlie-commitment-001");
+            var charlieCastSubmitResponse = await SubmitAcceptedBallotCastViaBlockchainAsync(
+                client,
+                electionId,
+                TestIdentities.Charlie,
+                "feat103-charlie-cast-001");
+            charlieCastSubmitResponse.Successfull.Should().BeTrue(charlieCastSubmitResponse.Message);
         }
 
         var closeProposalId = await StartGovernedProposalAsync(

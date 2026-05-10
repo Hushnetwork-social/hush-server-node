@@ -154,6 +154,9 @@ Feature: FEAT-094 election lifecycle integration
     When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
     And voter "Alice" registers voting commitment "alice-commitment-feat100-v1" through blockchain submission
     And voter "Alice" submits ballot cast with idempotency key "alice-feat100-001" through blockchain submission
+    And voter "Charlie" claims roster entry "voter-charlie" with temporary verification code through blockchain submission
+    And voter "Charlie" registers voting commitment "charlie-commitment-feat100-v1" through blockchain submission
+    And voter "Charlie" submits ballot cast with idempotency key "charlie-feat100-001" through blockchain submission
     And the owner starts an "close" governed proposal through blockchain submission
     And trustee "Bob" approves the governed proposal through blockchain submission
     And trustee "Charlie" approves the governed proposal through blockchain submission
@@ -166,7 +169,7 @@ Feature: FEAT-094 election lifecycle integration
     And trustee "Charlie" submits a bound finalization share through blockchain submission
     And trustee "Delta" submits a bound finalization share through blockchain submission
     Then the election should expose a tally-ready boundary after close drain
-    And the tally-ready boundary should reconcile 1 accepted ballots and 1 published ballots
+    And the tally-ready boundary should reconcile 2 accepted ballots and 2 published ballots
 
   @FEAT-100 @AT-PROC-I05 @FEAT-100-ISSUE-COALESCE @NON_E2E
   Scenario: Close drain coalesces repeated replay mismatch issues into one record
@@ -208,6 +211,9 @@ Feature: FEAT-094 election lifecycle integration
     When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
     And voter "Alice" registers voting commitment "alice-commitment-feat098-v1" through blockchain submission
     And voter "Alice" submits ballot cast with idempotency key "alice-feat098-001" through blockchain submission
+    And voter "Charlie" claims roster entry "voter-charlie" with temporary verification code through blockchain submission
+    And voter "Charlie" registers voting commitment "charlie-commitment-feat098-v1" through blockchain submission
+    And voter "Charlie" submits ballot cast with idempotency key "charlie-feat098-001" through blockchain submission
     And the owner starts an "close" governed proposal through blockchain submission
     And trustee "Bob" approves the governed proposal through blockchain submission
     And trustee "Charlie" approves the governed proposal through blockchain submission
@@ -233,6 +239,9 @@ Feature: FEAT-094 election lifecycle integration
     When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
     And voter "Alice" registers voting commitment "alice-commitment-feat101-v1" through blockchain submission
     And voter "Alice" submits ballot cast with idempotency key "alice-feat101-001" through blockchain submission
+    And voter "Charlie" claims roster entry "voter-charlie" with temporary verification code through blockchain submission
+    And voter "Charlie" registers voting commitment "charlie-commitment-feat101-v1" through blockchain submission
+    And voter "Charlie" submits ballot cast with idempotency key "charlie-feat101-001" through blockchain submission
     And the owner starts an "close" governed proposal through blockchain submission
     And trustee "Bob" approves the governed proposal through blockchain submission
     And trustee "Charlie" approves the governed proposal through blockchain submission
@@ -245,7 +254,7 @@ Feature: FEAT-094 election lifecycle integration
     And trustee "Delta" submits a bound finalization share through blockchain submission
     Then the election should expose a tally-ready boundary after close drain
     And the election result view for actor "Alice" should expose participant-encrypted unofficial results
-    And the unofficial result should report 1 total voted, 2 eligible to vote, 1 did not vote, and 0 blank
+    And the unofficial result should report 2 total voted, 2 eligible to vote, 0 did not vote, and 0 blank
     And the unofficial result should include all named options
     When the owner starts a "finalize" governed proposal through blockchain submission
     Then the governed proposal should remain pending for "finalize" while the election stays "Closed"
@@ -263,6 +272,9 @@ Feature: FEAT-094 election lifecycle integration
     When voter "Alice" claims roster entry "voter-alice" with temporary verification code through blockchain submission
     And voter "Alice" registers voting commitment "alice-commitment-feat102-package-v1" through blockchain submission
     And voter "Alice" submits ballot cast with idempotency key "alice-feat102-package-001" through blockchain submission
+    And voter "Charlie" claims roster entry "voter-charlie" with temporary verification code through blockchain submission
+    And voter "Charlie" registers voting commitment "charlie-commitment-feat102-package-v1" through blockchain submission
+    And voter "Charlie" submits ballot cast with idempotency key "charlie-feat102-package-001" through blockchain submission
     And the owner starts an "close" governed proposal through blockchain submission
     And trustee "Bob" approves the governed proposal through blockchain submission
     And trustee "Charlie" approves the governed proposal through blockchain submission

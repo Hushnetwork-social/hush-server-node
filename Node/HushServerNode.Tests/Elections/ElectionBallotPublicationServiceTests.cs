@@ -131,7 +131,7 @@ public class ElectionBallotPublicationServiceTests
     public async Task ProcessPendingPublicationAsync_ClosedElectionDrainsPoolAndMarksTallyReady()
     {
         var store = new PublicationStore();
-        var election = CreateClosedElection();
+        var election = CreateClosedElection(ElectionBindingStatus.NonBinding);
         SeedAcceptedBallots(store, election, 3);
         var expectedTallyHash = new byte[] { 9, 8, 7, 6 };
         var crypto = new FakePublicationCryptoService

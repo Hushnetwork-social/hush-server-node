@@ -80,6 +80,26 @@ public class HushVotingPackageVerifierTests
     }
 
     [Fact]
+    public async Task Verify_PublicAnonymousPackageWithHighAssuranceSp07Evidence_ShouldPassStructuralSp07()
+    {
+        using var package = CreateHighAssuranceTrusteePackageWithSp07Evidence(
+            packageProfileId: VerificationProfileIds.PublicAnonymousV1);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1));
+
+        result.ExitCode.Should().Be(0);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "VFY-SP07-000" &&
+            x.ResultCode == VerificationResultCodes.PublicationProofEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        result.Output.Results.Should().NotContain(x =>
+            x.CheckCode == "VFY-SP07-010" &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
     public async Task Verify_HighAssurancePackageWithCanonicalSp07Evidence_ShouldInvokePublicProofVerifier()
     {
         using var package = CreateHighAssuranceTrusteePackageWithSp07Evidence(
@@ -454,10 +474,14 @@ public class HushVotingPackageVerifierTests
     private static TemporaryPackageDirectory CreateHighAssuranceTrusteePackageWithSp07Evidence(
         bool includeDeletionReceipt = true,
         bool includeCanonicalProofVerifierInput = false,
-        bool includeManifestProofVerifierInput = false)
+        bool includeManifestProofVerifierInput = false,
+        string packageProfileId = VerificationProfileIds.HighAssuranceV1)
     {
         var directory = new TemporaryPackageDirectory();
-        var request = ElectionVerificationPackageExportServiceTests.CreateHighAssuranceTrusteeRequest();
+        var request = ElectionVerificationPackageExportServiceTests.CreateHighAssuranceTrusteeRequest() with
+        {
+            VerifierProfileId = packageProfileId,
+        };
         var witnessSetId = Guid.NewGuid();
         var proofBytes = "synthetic-proof-bytes";
         var canonicalProofBytes = Encoding.UTF8.GetBytes("canonical-sp07-proof-fixture");

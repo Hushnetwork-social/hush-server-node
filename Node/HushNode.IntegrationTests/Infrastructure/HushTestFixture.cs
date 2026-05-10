@@ -8,6 +8,7 @@ using Xunit;
 using HushServerNode;
 using HushServerNode.Testing;
 using HushShared.Elections.Model;
+using HushShared.Elections.PublicationProof;
 
 namespace HushNode.IntegrationTests.Infrastructure;
 
@@ -48,6 +49,8 @@ internal sealed class HushTestFixture : IAsyncLifetime
     /// </summary>
     public async Task InitializeAsync()
     {
+        InitializeSp07RustWorkerPath();
+
         // Start containers in parallel for faster initialization
         var postgresTask = StartPostgresContainerAsync();
         var redisTask = StartRedisContainerAsync();
@@ -376,6 +379,54 @@ internal sealed class HushTestFixture : IAsyncLifetime
                 {
                     WriteIndented = true,
                 }));
+    }
+
+    private static void InitializeSp07RustWorkerPath()
+    {
+        var configured = Environment.GetEnvironmentVariable(
+            Sp07RustWorkerProcessOptions.WorkerPathEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return;
+        }
+
+        var repositoryRoot = FindRepositoryRoot();
+        var executableName = OperatingSystem.IsWindows()
+            ? "hush-sp07-rust-worker.exe"
+            : "hush-sp07-rust-worker";
+        var candidates = new[]
+        {
+            Path.Combine(repositoryRoot, "Tools", "HushSp07RustWorker", "target", "release", executableName),
+            Path.Combine(repositoryRoot, "Tools", "HushSp07RustWorker", "target", "debug", executableName),
+        };
+
+        var workerPath = candidates.FirstOrDefault(File.Exists);
+        if (workerPath is null)
+        {
+            throw new InvalidOperationException(
+                "Integration tests require a built SP-07 Rust worker. " +
+                "Run cargo build in Tools/HushSp07RustWorker or set HUSH_SP07_RUST_WORKER_PATH.");
+        }
+
+        Environment.SetEnvironmentVariable(
+            Sp07RustWorkerProcessOptions.WorkerPathEnvironmentVariable,
+            workerPath);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (Directory.Exists(Path.Combine(directory.FullName, "Tools", "HushSp07RustWorker")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate hush-server-node repository root.");
     }
 
     private static string Hash(char seed) => new(seed, 64);

@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 
 namespace HushNode.IntegrationTests.Infrastructure;
 
@@ -12,12 +15,13 @@ internal sealed class WebClientFixture : IAsyncDisposable
     private readonly string _composeFilePath;
     private readonly string _webClientRootPath;
     private readonly string _buildStampPath;
+    private readonly int _hostPort;
     private bool _started;
 
     /// <summary>
     /// Gets the base URL for the web client.
     /// </summary>
-    public string BaseUrl { get; } = "http://localhost:3000";
+    public string BaseUrl { get; }
 
     /// <summary>
     /// Gets whether the container has been started.
@@ -46,6 +50,8 @@ internal sealed class WebClientFixture : IAsyncDisposable
 
         _webClientRootPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(_composeFilePath)!, "..", "..", "..", "hush-web-client"));
         _buildStampPath = Path.Combine(Path.GetTempPath(), "hush-web-client-e2e-build.stamp");
+        _hostPort = ResolveHostPort();
+        BaseUrl = $"http://localhost:{_hostPort}";
     }
 
     /// <summary>
@@ -88,6 +94,7 @@ internal sealed class WebClientFixture : IAsyncDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        ConfigureComposeEnvironment(startInfo);
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start docker compose process");
@@ -140,6 +147,7 @@ internal sealed class WebClientFixture : IAsyncDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        ConfigureComposeEnvironment(startInfo);
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to inspect docker compose services");
@@ -176,6 +184,7 @@ internal sealed class WebClientFixture : IAsyncDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        ConfigureComposeEnvironment(startInfo);
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start docker compose logs process");
@@ -211,6 +220,7 @@ internal sealed class WebClientFixture : IAsyncDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        ConfigureComposeEnvironment(startInfo);
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start docker build process");
@@ -324,6 +334,7 @@ internal sealed class WebClientFixture : IAsyncDisposable
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        ConfigureComposeEnvironment(startInfo);
 
         var process = Process.Start(startInfo);
         if (process != null)
@@ -332,5 +343,34 @@ internal sealed class WebClientFixture : IAsyncDisposable
         }
 
         _started = false;
+    }
+
+    private static int ResolveHostPort()
+    {
+        var configuredPort = Environment.GetEnvironmentVariable("HUSH_WEB_CLIENT_E2E_HOST_PORT");
+        if (!string.IsNullOrWhiteSpace(configuredPort))
+        {
+            if (int.TryParse(configuredPort, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedPort)
+                && parsedPort > 0
+                && parsedPort <= 65535)
+            {
+                return parsedPort;
+            }
+
+            throw new InvalidOperationException(
+                $"HUSH_WEB_CLIENT_E2E_HOST_PORT must be a TCP port between 1 and 65535. Current value: '{configuredPort}'.");
+        }
+
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
+    private void ConfigureComposeEnvironment(ProcessStartInfo startInfo)
+    {
+        startInfo.Environment["HUSH_WEB_CLIENT_E2E_HOST_PORT"] =
+            _hostPort.ToString(CultureInfo.InvariantCulture);
     }
 }

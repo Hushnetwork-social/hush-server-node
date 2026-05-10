@@ -14,6 +14,37 @@ $workspaceRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $workspaceRoot "Node\HushNode.IntegrationTests\HushNode.IntegrationTests.csproj"
 $testResultsRoot = Join-Path $workspaceRoot "TestResults"
 
+function Initialize-Sp07WorkerPath {
+    if ($env:HUSH_SP07_RUST_WORKER_PATH) {
+        Write-Host "SP-07 worker: $env:HUSH_SP07_RUST_WORKER_PATH"
+        return
+    }
+
+    $executableName = if ($IsWindows -or $env:OS -eq "Windows_NT") {
+        "hush-sp07-rust-worker.exe"
+    }
+    else {
+        "hush-sp07-rust-worker"
+    }
+
+    $candidatePaths = @(
+        Join-Path $workspaceRoot "Tools\HushSp07RustWorker\target\release\$executableName"
+        Join-Path $workspaceRoot "Tools\HushSp07RustWorker\target\debug\$executableName"
+    )
+
+    $workerPath = $candidatePaths |
+        Where-Object { Test-Path $_ } |
+        Select-Object -First 1
+
+    if ($workerPath) {
+        $env:HUSH_SP07_RUST_WORKER_PATH = (Resolve-Path $workerPath).Path
+        Write-Host "SP-07 worker auto-detected: $env:HUSH_SP07_RUST_WORKER_PATH"
+        return
+    }
+
+    Write-Warning "SP-07 worker was not found. Build it with 'cargo build --release --locked' in Tools/HushSp07RustWorker or set HUSH_SP07_RUST_WORKER_PATH."
+}
+
 $allBlocks = @(
     @{ Name = "Infrastructure"; Filter = 'Category=Infrastructure&Category!=LONG_RUNNING' },
     @{ Name = "FoundationWalkthrough"; Filter = 'Category=FoundationWalkthrough&Category!=LONG_RUNNING' },
@@ -179,6 +210,7 @@ Write-Host "StaleMinutes: $StaleMinutes"
 Write-Host "MaxMinutes: $MaxMinutes"
 Write-Host "NoBuild: $NoBuild"
 Write-Host "RetryOnEarlyStallCount: $RetryOnEarlyStallCount"
+Initialize-Sp07WorkerPath
 
 foreach ($block in $selectedBlocks) {
     Write-Host ""

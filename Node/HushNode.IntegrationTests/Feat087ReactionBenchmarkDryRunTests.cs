@@ -84,6 +84,7 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "LONG_RUNNING")]
     public async Task Sequential_PublicPost_ReactionVisibility_1000Voters_OneVotePerBlock_DevModeDryRun()
     {
         await RunSequentialBenchmarkAsync(
@@ -111,6 +112,7 @@ public sealed class Feat087ReactionBenchmarkDryRunTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "LONG_RUNNING")]
     public async Task Sequential_PublicPost_ReactionVisibility_10000Voters_OneVotePerBlock_DevModeDryRun()
     {
         await RunSequentialBenchmarkAsync(

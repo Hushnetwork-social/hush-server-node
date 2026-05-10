@@ -858,27 +858,35 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
     }
 
     public async Task<IReadOnlyList<ElectionPublicationProofSessionRecord>> GetPublicationProofSessionsAsync(
-        ElectionId electionId) =>
-        await Context.ElectionPublicationProofSessions
+        ElectionId electionId)
+    {
+        var persisted = await Context.ElectionPublicationProofSessions
             .Where(x => x.ElectionId == electionId)
             .OrderBy(x => x.StartedAt)
             .ThenBy(x => x.Id)
             .ToListAsync();
 
+        return MergeLocalPublicationProofSessions(electionId, persisted)
+            .OrderBy(x => x.StartedAt)
+            .ThenBy(x => x.Id)
+            .ToList();
+    }
+
     public async Task<ElectionPublicationProofSessionRecord?> GetLatestPublicationProofSessionAsync(
         ElectionId electionId) =>
-        await Context.ElectionPublicationProofSessions
-            .Where(x => x.ElectionId == electionId)
+        (await GetPublicationProofSessionsAsync(electionId))
             .OrderByDescending(x => x.StartedAt)
             .ThenByDescending(x => x.Id)
-            .FirstOrDefaultAsync();
+            .FirstOrDefault();
 
     public async Task SavePublicationProofSessionAsync(ElectionPublicationProofSessionRecord proofSession) =>
         await Context.ElectionPublicationProofSessions.AddAsync(proofSession);
 
     public async Task UpdatePublicationProofSessionAsync(ElectionPublicationProofSessionRecord proofSession)
     {
-        var existing = await Context.ElectionPublicationProofSessions
+        var existing = Context.ElectionPublicationProofSessions.Local
+            .FirstOrDefault(x => x.Id == proofSession.Id) ??
+            await Context.ElectionPublicationProofSessions
             .FirstOrDefaultAsync(x => x.Id == proofSession.Id);
 
         if (existing is not null)
@@ -888,40 +896,52 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
     }
 
     public async Task<IReadOnlyList<ElectionPublicationProofTranscriptRecord>> GetPublicationProofTranscriptsAsync(
-        ElectionId electionId) =>
-        await Context.ElectionPublicationProofTranscripts
+        ElectionId electionId)
+    {
+        var persisted = await Context.ElectionPublicationProofTranscripts
             .Where(x => x.ElectionId == electionId)
             .OrderBy(x => x.GeneratedAt)
             .ThenBy(x => x.Id)
             .ToListAsync();
 
+        return MergeLocalPublicationProofTranscripts(electionId, persisted)
+            .OrderBy(x => x.GeneratedAt)
+            .ThenBy(x => x.Id)
+            .ToList();
+    }
+
     public async Task<ElectionPublicationProofTranscriptRecord?> GetLatestPublicationProofTranscriptAsync(
         ElectionId electionId) =>
-        await Context.ElectionPublicationProofTranscripts
-            .Where(x => x.ElectionId == electionId)
+        (await GetPublicationProofTranscriptsAsync(electionId))
             .OrderByDescending(x => x.GeneratedAt)
             .ThenByDescending(x => x.Id)
-            .FirstOrDefaultAsync();
+            .FirstOrDefault();
 
     public async Task SavePublicationProofTranscriptAsync(
         ElectionPublicationProofTranscriptRecord proofTranscript) =>
         await Context.ElectionPublicationProofTranscripts.AddAsync(proofTranscript);
 
     public async Task<IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord>> GetPublicationWitnessDeletionReceiptsAsync(
-        ElectionId electionId) =>
-        await Context.ElectionPublicationWitnessDeletionReceipts
+        ElectionId electionId)
+    {
+        var persisted = await Context.ElectionPublicationWitnessDeletionReceipts
             .Where(x => x.ElectionId == electionId)
             .OrderBy(x => x.DeletedAt)
             .ThenBy(x => x.Id)
             .ToListAsync();
 
+        return MergeLocalPublicationWitnessDeletionReceipts(electionId, persisted)
+            .OrderBy(x => x.DeletedAt)
+            .ThenBy(x => x.Id)
+            .ToList();
+    }
+
     public async Task<ElectionPublicationWitnessDeletionReceiptRecord?> GetLatestPublicationWitnessDeletionReceiptAsync(
         ElectionId electionId) =>
-        await Context.ElectionPublicationWitnessDeletionReceipts
-            .Where(x => x.ElectionId == electionId)
+        (await GetPublicationWitnessDeletionReceiptsAsync(electionId))
             .OrderByDescending(x => x.DeletedAt)
             .ThenByDescending(x => x.Id)
-            .FirstOrDefaultAsync();
+            .FirstOrDefault();
 
     public async Task SavePublicationWitnessDeletionReceiptAsync(
         ElectionPublicationWitnessDeletionReceiptRecord deletionReceipt) =>
@@ -1382,4 +1402,43 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task SaveFinalizationReleaseEvidenceRecordAsync(ElectionFinalizationReleaseEvidenceRecord releaseEvidenceRecord) =>
         await Context.ElectionFinalizationReleaseEvidenceRecords.AddAsync(releaseEvidenceRecord);
+
+    private IReadOnlyList<ElectionPublicationProofSessionRecord> MergeLocalPublicationProofSessions(
+        ElectionId electionId,
+        IReadOnlyList<ElectionPublicationProofSessionRecord> persisted)
+    {
+        var byId = persisted.ToDictionary(x => x.Id);
+        foreach (var local in Context.ElectionPublicationProofSessions.Local.Where(x => x.ElectionId == electionId))
+        {
+            byId[local.Id] = local;
+        }
+
+        return byId.Values.ToList();
+    }
+
+    private IReadOnlyList<ElectionPublicationProofTranscriptRecord> MergeLocalPublicationProofTranscripts(
+        ElectionId electionId,
+        IReadOnlyList<ElectionPublicationProofTranscriptRecord> persisted)
+    {
+        var byId = persisted.ToDictionary(x => x.Id);
+        foreach (var local in Context.ElectionPublicationProofTranscripts.Local.Where(x => x.ElectionId == electionId))
+        {
+            byId[local.Id] = local;
+        }
+
+        return byId.Values.ToList();
+    }
+
+    private IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord> MergeLocalPublicationWitnessDeletionReceipts(
+        ElectionId electionId,
+        IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord> persisted)
+    {
+        var byId = persisted.ToDictionary(x => x.Id);
+        foreach (var local in Context.ElectionPublicationWitnessDeletionReceipts.Local.Where(x => x.ElectionId == electionId))
+        {
+            byId[local.Id] = local;
+        }
+
+        return byId.Values.ToList();
+    }
 }

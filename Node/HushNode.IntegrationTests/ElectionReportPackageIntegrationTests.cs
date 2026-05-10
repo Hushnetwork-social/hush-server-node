@@ -271,7 +271,10 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             x.ResultCode == VerificationResultCodes.PackageManifestValid &&
             x.Status == VerificationCheckStatus.Pass);
         verification.Output.Results.Should().Contain(x =>
-            x.ResultCode == VerificationResultCodes.PublicationProofEvidencePending &&
+            x.ResultCode == VerificationResultCodes.PublicationProofEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        verification.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.PublicationProofExternalReviewPending &&
             x.Status == VerificationCheckStatus.Warn);
         File.Exists(Path.Combine(verifierOutputPath, "VerifierOutput.json")).Should().BeTrue();
         File.Exists(Path.Combine(verifierOutputPath, "VerifierSummary.md")).Should().BeTrue();
@@ -350,7 +353,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         ownerStatus.Status.Should().NotBeNull();
         ownerStatus.Status!.Sp04Evidence.PreparedPackageCount.Should().BeGreaterThanOrEqualTo(2);
         ownerStatus.Status.Sp04Evidence.SpoiledPackageCount.Should().BeGreaterThanOrEqualTo(1);
-        ownerStatus.Status.Sp04Evidence.AcceptedBoundReceiptCount.Should().Be(1);
+        ownerStatus.Status.Sp04Evidence.AcceptedBoundReceiptCount.Should().Be(2);
         ownerStatus.Status.Sp04Evidence.ReceiptCommitmentSetHash.Should().NotBeNullOrWhiteSpace();
 
         var publicExport = await ExportElectionVerificationPackageAsync(
@@ -368,15 +371,19 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         var publicSp04Evidence = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp04Evidence);
         publicSp04Evidence.RootElement.GetProperty("preparedPackageCount").GetInt32().Should().BeGreaterThanOrEqualTo(2);
         publicSp04Evidence.RootElement.GetProperty("spoiledPackageCount").GetInt32().Should().BeGreaterThanOrEqualTo(1);
-        publicSp04Evidence.RootElement.GetProperty("acceptedBoundReceiptCount").GetInt32().Should().Be(1);
+        publicSp04Evidence.RootElement.GetProperty("acceptedBoundReceiptCount").GetInt32().Should().Be(2);
         publicSp04Evidence.Dispose();
 
         var publicReceiptCommitments = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp04ReceiptCommitments);
-        publicReceiptCommitments.RootElement.GetArrayLength().Should().Be(1);
-        publicReceiptCommitments.RootElement[0].GetProperty("preparedBallotId").GetString()
-            .Should().Be(voterView.PreparedBallotId);
-        publicReceiptCommitments.RootElement[0].GetProperty("receiptCommitment").GetString()
-            .Should().Be(voterView.ReceiptCommitment);
+        publicReceiptCommitments.RootElement.GetArrayLength().Should().Be(2);
+        publicReceiptCommitments.RootElement.EnumerateArray()
+            .Select(x => x.GetProperty("preparedBallotId").GetString())
+            .Should()
+            .Contain(voterView.PreparedBallotId);
+        publicReceiptCommitments.RootElement.EnumerateArray()
+            .Select(x => x.GetProperty("receiptCommitment").GetString())
+            .Should()
+            .Contain(voterView.ReceiptCommitment);
         publicReceiptCommitments.Dispose();
 
         var publicPayload = string.Join(
@@ -465,10 +472,10 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         ownerStatus.Status.Sp05Evidence.PublicEvidenceAvailable.Should().BeTrue();
         ownerStatus.Status.Sp05Evidence.RestrictedEvidenceAvailable.Should().BeTrue();
         ownerStatus.Status.Sp05Evidence.RosteredCount.Should().Be(4);
-        ownerStatus.Status.Sp05Evidence.LinkedCount.Should().Be(2);
+        ownerStatus.Status.Sp05Evidence.LinkedCount.Should().Be(3);
         ownerStatus.Status.Sp05Evidence.ActiveDenominatorCount.Should().Be(3);
-        ownerStatus.Status.Sp05Evidence.CommitmentCount.Should().Be(1);
-        ownerStatus.Status.Sp05Evidence.CountedParticipationCount.Should().Be(1);
+        ownerStatus.Status.Sp05Evidence.CommitmentCount.Should().Be(2);
+        ownerStatus.Status.Sp05Evidence.CountedParticipationCount.Should().Be(2);
         ownerStatus.Status.Sp05Evidence.RosterCanonicalHash.Should().NotBeNullOrWhiteSpace();
         ownerStatus.Status.Sp05Evidence.CommitmentTreeRoot.Should().NotBeNullOrWhiteSpace();
         ownerStatus.Status.Sp05Evidence.LatestEliResultCode.Should().Be(
@@ -490,10 +497,10 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         using (var publicSummary = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp05EligibilitySummary))
         {
             publicSummary.RootElement.GetProperty("rosteredCount").GetInt32().Should().Be(4);
-            publicSummary.RootElement.GetProperty("linkedCount").GetInt32().Should().Be(2);
+            publicSummary.RootElement.GetProperty("linkedCount").GetInt32().Should().Be(3);
             publicSummary.RootElement.GetProperty("activeDenominatorCount").GetInt32().Should().Be(3);
-            publicSummary.RootElement.GetProperty("commitmentCount").GetInt32().Should().Be(1);
-            publicSummary.RootElement.GetProperty("countedParticipationCount").GetInt32().Should().Be(1);
+            publicSummary.RootElement.GetProperty("commitmentCount").GetInt32().Should().Be(2);
+            publicSummary.RootElement.GetProperty("countedParticipationCount").GetInt32().Should().Be(2);
             publicSummary.RootElement.GetProperty("publicPrivacyBoundary").EnumerateArray()
                 .Select(x => x.GetString())
                 .Should()
@@ -504,8 +511,10 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             '\n',
             publicExport.Files.Select(x => Encoding.UTF8.GetString(x.Content.ToByteArray())));
         publicPayload.Should().NotContain("voter-alice");
+        publicPayload.Should().NotContain("voter-charlie");
         publicPayload.Should().NotContain("voter-guest");
         publicPayload.Should().NotContain("alice.eligibility@hush.test");
+        publicPayload.Should().NotContain("charlie.eligibility@hush.test");
         publicPayload.Should().NotContain("guest.eligibility@hush.test");
 
         using var packageDirectory = new TemporaryPackageDirectory();
@@ -547,6 +556,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             restrictedExport,
             VerificationPackageFileNames.RestrictedCheckoffLedger);
         restrictedCheckoff.Should().Contain("voter-alice");
+        restrictedCheckoff.Should().Contain("voter-charlie");
         restrictedCheckoff.Should().Contain("countedAsVoted");
     }
 
@@ -744,6 +754,15 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             TestIdentities.Alice,
             castSubmissionIdempotencyKey);
         castSubmitResponse.Successfull.Should().BeTrue(castSubmitResponse.Message);
+
+        await ClaimRosterEntryAsync(electionId, TestIdentities.Charlie, "voter-charlie");
+        await RegisterVotingCommitmentAsync(client, electionId, TestIdentities.Charlie, "feat102-charlie-commitment-001");
+        var charlieCastSubmitResponse = await SubmitAcceptedBallotCastViaBlockchainAsync(
+            client,
+            electionId,
+            TestIdentities.Charlie,
+            $"{castSubmissionIdempotencyKey}-charlie");
+        charlieCastSubmitResponse.Successfull.Should().BeTrue(charlieCastSubmitResponse.Message);
 
         var closeProposalId = await StartGovernedProposalAsync(
             client,
