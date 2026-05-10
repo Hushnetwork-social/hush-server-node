@@ -568,6 +568,8 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                 new TransparentTestCloseCountingExecutorEnvelopeCrypto());
             builder.Services.AddSingleton<IAdminOnlyProtectedTallyEnvelopeCrypto>(
                 new TransparentTestAdminOnlyProtectedTallyEnvelopeCrypto());
+            builder.Services.AddSingleton<IElectionPublicationWitnessEnvelopeCrypto>(
+                new TransparentTestElectionPublicationWitnessEnvelopeCrypto());
         }
 
         // Register feed message cache service (FEAT-046)
