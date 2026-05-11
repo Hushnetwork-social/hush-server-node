@@ -62,6 +62,16 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
                 VerificationArtifactVisibility.Public);
         }
 
+        var sp08ReleaseManifest = BuildSp08ReleaseManifest(request, exportedAt);
+        var sp08ReleaseIntegrity = BuildSp08ReleaseIntegrity(request, sp08ReleaseManifest);
+        AddJson(files, VerificationPackageFileNames.Sp08ReleaseManifest, sp08ReleaseManifest, VerificationArtifactVisibility.Public);
+        AddJson(files, VerificationPackageFileNames.Sp08ReleaseIntegrity, sp08ReleaseIntegrity, VerificationArtifactVisibility.Public);
+        AddJson(
+            files,
+            VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput,
+            BuildSp08VerifierOutput(request, sp08ReleaseManifest, sp08ReleaseIntegrity, exportedAt),
+            VerificationArtifactVisibility.Public);
+
         if (request.PackageView == VerificationPackageView.RestrictedOwnerAuditor)
         {
             AddJson(

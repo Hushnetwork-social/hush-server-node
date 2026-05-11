@@ -151,6 +151,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushVotingPublicationProofP
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushShared.Elections.PublicationProof", "..\Shared\HushShared.Elections.PublicationProof\HushShared.Elections.PublicationProof.csproj", "{270DA534-3DE3-4974-B507-FDEC1D76710C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HushVotingReleaseManifest", "..\Tools\HushVotingReleaseManifest\HushVotingReleaseManifest.csproj", "{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -917,6 +919,18 @@ Global
 		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Release|x64.Build.0 = Release|Any CPU
 		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Release|x86.ActiveCfg = Release|Any CPU
 		{270DA534-3DE3-4974-B507-FDEC1D76710C}.Release|x86.Build.0 = Release|Any CPU
+		{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}.Debug|x64.Build.0 = Debug|Any CPU
+		{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}.Debug|x86.Build.0 = Debug|Any CPU
+		{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}.Release|x64.ActiveCfg = Release|Any CPU
+		{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}.Release|x64.Build.0 = Release|Any CPU
+		{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}.Release|x86.ActiveCfg = Release|Any CPU
+		{ACAC87D8-6AE6-4787-AA34-0494463E8B6E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

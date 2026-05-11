@@ -28,6 +28,7 @@ public static class ElectionsHostBuild
             services.AddSingleton(CreateCloseCountingExecutorEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreatePublicationWitnessEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreateSp07PublicationProofChunkCoordinatorOptions(hostContext.Configuration));
+            services.AddSingleton(CreateSp08ReleaseEvidenceOptions(hostContext.Configuration));
             services.AddSingleton(_ => Sp07RustWorkerProcessOptions.FromEnvironment(
                 defaultWorkingDirectory: AppContext.BaseDirectory));
             services.AddSingleton<ISp07RustWorkerClient, Sp07RustWorkerProcessClient>();
@@ -105,6 +106,7 @@ public static class ElectionsHostBuild
         services.AddSingleton<IElectionSp07ProductionProofInputBuilder, ElectionSp07ProductionProofInputBuilder>();
         services.AddSingleton<IElectionSp07PublicationProofManifestBuilder, ElectionSp07PublicationProofManifestBuilder>();
         services.AddSingleton<IElectionSp07PublicationProofSessionRunner, ElectionSp07PublicationProofSessionRunner>();
+        services.AddSingleton<IElectionSp08ReleaseEvidenceProvider, ElectionSp08ReleaseEvidenceProvider>();
         services.AddSingleton<IElectionPublicationWitnessDeletionService, ElectionPublicationWitnessDeletionService>();
         services.AddSingleton<ElectionBallotPublicationService>();
         services.AddSingleton<IElectionBallotPublicationService>(sp => sp.GetRequiredService<ElectionBallotPublicationService>());
@@ -123,7 +125,8 @@ public static class ElectionsHostBuild
                 sp.GetRequiredService<IAdminOnlyProtectedTallyEnvelopeCrypto>(),
                 sensitiveStorageMaintenance: sp.GetService<IElectionSensitiveStorageMaintenance>(),
                 publicationWitnessDeletionService: sp.GetRequiredService<IElectionPublicationWitnessDeletionService>(),
-                publicationProofSessionRunner: sp.GetRequiredService<IElectionSp07PublicationProofSessionRunner>()));
+                publicationProofSessionRunner: sp.GetRequiredService<IElectionSp07PublicationProofSessionRunner>(),
+                sp08ReleaseEvidenceProvider: sp.GetRequiredService<IElectionSp08ReleaseEvidenceProvider>()));
         services.AddHostedService<TallyExecutorBackgroundService>();
     }
 
@@ -263,6 +266,14 @@ public static class ElectionsHostBuild
                 "Elections:Sp07PublicationProof:VerifyAfterProve",
                 defaultValue: true));
     }
+
+    private static ElectionSp08ReleaseEvidenceOptions CreateSp08ReleaseEvidenceOptions(
+        IConfiguration configuration) =>
+        new(
+            OpenReadinessReleaseManifestPath: GetConfigValue(
+                configuration,
+                "Elections:Sp08ReleaseIntegrity:OpenReadinessReleaseManifestPath",
+                "HUSH_ELECTIONS_SP08_RELEASE_MANIFEST_PATH"));
 
     private static string? GetConfigValue(
         IConfiguration configuration,

@@ -29,6 +29,9 @@ public static class VerificationPackageFileNames
     public const string Sp07PublicationProofTranscript = "artifacts/election-record/publication-proof-transcript.json";
     public const string Sp07PublicationProofVerifierOutput = "artifacts/election-record/publication-proof-verifier-output.json";
     public const string Sp07WitnessDeletionReceipt = "artifacts/election-record/witness-deletion-receipt.json";
+    public const string Sp08ReleaseIntegrity = "artifacts/election-record/release-integrity.json";
+    public const string Sp08ReleaseManifest = "artifacts/election-record/release-manifest.json";
+    public const string Sp08ReleaseIntegrityVerifierOutput = "artifacts/election-record/release-integrity-verifier-output.json";
     public const string RestrictedRosterCheckoff = "artifacts/restricted/roster-checkoff.json";
     public const string RestrictedRosterImportEvidence = "artifacts/restricted/roster-import-evidence.json";
     public const string RestrictedRoster = "artifacts/restricted/restricted-roster.json";

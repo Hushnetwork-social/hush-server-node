@@ -1,4 +1,5 @@
 using HushShared.Elections.Model;
+using HushShared.Elections.Verification.Model;
 
 namespace HushNode.Elections;
 
@@ -716,13 +717,15 @@ public record ElectionOpenValidationResult
     public ProtocolPackageBindingRecord? ProtocolPackageBinding { get; init; }
     public ElectionTrusteeControlDomainSummaryRecord? Sp06Summary { get; init; }
     public ElectionSp07OpenReadinessSummary? Sp07Summary { get; init; }
+    public ElectionSp08OpenReadinessSummary? Sp08Summary { get; init; }
 
     public static ElectionOpenValidationResult Ready(
         IReadOnlyList<ElectionWarningCode> requiredWarningCodes,
         ElectionCeremonyBindingSnapshot? ceremonySnapshot = null,
         ProtocolPackageBindingOpenValidation? protocolPackageValidation = null,
         ElectionTrusteeControlDomainSummaryRecord? sp06Summary = null,
-        ElectionSp07OpenReadinessSummary? sp07Summary = null) =>
+        ElectionSp07OpenReadinessSummary? sp07Summary = null,
+        ElectionSp08OpenReadinessSummary? sp08Summary = null) =>
         new()
         {
             IsReadyToOpen = true,
@@ -733,6 +736,7 @@ public record ElectionOpenValidationResult
             ProtocolPackageBinding = protocolPackageValidation?.Binding,
             Sp06Summary = sp06Summary,
             Sp07Summary = sp07Summary,
+            Sp08Summary = sp08Summary,
         };
 
     public static ElectionOpenValidationResult NotReady(
@@ -742,7 +746,8 @@ public record ElectionOpenValidationResult
         ElectionCeremonyBindingSnapshot? ceremonySnapshot = null,
         ProtocolPackageBindingOpenValidation? protocolPackageValidation = null,
         ElectionTrusteeControlDomainSummaryRecord? sp06Summary = null,
-        ElectionSp07OpenReadinessSummary? sp07Summary = null) =>
+        ElectionSp07OpenReadinessSummary? sp07Summary = null,
+        ElectionSp08OpenReadinessSummary? sp08Summary = null) =>
         new()
         {
             IsReadyToOpen = false,
@@ -755,6 +760,7 @@ public record ElectionOpenValidationResult
             ProtocolPackageBinding = protocolPackageValidation?.Binding,
             Sp06Summary = sp06Summary,
             Sp07Summary = sp07Summary,
+            Sp08Summary = sp08Summary,
         };
 }
 
@@ -773,6 +779,39 @@ public sealed record ElectionSp07OpenReadinessSummary(
 }
 
 public sealed record ElectionSp07OpenReadinessBlocker(
+    string Code,
+    string Message,
+    bool BlocksOpen,
+    bool BlocksFinalization);
+
+public sealed record ElectionSp08OpenReadinessSummary(
+    bool EvidenceExpected,
+    string EvidenceMode,
+    bool NotForReleaseIntegrityClaims,
+    bool BlocksHighAssurance,
+    string ReleaseManifestName,
+    string ReleaseManifestHash,
+    string ProtocolPackageManifestName,
+    string ProtocolPackageManifestHash,
+    string PrimaryResultCode,
+    string PrimaryIssue,
+    int ComponentCount,
+    int LifecycleBindingCount,
+    int EvidenceFileCount,
+    bool MobileEvidenceIncluded,
+    IReadOnlyList<ElectionSp08OpenReadinessBlocker> ReadinessBlockers)
+{
+    public bool PublicEvidenceAvailable { get; init; }
+    public bool RestrictedEvidenceAvailable { get; init; }
+    public IReadOnlyList<ElectionSp08ReleaseComponentArtifactRecord> Components { get; init; } =
+        Array.Empty<ElectionSp08ReleaseComponentArtifactRecord>();
+    public IReadOnlyList<ElectionSp08LifecycleReleaseBindingRecord> LifecycleBindings { get; init; } =
+        Array.Empty<ElectionSp08LifecycleReleaseBindingRecord>();
+
+    public bool IsReadyForOpen => !BlocksHighAssurance && ReadinessBlockers.All(x => !x.BlocksOpen);
+}
+
+public sealed record ElectionSp08OpenReadinessBlocker(
     string Code,
     string Message,
     bool BlocksOpen,

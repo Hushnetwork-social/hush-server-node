@@ -122,6 +122,12 @@ public sealed partial class HushVotingPackageVerifier
                 electionRecord,
                 _sp07PublicProofVerifier,
                 cancellationToken));
+            results.AddRange(await CheckReleaseIntegrityEvidenceAsync(
+                request.PackagePath,
+                manifest,
+                request.VerifierProfileId,
+                electionRecord,
+                cancellationToken));
 
             var overall = CalculateOverallStatus(results);
             var output = CreateOutput(

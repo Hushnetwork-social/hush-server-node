@@ -24,6 +24,8 @@ jobs:
   # ============================================
   ci:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
 
     defaults:
       run:
@@ -80,6 +82,249 @@ jobs:
         HUSH_WEB_CLIENT_ROOT: ${{ github.workspace }}/hush-web-client
         HUSH_SP07_RUST_WORKER_PATH: ${{ github.workspace }}/Tools/HushSp07RustWorker/target/release/hush-sp07-rust-worker
 
+    - name: Publish HushVoting verifier release bundle
+      run: dotnet publish ../Tools/HushVotingVerifier/HushVotingVerifier.csproj --configuration Release --no-restore --output ../release-evidence/hush-voting-verifier
+
+    - name: Write SP-08 verifier and SP-07 worker release component manifests
+      working-directory: .
+      run: |
+        set -euo pipefail
+        evidence_mode="development_placeholder"
+        is_placeholder=true
+        if [[ "${{ github.event_name }}" == "push" && "${GITHUB_REF_TYPE}" == "tag" ]]; then
+          evidence_mode="official_sp08"
+          is_placeholder=false
+        fi
+
+        verifier_digest="sha256:$(sha256sum release-evidence/hush-voting-verifier/HushVotingVerifier.dll | cut -d' ' -f1)"
+        verifier_project_hash="sha256:$(sha256sum Tools/HushVotingVerifier/HushVotingVerifier.csproj | cut -d' ' -f1)"
+        sp07_worker_path="Tools/HushSp07RustWorker/target/release/hush-sp07-rust-worker"
+        sp07_worker_digest="sha256:$(sha256sum "${sp07_worker_path}" | cut -d' ' -f1)"
+        sp07_cargo_lock_hash="sha256:$(sha256sum Tools/HushSp07RustWorker/Cargo.lock | cut -d' ' -f1)"
+        verifier_reference="github-actions://${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts/hush-voting-verifier-release"
+        sp07_reference="github-actions://${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts/sp07-rust-worker-release"
+
+        jq -n \
+          --arg componentId "standalone_verifier" \
+          --arg componentType "dotnet_tool" \
+          --arg evidenceMode "${evidence_mode}" \
+          --arg artifactName "HushVotingVerifier.dll" \
+          --arg artifactDigest "${verifier_digest}" \
+          --arg sourceCommit "${GITHUB_SHA}" \
+          --arg sourceTag "${GITHUB_REF_NAME}" \
+          --arg immutableReference "${verifier_reference}" \
+          --arg buildWorkflowRunId "${GITHUB_RUN_ID}" \
+          --arg verifierProjectHash "${verifier_project_hash}" \
+          --argjson isPlaceholder "${is_placeholder}" \
+          '{
+            componentId: $componentId,
+            componentType: $componentType,
+            evidenceMode: $evidenceMode,
+            artifactName: $artifactName,
+            artifactDigest: $artifactDigest,
+            sourceCommit: $sourceCommit,
+            sourceTag: $sourceTag,
+            immutableReference: $immutableReference,
+            buildWorkflowRunId: $buildWorkflowRunId,
+            distributionReference: $immutableReference,
+            signingFingerprint: null,
+            isPlaceholder: $isPlaceholder,
+            projectFileHash: $verifierProjectHash
+          }' > release-evidence/sp08-standalone-verifier-component.json
+
+        jq -n \
+          --arg componentId "sp07_proof_worker" \
+          --arg componentType "native_binary" \
+          --arg evidenceMode "${evidence_mode}" \
+          --arg artifactName "hush-sp07-rust-worker" \
+          --arg artifactDigest "${sp07_worker_digest}" \
+          --arg sourceCommit "${GITHUB_SHA}" \
+          --arg sourceTag "${GITHUB_REF_NAME}" \
+          --arg immutableReference "${sp07_reference}" \
+          --arg buildWorkflowRunId "${GITHUB_RUN_ID}" \
+          --arg cargoLockHash "${sp07_cargo_lock_hash}" \
+          --argjson isPlaceholder "${is_placeholder}" \
+          '{
+            componentId: $componentId,
+            componentType: $componentType,
+            evidenceMode: $evidenceMode,
+            artifactName: $artifactName,
+            artifactDigest: $artifactDigest,
+            sourceCommit: $sourceCommit,
+            sourceTag: $sourceTag,
+            immutableReference: $immutableReference,
+            buildWorkflowRunId: $buildWorkflowRunId,
+            distributionReference: $immutableReference,
+            signingFingerprint: null,
+            isPlaceholder: $isPlaceholder,
+            cargoLockHash: $cargoLockHash
+          }' > release-evidence/sp08-sp07-worker-component.json
+
+        {
+          echo "### SP-08 Verifier And SP-07 Worker Evidence"
+          echo ""
+          echo "- Evidence mode: \`${evidence_mode}\`"
+          echo "- Verifier digest: \`${verifier_digest}\`"
+          echo "- SP-07 worker digest: \`${sp07_worker_digest}\`"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload HushVoting verifier release bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: hush-voting-verifier-release
+        path: release-evidence/hush-voting-verifier
+
+    - name: Upload SP-07 Rust worker release binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: sp07-rust-worker-release
+        path: Tools/HushSp07RustWorker/target/release/hush-sp07-rust-worker
+
+    - name: Upload SP-08 verifier and SP-07 worker component manifests
+      uses: actions/upload-artifact@v4
+      with:
+        name: sp08-verifier-sp07-release-components
+        path: |
+          release-evidence/sp08-standalone-verifier-component.json
+          release-evidence/sp08-sp07-worker-component.json
+
+    - name: Publish SP-08 verifier and SP-07 worker evidence to GitHub Release
+      if: github.event_name == 'push' && github.ref_type == 'tag'
+      working-directory: .
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Automated SP-08 release evidence for ${GITHUB_REF_NAME}."
+        gh release upload "${GITHUB_REF_NAME}" \
+          release-evidence/sp08-standalone-verifier-component.json \
+          release-evidence/sp08-sp07-worker-component.json \
+          --clobber
+
+    - name: Write SP-08 protocol package and circuit key evidence
+      working-directory: .
+      run: |
+        set -euo pipefail
+        evidence_mode="development_placeholder"
+        is_placeholder=true
+        if [[ "${{ github.event_name }}" == "push" && "${GITHUB_REF_TYPE}" == "tag" ]]; then
+          evidence_mode="official_sp08"
+          is_placeholder=false
+        fi
+
+        selected_package="Node/Release/ProtocolPackages/SelectedProtocolPackage.json"
+        package_id="$(jq -r '.packageId' "${selected_package}")"
+        package_version="$(jq -r '.packageVersion' "${selected_package}")"
+        release_manifest_hash="$(jq -r '.releaseManifestHash' "${selected_package}")"
+        spec_package_hash="$(jq -r '.specPackageHash' "${selected_package}")"
+        proof_package_hash="$(jq -r '.proofPackageHash' "${selected_package}")"
+        package_manifest_path="Node/Release/ProtocolPackages/${package_version}/ProtocolOmegaPackageManifest.json"
+        statement_map_path="Node/Release/ProtocolPackages/${package_version}/Protocol-Proof-And-Crypto-Review/Proof-Statement-To-Circuit-Map.md"
+        spec_reference="$(jq -r '.specAccessLocations[0].location // empty' "${package_manifest_path}")"
+        proof_reference="$(jq -r '.proofAccessLocations[0].location // empty' "${package_manifest_path}")"
+        immutable_reference="${spec_reference}#releaseManifestHash=${release_manifest_hash}"
+
+        protocol_artifact_digest="sha256:${release_manifest_hash}"
+        package_manifest_file_hash="sha256:$(sha256sum "${package_manifest_path}" | cut -d' ' -f1)"
+        statement_map_hash="sha256:$(sha256sum "${statement_map_path}" | cut -d' ' -f1)"
+        circuit_hash="sha256:$(sha256sum hush-web-client/public/circuits/omega-v1.0.0/reaction.wasm | cut -d' ' -f1)"
+        proving_key_hash="sha256:$(sha256sum hush-web-client/public/circuits/omega-v1.0.0/reaction.zkey | cut -d' ' -f1)"
+        verifying_key_hash="sha256:$(sha256sum Node/HushServerNode/circuits/omega-v1.0.0/verification_key.json | cut -d' ' -f1)"
+
+        jq -n \
+          --arg componentId "protocol_package" \
+          --arg componentType "protocol_package" \
+          --arg evidenceMode "${evidence_mode}" \
+          --arg artifactName "${package_id}-${package_version}" \
+          --arg artifactDigest "${protocol_artifact_digest}" \
+          --arg sourceCommit "${GITHUB_SHA}" \
+          --arg sourceTag "${GITHUB_REF_NAME}" \
+          --arg immutableReference "${immutable_reference}" \
+          --arg buildWorkflowRunId "${GITHUB_RUN_ID}" \
+          --arg packageId "${package_id}" \
+          --arg packageVersion "${package_version}" \
+          --arg releaseManifestHash "${release_manifest_hash}" \
+          --arg specPackageHash "${spec_package_hash}" \
+          --arg proofPackageHash "${proof_package_hash}" \
+          --arg packageManifestFileHash "${package_manifest_file_hash}" \
+          --arg specReference "${spec_reference}" \
+          --arg proofReference "${proof_reference}" \
+          --argjson isPlaceholder "${is_placeholder}" \
+          '{
+            componentId: $componentId,
+            componentType: $componentType,
+            evidenceMode: $evidenceMode,
+            artifactName: $artifactName,
+            artifactDigest: $artifactDigest,
+            sourceCommit: $sourceCommit,
+            sourceTag: $sourceTag,
+            immutableReference: $immutableReference,
+            buildWorkflowRunId: $buildWorkflowRunId,
+            distributionReference: $immutableReference,
+            signingFingerprint: null,
+            isPlaceholder: $isPlaceholder,
+            packageId: $packageId,
+            packageVersion: $packageVersion,
+            releaseManifestHash: $releaseManifestHash,
+            specPackageHash: $specPackageHash,
+            proofPackageHash: $proofPackageHash,
+            packageManifestFileHash: $packageManifestFileHash,
+            specReference: $specReference,
+            proofReference: $proofReference
+          }' > release-evidence/sp08-protocol-package-component.json
+
+        jq -n \
+          --arg circuitId "omega-v1.0.0" \
+          --arg circuitHash "${circuit_hash}" \
+          --arg provingKeyHash "${proving_key_hash}" \
+          --arg verifyingKeyHash "${verifying_key_hash}" \
+          --arg protocolPackageManifestHash "${release_manifest_hash}" \
+          --arg statementCircuitMapPath "${statement_map_path}" \
+          --arg statementCircuitMapHash "${statement_map_hash}" \
+          '{
+            circuitId: $circuitId,
+            circuitHash: $circuitHash,
+            provingKeyHash: $provingKeyHash,
+            verifyingKeyHash: $verifyingKeyHash,
+            protocolPackageManifestHash: $protocolPackageManifestHash,
+            statementCircuitMapPath: $statementCircuitMapPath,
+            statementCircuitMapHash: $statementCircuitMapHash
+          }' > release-evidence/sp08-circuit-key-evidence.json
+
+        {
+          echo "### SP-08 Protocol Package And Circuit Evidence"
+          echo ""
+          echo "- Evidence mode: \`${evidence_mode}\`"
+          echo "- Protocol package: \`${package_id}/${package_version}\`"
+          echo "- Release manifest hash: \`${release_manifest_hash}\`"
+          echo "- Circuit hash: \`${circuit_hash}\`"
+          echo "- Proving key hash: \`${proving_key_hash}\`"
+          echo "- Verifying key hash: \`${verifying_key_hash}\`"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload SP-08 protocol package and circuit key evidence
+      uses: actions/upload-artifact@v4
+      with:
+        name: sp08-protocol-circuit-release-evidence
+        path: |
+          release-evidence/sp08-protocol-package-component.json
+          release-evidence/sp08-circuit-key-evidence.json
+
+    - name: Publish SP-08 protocol package and circuit key evidence to GitHub Release
+      if: github.event_name == 'push' && github.ref_type == 'tag'
+      working-directory: .
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Automated SP-08 release evidence for ${GITHUB_REF_NAME}."
+        gh release upload "${GITHUB_REF_NAME}" \
+          release-evidence/sp08-protocol-package-component.json \
+          release-evidence/sp08-circuit-key-evidence.json \
+          --clobber
+
   # ============================================
   # BUILD, PUSH & DEPLOY — only after CI passes
   # ============================================
@@ -89,7 +334,7 @@ jobs:
     environment: HushServerNode AWS CD
 
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -131,6 +376,7 @@ jobs:
           password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Build and push Docker image
+        id: build_image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -141,6 +387,160 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Write SP-08 server release component manifest
+        env:
+          IMAGE_DIGEST: ${{ steps.build_image.outputs.digest }}
+          IMAGE_TAG: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          evidence_mode="development_placeholder"
+          is_placeholder=true
+          immutable_reference="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+
+          if [[ "${{ github.event_name }}" == "push" && "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            if [[ -z "${IMAGE_DIGEST}" ]]; then
+              echo "::error::Official SP-08 server evidence requires an immutable image digest."
+              exit 1
+            fi
+            evidence_mode="official_sp08"
+            is_placeholder=false
+            immutable_reference="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${IMAGE_DIGEST}"
+          fi
+
+          artifact_digest="${IMAGE_DIGEST:-sha256:$(printf '%s' "${GITHUB_SHA}:${IMAGE_TAG}:development-placeholder" | sha256sum | cut -d' ' -f1)}"
+          dockerfile_hash="sha256:$(sha256sum Node/Dockerfile | cut -d' ' -f1)"
+          mkdir -p release-evidence
+          jq -n \
+            --arg componentId "server" \
+            --arg componentType "container_image" \
+            --arg evidenceMode "${evidence_mode}" \
+            --arg artifactName "hushservernode" \
+            --arg artifactDigest "${artifact_digest}" \
+            --arg sourceCommit "${GITHUB_SHA}" \
+            --arg sourceTag "${GITHUB_REF_NAME}" \
+            --arg immutableReference "${immutable_reference}" \
+            --arg buildWorkflowRunId "${GITHUB_RUN_ID}" \
+            --arg distributionReference "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}" \
+            --arg dockerfileHash "${dockerfile_hash}" \
+            --argjson isPlaceholder "${is_placeholder}" \
+            '{
+              componentId: $componentId,
+              componentType: $componentType,
+              evidenceMode: $evidenceMode,
+              artifactName: $artifactName,
+              artifactDigest: $artifactDigest,
+              sourceCommit: $sourceCommit,
+              sourceTag: $sourceTag,
+              immutableReference: $immutableReference,
+              buildWorkflowRunId: $buildWorkflowRunId,
+              distributionReference: $distributionReference,
+              signingFingerprint: null,
+              isPlaceholder: $isPlaceholder,
+              dockerfileHash: $dockerfileHash
+            }' > release-evidence/sp08-server-component.json
+
+          {
+            echo "### SP-08 Server Release Evidence"
+            echo ""
+            echo "- Evidence mode: \`${evidence_mode}\`"
+            echo "- Image digest: \`${artifact_digest}\`"
+            echo "- Dockerfile hash: \`${dockerfile_hash}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload SP-08 server release component manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: sp08-server-release-component
+          path: release-evidence/sp08-server-component.json
+
+      - name: Publish SP-08 server release component manifest to GitHub Release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
+            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Automated SP-08 release evidence for ${GITHUB_REF_NAME}."
+          gh release upload "${GITHUB_REF_NAME}" \
+            release-evidence/sp08-server-component.json \
+            --clobber
+
+      - name: Write SP-08 audit package exporter release component manifest
+        env:
+          IMAGE_DIGEST: ${{ steps.build_image.outputs.digest }}
+          IMAGE_TAG: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          evidence_mode="development_placeholder"
+          is_placeholder=true
+          immutable_reference="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+
+          if [[ "${{ github.event_name }}" == "push" && "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            if [[ -z "${IMAGE_DIGEST}" ]]; then
+              echo "::error::Official SP-08 audit package exporter evidence requires an immutable image digest."
+              exit 1
+            fi
+            evidence_mode="official_sp08"
+            is_placeholder=false
+            immutable_reference="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${IMAGE_DIGEST}"
+          fi
+
+          artifact_digest="${IMAGE_DIGEST:-sha256:$(printf '%s' "${GITHUB_SHA}:${IMAGE_TAG}:audit-package-exporter:development-placeholder" | sha256sum | cut -d' ' -f1)}"
+          mkdir -p release-evidence
+          jq -n \
+            --arg componentId "audit_package_exporter" \
+            --arg componentType "server_module_in_container" \
+            --arg evidenceMode "${evidence_mode}" \
+            --arg artifactName "HushNode.Elections.ElectionVerificationPackageExportService" \
+            --arg artifactDigest "${artifact_digest}" \
+            --arg sourceCommit "${GITHUB_SHA}" \
+            --arg sourceTag "${GITHUB_REF_NAME}" \
+            --arg immutableReference "${immutable_reference}" \
+            --arg buildWorkflowRunId "${GITHUB_RUN_ID}" \
+            --arg distributionReference "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}" \
+            --arg serverImageDigest "${artifact_digest}" \
+            --argjson isPlaceholder "${is_placeholder}" \
+            '{
+              componentId: $componentId,
+              componentType: $componentType,
+              evidenceMode: $evidenceMode,
+              artifactName: $artifactName,
+              artifactDigest: $artifactDigest,
+              sourceCommit: $sourceCommit,
+              sourceTag: $sourceTag,
+              immutableReference: $immutableReference,
+              buildWorkflowRunId: $buildWorkflowRunId,
+              distributionReference: $distributionReference,
+              signingFingerprint: null,
+              isPlaceholder: $isPlaceholder,
+              serverImageDigest: $serverImageDigest
+            }' > release-evidence/sp08-audit-package-exporter-component.json
+
+          {
+            echo "### SP-08 Audit Package Exporter Evidence"
+            echo ""
+            echo "- Evidence mode: \`${evidence_mode}\`"
+            echo "- Container digest: \`${artifact_digest}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload SP-08 audit package exporter release component manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: sp08-audit-package-exporter-release-component
+          path: release-evidence/sp08-audit-package-exporter-component.json
+
+      - name: Publish SP-08 audit package exporter release component manifest to GitHub Release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
+            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Automated SP-08 release evidence for ${GITHUB_REF_NAME}."
+          gh release upload "${GITHUB_REF_NAME}" \
+            release-evidence/sp08-audit-package-exporter-component.json \
+            --clobber
 
       - name: Summary - Image pushed
         run: |

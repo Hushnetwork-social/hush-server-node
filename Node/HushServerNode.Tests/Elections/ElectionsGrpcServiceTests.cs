@@ -371,6 +371,287 @@ public class ElectionsGrpcServiceTests
             x.BlocksOpen);
     }
 
+    [Fact]
+    public async Task GetElectionOpenReadiness_WithSp08ReadinessSummary_MapsReleaseIntegrityProjection()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var sp08Summary = new Domain.ElectionSp08OpenReadinessSummary(
+            EvidenceExpected: true,
+            EvidenceMode: ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder,
+            NotForReleaseIntegrityClaims: true,
+            BlocksHighAssurance: true,
+            ReleaseManifestName: ElectionSp08ProfileIds.ReleaseManifestFileName,
+            ReleaseManifestHash: string.Empty,
+            ProtocolPackageManifestName: "ProtocolOmegaPackageManifest.json",
+            ProtocolPackageManifestHash: "sha256:protocol",
+            PrimaryResultCode: VerificationResultCodes.ReleaseIntegrityEvidenceModeNotAllowed,
+            PrimaryIssue: "Official SP-08 release evidence is required before high-assurance elections can open.",
+            ComponentCount: ElectionSp08ProfileIds.RequiredHighAssuranceComponentIds.Count,
+            LifecycleBindingCount: 0,
+            EvidenceFileCount: 0,
+            MobileEvidenceIncluded: false,
+            ReadinessBlockers:
+            [
+                new Domain.ElectionSp08OpenReadinessBlocker(
+                    VerificationResultCodes.ReleaseIntegrityEvidenceModeNotAllowed,
+                    "Official SP-08 release evidence is required before high-assurance elections can open.",
+                    BlocksOpen: true,
+                    BlocksFinalization: true)
+            ]);
+
+        mocker.GetMock<Domain.IElectionLifecycleService>()
+            .Setup(x => x.EvaluateOpenReadinessAsync(It.IsAny<Domain.EvaluateElectionOpenReadinessRequest>()))
+            .ReturnsAsync(Domain.ElectionOpenValidationResult.NotReady(
+                ["release_integrity_evidence_mode_not_allowed: Official SP-08 release evidence is required before high-assurance elections can open."],
+                [],
+                [],
+                sp08Summary: sp08Summary));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionOpenReadiness(
+            new GetElectionOpenReadinessRequest { ElectionId = electionId.ToString() },
+            CreateMockServerCallContext());
+
+        response.IsReadyToOpen.Should().BeFalse();
+        response.Sp08ReleaseIntegrity.Should().NotBeNull();
+        response.Sp08ReleaseIntegrity.EvidenceMode.Should().Be(ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder);
+        response.Sp08ReleaseIntegrity.NotForReleaseIntegrityClaims.Should().BeTrue();
+        response.Sp08ReleaseIntegrity.BlocksHighAssurance.Should().BeTrue();
+        response.Sp08ReleaseIntegrity.PrimaryResultCode.Should().Be(
+            VerificationResultCodes.ReleaseIntegrityEvidenceModeNotAllowed);
+        response.Sp08ReleaseIntegrity.ProtocolPackageManifestHash.Should().Be("sha256:protocol");
+    }
+
+    [Fact]
+    public async Task GetElectionOpenReadiness_WithSp08WarningSummary_MapsWarningCopyWithoutBlocking()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        const string warning =
+            "Development placeholder SP-08 release evidence is present for this development profile. It is not official release evidence and must not support release-integrity claims.";
+        var sp08Summary = new Domain.ElectionSp08OpenReadinessSummary(
+            EvidenceExpected: true,
+            EvidenceMode: ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder,
+            NotForReleaseIntegrityClaims: true,
+            BlocksHighAssurance: false,
+            ReleaseManifestName: ElectionSp08ProfileIds.ReleaseManifestFileName,
+            ReleaseManifestHash: string.Empty,
+            ProtocolPackageManifestName: "ProtocolOmegaPackageManifest.json",
+            ProtocolPackageManifestHash: "sha256:protocol",
+            PrimaryResultCode: VerificationResultCodes.ReleaseIntegrityEvidencePending,
+            PrimaryIssue: warning,
+            ComponentCount: ElectionSp08ProfileIds.RequiredHighAssuranceComponentIds.Count,
+            LifecycleBindingCount: 0,
+            EvidenceFileCount: 0,
+            MobileEvidenceIncluded: false,
+            ReadinessBlockers: []);
+
+        mocker.GetMock<Domain.IElectionLifecycleService>()
+            .Setup(x => x.EvaluateOpenReadinessAsync(It.IsAny<Domain.EvaluateElectionOpenReadinessRequest>()))
+            .ReturnsAsync(Domain.ElectionOpenValidationResult.Ready(
+                [],
+                sp08Summary: sp08Summary));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionOpenReadiness(
+            new GetElectionOpenReadinessRequest { ElectionId = electionId.ToString() },
+            CreateMockServerCallContext());
+
+        response.IsReadyToOpen.Should().BeTrue();
+        response.Sp08ReleaseIntegrity.Should().NotBeNull();
+        response.Sp08ReleaseIntegrity.BlocksHighAssurance.Should().BeFalse();
+        response.Sp08ReleaseIntegrity.PrimaryResultCode.Should().Be(
+            VerificationResultCodes.ReleaseIntegrityEvidencePending);
+        response.Sp08ReleaseIntegrity.Message.Should().Be(warning);
+    }
+
+    [Fact]
+    public async Task GetElectionOpenReadiness_WithOfficialSp08ReadinessSummary_MapsReleaseEvidenceRows()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var component = new ElectionSp08ReleaseComponentArtifactRecord(
+            ElectionSp08ProfileIds.ServerComponent,
+            "container_image",
+            ElectionSp08ProfileIds.EvidenceModeOfficial,
+            "hushservernode",
+            "sha256:server",
+            "0123456789abcdef0123456789abcdef01234567",
+            "HushServerNode-v1.2.3",
+            "ghcr.io/hushnetwork-social/hushservernode@sha256:server",
+            BuildWorkflowRunId: "1234567890",
+            DistributionReference: "ghcr.io/hushnetwork-social/hushservernode@sha256:server",
+            SigningFingerprint: null,
+            IsPlaceholder: false);
+        var lifecycleBinding = new ElectionSp08LifecycleReleaseBindingRecord(
+            ElectionSp08ProfileIds.OpenLifecycleStage,
+            "release-2026.05.11",
+            "release-2026.05.11",
+            "sha256:server",
+            "sha256:server",
+            MatchesSealedPolicy: true);
+        var sp08Summary = new Domain.ElectionSp08OpenReadinessSummary(
+            EvidenceExpected: true,
+            EvidenceMode: ElectionSp08ProfileIds.EvidenceModeOfficial,
+            NotForReleaseIntegrityClaims: false,
+            BlocksHighAssurance: false,
+            ReleaseManifestName: ElectionSp08ProfileIds.ReleaseManifestFileName,
+            ReleaseManifestHash: "sha256:release",
+            ProtocolPackageManifestName: "ProtocolOmegaPackageManifest.json",
+            ProtocolPackageManifestHash: "sha256:protocol",
+            PrimaryResultCode: VerificationResultCodes.ReleaseIntegrityEvidenceValid,
+            PrimaryIssue: "Official SP-08 release-integrity evidence is ready for election open.",
+            ComponentCount: 1,
+            LifecycleBindingCount: 1,
+            EvidenceFileCount: 1,
+            MobileEvidenceIncluded: false,
+            ReadinessBlockers: [])
+        {
+            PublicEvidenceAvailable = true,
+            Components = [component],
+            LifecycleBindings = [lifecycleBinding],
+        };
+
+        mocker.GetMock<Domain.IElectionLifecycleService>()
+            .Setup(x => x.EvaluateOpenReadinessAsync(It.IsAny<Domain.EvaluateElectionOpenReadinessRequest>()))
+            .ReturnsAsync(Domain.ElectionOpenValidationResult.Ready(
+                [],
+                sp08Summary: sp08Summary));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionOpenReadiness(
+            new GetElectionOpenReadinessRequest { ElectionId = electionId.ToString() },
+            CreateMockServerCallContext());
+
+        response.IsReadyToOpen.Should().BeTrue();
+        response.Sp08ReleaseIntegrity.PublicEvidenceAvailable.Should().BeTrue();
+        response.Sp08ReleaseIntegrity.EvidenceMode.Should().Be(ElectionSp08ProfileIds.EvidenceModeOfficial);
+        response.Sp08ReleaseIntegrity.PrimaryResultCode.Should().Be(
+            VerificationResultCodes.ReleaseIntegrityEvidenceValid);
+        response.Sp08ReleaseIntegrity.Components.Should().ContainSingle(x =>
+            x.ComponentId == ElectionSp08ProfileIds.ServerComponent &&
+            !x.IsPlaceholder);
+        response.Sp08ReleaseIntegrity.LifecycleBindings.Should().ContainSingle(x =>
+            x.LifecycleStage == ElectionSp08ProfileIds.OpenLifecycleStage &&
+            x.MatchesSealedPolicy);
+    }
+
+    [Fact]
+    public async Task GetElectionOpenReadiness_WithMissingSp08ReadinessSummary_MapsManifestBlocker()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var sp08Summary = new Domain.ElectionSp08OpenReadinessSummary(
+            EvidenceExpected: true,
+            EvidenceMode: string.Empty,
+            NotForReleaseIntegrityClaims: false,
+            BlocksHighAssurance: true,
+            ReleaseManifestName: ElectionSp08ProfileIds.ReleaseManifestFileName,
+            ReleaseManifestHash: string.Empty,
+            ProtocolPackageManifestName: "ProtocolOmegaPackageManifest.json",
+            ProtocolPackageManifestHash: "sha256:protocol",
+            PrimaryResultCode: VerificationResultCodes.ReleaseIntegrityManifestMissing,
+            PrimaryIssue: "Configured SP-08 release manifest was not found.",
+            ComponentCount: ElectionSp08ProfileIds.RequiredHighAssuranceComponentIds.Count,
+            LifecycleBindingCount: 0,
+            EvidenceFileCount: 0,
+            MobileEvidenceIncluded: false,
+            ReadinessBlockers:
+            [
+                new Domain.ElectionSp08OpenReadinessBlocker(
+                    VerificationResultCodes.ReleaseIntegrityManifestMissing,
+                    "Configured SP-08 release manifest was not found.",
+                    BlocksOpen: true,
+                    BlocksFinalization: true)
+            ]);
+
+        mocker.GetMock<Domain.IElectionLifecycleService>()
+            .Setup(x => x.EvaluateOpenReadinessAsync(It.IsAny<Domain.EvaluateElectionOpenReadinessRequest>()))
+            .ReturnsAsync(Domain.ElectionOpenValidationResult.NotReady(
+                ["release_integrity_manifest_missing: Configured SP-08 release manifest was not found."],
+                [],
+                [],
+                sp08Summary: sp08Summary));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionOpenReadiness(
+            new GetElectionOpenReadinessRequest { ElectionId = electionId.ToString() },
+            CreateMockServerCallContext());
+
+        response.IsReadyToOpen.Should().BeFalse();
+        response.Sp08ReleaseIntegrity.PublicEvidenceAvailable.Should().BeFalse();
+        response.Sp08ReleaseIntegrity.BlocksHighAssurance.Should().BeTrue();
+        response.Sp08ReleaseIntegrity.PrimaryResultCode.Should().Be(
+            VerificationResultCodes.ReleaseIntegrityManifestMissing);
+    }
+
+    [Fact]
+    public async Task GetElectionOpenReadiness_WithSp08LifecycleMismatch_MapsReleaseBindingRows()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var lifecycleBinding = new ElectionSp08LifecycleReleaseBindingRecord(
+            ElectionSp08ProfileIds.CloseLifecycleStage,
+            "release-2026.05.11",
+            "release-2026.05.12",
+            "sha256:expected",
+            "sha256:observed",
+            MatchesSealedPolicy: false);
+        var sp08Summary = new Domain.ElectionSp08OpenReadinessSummary(
+            EvidenceExpected: true,
+            EvidenceMode: ElectionSp08ProfileIds.EvidenceModeOfficial,
+            NotForReleaseIntegrityClaims: false,
+            BlocksHighAssurance: true,
+            ReleaseManifestName: ElectionSp08ProfileIds.ReleaseManifestFileName,
+            ReleaseManifestHash: "sha256:release",
+            ProtocolPackageManifestName: "ProtocolOmegaPackageManifest.json",
+            ProtocolPackageManifestHash: "sha256:protocol",
+            PrimaryResultCode: VerificationResultCodes.ReleaseIntegrityLifecycleMismatch,
+            PrimaryIssue: "SP-08 lifecycle release binding does not match the sealed release policy.",
+            ComponentCount: ElectionSp08ProfileIds.RequiredHighAssuranceComponentIds.Count,
+            LifecycleBindingCount: 1,
+            EvidenceFileCount: 1,
+            MobileEvidenceIncluded: false,
+            ReadinessBlockers:
+            [
+                new Domain.ElectionSp08OpenReadinessBlocker(
+                    VerificationResultCodes.ReleaseIntegrityLifecycleMismatch,
+                    "SP-08 lifecycle release binding does not match the sealed release policy.",
+                    BlocksOpen: true,
+                    BlocksFinalization: true)
+            ])
+        {
+            PublicEvidenceAvailable = true,
+            LifecycleBindings = [lifecycleBinding],
+        };
+
+        mocker.GetMock<Domain.IElectionLifecycleService>()
+            .Setup(x => x.EvaluateOpenReadinessAsync(It.IsAny<Domain.EvaluateElectionOpenReadinessRequest>()))
+            .ReturnsAsync(Domain.ElectionOpenValidationResult.NotReady(
+                ["release_integrity_lifecycle_mismatch: SP-08 lifecycle release binding does not match the sealed release policy."],
+                [],
+                [],
+                sp08Summary: sp08Summary));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionOpenReadiness(
+            new GetElectionOpenReadinessRequest { ElectionId = electionId.ToString() },
+            CreateMockServerCallContext());
+
+        response.IsReadyToOpen.Should().BeFalse();
+        response.Sp08ReleaseIntegrity.PrimaryResultCode.Should().Be(
+            VerificationResultCodes.ReleaseIntegrityLifecycleMismatch);
+        response.Sp08ReleaseIntegrity.LifecycleBindings.Should().ContainSingle(x =>
+            x.LifecycleStage == ElectionSp08ProfileIds.CloseLifecycleStage &&
+            !x.MatchesSealedPolicy);
+    }
+
     [Theory]
     [InlineData(ProtocolPackageBindingStatus.Stale, ProtocolPackageBindingStatusProto.ProtocolPackageBindingStale)]
     [InlineData(ProtocolPackageBindingStatus.Incompatible, ProtocolPackageBindingStatusProto.ProtocolPackageBindingIncompatible)]

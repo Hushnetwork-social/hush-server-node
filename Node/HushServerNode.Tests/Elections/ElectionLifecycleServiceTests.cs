@@ -2302,7 +2302,7 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
-    public async Task EvaluateOpenReadinessAsync_WithHighAssuranceProfileAndCompleteCustodyEvidence_ReturnsReady()
+    public async Task EvaluateOpenReadinessAsync_WithHighAssuranceProfileAndCompleteCustodyEvidence_ReturnsSp08Blocker()
     {
         var store = new ElectionStore();
         var service = CreateService(store);
@@ -2334,8 +2334,7 @@ public class ElectionLifecycleServiceTests
             election.ElectionId,
             RequiredWarningCodes: []));
 
-        result.IsReadyToOpen.Should().BeTrue();
-        result.ValidationErrors.Should().BeEmpty();
+        result.IsReadyToOpen.Should().BeFalse();
         result.Sp06Summary.Should().NotBeNull();
         result.Sp06Summary!.CompleteEvidenceCount.Should().Be(5);
         result.Sp06Summary.MissingEvidenceCount.Should().Be(0);
@@ -2345,6 +2344,229 @@ public class ElectionLifecycleServiceTests
         result.Sp07Summary.CiphertextSlotCount.Should().Be(election.Options.Count);
         result.Sp07Summary.PlannedChunkCount.Should().Be(1);
         result.Sp07Summary.ReadinessBlockers.Should().BeEmpty();
+        result.Sp08Summary.Should().NotBeNull();
+        result.Sp08Summary!.EvidenceMode.Should().Be(ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder);
+        result.Sp08Summary.NotForReleaseIntegrityClaims.Should().BeTrue();
+        result.Sp08Summary.BlocksHighAssurance.Should().BeTrue();
+        result.Sp08Summary.ReadinessBlockers.Should().ContainSingle(x =>
+            x.Code == VerificationResultCodes.ReleaseIntegrityEvidenceModeNotAllowed &&
+            x.BlocksOpen);
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains(VerificationResultCodes.ReleaseIntegrityEvidenceModeNotAllowed, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithHighAssuranceProfileAndOfficialSp08Evidence_ReturnsReady()
+    {
+        var store = new ElectionStore();
+        var setup = SeedOpenReadyHighAssuranceTrusteeElection(store);
+        var manifest = CreateOfficialSp08ReleaseManifest(setup.ProtocolPackageBinding.ReleaseManifestHash);
+        var manifestPath = Path.Combine(Path.GetTempPath(), $"official-sp08-{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(manifestPath, JsonSerializer.Serialize(manifest, VerificationJson.Options));
+        var service = CreateService(
+            store,
+            sp08ReleaseEvidenceProvider: new ElectionSp08ReleaseEvidenceProvider(
+                new ElectionSp08ReleaseEvidenceOptions(manifestPath)));
+
+        try
+        {
+            var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+                setup.Election.ElectionId,
+                RequiredWarningCodes: []));
+
+            result.IsReadyToOpen.Should().BeTrue();
+            result.ValidationErrors.Should().BeEmpty();
+            result.Sp08Summary.Should().NotBeNull();
+            result.Sp08Summary!.EvidenceMode.Should().Be(ElectionSp08ProfileIds.EvidenceModeOfficial);
+            result.Sp08Summary.NotForReleaseIntegrityClaims.Should().BeFalse();
+            result.Sp08Summary.PublicEvidenceAvailable.Should().BeTrue();
+            result.Sp08Summary.BlocksHighAssurance.Should().BeFalse();
+            result.Sp08Summary.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityEvidenceValid);
+            result.Sp08Summary.ComponentCount.Should().Be(ElectionSp08ProfileIds.RequiredHighAssuranceComponentIds.Count);
+            result.Sp08Summary.LifecycleBindingCount.Should().Be(5);
+            result.Sp08Summary.ReadinessBlockers.Should().BeEmpty();
+        }
+        finally
+        {
+            File.Delete(manifestPath);
+        }
+    }
+
+    [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithHighAssuranceProfileAndMissingConfiguredSp08Manifest_ReturnsManifestBlocker()
+    {
+        var store = new ElectionStore();
+        var setup = SeedOpenReadyHighAssuranceTrusteeElection(store);
+        var missingManifestPath = Path.Combine(Path.GetTempPath(), $"missing-sp08-{Guid.NewGuid():N}.json");
+        var service = CreateService(
+            store,
+            sp08ReleaseEvidenceProvider: new ElectionSp08ReleaseEvidenceProvider(
+                new ElectionSp08ReleaseEvidenceOptions(missingManifestPath)));
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            setup.Election.ElectionId,
+            RequiredWarningCodes: []));
+
+        result.IsReadyToOpen.Should().BeFalse();
+        result.Sp08Summary.Should().NotBeNull();
+        result.Sp08Summary!.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityManifestMissing);
+        result.Sp08Summary.BlocksHighAssurance.Should().BeTrue();
+        result.Sp08Summary.PublicEvidenceAvailable.Should().BeFalse();
+        result.Sp08Summary.ReadinessBlockers.Should().ContainSingle(x =>
+            x.Code == VerificationResultCodes.ReleaseIntegrityManifestMissing &&
+            x.BlocksOpen);
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains(VerificationResultCodes.ReleaseIntegrityManifestMissing, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("latest")]
+    [InlineData("file:///tmp/hushservernode")]
+    public async Task EvaluateOpenReadinessAsync_WithHighAssuranceProfileAndMutableOrLocalSp08Reference_ReturnsReferenceBlocker(
+        string immutableReference)
+    {
+        var store = new ElectionStore();
+        var setup = SeedOpenReadyHighAssuranceTrusteeElection(store);
+        var manifest = CreateOfficialSp08ReleaseManifest(setup.ProtocolPackageBinding.ReleaseManifestHash);
+        var tamperedManifest = manifest with
+        {
+            Components = manifest.Components
+                .Select(component => string.Equals(
+                    component.ComponentId,
+                    ElectionSp08ProfileIds.ServerComponent,
+                    StringComparison.Ordinal)
+                    ? component with { ImmutableReference = immutableReference }
+                    : component)
+                .ToArray(),
+        };
+        var service = CreateService(
+            store,
+            sp08ReleaseEvidenceProvider: new FixedSp08ReleaseEvidenceProvider(tamperedManifest));
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            setup.Election.ElectionId,
+            RequiredWarningCodes: []));
+
+        result.IsReadyToOpen.Should().BeFalse();
+        result.Sp08Summary.Should().NotBeNull();
+        result.Sp08Summary!.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityMutableArtifactReference);
+        result.Sp08Summary.BlocksHighAssurance.Should().BeTrue();
+        result.Sp08Summary.ReadinessBlockers.Should().ContainSingle(x =>
+            x.Code == VerificationResultCodes.ReleaseIntegrityMutableArtifactReference &&
+            x.BlocksOpen);
+    }
+
+    [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithHighAssuranceProfileAndSp08ComponentMissingWorkflowRun_ReturnsComponentBlocker()
+    {
+        var store = new ElectionStore();
+        var setup = SeedOpenReadyHighAssuranceTrusteeElection(store);
+        var manifest = CreateOfficialSp08ReleaseManifest(setup.ProtocolPackageBinding.ReleaseManifestHash);
+        var tamperedManifest = manifest with
+        {
+            Components = manifest.Components
+                .Select(component => string.Equals(
+                    component.ComponentId,
+                    ElectionSp08ProfileIds.ServerComponent,
+                    StringComparison.Ordinal)
+                    ? component with { BuildWorkflowRunId = null }
+                    : component)
+                .ToArray(),
+        };
+        var service = CreateService(
+            store,
+            sp08ReleaseEvidenceProvider: new FixedSp08ReleaseEvidenceProvider(tamperedManifest));
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            setup.Election.ElectionId,
+            RequiredWarningCodes: []));
+
+        result.IsReadyToOpen.Should().BeFalse();
+        result.Sp08Summary.Should().NotBeNull();
+        result.Sp08Summary!.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityComponentHashMismatch);
+        result.Sp08Summary.PrimaryIssue.Should().Contain("build workflow run id");
+        result.Sp08Summary.ReadinessBlockers.Should().ContainSingle(x =>
+            x.Code == VerificationResultCodes.ReleaseIntegrityComponentHashMismatch &&
+            x.BlocksOpen);
+    }
+
+    [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithHighAssuranceProfileAndSp08ProtocolPackageMismatch_ReturnsCircuitBindingBlocker()
+    {
+        var store = new ElectionStore();
+        var setup = SeedOpenReadyHighAssuranceTrusteeElection(store);
+        var manifest = CreateOfficialSp08ReleaseManifest(setup.ProtocolPackageBinding.ReleaseManifestHash);
+        var tamperedManifest = manifest with
+        {
+            CircuitAndKeys = manifest.CircuitAndKeys
+                .Select(circuit => circuit with { ProtocolPackageManifestHash = Hash('f') })
+                .ToArray(),
+        };
+        var service = CreateService(
+            store,
+            sp08ReleaseEvidenceProvider: new FixedSp08ReleaseEvidenceProvider(tamperedManifest));
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            setup.Election.ElectionId,
+            RequiredWarningCodes: []));
+
+        result.IsReadyToOpen.Should().BeFalse();
+        result.Sp08Summary.Should().NotBeNull();
+        result.Sp08Summary!.PrimaryResultCode.Should().Be(
+            VerificationResultCodes.ReleaseIntegrityCircuitOrPackageHashMismatch);
+        result.Sp08Summary.BlocksHighAssurance.Should().BeTrue();
+        result.ValidationErrors.Should().Contain(x =>
+            x.Contains(VerificationResultCodes.ReleaseIntegrityCircuitOrPackageHashMismatch, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithDevelopmentProfile_ReturnsReadyWithSp08PlaceholderWarning()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateTrusteeElection(
+            acknowledgedWarningCodes: [ElectionWarningCode.AllTrusteesRequiredFragility],
+            requiredApprovalCount: 1,
+            bindingStatus: ElectionBindingStatus.NonBinding);
+        var acceptedInvitation = CreateAcceptedTrusteeInvitation(election, "trustee-a", "Alice");
+        var warningAcknowledgement = ElectionModelFactory.CreateWarningAcknowledgement(
+            election.ElectionId,
+            ElectionWarningCode.AllTrusteesRequiredFragility,
+            election.CurrentDraftRevision,
+            acknowledgedByPublicAddress: "owner-address");
+        var profile = RegisterCeremonyProfile(
+            store,
+            election.SelectedProfileId,
+            trusteeCount: 1,
+            requiredApprovalCount: 1,
+            devOnly: true);
+        RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            [acceptedInvitation],
+            completedTrustees: ["trustee-a"],
+            ready: true);
+
+        store.Elections[election.ElectionId] = election;
+        store.TrusteeInvitations[acceptedInvitation.Id] = acceptedInvitation;
+        store.WarningAcknowledgements.Add(warningAcknowledgement);
+        SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            election.ElectionId,
+            RequiredWarningCodes: []));
+
+        result.IsReadyToOpen.Should().BeTrue();
+        result.ValidationErrors.Should().BeEmpty();
+        result.Sp08Summary.Should().NotBeNull();
+        result.Sp08Summary!.EvidenceMode.Should().Be(ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder);
+        result.Sp08Summary.NotForReleaseIntegrityClaims.Should().BeTrue();
+        result.Sp08Summary.BlocksHighAssurance.Should().BeFalse();
+        result.Sp08Summary.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityEvidencePending);
+        result.Sp08Summary.ReadinessBlockers.Should().BeEmpty();
+        result.Sp08Summary.PrimaryIssue.Should().Contain("not official release evidence");
     }
 
     [Fact]
@@ -4896,7 +5118,8 @@ public class ElectionLifecycleServiceTests
         IAdminOnlyProtectedTallyEnvelopeCrypto? adminOnlyProtectedTallyEnvelopeCrypto = null,
         IElectionSensitiveStorageMaintenance? sensitiveStorageMaintenance = null,
         IElectionPublicationWitnessDeletionService? publicationWitnessDeletionService = null,
-        IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null)
+        IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null,
+        IElectionSp08ReleaseEvidenceProvider? sp08ReleaseEvidenceProvider = null)
     {
         SeedStandardCeremonyProfiles(store);
 
@@ -4914,7 +5137,30 @@ public class ElectionLifecycleServiceTests
             adminOnlyProtectedTallyEnvelopeCrypto ?? new TransparentTestAdminOnlyProtectedTallyEnvelopeCrypto(),
             sensitiveStorageMaintenance: sensitiveStorageMaintenance,
             publicationWitnessDeletionService: publicationWitnessDeletionService,
-            publicationProofSessionRunner: publicationProofSessionRunner);
+            publicationProofSessionRunner: publicationProofSessionRunner,
+            sp08ReleaseEvidenceProvider: sp08ReleaseEvidenceProvider);
+    }
+
+    private sealed record OpenReadyHighAssuranceSetup(
+        ElectionRecord Election,
+        ProtocolPackageBindingRecord ProtocolPackageBinding);
+
+    private sealed class FixedSp08ReleaseEvidenceProvider : IElectionSp08ReleaseEvidenceProvider
+    {
+        private readonly ElectionSp08ReleaseManifestArtifactRecord _manifest;
+
+        public FixedSp08ReleaseEvidenceProvider(ElectionSp08ReleaseManifestArtifactRecord manifest)
+        {
+            _manifest = manifest;
+        }
+
+        public Task<ElectionSp08ReleaseEvidenceSnapshot> GetOpenReadinessEvidenceAsync(
+            ElectionRecord election,
+            ProtocolPackageBindingOpenValidation protocolPackageValidation,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(ElectionSp08ReleaseEvidenceProvider.CreateFromManifest(
+                protocolPackageValidation,
+                _manifest));
     }
 
     private sealed class FakeElectionSensitiveStorageMaintenance : IElectionSensitiveStorageMaintenance
@@ -5157,6 +5403,127 @@ public class ElectionLifecycleServiceTests
             OpenArtifactId = Guid.NewGuid(),
             LastUpdatedAt = DateTime.UtcNow,
         };
+
+    private static OpenReadyHighAssuranceSetup SeedOpenReadyHighAssuranceTrusteeElection(ElectionStore store)
+    {
+        var election = CreateHighAssuranceTrusteeElection();
+        var invitations = CreateHighAssuranceTrusteeInvitations(election);
+        var profile = RegisterCeremonyProfile(
+            store,
+            ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+            trusteeCount: 5,
+            requiredApprovalCount: 3);
+        RegisterCeremonyVersion(
+            store,
+            election,
+            profile,
+            invitations,
+            completedTrustees: invitations.Select(x => x.TrusteeUserAddress).ToArray(),
+            ready: true);
+
+        store.Elections[election.ElectionId] = election;
+        foreach (var invitation in invitations)
+        {
+            store.TrusteeInvitations[invitation.Id] = invitation;
+        }
+
+        var protocolPackageBinding = SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
+
+        return new OpenReadyHighAssuranceSetup(election, protocolPackageBinding);
+    }
+
+    private static ElectionSp08ReleaseManifestArtifactRecord CreateOfficialSp08ReleaseManifest(
+        string protocolPackageManifestHash)
+    {
+        const string releaseId = "release-2026.05.11";
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        const string sourceTag = "hush-voting-2026.05.11";
+        var serverDigest = Sp08Digest("server");
+        var webDigest = Sp08Digest("web-client");
+        var verifierDigest = Sp08Digest("standalone-verifier");
+        var sp07Digest = Sp08Digest("sp07-worker");
+        var protocolDigest = $"sha256:{protocolPackageManifestHash}";
+        var exporterDigest = Sp08Digest("audit-package-exporter");
+
+        return new ElectionSp08ReleaseManifestArtifactRecord(
+            Schema: ElectionSp08ProfileIds.ReleaseManifestSchema,
+            ManifestId: "release-manifest-2026-05-11",
+            releaseId,
+            ElectionSp08ProfileIds.EvidenceModeOfficial,
+            NotForReleaseIntegrityClaims: false,
+            GeneratedAt: DateTime.UnixEpoch,
+            SourceAuthority: "github-actions",
+            sourceCommit,
+            sourceTag,
+            Components:
+            [
+                CreateOfficialSp08Component(ElectionSp08ProfileIds.ServerComponent, serverDigest, sourceCommit, sourceTag),
+                CreateOfficialSp08Component(ElectionSp08ProfileIds.WebClientComponent, webDigest, sourceCommit, sourceTag),
+                CreateOfficialSp08Component(ElectionSp08ProfileIds.StandaloneVerifierComponent, verifierDigest, sourceCommit, sourceTag),
+                CreateOfficialSp08Component(ElectionSp08ProfileIds.Sp07ProofWorkerComponent, sp07Digest, sourceCommit, sourceTag),
+                CreateOfficialSp08Component(ElectionSp08ProfileIds.ProtocolPackageComponent, protocolDigest, sourceCommit, sourceTag),
+                CreateOfficialSp08Component(ElectionSp08ProfileIds.AuditPackageExporterComponent, exporterDigest, sourceCommit, sourceTag),
+            ],
+            CircuitAndKeys:
+            [
+                new ElectionSp08CircuitKeyArtifactRecord(
+                    CircuitId: "protocol-omega-publication-proof-v1",
+                    CircuitHash: Sp08Digest("circuit"),
+                    ProvingKeyHash: Sp08Digest("proving-key"),
+                    VerifyingKeyHash: Sp08Digest("verifying-key"),
+                    ProtocolPackageManifestHash: protocolPackageManifestHash),
+            ],
+            LifecycleBindings:
+            [
+                CreateOfficialSp08Lifecycle(ElectionSp08ProfileIds.OpenLifecycleStage, releaseId, serverDigest),
+                CreateOfficialSp08Lifecycle(ElectionSp08ProfileIds.CloseLifecycleStage, releaseId, serverDigest),
+                CreateOfficialSp08Lifecycle(ElectionSp08ProfileIds.ProofWorkerLifecycleStage, releaseId, sp07Digest),
+                CreateOfficialSp08Lifecycle(ElectionSp08ProfileIds.ExporterLifecycleStage, releaseId, exporterDigest),
+                CreateOfficialSp08Lifecycle(ElectionSp08ProfileIds.ClientReleaseSetLifecycleStage, releaseId, webDigest),
+            ],
+            PublicPrivacyBoundary:
+            [
+                "no_private_host_state",
+                "no_per_voter_device_identifier",
+                "no_raw_attestation_token",
+                "no_ip_address",
+            ]);
+    }
+
+    private static ElectionSp08ReleaseComponentArtifactRecord CreateOfficialSp08Component(
+        string componentId,
+        string digest,
+        string sourceCommit,
+        string sourceTag) =>
+        new(
+            componentId,
+            componentId,
+            ElectionSp08ProfileIds.EvidenceModeOfficial,
+            $"{componentId}.artifact",
+            digest,
+            sourceCommit,
+            sourceTag,
+            $"{componentId}@{digest}",
+            BuildWorkflowRunId: "1234567890",
+            DistributionReference: null,
+            SigningFingerprint: null,
+            IsPlaceholder: false);
+
+    private static ElectionSp08LifecycleReleaseBindingRecord CreateOfficialSp08Lifecycle(
+        string lifecycleStage,
+        string releaseId,
+        string digest) =>
+        new(
+            lifecycleStage,
+            releaseId,
+            releaseId,
+            digest,
+            digest,
+            MatchesSealedPolicy: true);
+
+    private static string Sp08Digest(string value) =>
+        $"sha256:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant()}";
 
     private static ApprovedProtocolPackageCatalogEntryRecord SeedApprovedProtocolPackage(
         ElectionStore store,

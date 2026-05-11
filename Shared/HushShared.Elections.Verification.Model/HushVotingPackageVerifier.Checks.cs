@@ -463,6 +463,379 @@ public sealed partial class HushVotingPackageVerifier
         return results;
     }
 
+    private static async Task<IReadOnlyList<VerifierCheckResultRecord>> CheckReleaseIntegrityEvidenceAsync(
+        string packagePath,
+        AuditPackageManifestRecord auditManifest,
+        string profileId,
+        ElectionRecordReferenceRecord electionRecord,
+        CancellationToken cancellationToken)
+    {
+        var isHighAssurance = string.Equals(profileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal);
+        var requiredPaths = new[]
+        {
+            VerificationPackageFileNames.Sp08ReleaseManifest,
+            VerificationPackageFileNames.Sp08ReleaseIntegrity,
+            VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput,
+        };
+        var missingFiles = requiredPaths
+            .Where(path => !File.Exists(ResolvePackagePath(packagePath, path)))
+            .ToArray();
+        if (missingFiles.Length > 0)
+        {
+            return
+            [
+                CreateResult(
+                    ElectionSp08ProfileIds.ManifestRequiredCheckCode,
+                    isHighAssurance ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn,
+                    VerificationResultCodes.ReleaseIntegrityManifestMissing,
+                    isHighAssurance
+                        ? "High-assurance profile requires SP-08 release integrity package artifacts."
+                        : "SP-08 release integrity package artifacts are not available.",
+                    missingFiles.ToDictionary(path => path, _ => "missing", StringComparer.Ordinal)),
+            ];
+        }
+
+        var results = new List<VerifierCheckResultRecord>();
+        var releaseManifest = await ReadJsonAsync<ElectionSp08ReleaseManifestArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp08ReleaseManifest,
+            cancellationToken);
+        var releaseIntegrity = await ReadJsonAsync<ElectionSp08ReleaseIntegrityArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp08ReleaseIntegrity,
+            cancellationToken);
+        var verifierOutput = await ReadJsonAsync<ElectionSp08VerifierOutputArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput,
+            cancellationToken);
+
+        ValidateSp08PackageMembership(results, auditManifest, requiredPaths);
+        ValidateSp08Shape(results, profileId, electionRecord, releaseManifest, releaseIntegrity, verifierOutput);
+
+        var actualManifestHash = ElectionSp08ReleaseManifestHasher.ComputeReleaseManifestHash(releaseManifest);
+        if (!string.Equals(actualManifestHash, releaseIntegrity.ReleaseManifestHash, StringComparison.OrdinalIgnoreCase))
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.ManifestRequiredCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ReleaseIntegrityManifestMissing,
+                "SP-08 release manifest hash does not match the release-integrity summary.",
+                new Dictionary<string, string>
+                {
+                    ["expected"] = releaseIntegrity.ReleaseManifestHash,
+                    ["actual"] = actualManifestHash,
+                }));
+        }
+
+        if (!ElectionSp08ReleaseIntegrityRules.IsEvidenceModeAllowedForProfile(
+                profileId,
+                releaseManifest.EvidenceMode,
+                releaseManifest.NotForReleaseIntegrityClaims) ||
+            !ElectionSp08ReleaseIntegrityRules.IsEvidenceModeAllowedForProfile(
+                profileId,
+                releaseIntegrity.EvidenceMode,
+                releaseIntegrity.NotForReleaseIntegrityClaims))
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ReleaseIntegrityEvidenceModeNotAllowed,
+                "High-assurance profile requires official SP-08 release evidence.",
+                new Dictionary<string, string>
+                {
+                    ["manifest_evidence_mode"] = releaseManifest.EvidenceMode,
+                    ["integrity_evidence_mode"] = releaseIntegrity.EvidenceMode,
+                    ["not_for_release_integrity_claims"] =
+                        (releaseManifest.NotForReleaseIntegrityClaims ||
+                            releaseIntegrity.NotForReleaseIntegrityClaims).ToString(),
+                }));
+        }
+        else if (!ElectionSp08ReleaseIntegrityRules.IsOfficialEvidenceMode(releaseManifest.EvidenceMode) ||
+                 releaseManifest.NotForReleaseIntegrityClaims ||
+                 !ElectionSp08ReleaseIntegrityRules.IsOfficialEvidenceMode(releaseIntegrity.EvidenceMode) ||
+                 releaseIntegrity.NotForReleaseIntegrityClaims)
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode,
+                VerificationCheckStatus.Warn,
+                VerificationResultCodes.ReleaseIntegrityEvidencePending,
+                "SP-08 release integrity evidence is a development placeholder and is not official release evidence.",
+                new Dictionary<string, string>
+                {
+                    ["release_manifest_hash"] = actualManifestHash,
+                    ["evidence_mode"] = releaseManifest.EvidenceMode,
+                }));
+        }
+        else
+        {
+            ValidateSp08OfficialComponents(results, profileId, releaseManifest);
+            ValidateSp08ProtocolAndCircuitBinding(results, electionRecord, releaseManifest, releaseIntegrity);
+            ValidateSp08LifecycleBinding(results, profileId, releaseManifest);
+            ValidateSp08MobileEvidence(results, releaseManifest);
+        }
+
+        if (results.Count == 0)
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.ReleaseIntegrityAcceptedCheckCode,
+                VerificationCheckStatus.Pass,
+                VerificationResultCodes.ReleaseIntegrityEvidenceValid,
+                "SP-08 release manifest, package summary, component hashes, and lifecycle bindings are consistent.",
+                new Dictionary<string, string>
+                {
+                    ["release_manifest_hash"] = actualManifestHash,
+                }));
+        }
+
+        return results;
+    }
+
+    private static void ValidateSp08PackageMembership(
+        List<VerifierCheckResultRecord> results,
+        AuditPackageManifestRecord auditManifest,
+        IReadOnlyList<string> requiredPaths)
+    {
+        var manifestPaths = auditManifest.Entries
+            .Select(x => x.Path)
+            .ToHashSet(StringComparer.Ordinal);
+        var missingEntries = requiredPaths
+            .Where(path => !manifestPaths.Contains(path))
+            .ToArray();
+        if (missingEntries.Length == 0)
+        {
+            return;
+        }
+
+        results.Add(CreateResult(
+            ElectionSp08ProfileIds.PackageMembershipCheckCode,
+            VerificationCheckStatus.Fail,
+            VerificationResultCodes.ReleaseIntegrityPackageManifestMissingFiles,
+            "SP-08 release integrity files must be listed in the audit package manifest.",
+            missingEntries.ToDictionary(path => path, _ => "missing_manifest_entry", StringComparer.Ordinal)));
+    }
+
+    private static void ValidateSp08Shape(
+        List<VerifierCheckResultRecord> results,
+        string profileId,
+        ElectionRecordReferenceRecord electionRecord,
+        ElectionSp08ReleaseManifestArtifactRecord releaseManifest,
+        ElectionSp08ReleaseIntegrityArtifactRecord releaseIntegrity,
+        ElectionSp08VerifierOutputArtifactRecord verifierOutput)
+    {
+        if (!string.Equals(releaseManifest.Schema, ElectionSp08ProfileIds.ReleaseManifestSchema, StringComparison.Ordinal) ||
+            !ElectionSp08ProfileIds.EvidenceModes.Contains(releaseManifest.EvidenceMode) ||
+            !string.Equals(releaseIntegrity.ReleaseManifestName, ElectionSp08ProfileIds.ReleaseManifestFileName, StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.ManifestRequiredCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ReleaseIntegrityManifestMissing,
+                "SP-08 release manifest schema, evidence mode, or summary binding is invalid."));
+        }
+
+        if (!string.Equals(releaseIntegrity.ElectionId, electionRecord.ElectionId, StringComparison.Ordinal) ||
+            !string.Equals(verifierOutput.ElectionId, electionRecord.ElectionId, StringComparison.Ordinal) ||
+            !string.Equals(releaseIntegrity.ProfileId, profileId, StringComparison.Ordinal) ||
+            !string.Equals(verifierOutput.VerifierProfileId, profileId, StringComparison.Ordinal) ||
+            !string.Equals(verifierOutput.Schema, ElectionSp08ProfileIds.ReleaseVerifierOutputSchema, StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.LifecycleBindingCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ReleaseIntegrityLifecycleMismatch,
+                "SP-08 election id, verifier profile, or verifier-output schema does not match the package context."));
+        }
+    }
+
+    private static void ValidateSp08OfficialComponents(
+        List<VerifierCheckResultRecord> results,
+        string profileId,
+        ElectionSp08ReleaseManifestArtifactRecord releaseManifest)
+    {
+        var duplicateComponent = releaseManifest.Components
+            .GroupBy(x => x.ComponentId, StringComparer.Ordinal)
+            .FirstOrDefault(x => x.Count() > 1);
+        if (duplicateComponent is not null)
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.ComponentHashesCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ReleaseIntegrityComponentHashMismatch,
+                $"SP-08 release manifest has duplicate component id '{duplicateComponent.Key}'."));
+        }
+
+        if (string.Equals(profileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal))
+        {
+            var componentIds = releaseManifest.Components
+                .Select(x => x.ComponentId)
+                .ToHashSet(StringComparer.Ordinal);
+            var missingComponents = ElectionSp08ProfileIds.RequiredHighAssuranceComponentIds
+                .Where(componentId => !componentIds.Contains(componentId))
+                .ToArray();
+            if (missingComponents.Length > 0)
+            {
+                results.Add(CreateResult(
+                    ElectionSp08ProfileIds.ComponentHashesCheckCode,
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.ReleaseIntegrityComponentHashMismatch,
+                    "High-assurance SP-08 evidence is missing required release components.",
+                    missingComponents.ToDictionary(componentId => componentId, _ => "missing", StringComparer.Ordinal)));
+            }
+        }
+
+        foreach (var component in releaseManifest.Components)
+        {
+            if (component.IsPlaceholder ||
+                !ElectionSp08ReleaseIntegrityRules.IsOfficialEvidenceMode(component.EvidenceMode) ||
+                !component.ArtifactDigest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
+            {
+                results.Add(CreateResult(
+                    ElectionSp08ProfileIds.ComponentHashesCheckCode,
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.ReleaseIntegrityComponentHashMismatch,
+                    $"SP-08 component '{component.ComponentId}' does not bind official source and artifact hashes."));
+            }
+
+            if (ElectionSp08ReleaseIntegrityRules.IsMutableOrLocalReference(component.ImmutableReference))
+            {
+                results.Add(CreateResult(
+                    ElectionSp08ProfileIds.ImmutableArtifactsCheckCode,
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.ReleaseIntegrityMutableArtifactReference,
+                    $"SP-08 component '{component.ComponentId}' uses a mutable or local artifact reference.",
+                    new Dictionary<string, string>
+                    {
+                        ["component_id"] = component.ComponentId,
+                        ["artifact_reference"] = component.ImmutableReference,
+                    }));
+            }
+        }
+    }
+
+    private static void ValidateSp08ProtocolAndCircuitBinding(
+        List<VerifierCheckResultRecord> results,
+        ElectionRecordReferenceRecord electionRecord,
+        ElectionSp08ReleaseManifestArtifactRecord releaseManifest,
+        ElectionSp08ReleaseIntegrityArtifactRecord releaseIntegrity)
+    {
+        if (!string.Equals(
+                releaseIntegrity.ProtocolPackageManifestHash,
+                electionRecord.ProtocolReleaseManifestHash,
+                StringComparison.OrdinalIgnoreCase) ||
+            releaseManifest.CircuitAndKeys.Count == 0 ||
+            releaseManifest.CircuitAndKeys.All(x =>
+                !string.Equals(
+                    x.ProtocolPackageManifestHash,
+                    electionRecord.ProtocolReleaseManifestHash,
+                    StringComparison.OrdinalIgnoreCase)))
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.CircuitAndPackageHashesCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ReleaseIntegrityCircuitOrPackageHashMismatch,
+                "SP-08 protocol package or circuit/key evidence does not bind the sealed election protocol package."));
+        }
+
+        var malformedCircuitEvidence = releaseManifest.CircuitAndKeys.FirstOrDefault(x =>
+            !IsSp08Sha256Prefixed(x.CircuitHash) ||
+            !IsSp08Sha256Prefixed(x.ProvingKeyHash) ||
+            !IsSp08Sha256Prefixed(x.VerifyingKeyHash));
+        if (malformedCircuitEvidence is not null)
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.CircuitAndPackageHashesCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ReleaseIntegrityCircuitOrPackageHashMismatch,
+                "SP-08 circuit, proving-key, and verifying-key evidence must use sha256-prefixed hashes.",
+                new Dictionary<string, string>
+                {
+                    ["circuit_id"] = malformedCircuitEvidence.CircuitId,
+                }));
+        }
+    }
+
+    private static bool IsSp08Sha256Prefixed(string value) =>
+        value.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase);
+
+    private static void ValidateSp08LifecycleBinding(
+        List<VerifierCheckResultRecord> results,
+        string profileId,
+        ElectionSp08ReleaseManifestArtifactRecord releaseManifest)
+    {
+        if (!string.Equals(profileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var lifecycleStages = releaseManifest.LifecycleBindings
+            .Select(x => x.LifecycleStage)
+            .ToHashSet(StringComparer.Ordinal);
+        var missingStages = new[]
+            {
+                ElectionSp08ProfileIds.OpenLifecycleStage,
+                ElectionSp08ProfileIds.CloseLifecycleStage,
+                ElectionSp08ProfileIds.ProofWorkerLifecycleStage,
+                ElectionSp08ProfileIds.ExporterLifecycleStage,
+                ElectionSp08ProfileIds.ClientReleaseSetLifecycleStage,
+            }
+            .Where(stage => !lifecycleStages.Contains(stage))
+            .ToArray();
+        if (missingStages.Length > 0)
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.LifecycleBindingCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ReleaseIntegrityLifecycleMismatch,
+                "High-assurance SP-08 evidence is missing lifecycle release bindings.",
+                missingStages.ToDictionary(stage => stage, _ => "missing", StringComparer.Ordinal)));
+        }
+
+        var mismatch = releaseManifest.LifecycleBindings.FirstOrDefault(x =>
+            !x.MatchesSealedPolicy ||
+            !string.Equals(x.ExpectedReleaseId, x.ObservedReleaseId, StringComparison.Ordinal) ||
+            !string.Equals(x.ExpectedArtifactDigest, x.ObservedArtifactDigest, StringComparison.OrdinalIgnoreCase));
+        if (mismatch is not null)
+        {
+            results.Add(CreateResult(
+                ElectionSp08ProfileIds.LifecycleBindingCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ReleaseIntegrityLifecycleMismatch,
+                "SP-08 observed lifecycle release evidence does not match the sealed release policy.",
+                new Dictionary<string, string>
+                {
+                    ["lifecycle_stage"] = mismatch.LifecycleStage,
+                    ["expected_release_id"] = mismatch.ExpectedReleaseId,
+                    ["observed_release_id"] = mismatch.ObservedReleaseId,
+                }));
+        }
+    }
+
+    private static void ValidateSp08MobileEvidence(
+        List<VerifierCheckResultRecord> results,
+        ElectionSp08ReleaseManifestArtifactRecord releaseManifest)
+    {
+        var mobileComponents = releaseManifest.Components
+            .Where(x => string.Equals(x.ComponentId, ElectionSp08ProfileIds.MobileAppComponent, StringComparison.Ordinal))
+            .ToArray();
+        if (mobileComponents.Length == 0)
+        {
+            return;
+        }
+
+        foreach (var component in mobileComponents)
+        {
+            if (string.IsNullOrWhiteSpace(component.DistributionReference) ||
+                string.IsNullOrWhiteSpace(component.SigningFingerprint))
+            {
+                results.Add(CreateResult(
+                    ElectionSp08ProfileIds.MobileEvidenceCheckCode,
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.ReleaseIntegrityMobileEvidenceIncomplete,
+                    "SP-08 mobile/app release evidence must include aggregate distribution and signing evidence."));
+            }
+        }
+    }
+
     private static ElectionSp07PublicationProofManifestArtifactRecord? TryReadSp07PublicationProofManifest(
         ElectionSp07PublicationProofTranscriptArtifactRecord transcript,
         List<VerifierCheckResultRecord> results)

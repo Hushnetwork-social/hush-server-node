@@ -38,6 +38,19 @@ public class HushVotingPackageVerifierTamperTests
             { "tamper-raw-trustee-share", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicRestrictedFieldLeak, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "missing-sp07-development-warning", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.PublicationProofEvidencePending, VerificationCheckStatus.Warn, VerificationOverallStatus.Warn, 0 },
             { "missing-sp07-high-assurance-fail-closed", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.PublicationProofEvidencePending, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "missing-sp08-high-assurance-fail-closed", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityEvidenceModeNotAllowed, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp08-release-manifest-hash", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityManifestMissing, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp08-mutable-artifact-reference", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityMutableArtifactReference, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp08-local-artifact-reference", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityMutableArtifactReference, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp08-component-hash-mismatch", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityComponentHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp08-web-component-hash-mismatch", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityComponentHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp08-verifier-component-hash-mismatch", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityComponentHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp08-sp07-worker-component-hash-mismatch", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityComponentHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp08-protocol-package-mismatch", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityCircuitOrPackageHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp08-circuit-key-hash-mismatch", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityCircuitOrPackageHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp08-lifecycle-mismatch", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityLifecycleMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp08-mobile-evidence-incomplete", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityMobileEvidenceIncomplete, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp08-missing-package-manifest-entry", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityPackageManifestMissingFiles, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
         };
 
     [Theory]
@@ -67,18 +80,26 @@ public class HushVotingPackageVerifierTamperTests
     private static TemporaryPackageDirectory CreatePackage(string profileId, string fixtureName)
     {
         var directory = new TemporaryPackageDirectory();
-        var export = new ElectionVerificationPackageExportService().Export(
-            IsSp06Fixture(fixtureName)
-                ? ElectionVerificationPackageExportServiceTests.CreateHighAssuranceTrusteeRequest()
-                : ElectionVerificationPackageExportServiceTests.CreateRequest(
-                    VerificationPackageView.PublicAnonymous,
-                    profileId: profileId));
+        var request = IsSp06Fixture(fixtureName)
+            ? ElectionVerificationPackageExportServiceTests.CreateHighAssuranceTrusteeRequest()
+            : ElectionVerificationPackageExportServiceTests.CreateRequest(
+                VerificationPackageView.PublicAnonymous,
+                profileId: profileId);
+        if (IsSp08TamperFixture(fixtureName))
+        {
+            request = ElectionVerificationPackageExportServiceTests.WithOfficialSp08ReleaseManifest(request);
+        }
+
+        var export = new ElectionVerificationPackageExportService().Export(request);
         ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
         return directory;
     }
 
     private static bool IsSp06Fixture(string fixtureName) =>
         fixtureName.StartsWith("tamper-sp06-", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSp08TamperFixture(string fixtureName) =>
+        fixtureName.StartsWith("tamper-sp08-", StringComparison.OrdinalIgnoreCase);
 
     private static async Task ApplyTamperFixtureAsync(string packagePath, string fixtureName)
     {
@@ -394,6 +415,151 @@ public class HushVotingPackageVerifierTamperTests
 
             case "missing-sp07-development-warning":
             case "missing-sp07-high-assurance-fail-closed":
+            case "missing-sp08-high-assurance-fail-closed":
+                return;
+
+            case "tamper-sp08-release-manifest-hash":
+                var releaseManifestHash = await ReadArtifactAsync<ElectionSp08ReleaseManifestArtifactRecord>(
+                    packagePath,
+                    VerificationPackageFileNames.Sp08ReleaseManifest);
+                await WriteArtifactAsync(
+                    packagePath,
+                    VerificationPackageFileNames.Sp08ReleaseManifest,
+                    releaseManifestHash with { ReleaseId = "release-tampered" });
+                await RefreshAuditManifestEntriesAsync(packagePath);
+                return;
+
+            case "tamper-sp08-mutable-artifact-reference":
+                await MutateSp08ManifestAndRefreshAsync(
+                    packagePath,
+                    manifest => manifest with
+                    {
+                        Components =
+                        [
+                            manifest.Components[0] with { ImmutableReference = "latest" },
+                            .. manifest.Components.Skip(1),
+                        ],
+                    });
+                return;
+
+            case "tamper-sp08-local-artifact-reference":
+                await MutateSp08ManifestAndRefreshAsync(
+                    packagePath,
+                    manifest => manifest with
+                    {
+                        Components =
+                        [
+                            manifest.Components[0] with { ImmutableReference = "file:///tmp/hush-server.tar" },
+                            .. manifest.Components.Skip(1),
+                        ],
+                    });
+                return;
+
+            case "tamper-sp08-component-hash-mismatch":
+                await MutateSp08ManifestAndRefreshAsync(
+                    packagePath,
+                    manifest => manifest with
+                    {
+                        Components =
+                        [
+                            manifest.Components[0] with { ArtifactDigest = "missing-sha256-prefix" },
+                            .. manifest.Components.Skip(1),
+                        ],
+                    });
+                return;
+
+            case "tamper-sp08-web-component-hash-mismatch":
+                await MutateSp08ComponentAndRefreshAsync(
+                    packagePath,
+                    ElectionSp08ProfileIds.WebClientComponent,
+                    component => component with { ArtifactDigest = "missing-sha256-prefix" });
+                return;
+
+            case "tamper-sp08-verifier-component-hash-mismatch":
+                await MutateSp08ComponentAndRefreshAsync(
+                    packagePath,
+                    ElectionSp08ProfileIds.StandaloneVerifierComponent,
+                    component => component with { ArtifactDigest = "missing-sha256-prefix" });
+                return;
+
+            case "tamper-sp08-sp07-worker-component-hash-mismatch":
+                await MutateSp08ComponentAndRefreshAsync(
+                    packagePath,
+                    ElectionSp08ProfileIds.Sp07ProofWorkerComponent,
+                    component => component with { ArtifactDigest = "missing-sha256-prefix" });
+                return;
+
+            case "tamper-sp08-protocol-package-mismatch":
+                var releaseIntegrity = await ReadArtifactAsync<ElectionSp08ReleaseIntegrityArtifactRecord>(
+                    packagePath,
+                    VerificationPackageFileNames.Sp08ReleaseIntegrity);
+                await WriteArtifactAsync(
+                    packagePath,
+                    VerificationPackageFileNames.Sp08ReleaseIntegrity,
+                    releaseIntegrity with { ProtocolPackageManifestHash = new string('0', 64) });
+                await RefreshAuditManifestEntriesAsync(packagePath);
+                return;
+
+            case "tamper-sp08-circuit-key-hash-mismatch":
+                await MutateSp08ManifestAndRefreshAsync(
+                    packagePath,
+                    manifest => manifest with
+                    {
+                        CircuitAndKeys =
+                        [
+                            manifest.CircuitAndKeys[0] with
+                            {
+                                CircuitHash = "circuit-hash",
+                                ProvingKeyHash = "proving-key-hash",
+                                VerifyingKeyHash = "verifying-key-hash",
+                            },
+                        ],
+                    });
+                return;
+
+            case "tamper-sp08-lifecycle-mismatch":
+                await MutateSp08ManifestAndRefreshAsync(
+                    packagePath,
+                    manifest => manifest with
+                    {
+                        LifecycleBindings =
+                        [
+                            manifest.LifecycleBindings[0] with
+                            {
+                                ObservedReleaseId = "release-drifted",
+                                MatchesSealedPolicy = false,
+                            },
+                            .. manifest.LifecycleBindings.Skip(1),
+                        ],
+                    });
+                return;
+
+            case "tamper-sp08-mobile-evidence-incomplete":
+                await MutateSp08ManifestAndRefreshAsync(
+                    packagePath,
+                    manifest => manifest with
+                    {
+                        Components =
+                        [
+                            .. manifest.Components,
+                            manifest.Components[0] with
+                            {
+                                ComponentId = ElectionSp08ProfileIds.MobileAppComponent,
+                                ComponentType = "mobile_app",
+                                ArtifactName = "hush-mobile-benchmark.apk",
+                                ArtifactDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                ImmutableReference = "ghcr.io/hushnetwork/hush-mobile-benchmark@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                DistributionReference = null,
+                                SigningFingerprint = null,
+                            },
+                        ],
+                    });
+                return;
+
+            case "tamper-sp08-missing-package-manifest-entry":
+                await RemoveManifestEntryAndRefreshAsync(
+                    packagePath,
+                    VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput);
                 return;
 
             default:
@@ -474,6 +640,60 @@ public class HushVotingPackageVerifierTamperTests
                     manifest.Entries
                         .Where(x => !string.Equals(x.Path, removedPath, StringComparison.Ordinal))
                         .ToArray()),
+            });
+    }
+
+    private static async Task MutateSp08ManifestAndRefreshAsync(
+        string packagePath,
+        Func<ElectionSp08ReleaseManifestArtifactRecord, ElectionSp08ReleaseManifestArtifactRecord> mutate)
+    {
+        var releaseManifest = await ReadArtifactAsync<ElectionSp08ReleaseManifestArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp08ReleaseManifest);
+        var mutatedManifest = mutate(releaseManifest);
+        await WriteArtifactAsync(packagePath, VerificationPackageFileNames.Sp08ReleaseManifest, mutatedManifest);
+
+        var releaseIntegrity = await ReadArtifactAsync<ElectionSp08ReleaseIntegrityArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp08ReleaseIntegrity);
+        await WriteArtifactAsync(
+            packagePath,
+            VerificationPackageFileNames.Sp08ReleaseIntegrity,
+            releaseIntegrity with
+            {
+                ReleaseManifestHash = ElectionSp08ReleaseManifestHasher.ComputeReleaseManifestHash(mutatedManifest),
+            });
+        await RefreshAuditManifestEntriesAsync(packagePath);
+    }
+
+    private static async Task MutateSp08ComponentAndRefreshAsync(
+        string packagePath,
+        string componentId,
+        Func<ElectionSp08ReleaseComponentArtifactRecord, ElectionSp08ReleaseComponentArtifactRecord> mutate)
+    {
+        await MutateSp08ManifestAndRefreshAsync(
+            packagePath,
+            manifest => manifest with
+            {
+                Components = manifest.Components
+                    .Select(component => string.Equals(component.ComponentId, componentId, StringComparison.Ordinal)
+                        ? mutate(component)
+                        : component)
+                    .ToArray(),
+            });
+    }
+
+    private static async Task RefreshAuditManifestEntriesAsync(string packagePath)
+    {
+        var manifest = await ReadArtifactAsync<AuditPackageManifestRecord>(
+            packagePath,
+            VerificationPackageFileNames.AuditPackageManifest);
+        await WriteArtifactAsync(
+            packagePath,
+            VerificationPackageFileNames.AuditPackageManifest,
+            manifest with
+            {
+                Entries = await RefreshManifestEntriesAsync(packagePath, manifest.Entries),
             });
     }
 

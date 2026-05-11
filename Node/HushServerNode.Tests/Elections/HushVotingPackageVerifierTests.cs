@@ -35,6 +35,10 @@ public class HushVotingPackageVerifierTests
         result.Output.Results.Should().Contain(x =>
             x.ResultCode == VerificationResultCodes.EligibilityEvidenceValid &&
             x.Status == VerificationCheckStatus.Pass);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode &&
+            x.ResultCode == VerificationResultCodes.ReleaseIntegrityEvidencePending &&
+            x.Status == VerificationCheckStatus.Warn);
         File.Exists(Path.Combine(package.PackagePath, "verifier-output", "VerifierOutput.json"))
             .Should()
             .BeTrue();
@@ -57,6 +61,10 @@ public class HushVotingPackageVerifierTests
         result.Output.Results.Should().Contain(x =>
             x.ResultCode == VerificationResultCodes.PublicationProofEvidencePending &&
             x.Status == VerificationCheckStatus.Fail);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode &&
+            x.ResultCode == VerificationResultCodes.ReleaseIntegrityEvidenceModeNotAllowed &&
+            x.Status == VerificationCheckStatus.Fail);
     }
 
     [Fact]
@@ -77,6 +85,10 @@ public class HushVotingPackageVerifierTests
         result.Output.Results.Should().Contain(x =>
             x.ResultCode == VerificationResultCodes.PublicationProofExternalReviewPending &&
             x.Status == VerificationCheckStatus.Warn);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp08ProfileIds.ReleaseIntegrityAcceptedCheckCode &&
+            x.ResultCode == VerificationResultCodes.ReleaseIntegrityEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
     }
 
     [Fact]
@@ -451,6 +463,36 @@ public class HushVotingPackageVerifierTests
             x.ResultCode == VerificationResultCodes.UnsupportedLiveDependency);
     }
 
+    [Fact]
+    public async Task CommandLine_ShouldWriteSp08ResultsToJsonAndSummary()
+    {
+        using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
+        using var output = new TemporaryPackageDirectory();
+
+        var exitCode = await HushVotingVerifierCommandLine.RunAsync(
+            [
+                "--package",
+                package.PackagePath,
+                "--profile",
+                VerificationProfileIds.DevelopmentCurrentV1,
+                "--output",
+                output.PackagePath,
+            ]);
+
+        exitCode.Should().Be(0);
+        var verifierOutput = JsonSerializer.Deserialize<VerifierOutputRecord>(
+            await File.ReadAllTextAsync(Path.Combine(output.PackagePath, "VerifierOutput.json")),
+            VerificationJson.Options)!;
+        verifierOutput.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode &&
+            x.ResultCode == VerificationResultCodes.ReleaseIntegrityEvidencePending &&
+            x.Status == VerificationCheckStatus.Warn);
+
+        var summary = await File.ReadAllTextAsync(Path.Combine(output.PackagePath, "VerifierSummary.md"));
+        summary.Should().Contain(ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode);
+        summary.Should().Contain(VerificationResultCodes.ReleaseIntegrityEvidencePending);
+    }
+
     private static TemporaryPackageDirectory CreatePackage(string profileId)
     {
         var directory = new TemporaryPackageDirectory();
@@ -618,6 +660,7 @@ public class HushVotingPackageVerifierTests
             PublicationProofTranscripts = [transcript],
             PublicationWitnessDeletionReceipts = receipts,
         };
+        request = ElectionVerificationPackageExportServiceTests.WithOfficialSp08ReleaseManifest(request);
 
         var export = new ElectionVerificationPackageExportService().Export(request);
         ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
@@ -758,6 +801,7 @@ public class HushVotingPackageVerifierTests
                 PublicationProofTranscripts = [transcript],
                 PublicationWitnessDeletionReceipts = [receipt],
             };
+            request = ElectionVerificationPackageExportServiceTests.WithOfficialSp08ReleaseManifest(request);
 
             var export = new ElectionVerificationPackageExportService().Export(request);
             ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);

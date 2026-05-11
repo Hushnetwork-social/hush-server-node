@@ -11,6 +11,12 @@ namespace HushNode.Elections.gRPC;
 public partial class ElectionQueryApplicationService
 {
     private const string VerifierResultNotAvailableCode = "verifier_result_not_available";
+    private static readonly string[] Sp08EvidenceFileNames =
+    [
+        VerificationPackageFileNames.Sp08ReleaseManifest,
+        VerificationPackageFileNames.Sp08ReleaseIntegrity,
+        VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput,
+    ];
 
     public async Task<GetElectionVerificationPackageStatusResponse> GetElectionVerificationPackageStatusAsync(
         ElectionId electionId,
@@ -275,6 +281,11 @@ public partial class ElectionQueryApplicationService
         };
         view.Sp06Evidence = BuildSp06EvidenceStatus(context, publicPackage.IsAvailable, restrictedPackage.IsAvailable);
         view.Sp07Evidence = BuildSp07EvidenceStatus(context, publicPackage.IsAvailable, restrictedPackage.IsAvailable);
+        view.Sp08ReleaseIntegrity = BuildSp08ReleaseIntegrityStatus(
+            context,
+            publicPackage.IsAvailable,
+            restrictedPackage.IsAvailable,
+            includePackageHashes);
 
         if (context.CanViewPackageStatus && context.ProtocolPackageBinding is not null)
         {
@@ -897,6 +908,231 @@ public partial class ElectionQueryApplicationService
             election.ControlDomainProfileId,
             ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
             StringComparison.Ordinal);
+
+    private ElectionSp08ReleaseIntegrityStatusView BuildSp08ReleaseIntegrityStatus(
+        VerificationPackageContext context,
+        bool publicPackageAvailable,
+        bool restrictedPackageAvailable,
+        bool includePackageHashes)
+    {
+        var officialRequired = IsSp08OfficialEvidenceRequired(context.Election);
+        var view = new ElectionSp08ReleaseIntegrityStatusView
+        {
+            EvidenceExpected = true,
+            PublicEvidenceAvailable = false,
+            RestrictedEvidenceAvailable = false,
+            EvidenceMode = ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder,
+            NotForReleaseIntegrityClaims = true,
+            BlocksHighAssurance = officialRequired,
+            ReleaseManifestName = ElectionSp08ProfileIds.ReleaseManifestFileName,
+            ReleaseManifestHash = string.Empty,
+            ProtocolPackageManifestName = ProtocolPackagePromotionService.ReleaseManifestFileName,
+            ProtocolPackageManifestHash = context.ProtocolPackageBinding?.ReleaseManifestHash ?? string.Empty,
+            PrimaryResultCode = VerificationResultCodes.ReleaseIntegrityManifestMissing,
+            PrimaryIssue = officialRequired
+                ? "Official SP-08 release evidence is required before high-assurance claims can be made."
+                : "SP-08 release evidence is not available yet.",
+            Message = !context.CanViewPackageStatus
+                ? "SP-08 release-integrity status is not visible to this actor."
+                : "SP-08 release-integrity evidence is not exportable yet.",
+        };
+
+        if (!context.CanViewPackageStatus)
+        {
+            return view;
+        }
+
+        if (!publicPackageAvailable)
+        {
+            return view;
+        }
+
+        if (!includePackageHashes)
+        {
+            view.PrimaryResultCode = VerificationResultCodes.ReleaseIntegrityEvidencePending;
+            view.Message = "SP-08 release-integrity details are available from the verification package status endpoint.";
+            return view;
+        }
+
+        var export = _verificationPackageExportService.Export(
+            BuildExportRequest(context, VerificationPackageView.PublicAnonymous));
+        if (!export.Success)
+        {
+            view.PrimaryResultCode = export.Code;
+            view.PrimaryIssue = export.Message;
+            view.Message = "SP-08 release-integrity evidence could not be read from the public package export.";
+            return view;
+        }
+
+        var filesByPath = export.Files
+            .GroupBy(x => x.RelativePath, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => x.First(), StringComparer.Ordinal);
+        foreach (var relativePath in Sp08EvidenceFileNames)
+        {
+            view.EvidenceFiles.Add(BuildSp08EvidenceFileStatus(filesByPath, relativePath));
+        }
+
+        view.EvidenceFileCount = view.EvidenceFiles.Count(x => x.IsPresent);
+        var releaseManifest = TryReadSp08Artifact<ElectionSp08ReleaseManifestArtifactRecord>(
+            filesByPath,
+            VerificationPackageFileNames.Sp08ReleaseManifest);
+        var releaseIntegrity = TryReadSp08Artifact<ElectionSp08ReleaseIntegrityArtifactRecord>(
+            filesByPath,
+            VerificationPackageFileNames.Sp08ReleaseIntegrity);
+        var verifierOutput = TryReadSp08Artifact<ElectionSp08VerifierOutputArtifactRecord>(
+            filesByPath,
+            VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput);
+
+        if (releaseIntegrity is null || releaseManifest is null)
+        {
+            view.PrimaryIssue = "SP-08 release manifest or release-integrity artifact is missing or malformed.";
+            view.Message = view.PrimaryIssue;
+            return view;
+        }
+
+        var components = releaseManifest.Components.Count > 0
+            ? releaseManifest.Components
+            : releaseIntegrity.Components;
+        var lifecycleBindings = releaseManifest.LifecycleBindings.Count > 0
+            ? releaseManifest.LifecycleBindings
+            : releaseIntegrity.LifecycleBindings;
+        var primaryIssue = ResolveSp08PrimaryIssue(verifierOutput) ??
+            ResolveSp08LifecycleIssue(lifecycleBindings) ??
+            (releaseIntegrity.BlocksHighAssurance
+                ? "SP-08 release evidence is present but cannot satisfy high-assurance release-integrity claims."
+                : string.Empty);
+
+        view.PublicEvidenceAvailable = true;
+        view.RestrictedEvidenceAvailable = restrictedPackageAvailable && context.CanExportRestrictedPackage;
+        view.EvidenceMode = releaseIntegrity.EvidenceMode;
+        view.NotForReleaseIntegrityClaims = releaseIntegrity.NotForReleaseIntegrityClaims;
+        view.BlocksHighAssurance = releaseIntegrity.BlocksHighAssurance ||
+            (officialRequired && !ElectionSp08ReleaseIntegrityRules.IsOfficialEvidenceMode(releaseIntegrity.EvidenceMode)) ||
+            lifecycleBindings.Any(x => !x.MatchesSealedPolicy);
+        view.ReleaseManifestName = releaseIntegrity.ReleaseManifestName;
+        view.ReleaseManifestHash = releaseIntegrity.ReleaseManifestHash;
+        view.ProtocolPackageManifestName = releaseIntegrity.ProtocolPackageManifestName;
+        view.ProtocolPackageManifestHash = releaseIntegrity.ProtocolPackageManifestHash;
+        view.PrimaryResultCode = releaseIntegrity.PrimaryResultCode;
+        view.PrimaryIssue = primaryIssue;
+        view.ComponentCount = components.Count;
+        view.LifecycleBindingCount = lifecycleBindings.Count;
+        view.MobileEvidenceIncluded = components.Any(x =>
+            string.Equals(x.ComponentId, ElectionSp08ProfileIds.MobileAppComponent, StringComparison.Ordinal));
+        view.Message = ResolveSp08StatusMessage(view, officialRequired);
+
+        foreach (var component in components)
+        {
+            view.Components.Add(new ElectionSp08ReleaseComponentStatusView
+            {
+                ComponentId = component.ComponentId,
+                ComponentType = component.ComponentType,
+                EvidenceMode = component.EvidenceMode,
+                ArtifactName = component.ArtifactName,
+                ArtifactDigest = component.ArtifactDigest,
+                ImmutableReference = component.ImmutableReference,
+                BuildWorkflowRunId = component.BuildWorkflowRunId ?? string.Empty,
+                DistributionReference = component.DistributionReference ?? string.Empty,
+                HasSigningFingerprint = !string.IsNullOrWhiteSpace(component.SigningFingerprint),
+                IsPlaceholder = component.IsPlaceholder,
+            });
+        }
+
+        foreach (var lifecycleBinding in lifecycleBindings)
+        {
+            view.LifecycleBindings.Add(new ElectionSp08LifecycleBindingStatusView
+            {
+                LifecycleStage = lifecycleBinding.LifecycleStage,
+                ExpectedReleaseId = lifecycleBinding.ExpectedReleaseId,
+                ObservedReleaseId = lifecycleBinding.ObservedReleaseId,
+                ExpectedArtifactDigest = lifecycleBinding.ExpectedArtifactDigest,
+                ObservedArtifactDigest = lifecycleBinding.ObservedArtifactDigest,
+                MatchesSealedPolicy = lifecycleBinding.MatchesSealedPolicy,
+            });
+        }
+
+        return view;
+    }
+
+    private static ElectionSp08EvidenceFileStatusView BuildSp08EvidenceFileStatus(
+        IReadOnlyDictionary<string, ElectionVerificationPackageFile> filesByPath,
+        string relativePath)
+    {
+        if (!filesByPath.TryGetValue(relativePath, out var file))
+        {
+            return new ElectionSp08EvidenceFileStatusView
+            {
+                RelativePath = relativePath,
+                Visibility = ElectionVerificationArtifactVisibilityProto.VerificationArtifactPublic,
+                IsPresent = false,
+                ContentHash = string.Empty,
+            };
+        }
+
+        return new ElectionSp08EvidenceFileStatusView
+        {
+            RelativePath = file.RelativePath,
+            Visibility = file.Visibility.ToProto(),
+            IsPresent = true,
+            ContentHash = $"sha256:{VerificationCanonicalHash.ComputeManifestFileSha256(file.Content)}",
+        };
+    }
+
+    private static T? TryReadSp08Artifact<T>(
+        IReadOnlyDictionary<string, ElectionVerificationPackageFile> filesByPath,
+        string relativePath)
+    {
+        if (!filesByPath.TryGetValue(relativePath, out var file))
+        {
+            return default;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<T>(file.ContentText, VerificationJson.Options);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+    }
+
+    private static string? ResolveSp08PrimaryIssue(ElectionSp08VerifierOutputArtifactRecord? verifierOutput) =>
+        verifierOutput?.Results
+            .FirstOrDefault(x => x.Status is VerificationCheckStatus.Fail or VerificationCheckStatus.Warn)
+            ?.Message;
+
+    private static string? ResolveSp08LifecycleIssue(
+        IReadOnlyList<ElectionSp08LifecycleReleaseBindingRecord> lifecycleBindings) =>
+        lifecycleBindings.Any(x => !x.MatchesSealedPolicy)
+            ? "One or more SP-08 lifecycle release bindings do not match the sealed policy."
+            : null;
+
+    private static string ResolveSp08StatusMessage(
+        ElectionSp08ReleaseIntegrityStatusView view,
+        bool officialRequired)
+    {
+        if (!view.PublicEvidenceAvailable)
+        {
+            return "SP-08 release-integrity evidence is not exportable yet.";
+        }
+
+        if (view.BlocksHighAssurance && officialRequired)
+        {
+            return "SP-08 release-integrity evidence blocks high-assurance release claims.";
+        }
+
+        if (ElectionSp08ReleaseIntegrityRules.IsOfficialEvidenceMode(view.EvidenceMode) &&
+            !view.NotForReleaseIntegrityClaims)
+        {
+            return "Official SP-08 release-integrity evidence is present in the verification package.";
+        }
+
+        return "Development placeholder SP-08 release-integrity evidence is present and is not official release evidence.";
+    }
+
+    private static bool IsSp08OfficialEvidenceRequired(ElectionRecord election) =>
+        IsSp07EvidenceExpected(election);
 
     private ElectionVerificationPackageExportAvailabilityView BuildPackageAvailability(
         VerificationPackageContext context,

@@ -46,6 +46,7 @@ public sealed partial class ElectionVerificationPackageExportService
                 "VFY-SP04-000",
                 "CTRL-000",
                 "VFY-PRIVACY-000",
+                ElectionSp08ProfileIds.ReleaseIntegrityAcceptedCheckCode,
             ]);
     }
 
@@ -262,6 +263,218 @@ public sealed partial class ElectionVerificationPackageExportService
 
         return "SP-07 publication proof transcript and witness deletion receipt are available.";
     }
+
+    private static ElectionSp08ReleaseManifestArtifactRecord BuildSp08ReleaseManifest(
+        ElectionVerificationPackageExportRequest request,
+        DateTime exportedAt) =>
+        request.Sp08ReleaseManifest ?? BuildSp08PlaceholderReleaseManifest(request, exportedAt);
+
+    private static ElectionSp08ReleaseManifestArtifactRecord BuildSp08PlaceholderReleaseManifest(
+        ElectionVerificationPackageExportRequest request,
+        DateTime exportedAt)
+    {
+        var releaseId = "development-placeholder";
+        var serverDigest = BuildSp08PlaceholderDigest(request, ElectionSp08ProfileIds.ServerComponent);
+        var webDigest = BuildSp08PlaceholderDigest(request, ElectionSp08ProfileIds.WebClientComponent);
+        var verifierDigest = BuildSp08PlaceholderDigest(request, ElectionSp08ProfileIds.StandaloneVerifierComponent);
+        var sp07WorkerDigest = BuildSp08PlaceholderDigest(request, ElectionSp08ProfileIds.Sp07ProofWorkerComponent);
+        var protocolPackageDigest = $"sha256:{request.ProtocolPackageBinding!.ReleaseManifestHash}";
+        var exporterDigest = BuildSp08PlaceholderDigest(request, ElectionSp08ProfileIds.AuditPackageExporterComponent);
+
+        return new ElectionSp08ReleaseManifestArtifactRecord(
+            Schema: ElectionSp08ProfileIds.ReleaseManifestSchema,
+            ManifestId: $"development-placeholder-{request.Election.ElectionId}",
+            releaseId,
+            ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder,
+            NotForReleaseIntegrityClaims: true,
+            exportedAt,
+            SourceAuthority: "development_placeholder",
+            SourceCommit: "development-placeholder",
+            SourceTag: "development-placeholder",
+            Components:
+            [
+                BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.ServerComponent, serverDigest),
+                BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.WebClientComponent, webDigest),
+                BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.StandaloneVerifierComponent, verifierDigest),
+                BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.Sp07ProofWorkerComponent, sp07WorkerDigest),
+                BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.ProtocolPackageComponent, protocolPackageDigest),
+                BuildSp08PlaceholderComponent(ElectionSp08ProfileIds.AuditPackageExporterComponent, exporterDigest),
+            ],
+            CircuitAndKeys:
+            [
+                new ElectionSp08CircuitKeyArtifactRecord(
+                    CircuitId: "development-placeholder-protocol-omega-circuit",
+                    CircuitHash: BuildSp08PlaceholderDigest(request, "circuit"),
+                    ProvingKeyHash: BuildSp08PlaceholderDigest(request, "proving-key"),
+                    VerifyingKeyHash: BuildSp08PlaceholderDigest(request, "verifying-key"),
+                    ProtocolPackageManifestHash: request.ProtocolPackageBinding.ReleaseManifestHash),
+            ],
+            LifecycleBindings: BuildSp08LifecycleBindings(
+                releaseId,
+                serverDigest,
+                webDigest,
+                sp07WorkerDigest,
+                exporterDigest,
+                matchesSealedPolicy: false),
+            PublicPrivacyBoundary: BuildSp08PublicPrivacyBoundary());
+    }
+
+    private static ElectionSp08ReleaseComponentArtifactRecord BuildSp08PlaceholderComponent(
+        string componentId,
+        string artifactDigest) =>
+        new(
+            componentId,
+            componentId,
+            ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder,
+            $"{componentId}.development-placeholder",
+            artifactDigest,
+            SourceCommit: "development-placeholder",
+            SourceTag: "development-placeholder",
+            ImmutableReference: $"file:development-placeholder/{componentId}",
+            BuildWorkflowRunId: null,
+            DistributionReference: null,
+            SigningFingerprint: null,
+            IsPlaceholder: true);
+
+    private static ElectionSp08ReleaseIntegrityArtifactRecord BuildSp08ReleaseIntegrity(
+        ElectionVerificationPackageExportRequest request,
+        ElectionSp08ReleaseManifestArtifactRecord releaseManifest)
+    {
+        var releaseManifestHash = ElectionSp08ReleaseManifestHasher.ComputeReleaseManifestHash(releaseManifest);
+        var blocksHighAssurance = !ElectionSp08ReleaseIntegrityRules.IsEvidenceModeAllowedForProfile(
+            VerificationProfileIds.HighAssuranceV1,
+            releaseManifest.EvidenceMode,
+            releaseManifest.NotForReleaseIntegrityClaims);
+
+        return new ElectionSp08ReleaseIntegrityArtifactRecord(
+            request.Election.ElectionId.ToString(),
+            request.VerifierProfileId,
+            releaseManifest.EvidenceMode,
+            releaseManifest.NotForReleaseIntegrityClaims,
+            blocksHighAssurance,
+            ElectionSp08ProfileIds.ReleaseManifestFileName,
+            releaseManifestHash,
+            ProtocolPackagePromotionService.ReleaseManifestFileName,
+            request.ProtocolPackageBinding!.ReleaseManifestHash,
+            ElectionSp08ReleaseIntegrityRules.IsOfficialEvidenceMode(releaseManifest.EvidenceMode) &&
+                !releaseManifest.NotForReleaseIntegrityClaims
+                    ? VerificationResultCodes.ReleaseIntegrityEvidenceValid
+                    : VerificationResultCodes.ReleaseIntegrityEvidencePending,
+            releaseManifest.Components,
+            releaseManifest.LifecycleBindings,
+            BuildSp08PublicPrivacyBoundary());
+    }
+
+    private static ElectionSp08VerifierOutputArtifactRecord BuildSp08VerifierOutput(
+        ElectionVerificationPackageExportRequest request,
+        ElectionSp08ReleaseManifestArtifactRecord releaseManifest,
+        ElectionSp08ReleaseIntegrityArtifactRecord releaseIntegrity,
+        DateTime verifiedAt) =>
+        new(
+            request.Election.ElectionId.ToString(),
+            request.VerifierProfileId,
+            ElectionSp08ProfileIds.ReleaseVerifierOutputSchema,
+            verifiedAt,
+            BuildSp08ExportVerifierResults(request.VerifierProfileId, releaseManifest, releaseIntegrity));
+
+    private static IReadOnlyList<VerifierCheckResultRecord> BuildSp08ExportVerifierResults(
+        string profileId,
+        ElectionSp08ReleaseManifestArtifactRecord releaseManifest,
+        ElectionSp08ReleaseIntegrityArtifactRecord releaseIntegrity)
+    {
+        var isAllowed = ElectionSp08ReleaseIntegrityRules.IsEvidenceModeAllowedForProfile(
+            profileId,
+            releaseManifest.EvidenceMode,
+            releaseManifest.NotForReleaseIntegrityClaims);
+        if (!isAllowed)
+        {
+            return
+            [
+                new VerifierCheckResultRecord(
+                    ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode,
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.ReleaseIntegrityEvidenceModeNotAllowed,
+                    "High-assurance profile requires official SP-08 release evidence.",
+                    new Dictionary<string, string>
+                    {
+                        ["evidence_mode"] = releaseManifest.EvidenceMode,
+                        ["not_for_release_integrity_claims"] = releaseManifest.NotForReleaseIntegrityClaims.ToString(),
+                    }),
+            ];
+        }
+
+        if (!ElectionSp08ReleaseIntegrityRules.IsOfficialEvidenceMode(releaseManifest.EvidenceMode) ||
+            releaseManifest.NotForReleaseIntegrityClaims)
+        {
+            return
+            [
+                new VerifierCheckResultRecord(
+                    ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode,
+                    VerificationCheckStatus.Warn,
+                    VerificationResultCodes.ReleaseIntegrityEvidencePending,
+                    "Release integrity evidence is a development placeholder and is not official SP-08 evidence.",
+                    new Dictionary<string, string>
+                    {
+                        ["evidence_mode"] = releaseManifest.EvidenceMode,
+                        ["release_manifest_hash"] = releaseIntegrity.ReleaseManifestHash,
+                    }),
+            ];
+        }
+
+        return
+        [
+            new VerifierCheckResultRecord(
+                ElectionSp08ProfileIds.ReleaseIntegrityAcceptedCheckCode,
+                VerificationCheckStatus.Pass,
+                VerificationResultCodes.ReleaseIntegrityEvidenceValid,
+                "Official SP-08 release evidence is present in the exported package.",
+                new Dictionary<string, string>
+                {
+                    ["release_manifest_hash"] = releaseIntegrity.ReleaseManifestHash,
+                }),
+        ];
+    }
+
+    private static IReadOnlyList<ElectionSp08LifecycleReleaseBindingRecord> BuildSp08LifecycleBindings(
+        string releaseId,
+        string serverDigest,
+        string webDigest,
+        string sp07WorkerDigest,
+        string exporterDigest,
+        bool matchesSealedPolicy) =>
+        [
+            BuildSp08LifecycleBinding(ElectionSp08ProfileIds.OpenLifecycleStage, releaseId, serverDigest, matchesSealedPolicy),
+            BuildSp08LifecycleBinding(ElectionSp08ProfileIds.CloseLifecycleStage, releaseId, serverDigest, matchesSealedPolicy),
+            BuildSp08LifecycleBinding(ElectionSp08ProfileIds.ProofWorkerLifecycleStage, releaseId, sp07WorkerDigest, matchesSealedPolicy),
+            BuildSp08LifecycleBinding(ElectionSp08ProfileIds.ExporterLifecycleStage, releaseId, exporterDigest, matchesSealedPolicy),
+            BuildSp08LifecycleBinding(ElectionSp08ProfileIds.ClientReleaseSetLifecycleStage, releaseId, webDigest, matchesSealedPolicy),
+        ];
+
+    private static ElectionSp08LifecycleReleaseBindingRecord BuildSp08LifecycleBinding(
+        string lifecycleStage,
+        string releaseId,
+        string artifactDigest,
+        bool matchesSealedPolicy) =>
+        new(
+            lifecycleStage,
+            releaseId,
+            releaseId,
+            artifactDigest,
+            artifactDigest,
+            matchesSealedPolicy);
+
+    private static IReadOnlyList<string> BuildSp08PublicPrivacyBoundary() =>
+    [
+        "no_private_host_state",
+        "no_per_voter_device_identifier",
+        "no_raw_attestation_token",
+        "no_ip_address",
+    ];
+
+    private static string BuildSp08PlaceholderDigest(
+        ElectionVerificationPackageExportRequest request,
+        string material) =>
+        $"sha256:{VerificationCanonicalHash.ComputeSha256LowerHex($"{request.Election.ElectionId}:{material}:development-placeholder")}";
 
     private static string? ResolveFinalEncryptedTallyHash(ElectionVerificationPackageExportRequest request) =>
         request.FinalizationSessions

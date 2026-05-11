@@ -40,6 +40,15 @@ public static class VerificationResultCodes
     public const string FutureEvidencePending = "future_evidence_pending";
     public const string PublicationProofEvidencePending = "publication_proof_evidence_pending";
     public const string ReleaseIntegrityEvidencePending = "release_integrity_evidence_pending";
+    public const string ReleaseIntegrityEvidenceValid = "release_integrity_evidence_valid";
+    public const string ReleaseIntegrityManifestMissing = "release_integrity_manifest_missing";
+    public const string ReleaseIntegrityEvidenceModeNotAllowed = "release_integrity_evidence_mode_not_allowed";
+    public const string ReleaseIntegrityMutableArtifactReference = "release_integrity_mutable_artifact_reference";
+    public const string ReleaseIntegrityComponentHashMismatch = "release_integrity_component_hash_mismatch";
+    public const string ReleaseIntegrityCircuitOrPackageHashMismatch = "release_integrity_circuit_or_package_hash_mismatch";
+    public const string ReleaseIntegrityLifecycleMismatch = "release_integrity_lifecycle_mismatch";
+    public const string ReleaseIntegrityMobileEvidenceIncomplete = "release_integrity_mobile_evidence_incomplete";
+    public const string ReleaseIntegrityPackageManifestMissingFiles = "release_integrity_package_manifest_missing_files";
     public const string ChallengeSpoilEvidencePending = "challenge_spoil_evidence_pending";
     public const string ChallengeSpoilEvidenceValid = "challenge_spoil_evidence_valid";
     public const string ChallengeSpoilBallotDefinitionMismatch = "challenge_spoil_ballot_definition_mismatch";

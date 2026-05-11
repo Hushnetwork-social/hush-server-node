@@ -957,6 +957,7 @@ message ElectionVerificationPackageStatusView {
   ElectionSp05EvidenceStatusView Sp05Evidence = 11;
   ElectionSp06EvidenceStatusView Sp06Evidence = 12;
   ElectionSp07EvidenceStatusView Sp07Evidence = 13;
+  ElectionSp08ReleaseIntegrityStatusView Sp08ReleaseIntegrity = 14;
 }
 
 message ElectionSp04EvidenceStatusView {
@@ -1048,6 +1049,58 @@ message ElectionSp07ReadinessBlockerView {
   string Message = 2;
   bool BlocksOpen = 3;
   bool BlocksFinalization = 4;
+}
+
+message ElectionSp08ReleaseIntegrityStatusView {
+  bool EvidenceExpected = 1;
+  bool PublicEvidenceAvailable = 2;
+  bool RestrictedEvidenceAvailable = 3;
+  string EvidenceMode = 4;
+  bool NotForReleaseIntegrityClaims = 5;
+  bool BlocksHighAssurance = 6;
+  string ReleaseManifestName = 7;
+  string ReleaseManifestHash = 8;
+  string ProtocolPackageManifestName = 9;
+  string ProtocolPackageManifestHash = 10;
+  string PrimaryResultCode = 11;
+  string PrimaryIssue = 12;
+  int32 ComponentCount = 13;
+  int32 LifecycleBindingCount = 14;
+  int32 EvidenceFileCount = 15;
+  bool MobileEvidenceIncluded = 16;
+  string Message = 17;
+  repeated ElectionSp08ReleaseComponentStatusView Components = 18;
+  repeated ElectionSp08LifecycleBindingStatusView LifecycleBindings = 19;
+  repeated ElectionSp08EvidenceFileStatusView EvidenceFiles = 20;
+}
+
+message ElectionSp08ReleaseComponentStatusView {
+  string ComponentId = 1;
+  string ComponentType = 2;
+  string EvidenceMode = 3;
+  string ArtifactName = 4;
+  string ArtifactDigest = 5;
+  string ImmutableReference = 6;
+  string BuildWorkflowRunId = 7;
+  string DistributionReference = 8;
+  bool HasSigningFingerprint = 9;
+  bool IsPlaceholder = 10;
+}
+
+message ElectionSp08LifecycleBindingStatusView {
+  string LifecycleStage = 1;
+  string ExpectedReleaseId = 2;
+  string ObservedReleaseId = 3;
+  string ExpectedArtifactDigest = 4;
+  string ObservedArtifactDigest = 5;
+  bool MatchesSealedPolicy = 6;
+}
+
+message ElectionSp08EvidenceFileStatusView {
+  string RelativePath = 1;
+  ElectionVerificationArtifactVisibilityProto Visibility = 2;
+  bool IsPresent = 3;
+  string ContentHash = 4;
 }
 
 message ElectionTrusteeControlDomainEvidenceView {
@@ -1903,6 +1956,7 @@ message GetElectionOpenReadinessResponse {
   string ProtocolPackageBindingMessage = 8;
   ElectionSp06EvidenceStatusView Sp06Evidence = 9;
   ElectionSp07EvidenceStatusView Sp07Evidence = 10;
+  ElectionSp08ReleaseIntegrityStatusView Sp08ReleaseIntegrity = 11;
 }
 
 message GetElectionResponse {

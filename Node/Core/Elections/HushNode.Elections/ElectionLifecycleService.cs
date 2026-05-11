@@ -36,6 +36,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly IElectionSensitiveStorageMaintenance? _sensitiveStorageMaintenance;
     private readonly IElectionPublicationWitnessDeletionService _publicationWitnessDeletionService;
     private readonly IElectionSp07PublicationProofSessionRunner? _publicationProofSessionRunner;
+    private readonly IElectionSp08ReleaseEvidenceProvider _sp08ReleaseEvidenceProvider;
     private readonly IBabyJubJub _curve;
     private readonly ProtocolPackageBindingService _protocolPackageBindingService = new();
     private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
@@ -70,7 +71,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IBabyJubJub? curve = null,
         IElectionSensitiveStorageMaintenance? sensitiveStorageMaintenance = null,
         IElectionPublicationWitnessDeletionService? publicationWitnessDeletionService = null,
-        IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null)
+        IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null,
+        IElectionSp08ReleaseEvidenceProvider? sp08ReleaseEvidenceProvider = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _logger = logger;
@@ -87,6 +89,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         _publicationWitnessDeletionService =
             publicationWitnessDeletionService ?? new ElectionPublicationWitnessDeletionService();
         _publicationProofSessionRunner = publicationProofSessionRunner;
+        _sp08ReleaseEvidenceProvider = sp08ReleaseEvidenceProvider ?? new ElectionSp08ReleaseEvidenceProvider();
         _curve = curve ?? new BabyJubJubCurve();
     }
 
@@ -2270,6 +2273,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
             : await repository.GetCeremonyShareCustodyRecordsAsync(activeCeremonyVersion.Id);
         var selectedProfile = await ResolveSelectedProfileAsync(repository, election);
         var protocolPackageValidation = await _protocolPackageBindingService.ValidateForOpenAsync(repository, election);
+        var sp08ReleaseEvidence = await _sp08ReleaseEvidenceProvider.GetOpenReadinessEvidenceAsync(
+            election,
+            protocolPackageValidation);
 
         return EvaluateOpenReadiness(
             election,
@@ -2282,7 +2288,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
             selectedProfile,
             protocolPackageValidation,
             request.RequiredWarningCodes,
-            blockGovernedWorkflowMissing: false);
+            blockGovernedWorkflowMissing: false,
+            sp08ReleaseEvidence: sp08ReleaseEvidence);
     }
 
     public async Task<ElectionCommandResult> StartGovernedProposalAsync(StartElectionGovernedProposalRequest request)
@@ -3156,6 +3163,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     : await repository.GetCeremonyShareCustodyRecordsAsync(activeCeremonyVersion.Id);
                 var selectedProfile = await ResolveSelectedProfileAsync(repository, election);
                 var protocolPackageValidation = await _protocolPackageBindingService.ValidateForOpenAsync(repository, election);
+                var sp08ReleaseEvidence = await _sp08ReleaseEvidenceProvider.GetOpenReadinessEvidenceAsync(
+                    election,
+                    protocolPackageValidation);
                 var readiness = EvaluateOpenReadiness(
                     election,
                     invitations,
@@ -3167,7 +3177,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
                     selectedProfile,
                     protocolPackageValidation,
                     election.AcknowledgedWarningCodes,
-                    blockGovernedWorkflowMissing: false);
+                    blockGovernedWorkflowMissing: false,
+                    sp08ReleaseEvidence: sp08ReleaseEvidence);
 
                 return readiness.IsReadyToOpen
                     ? null
@@ -3365,6 +3376,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
             : await repository.GetCeremonyShareCustodyRecordsAsync(activeCeremonyVersion.Id);
         var selectedProfile = await ResolveSelectedProfileAsync(repository, election);
         var protocolPackageValidation = await _protocolPackageBindingService.ValidateForOpenAsync(repository, election);
+        var sp08ReleaseEvidence = await _sp08ReleaseEvidenceProvider.GetOpenReadinessEvidenceAsync(
+            election,
+            protocolPackageValidation);
         var readiness = EvaluateOpenReadiness(
             election,
             invitations,
@@ -3376,7 +3390,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
             selectedProfile,
             protocolPackageValidation,
             requiredWarningCodes,
-            blockGovernedWorkflowMissing: !allowTrusteeThresholdExecution);
+            blockGovernedWorkflowMissing: !allowTrusteeThresholdExecution,
+            sp08ReleaseEvidence: sp08ReleaseEvidence);
 
         if (!readiness.IsReadyToOpen)
         {
@@ -4105,7 +4120,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionCeremonyProfileRecord? selectedProfile,
         ProtocolPackageBindingOpenValidation protocolPackageValidation,
         IReadOnlyList<ElectionWarningCode>? requestedWarnings,
-        bool blockGovernedWorkflowMissing)
+        bool blockGovernedWorkflowMissing,
+        ElectionSp08ReleaseEvidenceSnapshot? sp08ReleaseEvidence = null)
     {
         var errors = new List<string>();
         var requiredWarnings = NormalizeWarningCodes(requestedWarnings).ToList();
@@ -4113,6 +4129,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         ElectionCeremonyBindingSnapshot? ceremonySnapshot = null;
         ElectionTrusteeControlDomainSummaryRecord? sp06Summary = null;
         ElectionSp07OpenReadinessSummary? sp07Summary = null;
+        ElectionSp08OpenReadinessSummary? sp08Summary = null;
 
         if (election.LifecycleState != ElectionLifecycleState.Draft)
         {
@@ -4257,6 +4274,25 @@ public class ElectionLifecycleService : IElectionLifecycleService
             }
         }
 
+        if (IsSp08HighAssuranceClaimed(election))
+        {
+            sp08Summary = BuildSp08OpenReadinessSummary(
+                protocolPackageValidation,
+                sp08ReleaseEvidence,
+                requiresOfficialEvidence: true);
+            foreach (var blocker in sp08Summary.ReadinessBlockers.Where(x => x.BlocksOpen))
+            {
+                errors.Add($"{blocker.Code}: {blocker.Message}");
+            }
+        }
+        else if (CanShowSp08DevelopmentPlaceholderWarning(election))
+        {
+            sp08Summary = BuildSp08OpenReadinessSummary(
+                protocolPackageValidation,
+                sp08ReleaseEvidence,
+                requiresOfficialEvidence: false);
+        }
+
         requiredWarnings = NormalizeWarningCodes(requiredWarnings).ToList();
         var currentRevisionAcknowledgements = warningAcknowledgements
             .Where(x => x.DraftRevision == election.CurrentDraftRevision)
@@ -4281,7 +4317,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ceremonySnapshot,
                 protocolPackageValidation,
                 sp06Summary,
-                sp07Summary)
+                sp07Summary,
+                sp08Summary)
             : ElectionOpenValidationResult.NotReady(
                 errors,
                 requiredWarnings,
@@ -4289,7 +4326,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 ceremonySnapshot,
                 protocolPackageValidation,
                 sp06Summary,
-                sp07Summary);
+                sp07Summary,
+                sp08Summary);
     }
 
     private static bool IsSp06HighAssuranceClaimed(ElectionRecord election) =>
@@ -4303,6 +4341,93 @@ public class ElectionLifecycleService : IElectionLifecycleService
         (string.Equals(election.SelectedProfileId, ElectionSelectableProfileCatalog.TrusteeProductionProfileId, StringComparison.Ordinal) ||
          string.Equals(election.SelectedProfileId, ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId, StringComparison.Ordinal) ||
          string.Equals(election.ControlDomainProfileId, ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1, StringComparison.Ordinal));
+
+    private static bool IsSp08HighAssuranceClaimed(ElectionRecord election) =>
+        IsSp06HighAssuranceClaimed(election);
+
+    private static bool CanShowSp08DevelopmentPlaceholderWarning(ElectionRecord election) =>
+        election.SelectedProfileDevOnly;
+
+    private static ElectionSp08OpenReadinessSummary BuildSp08OpenReadinessSummary(
+        ProtocolPackageBindingOpenValidation protocolPackageValidation,
+        ElectionSp08ReleaseEvidenceSnapshot? releaseEvidence,
+        bool requiresOfficialEvidence)
+    {
+        var resolvedEvidence = releaseEvidence ??
+            ElectionSp08ReleaseEvidenceProvider.CreateDevelopmentPlaceholder(protocolPackageValidation);
+        var blocksHighAssurance = requiresOfficialEvidence && !resolvedEvidence.SatisfiesOfficialReleaseIntegrity;
+        var primaryResultCode = blocksHighAssurance
+            ? ResolveSp08HighAssuranceBlockerCode(resolvedEvidence)
+            : resolvedEvidence.PrimaryResultCode;
+        var primaryIssue = blocksHighAssurance
+            ? ResolveSp08HighAssurancePrimaryIssue(resolvedEvidence, primaryResultCode)
+            : resolvedEvidence.PrimaryIssue;
+        IReadOnlyList<ElectionSp08OpenReadinessBlocker> blockers = blocksHighAssurance
+            ? [
+                new ElectionSp08OpenReadinessBlocker(
+                    primaryResultCode,
+                    primaryIssue,
+                    BlocksOpen: true,
+                    BlocksFinalization: true)
+            ]
+            : [];
+
+        return new ElectionSp08OpenReadinessSummary(
+            EvidenceExpected: true,
+            EvidenceMode: resolvedEvidence.EvidenceMode,
+            NotForReleaseIntegrityClaims: resolvedEvidence.NotForReleaseIntegrityClaims,
+            BlocksHighAssurance: blocksHighAssurance,
+            ReleaseManifestName: resolvedEvidence.ReleaseManifestName,
+            ReleaseManifestHash: resolvedEvidence.ReleaseManifestHash,
+            ProtocolPackageManifestName: resolvedEvidence.ProtocolPackageManifestName,
+            ProtocolPackageManifestHash: resolvedEvidence.ProtocolPackageManifestHash,
+            PrimaryResultCode: primaryResultCode,
+            PrimaryIssue: primaryIssue,
+            ComponentCount: resolvedEvidence.Components.Count > 0
+                ? resolvedEvidence.Components.Count
+                : ElectionSp08ProfileIds.RequiredHighAssuranceComponentIds.Count,
+            LifecycleBindingCount: resolvedEvidence.LifecycleBindings.Count,
+            EvidenceFileCount: resolvedEvidence.EvidenceFileCount,
+            MobileEvidenceIncluded: resolvedEvidence.MobileEvidenceIncluded,
+            ReadinessBlockers: blockers)
+        {
+            PublicEvidenceAvailable = resolvedEvidence.PublicEvidenceAvailable,
+            RestrictedEvidenceAvailable = resolvedEvidence.RestrictedEvidenceAvailable,
+            Components = resolvedEvidence.Components,
+            LifecycleBindings = resolvedEvidence.LifecycleBindings,
+        };
+    }
+
+    private static string ResolveSp08HighAssuranceBlockerCode(ElectionSp08ReleaseEvidenceSnapshot releaseEvidence)
+    {
+        if (string.IsNullOrWhiteSpace(releaseEvidence.PrimaryResultCode))
+        {
+            return VerificationResultCodes.ReleaseIntegrityManifestMissing;
+        }
+
+        if (releaseEvidence.PrimaryResultCode == VerificationResultCodes.ReleaseIntegrityEvidencePending &&
+            (releaseEvidence.NotForReleaseIntegrityClaims ||
+             !ElectionSp08ReleaseIntegrityRules.IsOfficialEvidenceMode(releaseEvidence.EvidenceMode)))
+        {
+            return VerificationResultCodes.ReleaseIntegrityEvidenceModeNotAllowed;
+        }
+
+        return releaseEvidence.PrimaryResultCode;
+    }
+
+    private static string ResolveSp08HighAssurancePrimaryIssue(
+        ElectionSp08ReleaseEvidenceSnapshot releaseEvidence,
+        string primaryResultCode) =>
+        primaryResultCode switch
+        {
+            VerificationResultCodes.ReleaseIntegrityEvidenceModeNotAllowed =>
+                "Official SP-08 release evidence is required before high-assurance elections can open.",
+            VerificationResultCodes.ReleaseIntegrityManifestMissing when string.IsNullOrWhiteSpace(releaseEvidence.PrimaryIssue) =>
+                "Official SP-08 release manifest evidence is required before high-assurance elections can open.",
+            _ => string.IsNullOrWhiteSpace(releaseEvidence.PrimaryIssue)
+                ? "SP-08 release-integrity evidence blocks high-assurance election open."
+                : releaseEvidence.PrimaryIssue,
+        };
 
     private static ElectionSp07OpenReadinessSummary BuildSp07OpenReadinessSummary(
         ElectionRecord election,

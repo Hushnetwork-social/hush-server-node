@@ -27,6 +27,9 @@ public class ElectionVerificationPackageExportServiceTests
             VerificationPackageFileNames.Sp06TrusteeControlProfile,
             VerificationPackageFileNames.Sp06TrusteeControlSummary,
             VerificationPackageFileNames.Sp06TrusteeVerifierOutput,
+            VerificationPackageFileNames.Sp08ReleaseManifest,
+            VerificationPackageFileNames.Sp08ReleaseIntegrity,
+            VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput,
         ]);
         result.Files.Should().NotContain(x => x.RelativePath.StartsWith("artifacts/restricted/", StringComparison.OrdinalIgnoreCase));
         var publicPayload = string.Join(
@@ -44,6 +47,44 @@ public class ElectionVerificationPackageExportServiceTests
             var file = result.Files.Single(x => x.RelativePath == entry.Path);
             VerificationCanonicalHash.ComputeManifestFileSha256(file.Content).Should().Be(entry.Sha256Hash);
         }
+    }
+
+    [Fact]
+    public void Export_PublicPackage_ShouldIncludeDevelopmentPlaceholderSp08Artifacts()
+    {
+        var result = Export(CreateRequest(VerificationPackageView.PublicAnonymous));
+
+        result.Success.Should().BeTrue();
+        var manifest = ReadFile<AuditPackageManifestRecord>(result, VerificationPackageFileNames.AuditPackageManifest);
+        manifest.Entries.Select(x => x.Path).Should().Contain([
+            VerificationPackageFileNames.Sp08ReleaseManifest,
+            VerificationPackageFileNames.Sp08ReleaseIntegrity,
+            VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput,
+        ]);
+
+        var releaseManifest = ReadFile<ElectionSp08ReleaseManifestArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp08ReleaseManifest);
+        releaseManifest.EvidenceMode.Should().Be(ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder);
+        releaseManifest.NotForReleaseIntegrityClaims.Should().BeTrue();
+        releaseManifest.Components.Select(x => x.ComponentId).Should().Contain(
+            ElectionSp08ProfileIds.RequiredHighAssuranceComponentIds);
+
+        var integrity = ReadFile<ElectionSp08ReleaseIntegrityArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp08ReleaseIntegrity);
+        integrity.BlocksHighAssurance.Should().BeTrue();
+        integrity.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityEvidencePending);
+        integrity.ReleaseManifestHash.Should().Be(
+            ElectionSp08ReleaseManifestHasher.ComputeReleaseManifestHash(releaseManifest));
+
+        var verifierOutput = ReadFile<ElectionSp08VerifierOutputArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput);
+        verifierOutput.Results.Should().ContainSingle(x =>
+            x.CheckCode == ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode &&
+            x.Status == VerificationCheckStatus.Warn &&
+            x.ResultCode == VerificationResultCodes.ReleaseIntegrityEvidencePending);
     }
 
     [Fact]
@@ -679,6 +720,102 @@ public class ElectionVerificationPackageExportServiceTests
         };
     }
 
+    internal static ElectionVerificationPackageExportRequest WithOfficialSp08ReleaseManifest(
+        ElectionVerificationPackageExportRequest request) =>
+        request with
+        {
+            Sp08ReleaseManifest = CreateOfficialSp08ReleaseManifest(request),
+        };
+
+    internal static ElectionSp08ReleaseManifestArtifactRecord CreateOfficialSp08ReleaseManifest(
+        ElectionVerificationPackageExportRequest request)
+    {
+        var releaseId = "release-2026.05.11";
+        var sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        var sourceTag = "hush-voting-2026.05.11";
+        var serverDigest = Sp08Digest("server");
+        var webDigest = Sp08Digest("web-client");
+        var verifierDigest = Sp08Digest("standalone-verifier");
+        var sp07Digest = Sp08Digest("sp07-worker");
+        var protocolDigest = $"sha256:{request.ProtocolPackageBinding!.ReleaseManifestHash}";
+        var exporterDigest = Sp08Digest("audit-package-exporter");
+
+        return new ElectionSp08ReleaseManifestArtifactRecord(
+            Schema: ElectionSp08ProfileIds.ReleaseManifestSchema,
+            ManifestId: "release-manifest-2026-05-11",
+            releaseId,
+            ElectionSp08ProfileIds.EvidenceModeOfficial,
+            NotForReleaseIntegrityClaims: false,
+            GeneratedAt: DateTime.UnixEpoch,
+            SourceAuthority: "github-actions",
+            sourceCommit,
+            sourceTag,
+            Components:
+            [
+                CreateOfficialSp08Component(ElectionSp08ProfileIds.ServerComponent, serverDigest, sourceCommit, sourceTag),
+                CreateOfficialSp08Component(ElectionSp08ProfileIds.WebClientComponent, webDigest, sourceCommit, sourceTag),
+                CreateOfficialSp08Component(ElectionSp08ProfileIds.StandaloneVerifierComponent, verifierDigest, sourceCommit, sourceTag),
+                CreateOfficialSp08Component(ElectionSp08ProfileIds.Sp07ProofWorkerComponent, sp07Digest, sourceCommit, sourceTag),
+                CreateOfficialSp08Component(ElectionSp08ProfileIds.ProtocolPackageComponent, protocolDigest, sourceCommit, sourceTag),
+                CreateOfficialSp08Component(ElectionSp08ProfileIds.AuditPackageExporterComponent, exporterDigest, sourceCommit, sourceTag),
+            ],
+            CircuitAndKeys:
+            [
+                new ElectionSp08CircuitKeyArtifactRecord(
+                    CircuitId: "protocol-omega-publication-proof-v1",
+                    CircuitHash: Sp08Digest("circuit"),
+                    ProvingKeyHash: Sp08Digest("proving-key"),
+                    VerifyingKeyHash: Sp08Digest("verifying-key"),
+                    ProtocolPackageManifestHash: request.ProtocolPackageBinding.ReleaseManifestHash),
+            ],
+            LifecycleBindings:
+            [
+                CreateOfficialSp08Lifecycle(ElectionSp08ProfileIds.OpenLifecycleStage, releaseId, serverDigest),
+                CreateOfficialSp08Lifecycle(ElectionSp08ProfileIds.CloseLifecycleStage, releaseId, serverDigest),
+                CreateOfficialSp08Lifecycle(ElectionSp08ProfileIds.ProofWorkerLifecycleStage, releaseId, sp07Digest),
+                CreateOfficialSp08Lifecycle(ElectionSp08ProfileIds.ExporterLifecycleStage, releaseId, exporterDigest),
+                CreateOfficialSp08Lifecycle(ElectionSp08ProfileIds.ClientReleaseSetLifecycleStage, releaseId, webDigest),
+            ],
+            PublicPrivacyBoundary:
+            [
+                "no_private_host_state",
+                "no_per_voter_device_identifier",
+                "no_raw_attestation_token",
+                "no_ip_address",
+            ]);
+    }
+
+    private static ElectionSp08ReleaseComponentArtifactRecord CreateOfficialSp08Component(
+        string componentId,
+        string digest,
+        string sourceCommit,
+        string sourceTag) =>
+        new(
+            componentId,
+            componentId,
+            ElectionSp08ProfileIds.EvidenceModeOfficial,
+            $"{componentId}.artifact",
+            digest,
+            sourceCommit,
+            sourceTag,
+            $"{componentId}@{digest}",
+            BuildWorkflowRunId: "1234567890",
+            DistributionReference: null,
+            SigningFingerprint: null,
+            IsPlaceholder: false);
+
+    private static ElectionSp08LifecycleReleaseBindingRecord CreateOfficialSp08Lifecycle(
+        string lifecycleStage,
+        string releaseId,
+        string digest) =>
+        new(
+            lifecycleStage,
+            releaseId,
+            releaseId,
+            digest,
+            digest,
+            MatchesSealedPolicy: true);
+
     private static ElectionPublicationProofSessionRecord CreatePublicationProofSession(
         ElectionVerificationPackageExportRequest request,
         Guid witnessSetId) =>
@@ -832,4 +969,7 @@ public class ElectionVerificationPackageExportServiceTests
 
     private static string HashHex(string value) =>
         Convert.ToHexString(HashBytes(value)).ToLowerInvariant();
+
+    private static string Sp08Digest(string value) =>
+        $"sha256:{HashHex($"sp08:{value}")}";
 }

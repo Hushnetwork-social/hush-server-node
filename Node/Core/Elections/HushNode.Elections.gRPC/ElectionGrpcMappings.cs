@@ -227,6 +227,59 @@ internal static partial class ElectionGrpcMappings
         return view;
     }
 
+    public static ElectionSp08ReleaseIntegrityStatusView ToProto(this ElectionSp08OpenReadinessSummary summary)
+    {
+        var view = new ElectionSp08ReleaseIntegrityStatusView
+        {
+            EvidenceExpected = summary.EvidenceExpected,
+            PublicEvidenceAvailable = summary.PublicEvidenceAvailable,
+            RestrictedEvidenceAvailable = summary.RestrictedEvidenceAvailable,
+            EvidenceMode = summary.EvidenceMode,
+            NotForReleaseIntegrityClaims = summary.NotForReleaseIntegrityClaims,
+            BlocksHighAssurance = summary.BlocksHighAssurance,
+            ReleaseManifestName = summary.ReleaseManifestName,
+            ReleaseManifestHash = summary.ReleaseManifestHash,
+            ProtocolPackageManifestName = summary.ProtocolPackageManifestName,
+            ProtocolPackageManifestHash = summary.ProtocolPackageManifestHash,
+            PrimaryResultCode = summary.PrimaryResultCode,
+            PrimaryIssue = summary.PrimaryIssue,
+            ComponentCount = summary.ComponentCount,
+            LifecycleBindingCount = summary.LifecycleBindingCount,
+            EvidenceFileCount = summary.EvidenceFileCount,
+            MobileEvidenceIncluded = summary.MobileEvidenceIncluded,
+            Message = summary.BlocksHighAssurance
+                ? "SP-08 release-integrity evidence blocks high-assurance election open."
+                : summary.NotForReleaseIntegrityClaims
+                    ? summary.PrimaryIssue
+                    : "SP-08 release-integrity evidence is ready for election open.",
+        };
+
+        view.Components.AddRange(summary.Components.Select(component => new ElectionSp08ReleaseComponentStatusView
+        {
+            ComponentId = component.ComponentId,
+            ComponentType = component.ComponentType,
+            EvidenceMode = component.EvidenceMode,
+            ArtifactName = component.ArtifactName,
+            ArtifactDigest = component.ArtifactDigest,
+            ImmutableReference = component.ImmutableReference,
+            BuildWorkflowRunId = component.BuildWorkflowRunId ?? string.Empty,
+            DistributionReference = component.DistributionReference ?? string.Empty,
+            HasSigningFingerprint = !string.IsNullOrWhiteSpace(component.SigningFingerprint),
+            IsPlaceholder = component.IsPlaceholder,
+        }));
+        view.LifecycleBindings.AddRange(summary.LifecycleBindings.Select(binding => new ElectionSp08LifecycleBindingStatusView
+        {
+            LifecycleStage = binding.LifecycleStage,
+            ExpectedReleaseId = binding.ExpectedReleaseId,
+            ObservedReleaseId = binding.ObservedReleaseId,
+            ExpectedArtifactDigest = binding.ExpectedArtifactDigest,
+            ObservedArtifactDigest = binding.ObservedArtifactDigest,
+            MatchesSealedPolicy = binding.MatchesSealedPolicy,
+        }));
+
+        return view;
+    }
+
     public static GetElectionOpenReadinessResponse ToProto(this ElectionOpenValidationResult result)
     {
         var response = new GetElectionOpenReadinessResponse
@@ -269,6 +322,11 @@ internal static partial class ElectionGrpcMappings
         if (result.Sp07Summary is not null)
         {
             response.Sp07Evidence = result.Sp07Summary.ToProto();
+        }
+
+        if (result.Sp08Summary is not null)
+        {
+            response.Sp08ReleaseIntegrity = result.Sp08Summary.ToProto();
         }
 
         return response;

@@ -3387,6 +3387,21 @@ public class ElectionQueryApplicationServiceTests
         response.Status.Sp04Evidence.PublicEvidenceAvailable.Should().BeTrue();
         response.Status.Sp04Evidence.RestrictedEvidenceAvailable.Should().BeTrue();
         response.Status.Sp04Evidence.ReceiptCommitmentSetHash.Should().NotBeNullOrWhiteSpace();
+        response.Status.Sp08ReleaseIntegrity.Should().NotBeNull();
+        response.Status.Sp08ReleaseIntegrity.EvidenceExpected.Should().BeTrue();
+        response.Status.Sp08ReleaseIntegrity.PublicEvidenceAvailable.Should().BeTrue();
+        response.Status.Sp08ReleaseIntegrity.RestrictedEvidenceAvailable.Should().BeTrue();
+        response.Status.Sp08ReleaseIntegrity.EvidenceMode.Should().Be(ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder);
+        response.Status.Sp08ReleaseIntegrity.NotForReleaseIntegrityClaims.Should().BeTrue();
+        response.Status.Sp08ReleaseIntegrity.PrimaryResultCode.Should().Be(VerificationResultCodes.ReleaseIntegrityEvidencePending);
+        response.Status.Sp08ReleaseIntegrity.ReleaseManifestHash.Should().NotBeNullOrWhiteSpace();
+        response.Status.Sp08ReleaseIntegrity.EvidenceFileCount.Should().Be(3);
+        response.Status.Sp08ReleaseIntegrity.ComponentCount.Should().BeGreaterThanOrEqualTo(6);
+        response.Status.Sp08ReleaseIntegrity.LifecycleBindingCount.Should().Be(5);
+        response.Status.Sp08ReleaseIntegrity.EvidenceFiles.Select(x => x.RelativePath).Should().Contain(
+            VerificationPackageFileNames.Sp08ReleaseIntegrity);
+        response.Status.Sp08ReleaseIntegrity.Components.Select(x => x.ComponentId).Should().Contain(
+            ElectionSp08ProfileIds.ServerComponent);
         response.Status.LastVerifierResult.OverallStatus.Should().Be(ElectionVerifierOverallStatusProto.ElectionVerifierNotAvailable);
     }
 
@@ -3466,6 +3481,11 @@ public class ElectionQueryApplicationServiceTests
         sp06.MissingEvidenceCount.Should().Be(0);
         sp06.LatestCtrlResultCode.Should().Be(VerificationResultCodes.TrusteeControlDomainEvidenceValid);
         sp06.Blockers.Should().BeEmpty();
+        response.Status.Sp08ReleaseIntegrity.Should().NotBeNull();
+        response.Status.Sp08ReleaseIntegrity.EvidenceMode.Should().Be(ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder);
+        response.Status.Sp08ReleaseIntegrity.BlocksHighAssurance.Should().BeTrue();
+        response.Status.Sp08ReleaseIntegrity.PrimaryIssue.Should().Contain("development placeholder");
+        response.Status.Sp08ReleaseIntegrity.LifecycleBindings.Should().OnlyContain(x => !x.MatchesSealedPolicy);
     }
 
     [Fact]
