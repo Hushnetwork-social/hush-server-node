@@ -47,6 +47,7 @@ public sealed partial class ElectionVerificationPackageExportService
                 "CTRL-000",
                 "VFY-PRIVACY-000",
                 ElectionSp08ProfileIds.ReleaseIntegrityAcceptedCheckCode,
+                ElectionSp09ProfileIds.ReviewStatusValidCheckCode,
             ]);
     }
 
@@ -434,6 +435,217 @@ public sealed partial class ElectionVerificationPackageExportService
                 }),
         ];
     }
+
+    private static ElectionSp09ExternalReviewStatusArtifactRecord BuildSp09ExternalReviewStatus(
+        ElectionVerificationPackageExportRequest request)
+    {
+        var detailedStatus = ElectionSp09ProfileIds.StatusNotStarted;
+        var availability = ElectionSp09ExternalReviewRules.ProjectAvailability(detailedStatus);
+        var claimState = ElectionSp09ExternalReviewRules.GetDefaultClaimState(detailedStatus);
+        var status = new ElectionSp09ExternalReviewStatusArtifactRecord(
+            Schema: ElectionSp09ProfileIds.ExternalReviewStatusSchema,
+            request.Election.ElectionId.ToString(),
+            ElectionSp09ProfileIds.ExternalExaminationProgramVersion,
+            ElectionSp09ProfileIds.ReviewScopeProtocolOmegaV1,
+            ElectionSp09ProfileIds.ReviewTypeCryptographicSecurity,
+            ElectionSp09ProfileIds.ReviewPhaseProtocolProofP1,
+            detailedStatus,
+            availability,
+            claimState,
+            ReviewScopeMatchesElection: true,
+            PrimaryResultCode: VerificationResultCodes.ExternalReviewNotComplete,
+            PrimaryIssue: "External examination program is defined; no reviewer conclusion is available.",
+            ReviewerEvidenceRef: null,
+            ReportHashOrRestrictedRef: null,
+            CustomerSafeSummaryHash: null,
+            CustomerSafeSummaryUrl: null,
+            KnownLimitationsVersion: request.ProtocolPackageBinding!.PackageVersion,
+            KnownLimitationsHash: $"sha256:{request.ProtocolPackageBinding.ProofPackageHash}",
+            ReviewedArtifacts: [],
+            FindingSummary: BuildSp09EmptyFindingSummary(),
+            PublicEvidenceFiles:
+            [
+                VerificationPackageFileNames.Sp09ExternalReviewStatus,
+                VerificationPackageFileNames.Sp09ExternalReviewClaimTable,
+                VerificationPackageFileNames.Sp09ExternalReviewVerifierOutput,
+            ],
+            RestrictedEvidenceFiles: [],
+            PublicPrivacyBoundary: BuildSp09PublicPrivacyBoundary());
+
+        var errors = ElectionSp09ExternalReviewRules.Validate(status, request.PackageView);
+        if (errors.Count > 0)
+        {
+            throw new InvalidOperationException($"Generated SP-09 status is invalid: {string.Join("; ", errors)}");
+        }
+
+        return status;
+    }
+
+    private static ElectionSp09ExternalReviewClaimTableArtifactRecord BuildSp09ExternalReviewClaimTable() =>
+        new(
+            ElectionSp09ProfileIds.ExternalReviewClaimTableSchema,
+            ElectionSp09ProfileIds.ExternalExaminationProgramVersion,
+            Claims:
+            [
+                BuildSp09Claim(
+                    "CLM-SP03-VERIFIER-REPLAY",
+                    ElectionSp09ProfileIds.ClaimStateProgramDefined,
+                    [
+                        VerificationPackageFileNames.AuditPackageManifest,
+                        VerificationPackageFileNames.VerifierInputManifest,
+                        VerificationPackageFileNames.VerifierOutput,
+                    ]),
+                BuildSp09Claim(
+                    "CLM-SP05-ELIGIBILITY-SEPARATION",
+                    ElectionSp09ProfileIds.ClaimStateProgramDefined,
+                    [
+                        VerificationPackageFileNames.Sp05EligibilityPolicy,
+                        VerificationPackageFileNames.Sp05EligibilitySummary,
+                        VerificationPackageFileNames.Sp05EligibilityVerifierOutput,
+                    ]),
+                BuildSp09Claim(
+                    "CLM-SP07-PUBLICATION-PROOF",
+                    ElectionSp09ProfileIds.ClaimStateProgramDefined,
+                    [
+                        VerificationPackageFileNames.Sp07PublicationProofTranscript,
+                        VerificationPackageFileNames.Sp07PublicationProofVerifierOutput,
+                        VerificationPackageFileNames.Sp07WitnessDeletionReceipt,
+                    ]),
+                BuildSp09Claim(
+                    "CLM-SP08-RELEASE-INTEGRITY",
+                    ElectionSp09ProfileIds.ClaimStateProgramDefined,
+                    [
+                        VerificationPackageFileNames.Sp08ReleaseManifest,
+                        VerificationPackageFileNames.Sp08ReleaseIntegrity,
+                        VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput,
+                    ]),
+                BuildSp09Claim(
+                    "CLM-SP09-EXAMINATION-PROGRAM",
+                    ElectionSp09ProfileIds.ClaimStateProgramDefined,
+                    [
+                        VerificationPackageFileNames.Sp09ExternalReviewStatus,
+                        VerificationPackageFileNames.Sp09ExternalReviewClaimTable,
+                        VerificationPackageFileNames.Sp09ExternalReviewVerifierOutput,
+                    ]),
+            ],
+            ElectionSp09ProfileIds.ForbiddenClaimPhrases,
+            BuildSp09PublicPrivacyBoundary());
+
+    private static ElectionSp09ExternalReviewClaimRecord BuildSp09Claim(
+        string claimId,
+        string claimState,
+        IReadOnlyList<string> hushControlledEvidenceRefs) =>
+        new(
+            claimId,
+            claimState,
+            ElectionSp09ProfileIds.AllowedWordingByClaimState[claimState],
+            hushControlledEvidenceRefs,
+            ExternalReviewEvidenceRefs: [],
+            AffectedFindingIds: []);
+
+    private static ElectionSp09VerifierOutputArtifactRecord BuildSp09VerifierOutput(
+        ElectionVerificationPackageExportRequest request,
+        ElectionSp09ExternalReviewStatusArtifactRecord status,
+        DateTime verifiedAt)
+    {
+        var validationErrors = ElectionSp09ExternalReviewRules.Validate(status, request.PackageView);
+        if (validationErrors.Count > 0)
+        {
+            return new ElectionSp09VerifierOutputArtifactRecord(
+                request.Election.ElectionId.ToString(),
+                request.VerifierProfileId,
+                ElectionSp09ProfileIds.ExternalReviewVerifierOutputSchema,
+                verifiedAt,
+                [
+                    new VerifierCheckResultRecord(
+                        ElectionSp09ProfileIds.ClaimNotAllowedCheckCode,
+                        VerificationCheckStatus.Fail,
+                        VerificationResultCodes.ExternalReviewClaimNotAllowed,
+                        "External review status is not valid for the requested package view.",
+                        new Dictionary<string, string>
+                        {
+                            ["errors"] = string.Join(" | ", validationErrors),
+                        }),
+                ]);
+        }
+
+        return new ElectionSp09VerifierOutputArtifactRecord(
+            request.Election.ElectionId.ToString(),
+            request.VerifierProfileId,
+            ElectionSp09ProfileIds.ExternalReviewVerifierOutputSchema,
+            verifiedAt,
+            [
+                new VerifierCheckResultRecord(
+                    ElectionSp09ProfileIds.ReviewStatusValidCheckCode,
+                    VerificationCheckStatus.Pass,
+                    VerificationResultCodes.ExternalReviewStatusValid,
+                    "External review status shape is valid and claim state matches available evidence.",
+                    new Dictionary<string, string>
+                    {
+                        ["review_status"] = status.DetailedStatus,
+                        ["review_availability"] = status.Availability,
+                        ["claim_state"] = status.ClaimState,
+                    }),
+                new VerifierCheckResultRecord(
+                    ElectionSp09ProfileIds.ReviewNotCompleteCheckCode,
+                    VerificationCheckStatus.Warn,
+                    VerificationResultCodes.ExternalReviewNotComplete,
+                    "External examination program is defined; no reviewer conclusion is available.",
+                    new Dictionary<string, string>
+                    {
+                        ["program_version"] = status.ProgramVersion,
+                        ["review_scope"] = status.ReviewScope,
+                    }),
+            ]);
+    }
+
+    private static ElectionSp09RestrictedFindingTrackerArtifactRecord BuildRestrictedSp09FindingTracker(
+        ElectionVerificationPackageExportRequest request) =>
+        new(
+            request.Election.ElectionId.ToString(),
+            ElectionSp09ProfileIds.ExternalExaminationProgramVersion,
+            ElectionSp09ProfileIds.ReviewScopeProtocolOmegaV1,
+            Findings: []);
+
+    private static ElectionSp09RestrictedRetestEvidenceArtifactRecord BuildRestrictedSp09RetestEvidence(
+        ElectionVerificationPackageExportRequest request) =>
+        new(
+            request.Election.ElectionId.ToString(),
+            ElectionSp09ProfileIds.ExternalExaminationProgramVersion,
+            ElectionSp09ProfileIds.ReviewScopeProtocolOmegaV1,
+            Retests: []);
+
+    private static ElectionSp09RestrictedReportReferenceArtifactRecord BuildRestrictedSp09ReportReference(
+        ElectionVerificationPackageExportRequest request,
+        ElectionSp09ExternalReviewStatusArtifactRecord status) =>
+        new(
+            request.Election.ElectionId.ToString(),
+            ElectionSp09ProfileIds.ExternalExaminationProgramVersion,
+            ElectionSp09ProfileIds.ReviewScopeProtocolOmegaV1,
+            status.DetailedStatus,
+            ReportHash: null,
+            RestrictedReportRef: null,
+            CustomerSafeSummaryHash: null,
+            BuildSp09PublicPrivacyBoundary());
+
+    private static IReadOnlyList<ElectionSp09FindingSeverityCountRecord> BuildSp09EmptyFindingSummary() =>
+    [
+        new("critical", OpenCount: 0, FixedCount: 0, AcceptedLimitationCount: 0),
+        new("high", OpenCount: 0, FixedCount: 0, AcceptedLimitationCount: 0),
+        new("medium", OpenCount: 0, FixedCount: 0, AcceptedLimitationCount: 0),
+        new("low", OpenCount: 0, FixedCount: 0, AcceptedLimitationCount: 0),
+        new("informational", OpenCount: 0, FixedCount: 0, AcceptedLimitationCount: 0),
+    ];
+
+    private static IReadOnlyList<string> BuildSp09PublicPrivacyBoundary() =>
+    [
+        "no_full_report_body",
+        "no_finding_body",
+        "no_reviewer_workpaper",
+        "no_retest_evidence_body",
+        "no_confidential_report_url",
+        "no_voter_detail",
+    ];
 
     private static IReadOnlyList<ElectionSp08LifecycleReleaseBindingRecord> BuildSp08LifecycleBindings(
         string releaseId,

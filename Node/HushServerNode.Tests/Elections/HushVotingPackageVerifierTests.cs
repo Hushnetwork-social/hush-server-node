@@ -39,12 +39,200 @@ public class HushVotingPackageVerifierTests
             x.CheckCode == ElectionSp08ProfileIds.EvidenceModeAllowedCheckCode &&
             x.ResultCode == VerificationResultCodes.ReleaseIntegrityEvidencePending &&
             x.Status == VerificationCheckStatus.Warn);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp09ProfileIds.ReviewStatusValidCheckCode &&
+            x.ResultCode == VerificationResultCodes.ExternalReviewStatusValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp09ProfileIds.ReviewNotCompleteCheckCode &&
+            x.ResultCode == VerificationResultCodes.ExternalReviewNotComplete &&
+            x.Status == VerificationCheckStatus.Warn);
         File.Exists(Path.Combine(package.PackagePath, "verifier-output", "VerifierOutput.json"))
             .Should()
             .BeTrue();
         File.Exists(Path.Combine(package.PackagePath, "verifier-output", "VerifierSummary.md"))
             .Should()
             .BeTrue();
+    }
+
+    [Fact]
+    public async Task Verify_Sp09ReviewedClaimWithoutReviewerEvidence_ShouldFail()
+    {
+        using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
+        var status = await ReadPackageArtifactAsync<ElectionSp09ExternalReviewStatusArtifactRecord>(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp09ExternalReviewStatus);
+        await WritePackageArtifactAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp09ExternalReviewStatus,
+            status with
+            {
+                DetailedStatus = ElectionSp09ProfileIds.StatusReviewedForDeclaredScope,
+                Availability = ElectionSp09ProfileIds.AvailabilityAvailable,
+                ClaimState = ElectionSp09ProfileIds.ClaimStateReviewedForDeclaredScope,
+                PrimaryResultCode = VerificationResultCodes.ExternalReviewStatusValid,
+            });
+        await RefreshAuditManifestAsync(package.PackagePath);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp09ProfileIds.ReviewNotCompleteCheckCode &&
+            x.ResultCode == VerificationResultCodes.ExternalReviewNotComplete &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_Sp09FalseClaimWording_ShouldFail()
+    {
+        using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
+        var claimTable = await ReadPackageArtifactAsync<ElectionSp09ExternalReviewClaimTableArtifactRecord>(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp09ExternalReviewClaimTable);
+        await WritePackageArtifactAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp09ExternalReviewClaimTable,
+            claimTable with
+            {
+                Claims =
+                [
+                    claimTable.Claims[0] with { AllowedWording = "Certified for public elections." },
+                    .. claimTable.Claims.Skip(1),
+                ],
+            });
+        await RefreshAuditManifestAsync(package.PackagePath);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp09ProfileIds.ClaimNotAllowedCheckCode &&
+            x.ResultCode == VerificationResultCodes.ExternalReviewClaimNotAllowed &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_Sp09ScopeMismatch_ShouldFail()
+    {
+        using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
+        var status = await CreateReviewedSp09StatusAsync(package.PackagePath) with
+        {
+            ReviewScopeMatchesElection = false,
+            Availability = ElectionSp09ProfileIds.AvailabilityAvailable,
+        };
+        await WritePackageArtifactAsync(package.PackagePath, VerificationPackageFileNames.Sp09ExternalReviewStatus, status);
+        await RefreshAuditManifestAsync(package.PackagePath);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp09ProfileIds.ScopeMismatchCheckCode &&
+            x.ResultCode == VerificationResultCodes.ExternalReviewScopeMismatch &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_Sp09ReportHashMismatch_ShouldFail()
+    {
+        using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
+        var status = await CreateReviewedSp09StatusAsync(package.PackagePath) with
+        {
+            CustomerSafeSummaryHash = "not-a-sha256-hash",
+        };
+        await WritePackageArtifactAsync(package.PackagePath, VerificationPackageFileNames.Sp09ExternalReviewStatus, status);
+        await RefreshAuditManifestAsync(package.PackagePath);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp09ProfileIds.ReportHashMismatchCheckCode &&
+            x.ResultCode == VerificationResultCodes.ExternalReviewReportHashMismatch &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_Sp09PublicBoundaryLeak_ShouldFail()
+    {
+        using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
+        var status = await ReadPackageArtifactAsync<ElectionSp09ExternalReviewStatusArtifactRecord>(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp09ExternalReviewStatus);
+        await WritePackageArtifactAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp09ExternalReviewStatus,
+            status with { PublicPrivacyBoundary = ["fullReportBody"] });
+        await RefreshAuditManifestAsync(package.PackagePath);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp09ProfileIds.PublicBoundaryViolationCheckCode &&
+            x.ResultCode == VerificationResultCodes.ExternalReviewPublicBoundaryViolation &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_Sp09OpenFindingsBlockStrongClaim_ShouldFail()
+    {
+        using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
+        var status = await CreateReviewedSp09StatusAsync(package.PackagePath) with
+        {
+            FindingSummary =
+            [
+                new ElectionSp09FindingSeverityCountRecord("high", OpenCount: 1, FixedCount: 0, AcceptedLimitationCount: 0),
+            ],
+        };
+        await WritePackageArtifactAsync(package.PackagePath, VerificationPackageFileNames.Sp09ExternalReviewStatus, status);
+        await RefreshAuditManifestAsync(package.PackagePath);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp09ProfileIds.OpenFindingsBlockClaimsCheckCode &&
+            x.ResultCode == VerificationResultCodes.ExternalReviewOpenFindingsBlockClaims &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_Sp09RequiresRedesignReviewedClaim_ShouldFail()
+    {
+        using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
+        var status = await CreateReviewedSp09StatusAsync(package.PackagePath) with
+        {
+            DetailedStatus = ElectionSp09ProfileIds.StatusRequiresRedesign,
+            Availability = ElectionSp09ProfileIds.AvailabilityNotAvailable,
+            ClaimState = ElectionSp09ProfileIds.ClaimStateReviewedForDeclaredScope,
+            PrimaryResultCode = VerificationResultCodes.ExternalReviewRequiresRedesign,
+        };
+        await WritePackageArtifactAsync(package.PackagePath, VerificationPackageFileNames.Sp09ExternalReviewStatus, status);
+        await RefreshAuditManifestAsync(package.PackagePath);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp09ProfileIds.RequiresRedesignCheckCode &&
+            x.ResultCode == VerificationResultCodes.ExternalReviewRequiresRedesign &&
+            x.Status == VerificationCheckStatus.Fail);
     }
 
     [Fact]
@@ -819,6 +1007,74 @@ public class HushVotingPackageVerifierTests
 
     private static string HashHex(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+
+    private static async Task<ElectionSp09ExternalReviewStatusArtifactRecord> CreateReviewedSp09StatusAsync(
+        string packagePath,
+        string detailedStatus = ElectionSp09ProfileIds.StatusReviewedForDeclaredScope,
+        string? claimState = null,
+        bool reviewScopeMatchesElection = true,
+        string? customerSafeSummaryHash = "sha256:customer-safe-summary",
+        string? reportHashOrRestrictedRef = "sha256:review-report",
+        IReadOnlyList<ElectionSp09FindingSeverityCountRecord>? findingSummary = null,
+        IReadOnlyList<string>? publicPrivacyBoundary = null)
+    {
+        var status = await ReadPackageArtifactAsync<ElectionSp09ExternalReviewStatusArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp09ExternalReviewStatus);
+        var electionRecord = await ReadPackageArtifactAsync<ElectionRecordReferenceRecord>(
+            packagePath,
+            VerificationPackageFileNames.ElectionRecord);
+
+        return status with
+        {
+            DetailedStatus = detailedStatus,
+            Availability = ElectionSp09ExternalReviewRules.ProjectAvailability(
+                detailedStatus,
+                reviewScopeMatchesElection),
+            ClaimState = claimState ??
+                ElectionSp09ExternalReviewRules.GetDefaultClaimState(detailedStatus, reviewScopeMatchesElection),
+            ReviewScopeMatchesElection = reviewScopeMatchesElection,
+            PrimaryResultCode = VerificationResultCodes.ExternalReviewStatusValid,
+            PrimaryIssue = null,
+            ReviewerEvidenceRef = "reviewer:engagement-42",
+            ReportHashOrRestrictedRef = reportHashOrRestrictedRef,
+            CustomerSafeSummaryHash = customerSafeSummaryHash,
+            ReviewedArtifacts = BuildSp09ReviewedArtifacts(electionRecord),
+            FindingSummary = findingSummary ?? status.FindingSummary,
+            PublicPrivacyBoundary = publicPrivacyBoundary ?? status.PublicPrivacyBoundary,
+        };
+    }
+
+    private static IReadOnlyList<ElectionSp09ReviewedArtifactRecord> BuildSp09ReviewedArtifacts(
+        ElectionRecordReferenceRecord electionRecord) =>
+    [
+        new(
+            "protocol-specification-package",
+            "protocol_specification_package",
+            "Protocol specification package",
+            BuildSp09Sha256Ref(electionRecord.ProtocolSpecificationHash),
+            electionRecord.ProtocolPackageVersion,
+            ElectionSp09ProfileIds.ReviewScopeProtocolOmegaV1),
+        new(
+            "protocol-proof-package",
+            "protocol_proof_package",
+            "Protocol proof package",
+            BuildSp09Sha256Ref(electionRecord.ProtocolProofPackageHash),
+            electionRecord.ProtocolPackageVersion,
+            ElectionSp09ProfileIds.ReviewScopeProtocolOmegaV1),
+        new(
+            "protocol-release-manifest",
+            "protocol_release_manifest",
+            "Protocol release manifest",
+            BuildSp09Sha256Ref(electionRecord.ProtocolReleaseManifestHash),
+            electionRecord.ProtocolPackageVersion,
+            ElectionSp09ProfileIds.ReviewScopeProtocolOmegaV1),
+    ];
+
+    private static string BuildSp09Sha256Ref(string hash) =>
+        hash.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase)
+            ? hash
+            : $"sha256:{hash}";
 
     private static async Task<string> ReadPackageAcceptedBallotSetHashAsync(string packagePath)
     {

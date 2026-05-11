@@ -958,6 +958,7 @@ message ElectionVerificationPackageStatusView {
   ElectionSp06EvidenceStatusView Sp06Evidence = 12;
   ElectionSp07EvidenceStatusView Sp07Evidence = 13;
   ElectionSp08ReleaseIntegrityStatusView Sp08ReleaseIntegrity = 14;
+  ElectionSp09ExternalReviewStatusView Sp09ExternalReview = 15;
 }
 
 message ElectionSp04EvidenceStatusView {
@@ -1097,6 +1098,61 @@ message ElectionSp08LifecycleBindingStatusView {
 }
 
 message ElectionSp08EvidenceFileStatusView {
+  string RelativePath = 1;
+  ElectionVerificationArtifactVisibilityProto Visibility = 2;
+  bool IsPresent = 3;
+  string ContentHash = 4;
+}
+
+message ElectionSp09ExternalReviewStatusView {
+  bool EvidenceExpected = 1;
+  bool PublicEvidenceAvailable = 2;
+  bool RestrictedEvidenceAvailable = 3;
+  string ProgramVersion = 4;
+  string ReviewScope = 5;
+  string ReviewType = 6;
+  string ReviewPhase = 7;
+  string DetailedStatus = 8;
+  string Availability = 9;
+  string ClaimState = 10;
+  bool ReviewScopeMatchesElection = 11;
+  string PrimaryResultCode = 12;
+  string PrimaryIssue = 13;
+  string CustomerSafeSummaryHash = 14;
+  string CustomerSafeSummaryUrl = 15;
+  string KnownLimitationsVersion = 16;
+  string KnownLimitationsHash = 17;
+  int32 ReviewedArtifactCount = 18;
+  int32 OpenCriticalFindingCount = 19;
+  int32 OpenHighFindingCount = 20;
+  int32 OpenFindingCount = 21;
+  int32 PublicEvidenceFileCount = 22;
+  int32 RestrictedEvidenceFileCount = 23;
+  bool BlocksReviewedClaims = 24;
+  bool RequiresRedesign = 25;
+  string Message = 26;
+  repeated ElectionSp09ReviewedArtifactStatusView ReviewedArtifacts = 27;
+  repeated ElectionSp09FindingSeverityStatusView FindingSummary = 28;
+  repeated ElectionSp09EvidenceFileStatusView EvidenceFiles = 29;
+}
+
+message ElectionSp09ReviewedArtifactStatusView {
+  string ArtifactId = 1;
+  string ArtifactType = 2;
+  string ArtifactName = 3;
+  string ArtifactHash = 4;
+  string ArtifactVersion = 5;
+  string ReviewScope = 6;
+}
+
+message ElectionSp09FindingSeverityStatusView {
+  string Severity = 1;
+  int32 OpenCount = 2;
+  int32 FixedCount = 3;
+  int32 AcceptedLimitationCount = 4;
+}
+
+message ElectionSp09EvidenceFileStatusView {
   string RelativePath = 1;
   ElectionVerificationArtifactVisibilityProto Visibility = 2;
   bool IsPresent = 3;
