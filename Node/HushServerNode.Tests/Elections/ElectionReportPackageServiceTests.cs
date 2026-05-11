@@ -1,6 +1,7 @@
 using FluentAssertions;
 using HushNode.Elections;
 using HushShared.Elections.Model;
+using HushShared.Elections.Verification.Model;
 using Xunit;
 
 namespace HushServerNode.Tests.Elections;
@@ -431,6 +432,10 @@ public class ElectionReportPackageServiceTests
         machineManifest.Content.Should().Contain($"\"specPackageHash\": \"{Hash('a')}\"");
         machineManifest.Content.Should().Contain($"\"proofPackageHash\": \"{Hash('b')}\"");
         machineManifest.Content.Should().Contain($"\"releaseManifestHash\": \"{Hash('c')}\"");
+        machineManifest.Content.Should().Contain("\"externalReviewAvailability\": \"not_available\"");
+        machineManifest.Content.Should().Contain("\"externalReviewClaimState\": \"program_defined\"");
+        machineManifest.Content.Should().Contain(
+            "\"externalReviewCustomerSafeSummary\": \"External examination program is defined; no reviewer conclusion is available.\"");
         machineManifest.Content.Should().Contain("https://www.hushnetwork.social/protocol-omega/hushvoting-v1/spec.zip");
 
         var machineEvidenceGraph = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineEvidenceGraph);
@@ -445,12 +450,16 @@ public class ElectionReportPackageServiceTests
         humanManifest.Content.Should().Contain("Protocol package binding id");
         humanManifest.Content.Should().Contain($"Spec package hash: `{Hash('a')}`");
         humanManifest.Content.Should().Contain("Spec access locations: `1`");
+        humanManifest.Content.Should().Contain(
+            "External review summary: External examination program is defined; no reviewer conclusion is available.");
 
         var humanAudit = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport);
         humanAudit.Content.Should().Contain("## Protocol Omega Package Binding");
         humanAudit.Content.Should().Contain("Access-location note: Protocol package archives are referenced by immutable hashes");
         humanAudit.Content.Should().Contain("Website spec package");
         humanAudit.Content.Should().Contain("Website proof package");
+        ElectionSp09ProfileIds.ForbiddenClaimPhrases.Should().AllSatisfy(phrase =>
+            humanAudit.Content.Contains(phrase, StringComparison.OrdinalIgnoreCase).Should().BeFalse());
     }
 
     private static OutcomeRuleDefinition CreatePassFailRule() =>

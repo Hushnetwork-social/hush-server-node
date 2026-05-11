@@ -463,6 +463,327 @@ public sealed partial class HushVotingPackageVerifier
         return results;
     }
 
+    private static async Task<IReadOnlyList<VerifierCheckResultRecord>> CheckExternalReviewEvidenceAsync(
+        string packagePath,
+        AuditPackageManifestRecord auditManifest,
+        string profileId,
+        ElectionRecordReferenceRecord electionRecord,
+        CancellationToken cancellationToken)
+    {
+        var requiredPaths = new[]
+        {
+            VerificationPackageFileNames.Sp09ExternalReviewStatus,
+            VerificationPackageFileNames.Sp09ExternalReviewClaimTable,
+            VerificationPackageFileNames.Sp09ExternalReviewVerifierOutput,
+        };
+        var missingFiles = requiredPaths
+            .Where(path => !File.Exists(ResolvePackagePath(packagePath, path)))
+            .ToArray();
+        if (missingFiles.Length > 0)
+        {
+            return
+            [
+                CreateResult(
+                    ElectionSp09ProfileIds.ProgramMissingCheckCode,
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.ExternalReviewProgramMissing,
+                    "SP-09 external review package artifacts are missing.",
+                    missingFiles.ToDictionary(path => path, _ => "missing", StringComparer.Ordinal)),
+            ];
+        }
+
+        var results = new List<VerifierCheckResultRecord>();
+        var status = await ReadJsonAsync<ElectionSp09ExternalReviewStatusArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp09ExternalReviewStatus,
+            cancellationToken);
+        var claimTable = await ReadJsonAsync<ElectionSp09ExternalReviewClaimTableArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp09ExternalReviewClaimTable,
+            cancellationToken);
+        var verifierOutput = await ReadJsonAsync<ElectionSp09VerifierOutputArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp09ExternalReviewVerifierOutput,
+            cancellationToken);
+
+        ValidateSp09ExternalReviewStatus(results, status, auditManifest, profileId, electionRecord);
+        ValidateSp09ClaimTable(results, claimTable);
+        ValidateSp09VerifierOutput(results, verifierOutput, profileId, electionRecord);
+
+        if (results.All(x => x.Status != VerificationCheckStatus.Fail))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.ReviewStatusValidCheckCode,
+                VerificationCheckStatus.Pass,
+                VerificationResultCodes.ExternalReviewStatusValid,
+                "SP-09 external review status shape is valid and claim state matches available evidence.",
+                new Dictionary<string, string>
+                {
+                    ["review_status"] = status.DetailedStatus,
+                    ["review_availability"] = status.Availability,
+                    ["claim_state"] = status.ClaimState,
+                }));
+        }
+
+        if (!string.Equals(status.Availability, ElectionSp09ProfileIds.AvailabilityAvailable, StringComparison.Ordinal))
+        {
+            var claimedReviewed = ElectionSp09ExternalReviewRules.IsReviewedClaimState(status.ClaimState);
+            results.Add(CreateResult(
+                claimedReviewed
+                    ? ElectionSp09ProfileIds.ClaimNotAllowedCheckCode
+                    : ElectionSp09ProfileIds.ReviewNotCompleteCheckCode,
+                claimedReviewed ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn,
+                claimedReviewed
+                    ? VerificationResultCodes.ExternalReviewClaimNotAllowed
+                    : VerificationResultCodes.ExternalReviewNotComplete,
+                claimedReviewed
+                    ? "Package claims reviewed external-review status without available reviewer evidence."
+                    : "External examination program is defined; no reviewer conclusion is available.",
+                new Dictionary<string, string>
+                {
+                    ["review_status"] = status.DetailedStatus,
+                    ["review_availability"] = status.Availability,
+                    ["claim_state"] = status.ClaimState,
+                }));
+        }
+
+        return results;
+    }
+
+    private static void ValidateSp09ExternalReviewStatus(
+        List<VerifierCheckResultRecord> results,
+        ElectionSp09ExternalReviewStatusArtifactRecord status,
+        AuditPackageManifestRecord auditManifest,
+        string profileId,
+        ElectionRecordReferenceRecord electionRecord)
+    {
+        if (!string.Equals(status.ElectionId, electionRecord.ElectionId, StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.ClaimNotAllowedCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewClaimNotAllowed,
+                "SP-09 status election id does not match the package election id."));
+        }
+
+        foreach (var error in ElectionSp09ExternalReviewRules.Validate(status, auditManifest.PackageView))
+        {
+            AddSp09ValidationError(results, error);
+        }
+
+        if (string.Equals(status.DetailedStatus, ElectionSp09ProfileIds.StatusRequiresRedesign, StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.RequiresRedesignCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewRequiresRedesign,
+                "External review status says the reviewed scope requires redesign."));
+        }
+
+        if (!IsValidSp09ReportHashOrReference(status.ReportHashOrRestrictedRef) ||
+            !IsValidSp09OptionalHash(status.CustomerSafeSummaryHash))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.ReportHashMismatchCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewReportHashMismatch,
+                "External review report or customer-safe summary hash is malformed or does not match an allowed reference."));
+        }
+
+        if (string.Equals(status.Availability, ElectionSp09ProfileIds.AvailabilityAvailable, StringComparison.Ordinal) &&
+            !Sp09ReviewedArtifactsCoverPackage(status, electionRecord))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.ScopeMismatchCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewScopeMismatch,
+                "Reviewed artifact hashes do not cover the sealed protocol package hashes.",
+                new Dictionary<string, string>
+                {
+                    ["protocol_package_version"] = electionRecord.ProtocolPackageVersion,
+                    ["protocol_release_manifest_hash"] = electionRecord.ProtocolReleaseManifestHash,
+                }));
+        }
+
+        if (ElectionSp09ExternalReviewRules.HasBlockingOpenFindings(status.FindingSummary) &&
+            ElectionSp09ExternalReviewRules.IsStrongReviewedClaimState(status.ClaimState))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.OpenFindingsBlockClaimsCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewOpenFindingsBlockClaims,
+                "Open critical or high findings block strong external-review claims."));
+        }
+    }
+
+    private static void ValidateSp09ClaimTable(
+        List<VerifierCheckResultRecord> results,
+        ElectionSp09ExternalReviewClaimTableArtifactRecord claimTable)
+    {
+        if (!string.Equals(claimTable.Schema, ElectionSp09ProfileIds.ExternalReviewClaimTableSchema, StringComparison.Ordinal) ||
+            !string.Equals(claimTable.ProgramVersion, ElectionSp09ProfileIds.ExternalExaminationProgramVersion, StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.ClaimNotAllowedCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewClaimNotAllowed,
+                "SP-09 claim table schema or program version is invalid."));
+        }
+
+        var forbiddenBoundaryFields = VerificationPrivacyBoundary.FindForbiddenPublicFields(claimTable.PublicPrivacyBoundary);
+        if (forbiddenBoundaryFields.Count > 0)
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.PublicBoundaryViolationCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewPublicBoundaryViolation,
+                "SP-09 claim table public boundary includes restricted review fields.",
+                forbiddenBoundaryFields.ToDictionary(field => field, _ => "forbidden", StringComparer.OrdinalIgnoreCase)));
+        }
+
+        foreach (var claim in claimTable.Claims)
+        {
+            if (!ElectionSp09ProfileIds.ClaimStateSet.Contains(claim.ClaimState) ||
+                ElectionSp09ExternalReviewRules.ContainsForbiddenClaimPhrase(claim.AllowedWording))
+            {
+                results.Add(CreateResult(
+                    ElectionSp09ProfileIds.ClaimNotAllowedCheckCode,
+                    VerificationCheckStatus.Fail,
+                    VerificationResultCodes.ExternalReviewClaimNotAllowed,
+                    "SP-09 claim table contains unsupported claim state or forbidden claim wording.",
+                    new Dictionary<string, string>
+                    {
+                        ["claim_id"] = claim.ClaimId,
+                        ["claim_state"] = claim.ClaimState,
+                    }));
+            }
+        }
+    }
+
+    private static void ValidateSp09VerifierOutput(
+        List<VerifierCheckResultRecord> results,
+        ElectionSp09VerifierOutputArtifactRecord verifierOutput,
+        string profileId,
+        ElectionRecordReferenceRecord electionRecord)
+    {
+        if (!string.Equals(verifierOutput.ElectionId, electionRecord.ElectionId, StringComparison.Ordinal) ||
+            !string.Equals(verifierOutput.VerifierProfileId, profileId, StringComparison.Ordinal) ||
+            !string.Equals(verifierOutput.Schema, ElectionSp09ProfileIds.ExternalReviewVerifierOutputSchema, StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.ClaimNotAllowedCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewClaimNotAllowed,
+                "SP-09 verifier output election id, profile, or schema does not match the package context."));
+        }
+    }
+
+    private static void AddSp09ValidationError(
+        List<VerifierCheckResultRecord> results,
+        string error)
+    {
+        var lower = error.ToLowerInvariant();
+        if (lower.Contains("public", StringComparison.Ordinal) ||
+            lower.Contains("restricted", StringComparison.Ordinal) ||
+            lower.Contains("privacy boundary", StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.PublicBoundaryViolationCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewPublicBoundaryViolation,
+                error));
+            return;
+        }
+
+        if (lower.Contains("scope", StringComparison.Ordinal) ||
+            lower.Contains("availability", StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.ScopeMismatchCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewScopeMismatch,
+                error));
+            return;
+        }
+
+        if (lower.Contains("open critical/high", StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.OpenFindingsBlockClaimsCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewOpenFindingsBlockClaims,
+                error));
+            return;
+        }
+
+        if (lower.Contains("requires_redesign", StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.RequiresRedesignCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewRequiresRedesign,
+                error));
+            return;
+        }
+
+        if (lower.Contains("reviewer evidence", StringComparison.Ordinal) ||
+            lower.Contains("reviewed artifact", StringComparison.Ordinal) ||
+            lower.Contains("report hash", StringComparison.Ordinal))
+        {
+            results.Add(CreateResult(
+                ElectionSp09ProfileIds.ReviewNotCompleteCheckCode,
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.ExternalReviewNotComplete,
+                error));
+            return;
+        }
+
+        results.Add(CreateResult(
+            ElectionSp09ProfileIds.ClaimNotAllowedCheckCode,
+            VerificationCheckStatus.Fail,
+            VerificationResultCodes.ExternalReviewClaimNotAllowed,
+            error));
+    }
+
+    private static bool Sp09ReviewedArtifactsCoverPackage(
+        ElectionSp09ExternalReviewStatusArtifactRecord status,
+        ElectionRecordReferenceRecord electionRecord)
+    {
+        var reviewedHashes = status.ReviewedArtifacts
+            .Select(x => NormalizeSp09Hash(x.ArtifactHash))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return reviewedHashes.Contains(NormalizeSp09Hash(electionRecord.ProtocolSpecificationHash)) &&
+            reviewedHashes.Contains(NormalizeSp09Hash(electionRecord.ProtocolProofPackageHash)) &&
+            reviewedHashes.Contains(NormalizeSp09Hash(electionRecord.ProtocolReleaseManifestHash));
+    }
+
+    private static string NormalizeSp09Hash(string value)
+    {
+        var trimmed = (value ?? string.Empty).Trim();
+        return trimmed.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase)
+            ? trimmed["sha256:".Length..]
+            : trimmed;
+    }
+
+    private static bool IsValidSp09ReportHashOrReference(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        var trimmed = value.Trim();
+        return IsSp09Sha256Prefixed(trimmed) ||
+            VerificationPrivacyBoundary.IsRestrictedArtifactPath(trimmed);
+    }
+
+    private static bool IsValidSp09OptionalHash(string? value) =>
+        string.IsNullOrWhiteSpace(value) || IsSp09Sha256Prefixed(value.Trim());
+
+    private static bool IsSp09Sha256Prefixed(string value) =>
+        value.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase);
+
     private static async Task<IReadOnlyList<VerifierCheckResultRecord>> CheckReleaseIntegrityEvidenceAsync(
         string packagePath,
         AuditPackageManifestRecord auditManifest,

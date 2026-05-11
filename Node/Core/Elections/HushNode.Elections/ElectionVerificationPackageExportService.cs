@@ -71,6 +71,14 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
             VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput,
             BuildSp08VerifierOutput(request, sp08ReleaseManifest, sp08ReleaseIntegrity, exportedAt),
             VerificationArtifactVisibility.Public);
+        var sp09ExternalReviewStatus = BuildSp09ExternalReviewStatus(request);
+        AddJson(files, VerificationPackageFileNames.Sp09ExternalReviewStatus, sp09ExternalReviewStatus, VerificationArtifactVisibility.Public);
+        AddJson(files, VerificationPackageFileNames.Sp09ExternalReviewClaimTable, BuildSp09ExternalReviewClaimTable(), VerificationArtifactVisibility.Public);
+        AddJson(
+            files,
+            VerificationPackageFileNames.Sp09ExternalReviewVerifierOutput,
+            BuildSp09VerifierOutput(request, sp09ExternalReviewStatus, exportedAt),
+            VerificationArtifactVisibility.Public);
 
         if (request.PackageView == VerificationPackageView.RestrictedOwnerAuditor)
         {
@@ -143,6 +151,21 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
                 files,
                 VerificationPackageFileNames.RestrictedSp07WitnessDeletionLog,
                 BuildRestrictedSp07WitnessDeletionLog(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp09FindingTracker,
+                BuildRestrictedSp09FindingTracker(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp09RetestEvidence,
+                BuildRestrictedSp09RetestEvidence(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp09ReportReference,
+                BuildRestrictedSp09ReportReference(request, sp09ExternalReviewStatus),
                 VerificationArtifactVisibility.Restricted);
         }
 

@@ -30,6 +30,9 @@ public class ElectionVerificationPackageExportServiceTests
             VerificationPackageFileNames.Sp08ReleaseManifest,
             VerificationPackageFileNames.Sp08ReleaseIntegrity,
             VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput,
+            VerificationPackageFileNames.Sp09ExternalReviewStatus,
+            VerificationPackageFileNames.Sp09ExternalReviewClaimTable,
+            VerificationPackageFileNames.Sp09ExternalReviewVerifierOutput,
         ]);
         result.Files.Should().NotContain(x => x.RelativePath.StartsWith("artifacts/restricted/", StringComparison.OrdinalIgnoreCase));
         var publicPayload = string.Join(
@@ -40,6 +43,10 @@ public class ElectionVerificationPackageExportServiceTests
         publicPayload.Should().NotContain("voter-1");
         publicPayload.Should().NotContain("actor-voter-1");
         publicPayload.Should().NotContain("voter-1@example.test");
+        publicPayload.Should().NotContain("fullReportBody");
+        publicPayload.Should().NotContain("findingBody");
+        publicPayload.Should().NotContain("reviewerWorkpaper");
+        publicPayload.Should().NotContain("retestEvidenceBody");
 
         var manifest = ReadFile<AuditPackageManifestRecord>(result, VerificationPackageFileNames.AuditPackageManifest);
         foreach (var entry in manifest.Entries)
@@ -47,6 +54,47 @@ public class ElectionVerificationPackageExportServiceTests
             var file = result.Files.Single(x => x.RelativePath == entry.Path);
             VerificationCanonicalHash.ComputeManifestFileSha256(file.Content).Should().Be(entry.Sha256Hash);
         }
+    }
+
+    [Fact]
+    public void Export_PublicPackage_ShouldIncludePlannedSp09ExternalReviewArtifacts()
+    {
+        var result = Export(CreateRequest(VerificationPackageView.PublicAnonymous));
+
+        result.Success.Should().BeTrue();
+        var status = ReadFile<ElectionSp09ExternalReviewStatusArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp09ExternalReviewStatus);
+        status.ProgramVersion.Should().Be(ElectionSp09ProfileIds.ExternalExaminationProgramVersion);
+        status.ReviewScope.Should().Be(ElectionSp09ProfileIds.ReviewScopeProtocolOmegaV1);
+        status.ReviewType.Should().Be(ElectionSp09ProfileIds.ReviewTypeCryptographicSecurity);
+        status.DetailedStatus.Should().Be(ElectionSp09ProfileIds.StatusNotStarted);
+        status.Availability.Should().Be(ElectionSp09ProfileIds.AvailabilityPlanned);
+        status.ClaimState.Should().Be(ElectionSp09ProfileIds.ClaimStateProgramDefined);
+        status.PrimaryResultCode.Should().Be(VerificationResultCodes.ExternalReviewNotComplete);
+        status.ReviewerEvidenceRef.Should().BeNull();
+        status.ReportHashOrRestrictedRef.Should().BeNull();
+        status.RestrictedEvidenceFiles.Should().BeEmpty();
+        ElectionSp09ExternalReviewRules.Validate(status).Should().BeEmpty();
+
+        var claimTable = ReadFile<ElectionSp09ExternalReviewClaimTableArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp09ExternalReviewClaimTable);
+        claimTable.Claims.Should().Contain(x => x.ClaimId == "CLM-SP09-EXAMINATION-PROGRAM");
+        claimTable.Claims.Should().AllSatisfy(x =>
+            ElectionSp09ExternalReviewRules.ContainsForbiddenClaimPhrase(x.AllowedWording).Should().BeFalse());
+
+        var verifierOutput = ReadFile<ElectionSp09VerifierOutputArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp09ExternalReviewVerifierOutput);
+        verifierOutput.Results.Should().ContainSingle(x =>
+            x.CheckCode == ElectionSp09ProfileIds.ReviewStatusValidCheckCode &&
+            x.Status == VerificationCheckStatus.Pass &&
+            x.ResultCode == VerificationResultCodes.ExternalReviewStatusValid);
+        verifierOutput.Results.Should().ContainSingle(x =>
+            x.CheckCode == ElectionSp09ProfileIds.ReviewNotCompleteCheckCode &&
+            x.Status == VerificationCheckStatus.Warn &&
+            x.ResultCode == VerificationResultCodes.ExternalReviewNotComplete);
     }
 
     [Fact]
@@ -183,6 +231,15 @@ public class ElectionVerificationPackageExportServiceTests
             x.Visibility == VerificationArtifactVisibility.Restricted);
         result.Files.Should().Contain(x =>
             x.RelativePath == VerificationPackageFileNames.RestrictedSp07WitnessDeletionLog &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp09FindingTracker &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp09RetestEvidence &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp09ReportReference &&
             x.Visibility == VerificationArtifactVisibility.Restricted);
     }
 

@@ -49,6 +49,15 @@ public static class VerificationResultCodes
     public const string ReleaseIntegrityLifecycleMismatch = "release_integrity_lifecycle_mismatch";
     public const string ReleaseIntegrityMobileEvidenceIncomplete = "release_integrity_mobile_evidence_incomplete";
     public const string ReleaseIntegrityPackageManifestMissingFiles = "release_integrity_package_manifest_missing_files";
+    public const string ExternalReviewStatusValid = "external_review_status_valid";
+    public const string ExternalReviewProgramMissing = "external_review_program_missing";
+    public const string ExternalReviewNotComplete = "external_review_not_complete";
+    public const string ExternalReviewScopeMismatch = "external_review_scope_mismatch";
+    public const string ExternalReviewReportHashMismatch = "external_review_report_hash_mismatch";
+    public const string ExternalReviewOpenFindingsBlockClaims = "external_review_open_findings_block_claims";
+    public const string ExternalReviewClaimNotAllowed = "external_review_claim_not_allowed";
+    public const string ExternalReviewPublicBoundaryViolation = "external_review_public_boundary_violation";
+    public const string ExternalReviewRequiresRedesign = "external_review_requires_redesign";
     public const string ChallengeSpoilEvidencePending = "challenge_spoil_evidence_pending";
     public const string ChallengeSpoilEvidenceValid = "challenge_spoil_evidence_valid";
     public const string ChallengeSpoilBallotDefinitionMismatch = "challenge_spoil_ballot_definition_mismatch";

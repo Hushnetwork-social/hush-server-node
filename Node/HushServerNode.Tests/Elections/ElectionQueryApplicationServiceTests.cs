@@ -3402,6 +3402,21 @@ public class ElectionQueryApplicationServiceTests
             VerificationPackageFileNames.Sp08ReleaseIntegrity);
         response.Status.Sp08ReleaseIntegrity.Components.Select(x => x.ComponentId).Should().Contain(
             ElectionSp08ProfileIds.ServerComponent);
+        response.Status.Sp09ExternalReview.Should().NotBeNull();
+        response.Status.Sp09ExternalReview.EvidenceExpected.Should().BeTrue();
+        response.Status.Sp09ExternalReview.PublicEvidenceAvailable.Should().BeTrue();
+        response.Status.Sp09ExternalReview.RestrictedEvidenceAvailable.Should().BeTrue();
+        response.Status.Sp09ExternalReview.ProgramVersion.Should().Be(ElectionSp09ProfileIds.ExternalExaminationProgramVersion);
+        response.Status.Sp09ExternalReview.ReviewScope.Should().Be(ElectionSp09ProfileIds.ReviewScopeProtocolOmegaV1);
+        response.Status.Sp09ExternalReview.Availability.Should().Be(ElectionSp09ProfileIds.AvailabilityPlanned);
+        response.Status.Sp09ExternalReview.ClaimState.Should().Be(ElectionSp09ProfileIds.ClaimStateProgramDefined);
+        response.Status.Sp09ExternalReview.PrimaryResultCode.Should().Be(VerificationResultCodes.ExternalReviewNotComplete);
+        response.Status.Sp09ExternalReview.PublicEvidenceFileCount.Should().Be(3);
+        response.Status.Sp09ExternalReview.RestrictedEvidenceFileCount.Should().Be(3);
+        response.Status.Sp09ExternalReview.EvidenceFiles.Select(x => x.RelativePath).Should().Contain(
+            VerificationPackageFileNames.Sp09ExternalReviewStatus);
+        response.Status.Sp09ExternalReview.EvidenceFiles.Select(x => x.RelativePath).Should().Contain(
+            VerificationPackageFileNames.RestrictedSp09FindingTracker);
         response.Status.LastVerifierResult.OverallStatus.Should().Be(ElectionVerifierOverallStatusProto.ElectionVerifierNotAvailable);
     }
 
@@ -3867,6 +3882,9 @@ public class ElectionQueryApplicationServiceTests
         response.Status.PublicPackage.Blocker.Should().Be(
             ElectionVerificationPackageBlockerProto.VerificationPackageBlockerNotVisible);
         response.Status.RestrictedPackage.IsAvailable.Should().BeFalse();
+        response.Status.Sp09ExternalReview.EvidenceExpected.Should().BeFalse();
+        response.Status.Sp09ExternalReview.ReviewScope.Should().BeEmpty();
+        response.Status.Sp09ExternalReview.Message.Should().Contain("not visible");
     }
 
     [Fact]

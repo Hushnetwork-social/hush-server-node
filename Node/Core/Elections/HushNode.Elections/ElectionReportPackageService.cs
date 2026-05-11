@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using HushShared.Elections.Model;
+using HushShared.Elections.Verification.Model;
 
 namespace HushNode.Elections;
 
@@ -642,6 +643,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             return null;
         }
 
+        var externalReviewSummary = ElectionSp09ExternalReviewRules.BuildCustomerSafeSummary(binding.ExternalReviewStatus);
         return new ProtocolPackageBindingProjection(
             binding.Id,
             binding.PackageId,
@@ -652,6 +654,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             binding.ReleaseManifestHash,
             binding.PackageApprovalStatus.ToString(),
             binding.ExternalReviewStatus.ToString(),
+            externalReviewSummary.Availability,
+            externalReviewSummary.ClaimState,
+            externalReviewSummary.Wording,
             binding.Status.ToString(),
             binding.Source.ToString(),
             binding.DraftRevision,
@@ -1422,6 +1427,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         builder.AppendLine($"- Source: `{binding.Source}`");
         builder.AppendLine($"- Approval status: `{binding.ApprovalStatus}`");
         builder.AppendLine($"- External review status: `{binding.ExternalReviewStatus}`");
+        builder.AppendLine($"- External review availability: `{binding.ExternalReviewAvailability}`");
+        builder.AppendLine($"- External review claim state: `{binding.ExternalReviewClaimState}`");
+        builder.AppendLine($"- External review summary: {binding.ExternalReviewCustomerSafeSummary}");
         builder.AppendLine($"- Spec package hash: `{binding.SpecPackageHash}`");
         builder.AppendLine($"- Proof package hash: `{binding.ProofPackageHash}`");
         builder.AppendLine($"- Release manifest hash: `{binding.ReleaseManifestHash}`");
@@ -1953,6 +1961,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         string ReleaseManifestHash,
         string ApprovalStatus,
         string ExternalReviewStatus,
+        string ExternalReviewAvailability,
+        string ExternalReviewClaimState,
+        string ExternalReviewCustomerSafeSummary,
         string Status,
         string Source,
         int DraftRevision,

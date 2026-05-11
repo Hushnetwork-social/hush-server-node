@@ -32,6 +32,9 @@ public static class VerificationPackageFileNames
     public const string Sp08ReleaseIntegrity = "artifacts/election-record/release-integrity.json";
     public const string Sp08ReleaseManifest = "artifacts/election-record/release-manifest.json";
     public const string Sp08ReleaseIntegrityVerifierOutput = "artifacts/election-record/release-integrity-verifier-output.json";
+    public const string Sp09ExternalReviewStatus = "artifacts/election-record/external-review-status.json";
+    public const string Sp09ExternalReviewClaimTable = "artifacts/election-record/external-review-claim-table.json";
+    public const string Sp09ExternalReviewVerifierOutput = "artifacts/election-record/external-review-verifier-output.json";
     public const string RestrictedRosterCheckoff = "artifacts/restricted/roster-checkoff.json";
     public const string RestrictedRosterImportEvidence = "artifacts/restricted/roster-import-evidence.json";
     public const string RestrictedRoster = "artifacts/restricted/restricted-roster.json";
@@ -46,6 +49,9 @@ public static class VerificationPackageFileNames
     public const string RestrictedSp06TrusteeReleaseArtifacts = "artifacts/restricted/trustee-release-artifacts.json";
     public const string RestrictedSp07PublicationProofSession = "artifacts/restricted/publication-proof-session.json";
     public const string RestrictedSp07WitnessDeletionLog = "artifacts/restricted/publication-proof-deletion-log.json";
+    public const string RestrictedSp09FindingTracker = "artifacts/restricted/external-review-finding-tracker.json";
+    public const string RestrictedSp09RetestEvidence = "artifacts/restricted/external-review-retest-evidence.json";
+    public const string RestrictedSp09ReportReference = "artifacts/restricted/external-review-report-reference.json";
 
     public static IReadOnlyList<string> RootFiles { get; } =
     [
