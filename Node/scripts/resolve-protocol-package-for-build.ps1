@@ -7,7 +7,7 @@ param(
     [string]$ArtifactsRelativePath = "hushvoting-v1",
     [string]$LocalArtifactsRelativePath = "PrivateServer_ElectronicVoting/Protocol-Omega-HushVoting-v1-Artifacts",
     [string]$GitHubRepository = "Hushnetwork-social/protocol-omega-packages",
-    [string]$GitHubRef = "master",
+    [string]$GitHubRef = "main",
     [string]$ReleaseTagPrefix = "ProtocolOmega-HushVoting-v1-",
     [string]$ReleaseAssetPrefix = "Protocol-Omega-HushVoting-v1-Artifacts",
     [string]$GitHubToken
