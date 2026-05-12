@@ -33,6 +33,10 @@ public class ElectionVerificationPackageExportServiceTests
             VerificationPackageFileNames.Sp09ExternalReviewStatus,
             VerificationPackageFileNames.Sp09ExternalReviewClaimTable,
             VerificationPackageFileNames.Sp09ExternalReviewVerifierOutput,
+            VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+            VerificationPackageFileNames.Sp10OperationalDeploymentEvidence,
+            VerificationPackageFileNames.Sp10OperationalCustodyEvidence,
+            VerificationPackageFileNames.Sp10OperationalVerifierOutput,
         ]);
         result.Files.Should().NotContain(x => x.RelativePath.StartsWith("artifacts/restricted/", StringComparison.OrdinalIgnoreCase));
         var publicPayload = string.Join(
@@ -95,6 +99,92 @@ public class ElectionVerificationPackageExportServiceTests
             x.CheckCode == ElectionSp09ProfileIds.ReviewNotCompleteCheckCode &&
             x.Status == VerificationCheckStatus.Warn &&
             x.ResultCode == VerificationResultCodes.ExternalReviewNotComplete);
+    }
+
+    [Fact]
+    public void Export_PublicPackage_ShouldIncludeDevelopmentPlaceholderSp10OperationalArtifacts()
+    {
+        var result = Export(CreateRequest(VerificationPackageView.PublicAnonymous));
+
+        result.Success.Should().BeTrue();
+        var manifest = ReadFile<AuditPackageManifestRecord>(result, VerificationPackageFileNames.AuditPackageManifest);
+        manifest.Entries.Select(x => x.Path).Should().Contain([
+            VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+            VerificationPackageFileNames.Sp10OperationalDeploymentEvidence,
+            VerificationPackageFileNames.Sp10OperationalCustodyEvidence,
+            VerificationPackageFileNames.Sp10OperationalVerifierOutput,
+        ]);
+
+        var summary = ReadFile<ElectionSp10OperationalSecurityStatusArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp10OperationalSecuritySummary);
+        summary.Schema.Should().Be(ElectionSp10ProfileIds.OperationalSecuritySummarySchema);
+        summary.ProgramVersion.Should().Be(ElectionSp10ProfileIds.OperationalSecurityProgramVersion);
+        summary.DeploymentProfileId.Should().Be(ElectionSp10ProfileIds.DeploymentProfileManagedAwsContainerV1);
+        summary.EvidenceState.Should().Be(ElectionSp10ProfileIds.EvidenceStateDevelopmentPlaceholder);
+        summary.DoesNotCompleteFeat106Readiness.Should().BeTrue();
+        summary.BlocksHighAssurance.Should().BeTrue();
+        summary.PrimaryResultCode.Should().Be(VerificationResultCodes.OperationalSecurityDevelopmentPlaceholder);
+        summary.RestrictedEvidenceFiles.Should().BeEmpty();
+        ElectionSp10OperationalSecurityRules.Validate(summary).Should().BeEmpty();
+
+        var deployment = ReadFile<ElectionSp10OperationalDeploymentEvidenceArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp10OperationalDeploymentEvidence);
+        deployment.Schema.Should().Be(ElectionSp10ProfileIds.OperationalDeploymentEvidenceSchema);
+        deployment.ReleaseEvidenceMode.Should().Be(ElectionSp08ProfileIds.EvidenceModeDevelopmentPlaceholder);
+        deployment.ReleaseManifestHash.Should().NotBeNullOrWhiteSpace();
+        deployment.ImmutableDeploymentRef.Should().Contain("development-placeholder");
+
+        var custody = ReadFile<ElectionSp10OperationalCustodyEvidenceArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp10OperationalCustodyEvidence);
+        custody.Schema.Should().Be(ElectionSp10ProfileIds.OperationalCustodyEvidenceSchema);
+        custody.CustodyMode.Should().Be(ElectionSp10ProfileIds.CustodyModeAwsKmsPerElectionEnvelopeV1);
+        custody.ExecutorKeyLifecycle.Should().Be(ElectionSp10ProfileIds.ExecutorKeyLifecycleEphemeralMemoryV1);
+
+        var verifierOutput = ReadFile<ElectionSp10OperationalVerifierOutputArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp10OperationalVerifierOutput);
+        verifierOutput.Results.Should().ContainSingle(x =>
+            x.CheckCode == ElectionSp10ProfileIds.DeploymentProfileDeclaredCheckCode &&
+            x.Status == VerificationCheckStatus.Pass &&
+            x.ResultCode == VerificationResultCodes.OperationalSecurityProfileDeclared);
+        verifierOutput.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.OperationalSecurityDevelopmentPlaceholder &&
+            x.Status == VerificationCheckStatus.Warn);
+
+        var publicPayload = string.Join(
+            '\n',
+            result.Files
+                .Where(x => x.Visibility == VerificationArtifactVisibility.Public)
+                .Select(x => x.ContentText));
+        publicPayload.Should().NotContain("rawLogLine");
+        publicPayload.Should().NotContain("kmsPlaintextKey");
+        publicPayload.Should().NotContain("executorPrivateKey");
+        publicPayload.Should().NotContain("incidentWorkpaper");
+        publicPayload.Should().NotContain("regulatoryWorkpaper");
+    }
+
+    [Fact]
+    public void Export_PublicPackageWithRegulatoryClaim_ShouldIncludeOptionalSp11ClaimState()
+    {
+        var request = CreateRequest(VerificationPackageView.PublicAnonymous) with
+        {
+            Sp11RegulatoryClaimState = CreateRegulatoryClaimState(),
+        };
+
+        var result = Export(request);
+
+        result.Success.Should().BeTrue();
+        var claim = ReadFile<ElectionSp11RegulatoryClaimStateArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp11RegulatoryClaimState);
+        claim.Schema.Should().Be(ElectionSp11ProfileIds.RegulatoryClaimStateSchema);
+        claim.ClaimState.Should().Be(ElectionSp11ProfileIds.ClaimStateAllowedWithLimitation);
+        claim.IsLegalAdvice.Should().BeFalse();
+        claim.RestrictedWorkpaperRef.Should().BeNull();
+        ElectionSp11RegulatoryRules.Validate(claim).Should().BeEmpty();
     }
 
     [Fact]
@@ -241,6 +331,47 @@ public class ElectionVerificationPackageExportServiceTests
         result.Files.Should().Contain(x =>
             x.RelativePath == VerificationPackageFileNames.RestrictedSp09ReportReference &&
             x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp10AccessControlSnapshot &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp10LoggingEvidence &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp10BackupRestoreEvidence &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp10IncidentEvidence &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp10AuditorRoomAccessLog &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+    }
+
+    [Fact]
+    public void Export_RestrictedPackageWithRegulatoryClaim_ShouldIncludeRestrictedWorkpaper()
+    {
+        var result = Export(CreateRequest(
+            VerificationPackageView.RestrictedOwnerAuditor,
+            restrictedAccessAuthorized: true,
+            profileId: VerificationProfileIds.RestrictedOwnerAuditorV1) with
+        {
+            Sp11RegulatoryClaimState = CreateRegulatoryClaimState(restrictedWorkpaperRef: "restricted-workpaper-hash"),
+        });
+
+        result.Success.Should().BeTrue();
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.Sp11RegulatoryClaimState &&
+            x.Visibility == VerificationArtifactVisibility.Public);
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.RestrictedSp11RegulatoryJurisdictionWorkpaper &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+
+        var workpaper = ReadFile<ElectionSp11RestrictedJurisdictionWorkpaperArtifactRecord>(
+            result,
+            VerificationPackageFileNames.RestrictedSp11RegulatoryJurisdictionWorkpaper);
+        workpaper.WorkpaperHash.Should().Be("restricted-workpaper-hash");
+        workpaper.ReviewState.Should().Be(ElectionSp11ProfileIds.ClaimStateAllowedWithLimitation);
     }
 
     [Fact]
@@ -784,6 +915,108 @@ public class ElectionVerificationPackageExportServiceTests
             Sp08ReleaseManifest = CreateOfficialSp08ReleaseManifest(request),
         };
 
+    internal static ElectionVerificationPackageExportRequest WithCompleteSp10OperationalSecurityStatus(
+        ElectionVerificationPackageExportRequest request)
+    {
+        var requestWithRelease = request.Sp08ReleaseManifest is null
+            ? WithOfficialSp08ReleaseManifest(request)
+            : request;
+        var releaseManifest = requestWithRelease.Sp08ReleaseManifest!;
+        var releaseManifestHash = ElectionSp08ReleaseManifestHasher.ComputeReleaseManifestHash(releaseManifest);
+        var serverComponent = releaseManifest.Components.Single(x =>
+            string.Equals(x.ComponentId, ElectionSp08ProfileIds.ServerComponent, StringComparison.Ordinal));
+        var evidenceState = ElectionSp10ProfileIds.EvidenceStateManagedProfileEvidenceAvailable;
+
+        return requestWithRelease with
+        {
+            Sp10OperationalSecurityStatus = new ElectionSp10OperationalSecurityStatusArtifactRecord(
+                Schema: ElectionSp10ProfileIds.OperationalSecuritySummarySchema,
+                requestWithRelease.Election.ElectionId.ToString(),
+                ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+                ElectionSp10ProfileIds.DeploymentProfileManagedAwsContainerV1,
+                evidenceState,
+                DoesNotCompleteFeat106Readiness: true,
+                Feat106ReadinessCaveat: ElectionSp10OperationalSecurityRules.GetAllowedWordingForEvidenceState(evidenceState),
+                ReleaseEvidenceMode: releaseManifest.EvidenceMode,
+                ReleaseManifestHash: releaseManifestHash,
+                ImmutableDeploymentRef: serverComponent.ImmutableReference,
+                CustodyMode: requestWithRelease.Election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold
+                    ? ElectionSp10ProfileIds.CustodyModeTrusteeLocalSecureVaultV1
+                    : ElectionSp10ProfileIds.CustodyModeAwsKmsPerElectionEnvelopeV1,
+                ExecutorKeyLifecycle: ElectionSp10ProfileIds.ExecutorKeyLifecycleEphemeralMemoryV1,
+                AccessSnapshotHashOrRestrictedRef: "sha256:access-snapshot",
+                BackupRestoreHashOrRestrictedRef: "sha256:backup-restore",
+                IncidentStatus: ElectionSp10ProfileIds.IncidentStatusNoIncidentDeclared,
+                AuditorRoomAccessLogHashOrRestrictedRef: "sha256:auditor-room-access-log",
+                BlocksHighAssurance: false,
+                PrimaryResultCode: VerificationResultCodes.OperationalSecurityEvidenceValid,
+                PrimaryIssue: null,
+                PublicEvidenceFiles:
+                [
+                    VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+                    VerificationPackageFileNames.Sp10OperationalDeploymentEvidence,
+                    VerificationPackageFileNames.Sp10OperationalCustodyEvidence,
+                    VerificationPackageFileNames.Sp10OperationalVerifierOutput,
+                ],
+                RestrictedEvidenceFiles: [],
+                PublicPrivacyBoundary:
+                [
+                    "no_raw_log_line",
+                    "no_raw_audit_log",
+                    "no_ip_address",
+                    "no_device_id",
+                    "no_kms_plaintext_key",
+                    "no_kms_unwrapped_key",
+                    "no_executor_private_key",
+                    "no_iam_policy_document",
+                    "no_security_group_rule_dump",
+                    "no_raw_backup_archive",
+                    "no_incident_workpaper",
+                    "no_regulatory_workpaper",
+                    "no_authority_private_correspondence",
+                    "no_voter_detail",
+                    "no_plaintext_vote",
+                    "no_raw_trustee_share",
+                    "no_proof_witness",
+                ]),
+        };
+    }
+
+    internal static ElectionSp11RegulatoryClaimStateArtifactRecord CreateSp11RegulatoryClaimState(
+        string claimState = ElectionSp11ProfileIds.ClaimStateAllowedWithLimitation,
+        DateTimeOffset? sourceCheckedAt = null,
+        DateTimeOffset? nextReviewAt = null,
+        bool requiresAuthorityEvidence = false,
+        string? authorityEvidenceRef = null,
+        string? restrictedWorkpaperRef = null,
+        string? allowedWording = null) =>
+        new(
+            Schema: ElectionSp11ProfileIds.RegulatoryClaimStateSchema,
+            JurisdictionId: "CH",
+            ClaimId: "organizational_remote_voting_market_intelligence",
+            TrackerVersion: ElectionSp11ProfileIds.RegulatoryTrackerVersion,
+            ClaimState: claimState,
+            SourceCheckedAt: sourceCheckedAt ?? DateTimeOffset.UtcNow.AddDays(-1),
+            NextReviewAt: nextReviewAt ?? DateTimeOffset.UtcNow.AddDays(30),
+            SourceRef: "https://www.bk.admin.ch/bk/en/home/politische-rechte/e-voting.html",
+            Owner: "protocol-omega-regulatory-tracker",
+            IsLegalAdvice: false,
+            RequiresAuthorityEvidence: requiresAuthorityEvidence,
+            AuthorityEvidenceRef: authorityEvidenceRef,
+            RestrictedWorkpaperRef: restrictedWorkpaperRef,
+            AllowedWording: allowedWording ?? ElectionSp11RegulatoryRules.GetAllowedWordingForClaimState(claimState),
+            PublicEvidenceFiles:
+            [
+                VerificationPackageFileNames.Sp11RegulatoryClaimState,
+            ],
+            RestrictedEvidenceFiles: [],
+            PublicPrivacyBoundary:
+            [
+                "no_legal_advice",
+                "no_authority_private_correspondence",
+                "no_jurisdiction_workpaper_body",
+            ]);
+
     internal static ElectionSp08ReleaseManifestArtifactRecord CreateOfficialSp08ReleaseManifest(
         ElectionVerificationPackageExportRequest request)
     {
@@ -872,6 +1105,38 @@ public class ElectionVerificationPackageExportServiceTests
             digest,
             digest,
             MatchesSealedPolicy: true);
+
+    private static ElectionSp11RegulatoryClaimStateArtifactRecord CreateRegulatoryClaimState(
+        string? restrictedWorkpaperRef = null) =>
+        new(
+            ElectionSp11ProfileIds.RegulatoryClaimStateSchema,
+            JurisdictionId: "CH",
+            ClaimId: "organizational-remote-voting-fit",
+            TrackerVersion: ElectionSp11ProfileIds.RegulatoryTrackerVersion,
+            ClaimState: ElectionSp11ProfileIds.ClaimStateAllowedWithLimitation,
+            SourceCheckedAt: DateTimeOffset.UnixEpoch.AddDays(10),
+            NextReviewAt: DateTimeOffset.UtcNow.AddDays(30),
+            SourceRef: "https://www.bk.admin.ch/bk/en/home/politische-rechte/e-voting.html",
+            Owner: "regulatory-tracker-owner",
+            IsLegalAdvice: false,
+            RequiresAuthorityEvidence: false,
+            AuthorityEvidenceRef: null,
+            RestrictedWorkpaperRef: restrictedWorkpaperRef,
+            AllowedWording: ElectionSp11RegulatoryRules.GetAllowedWordingForClaimState(
+                ElectionSp11ProfileIds.ClaimStateAllowedWithLimitation),
+            PublicEvidenceFiles:
+            [
+                VerificationPackageFileNames.Sp11RegulatoryClaimState,
+            ],
+            RestrictedEvidenceFiles: restrictedWorkpaperRef is null
+                ? []
+                : [VerificationPackageFileNames.RestrictedSp11RegulatoryJurisdictionWorkpaper],
+            PublicPrivacyBoundary:
+            [
+                "no_legal_advice",
+                "no_authority_private_correspondence",
+                "no_jurisdiction_workpaper_body",
+            ]);
 
     private static ElectionPublicationProofSessionRecord CreatePublicationProofSession(
         ElectionVerificationPackageExportRequest request,

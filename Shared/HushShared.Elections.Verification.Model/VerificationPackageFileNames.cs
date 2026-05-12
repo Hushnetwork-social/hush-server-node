@@ -35,6 +35,11 @@ public static class VerificationPackageFileNames
     public const string Sp09ExternalReviewStatus = "artifacts/election-record/external-review-status.json";
     public const string Sp09ExternalReviewClaimTable = "artifacts/election-record/external-review-claim-table.json";
     public const string Sp09ExternalReviewVerifierOutput = "artifacts/election-record/external-review-verifier-output.json";
+    public const string Sp10OperationalSecuritySummary = "artifacts/election-record/operational-security-summary.json";
+    public const string Sp10OperationalDeploymentEvidence = "artifacts/election-record/operational-deployment-evidence.json";
+    public const string Sp10OperationalCustodyEvidence = "artifacts/election-record/operational-custody-evidence.json";
+    public const string Sp10OperationalVerifierOutput = "artifacts/election-record/operational-verifier-output.json";
+    public const string Sp11RegulatoryClaimState = "artifacts/election-record/regulatory-claim-state.json";
     public const string RestrictedRosterCheckoff = "artifacts/restricted/roster-checkoff.json";
     public const string RestrictedRosterImportEvidence = "artifacts/restricted/roster-import-evidence.json";
     public const string RestrictedRoster = "artifacts/restricted/restricted-roster.json";
@@ -52,6 +57,12 @@ public static class VerificationPackageFileNames
     public const string RestrictedSp09FindingTracker = "artifacts/restricted/external-review-finding-tracker.json";
     public const string RestrictedSp09RetestEvidence = "artifacts/restricted/external-review-retest-evidence.json";
     public const string RestrictedSp09ReportReference = "artifacts/restricted/external-review-report-reference.json";
+    public const string RestrictedSp10AccessControlSnapshot = "artifacts/restricted/operational-access-control-snapshot.json";
+    public const string RestrictedSp10LoggingEvidence = "artifacts/restricted/operational-logging-evidence.json";
+    public const string RestrictedSp10BackupRestoreEvidence = "artifacts/restricted/operational-backup-restore-evidence.json";
+    public const string RestrictedSp10IncidentEvidence = "artifacts/restricted/operational-incident-evidence.json";
+    public const string RestrictedSp10AuditorRoomAccessLog = "artifacts/restricted/auditor-room-access-log.json";
+    public const string RestrictedSp11RegulatoryJurisdictionWorkpaper = "artifacts/restricted/regulatory-jurisdiction-workpaper.json";
 
     public static IReadOnlyList<string> RootFiles { get; } =
     [

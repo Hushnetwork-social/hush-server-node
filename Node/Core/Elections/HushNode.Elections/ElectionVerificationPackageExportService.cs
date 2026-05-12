@@ -79,6 +79,34 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
             VerificationPackageFileNames.Sp09ExternalReviewVerifierOutput,
             BuildSp09VerifierOutput(request, sp09ExternalReviewStatus, exportedAt),
             VerificationArtifactVisibility.Public);
+        var sp10OperationalStatus = BuildSp10OperationalSecuritySummary(
+            request,
+            sp08ReleaseManifest,
+            sp08ReleaseIntegrity);
+        AddJson(files, VerificationPackageFileNames.Sp10OperationalSecuritySummary, sp10OperationalStatus, VerificationArtifactVisibility.Public);
+        AddJson(
+            files,
+            VerificationPackageFileNames.Sp10OperationalDeploymentEvidence,
+            BuildSp10OperationalDeploymentEvidence(request, sp10OperationalStatus, sp08ReleaseManifest),
+            VerificationArtifactVisibility.Public);
+        AddJson(
+            files,
+            VerificationPackageFileNames.Sp10OperationalCustodyEvidence,
+            BuildSp10OperationalCustodyEvidence(request, sp10OperationalStatus),
+            VerificationArtifactVisibility.Public);
+        AddJson(
+            files,
+            VerificationPackageFileNames.Sp10OperationalVerifierOutput,
+            BuildSp10VerifierOutput(request, sp10OperationalStatus, exportedAt),
+            VerificationArtifactVisibility.Public);
+        if (request.Sp11RegulatoryClaimState is not null)
+        {
+            AddJson(
+                files,
+                VerificationPackageFileNames.Sp11RegulatoryClaimState,
+                BuildSp11RegulatoryClaimState(request),
+                VerificationArtifactVisibility.Public);
+        }
 
         if (request.PackageView == VerificationPackageView.RestrictedOwnerAuditor)
         {
@@ -167,6 +195,39 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
                 VerificationPackageFileNames.RestrictedSp09ReportReference,
                 BuildRestrictedSp09ReportReference(request, sp09ExternalReviewStatus),
                 VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp10AccessControlSnapshot,
+                BuildRestrictedSp10AccessControlSnapshot(request, sp10OperationalStatus),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp10LoggingEvidence,
+                BuildRestrictedSp10LoggingEvidence(request),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp10BackupRestoreEvidence,
+                BuildRestrictedSp10BackupRestoreEvidence(request, exportedAt),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp10IncidentEvidence,
+                BuildRestrictedSp10IncidentEvidence(request, sp10OperationalStatus, exportedAt),
+                VerificationArtifactVisibility.Restricted);
+            AddJson(
+                files,
+                VerificationPackageFileNames.RestrictedSp10AuditorRoomAccessLog,
+                BuildRestrictedSp10AuditorRoomAccessLog(request),
+                VerificationArtifactVisibility.Restricted);
+            if (request.Sp11RegulatoryClaimState is not null)
+            {
+                AddJson(
+                    files,
+                    VerificationPackageFileNames.RestrictedSp11RegulatoryJurisdictionWorkpaper,
+                    BuildRestrictedSp11RegulatoryJurisdictionWorkpaper(request.Sp11RegulatoryClaimState),
+                    VerificationArtifactVisibility.Restricted);
+            }
         }
 
         var manifest = new AuditPackageManifestRecord(

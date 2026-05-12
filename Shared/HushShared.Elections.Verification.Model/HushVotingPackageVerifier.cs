@@ -134,6 +134,16 @@ public sealed partial class HushVotingPackageVerifier
                 request.VerifierProfileId,
                 electionRecord,
                 cancellationToken));
+            results.AddRange(await CheckOperationalSecurityEvidenceAsync(
+                request.PackagePath,
+                manifest,
+                request.VerifierProfileId,
+                electionRecord,
+                cancellationToken));
+            results.AddRange(await CheckRegulatoryClaimEvidenceAsync(
+                request.PackagePath,
+                manifest,
+                cancellationToken));
 
             var overall = CalculateOverallStatus(results);
             var output = CreateOutput(

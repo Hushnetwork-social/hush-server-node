@@ -47,6 +47,13 @@ public class HushVotingPackageVerifierTests
             x.CheckCode == ElectionSp09ProfileIds.ReviewNotCompleteCheckCode &&
             x.ResultCode == VerificationResultCodes.ExternalReviewNotComplete &&
             x.Status == VerificationCheckStatus.Warn);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp10ProfileIds.ReleaseDeploymentBindingCheckCode &&
+            x.Status == VerificationCheckStatus.Warn);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp10ProfileIds.ForbiddenMaterialScanCheckCode &&
+            x.ResultCode == VerificationResultCodes.OperationalSecurityEvidenceValid &&
+            x.Status == VerificationCheckStatus.Pass);
         File.Exists(Path.Combine(package.PackagePath, "verifier-output", "VerifierOutput.json"))
             .Should()
             .BeTrue();
@@ -277,6 +284,105 @@ public class HushVotingPackageVerifierTests
             x.CheckCode == ElectionSp08ProfileIds.ReleaseIntegrityAcceptedCheckCode &&
             x.ResultCode == VerificationResultCodes.ReleaseIntegrityEvidenceValid &&
             x.Status == VerificationCheckStatus.Pass);
+        result.Output.Results
+            .Where(x => ElectionSp10ProfileIds.OperationalCheckCodes.Contains(x.CheckCode))
+            .Should()
+            .OnlyContain(x => x.Status == VerificationCheckStatus.Pass);
+    }
+
+    [Fact]
+    public async Task Verify_Sp10FalseReadinessClaim_ShouldFail()
+    {
+        using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
+        var status = await ReadPackageArtifactAsync<ElectionSp10OperationalSecurityStatusArtifactRecord>(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp10OperationalSecuritySummary);
+        await WritePackageArtifactAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+            status with
+            {
+                DoesNotCompleteFeat106Readiness = false,
+                Feat106ReadinessCaveat = "FEAT-106 complete and certified for public elections.",
+            });
+        await RefreshAuditManifestAsync(package.PackagePath);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp10ProfileIds.ForbiddenMaterialScanCheckCode &&
+            x.ResultCode == VerificationResultCodes.OperationalSecurityForbiddenMaterial &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_Sp11AllowedRegulatoryClaim_ShouldRunOptionalRegChecks()
+    {
+        using var package = CreatePackageWithRegulatoryClaim(
+            ElectionVerificationPackageExportServiceTests.CreateSp11RegulatoryClaimState());
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp11ProfileIds.RegulatoryClaimShapeValidCheckCode &&
+            x.ResultCode == VerificationResultCodes.RegulatoryClaimShapeValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp11ProfileIds.ClaimAllowedByRegisterCheckCode &&
+            x.ResultCode == VerificationResultCodes.RegulatoryClaimAllowedByRegister &&
+            x.Status == VerificationCheckStatus.Pass);
+    }
+
+    [Fact]
+    public async Task Verify_Sp11BlockedCertificationClaim_ShouldFail()
+    {
+        using var package = CreatePackageWithRegulatoryClaim(
+            ElectionVerificationPackageExportServiceTests.CreateSp11RegulatoryClaimState(
+                ElectionSp11ProfileIds.ClaimStateBlockedUntilCertification,
+                requiresAuthorityEvidence: true));
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp11ProfileIds.BlockedCertificationClaimCheckCode &&
+            x.ResultCode == VerificationResultCodes.RegulatoryClaimBlockedCertification &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_Sp11StaleRegulatoryTracker_ShouldWarn()
+    {
+        using var package = CreatePackageWithRegulatoryClaim(
+            ElectionVerificationPackageExportServiceTests.CreateSp11RegulatoryClaimState());
+        var claim = await ReadPackageArtifactAsync<ElectionSp11RegulatoryClaimStateArtifactRecord>(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp11RegulatoryClaimState);
+        await WritePackageArtifactAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.Sp11RegulatoryClaimState,
+            claim with
+            {
+                SourceCheckedAt = DateTimeOffset.UtcNow.AddDays(-60),
+                NextReviewAt = DateTimeOffset.UtcNow.AddDays(-1),
+            });
+        await RefreshAuditManifestAsync(package.PackagePath);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == ElectionSp11ProfileIds.StaleTrackerWarningCheckCode &&
+            x.ResultCode == VerificationResultCodes.RegulatoryTrackerStale &&
+            x.Status == VerificationCheckStatus.Warn);
     }
 
     [Fact]
@@ -692,6 +798,21 @@ public class HushVotingPackageVerifierTests
         return directory;
     }
 
+    private static TemporaryPackageDirectory CreatePackageWithRegulatoryClaim(
+        ElectionSp11RegulatoryClaimStateArtifactRecord claim)
+    {
+        var directory = new TemporaryPackageDirectory();
+        var export = new ElectionVerificationPackageExportService().Export(
+            ElectionVerificationPackageExportServiceTests.CreateRequest(
+                VerificationPackageView.PublicAnonymous,
+                profileId: VerificationProfileIds.DevelopmentCurrentV1) with
+            {
+                Sp11RegulatoryClaimState = claim,
+            });
+        ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
+        return directory;
+    }
+
     private static TemporaryPackageDirectory CreateHighAssuranceTrusteePackage()
     {
         var directory = new TemporaryPackageDirectory();
@@ -848,7 +969,8 @@ public class HushVotingPackageVerifierTests
             PublicationProofTranscripts = [transcript],
             PublicationWitnessDeletionReceipts = receipts,
         };
-        request = ElectionVerificationPackageExportServiceTests.WithOfficialSp08ReleaseManifest(request);
+        request = ElectionVerificationPackageExportServiceTests.WithCompleteSp10OperationalSecurityStatus(
+            ElectionVerificationPackageExportServiceTests.WithOfficialSp08ReleaseManifest(request));
 
         var export = new ElectionVerificationPackageExportService().Export(request);
         ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
@@ -989,7 +1111,8 @@ public class HushVotingPackageVerifierTests
                 PublicationProofTranscripts = [transcript],
                 PublicationWitnessDeletionReceipts = [receipt],
             };
-            request = ElectionVerificationPackageExportServiceTests.WithOfficialSp08ReleaseManifest(request);
+            request = ElectionVerificationPackageExportServiceTests.WithCompleteSp10OperationalSecurityStatus(
+                ElectionVerificationPackageExportServiceTests.WithOfficialSp08ReleaseManifest(request));
 
             var export = new ElectionVerificationPackageExportService().Export(request);
             ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);

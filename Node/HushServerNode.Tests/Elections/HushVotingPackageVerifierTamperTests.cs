@@ -51,6 +51,14 @@ public class HushVotingPackageVerifierTamperTests
             { "tamper-sp08-lifecycle-mismatch", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityLifecycleMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-sp08-mobile-evidence-incomplete", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityMobileEvidenceIncomplete, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-sp08-missing-package-manifest-entry", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.ReleaseIntegrityPackageManifestMissingFiles, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp10-release-deployment-mismatch", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.OperationalSecurityReleaseBindingMissing, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp10-unsupported-custody", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.OperationalSecurityCustodyModeMissing, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp10-missing-incident-declaration", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.OperationalSecurityIncidentDeclarationMissing, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp10-missing-backup-restore", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.OperationalSecurityBackupRestoreMissing, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp10-missing-access-log", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.OperationalSecurityAuditorRoomMissing, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp10-forbidden-leak", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.OperationalSecurityForbiddenMaterial, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp11-stale-tracker", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.RegulatoryTrackerStale, VerificationCheckStatus.Warn, VerificationOverallStatus.Warn, 0 },
+            { "tamper-sp11-blocked-certification-claim", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.RegulatoryClaimBlockedCertification, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
         };
 
     [Theory]
@@ -89,6 +97,17 @@ public class HushVotingPackageVerifierTamperTests
         {
             request = ElectionVerificationPackageExportServiceTests.WithOfficialSp08ReleaseManifest(request);
         }
+        if (IsSp10TamperFixture(fixtureName) || IsSp11TamperFixture(fixtureName))
+        {
+            request = ElectionVerificationPackageExportServiceTests.WithCompleteSp10OperationalSecurityStatus(request);
+        }
+        if (IsSp11TamperFixture(fixtureName))
+        {
+            request = request with
+            {
+                Sp11RegulatoryClaimState = ElectionVerificationPackageExportServiceTests.CreateSp11RegulatoryClaimState(),
+            };
+        }
 
         var export = new ElectionVerificationPackageExportService().Export(request);
         ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
@@ -100,6 +119,12 @@ public class HushVotingPackageVerifierTamperTests
 
     private static bool IsSp08TamperFixture(string fixtureName) =>
         fixtureName.StartsWith("tamper-sp08-", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSp10TamperFixture(string fixtureName) =>
+        fixtureName.StartsWith("tamper-sp10-", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSp11TamperFixture(string fixtureName) =>
+        fixtureName.StartsWith("tamper-sp11-", StringComparison.OrdinalIgnoreCase);
 
     private static async Task ApplyTamperFixtureAsync(string packagePath, string fixtureName)
     {
@@ -562,6 +587,69 @@ public class HushVotingPackageVerifierTamperTests
                     VerificationPackageFileNames.Sp08ReleaseIntegrityVerifierOutput);
                 return;
 
+            case "tamper-sp10-release-deployment-mismatch":
+                await MutateSp10StatusAndRefreshAsync(
+                    packagePath,
+                    status => status with { ReleaseManifestHash = new string('0', 64) });
+                return;
+
+            case "tamper-sp10-unsupported-custody":
+                await MutateSp10StatusAndRefreshAsync(
+                    packagePath,
+                    status => status with { CustodyMode = "unsupported_custody_mode" });
+                return;
+
+            case "tamper-sp10-missing-incident-declaration":
+                await MutateSp10StatusAndRefreshAsync(
+                    packagePath,
+                    status => status with { IncidentStatus = null });
+                return;
+
+            case "tamper-sp10-missing-backup-restore":
+                await MutateSp10StatusAndRefreshAsync(
+                    packagePath,
+                    status => status with { BackupRestoreHashOrRestrictedRef = null });
+                return;
+
+            case "tamper-sp10-missing-access-log":
+                await MutateSp10StatusAndRefreshAsync(
+                    packagePath,
+                    status => status with { AuditorRoomAccessLogHashOrRestrictedRef = null });
+                return;
+
+            case "tamper-sp10-forbidden-leak":
+                await MutateSp10StatusAndRefreshAsync(
+                    packagePath,
+                    status => status with
+                    {
+                        PublicPrivacyBoundary = ["rawLogLine"],
+                        Feat106ReadinessCaveat = "Certified for public elections.",
+                    });
+                return;
+
+            case "tamper-sp11-stale-tracker":
+                await MutateSp11ClaimAndRefreshAsync(
+                    packagePath,
+                    claim => claim with
+                    {
+                        SourceCheckedAt = DateTimeOffset.UtcNow.AddDays(-60),
+                        NextReviewAt = DateTimeOffset.UtcNow.AddDays(-1),
+                    });
+                return;
+
+            case "tamper-sp11-blocked-certification-claim":
+                await MutateSp11ClaimAndRefreshAsync(
+                    packagePath,
+                    claim => claim with
+                    {
+                        ClaimState = ElectionSp11ProfileIds.ClaimStateBlockedUntilCertification,
+                        RequiresAuthorityEvidence = true,
+                        AuthorityEvidenceRef = null,
+                        AllowedWording = ElectionSp11RegulatoryRules.GetAllowedWordingForClaimState(
+                            ElectionSp11ProfileIds.ClaimStateBlockedUntilCertification),
+                    });
+                return;
+
             default:
                 throw new InvalidOperationException($"Unknown tamper fixture '{fixtureName}'.");
         }
@@ -681,6 +769,34 @@ public class HushVotingPackageVerifierTamperTests
                         : component)
                     .ToArray(),
             });
+    }
+
+    private static async Task MutateSp10StatusAndRefreshAsync(
+        string packagePath,
+        Func<ElectionSp10OperationalSecurityStatusArtifactRecord, ElectionSp10OperationalSecurityStatusArtifactRecord> mutate)
+    {
+        var status = await ReadArtifactAsync<ElectionSp10OperationalSecurityStatusArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp10OperationalSecuritySummary);
+        await WriteArtifactAsync(
+            packagePath,
+            VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+            mutate(status));
+        await RefreshAuditManifestEntriesAsync(packagePath);
+    }
+
+    private static async Task MutateSp11ClaimAndRefreshAsync(
+        string packagePath,
+        Func<ElectionSp11RegulatoryClaimStateArtifactRecord, ElectionSp11RegulatoryClaimStateArtifactRecord> mutate)
+    {
+        var claim = await ReadArtifactAsync<ElectionSp11RegulatoryClaimStateArtifactRecord>(
+            packagePath,
+            VerificationPackageFileNames.Sp11RegulatoryClaimState);
+        await WriteArtifactAsync(
+            packagePath,
+            VerificationPackageFileNames.Sp11RegulatoryClaimState,
+            mutate(claim));
+        await RefreshAuditManifestEntriesAsync(packagePath);
     }
 
     private static async Task RefreshAuditManifestEntriesAsync(string packagePath)

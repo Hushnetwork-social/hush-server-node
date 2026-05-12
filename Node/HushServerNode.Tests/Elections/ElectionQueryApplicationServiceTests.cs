@@ -3417,6 +3417,24 @@ public class ElectionQueryApplicationServiceTests
             VerificationPackageFileNames.Sp09ExternalReviewStatus);
         response.Status.Sp09ExternalReview.EvidenceFiles.Select(x => x.RelativePath).Should().Contain(
             VerificationPackageFileNames.RestrictedSp09FindingTracker);
+        response.Status.Sp10OperationalSecurity.Should().NotBeNull();
+        response.Status.Sp10OperationalSecurity.EvidenceExpected.Should().BeTrue();
+        response.Status.Sp10OperationalSecurity.PublicEvidenceAvailable.Should().BeTrue();
+        response.Status.Sp10OperationalSecurity.RestrictedEvidenceAvailable.Should().BeTrue();
+        response.Status.Sp10OperationalSecurity.EvidenceState.Should().Be(ElectionSp10ProfileIds.EvidenceStateDevelopmentPlaceholder);
+        response.Status.Sp10OperationalSecurity.DoesNotCompleteFeat106Readiness.Should().BeTrue();
+        response.Status.Sp10OperationalSecurity.PrimaryResultCode.Should().Be(
+            VerificationResultCodes.OperationalSecurityDevelopmentPlaceholder);
+        response.Status.Sp10OperationalSecurity.PublicEvidenceFileCount.Should().Be(4);
+        response.Status.Sp10OperationalSecurity.RestrictedEvidenceFileCount.Should().Be(5);
+        response.Status.Sp10OperationalSecurity.EvidenceFiles.Select(x => x.RelativePath).Should().Contain(
+            VerificationPackageFileNames.Sp10OperationalSecuritySummary);
+        response.Status.Sp10OperationalSecurity.EvidenceFiles.Select(x => x.RelativePath).Should().Contain(
+            VerificationPackageFileNames.RestrictedSp10AccessControlSnapshot);
+        response.Status.Sp11RegulatoryClaim.Should().NotBeNull();
+        response.Status.Sp11RegulatoryClaim.ClaimExported.Should().BeFalse();
+        response.Status.Sp11RegulatoryClaim.EvidenceExpected.Should().BeFalse();
+        response.Status.Sp11RegulatoryClaim.Message.Should().Contain("No SP-11 regulatory claim");
         response.Status.LastVerifierResult.OverallStatus.Should().Be(ElectionVerifierOverallStatusProto.ElectionVerifierNotAvailable);
     }
 
@@ -3885,6 +3903,10 @@ public class ElectionQueryApplicationServiceTests
         response.Status.Sp09ExternalReview.EvidenceExpected.Should().BeFalse();
         response.Status.Sp09ExternalReview.ReviewScope.Should().BeEmpty();
         response.Status.Sp09ExternalReview.Message.Should().Contain("not visible");
+        response.Status.Sp10OperationalSecurity.EvidenceExpected.Should().BeFalse();
+        response.Status.Sp10OperationalSecurity.Message.Should().Contain("not visible");
+        response.Status.Sp11RegulatoryClaim.ClaimExported.Should().BeFalse();
+        response.Status.Sp11RegulatoryClaim.Message.Should().Contain("not visible");
     }
 
     [Fact]

@@ -39,7 +39,9 @@ public record ElectionVerificationPackageExportRequest(
     IReadOnlyList<ElectionPublicationProofTranscriptRecord>? PublicationProofTranscripts = null,
     IReadOnlyList<ElectionPublicationProofSessionRecord>? PublicationProofSessions = null,
     IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord>? PublicationWitnessDeletionReceipts = null,
-    ElectionSp08ReleaseManifestArtifactRecord? Sp08ReleaseManifest = null);
+    ElectionSp08ReleaseManifestArtifactRecord? Sp08ReleaseManifest = null,
+    ElectionSp10OperationalSecurityStatusArtifactRecord? Sp10OperationalSecurityStatus = null,
+    ElectionSp11RegulatoryClaimStateArtifactRecord? Sp11RegulatoryClaimState = null);
 
 public record ElectionVerificationPackageExportResult(
     bool Success,

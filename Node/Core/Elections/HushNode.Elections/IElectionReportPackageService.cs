@@ -1,4 +1,5 @@
 using HushShared.Elections.Model;
+using HushShared.Elections.Verification.Model;
 
 namespace HushNode.Elections;
 
@@ -28,7 +29,9 @@ public sealed record ElectionReportPackageBuildRequest(
     int AttemptNumber,
     Guid? PreviousAttemptId,
     string AttemptedByPublicAddress,
-    DateTime AttemptedAt);
+    DateTime AttemptedAt,
+    ElectionSp10OperationalSecurityStatusArtifactRecord? Sp10OperationalSecurityStatus = null,
+    ElectionSp11RegulatoryClaimStateArtifactRecord? Sp11RegulatoryClaimState = null);
 
 public sealed record ElectionReportPackageBuildResult(
     bool IsSuccess,

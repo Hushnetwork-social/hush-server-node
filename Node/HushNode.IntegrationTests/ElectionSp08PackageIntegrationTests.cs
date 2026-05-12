@@ -206,9 +206,13 @@ public sealed class ElectionSp08PackageIntegrationTests
             PublicationProofSessions: [sp07Evidence.Session],
             PublicationWitnessDeletionReceipts: [sp07Evidence.DeletionReceipt]);
 
-        return officialSp08
-            ? request with { Sp08ReleaseManifest = CreateOfficialSp08ReleaseManifest(request) }
-            : request;
+        if (!officialSp08)
+        {
+            return request;
+        }
+
+        var requestWithOfficialRelease = request with { Sp08ReleaseManifest = CreateOfficialSp08ReleaseManifest(request) };
+        return WithCompleteSp10OperationalSecurityStatus(requestWithOfficialRelease);
     }
 
     private static ElectionRecord CreateFinalizedHighAssuranceElection()
@@ -498,6 +502,70 @@ public sealed class ElectionSp08PackageIntegrationTests
                 "no_raw_attestation_token",
                 "no_ip_address",
             ]));
+    }
+
+    private static ElectionVerificationPackageExportRequest WithCompleteSp10OperationalSecurityStatus(
+        ElectionVerificationPackageExportRequest request)
+    {
+        var releaseManifest = request.Sp08ReleaseManifest!;
+        var releaseManifestHash = ElectionSp08ReleaseManifestHasher.ComputeReleaseManifestHash(releaseManifest);
+        var serverComponent = releaseManifest.Components.Single(x =>
+            string.Equals(x.ComponentId, ElectionSp08ProfileIds.ServerComponent, StringComparison.Ordinal));
+        const string evidenceState = ElectionSp10ProfileIds.EvidenceStateManagedProfileEvidenceAvailable;
+
+        return request with
+        {
+            Sp10OperationalSecurityStatus = new ElectionSp10OperationalSecurityStatusArtifactRecord(
+                Schema: ElectionSp10ProfileIds.OperationalSecuritySummarySchema,
+                request.Election.ElectionId.ToString(),
+                ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+                ElectionSp10ProfileIds.DeploymentProfileManagedAwsContainerV1,
+                evidenceState,
+                DoesNotCompleteFeat106Readiness: true,
+                Feat106ReadinessCaveat: ElectionSp10OperationalSecurityRules.GetAllowedWordingForEvidenceState(evidenceState),
+                ReleaseEvidenceMode: releaseManifest.EvidenceMode,
+                ReleaseManifestHash: releaseManifestHash,
+                ImmutableDeploymentRef: serverComponent.ImmutableReference,
+                CustodyMode: request.Election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold
+                    ? ElectionSp10ProfileIds.CustodyModeTrusteeLocalSecureVaultV1
+                    : ElectionSp10ProfileIds.CustodyModeAwsKmsPerElectionEnvelopeV1,
+                ExecutorKeyLifecycle: ElectionSp10ProfileIds.ExecutorKeyLifecycleEphemeralMemoryV1,
+                AccessSnapshotHashOrRestrictedRef: "sha256:access-snapshot",
+                BackupRestoreHashOrRestrictedRef: "sha256:backup-restore",
+                IncidentStatus: ElectionSp10ProfileIds.IncidentStatusNoIncidentDeclared,
+                AuditorRoomAccessLogHashOrRestrictedRef: "sha256:auditor-room-access-log",
+                BlocksHighAssurance: false,
+                PrimaryResultCode: VerificationResultCodes.OperationalSecurityEvidenceValid,
+                PrimaryIssue: null,
+                PublicEvidenceFiles:
+                [
+                    VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+                    VerificationPackageFileNames.Sp10OperationalDeploymentEvidence,
+                    VerificationPackageFileNames.Sp10OperationalCustodyEvidence,
+                    VerificationPackageFileNames.Sp10OperationalVerifierOutput,
+                ],
+                RestrictedEvidenceFiles: [],
+                PublicPrivacyBoundary:
+                [
+                    "no_raw_log_line",
+                    "no_raw_audit_log",
+                    "no_ip_address",
+                    "no_device_id",
+                    "no_kms_plaintext_key",
+                    "no_kms_unwrapped_key",
+                    "no_executor_private_key",
+                    "no_iam_policy_document",
+                    "no_security_group_rule_dump",
+                    "no_raw_backup_archive",
+                    "no_incident_workpaper",
+                    "no_regulatory_workpaper",
+                    "no_authority_private_correspondence",
+                    "no_voter_detail",
+                    "no_plaintext_vote",
+                    "no_raw_trustee_share",
+                    "no_proof_witness",
+                ]),
+        };
     }
 
     private static ElectionSp08ReleaseComponentArtifactRecord CreateOfficialSp08Component(
