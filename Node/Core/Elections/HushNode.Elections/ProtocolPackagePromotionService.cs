@@ -193,6 +193,10 @@ public sealed class ProtocolPackagePromotionService
             officialVersionRoot,
             options.Paths.WebsitePublicArtifactsRoot,
             promotionPlan.PackageVersion));
+        writtenFiles.AddRange(MirrorOfficialArtifactsToPublicPackageRepository(
+            officialVersionRoot,
+            options.Paths.PublicPackageRepositoryArtifactsRoot,
+            promotionPlan.PackageVersion));
 
         return new ProtocolPackagePromotionResult(
             specification.Manifest,
@@ -338,12 +342,34 @@ public sealed class ProtocolPackagePromotionService
         string? websitePublicArtifactsRoot,
         string packageVersion)
     {
-        if (string.IsNullOrWhiteSpace(websitePublicArtifactsRoot))
+        return MirrorOfficialArtifactsToRoot(
+            officialVersionRoot,
+            websitePublicArtifactsRoot,
+            packageVersion);
+    }
+
+    private static IReadOnlyList<string> MirrorOfficialArtifactsToPublicPackageRepository(
+        string officialVersionRoot,
+        string? publicPackageRepositoryArtifactsRoot,
+        string packageVersion)
+    {
+        return MirrorOfficialArtifactsToRoot(
+            officialVersionRoot,
+            publicPackageRepositoryArtifactsRoot,
+            packageVersion);
+    }
+
+    private static IReadOnlyList<string> MirrorOfficialArtifactsToRoot(
+        string officialVersionRoot,
+        string? artifactsRoot,
+        string packageVersion)
+    {
+        if (string.IsNullOrWhiteSpace(artifactsRoot))
         {
             return Array.Empty<string>();
         }
 
-        var targetVersionRoot = ResolveChildPath(websitePublicArtifactsRoot, packageVersion);
+        var targetVersionRoot = ResolveChildPath(artifactsRoot, packageVersion);
         if (Directory.Exists(targetVersionRoot))
         {
             Directory.Delete(targetVersionRoot, recursive: true);

@@ -1,8 +1,8 @@
 # Protocol Package Promoter
 
 `ProtocolPackagePromoter` promotes the working Protocol Omega / HushVoting v1 package source into
-versioned official artifacts, website artifacts, and the runtime package catalog used by
-`hush-server-node`.
+versioned official artifacts, website artifacts, the public package repository, and the runtime
+package catalog used by `hush-server-node`.
 
 The promoter owns package versioning in normal operation. Do not manually copy package folders or
 hand-edit catalog entries.
@@ -42,6 +42,12 @@ Website mirror output:
 
 ```text
 hush-website/public/protocol-omega/hushvoting-v1/vX.Y.Z/
+```
+
+Public package repository output:
+
+```text
+protocol-omega-packages/hushvoting-v1/vX.Y.Z/
 ```
 
 Runtime catalog:
@@ -176,6 +182,7 @@ Release manifest hash: ...
 Catalog: ...
 Official artifacts: ...
 Website artifacts: ...
+Public package repository artifacts: ...
 ```
 
 If `Incomplete files` is greater than `0`, the package is intentionally draft/private and must not
@@ -203,7 +210,7 @@ publish unless `ResolveProtocolPackageOnBuild=false` is supplied.
 Debug behavior:
 
 - reads local artifacts from the sibling `hush-documents` repository;
-- selects the latest local development package, preferring draft/odd-minor packages when present;
+- selects the latest local development package;
 - writes the selected package under the HushServerNode output folder:
 
 ```text
@@ -222,13 +229,18 @@ rewriting output files unnecessarily.
 Release behavior:
 
 - reads the package from GitHub Releases, defaulting to releases in
-  `Hushnetwork-social/hush-documents`;
+  `Hushnetwork-social/protocol-omega-packages`;
 - selects the latest published approved even-minor package release using tag convention
   `ProtocolOmega-HushVoting-v1-vX.Y.Z`;
 - downloads asset `Protocol-Omega-HushVoting-v1-Artifacts-vX.Y.Z.zip`;
 - fails closed if no approved release package is available;
 - uses `HUSH_PROTOCOL_PACKAGE_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN` when the GitHub repository
-  needs authentication.
+  needs authentication or unauthenticated GitHub API rate limits are not enough.
+
+The public `protocol-omega-packages` repository is the authoritative distribution registry for
+Release builds. Its release workflow validates approved even-minor packages under
+`hushvoting-v1/vX.Y.Z/`, creates the immutable release tag, and uploads the ZIP asset consumed by
+the build resolver. Private authoring still happens in `hush-documents` and `hush-memory-bank`.
 
 Manual build examples:
 

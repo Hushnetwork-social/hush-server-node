@@ -74,10 +74,12 @@ jobs:
       run: cargo test --release --locked
 
     - name: Build
-      run: dotnet build --no-restore
+      run: dotnet build --configuration Release --no-restore
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
 
     - name: Unit Tests
-      run: dotnet test --no-build --verbosity normal --filter "Category!=Performance&Category!=PerformanceTest&Category!=E2E&Category!=HS-INT-087-CROSS-RUNTIME-PROOF"
+      run: dotnet test --configuration Release --no-build --verbosity normal --filter "Category!=Performance&Category!=PerformanceTest&Category!=E2E&Category!=HS-INT-087-CROSS-RUNTIME-PROOF"
       env:
         HUSH_WEB_CLIENT_ROOT: ${{ github.workspace }}/hush-web-client
         HUSH_SP07_RUST_WORKER_PATH: ${{ github.workspace }}/Tools/HushSp07RustWorker/target/release/hush-sp07-rust-worker

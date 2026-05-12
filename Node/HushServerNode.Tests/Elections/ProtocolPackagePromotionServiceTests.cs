@@ -78,6 +78,16 @@ public class ProtocolPackagePromotionServiceTests : IDisposable
             "v1.0.0",
             ProtocolPackagePromotionService.ProofPackageFolderName,
             $"{ProtocolPackagePromotionService.ProofPackageFolderName}.zip")).Should().BeTrue();
+        File.Exists(Path.Combine(
+            paths.PublicPackageRepositoryArtifactsRoot!,
+            "v1.0.0",
+            ProtocolPackagePromotionService.SpecificationPackageFolderName,
+            $"{ProtocolPackagePromotionService.SpecificationPackageFolderName}.zip")).Should().BeTrue();
+        File.Exists(Path.Combine(
+            paths.PublicPackageRepositoryArtifactsRoot!,
+            "v1.0.0",
+            ProtocolPackagePromotionService.ProofPackageFolderName,
+            $"{ProtocolPackagePromotionService.ProofPackageFolderName}.zip")).Should().BeTrue();
         File.Exists(paths.ServerCatalogPath).Should().BeTrue();
 
         var catalog = JsonSerializer.Deserialize<ApprovedProtocolPackageCatalogEntryRecord[]>(
@@ -266,6 +276,7 @@ public class ProtocolPackagePromotionServiceTests : IDisposable
             .WithMessage("*Package version must be a simple directory name*");
         Directory.Exists(paths.OfficialArtifactsRoot).Should().BeFalse();
         Directory.Exists(paths.WebsitePublicArtifactsRoot!).Should().BeFalse();
+        Directory.Exists(paths.PublicPackageRepositoryArtifactsRoot!).Should().BeFalse();
         File.Exists(paths.ServerCatalogPath).Should().BeFalse();
     }
 
@@ -314,7 +325,8 @@ public class ProtocolPackagePromotionServiceTests : IDisposable
             Path.Combine(_tempRoot, "working"),
             Path.Combine(_tempRoot, "official"),
             Path.Combine(_tempRoot, "server", "ApprovedProtocolPackageCatalog.json"),
-            Path.Combine(_tempRoot, "website", "public", "protocol-omega", "hushvoting-v1"));
+            Path.Combine(_tempRoot, "website", "public", "protocol-omega", "hushvoting-v1"),
+            Path.Combine(_tempRoot, "protocol-omega-packages", "hushvoting-v1"));
 
     private static ProtocolPackagePromotionOptions CreateOptions(
         ProtocolPackagePromotionPaths paths,

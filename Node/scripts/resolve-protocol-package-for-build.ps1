@@ -4,8 +4,9 @@ param(
     [string]$WorkspaceRoot,
     [string]$OutputRoot,
     [string]$PackageId = "omega-hushvoting-v1",
-    [string]$ArtifactsRelativePath = "PrivateServer_ElectronicVoting/Protocol-Omega-HushVoting-v1-Artifacts",
-    [string]$GitHubRepository = "Hushnetwork-social/hush-documents",
+    [string]$ArtifactsRelativePath = "hushvoting-v1",
+    [string]$LocalArtifactsRelativePath = "PrivateServer_ElectronicVoting/Protocol-Omega-HushVoting-v1-Artifacts",
+    [string]$GitHubRepository = "Hushnetwork-social/protocol-omega-packages",
     [string]$GitHubRef = "master",
     [string]$ReleaseTagPrefix = "ProtocolOmega-HushVoting-v1-",
     [string]$ReleaseAssetPrefix = "Protocol-Omega-HushVoting-v1-Artifacts",
@@ -65,7 +66,7 @@ function Invoke-GitHubContents {
         return Invoke-RestMethod -Uri $url -Headers (Get-GitHubHeaders)
     }
     catch {
-        throw "Unable to read GitHub package path '$Path' from '$GitHubRepository' ref '$GitHubRef'. Check that the package has been published to GitHub and set HUSH_PROTOCOL_PACKAGE_GITHUB_TOKEN if the repository is private. $($_.Exception.Message)"
+        throw "Unable to read GitHub package path '$Path' from '$GitHubRepository' ref '$GitHubRef'. Check that the package has been published to GitHub. Set HUSH_PROTOCOL_PACKAGE_GITHUB_TOKEN only when using a private package repository or when rate limits require authentication. $($_.Exception.Message)"
     }
 }
 
@@ -75,7 +76,7 @@ function Invoke-GitHubReleases {
         return Invoke-RestMethod -Uri $url -Headers (Get-GitHubHeaders)
     }
     catch {
-        throw "Unable to read GitHub releases from '$GitHubRepository'. Check that Protocol Omega packages have been released and set HUSH_PROTOCOL_PACKAGE_GITHUB_TOKEN if the repository is private. $($_.Exception.Message)"
+        throw "Unable to read GitHub releases from '$GitHubRepository'. Check that Protocol Omega packages have been released. Set HUSH_PROTOCOL_PACKAGE_GITHUB_TOKEN only when using a private package repository or when rate limits require authentication. $($_.Exception.Message)"
     }
 }
 
@@ -553,7 +554,7 @@ if ([string]::IsNullOrWhiteSpace($workspaceRootFull)) {
     exit 0
 }
 
-$localArtifactsRoot = Join-Path (Join-Path $workspaceRootFull "hush-documents") $ArtifactsRelativePath.Replace("/", [IO.Path]::DirectorySeparatorChar)
+$localArtifactsRoot = Join-Path (Join-Path $workspaceRootFull "hush-documents") $LocalArtifactsRelativePath.Replace("/", [IO.Path]::DirectorySeparatorChar)
 Write-Host "Resolving Protocol Omega package for Debug from local artifacts '$localArtifactsRoot'."
 $localCandidates = @(Get-LocalCandidates -ArtifactsRoot $localArtifactsRoot)
 if ($localCandidates.Count -eq 0) {

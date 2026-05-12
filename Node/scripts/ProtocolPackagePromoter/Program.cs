@@ -43,6 +43,10 @@ try
     {
         Console.WriteLine($"Website artifacts: {Path.Combine(paths.WebsitePublicArtifactsRoot, result.ReleaseManifest.PackageVersion)}");
     }
+    if (!string.IsNullOrWhiteSpace(paths.PublicPackageRepositoryArtifactsRoot))
+    {
+        Console.WriteLine($"Public package repository artifacts: {Path.Combine(paths.PublicPackageRepositoryArtifactsRoot, result.ReleaseManifest.PackageVersion)}");
+    }
 
     return 0;
 }

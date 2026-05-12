@@ -6,7 +6,8 @@ public sealed record ProtocolPackagePromotionPaths(
     string WorkingSourceRoot,
     string OfficialArtifactsRoot,
     string ServerCatalogPath,
-    string? WebsitePublicArtifactsRoot = null)
+    string? WebsitePublicArtifactsRoot = null,
+    string? PublicPackageRepositoryArtifactsRoot = null)
 {
     public static ProtocolPackagePromotionPaths FromWorkspaceRoot(string workspaceRoot)
     {
@@ -16,6 +17,7 @@ public sealed record ProtocolPackagePromotionPaths(
         }
 
         var root = Path.GetFullPath(workspaceRoot);
+        var publicPackageRepositoryRoot = Path.Combine(root, "protocol-omega-packages");
         return new ProtocolPackagePromotionPaths(
             Path.Combine(
                 root,
@@ -42,7 +44,10 @@ public sealed record ProtocolPackagePromotionPaths(
                 "hush-website",
                 "public",
                 "protocol-omega",
-                "hushvoting-v1"));
+                "hushvoting-v1"),
+            Directory.Exists(publicPackageRepositoryRoot)
+                ? Path.Combine(publicPackageRepositoryRoot, "hushvoting-v1")
+                : null);
     }
 }
 
