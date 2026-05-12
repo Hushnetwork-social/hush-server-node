@@ -405,14 +405,6 @@ function Select-Candidate {
         return $approved[0]
     }
 
-    $development = @($sorted | Where-Object {
-        $_.ApprovalStatus -ne "ApprovedInternal" -or ($_.Version.Minor % 2 -ne 0)
-    })
-
-    if ($development.Count -gt 0) {
-        return $development[0]
-    }
-
     if ($sorted.Count -eq 0) {
         throw "No Protocol Omega package candidates were found."
     }
