@@ -5,6 +5,7 @@ using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
 using HushShared.Elections.PublicationProof;
 using HushShared.Elections.Verification.Model;
+using Timestamp = Google.Protobuf.WellKnownTypes.Timestamp;
 
 namespace HushNode.Elections.gRPC;
 
@@ -28,6 +29,29 @@ public partial class ElectionQueryApplicationService
         VerificationPackageFileNames.RestrictedSp09FindingTracker,
         VerificationPackageFileNames.RestrictedSp09RetestEvidence,
         VerificationPackageFileNames.RestrictedSp09ReportReference,
+    ];
+    private static readonly string[] Sp10PublicEvidenceFileNames =
+    [
+        VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+        VerificationPackageFileNames.Sp10OperationalDeploymentEvidence,
+        VerificationPackageFileNames.Sp10OperationalCustodyEvidence,
+        VerificationPackageFileNames.Sp10OperationalVerifierOutput,
+    ];
+    private static readonly string[] Sp10RestrictedEvidenceFileNames =
+    [
+        VerificationPackageFileNames.RestrictedSp10AccessControlSnapshot,
+        VerificationPackageFileNames.RestrictedSp10LoggingEvidence,
+        VerificationPackageFileNames.RestrictedSp10BackupRestoreEvidence,
+        VerificationPackageFileNames.RestrictedSp10IncidentEvidence,
+        VerificationPackageFileNames.RestrictedSp10AuditorRoomAccessLog,
+    ];
+    private static readonly string[] Sp11PublicEvidenceFileNames =
+    [
+        VerificationPackageFileNames.Sp11RegulatoryClaimState,
+    ];
+    private static readonly string[] Sp11RestrictedEvidenceFileNames =
+    [
+        VerificationPackageFileNames.RestrictedSp11RegulatoryJurisdictionWorkpaper,
     ];
 
     public async Task<GetElectionVerificationPackageStatusResponse> GetElectionVerificationPackageStatusAsync(
@@ -299,6 +323,16 @@ public partial class ElectionQueryApplicationService
             restrictedPackage.IsAvailable,
             includePackageHashes);
         view.Sp09ExternalReview = BuildSp09ExternalReviewStatus(
+            context,
+            publicPackage.IsAvailable,
+            restrictedPackage.IsAvailable,
+            includePackageHashes);
+        view.Sp10OperationalSecurity = BuildSp10OperationalSecurityStatus(
+            context,
+            publicPackage.IsAvailable,
+            restrictedPackage.IsAvailable,
+            includePackageHashes);
+        view.Sp11RegulatoryClaim = BuildSp11RegulatoryClaimStatus(
             context,
             publicPackage.IsAvailable,
             restrictedPackage.IsAvailable,
@@ -1403,6 +1437,490 @@ public partial class ElectionQueryApplicationService
         return status.PrimaryIssue ??
             ElectionSp09ExternalReviewRules.GetAllowedWordingForClaimState(status.ClaimState);
     }
+
+    private ElectionSp10OperationalSecurityStatusView BuildSp10OperationalSecurityStatus(
+        VerificationPackageContext context,
+        bool publicPackageAvailable,
+        bool restrictedPackageAvailable,
+        bool includePackageHashes)
+    {
+        var view = CreateDefaultSp10OperationalSecurityStatus(context);
+        if (!context.CanViewPackageStatus)
+        {
+            return new ElectionSp10OperationalSecurityStatusView
+            {
+                EvidenceExpected = false,
+                PublicEvidenceAvailable = false,
+                RestrictedEvidenceAvailable = false,
+                ProgramVersion = ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+                EvidenceState = ElectionSp10ProfileIds.EvidenceStateNotAvailable,
+                PrimaryResultCode = string.Empty,
+                Message = "SP-10 operational-security status is not visible to this actor.",
+            };
+        }
+
+        if (!publicPackageAvailable)
+        {
+            view.Message = "SP-10 operational-security evidence becomes exportable with the public verification package.";
+            return view;
+        }
+
+        if (!includePackageHashes)
+        {
+            view.PublicEvidenceAvailable = true;
+            view.PrimaryResultCode = VerificationResultCodes.OperationalSecurityEvidenceMissing;
+            view.Message = "SP-10 operational-security details are available from the verification package status endpoint.";
+            return view;
+        }
+
+        var export = _verificationPackageExportService.Export(
+            BuildExportRequest(context, VerificationPackageView.PublicAnonymous));
+        if (!export.Success)
+        {
+            view.PrimaryResultCode = export.Code;
+            view.PrimaryIssue = export.Message;
+            view.Message = "SP-10 operational-security evidence could not be read from the public package export.";
+            return view;
+        }
+
+        var filesByPath = export.Files
+            .GroupBy(x => x.RelativePath, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => x.First(), StringComparer.Ordinal);
+        foreach (var relativePath in Sp10PublicEvidenceFileNames)
+        {
+            view.EvidenceFiles.Add(BuildSp10EvidenceFileStatus(filesByPath, relativePath));
+        }
+
+        var status = TryReadSp10Artifact<ElectionSp10OperationalSecurityStatusArtifactRecord>(
+            filesByPath,
+            VerificationPackageFileNames.Sp10OperationalSecuritySummary);
+        var verifierOutput = TryReadSp10Artifact<ElectionSp10OperationalVerifierOutputArtifactRecord>(
+            filesByPath,
+            VerificationPackageFileNames.Sp10OperationalVerifierOutput);
+
+        if (status is null)
+        {
+            view.PrimaryResultCode = VerificationResultCodes.OperationalSecurityEvidenceMissing;
+            view.PrimaryIssue = "SP-10 operational-security summary artifact is missing or malformed.";
+            view.Message = view.PrimaryIssue;
+            return view;
+        }
+
+        var primaryVerifierResult = ResolveSp10PrimaryVerifierResult(verifierOutput);
+        view.PublicEvidenceAvailable = true;
+        view.RestrictedEvidenceAvailable = restrictedPackageAvailable && context.CanExportRestrictedPackage;
+        view.ProgramVersion = status.ProgramVersion;
+        view.DeploymentProfileId = status.DeploymentProfileId;
+        view.EvidenceState = status.EvidenceState;
+        view.DoesNotCompleteFeat106Readiness = status.DoesNotCompleteFeat106Readiness;
+        view.Feat106ReadinessCaveat = status.Feat106ReadinessCaveat;
+        view.ReleaseEvidenceMode = status.ReleaseEvidenceMode ?? string.Empty;
+        view.ReleaseManifestHash = status.ReleaseManifestHash ?? string.Empty;
+        view.ImmutableDeploymentRef = status.ImmutableDeploymentRef ?? string.Empty;
+        view.CustodyMode = status.CustodyMode ?? string.Empty;
+        view.ExecutorKeyLifecycle = status.ExecutorKeyLifecycle ?? string.Empty;
+        view.AccessSnapshotHashOrRestrictedRef = status.AccessSnapshotHashOrRestrictedRef ?? string.Empty;
+        view.BackupRestoreHashOrRestrictedRef = status.BackupRestoreHashOrRestrictedRef ?? string.Empty;
+        view.IncidentStatus = status.IncidentStatus ?? string.Empty;
+        view.AuditorRoomAccessLogHashOrRestrictedRef = status.AuditorRoomAccessLogHashOrRestrictedRef ?? string.Empty;
+        view.BlocksHighAssurance = status.BlocksHighAssurance;
+        view.PrimaryResultCode = primaryVerifierResult?.ResultCode ?? status.PrimaryResultCode;
+        view.PrimaryIssue = primaryVerifierResult?.Message ?? status.PrimaryIssue ?? string.Empty;
+        view.PublicEvidenceFileCount = status.PublicEvidenceFiles.Count;
+        view.RestrictedEvidenceFileCount = view.RestrictedEvidenceAvailable
+            ? Sp10RestrictedEvidenceFileNames.Length
+            : 0;
+        view.Message = ResolveSp10StatusMessage(view, status);
+
+        if (view.RestrictedEvidenceAvailable)
+        {
+            var restrictedExport = _verificationPackageExportService.Export(
+                BuildExportRequest(context, VerificationPackageView.RestrictedOwnerAuditor));
+            if (restrictedExport.Success)
+            {
+                var restrictedFilesByPath = restrictedExport.Files
+                    .GroupBy(x => x.RelativePath, StringComparer.Ordinal)
+                    .ToDictionary(x => x.Key, x => x.First(), StringComparer.Ordinal);
+                foreach (var relativePath in Sp10RestrictedEvidenceFileNames)
+                {
+                    view.EvidenceFiles.Add(BuildSp10EvidenceFileStatus(restrictedFilesByPath, relativePath));
+                }
+
+                view.RestrictedEvidenceFileCount = view.EvidenceFiles.Count(x =>
+                    x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted &&
+                    x.IsPresent);
+            }
+        }
+
+        return view;
+    }
+
+    private static ElectionSp10OperationalSecurityStatusView CreateDefaultSp10OperationalSecurityStatus(
+        VerificationPackageContext context)
+    {
+        var evidenceState = ElectionSp10ProfileIds.EvidenceStateNotAvailable;
+        return new ElectionSp10OperationalSecurityStatusView
+        {
+            EvidenceExpected = true,
+            PublicEvidenceAvailable = false,
+            RestrictedEvidenceAvailable = false,
+            ProgramVersion = ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+            DeploymentProfileId = ElectionSp10ProfileIds.DeploymentProfileManagedAwsContainerV1,
+            EvidenceState = evidenceState,
+            DoesNotCompleteFeat106Readiness = true,
+            Feat106ReadinessCaveat = ElectionSp10OperationalSecurityRules.GetAllowedWordingForEvidenceState(evidenceState),
+            BlocksHighAssurance = true,
+            PrimaryResultCode = VerificationResultCodes.OperationalSecurityEvidenceMissing,
+            PrimaryIssue = "SP-10 operational-security evidence is not available yet.",
+            Message = context.CanViewPackageStatus
+                ? "SP-10 operational-security evidence is not exportable yet."
+                : "SP-10 operational-security status is not visible to this actor.",
+        };
+    }
+
+    private static ElectionSp10EvidenceFileStatusView BuildSp10EvidenceFileStatus(
+        IReadOnlyDictionary<string, ElectionVerificationPackageFile> filesByPath,
+        string relativePath)
+    {
+        if (!filesByPath.TryGetValue(relativePath, out var file))
+        {
+            return new ElectionSp10EvidenceFileStatusView
+            {
+                RelativePath = relativePath,
+                Visibility = VerificationPrivacyBoundary.IsRestrictedArtifactPath(relativePath)
+                    ? ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted
+                    : ElectionVerificationArtifactVisibilityProto.VerificationArtifactPublic,
+                IsPresent = false,
+                ContentHash = string.Empty,
+            };
+        }
+
+        return new ElectionSp10EvidenceFileStatusView
+        {
+            RelativePath = file.RelativePath,
+            Visibility = file.Visibility.ToProto(),
+            IsPresent = true,
+            ContentHash = $"sha256:{VerificationCanonicalHash.ComputeManifestFileSha256(file.Content)}",
+        };
+    }
+
+    private static T? TryReadSp10Artifact<T>(
+        IReadOnlyDictionary<string, ElectionVerificationPackageFile> filesByPath,
+        string relativePath)
+    {
+        if (!filesByPath.TryGetValue(relativePath, out var file))
+        {
+            return default;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<T>(file.ContentText, VerificationJson.Options);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+    }
+
+    private static VerifierCheckResultRecord? ResolveSp10PrimaryVerifierResult(
+        ElectionSp10OperationalVerifierOutputArtifactRecord? verifierOutput) =>
+        verifierOutput?.Results.FirstOrDefault(x => x.Status == VerificationCheckStatus.Fail) ??
+        verifierOutput?.Results.FirstOrDefault(x => x.Status == VerificationCheckStatus.Warn);
+
+    private static string ResolveSp10StatusMessage(
+        ElectionSp10OperationalSecurityStatusView view,
+        ElectionSp10OperationalSecurityStatusArtifactRecord status)
+    {
+        if (!view.PublicEvidenceAvailable)
+        {
+            return "SP-10 operational-security evidence is not exportable yet.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(view.PrimaryIssue) && view.BlocksHighAssurance)
+        {
+            return view.PrimaryIssue;
+        }
+
+        return status.Feat106ReadinessCaveat;
+    }
+
+    private ElectionSp11RegulatoryClaimStatusView BuildSp11RegulatoryClaimStatus(
+        VerificationPackageContext context,
+        bool publicPackageAvailable,
+        bool restrictedPackageAvailable,
+        bool includePackageHashes)
+    {
+        var view = CreateDefaultSp11RegulatoryClaimStatus(context);
+        if (!context.CanViewPackageStatus)
+        {
+            view.Message = "SP-11 regulatory-claim status is not visible to this actor.";
+            return view;
+        }
+
+        if (!publicPackageAvailable)
+        {
+            view.Message = "SP-11 regulatory-claim state is projected only when a relevant claim is exported.";
+            return view;
+        }
+
+        if (!includePackageHashes)
+        {
+            view.Message = "SP-11 regulatory-claim details are available from the verification package status endpoint when a claim is exported.";
+            return view;
+        }
+
+        var export = _verificationPackageExportService.Export(
+            BuildExportRequest(context, VerificationPackageView.PublicAnonymous));
+        if (!export.Success)
+        {
+            view.PrimaryResultCode = export.Code;
+            view.PrimaryIssue = export.Message;
+            view.Message = "SP-11 regulatory-claim evidence could not be read from the public package export.";
+            return view;
+        }
+
+        var filesByPath = export.Files
+            .GroupBy(x => x.RelativePath, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => x.First(), StringComparer.Ordinal);
+        if (!filesByPath.ContainsKey(VerificationPackageFileNames.Sp11RegulatoryClaimState))
+        {
+            return view;
+        }
+
+        foreach (var relativePath in Sp11PublicEvidenceFileNames)
+        {
+            view.EvidenceFiles.Add(BuildSp11EvidenceFileStatus(filesByPath, relativePath));
+        }
+
+        var claim = TryReadSp11Artifact<ElectionSp11RegulatoryClaimStateArtifactRecord>(
+            filesByPath,
+            VerificationPackageFileNames.Sp11RegulatoryClaimState);
+        if (claim is null)
+        {
+            view.EvidenceExpected = true;
+            view.ClaimExported = true;
+            view.PrimaryResultCode = VerificationResultCodes.RegulatoryClaimNotLegalApproval;
+            view.PrimaryIssue = "SP-11 regulatory-claim artifact is missing or malformed.";
+            view.Message = view.PrimaryIssue;
+            return view;
+        }
+
+        ProjectSp11RegulatoryClaim(view, claim, restrictedPackageAvailable && context.CanExportRestrictedPackage);
+
+        if (view.RestrictedEvidenceAvailable)
+        {
+            var restrictedExport = _verificationPackageExportService.Export(
+                BuildExportRequest(context, VerificationPackageView.RestrictedOwnerAuditor));
+            if (restrictedExport.Success)
+            {
+                var restrictedFilesByPath = restrictedExport.Files
+                    .GroupBy(x => x.RelativePath, StringComparer.Ordinal)
+                    .ToDictionary(x => x.Key, x => x.First(), StringComparer.Ordinal);
+                foreach (var relativePath in Sp11RestrictedEvidenceFileNames)
+                {
+                    view.EvidenceFiles.Add(BuildSp11EvidenceFileStatus(restrictedFilesByPath, relativePath));
+                }
+
+                view.RestrictedEvidenceFileCount = view.EvidenceFiles.Count(x =>
+                    x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted &&
+                    x.IsPresent);
+
+                var restrictedClaim = TryReadSp11Artifact<ElectionSp11RegulatoryClaimStateArtifactRecord>(
+                    restrictedFilesByPath,
+                    VerificationPackageFileNames.Sp11RegulatoryClaimState);
+                if (restrictedClaim is not null)
+                {
+                    view.RestrictedWorkpaperRef = restrictedClaim.RestrictedWorkpaperRef ?? string.Empty;
+                }
+            }
+        }
+
+        return view;
+    }
+
+    private static ElectionSp11RegulatoryClaimStatusView CreateDefaultSp11RegulatoryClaimStatus(
+        VerificationPackageContext context) =>
+        new()
+        {
+            EvidenceExpected = false,
+            PublicEvidenceAvailable = false,
+            RestrictedEvidenceAvailable = false,
+            ClaimExported = false,
+            TrackerVersion = ElectionSp11ProfileIds.RegulatoryTrackerVersion,
+            PrimaryResultCode = string.Empty,
+            PrimaryIssue = string.Empty,
+            Message = context.CanViewPackageStatus
+                ? "No SP-11 regulatory claim is exported for this package."
+                : "SP-11 regulatory-claim status is not visible to this actor.",
+        };
+
+    private static void ProjectSp11RegulatoryClaim(
+        ElectionSp11RegulatoryClaimStatusView view,
+        ElectionSp11RegulatoryClaimStateArtifactRecord claim,
+        bool restrictedEvidenceAvailable)
+    {
+        var observedAt = DateTimeOffset.UtcNow;
+        var isStale = ElectionSp11RegulatoryRules.IsTrackerStale(claim, observedAt);
+        var validationErrors = ElectionSp11RegulatoryRules.Validate(
+            claim,
+            VerificationPackageView.PublicAnonymous,
+            observedAt);
+        var blocksClaims = IsSp11BlockingClaimState(claim.ClaimState) ||
+            isStale ||
+            validationErrors.Count > 0;
+
+        view.EvidenceExpected = true;
+        view.PublicEvidenceAvailable = true;
+        view.RestrictedEvidenceAvailable = restrictedEvidenceAvailable;
+        view.ClaimExported = true;
+        view.TrackerVersion = claim.TrackerVersion;
+        view.JurisdictionId = claim.JurisdictionId;
+        view.ClaimId = claim.ClaimId;
+        view.ClaimState = claim.ClaimState;
+        view.SourceCheckedAt = ToTimestamp(claim.SourceCheckedAt);
+        view.HasSourceCheckedAt = true;
+        view.NextReviewAt = ToTimestamp(claim.NextReviewAt);
+        view.HasNextReviewAt = true;
+        view.SourceRef = claim.SourceRef;
+        view.Owner = claim.Owner;
+        view.IsLegalAdvice = claim.IsLegalAdvice;
+        view.RequiresAuthorityEvidence = claim.RequiresAuthorityEvidence;
+        view.AuthorityEvidenceRef = claim.AuthorityEvidenceRef ?? string.Empty;
+        view.RestrictedWorkpaperRef = restrictedEvidenceAvailable
+            ? claim.RestrictedWorkpaperRef ?? string.Empty
+            : string.Empty;
+        view.AllowedWording = claim.AllowedWording;
+        view.IsStale = isStale;
+        view.BlocksClaims = blocksClaims;
+        view.PrimaryResultCode = ResolveSp11PrimaryResultCode(claim, isStale, validationErrors.Count > 0);
+        view.PrimaryIssue = ResolveSp11PrimaryIssue(claim, isStale, validationErrors);
+        view.PublicEvidenceFileCount = claim.PublicEvidenceFiles.Count;
+        view.RestrictedEvidenceFileCount = restrictedEvidenceAvailable
+            ? claim.RestrictedEvidenceFiles.Count
+            : 0;
+        view.Message = ResolveSp11StatusMessage(view, claim);
+    }
+
+    private static ElectionSp11EvidenceFileStatusView BuildSp11EvidenceFileStatus(
+        IReadOnlyDictionary<string, ElectionVerificationPackageFile> filesByPath,
+        string relativePath)
+    {
+        if (!filesByPath.TryGetValue(relativePath, out var file))
+        {
+            return new ElectionSp11EvidenceFileStatusView
+            {
+                RelativePath = relativePath,
+                Visibility = VerificationPrivacyBoundary.IsRestrictedArtifactPath(relativePath)
+                    ? ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted
+                    : ElectionVerificationArtifactVisibilityProto.VerificationArtifactPublic,
+                IsPresent = false,
+                ContentHash = string.Empty,
+            };
+        }
+
+        return new ElectionSp11EvidenceFileStatusView
+        {
+            RelativePath = file.RelativePath,
+            Visibility = file.Visibility.ToProto(),
+            IsPresent = true,
+            ContentHash = $"sha256:{VerificationCanonicalHash.ComputeManifestFileSha256(file.Content)}",
+        };
+    }
+
+    private static T? TryReadSp11Artifact<T>(
+        IReadOnlyDictionary<string, ElectionVerificationPackageFile> filesByPath,
+        string relativePath)
+    {
+        if (!filesByPath.TryGetValue(relativePath, out var file))
+        {
+            return default;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<T>(file.ContentText, VerificationJson.Options);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+    }
+
+    private static bool IsSp11BlockingClaimState(string? claimState) =>
+        string.Equals(claimState, ElectionSp11ProfileIds.ClaimStateBlockedUntilReview, StringComparison.Ordinal) ||
+        string.Equals(claimState, ElectionSp11ProfileIds.ClaimStateBlockedUntilCertification, StringComparison.Ordinal) ||
+        string.Equals(claimState, ElectionSp11ProfileIds.ClaimStateForbidden, StringComparison.Ordinal);
+
+    private static string ResolveSp11PrimaryResultCode(
+        ElectionSp11RegulatoryClaimStateArtifactRecord claim,
+        bool isStale,
+        bool hasValidationErrors)
+    {
+        if (string.Equals(claim.ClaimState, ElectionSp11ProfileIds.ClaimStateBlockedUntilCertification, StringComparison.Ordinal) ||
+            claim.RequiresAuthorityEvidence && string.IsNullOrWhiteSpace(claim.AuthorityEvidenceRef) ||
+            ElectionSp11RegulatoryRules.ContainsForbiddenClaimPhrase(claim.AllowedWording))
+        {
+            return VerificationResultCodes.RegulatoryClaimBlockedCertification;
+        }
+
+        if (isStale)
+        {
+            return VerificationResultCodes.RegulatoryTrackerStale;
+        }
+
+        if (hasValidationErrors ||
+            string.Equals(claim.ClaimState, ElectionSp11ProfileIds.ClaimStateForbidden, StringComparison.Ordinal) ||
+            string.Equals(claim.ClaimState, ElectionSp11ProfileIds.ClaimStateBlockedUntilReview, StringComparison.Ordinal))
+        {
+            return VerificationResultCodes.RegulatoryClaimNotLegalApproval;
+        }
+
+        return VerificationResultCodes.RegulatoryClaimAllowedByRegister;
+    }
+
+    private static string ResolveSp11PrimaryIssue(
+        ElectionSp11RegulatoryClaimStateArtifactRecord claim,
+        bool isStale,
+        IReadOnlyList<string> validationErrors)
+    {
+        if (validationErrors.Count > 0)
+        {
+            return string.Join(" | ", validationErrors);
+        }
+
+        if (isStale)
+        {
+            return "Regulatory tracker source is past its next review date and needs refresh before new claim reliance.";
+        }
+
+        if (IsSp11BlockingClaimState(claim.ClaimState))
+        {
+            return ElectionSp11RegulatoryRules.GetAllowedWordingForClaimState(claim.ClaimState);
+        }
+
+        return claim.AllowedWording;
+    }
+
+    private static string ResolveSp11StatusMessage(
+        ElectionSp11RegulatoryClaimStatusView view,
+        ElectionSp11RegulatoryClaimStateArtifactRecord claim)
+    {
+        if (view.IsStale)
+        {
+            return "SP-11 regulatory tracker is stale and needs review before relying on this claim.";
+        }
+
+        if (view.BlocksClaims && !string.IsNullOrWhiteSpace(view.PrimaryIssue))
+        {
+            return view.PrimaryIssue;
+        }
+
+        return claim.AllowedWording;
+    }
+
+    private static Timestamp ToTimestamp(DateTimeOffset value) =>
+        Timestamp.FromDateTime(value.UtcDateTime);
 
     private ElectionVerificationPackageExportAvailabilityView BuildPackageAvailability(
         VerificationPackageContext context,

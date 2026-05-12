@@ -959,6 +959,8 @@ message ElectionVerificationPackageStatusView {
   ElectionSp07EvidenceStatusView Sp07Evidence = 13;
   ElectionSp08ReleaseIntegrityStatusView Sp08ReleaseIntegrity = 14;
   ElectionSp09ExternalReviewStatusView Sp09ExternalReview = 15;
+  ElectionSp10OperationalSecurityStatusView Sp10OperationalSecurity = 16;
+  ElectionSp11RegulatoryClaimStatusView Sp11RegulatoryClaim = 17;
 }
 
 message ElectionSp04EvidenceStatusView {
@@ -1153,6 +1155,77 @@ message ElectionSp09FindingSeverityStatusView {
 }
 
 message ElectionSp09EvidenceFileStatusView {
+  string RelativePath = 1;
+  ElectionVerificationArtifactVisibilityProto Visibility = 2;
+  bool IsPresent = 3;
+  string ContentHash = 4;
+}
+
+message ElectionSp10OperationalSecurityStatusView {
+  bool EvidenceExpected = 1;
+  bool PublicEvidenceAvailable = 2;
+  bool RestrictedEvidenceAvailable = 3;
+  string ProgramVersion = 4;
+  string DeploymentProfileId = 5;
+  string EvidenceState = 6;
+  bool DoesNotCompleteFeat106Readiness = 7;
+  string Feat106ReadinessCaveat = 8;
+  string ReleaseEvidenceMode = 9;
+  string ReleaseManifestHash = 10;
+  string ImmutableDeploymentRef = 11;
+  string CustodyMode = 12;
+  string ExecutorKeyLifecycle = 13;
+  string AccessSnapshotHashOrRestrictedRef = 14;
+  string BackupRestoreHashOrRestrictedRef = 15;
+  string IncidentStatus = 16;
+  string AuditorRoomAccessLogHashOrRestrictedRef = 17;
+  bool BlocksHighAssurance = 18;
+  string PrimaryResultCode = 19;
+  string PrimaryIssue = 20;
+  int32 PublicEvidenceFileCount = 21;
+  int32 RestrictedEvidenceFileCount = 22;
+  string Message = 23;
+  repeated ElectionSp10EvidenceFileStatusView EvidenceFiles = 24;
+}
+
+message ElectionSp10EvidenceFileStatusView {
+  string RelativePath = 1;
+  ElectionVerificationArtifactVisibilityProto Visibility = 2;
+  bool IsPresent = 3;
+  string ContentHash = 4;
+}
+
+message ElectionSp11RegulatoryClaimStatusView {
+  bool EvidenceExpected = 1;
+  bool PublicEvidenceAvailable = 2;
+  bool RestrictedEvidenceAvailable = 3;
+  bool ClaimExported = 4;
+  string TrackerVersion = 5;
+  string JurisdictionId = 6;
+  string ClaimId = 7;
+  string ClaimState = 8;
+  google.protobuf.Timestamp SourceCheckedAt = 9;
+  bool HasSourceCheckedAt = 10;
+  google.protobuf.Timestamp NextReviewAt = 11;
+  bool HasNextReviewAt = 12;
+  string SourceRef = 13;
+  string Owner = 14;
+  bool IsLegalAdvice = 15;
+  bool RequiresAuthorityEvidence = 16;
+  string AuthorityEvidenceRef = 17;
+  string RestrictedWorkpaperRef = 18;
+  string AllowedWording = 19;
+  bool IsStale = 20;
+  bool BlocksClaims = 21;
+  string PrimaryResultCode = 22;
+  string PrimaryIssue = 23;
+  int32 PublicEvidenceFileCount = 24;
+  int32 RestrictedEvidenceFileCount = 25;
+  string Message = 26;
+  repeated ElectionSp11EvidenceFileStatusView EvidenceFiles = 27;
+}
+
+message ElectionSp11EvidenceFileStatusView {
   string RelativePath = 1;
   ElectionVerificationArtifactVisibilityProto Visibility = 2;
   bool IsPresent = 3;

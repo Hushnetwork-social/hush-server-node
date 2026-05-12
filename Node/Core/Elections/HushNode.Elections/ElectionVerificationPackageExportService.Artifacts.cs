@@ -647,6 +647,418 @@ public sealed partial class ElectionVerificationPackageExportService
         "no_voter_detail",
     ];
 
+    private static ElectionSp10OperationalSecurityStatusArtifactRecord BuildSp10OperationalSecuritySummary(
+        ElectionVerificationPackageExportRequest request,
+        ElectionSp08ReleaseManifestArtifactRecord releaseManifest,
+        ElectionSp08ReleaseIntegrityArtifactRecord releaseIntegrity)
+    {
+        if (request.Sp10OperationalSecurityStatus is not null)
+        {
+            var providedErrors = ElectionSp10OperationalSecurityRules.Validate(
+                request.Sp10OperationalSecurityStatus,
+                request.PackageView);
+            if (providedErrors.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Provided SP-10 operational status is invalid: {string.Join("; ", providedErrors)}");
+            }
+
+            return request.Sp10OperationalSecurityStatus;
+        }
+
+        var evidenceState = ElectionSp10ProfileIds.EvidenceStateDevelopmentPlaceholder;
+        var immutableDeploymentRef = releaseManifest.Components
+            .FirstOrDefault(x => string.Equals(
+                x.ComponentId,
+                ElectionSp08ProfileIds.ServerComponent,
+                StringComparison.Ordinal))?.ImmutableReference;
+
+        var status = new ElectionSp10OperationalSecurityStatusArtifactRecord(
+            Schema: ElectionSp10ProfileIds.OperationalSecuritySummarySchema,
+            request.Election.ElectionId.ToString(),
+            ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+            ElectionSp10ProfileIds.DeploymentProfileManagedAwsContainerV1,
+            evidenceState,
+            DoesNotCompleteFeat106Readiness: true,
+            Feat106ReadinessCaveat: ElectionSp10OperationalSecurityRules.GetAllowedWordingForEvidenceState(evidenceState),
+            releaseManifest.EvidenceMode,
+            releaseIntegrity.ReleaseManifestHash,
+            immutableDeploymentRef,
+            ResolveSp10CustodyMode(request),
+            ElectionSp10ProfileIds.ExecutorKeyLifecycleEphemeralMemoryV1,
+            AccessSnapshotHashOrRestrictedRef: null,
+            BackupRestoreHashOrRestrictedRef: null,
+            IncidentStatus: ElectionSp10ProfileIds.IncidentStatusNoIncidentDeclared,
+            AuditorRoomAccessLogHashOrRestrictedRef: null,
+            BlocksHighAssurance: ElectionSp10OperationalSecurityRules.BlocksHighAssurance(evidenceState),
+            PrimaryResultCode: ElectionSp10OperationalSecurityRules.GetPrimaryResultCode(evidenceState),
+            PrimaryIssue: "Development-only SP-10 operational evidence is exported for this package. FEAT-106 readiness, legal validation, public-election approval, and certification remain out of scope.",
+            PublicEvidenceFiles:
+            [
+                VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+                VerificationPackageFileNames.Sp10OperationalDeploymentEvidence,
+                VerificationPackageFileNames.Sp10OperationalCustodyEvidence,
+                VerificationPackageFileNames.Sp10OperationalVerifierOutput,
+            ],
+            RestrictedEvidenceFiles: [],
+            PublicPrivacyBoundary: BuildSp10PublicPrivacyBoundary());
+
+        var errors = ElectionSp10OperationalSecurityRules.Validate(status, request.PackageView);
+        if (errors.Count > 0)
+        {
+            throw new InvalidOperationException($"Generated SP-10 status is invalid: {string.Join("; ", errors)}");
+        }
+
+        return status;
+    }
+
+    private static ElectionSp10OperationalDeploymentEvidenceArtifactRecord BuildSp10OperationalDeploymentEvidence(
+        ElectionVerificationPackageExportRequest request,
+        ElectionSp10OperationalSecurityStatusArtifactRecord status,
+        ElectionSp08ReleaseManifestArtifactRecord releaseManifest) =>
+        new(
+            ElectionSp10ProfileIds.OperationalDeploymentEvidenceSchema,
+            request.Election.ElectionId.ToString(),
+            ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+            status.DeploymentProfileId,
+            status.EvidenceState,
+            status.ReleaseEvidenceMode ?? releaseManifest.EvidenceMode,
+            status.ReleaseManifestHash,
+            status.ImmutableDeploymentRef,
+            releaseManifest.SourceAuthority,
+            PublicEvidenceFiles:
+            [
+                VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+                VerificationPackageFileNames.Sp10OperationalDeploymentEvidence,
+                VerificationPackageFileNames.Sp08ReleaseManifest,
+                VerificationPackageFileNames.Sp08ReleaseIntegrity,
+            ],
+            PublicPrivacyBoundary: BuildSp10PublicPrivacyBoundary());
+
+    private static ElectionSp10OperationalCustodyEvidenceArtifactRecord BuildSp10OperationalCustodyEvidence(
+        ElectionVerificationPackageExportRequest request,
+        ElectionSp10OperationalSecurityStatusArtifactRecord status) =>
+        new(
+            ElectionSp10ProfileIds.OperationalCustodyEvidenceSchema,
+            request.Election.ElectionId.ToString(),
+            ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+            request.Election.GovernanceMode.ToString(),
+            status.CustodyMode ?? ResolveSp10CustodyMode(request),
+            status.ExecutorKeyLifecycle ?? ElectionSp10ProfileIds.ExecutorKeyLifecycleEphemeralMemoryV1,
+            TrusteeThresholdCustodyExpected: request.Election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold,
+            PublicEvidenceFiles:
+            [
+                VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+                VerificationPackageFileNames.Sp10OperationalCustodyEvidence,
+            ],
+            PublicPrivacyBoundary: BuildSp10PublicPrivacyBoundary());
+
+    private static ElectionSp10OperationalVerifierOutputArtifactRecord BuildSp10VerifierOutput(
+        ElectionVerificationPackageExportRequest request,
+        ElectionSp10OperationalSecurityStatusArtifactRecord status,
+        DateTime verifiedAt) =>
+        new(
+            request.Election.ElectionId.ToString(),
+            request.VerifierProfileId,
+            ElectionSp10ProfileIds.OperationalVerifierOutputSchema,
+            verifiedAt,
+            BuildSp10ExportVerifierResults(request.VerifierProfileId, status));
+
+    private static IReadOnlyList<VerifierCheckResultRecord> BuildSp10ExportVerifierResults(
+        string profileId,
+        ElectionSp10OperationalSecurityStatusArtifactRecord status)
+    {
+        var missingStatus = string.Equals(profileId, VerificationProfileIds.HighAssuranceV1, StringComparison.Ordinal)
+            ? VerificationCheckStatus.Fail
+            : VerificationCheckStatus.Warn;
+        var placeholderStatus = string.Equals(
+                status.EvidenceState,
+                ElectionSp10ProfileIds.EvidenceStateDevelopmentPlaceholder,
+                StringComparison.Ordinal)
+            ? missingStatus
+            : VerificationCheckStatus.Pass;
+        var releaseStatus = string.IsNullOrWhiteSpace(status.ReleaseManifestHash) ||
+                            string.IsNullOrWhiteSpace(status.ImmutableDeploymentRef)
+            ? missingStatus
+            : placeholderStatus;
+        var custodyStatus = ElectionSp10ProfileIds.CustodyModeSet.Contains(status.CustodyMode ?? string.Empty)
+            ? placeholderStatus
+            : missingStatus;
+        var executorStatus = string.Equals(
+                status.ExecutorKeyLifecycle,
+                ElectionSp10ProfileIds.ExecutorKeyLifecycleEphemeralMemoryV1,
+                StringComparison.Ordinal)
+            ? placeholderStatus
+            : missingStatus;
+        var privacyStatus = VerificationPrivacyBoundary.FindForbiddenPublicFields(status.PublicPrivacyBoundary).Count == 0
+            ? VerificationCheckStatus.Pass
+            : VerificationCheckStatus.Fail;
+        var incidentStatus = ElectionSp10ProfileIds.IncidentStatusSet.Contains(status.IncidentStatus ?? string.Empty)
+            ? placeholderStatus
+            : missingStatus;
+
+        return
+        [
+            new VerifierCheckResultRecord(
+                ElectionSp10ProfileIds.DeploymentProfileDeclaredCheckCode,
+                VerificationCheckStatus.Pass,
+                VerificationResultCodes.OperationalSecurityProfileDeclared,
+                "SP-10 managed deployment profile is declared without implying FEAT-106 readiness.",
+                new Dictionary<string, string>
+                {
+                    ["deployment_profile_id"] = status.DeploymentProfileId,
+                    ["evidence_state"] = status.EvidenceState,
+                }),
+            BuildSp10Check(
+                ElectionSp10ProfileIds.ReleaseDeploymentBindingCheckCode,
+                releaseStatus,
+                releaseStatus == VerificationCheckStatus.Pass
+                    ? VerificationResultCodes.OperationalSecurityEvidenceValid
+                    : string.Equals(status.EvidenceState, ElectionSp10ProfileIds.EvidenceStateDevelopmentPlaceholder, StringComparison.Ordinal)
+                        ? VerificationResultCodes.OperationalSecurityDevelopmentPlaceholder
+                        : VerificationResultCodes.OperationalSecurityReleaseBindingMissing,
+                "SP-10 deployment evidence is bound to the SP-08 release manifest and immutable deployment reference.",
+                "SP-10 deployment evidence is missing official release binding or remains development-only."),
+            BuildSp10Check(
+                ElectionSp10ProfileIds.AccessControlSnapshotCheckCode,
+                string.IsNullOrWhiteSpace(status.AccessSnapshotHashOrRestrictedRef) ? missingStatus : placeholderStatus,
+                string.IsNullOrWhiteSpace(status.AccessSnapshotHashOrRestrictedRef)
+                    ? VerificationResultCodes.OperationalSecurityAccessSnapshotMissing
+                    : VerificationResultCodes.OperationalSecurityEvidenceValid,
+                "SP-10 access-control snapshot evidence is present.",
+                "SP-10 access-control snapshot evidence is missing from public summary."),
+            BuildSp10Check(
+                ElectionSp10ProfileIds.CustodyModeDeclaredCheckCode,
+                custodyStatus,
+                custodyStatus == VerificationCheckStatus.Pass
+                    ? VerificationResultCodes.OperationalSecurityEvidenceValid
+                    : VerificationResultCodes.OperationalSecurityCustodyModeMissing,
+                "SP-10 custody mode is declared for the governance mode.",
+                "SP-10 custody mode is missing or unsupported."),
+            BuildSp10Check(
+                ElectionSp10ProfileIds.ExecutorKeyLifecycleCheckCode,
+                executorStatus,
+                executorStatus == VerificationCheckStatus.Pass
+                    ? VerificationResultCodes.OperationalSecurityEvidenceValid
+                    : VerificationResultCodes.OperationalSecurityExecutorKeyLifecycleMissing,
+                "SP-10 executor key lifecycle is declared as ephemeral in-memory handling.",
+                "SP-10 executor key lifecycle evidence is missing or unsupported."),
+            BuildSp10Check(
+                ElectionSp10ProfileIds.ForbiddenMaterialScanCheckCode,
+                privacyStatus,
+                privacyStatus == VerificationCheckStatus.Pass
+                    ? VerificationResultCodes.OperationalSecurityEvidenceValid
+                    : VerificationResultCodes.OperationalSecurityForbiddenMaterial,
+                "SP-10 public privacy boundary excludes forbidden operational material.",
+                "SP-10 public privacy boundary contains forbidden operational material."),
+            BuildSp10Check(
+                ElectionSp10ProfileIds.BackupRestoreEvidenceCheckCode,
+                string.IsNullOrWhiteSpace(status.BackupRestoreHashOrRestrictedRef) ? missingStatus : placeholderStatus,
+                string.IsNullOrWhiteSpace(status.BackupRestoreHashOrRestrictedRef)
+                    ? VerificationResultCodes.OperationalSecurityBackupRestoreMissing
+                    : VerificationResultCodes.OperationalSecurityEvidenceValid,
+                "SP-10 backup/restore evidence is referenced.",
+                "SP-10 backup/restore evidence is missing from public summary."),
+            BuildSp10Check(
+                ElectionSp10ProfileIds.IncidentDeclarationCheckCode,
+                incidentStatus,
+                incidentStatus == VerificationCheckStatus.Pass
+                    ? VerificationResultCodes.OperationalSecurityEvidenceValid
+                    : VerificationResultCodes.OperationalSecurityIncidentDeclarationMissing,
+                "SP-10 incident/no-incident declaration is present.",
+                "SP-10 incident/no-incident declaration is missing."),
+            BuildSp10Check(
+                ElectionSp10ProfileIds.AuditorRoomAccessLogCheckCode,
+                string.IsNullOrWhiteSpace(status.AuditorRoomAccessLogHashOrRestrictedRef) ? missingStatus : placeholderStatus,
+                string.IsNullOrWhiteSpace(status.AuditorRoomAccessLogHashOrRestrictedRef)
+                    ? VerificationResultCodes.OperationalSecurityAuditorRoomMissing
+                    : VerificationResultCodes.OperationalSecurityEvidenceValid,
+                "SP-10 auditor-room access-log evidence is referenced.",
+                "SP-10 auditor-room access-log evidence is missing from public summary."),
+        ];
+    }
+
+    private static VerifierCheckResultRecord BuildSp10Check(
+        string checkCode,
+        VerificationCheckStatus status,
+        string resultCode,
+        string passMessage,
+        string failureMessage) =>
+        new(
+            checkCode,
+            status,
+            resultCode,
+            status == VerificationCheckStatus.Pass ? passMessage : failureMessage,
+            new Dictionary<string, string>());
+
+    private static ElectionSp10RestrictedAccessControlSnapshotArtifactRecord BuildRestrictedSp10AccessControlSnapshot(
+        ElectionVerificationPackageExportRequest request,
+        ElectionSp10OperationalSecurityStatusArtifactRecord status) =>
+        new(
+            ElectionSp10ProfileIds.RestrictedAccessControlSnapshotSchema,
+            request.Election.ElectionId.ToString(),
+            ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+            $"sp10-access-{request.Election.ElectionId}",
+            status.EvidenceState,
+            Roles:
+            [
+                new ElectionSp10RestrictedAccessRoleRecord(
+                    "owner_admin",
+                    "election_management",
+                    ActorCount: 1,
+                    AccessMode: "owner_admin_role",
+                    EvidenceHashOrRef: BuildSp10EvidenceHash(request, "owner-admin-access")),
+                new ElectionSp10RestrictedAccessRoleRecord(
+                    "hush_operator",
+                    "managed_hosting",
+                    ActorCount: 0,
+                    AccessMode: "ticketed_break_glass_only",
+                    EvidenceHashOrRef: BuildSp10EvidenceHash(request, "operator-access")),
+                new ElectionSp10RestrictedAccessRoleRecord(
+                    "auditor",
+                    "auditor_room_v1",
+                    ActorCount: 0,
+                    AccessMode: "restricted_export_authorized_only",
+                    EvidenceHashOrRef: BuildSp10EvidenceHash(request, "auditor-room-access")),
+            ],
+            PublicPrivacyBoundary: BuildSp10PublicPrivacyBoundary());
+
+    private static ElectionSp10RestrictedLoggingEvidenceArtifactRecord BuildRestrictedSp10LoggingEvidence(
+        ElectionVerificationPackageExportRequest request) =>
+        new(
+            ElectionSp10ProfileIds.RestrictedLoggingEvidenceSchema,
+            request.Election.ElectionId.ToString(),
+            ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+            "privacy_safe_logging_policy_v1",
+            AllowedEventFamilies:
+            [
+                "aggregate_security_event",
+                "package_export_event",
+                "support_access_decision",
+            ],
+            RestrictedEventFamilies:
+            [
+                "support_case_reference",
+                "provider_delivery_status",
+                "auditor_room_access_event",
+            ],
+            ForbiddenEventFamilies:
+            [
+                "raw_log_line",
+                "ip_address",
+                "device_id",
+                "kms_plaintext_key",
+                "executor_private_key",
+            ],
+            SampleRedactionEvidenceHash: BuildSp10EvidenceHash(request, "logging-redaction-sample"),
+            PublicPrivacyBoundary: BuildSp10PublicPrivacyBoundary());
+
+    private static ElectionSp10RestrictedBackupRestoreEvidenceArtifactRecord BuildRestrictedSp10BackupRestoreEvidence(
+        ElectionVerificationPackageExportRequest request,
+        DateTime exportedAt) =>
+        new(
+            ElectionSp10ProfileIds.RestrictedBackupRestoreEvidenceSchema,
+            request.Election.ElectionId.ToString(),
+            ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+            "managed_backup_restore_policy_v1",
+            new DateTimeOffset(exportedAt, TimeSpan.Zero),
+            "development_placeholder_restore_test_not_for_high_assurance_claims",
+            EvidenceHashOrRef: BuildSp10EvidenceHash(request, "backup-restore"),
+            PublicPrivacyBoundary: BuildSp10PublicPrivacyBoundary());
+
+    private static ElectionSp10RestrictedIncidentEvidenceArtifactRecord BuildRestrictedSp10IncidentEvidence(
+        ElectionVerificationPackageExportRequest request,
+        ElectionSp10OperationalSecurityStatusArtifactRecord status,
+        DateTime exportedAt) =>
+        new(
+            ElectionSp10ProfileIds.RestrictedIncidentEvidenceSchema,
+            request.Election.ElectionId.ToString(),
+            ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+            status.IncidentStatus ?? ElectionSp10ProfileIds.IncidentStatusNoIncidentDeclared,
+            new DateTimeOffset(exportedAt, TimeSpan.Zero),
+            MaterialElectionImpactDeclared: false,
+            EvidenceHashOrRef: BuildSp10EvidenceHash(request, "incident-declaration"),
+            PublicPrivacyBoundary: BuildSp10PublicPrivacyBoundary());
+
+    private static ElectionSp10RestrictedAuditorRoomAccessLogArtifactRecord BuildRestrictedSp10AuditorRoomAccessLog(
+        ElectionVerificationPackageExportRequest request) =>
+        new(
+            ElectionSp10ProfileIds.RestrictedAuditorRoomAccessLogSchema,
+            request.Election.ElectionId.ToString(),
+            ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+            "auditor_room_v1",
+            AccessLogHash: BuildSp10EvidenceHash(request, "auditor-room-access-log"),
+            OpenGrantCount: 0,
+            AuthorizedEvidenceScopes:
+            [
+                "verification_package_restricted_owner_auditor",
+                "operational_security_evidence",
+                "regulatory_tracker_workpaper_when_authorized",
+            ],
+            PublicPrivacyBoundary: BuildSp10PublicPrivacyBoundary());
+
+    private static ElectionSp11RegulatoryClaimStateArtifactRecord BuildSp11RegulatoryClaimState(
+        ElectionVerificationPackageExportRequest request)
+    {
+        var claim = request.Sp11RegulatoryClaimState!;
+        var errors = ElectionSp11RegulatoryRules.Validate(claim, request.PackageView);
+        if (errors.Count > 0)
+        {
+            throw new InvalidOperationException($"Provided SP-11 regulatory claim state is invalid: {string.Join("; ", errors)}");
+        }
+
+        return claim;
+    }
+
+    private static ElectionSp11RestrictedJurisdictionWorkpaperArtifactRecord BuildRestrictedSp11RegulatoryJurisdictionWorkpaper(
+        ElectionSp11RegulatoryClaimStateArtifactRecord claim) =>
+        new(
+            claim.JurisdictionId,
+            claim.ClaimId,
+            claim.TrackerVersion,
+            claim.RestrictedWorkpaperRef ?? VerificationCanonicalHash.ComputeSha256UpperHex(
+                $"{claim.JurisdictionId}|{claim.ClaimId}|{claim.SourceRef}|{claim.SourceCheckedAt:O}"),
+            claim.Owner,
+            claim.ClaimState,
+            SourceRefs: [claim.SourceRef],
+            PublicPrivacyBoundary:
+            [
+                "no_legal_advice",
+                "no_authority_private_correspondence",
+                "no_jurisdiction_workpaper_body",
+            ]);
+
+    private static IReadOnlyList<string> BuildSp10PublicPrivacyBoundary() =>
+    [
+        "no_raw_log_line",
+        "no_raw_audit_log",
+        "no_ip_address",
+        "no_device_id",
+        "no_kms_plaintext_key",
+        "no_kms_unwrapped_key",
+        "no_executor_private_key",
+        "no_iam_policy_document",
+        "no_security_group_rule_dump",
+        "no_raw_backup_archive",
+        "no_incident_workpaper",
+        "no_regulatory_workpaper",
+        "no_authority_private_correspondence",
+        "no_voter_detail",
+        "no_plaintext_vote",
+        "no_raw_trustee_share",
+        "no_proof_witness",
+    ];
+
+    private static string ResolveSp10CustodyMode(ElectionVerificationPackageExportRequest request) =>
+        request.Election.GovernanceMode == ElectionGovernanceMode.TrusteeThreshold
+            ? ElectionSp10ProfileIds.CustodyModeTrusteeLocalSecureVaultV1
+            : ElectionSp10ProfileIds.CustodyModeAwsKmsPerElectionEnvelopeV1;
+
+    private static string BuildSp10EvidenceHash(
+        ElectionVerificationPackageExportRequest request,
+        string material) =>
+        VerificationCanonicalHash.ComputeSha256UpperHex($"{request.Election.ElectionId}|SP-10|{material}");
+
     private static IReadOnlyList<ElectionSp08LifecycleReleaseBindingRecord> BuildSp08LifecycleBindings(
         string releaseId,
         string serverDigest,

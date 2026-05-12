@@ -74,9 +74,13 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 outcomeProjection,
                 ceremonyPublicKey);
             var protocolPackageBindingProjection = BuildProtocolPackageBindingProjection(request.ProtocolPackageBinding);
+            var operationalSecurityProjection = BuildOperationalSecurityProjection(request);
+            var regulatoryClaimProjection = BuildRegulatoryClaimProjection(request);
             var auditProjection = BuildAuditProjection(
                 request,
                 protocolPackageBindingProjection,
+                operationalSecurityProjection,
+                regulatoryClaimProjection,
                 frozenEvidenceFingerprint,
                 trustees,
                 warningEvidence,
@@ -90,6 +94,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 trustees.Length,
                 rosterEntries.Length,
                 protocolPackageBindingProjection,
+                operationalSecurityProjection,
+                regulatoryClaimProjection,
                 outcomeProjection,
                 warningEvidence,
                 governedApprovalProjections,
@@ -102,7 +108,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 warningEvidence.Length,
                 governedApprovalProjections.Length,
                 finalizationShareProjections.Length,
-                protocolPackageBindingProjection);
+                protocolPackageBindingProjection,
+                operationalSecurityProjection,
+                regulatoryClaimProjection);
 
             var machineManifestId = Guid.NewGuid();
             var humanManifestId = Guid.NewGuid();
@@ -490,6 +498,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             BuildResultArtifactProjection(request.UnofficialResult),
             BuildResultArtifactProjection(request.OfficialResult),
             BuildProtocolPackageBindingProjection(request.ProtocolPackageBinding),
+            BuildOperationalSecurityProjection(request),
+            BuildRegulatoryClaimProjection(request),
             request.FinalizationSession is null
                 ? null
                 : new FinalizationSessionProjection(
@@ -689,6 +699,94 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             accessLocation.Location,
             accessLocation.ContentHash);
 
+    private static OperationalSecurityProjection BuildOperationalSecurityProjection(
+        ElectionReportPackageBuildRequest request)
+    {
+        if (request.Sp10OperationalSecurityStatus is null)
+        {
+            var evidenceState = ElectionSp10ProfileIds.EvidenceStateNotAvailable;
+            return new OperationalSecurityProjection(
+                ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
+                ElectionSp10ProfileIds.DeploymentProfileManagedAwsContainerV1,
+                evidenceState,
+                DoesNotCompleteFeat106Readiness: true,
+                ElectionSp10OperationalSecurityRules.GetAllowedWordingForEvidenceState(evidenceState),
+                ReleaseEvidenceMode: null,
+                ReleaseManifestHash: null,
+                ImmutableDeploymentRef: null,
+                CustodyMode: null,
+                ExecutorKeyLifecycle: null,
+                IncidentStatus: null,
+                BlocksHighAssurance: true,
+                VerificationResultCodes.OperationalSecurityEvidenceMissing,
+                "SP-10 operational security evidence is not attached to this report package.",
+                PublicEvidenceFiles: [],
+                RestrictedEvidenceFiles: []);
+        }
+
+        var status = request.Sp10OperationalSecurityStatus;
+        var errors = ElectionSp10OperationalSecurityRules.Validate(
+            status,
+            VerificationPackageView.RestrictedOwnerAuditor);
+        if (errors.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Report package SP-10 operational status is invalid: {string.Join("; ", errors)}");
+        }
+
+        return new OperationalSecurityProjection(
+            status.ProgramVersion,
+            status.DeploymentProfileId,
+            status.EvidenceState,
+            status.DoesNotCompleteFeat106Readiness,
+            status.Feat106ReadinessCaveat,
+            status.ReleaseEvidenceMode,
+            status.ReleaseManifestHash,
+            status.ImmutableDeploymentRef,
+            status.CustodyMode,
+            status.ExecutorKeyLifecycle,
+            status.IncidentStatus,
+            status.BlocksHighAssurance,
+            status.PrimaryResultCode,
+            status.PrimaryIssue,
+            status.PublicEvidenceFiles,
+            status.RestrictedEvidenceFiles);
+    }
+
+    private static RegulatoryClaimProjection? BuildRegulatoryClaimProjection(
+        ElectionReportPackageBuildRequest request)
+    {
+        if (request.Sp11RegulatoryClaimState is null)
+        {
+            return null;
+        }
+
+        var claim = request.Sp11RegulatoryClaimState;
+        if (!string.Equals(claim.Schema, ElectionSp11ProfileIds.RegulatoryClaimStateSchema, StringComparison.Ordinal) ||
+            !ElectionSp11RegulatoryRules.IsSupportedClaimState(claim.ClaimState) ||
+            claim.IsLegalAdvice ||
+            ElectionSp11RegulatoryRules.ContainsForbiddenClaimPhrase(claim.AllowedWording))
+        {
+            throw new InvalidOperationException("Report package SP-11 regulatory claim state is invalid.");
+        }
+
+        return new RegulatoryClaimProjection(
+            claim.TrackerVersion,
+            claim.JurisdictionId,
+            claim.ClaimId,
+            claim.ClaimState,
+            claim.SourceCheckedAt,
+            claim.NextReviewAt,
+            claim.SourceRef,
+            claim.Owner,
+            claim.RequiresAuthorityEvidence,
+            claim.AuthorityEvidenceRef,
+            IsTrackerStale: ElectionSp11RegulatoryRules.IsTrackerStale(claim, DateTimeOffset.UtcNow),
+            claim.AllowedWording,
+            claim.PublicEvidenceFiles,
+            claim.RestrictedEvidenceFiles);
+    }
+
     private static WarningEvidenceProjection[] BuildWarningEvidenceProjections(ElectionReportPackageBuildRequest request)
     {
         var warningsByCode = request.WarningAcknowledgements
@@ -806,6 +904,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         int acceptedTrusteeCount,
         int rosterEntryCount,
         ProtocolPackageBindingProjection? protocolPackageBinding,
+        OperationalSecurityProjection operationalSecurity,
+        RegulatoryClaimProjection? regulatoryClaim,
         OutcomeDeterminationProjection outcomeProjection,
         IReadOnlyList<WarningEvidenceProjection> warningEvidence,
         IReadOnlyList<GovernedApprovalProjection> governedApprovals,
@@ -837,6 +937,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             AcceptedTrusteeCount: acceptedTrusteeCount,
             RosterEntryCount: rosterEntryCount,
             ProtocolPackageBinding: protocolPackageBinding,
+            OperationalSecurity: operationalSecurity,
+            RegulatoryClaim: regulatoryClaim,
             FinalizeArtifactId: request.FinalizeArtifact.Id,
             OfficialResultArtifactId: request.OfficialResult.Id,
             OfficialResultHash: officialResultHash,
@@ -853,7 +955,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         int warningCount,
         int governedApprovalCount,
         int finalizationShareCount,
-        ProtocolPackageBindingProjection? protocolPackageBinding) =>
+        ProtocolPackageBindingProjection? protocolPackageBinding,
+        OperationalSecurityProjection operationalSecurity,
+        RegulatoryClaimProjection? regulatoryClaim) =>
         new(
             ArtifactId: Guid.Empty,
             ManifestArtifactId: Guid.Empty,
@@ -881,6 +985,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             GovernedApprovalCount: governedApprovalCount,
             FinalizationShareCount: finalizationShareCount,
             ProtocolPackageBinding: protocolPackageBinding,
+            OperationalSecurity: operationalSecurity,
+            RegulatoryClaim: regulatoryClaim,
             Trustees: trustees);
 
     private static ResultReportProjection BuildResultReportProjection(
@@ -945,6 +1051,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
     private static AuditProvenanceProjection BuildAuditProjection(
         ElectionReportPackageBuildRequest request,
         ProtocolPackageBindingProjection? protocolPackageBinding,
+        OperationalSecurityProjection operationalSecurity,
+        RegulatoryClaimProjection? regulatoryClaim,
         string frozenEvidenceFingerprint,
         IReadOnlyList<TrusteeProjection> trustees,
         IReadOnlyList<WarningEvidenceProjection> warningEvidence,
@@ -975,6 +1083,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 ? null
                 : BuildTrusteeThresholdProjection(request.CloseArtifact.TrusteeSnapshot),
             ProtocolPackageBinding: protocolPackageBinding,
+            OperationalSecurity: operationalSecurity,
+            RegulatoryClaim: regulatoryClaim,
             FinalizationGovernedProposal: request.FinalizationGovernedProposal is null
                 ? null
                 : BuildGovernedProposalProjection(request.FinalizationGovernedProposal),
@@ -1158,6 +1268,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         - Secrecy boundary: {manifest.SecrecyBoundarySummary}
         - Custody boundary: {manifest.CustodyBoundarySummary}
         {BuildHumanProtocolPackageBindingContent(manifest.ProtocolPackageBinding)}
+        {BuildHumanOperationalRegulatoryContent(manifest.OperationalSecurity, manifest.RegulatoryClaim)}
         - Accepted trustee count: `{manifest.AcceptedTrusteeCount}`
         - Roster entry count: `{manifest.RosterEntryCount}`
         - Warning count: `{manifest.WarningCount}`
@@ -1286,6 +1397,10 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         builder.AppendLine();
         AppendHumanProtocolPackageBindingContent(builder, projection.ProtocolPackageBinding);
         builder.AppendLine();
+        builder.AppendLine("## Operational Security And Regulatory Boundaries");
+        builder.AppendLine();
+        AppendHumanOperationalRegulatoryContent(builder, projection.OperationalSecurity, projection.RegulatoryClaim);
+        builder.AppendLine();
         builder.AppendLine("### Approved Clients");
         builder.AppendLine();
         foreach (var client in projection.Setup.ApprovedClients)
@@ -1409,6 +1524,15 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         return builder.ToString().TrimEnd();
     }
 
+    private static string BuildHumanOperationalRegulatoryContent(
+        OperationalSecurityProjection operationalSecurity,
+        RegulatoryClaimProjection? regulatoryClaim)
+    {
+        var builder = new StringBuilder();
+        AppendHumanOperationalRegulatoryContent(builder, operationalSecurity, regulatoryClaim);
+        return builder.ToString().TrimEnd();
+    }
+
     private static void AppendHumanProtocolPackageBindingContent(
         StringBuilder builder,
         ProtocolPackageBindingProjection? binding)
@@ -1426,13 +1550,13 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         builder.AppendLine($"- Status: `{binding.Status}`");
         builder.AppendLine($"- Source: `{binding.Source}`");
         builder.AppendLine($"- Approval status: `{binding.ApprovalStatus}`");
-        builder.AppendLine($"- External review status: `{binding.ExternalReviewStatus}`");
-        builder.AppendLine($"- External review availability: `{binding.ExternalReviewAvailability}`");
-        builder.AppendLine($"- External review claim state: `{binding.ExternalReviewClaimState}`");
-        builder.AppendLine($"- External review summary: {binding.ExternalReviewCustomerSafeSummary}");
+        builder.AppendLine($"- SP-09 external review status: `{binding.ExternalReviewStatus}`");
+        builder.AppendLine($"- SP-09 external review availability: `{binding.ExternalReviewAvailability}`");
+        builder.AppendLine($"- SP-09 external review claim state: `{binding.ExternalReviewClaimState}`");
+        builder.AppendLine($"- SP-09 external review summary: {binding.ExternalReviewCustomerSafeSummary}");
         builder.AppendLine($"- Spec package hash: `{binding.SpecPackageHash}`");
         builder.AppendLine($"- Proof package hash: `{binding.ProofPackageHash}`");
-        builder.AppendLine($"- Release manifest hash: `{binding.ReleaseManifestHash}`");
+        builder.AppendLine($"- SP-08 release integrity manifest hash: `{binding.ReleaseManifestHash}`");
         builder.AppendLine($"- Draft revision: `{binding.DraftRevision}`");
         builder.AppendLine($"- Bound at: `{binding.BoundAt:O}`");
         builder.AppendLine($"- Sealed at: `{binding.SealedAt?.ToString("O") ?? "not sealed"}`");
@@ -1443,6 +1567,61 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         builder.AppendLine($"- Access-location note: {binding.AccessLocationOperationalNote}");
         AppendProtocolPackageAccessLocations(builder, "Spec access locations", binding.SpecAccessLocations);
         AppendProtocolPackageAccessLocations(builder, "Proof access locations", binding.ProofAccessLocations);
+    }
+
+    private static void AppendHumanOperationalRegulatoryContent(
+        StringBuilder builder,
+        OperationalSecurityProjection operationalSecurity,
+        RegulatoryClaimProjection? regulatoryClaim)
+    {
+        var sectionStart = builder.Length;
+        builder.AppendLine("- SP-10 operational security boundary: operational evidence state only; no FEAT-106 rollout readiness, legal validation, public-election approval, or certification is asserted.");
+        builder.AppendLine($"- SP-10 program version: `{operationalSecurity.ProgramVersion}`");
+        builder.AppendLine($"- SP-10 deployment profile: `{operationalSecurity.DeploymentProfileId}`");
+        builder.AppendLine($"- SP-10 evidence state: `{operationalSecurity.EvidenceState}`");
+        builder.AppendLine($"- SP-10 primary result: `{operationalSecurity.PrimaryResultCode}`");
+        builder.AppendLine($"- SP-10 blocks high assurance: `{operationalSecurity.BlocksHighAssurance}`");
+        builder.AppendLine($"- SP-10 FEAT-106 caveat: {operationalSecurity.Feat106ReadinessCaveat}");
+        builder.AppendLine($"- SP-10 release evidence mode: `{operationalSecurity.ReleaseEvidenceMode ?? "not recorded"}`");
+        builder.AppendLine($"- SP-10 release manifest hash: `{operationalSecurity.ReleaseManifestHash ?? "not recorded"}`");
+        builder.AppendLine($"- SP-10 immutable deployment ref: `{operationalSecurity.ImmutableDeploymentRef ?? "not recorded"}`");
+        builder.AppendLine($"- SP-10 custody mode: `{operationalSecurity.CustodyMode ?? "not recorded"}`");
+        builder.AppendLine($"- SP-10 executor key lifecycle: `{operationalSecurity.ExecutorKeyLifecycle ?? "not recorded"}`");
+        builder.AppendLine($"- SP-10 incident status: `{operationalSecurity.IncidentStatus ?? "not recorded"}`");
+        builder.AppendLine($"- SP-10 primary issue: {operationalSecurity.PrimaryIssue ?? "none"}");
+        builder.AppendLine($"- SP-10 public evidence files: `{operationalSecurity.PublicEvidenceFiles.Count}`");
+        builder.AppendLine($"- SP-10 restricted evidence files: `{operationalSecurity.RestrictedEvidenceFiles.Count}`");
+
+        if (regulatoryClaim is null)
+        {
+            builder.AppendLine("- SP-11 regulatory tracker claim: `not exported`");
+            builder.AppendLine("- SP-11 legal validation boundary: no legal advice, authority approval, public-election parity, or certification is asserted.");
+        }
+        else
+        {
+            builder.AppendLine($"- SP-11 tracker version: `{regulatoryClaim.TrackerVersion}`");
+            builder.AppendLine($"- SP-11 jurisdiction id: `{regulatoryClaim.JurisdictionId}`");
+            builder.AppendLine($"- SP-11 claim id: `{regulatoryClaim.ClaimId}`");
+            builder.AppendLine($"- SP-11 claim state: `{regulatoryClaim.ClaimState}`");
+            builder.AppendLine($"- SP-11 source checked at: `{regulatoryClaim.SourceCheckedAt:O}`");
+            builder.AppendLine($"- SP-11 next review at: `{regulatoryClaim.NextReviewAt:O}`");
+            builder.AppendLine($"- SP-11 tracker stale: `{regulatoryClaim.IsTrackerStale}`");
+            builder.AppendLine($"- SP-11 source ref: `{regulatoryClaim.SourceRef}`");
+            builder.AppendLine($"- SP-11 owner: `{regulatoryClaim.Owner}`");
+            builder.AppendLine($"- SP-11 requires authority evidence: `{regulatoryClaim.RequiresAuthorityEvidence}`");
+            builder.AppendLine($"- SP-11 authority evidence ref: `{regulatoryClaim.AuthorityEvidenceRef ?? "not recorded"}`");
+            builder.AppendLine($"- SP-11 allowed wording: {regulatoryClaim.AllowedWording}");
+            builder.AppendLine($"- SP-11 public evidence files: `{regulatoryClaim.PublicEvidenceFiles.Count}`");
+            builder.AppendLine($"- SP-11 restricted evidence files: `{regulatoryClaim.RestrictedEvidenceFiles.Count}`");
+            builder.AppendLine("- SP-11 legal validation boundary: tracker content is market intelligence, not legal advice; no certification or public-election parity is asserted.");
+        }
+
+        var sectionText = builder.ToString(sectionStart, builder.Length - sectionStart);
+        if (ElectionSp10OperationalSecurityRules.ContainsForbiddenClaimPhrase(sectionText) ||
+            ElectionSp11RegulatoryRules.ContainsForbiddenClaimPhrase(sectionText))
+        {
+            throw new InvalidOperationException("Generated operational/regulatory report wording contains a forbidden claim phrase.");
+        }
     }
 
     private static void AppendProtocolPackageAccessLocations(
@@ -1586,6 +1765,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         ResultArtifactProjection UnofficialResult,
         ResultArtifactProjection OfficialResult,
         ProtocolPackageBindingProjection? ProtocolPackageBinding,
+        OperationalSecurityProjection OperationalSecurity,
+        RegulatoryClaimProjection? RegulatoryClaim,
         FinalizationSessionProjection? FinalizationSession,
         FinalizationReleaseProjection? FinalizationReleaseEvidence,
         IReadOnlyList<WarningEvidenceProjection> WarningEvidence,
@@ -1799,6 +1980,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         int AcceptedTrusteeCount,
         int RosterEntryCount,
         ProtocolPackageBindingProjection? ProtocolPackageBinding,
+        OperationalSecurityProjection OperationalSecurity,
+        RegulatoryClaimProjection? RegulatoryClaim,
         Guid FinalizeArtifactId,
         Guid OfficialResultArtifactId,
         string OfficialResultHash,
@@ -1835,6 +2018,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         int GovernedApprovalCount,
         int FinalizationShareCount,
         ProtocolPackageBindingProjection? ProtocolPackageBinding,
+        OperationalSecurityProjection OperationalSecurity,
+        RegulatoryClaimProjection? RegulatoryClaim,
         IReadOnlyList<TrusteeProjection> Trustees);
 
     private sealed record ResultReportProjection(
@@ -1919,6 +2104,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         CeremonyPublicKeyProjection? CeremonyPublicKey,
         TrusteeThresholdProjection? TrusteeThreshold,
         ProtocolPackageBindingProjection? ProtocolPackageBinding,
+        OperationalSecurityProjection OperationalSecurity,
+        RegulatoryClaimProjection? RegulatoryClaim,
         GovernedProposalProjection? FinalizationGovernedProposal,
         IReadOnlyList<GovernedApprovalProjection> FinalizationApprovals,
         IReadOnlyList<FinalizationShareProjection> FinalizationShares,
@@ -1982,6 +2169,40 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         string Label,
         string Location,
         string? ContentHash);
+
+    private sealed record OperationalSecurityProjection(
+        string ProgramVersion,
+        string DeploymentProfileId,
+        string EvidenceState,
+        bool DoesNotCompleteFeat106Readiness,
+        string Feat106ReadinessCaveat,
+        string? ReleaseEvidenceMode,
+        string? ReleaseManifestHash,
+        string? ImmutableDeploymentRef,
+        string? CustodyMode,
+        string? ExecutorKeyLifecycle,
+        string? IncidentStatus,
+        bool BlocksHighAssurance,
+        string PrimaryResultCode,
+        string? PrimaryIssue,
+        IReadOnlyList<string> PublicEvidenceFiles,
+        IReadOnlyList<string> RestrictedEvidenceFiles);
+
+    private sealed record RegulatoryClaimProjection(
+        string TrackerVersion,
+        string JurisdictionId,
+        string ClaimId,
+        string ClaimState,
+        DateTimeOffset SourceCheckedAt,
+        DateTimeOffset NextReviewAt,
+        string SourceRef,
+        string Owner,
+        bool RequiresAuthorityEvidence,
+        string? AuthorityEvidenceRef,
+        bool IsTrackerStale,
+        string AllowedWording,
+        IReadOnlyList<string> PublicEvidenceFiles,
+        IReadOnlyList<string> RestrictedEvidenceFiles);
 
     private sealed record DisputeReviewIndexProjection(
         Guid MachineArtifactId,

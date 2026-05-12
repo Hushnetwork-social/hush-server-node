@@ -428,6 +428,7 @@ public class ElectionReportPackageServiceTests
 
         var machineManifest = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineManifest);
         machineManifest.Content.Should().Contain("\"protocolPackageBinding\"");
+        machineManifest.Content.Should().Contain("\"operationalSecurity\"");
         machineManifest.Content.Should().Contain("\"packageVersion\": \"v1.0.0\"");
         machineManifest.Content.Should().Contain($"\"specPackageHash\": \"{Hash('a')}\"");
         machineManifest.Content.Should().Contain($"\"proofPackageHash\": \"{Hash('b')}\"");
@@ -440,6 +441,7 @@ public class ElectionReportPackageServiceTests
 
         var machineEvidenceGraph = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineEvidenceGraph);
         machineEvidenceGraph.Content.Should().Contain("\"protocolPackageBinding\"");
+        machineEvidenceGraph.Content.Should().Contain("\"regulatoryClaim\"");
         machineEvidenceGraph.Content.Should().Contain($"\"releaseManifestHash\": \"{Hash('c')}\"");
 
         var machineAudit = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineAuditProvenanceReportProjection);
@@ -449,15 +451,22 @@ public class ElectionReportPackageServiceTests
         var humanManifest = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanManifest);
         humanManifest.Content.Should().Contain("Protocol package binding id");
         humanManifest.Content.Should().Contain($"Spec package hash: `{Hash('a')}`");
+        humanManifest.Content.Should().Contain($"SP-08 release integrity manifest hash: `{Hash('c')}`");
         humanManifest.Content.Should().Contain("Spec access locations: `1`");
         humanManifest.Content.Should().Contain(
-            "External review summary: External examination program is defined; no reviewer conclusion is available.");
+            "SP-09 external review summary: External examination program is defined; no reviewer conclusion is available.");
+        humanManifest.Content.Should().Contain("SP-10 operational security boundary");
+        humanManifest.Content.Should().Contain("SP-11 regulatory tracker claim: `not exported`");
 
         var humanAudit = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport);
         humanAudit.Content.Should().Contain("## Protocol Omega Package Binding");
+        humanAudit.Content.Should().Contain("## Operational Security And Regulatory Boundaries");
         humanAudit.Content.Should().Contain("Access-location note: Protocol package archives are referenced by immutable hashes");
         humanAudit.Content.Should().Contain("Website spec package");
         humanAudit.Content.Should().Contain("Website proof package");
+        humanAudit.Content.Should().Contain("SP-11 legal validation boundary");
+        humanAudit.Content.Should().NotContain("FEAT-106 complete");
+        humanAudit.Content.Should().NotContain("Certified for public elections");
         ElectionSp09ProfileIds.ForbiddenClaimPhrases.Should().AllSatisfy(phrase =>
             humanAudit.Content.Contains(phrase, StringComparison.OrdinalIgnoreCase).Should().BeFalse());
     }
