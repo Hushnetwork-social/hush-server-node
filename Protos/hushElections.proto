@@ -42,6 +42,7 @@ service HushElections {
   rpc GetElectionVotingView(GetElectionVotingViewRequest) returns (GetElectionVotingViewResponse);
   rpc VerifyElectionReceipt(VerifyElectionReceiptRequest) returns (VerifyElectionReceiptResponse);
   rpc GetElectionEnvelopeAccess(GetElectionEnvelopeAccessRequest) returns (GetElectionEnvelopeAccessResponse);
+  rpc GetElectionAnomalyOwnThread(GetElectionAnomalyOwnThreadRequest) returns (GetElectionAnomalyOwnThreadResponse);
   rpc GetElectionResultView(GetElectionResultViewRequest) returns (GetElectionResultViewResponse);
   rpc GetElectionVerificationPackageStatus(GetElectionVerificationPackageStatusRequest) returns (GetElectionVerificationPackageStatusResponse);
   rpc ExportElectionVerificationPackage(ExportElectionVerificationPackageRequest) returns (ExportElectionVerificationPackageResponse);
@@ -1340,6 +1341,8 @@ message ElectionRecordView {
   string ControlDomainProfileId = 51;
   string ControlDomainProfileVersion = 52;
   string ThresholdProfileId = 53;
+  google.protobuf.Timestamp AnomalySubmissionWindowClosesAt = 54;
+  bool HasAnomalySubmissionWindowClosesAt = 55;
 }
 
 message ElectionSummary {
@@ -1351,6 +1354,8 @@ message ElectionSummary {
   ElectionGovernanceModeProto GovernanceMode = 6;
   int32 CurrentDraftRevision = 7;
   google.protobuf.Timestamp LastUpdatedAt = 8;
+  google.protobuf.Timestamp AnomalySubmissionWindowClosesAt = 9;
+  bool HasAnomalySubmissionWindowClosesAt = 10;
 }
 
 message ElectionDraftSnapshot {
@@ -1789,6 +1794,55 @@ message GetElectionEnvelopeAccessResponse {
   bool Success = 1;
   string ErrorMessage = 2;
   string ActorEncryptedElectionPrivateKey = 3;
+}
+
+message GetElectionAnomalyOwnThreadRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+}
+
+message ElectionAnomalyRecipientWrapView {
+  string RecipientRoleId = 1;
+  string WrapStatusId = 2;
+  string RecipientPublicAddress = 3;
+  string RecipientKeyFingerprint = 4;
+  string EncryptedContentKey = 5;
+  string WrapAlgorithm = 6;
+}
+
+message ElectionAnomalyMessageView {
+  string MessageId = 1;
+  string MessageKindId = 2;
+  google.protobuf.Timestamp RecordedAt = 3;
+  string EncryptedBody = 4;
+  string EncryptedBodyHash = 5;
+  int32 PlaintextCharacterCount = 6;
+  repeated ElectionAnomalyRecipientWrapView RecipientWraps = 7;
+  string ClarificationRequestId = 8;
+  bool HasClarificationRequest = 9;
+  string AttachmentManifestHash = 10;
+}
+
+message ElectionAnomalyOwnThreadView {
+  string AnomalyThreadId = 1;
+  string ElectionId = 2;
+  string CategoryId = 3;
+  string CaseStateId = 4;
+  string CurrentThreadHash = 5;
+  string SeverityCandidateId = 6;
+  string GovernedDecisionRef = 7;
+  bool HasOpenClarificationRequest = 8;
+  google.protobuf.Timestamp CreatedAt = 9;
+  google.protobuf.Timestamp UpdatedAt = 10;
+  repeated ElectionAnomalyMessageView Messages = 11;
+}
+
+message GetElectionAnomalyOwnThreadResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ActorPublicAddress = 3;
+  bool HasThread = 4;
+  ElectionAnomalyOwnThreadView Thread = 5;
 }
 
 message GetElectionResultViewRequest {

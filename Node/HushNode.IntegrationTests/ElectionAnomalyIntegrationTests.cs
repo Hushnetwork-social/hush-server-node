@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Grpc.Core;
 using HushNetwork.proto;
 using HushNode.Elections.gRPC;
 using HushNode.IntegrationTests.Infrastructure;
@@ -8,6 +9,8 @@ using HushServerNode.Testing.Elections;
 using HushShared.Elections.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Olimpo;
+using System.Text.Json;
 using Xunit;
 
 namespace HushNode.IntegrationTests;
@@ -141,6 +144,40 @@ public sealed class ElectionAnomalyIntegrationTests : IAsyncLifetime
             TestIdentities.Alice.PublicSigningAddress);
         ownProjection.Should().NotBeNull();
         ownProjection!.Messages.Should().HaveCount(4);
+        ownProjection.Messages.SelectMany(x => x.RecipientWraps)
+            .Where(x => x.RecipientPublicAddress == TestIdentities.Alice.PublicSigningAddress)
+            .Should()
+            .OnlyContain(x => !string.IsNullOrWhiteSpace(x.EncryptedContentKey) &&
+                              !string.IsNullOrWhiteSpace(x.WrapAlgorithm));
+        ownProjection.Messages.SelectMany(x => x.RecipientWraps)
+            .Where(x => x.RecipientPublicAddress != TestIdentities.Alice.PublicSigningAddress)
+            .Should()
+            .OnlyContain(x => string.IsNullOrWhiteSpace(x.EncryptedContentKey) &&
+                              string.IsNullOrWhiteSpace(x.WrapAlgorithm));
+
+        var electionsClient = _grpcFactory!.CreateClient<HushElections.HushElectionsClient>();
+        var grpcOwnThread = await electionsClient.GetElectionAnomalyOwnThreadAsync(
+            new GetElectionAnomalyOwnThreadRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
+            },
+            headers: CreateSignedElectionQueryHeaders(
+                "GetElectionAnomalyOwnThread",
+                TestIdentities.Alice,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId.ToString(),
+                    ["ActorPublicAddress"] = TestIdentities.Alice.PublicSigningAddress,
+                }));
+
+        grpcOwnThread.Success.Should().BeTrue();
+        grpcOwnThread.HasThread.Should().BeTrue();
+        grpcOwnThread.Thread.Messages.Should().HaveCount(4);
+        grpcOwnThread.Thread.Messages.SelectMany(x => x.RecipientWraps)
+            .Where(x => x.RecipientPublicAddress != TestIdentities.Alice.PublicSigningAddress)
+            .Should()
+            .OnlyContain(x => string.IsNullOrWhiteSpace(x.EncryptedContentKey));
 
         var peerProjection = await queryService.GetElectionAnomalyOwnThreadAsync(
             electionId,
@@ -256,6 +293,39 @@ public sealed class ElectionAnomalyIntegrationTests : IAsyncLifetime
         }
 
         return submitResponse;
+    }
+
+    private static Metadata CreateSignedElectionQueryHeaders(
+        string method,
+        TestIdentity actor,
+        IReadOnlyDictionary<string, object?> request)
+    {
+        var signedAt = DateTimeOffset.UtcNow.ToString("O");
+        var payload = BuildSignedPayload(method, actor.PublicSigningAddress, signedAt, request);
+        return new Metadata
+        {
+            { "x-hush-election-query-signatory", actor.PublicSigningAddress },
+            { "x-hush-election-query-signed-at", signedAt },
+            { "x-hush-election-query-signature", DigitalSignature.SignMessageCompactBase64(payload, actor.PrivateSigningKey) },
+        };
+    }
+
+    private static string BuildSignedPayload(
+        string method,
+        string actorAddress,
+        string signedAt,
+        IReadOnlyDictionary<string, object?> request)
+    {
+        var payload = new SortedDictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["actorAddress"] = actorAddress,
+            ["method"] = method,
+            ["request"] = request.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .ToDictionary(x => x.Key, x => x.Value),
+            ["signedAt"] = signedAt,
+        };
+
+        return JsonSerializer.Serialize(payload);
     }
 
     private static ElectionDraftSpecification CreateDraftSpecification(string title) =>

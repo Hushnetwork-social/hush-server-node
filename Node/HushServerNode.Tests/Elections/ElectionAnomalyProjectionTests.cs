@@ -33,6 +33,31 @@ public class ElectionAnomalyProjectionTests
     }
 
     [Fact]
+    public async Task GetElectionAnomalyOwnThreadAsync_ReturnsCallerUsableWrapMaterialOnly()
+    {
+        var election = CreateElection();
+        var ownThread = CreateThread(election, "owner-address");
+        var ownMessage = CreateMessage(ownThread);
+        var repository = CreateRepository(election, [ownThread]);
+        SetupThreadMessages(repository, ownThread, ownMessage, ownerRecipientAddress: "authority-address");
+        var sut = CreateService(repository.Object);
+
+        var projection = await sut.GetElectionAnomalyOwnThreadAsync(election.ElectionId, "owner-address");
+
+        projection.Should().NotBeNull();
+        var submitterWrap = projection!.Messages[0].RecipientWraps
+            .Single(x => x.RecipientRoleId == ElectionAnomalyRecipientRoleIds.Submitter);
+        submitterWrap.EncryptedContentKey.Should().Be("submitter-encrypted-content-key");
+        submitterWrap.WrapAlgorithm.Should().Be("x25519-aes-gcm");
+
+        var authorityWrap = projection.Messages[0].RecipientWraps
+            .Single(x => x.RecipientRoleId == ElectionAnomalyRecipientRoleIds.ElectionOwner);
+        authorityWrap.RecipientPublicAddress.Should().Be("authority-address");
+        authorityWrap.EncryptedContentKey.Should().BeNull();
+        authorityWrap.WrapAlgorithm.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetElectionAnomalyOwnerTriageAsync_WithOwner_ReturnsAllThreadsWithIdentityMetadata()
     {
         var election = CreateElection();
@@ -206,7 +231,8 @@ public class ElectionAnomalyProjectionTests
     private static void SetupThreadMessages(
         Mock<IElectionsRepository> repository,
         ElectionAnomalyThreadRecord thread,
-        ElectionAnomalyMessageEnvelopeRecord message)
+        ElectionAnomalyMessageEnvelopeRecord message,
+        string ownerRecipientAddress = "owner-address")
     {
         repository.Setup(x => x.GetAnomalyMessageEnvelopesAsync(thread.Id)).ReturnsAsync([message]);
         repository
@@ -231,7 +257,7 @@ public class ElectionAnomalyProjectionTests
                     thread.Id,
                     thread.ElectionId,
                     ElectionAnomalyRecipientRoleIds.ElectionOwner,
-                    "owner-address",
+                    ownerRecipientAddress,
                     "owner-key-fingerprint",
                     "encrypted-content-key",
                     "x25519-aes-gcm",

@@ -195,11 +195,14 @@ public record ElectionAnomalyRecipientWrapProjection(
     string RecipientRoleId,
     string WrapStatusId,
     string? RecipientPublicAddress = null,
-    string? RecipientKeyFingerprint = null);
+    string? RecipientKeyFingerprint = null,
+    string? EncryptedContentKey = null,
+    string? WrapAlgorithm = null);
 
 public record ElectionAnomalyEncryptedMessageProjection(
     Guid MessageId,
     string MessageKindId,
+    DateTime RecordedAtUtc,
     string EncryptedBody,
     string EncryptedBodyHash,
     int PlaintextCharacterCount,

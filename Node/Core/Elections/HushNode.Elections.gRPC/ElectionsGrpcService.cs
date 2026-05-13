@@ -399,6 +399,51 @@ public class ElectionsGrpcService(
         }
     }
 
+    public override async Task<GetElectionAnomalyOwnThreadResponse> GetElectionAnomalyOwnThread(
+        GetElectionAnomalyOwnThreadRequest request,
+        ServerCallContext context)
+    {
+        ValidateSignedQuery(
+            nameof(GetElectionAnomalyOwnThread),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+            },
+            context);
+
+        try
+        {
+            var projection = await _queryApplicationService.GetElectionAnomalyOwnThreadAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress);
+
+            var response = new GetElectionAnomalyOwnThreadResponse
+            {
+                Success = true,
+                ActorPublicAddress = request.ActorPublicAddress,
+                HasThread = projection is not null,
+            };
+
+            if (projection is not null)
+            {
+                response.Thread = projection.ToProto();
+            }
+
+            return response;
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionAnomalyOwnThread));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch election anomaly thread."));
+        }
+    }
+
     public override async Task<GetElectionResultViewResponse> GetElectionResultView(GetElectionResultViewRequest request, ServerCallContext context)
     {
         ValidateSignedQuery(
