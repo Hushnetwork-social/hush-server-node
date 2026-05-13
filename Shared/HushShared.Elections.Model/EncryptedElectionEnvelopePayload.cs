@@ -242,6 +242,85 @@ public record RecordElectionCeremonyShareImportActionPayload(
     string ImportedTrusteeUserAddress,
     string ImportedShareVersion);
 
+public record ElectionAnomalyRecipientWrapPayload(
+    string RecipientRoleId,
+    string RecipientPublicAddress,
+    string RecipientKeyFingerprint,
+    string EncryptedContentKey,
+    string WrapAlgorithm,
+    string WrapStatusId = ElectionAnomalyRecipientWrapStatusIds.Available);
+
+public record ElectionAnomalyMessageEnvelopePayload(
+    Guid MessageId,
+    string MessageKindId,
+    string EncryptedBody,
+    string EncryptedBodyHash,
+    int PlaintextCharacterCount,
+    IReadOnlyList<ElectionAnomalyRecipientWrapPayload> RecipientWraps,
+    string? PlaintextBodyHash = null,
+    string? EncryptionAlgorithm = null);
+
+public record SubmitElectionAnomalyThreadActionPayload(
+    Guid AnomalyThreadId,
+    Guid ActionNonce,
+    string ActorPublicAddress,
+    string CategoryId,
+    ElectionAnomalyMessageEnvelopePayload InitialMessage,
+    string? ActorRoleContextId = null);
+
+public record RequestElectionAnomalyInformationActionPayload(
+    Guid AnomalyThreadId,
+    Guid ClarificationRequestId,
+    Guid ActionNonce,
+    string ActorPublicAddress,
+    ElectionAnomalyMessageEnvelopePayload RequestMessage,
+    int MaxResponseCharacters = ElectionAnomalyLimits.ClarificationBodyMaxCharacters);
+
+public record SubmitElectionAnomalyInformationActionPayload(
+    Guid AnomalyThreadId,
+    Guid ClarificationRequestId,
+    Guid ActionNonce,
+    string ActorPublicAddress,
+    ElectionAnomalyMessageEnvelopePayload ResponseMessage);
+
+public record RecordElectionAnomalyAuthorityResponseActionPayload(
+    Guid AnomalyThreadId,
+    Guid ActionNonce,
+    string ActorPublicAddress,
+    ElectionAnomalyMessageEnvelopePayload AuthorityResponseMessage);
+
+public record ClassifyElectionAnomalyThreadActionPayload(
+    Guid AnomalyThreadId,
+    Guid ActionNonce,
+    string ActorPublicAddress,
+    string? CategoryId = null,
+    string? CaseStateId = null,
+    string? SeverityCandidateId = null,
+    string? GovernedDecisionRef = null);
+
+public record RegisterExternalElectionAnomalyClaimantActionPayload(
+    Guid AnomalyThreadId,
+    Guid ActionNonce,
+    string ActorPublicAddress,
+    string ExternalClaimantReferenceHash,
+    string CategoryId,
+    ElectionAnomalyMessageEnvelopePayload InitialMessage,
+    string? RegistrarRoleContextId = null);
+
+public record RecordElectionAnomalyAttachmentManifestActionPayload(
+    Guid AnomalyThreadId,
+    Guid AttachmentManifestId,
+    Guid ActionNonce,
+    string ActorPublicAddress,
+    string AttachmentKindId,
+    string EncryptedPayloadReference,
+    string EncryptedPayloadHash,
+    string ContentHash,
+    long SizeBytes,
+    string MimeType,
+    string ValidationStatusId,
+    Guid? ClarificationRequestId = null);
+
 public static class EncryptedElectionEnvelopeActionTypes
 {
     public const string CreateDraft = "create_draft";
@@ -276,6 +355,13 @@ public static class EncryptedElectionEnvelopeActionTypes
     public const string CompleteCeremonyTrustee = "complete_ceremony_trustee";
     public const string RecordCeremonyShareExport = "record_ceremony_share_export";
     public const string RecordCeremonyShareImport = "record_ceremony_share_import";
+    public const string SubmitAnomalyThread = "submit_anomaly_thread";
+    public const string RequestAnomalyInformation = "request_anomaly_information";
+    public const string SubmitAnomalyInformation = "submit_anomaly_information";
+    public const string RecordAnomalyAuthorityResponse = "record_anomaly_authority_response";
+    public const string ClassifyAnomalyThread = "classify_anomaly_thread";
+    public const string RegisterExternalAnomalyClaimant = "register_external_anomaly_claimant";
+    public const string RecordAnomalyAttachmentManifest = "record_anomaly_attachment_manifest";
 }
 
 public static class EncryptedElectionEnvelopePayloadHandler

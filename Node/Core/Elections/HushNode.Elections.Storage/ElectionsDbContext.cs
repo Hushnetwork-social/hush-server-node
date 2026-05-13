@@ -57,6 +57,11 @@ public class ElectionsDbContext(
     public DbSet<ElectionTallyExecutorLeaseRecord> ElectionTallyExecutorLeases { get; set; }
     public DbSet<ElectionFinalizationShareRecord> ElectionFinalizationShares { get; set; }
     public DbSet<ElectionFinalizationReleaseEvidenceRecord> ElectionFinalizationReleaseEvidenceRecords { get; set; }
+    public DbSet<ElectionAnomalyThreadRecord> ElectionAnomalyThreads { get; set; }
+    public DbSet<ElectionAnomalyThreadEventRecord> ElectionAnomalyThreadEvents { get; set; }
+    public DbSet<ElectionAnomalyMessageEnvelopeRecord> ElectionAnomalyMessageEnvelopes { get; set; }
+    public DbSet<ElectionAnomalyRecipientWrapRecord> ElectionAnomalyRecipientWraps { get; set; }
+    public DbSet<ElectionAnomalyActionRecord> ElectionAnomalyActions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

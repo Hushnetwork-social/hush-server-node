@@ -49,4 +49,24 @@ public interface IElectionQueryApplicationService
     Task<GetElectionCeremonyActionViewResponse> GetElectionCeremonyActionViewAsync(ElectionId electionId, string actorPublicAddress);
 
     Task<GetElectionsByOwnerResponse> GetElectionsByOwnerAsync(string ownerPublicAddress);
+
+    Task<ElectionAnomalyOwnThreadProjection?> GetElectionAnomalyOwnThreadAsync(
+        ElectionId electionId,
+        string actorPublicAddress);
+
+    Task<IReadOnlyList<ElectionAnomalyOwnerTriageProjection>> GetElectionAnomalyOwnerTriageAsync(
+        ElectionId electionId,
+        string actorPublicAddress);
+
+    Task<ElectionAnomalyTrusteeCountsProjection?> GetElectionAnomalyTrusteeCountsAsync(
+        ElectionId electionId,
+        string actorPublicAddress);
+
+    Task<ElectionAnomalyAuditorRestrictedReviewProjection?> GetElectionAnomalyAuditorRestrictedReviewAsync(
+        ElectionId electionId,
+        string actorPublicAddress);
+
+    Task<ElectionAnomalyReportManifestSeedProjection?> GetElectionAnomalyReportManifestSeedAsync(
+        ElectionId electionId,
+        string actorPublicAddress);
 }

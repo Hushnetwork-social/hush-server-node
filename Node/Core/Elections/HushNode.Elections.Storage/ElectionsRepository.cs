@@ -1403,6 +1403,101 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
     public async Task SaveFinalizationReleaseEvidenceRecordAsync(ElectionFinalizationReleaseEvidenceRecord releaseEvidenceRecord) =>
         await Context.ElectionFinalizationReleaseEvidenceRecords.AddAsync(releaseEvidenceRecord);
 
+    public async Task<ElectionAnomalyThreadRecord?> GetAnomalyThreadAsync(Guid anomalyThreadId) =>
+        await Context.ElectionAnomalyThreads
+            .FirstOrDefaultAsync(x => x.Id == anomalyThreadId);
+
+    public async Task<ElectionAnomalyThreadRecord?> GetAnomalyThreadByPersonScopeAsync(
+        ElectionId electionId,
+        string submitterPersonScopeId) =>
+        await Context.ElectionAnomalyThreads
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.SubmitterPersonScopeId == submitterPersonScopeId);
+
+    public async Task<IReadOnlyList<ElectionAnomalyThreadRecord>> GetAnomalyThreadsAsync(ElectionId electionId) =>
+        await Context.ElectionAnomalyThreads
+            .Where(x => x.ElectionId == electionId)
+            .OrderByDescending(x => x.LastUpdatedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task SaveAnomalyThreadWithInitialEventAsync(
+        ElectionAnomalyThreadRecord thread,
+        ElectionAnomalyThreadEventRecord threadEvent,
+        ElectionAnomalyMessageEnvelopeRecord? messageEnvelope,
+        IReadOnlyCollection<ElectionAnomalyRecipientWrapRecord> recipientWraps)
+    {
+        await Context.ElectionAnomalyThreads.AddAsync(thread);
+        await Context.ElectionAnomalyThreadEvents.AddAsync(threadEvent);
+
+        if (messageEnvelope is not null)
+        {
+            await Context.ElectionAnomalyMessageEnvelopes.AddAsync(messageEnvelope);
+        }
+
+        if (recipientWraps.Count > 0)
+        {
+            await Context.ElectionAnomalyRecipientWraps.AddRangeAsync(recipientWraps);
+        }
+    }
+
+    public async Task UpdateAnomalyThreadAsync(ElectionAnomalyThreadRecord thread)
+    {
+        var existing = await Context.ElectionAnomalyThreads
+            .FirstOrDefaultAsync(x => x.Id == thread.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(thread);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionAnomalyThreadEventRecord>> GetAnomalyThreadEventsAsync(Guid anomalyThreadId) =>
+        await Context.ElectionAnomalyThreadEvents
+            .Where(x => x.AnomalyThreadId == anomalyThreadId)
+            .OrderBy(x => x.Sequence)
+            .ThenBy(x => x.OccurredAt)
+            .ToListAsync();
+
+    public async Task<ElectionAnomalyThreadEventRecord?> GetLatestAnomalyThreadEventAsync(Guid anomalyThreadId) =>
+        await Context.ElectionAnomalyThreadEvents
+            .Where(x => x.AnomalyThreadId == anomalyThreadId)
+            .OrderByDescending(x => x.Sequence)
+            .ThenByDescending(x => x.OccurredAt)
+            .FirstOrDefaultAsync();
+
+    public async Task SaveAnomalyThreadEventAsync(ElectionAnomalyThreadEventRecord threadEvent) =>
+        await Context.ElectionAnomalyThreadEvents.AddAsync(threadEvent);
+
+    public async Task<IReadOnlyList<ElectionAnomalyMessageEnvelopeRecord>> GetAnomalyMessageEnvelopesAsync(Guid anomalyThreadId) =>
+        await Context.ElectionAnomalyMessageEnvelopes
+            .Where(x => x.AnomalyThreadId == anomalyThreadId)
+            .OrderBy(x => x.RecordedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task SaveAnomalyMessageEnvelopeAsync(ElectionAnomalyMessageEnvelopeRecord messageEnvelope) =>
+        await Context.ElectionAnomalyMessageEnvelopes.AddAsync(messageEnvelope);
+
+    public async Task<IReadOnlyList<ElectionAnomalyRecipientWrapRecord>> GetAnomalyRecipientWrapsAsync(Guid anomalyThreadId) =>
+        await Context.ElectionAnomalyRecipientWraps
+            .Where(x => x.AnomalyThreadId == anomalyThreadId)
+            .OrderBy(x => x.RecordedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task SaveAnomalyRecipientWrapsAsync(IReadOnlyCollection<ElectionAnomalyRecipientWrapRecord> recipientWraps)
+    {
+        if (recipientWraps.Count > 0)
+        {
+            await Context.ElectionAnomalyRecipientWraps.AddRangeAsync(recipientWraps);
+        }
+    }
+
+    public async Task SaveAnomalyActionRecordAsync(ElectionAnomalyActionRecord actionRecord) =>
+        await Context.ElectionAnomalyActions.AddAsync(actionRecord);
+
     private IReadOnlyList<ElectionPublicationProofSessionRecord> MergeLocalPublicationProofSessions(
         ElectionId electionId,
         IReadOnlyList<ElectionPublicationProofSessionRecord> persisted)

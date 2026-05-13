@@ -474,4 +474,45 @@ public interface IElectionsRepository : IRepository
     Task<ElectionFinalizationReleaseEvidenceRecord?> GetFinalizationReleaseEvidenceRecordAsync(Guid finalizationSessionId);
 
     Task SaveFinalizationReleaseEvidenceRecordAsync(ElectionFinalizationReleaseEvidenceRecord releaseEvidenceRecord);
+
+    Task<ElectionAnomalyThreadRecord?> GetAnomalyThreadAsync(Guid anomalyThreadId) =>
+        Task.FromResult<ElectionAnomalyThreadRecord?>(null);
+
+    Task<ElectionAnomalyThreadRecord?> GetAnomalyThreadByPersonScopeAsync(
+        ElectionId electionId,
+        string submitterPersonScopeId) =>
+        Task.FromResult<ElectionAnomalyThreadRecord?>(null);
+
+    Task<IReadOnlyList<ElectionAnomalyThreadRecord>> GetAnomalyThreadsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionAnomalyThreadRecord>>(Array.Empty<ElectionAnomalyThreadRecord>());
+
+    Task SaveAnomalyThreadWithInitialEventAsync(
+        ElectionAnomalyThreadRecord thread,
+        ElectionAnomalyThreadEventRecord threadEvent,
+        ElectionAnomalyMessageEnvelopeRecord? messageEnvelope,
+        IReadOnlyCollection<ElectionAnomalyRecipientWrapRecord> recipientWraps) =>
+        Task.CompletedTask;
+
+    Task UpdateAnomalyThreadAsync(ElectionAnomalyThreadRecord thread) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionAnomalyThreadEventRecord>> GetAnomalyThreadEventsAsync(Guid anomalyThreadId) =>
+        Task.FromResult<IReadOnlyList<ElectionAnomalyThreadEventRecord>>(Array.Empty<ElectionAnomalyThreadEventRecord>());
+
+    Task<ElectionAnomalyThreadEventRecord?> GetLatestAnomalyThreadEventAsync(Guid anomalyThreadId) =>
+        Task.FromResult<ElectionAnomalyThreadEventRecord?>(null);
+
+    Task SaveAnomalyThreadEventAsync(ElectionAnomalyThreadEventRecord threadEvent) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionAnomalyMessageEnvelopeRecord>> GetAnomalyMessageEnvelopesAsync(Guid anomalyThreadId) =>
+        Task.FromResult<IReadOnlyList<ElectionAnomalyMessageEnvelopeRecord>>(Array.Empty<ElectionAnomalyMessageEnvelopeRecord>());
+
+    Task SaveAnomalyMessageEnvelopeAsync(ElectionAnomalyMessageEnvelopeRecord messageEnvelope) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionAnomalyRecipientWrapRecord>> GetAnomalyRecipientWrapsAsync(Guid anomalyThreadId) =>
+        Task.FromResult<IReadOnlyList<ElectionAnomalyRecipientWrapRecord>>(Array.Empty<ElectionAnomalyRecipientWrapRecord>());
+
+    Task SaveAnomalyRecipientWrapsAsync(IReadOnlyCollection<ElectionAnomalyRecipientWrapRecord> recipientWraps) =>
+        Task.CompletedTask;
+
+    Task SaveAnomalyActionRecordAsync(ElectionAnomalyActionRecord actionRecord) => Task.CompletedTask;
 }

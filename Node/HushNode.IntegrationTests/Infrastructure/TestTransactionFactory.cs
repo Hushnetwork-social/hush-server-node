@@ -324,6 +324,120 @@ internal static class TestTransactionFactory
         return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
     }
 
+    public static (string Transaction, Guid AnomalyThreadId) SubmitElectionAnomalyThread(
+        TestIdentity actor,
+        TestIdentity owner,
+        ElectionId electionId,
+        string categoryId = ElectionAnomalyCategoryIds.TrusteeContinuityAnomaly,
+        string? actorRoleContextId = null)
+    {
+        var anomalyThreadId = Guid.NewGuid();
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.SubmitAnomalyThread,
+            JsonSerializer.SerializeToElement(new SubmitElectionAnomalyThreadActionPayload(
+                anomalyThreadId,
+                Guid.NewGuid(),
+                actor.PublicSigningAddress,
+                categoryId,
+                CreateAnomalyMessage(
+                    ElectionAnomalyMessageKindIds.InitialSubmission,
+                    actor,
+                    owner,
+                    "integration-initial-anomaly"),
+                actorRoleContextId)));
+
+        return (CreateEncryptedElectionEnvelopeTransaction(actor, electionId, actionEnvelope), anomalyThreadId);
+    }
+
+    public static string SubmitElectionAnomalyThreadWithMismatchedSignatory(
+        TestIdentity declaredActor,
+        TestIdentity signer,
+        TestIdentity owner,
+        ElectionId electionId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.SubmitAnomalyThread,
+            JsonSerializer.SerializeToElement(new SubmitElectionAnomalyThreadActionPayload(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                declaredActor.PublicSigningAddress,
+                ElectionAnomalyCategoryIds.TrusteeContinuityAnomaly,
+                CreateAnomalyMessage(
+                    ElectionAnomalyMessageKindIds.InitialSubmission,
+                    declaredActor,
+                    owner,
+                    "integration-invalid-signatory"))));
+
+        return CreateEncryptedElectionEnvelopeTransaction(signer, electionId, actionEnvelope);
+    }
+
+    public static (string Transaction, Guid ClarificationRequestId) RequestElectionAnomalyInformation(
+        TestIdentity owner,
+        TestIdentity submitter,
+        ElectionId electionId,
+        Guid anomalyThreadId)
+    {
+        var clarificationRequestId = Guid.NewGuid();
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RequestAnomalyInformation,
+            JsonSerializer.SerializeToElement(new RequestElectionAnomalyInformationActionPayload(
+                anomalyThreadId,
+                clarificationRequestId,
+                Guid.NewGuid(),
+                owner.PublicSigningAddress,
+                CreateAnomalyMessage(
+                    ElectionAnomalyMessageKindIds.AuthorityInformationRequest,
+                    submitter,
+                    owner,
+                    "integration-authority-request"))));
+
+        return (CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope), clarificationRequestId);
+    }
+
+    public static string SubmitElectionAnomalyInformation(
+        TestIdentity submitter,
+        TestIdentity owner,
+        ElectionId electionId,
+        Guid anomalyThreadId,
+        Guid clarificationRequestId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.SubmitAnomalyInformation,
+            JsonSerializer.SerializeToElement(new SubmitElectionAnomalyInformationActionPayload(
+                anomalyThreadId,
+                clarificationRequestId,
+                Guid.NewGuid(),
+                submitter.PublicSigningAddress,
+                CreateAnomalyMessage(
+                    ElectionAnomalyMessageKindIds.SubmitterInformationResponse,
+                    submitter,
+                    owner,
+                    "integration-submitter-clarification"))));
+
+        return CreateEncryptedElectionEnvelopeTransaction(submitter, electionId, actionEnvelope);
+    }
+
+    public static string RecordElectionAnomalyAuthorityResponse(
+        TestIdentity owner,
+        TestIdentity submitter,
+        ElectionId electionId,
+        Guid anomalyThreadId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAuthorityResponse,
+            JsonSerializer.SerializeToElement(new RecordElectionAnomalyAuthorityResponseActionPayload(
+                anomalyThreadId,
+                Guid.NewGuid(),
+                owner.PublicSigningAddress,
+                CreateAnomalyMessage(
+                    ElectionAnomalyMessageKindIds.AuthorityResponse,
+                    submitter,
+                    owner,
+                    "integration-authority-response"))));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
     public static string StartElectionCeremony(
         TestIdentity owner,
         ElectionId electionId,
@@ -590,6 +704,34 @@ internal static class TestTransactionFactory
                 return (actionEnvelope.ActionPayload, null);
         }
     }
+
+    private static ElectionAnomalyMessageEnvelopePayload CreateAnomalyMessage(
+        string messageKindId,
+        TestIdentity submitter,
+        TestIdentity owner,
+        string bodyMarker) =>
+        new(
+            Guid.NewGuid(),
+            messageKindId,
+            $"encrypted-body:{bodyMarker}",
+            $"sha256:encrypted-body:{bodyMarker}",
+            bodyMarker.Length,
+            [
+                CreateAnomalyRecipientWrap(ElectionAnomalyRecipientRoleIds.Submitter, submitter),
+                CreateAnomalyRecipientWrap(ElectionAnomalyRecipientRoleIds.ElectionOwner, owner),
+            ],
+            PlaintextBodyHash: $"sha256:plaintext:{bodyMarker}",
+            EncryptionAlgorithm: "x25519-aes-gcm");
+
+    private static ElectionAnomalyRecipientWrapPayload CreateAnomalyRecipientWrap(
+        string recipientRoleId,
+        TestIdentity recipient) =>
+        new(
+            recipientRoleId,
+            recipient.PublicSigningAddress,
+            $"{recipientRoleId}:{recipient.PublicEncryptAddress}:fingerprint",
+            $"encrypted-content-key:{recipientRoleId}:{recipient.PublicSigningAddress}",
+            "x25519-aes-gcm");
 
     /// <summary>
     /// Creates a signed open election transaction.

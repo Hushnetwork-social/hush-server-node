@@ -51,7 +51,8 @@ public record ElectionRecord(
     ElectionContactCodeProviderReadiness ContactCodeProviderReadiness = ElectionContactCodeProviderReadiness.DevOnly,
     string? ControlDomainProfileId = null,
     string? ControlDomainProfileVersion = null,
-    string? ThresholdProfileId = null)
+    string? ThresholdProfileId = null,
+    DateTime? AnomalySubmissionWindowClosesAt = null)
 {
     public byte[]? BallotDefinitionHash { get; init; } = BallotDefinitionHash?.ToArray();
 

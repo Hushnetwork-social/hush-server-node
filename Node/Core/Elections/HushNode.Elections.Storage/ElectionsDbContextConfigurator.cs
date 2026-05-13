@@ -62,6 +62,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionTallyExecutorLease(modelBuilder);
         ConfigureElectionFinalizationShare(modelBuilder);
         ConfigureElectionFinalizationReleaseEvidence(modelBuilder);
+        ConfigureElectionAnomalyRecords(modelBuilder);
     }
 
     private static void ConfigureElectionRecord(ModelBuilder modelBuilder)
@@ -125,6 +126,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.ClosedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.FinalizedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.TallyReadyAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.AnomalySubmissionWindowClosesAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.ClosedProgressStatus).HasConversion<string>().HasColumnType("varchar(40)");
             entity.Property(x => x.OpenArtifactId).HasColumnType("uuid");
             entity.Property(x => x.CloseArtifactId).HasColumnType("uuid");
@@ -1608,6 +1610,158 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
 
             entity.HasIndex(x => x.FinalizationSessionId).IsUnique();
             entity.HasIndex(x => x.ElectionId);
+        });
+    }
+
+    private static void ConfigureElectionAnomalyRecords(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionAnomalyThreadRecord>(entity =>
+        {
+            entity.ToTable("ElectionAnomalyThreadRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.SubmitterPersonScopeId).HasColumnType("varchar(160)");
+            entity.Property(x => x.SubmitterPersonScopeDerivationVersion).HasColumnType("varchar(96)");
+            entity.Property(x => x.SubmitterActorPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.SubmitterRoleContextId).HasColumnType("varchar(64)");
+            entity.Property(x => x.SubmitterRoleEvidenceTypeId).HasColumnType("varchar(96)");
+            entity.Property(x => x.SubmitterRoleEvidenceReference).HasColumnType("text");
+            entity.Property(x => x.LifecycleStateAtSubmission).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.SubmissionWindowClosesAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.CurrentCategoryId).HasColumnType("varchar(96)");
+            entity.Property(x => x.CurrentCaseStateId).HasColumnType("varchar(64)");
+            entity.Property(x => x.SeverityCandidateId).HasColumnType("varchar(64)");
+            entity.Property(x => x.GovernedDecisionRef).HasColumnType("text");
+            entity.Property(x => x.HasOpenClarificationRequest).HasColumnType("boolean");
+            entity.Property(x => x.OpenClarificationRequestId).HasColumnType("uuid");
+            entity.Property(x => x.CreatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+            entity.Property(x => x.CurrentThreadHash).HasColumnType("varchar(128)");
+
+            entity.HasIndex(x => new { x.ElectionId, x.SubmitterPersonScopeId }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.CurrentCategoryId });
+            entity.HasIndex(x => new { x.ElectionId, x.CurrentCaseStateId });
+            entity.HasIndex(x => x.LastUpdatedAt);
+            entity.HasIndex(x => x.SourceTransactionId);
+        });
+
+        modelBuilder.Entity<ElectionAnomalyThreadEventRecord>(entity =>
+        {
+            entity.ToTable("ElectionAnomalyThreadEventRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.AnomalyThreadId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.Sequence).HasColumnType("integer");
+            entity.Property(x => x.EventTypeId).HasColumnType("varchar(96)");
+            entity.Property(x => x.EventPayloadJson).HasColumnType("jsonb");
+            entity.Property(x => x.EventHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.PreviousEventHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.ActionNonce).HasColumnType("uuid");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+            entity.Property(x => x.ActorPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.OccurredAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.AnomalyThreadId, x.Sequence }).IsUnique();
+            entity.HasIndex(x => x.EventHash).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.EventTypeId });
+            entity.HasIndex(x => new { x.SourceTransactionId, x.ActionNonce }).IsUnique();
+        });
+
+        modelBuilder.Entity<ElectionAnomalyMessageEnvelopeRecord>(entity =>
+        {
+            entity.ToTable("ElectionAnomalyMessageEnvelopeRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.AnomalyThreadId).HasColumnType("uuid");
+            entity.Property(x => x.EventId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.MessageKindId).HasColumnType("varchar(96)");
+            entity.Property(x => x.EncryptedBody).HasColumnType("text");
+            entity.Property(x => x.EncryptedBodyHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.PlaintextBodyHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.PlaintextCharacterCount).HasColumnType("integer");
+            entity.Property(x => x.EncryptionAlgorithm).HasColumnType("varchar(96)");
+            entity.Property(x => x.RecordedAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => x.EventId).IsUnique();
+            entity.HasIndex(x => new { x.AnomalyThreadId, x.MessageKindId });
+            entity.HasIndex(x => x.EncryptedBodyHash);
+        });
+
+        modelBuilder.Entity<ElectionAnomalyRecipientWrapRecord>(entity =>
+        {
+            entity.ToTable("ElectionAnomalyRecipientWrapRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.MessageEnvelopeId).HasColumnType("uuid");
+            entity.Property(x => x.AnomalyThreadId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.RecipientRoleId).HasColumnType("varchar(64)");
+            entity.Property(x => x.RecipientPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.RecipientKeyFingerprint).HasColumnType("varchar(256)");
+            entity.Property(x => x.EncryptedContentKey).HasColumnType("text");
+            entity.Property(x => x.WrapAlgorithm).HasColumnType("varchar(96)");
+            entity.Property(x => x.WrapStatusId).HasColumnType("varchar(64)");
+            entity.Property(x => x.RecordedAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.MessageEnvelopeId, x.RecipientRoleId, x.RecipientPublicAddress }).IsUnique();
+            entity.HasIndex(x => new { x.AnomalyThreadId, x.RecipientRoleId });
+            entity.HasIndex(x => new { x.ElectionId, x.WrapStatusId });
+        });
+
+        modelBuilder.Entity<ElectionAnomalyActionRecord>(entity =>
+        {
+            entity.ToTable("ElectionAnomalyActionRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.AnomalyThreadId).HasColumnType("uuid");
+            entity.Property(x => x.ActionNonce).HasColumnType("uuid");
+            entity.Property(x => x.ActionType).HasColumnType("varchar(96)");
+            entity.Property(x => x.ActionOutcomeId).HasColumnType("varchar(64)");
+            entity.Property(x => x.ActorPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.ValidationCode).HasColumnType("varchar(128)");
+            entity.Property(x => x.DiagnosticReference).HasColumnType("text");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+            entity.Property(x => x.RecordedAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => x.SourceTransactionId).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.ActionOutcomeId });
+            entity.HasIndex(x => new { x.AnomalyThreadId, x.RecordedAt });
         });
     }
 
