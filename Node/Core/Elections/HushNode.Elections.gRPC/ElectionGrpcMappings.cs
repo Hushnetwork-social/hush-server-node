@@ -429,11 +429,18 @@ internal static partial class ElectionGrpcMappings
             view.HasBallotDefinitionSealedAt = true;
         }
 
+        if (election.AnomalySubmissionWindowClosesAt.HasValue)
+        {
+            view.AnomalySubmissionWindowClosesAt = ToTimestamp(election.AnomalySubmissionWindowClosesAt.Value);
+            view.HasAnomalySubmissionWindowClosesAt = true;
+        }
+
         return view;
     }
 
-    public static ElectionSummary ToSummaryProto(this ElectionRecord election) =>
-        new()
+    public static ElectionSummary ToSummaryProto(this ElectionRecord election)
+    {
+        var summary = new ElectionSummary
         {
             ElectionId = election.ElectionId.ToString(),
             Title = election.Title,
@@ -444,6 +451,15 @@ internal static partial class ElectionGrpcMappings
             CurrentDraftRevision = election.CurrentDraftRevision,
             LastUpdatedAt = ToTimestamp(election.LastUpdatedAt),
         };
+
+        if (election.AnomalySubmissionWindowClosesAt.HasValue)
+        {
+            summary.AnomalySubmissionWindowClosesAt = ToTimestamp(election.AnomalySubmissionWindowClosesAt.Value);
+            summary.HasAnomalySubmissionWindowClosesAt = true;
+        }
+
+        return summary;
+    }
 
     public static ElectionDraftSnapshot ToProto(this ElectionDraftSnapshotRecord snapshot)
     {

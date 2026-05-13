@@ -1188,6 +1188,136 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task GetElectionAnomalyOwnThread_WithoutSignedHeaders_RejectsQuery()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var electionId = ElectionId.NewElectionId;
+
+        var act = async () => await sut.GetElectionAnomalyOwnThread(new GetElectionAnomalyOwnThreadRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.Unauthenticated);
+        exception.Which.Status.Detail.Should().Contain("requires signed actor-bound headers");
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyOwnThread_WithNoThread_ReturnsSuccessfulEmptyProjection()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionAnomalyOwnThreadAsync(electionId, TestActorPublicAddress))
+            .ReturnsAsync((ElectionAnomalyOwnThreadProjection?)null);
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionAnomalyOwnThread(new GetElectionAnomalyOwnThreadRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionAnomalyOwnThread),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+            }));
+
+        response.Success.Should().BeTrue();
+        response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
+        response.HasThread.Should().BeFalse();
+        response.Thread.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyOwnThread_WithValidRequest_ReturnsOwnThreadPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var threadId = Guid.NewGuid();
+        var messageId = Guid.NewGuid();
+        var clarificationRequestId = Guid.NewGuid();
+        var recordedAt = DateTime.UtcNow.AddMinutes(-3);
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionAnomalyOwnThreadAsync(electionId, TestActorPublicAddress))
+            .ReturnsAsync(new ElectionAnomalyOwnThreadProjection(
+                threadId,
+                electionId,
+                ElectionAnomalyCategoryIds.BallotCastingOrReceiptAnomaly,
+                ElectionAnomalyCaseStateIds.AuthorityRequestedInformation,
+                "sha256:thread",
+                SeverityCandidateId: null,
+                GovernedDecisionRef: null,
+                HasOpenClarificationRequest: true,
+                DateTime.UtcNow.AddMinutes(-5),
+                DateTime.UtcNow.AddMinutes(-1),
+                [
+                    new ElectionAnomalyEncryptedMessageProjection(
+                        messageId,
+                        ElectionAnomalyMessageKindIds.AuthorityInformationRequest,
+                        recordedAt,
+                        "encrypted-body",
+                        "sha256:body",
+                        PlaintextCharacterCount: 22,
+                        [
+                            new ElectionAnomalyRecipientWrapProjection(
+                                ElectionAnomalyRecipientRoleIds.Submitter,
+                                ElectionAnomalyRecipientWrapStatusIds.Available,
+                                TestActorPublicAddress,
+                                "submitter-key",
+                                "submitter-encrypted-content-key",
+                                "x25519-aes-gcm"),
+                            new ElectionAnomalyRecipientWrapProjection(
+                                ElectionAnomalyRecipientRoleIds.ElectionOwner,
+                                ElectionAnomalyRecipientWrapStatusIds.Available,
+                                "owner-address",
+                                "owner-key"),
+                        ],
+                        clarificationRequestId),
+                ]));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionAnomalyOwnThread(new GetElectionAnomalyOwnThreadRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionAnomalyOwnThread),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+            }));
+
+        response.Success.Should().BeTrue();
+        response.HasThread.Should().BeTrue();
+        response.Thread.AnomalyThreadId.Should().Be(threadId.ToString());
+        response.Thread.CategoryId.Should().Be(ElectionAnomalyCategoryIds.BallotCastingOrReceiptAnomaly);
+        response.Thread.HasOpenClarificationRequest.Should().BeTrue();
+        response.Thread.Messages.Should().ContainSingle();
+        response.Thread.Messages[0].MessageId.Should().Be(messageId.ToString());
+        response.Thread.Messages[0].HasClarificationRequest.Should().BeTrue();
+        response.Thread.Messages[0].ClarificationRequestId.Should().Be(clarificationRequestId.ToString());
+        response.Thread.Messages[0].RecipientWraps.Should().HaveCount(2);
+        response.Thread.Messages[0].RecipientWraps
+            .Single(x => x.RecipientRoleId == ElectionAnomalyRecipientRoleIds.Submitter)
+            .EncryptedContentKey.Should().Be("submitter-encrypted-content-key");
+        response.Thread.Messages[0].RecipientWraps
+            .Single(x => x.RecipientRoleId == ElectionAnomalyRecipientRoleIds.ElectionOwner)
+            .EncryptedContentKey.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task GetElectionResultView_WithValidRequest_ReturnsResultPayload()
     {
         var mocker = new AutoMocker();

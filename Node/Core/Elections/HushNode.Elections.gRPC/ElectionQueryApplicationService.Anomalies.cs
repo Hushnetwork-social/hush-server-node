@@ -25,7 +25,7 @@ public partial class ElectionQueryApplicationService
             return null;
         }
 
-        var messages = await BuildEncryptedMessageProjectionsAsync(repository, ownThread);
+        var messages = await BuildEncryptedMessageProjectionsAsync(repository, ownThread, actorPublicAddress);
         return new ElectionAnomalyOwnThreadProjection(
             ownThread.Id,
             ownThread.ElectionId,
@@ -212,7 +212,8 @@ public partial class ElectionQueryApplicationService
 
     private static async Task<IReadOnlyList<ElectionAnomalyEncryptedMessageProjection>> BuildEncryptedMessageProjectionsAsync(
         IElectionsRepository repository,
-        ElectionAnomalyThreadRecord thread)
+        ElectionAnomalyThreadRecord thread,
+        string? callerPublicAddressForWrapMaterial = null)
     {
         var messages = await repository.GetAnomalyMessageEnvelopesAsync(thread.Id);
         var wraps = await repository.GetAnomalyRecipientWrapsAsync(thread.Id);
@@ -231,20 +232,38 @@ public partial class ElectionQueryApplicationService
                 return new ElectionAnomalyEncryptedMessageProjection(
                     message.Id,
                     message.MessageKindId,
+                    message.RecordedAt,
                     message.EncryptedBody,
                     message.EncryptedBodyHash,
                     message.PlaintextCharacterCount,
                     (messageWraps ?? Array.Empty<ElectionAnomalyRecipientWrapRecord>())
-                        .Select(wrap => new ElectionAnomalyRecipientWrapProjection(
-                            wrap.RecipientRoleId,
-                            wrap.WrapStatusId,
-                            wrap.RecipientPublicAddress,
-                            wrap.RecipientKeyFingerprint))
+                        .Select(wrap =>
+                        {
+                            var canExposeWrapMaterial = CanExposeRecipientWrapMaterial(
+                                wrap,
+                                callerPublicAddressForWrapMaterial);
+                            return new ElectionAnomalyRecipientWrapProjection(
+                                wrap.RecipientRoleId,
+                                wrap.WrapStatusId,
+                                wrap.RecipientPublicAddress,
+                                wrap.RecipientKeyFingerprint,
+                                canExposeWrapMaterial ? wrap.EncryptedContentKey : null,
+                                canExposeWrapMaterial ? wrap.WrapAlgorithm : null);
+                        })
                         .ToArray(),
                     clarificationRequestId);
             })
             .ToArray();
     }
+
+    private static bool CanExposeRecipientWrapMaterial(
+        ElectionAnomalyRecipientWrapRecord wrap,
+        string? callerPublicAddressForWrapMaterial) =>
+        !string.IsNullOrWhiteSpace(callerPublicAddressForWrapMaterial) &&
+        string.Equals(
+            wrap.RecipientPublicAddress,
+            callerPublicAddressForWrapMaterial,
+            StringComparison.Ordinal);
 
     private static async Task<IReadOnlyList<ElectionAnomalyRestrictedMessageProjection>> BuildRestrictedMessageProjectionsAsync(
         IElectionsRepository repository,
