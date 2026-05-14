@@ -115,6 +115,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleRegisterExternalAnomalyClaimantAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest =>
                 await HandleRecordAnomalyAttachmentManifestAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAuditorRecipientRewrap =>
+                await HandleRecordAnomalyAuditorRecipientRewrapAsync(decryptedEnvelope),
             _ => ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.NotSupported,
                 $"Unsupported encrypted election action type {decryptedEnvelope.ActionType}."),
@@ -1340,7 +1342,12 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                     : classifyAction.CaseStateId,
                 SeverityCandidateId = string.IsNullOrWhiteSpace(classifyAction.SeverityCandidateId)
                     ? thread.SeverityCandidateId
-                    : classifyAction.SeverityCandidateId,
+                    : string.Equals(
+                        classifyAction.SeverityCandidateId,
+                        ElectionAnomalySeverityCandidateIds.NotAssessed,
+                        StringComparison.Ordinal)
+                        ? null
+                        : classifyAction.SeverityCandidateId,
                 GovernedDecisionRef = string.IsNullOrWhiteSpace(classifyAction.GovernedDecisionRef)
                     ? thread.GovernedDecisionRef
                     : classifyAction.GovernedDecisionRef,
@@ -1378,6 +1385,108 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             }),
             message: null,
             thread => thread);
+    }
+
+    private async Task<ElectionCommandResult> HandleRecordAnomalyAuditorRecipientRewrapAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var rewrapAction = decryptedEnvelope.DeserializeAction<RecordElectionAnomalyAuditorRecipientRewrapActionPayload>();
+        if (rewrapAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Record anomaly auditor recipient rewrap action payload could not be deserialized.");
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId);
+        if (election is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Election was not found for anomaly auditor recipient rewrap indexing.");
+        }
+
+        var thread = await repository.GetAnomalyThreadAsync(rewrapAction.AnomalyThreadId);
+        var message = thread is null || thread.ElectionId != election.ElectionId
+            ? null
+            : (await repository.GetAnomalyMessageEnvelopesAsync(thread.Id))
+                .FirstOrDefault(x => x.Id == rewrapAction.MessageId);
+        if (thread is null || message is null)
+        {
+            await SaveAnomalyActionRecordAsync(
+                repository,
+                decryptedEnvelope,
+                rewrapAction.ActorPublicAddress,
+                rewrapAction.ActionNonce,
+                rewrapAction.AnomalyThreadId,
+                ElectionAnomalyActionOutcomeIds.IgnoredDuplicate,
+                ElectionAnomalyValidationCodes.RecipientWrapMissing);
+            await unitOfWork.CommitAsync();
+            return ElectionCommandResult.Success(election);
+        }
+
+        var recordedAt = NormalizeUtc(decryptedEnvelope.Transaction.TransactionTimeStamp.Value);
+        var existingWrap = (await repository.GetAnomalyRecipientWrapsAsync(thread.Id))
+            .Where(wrap =>
+                wrap.MessageEnvelopeId == message.Id &&
+                string.Equals(
+                    wrap.RecipientRoleId,
+                    ElectionAnomalyRecipientRoleIds.DesignatedAuditor,
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    wrap.RecipientPublicAddress,
+                    rewrapAction.AuditorPublicAddress,
+                    StringComparison.Ordinal))
+            .OrderByDescending(wrap => string.Equals(
+                wrap.WrapStatusId,
+                ElectionAnomalyRecipientWrapStatusIds.PendingBackfill,
+                StringComparison.Ordinal))
+            .ThenByDescending(wrap => wrap.RecordedAt)
+            .FirstOrDefault();
+        var availableWrap = existingWrap is null
+            ? new ElectionAnomalyRecipientWrapRecord(
+                Guid.NewGuid(),
+                message.Id,
+                thread.Id,
+                election.ElectionId,
+                ElectionAnomalyRecipientRoleIds.DesignatedAuditor,
+                rewrapAction.AuditorPublicAddress,
+                rewrapAction.RecipientKeyFingerprint,
+                rewrapAction.EncryptedContentKey,
+                rewrapAction.WrapAlgorithm,
+                ElectionAnomalyRecipientWrapStatusIds.Available,
+                recordedAt)
+            : existingWrap with
+            {
+                RecipientKeyFingerprint = rewrapAction.RecipientKeyFingerprint,
+                EncryptedContentKey = rewrapAction.EncryptedContentKey,
+                WrapAlgorithm = rewrapAction.WrapAlgorithm,
+                WrapStatusId = ElectionAnomalyRecipientWrapStatusIds.Available,
+                RecordedAt = recordedAt,
+            };
+
+        if (existingWrap is null)
+        {
+            await repository.SaveAnomalyRecipientWrapsAsync([availableWrap]);
+        }
+        else
+        {
+            await repository.UpdateAnomalyRecipientWrapAsync(availableWrap);
+        }
+
+        await SaveAnomalyActionRecordAsync(
+            repository,
+            decryptedEnvelope,
+            rewrapAction.ActorPublicAddress,
+            rewrapAction.ActionNonce,
+            thread.Id,
+            ElectionAnomalyActionOutcomeIds.Accepted,
+            validationCode: null);
+        await unitOfWork.CommitAsync();
+
+        return ElectionCommandResult.Success(election);
     }
 
     private async Task<ElectionCommandResult> AppendAnomalyEventAsync(

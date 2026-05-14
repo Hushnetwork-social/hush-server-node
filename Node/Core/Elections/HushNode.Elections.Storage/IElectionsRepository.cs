@@ -514,5 +514,8 @@ public interface IElectionsRepository : IRepository
     Task SaveAnomalyRecipientWrapsAsync(IReadOnlyCollection<ElectionAnomalyRecipientWrapRecord> recipientWraps) =>
         Task.CompletedTask;
 
+    Task UpdateAnomalyRecipientWrapAsync(ElectionAnomalyRecipientWrapRecord recipientWrap) =>
+        Task.CompletedTask;
+
     Task SaveAnomalyActionRecordAsync(ElectionAnomalyActionRecord actionRecord) => Task.CompletedTask;
 }

@@ -324,6 +324,28 @@ internal static class TestTransactionFactory
         return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
     }
 
+    public static string RecordElectionAnomalyAuditorRecipientRewrap(
+        TestIdentity owner,
+        TestIdentity auditor,
+        ElectionId electionId,
+        Guid anomalyThreadId,
+        Guid messageId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAuditorRecipientRewrap,
+            JsonSerializer.SerializeToElement(new RecordElectionAnomalyAuditorRecipientRewrapActionPayload(
+                anomalyThreadId,
+                messageId,
+                Guid.NewGuid(),
+                owner.PublicSigningAddress,
+                auditor.PublicSigningAddress,
+                $"{ElectionAnomalyRecipientRoleIds.DesignatedAuditor}:{auditor.PublicEncryptAddress}:fingerprint",
+                $"encrypted-content-key:{ElectionAnomalyRecipientRoleIds.DesignatedAuditor}:{auditor.PublicSigningAddress}",
+                "x25519-aes-gcm")));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
     public static (string Transaction, Guid AnomalyThreadId) SubmitElectionAnomalyThread(
         TestIdentity actor,
         TestIdentity owner,
@@ -436,6 +458,30 @@ internal static class TestTransactionFactory
                     "integration-authority-response"))));
 
         return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    public static (string Transaction, Guid AnomalyThreadId) RegisterExternalElectionAnomalyClaimant(
+        TestIdentity owner,
+        ElectionId electionId,
+        string externalClaimantReferenceHash)
+    {
+        var anomalyThreadId = Guid.NewGuid();
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RegisterExternalAnomalyClaimant,
+            JsonSerializer.SerializeToElement(new RegisterExternalElectionAnomalyClaimantActionPayload(
+                anomalyThreadId,
+                Guid.NewGuid(),
+                owner.PublicSigningAddress,
+                externalClaimantReferenceHash,
+                ElectionAnomalyCategoryIds.ExternalObjectionOrComplaint,
+                CreateAnomalyMessage(
+                    ElectionAnomalyMessageKindIds.InitialSubmission,
+                    owner,
+                    owner,
+                    "integration-external-claimant"),
+                ElectionAnomalyActorRoleContextIds.ExternalClaimantRegistrar)));
+
+        return (CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope), anomalyThreadId);
     }
 
     public static string StartElectionCeremony(

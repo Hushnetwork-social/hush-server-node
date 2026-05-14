@@ -1318,6 +1318,439 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task GetElectionAnomalyTrusteeCounts_WithoutSignedHeaders_RejectsQuery()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var electionId = ElectionId.NewElectionId;
+
+        var act = async () => await sut.GetElectionAnomalyTrusteeCounts(new GetElectionAnomalyTrusteeCountsRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.Unauthenticated);
+        exception.Which.Status.Detail.Should().Contain("requires signed actor-bound headers");
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyTrusteeCounts_WithUnavailableProjection_ReturnsDeniedPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionAnomalyTrusteeCountsAsync(electionId, TestActorPublicAddress))
+            .ReturnsAsync((ElectionAnomalyTrusteeCountsProjection?)null);
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionAnomalyTrusteeCounts(new GetElectionAnomalyTrusteeCountsRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionAnomalyTrusteeCounts),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+            }));
+
+        response.Success.Should().BeFalse();
+        response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
+        response.HasCounts.Should().BeFalse();
+        response.ErrorMessage.Should().Contain("unavailable");
+        response.Counts.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyTrusteeCounts_WithValidRequest_ReturnsBodyFreeCounts()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionAnomalyTrusteeCountsAsync(electionId, TestActorPublicAddress))
+            .ReturnsAsync(new ElectionAnomalyTrusteeCountsProjection(
+                electionId,
+                TotalThreadCount: 2,
+                CategoryCounts:
+                [
+                    new ElectionAnomalyCategoryCountProjection(
+                        ElectionAnomalyCategoryIds.SecurityOrIntegrityConcern,
+                        Count: 1),
+                    new ElectionAnomalyCategoryCountProjection(
+                        ElectionAnomalyCategoryIds.TrusteeContinuityAnomaly,
+                        Count: 1),
+                ],
+                CaseStateCounts:
+                [
+                    new ElectionAnomalyCaseStateCountProjection(
+                        ElectionAnomalyCaseStateIds.Submitted,
+                        Count: 1),
+                    new ElectionAnomalyCaseStateCountProjection(
+                        ElectionAnomalyCaseStateIds.AuthorityRequestedInformation,
+                        Count: 1),
+                ],
+                ContinuitySummary: new ElectionAnomalyTrusteeContinuitySummaryProjection(
+                    TrusteeContinuityThreadCount: 1,
+                    OpenContinuityThreadCount: 1,
+                    AwaitingInformationContinuityThreadCount: 1,
+                    ClosedContinuityThreadCount: 0,
+                    GovernedDecisionLinkedCount: 0,
+                    HasContinuityIssue: true)));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionAnomalyTrusteeCounts(new GetElectionAnomalyTrusteeCountsRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+        }, CreateSignedServerCallContext(
+            nameof(ElectionsGrpcService.GetElectionAnomalyTrusteeCounts),
+            TestActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = electionId.ToString(),
+                ["ActorPublicAddress"] = TestActorPublicAddress,
+            }));
+
+        response.Success.Should().BeTrue();
+        response.HasCounts.Should().BeTrue();
+        response.Counts.ElectionId.Should().Be(electionId.ToString());
+        response.Counts.TotalThreadCount.Should().Be(2);
+        response.Counts.CategoryCounts.Select(x => x.CategoryId)
+            .Should()
+            .Contain([ElectionAnomalyCategoryIds.SecurityOrIntegrityConcern, ElectionAnomalyCategoryIds.TrusteeContinuityAnomaly]);
+        response.Counts.ContinuitySummary.HasContinuityIssue.Should().BeTrue();
+        response.Counts.ContinuitySummary.AwaitingInformationContinuityThreadCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyOwnerTriage_WithoutSignedHeaders_RejectsQuery()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var electionId = ElectionId.NewElectionId;
+
+        var act = async () => await sut.GetElectionAnomalyOwnerTriage(
+            new GetElectionAnomalyOwnerTriageRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+            },
+            CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.Unauthenticated);
+        exception.Which.Status.Detail.Should().Contain("requires signed actor-bound headers");
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyOwnerTriage_WithUnavailableProjection_ReturnsDeniedPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionAnomalyOwnerTriageAsync(electionId, TestActorPublicAddress))
+            .ReturnsAsync((ElectionAnomalyOwnerTriageProjection?)null);
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionAnomalyOwnerTriage(
+            new GetElectionAnomalyOwnerTriageRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+            },
+            CreateSignedServerCallContext(
+                nameof(ElectionsGrpcService.GetElectionAnomalyOwnerTriage),
+                TestActorPublicAddress,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId.ToString(),
+                    ["ActorPublicAddress"] = TestActorPublicAddress,
+                }));
+
+        response.Success.Should().BeFalse();
+        response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
+        response.HasTriage.Should().BeFalse();
+        response.ErrorMessage.Should().Contain("unavailable");
+        response.Triage.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyOwnerTriage_WithValidRequest_ReturnsIdentityVisibleCallerWrap()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var threadId = Guid.NewGuid();
+        var messageId = Guid.NewGuid();
+        var recordedAt = DateTime.UtcNow.AddMinutes(-2);
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionAnomalyOwnerTriageAsync(electionId, TestActorPublicAddress))
+            .ReturnsAsync(new ElectionAnomalyOwnerTriageProjection(
+                electionId,
+                TotalThreadCount: 1,
+                OpenThreadCount: 1,
+                AwaitingInformationThreadCount: 1,
+                ResponsePresentThreadCount: 0,
+                ExternalClaimantThreadCount: 0,
+                DecryptableMessageCount: 1,
+                PendingRewrapMessageCount: 1,
+                MissingOwnerWrapMessageCount: 0,
+                AttachmentManifestCount: 0,
+                GovernedContinuityHandoffStatusId: "governed_path_unavailable",
+                CategoryCounts:
+                [
+                    new ElectionAnomalyCategoryCountProjection(
+                        ElectionAnomalyCategoryIds.TrusteeContinuityAnomaly,
+                        Count: 1),
+                ],
+                CaseStateCounts:
+                [
+                    new ElectionAnomalyCaseStateCountProjection(
+                        ElectionAnomalyCaseStateIds.AuthorityRequestedInformation,
+                        Count: 1),
+                ],
+                ContinuitySummary: new ElectionAnomalyTrusteeContinuitySummaryProjection(
+                    TrusteeContinuityThreadCount: 1,
+                    OpenContinuityThreadCount: 1,
+                    AwaitingInformationContinuityThreadCount: 1,
+                    ClosedContinuityThreadCount: 0,
+                    GovernedDecisionLinkedCount: 0,
+                    HasContinuityIssue: true),
+                Threads:
+                [
+                    new ElectionAnomalyOwnerTriageThreadProjection(
+                        threadId,
+                        electionId,
+                        ElectionAnomalyCategoryIds.TrusteeContinuityAnomaly,
+                        ElectionAnomalyCaseStateIds.AuthorityRequestedInformation,
+                        "sha256:thread",
+                        ElectionAnomalySeverityCandidateIds.RequiresAuthorityReview,
+                        GovernedDecisionRef: null,
+                        SubmitterActorPublicAddress: "submitter-address",
+                        SubmitterRoleContextId: ElectionAnomalyActorRoleContextIds.Trustee,
+                        LifecycleStateAtSubmission: ElectionLifecycleState.Draft,
+                        HasOpenClarificationRequest: true,
+                        OpenClarificationRequestId: Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                        CreatedAtUtc: DateTime.UtcNow.AddMinutes(-10),
+                        UpdatedAtUtc: DateTime.UtcNow.AddMinutes(-1),
+                        Messages:
+                        [
+                            new ElectionAnomalyOwnerMessageProjection(
+                                messageId,
+                                ElectionAnomalyMessageKindIds.InitialSubmission,
+                                recordedAt,
+                                "encrypted-body",
+                                "sha256:body",
+                                PlaintextCharacterCount: 31,
+                                [
+                                    new ElectionAnomalyRestrictedRecipientWrapProjection(
+                                        ElectionAnomalyRecipientRoleIds.Submitter,
+                                        ElectionAnomalyRecipientWrapStatusIds.Available),
+                                    new ElectionAnomalyRestrictedRecipientWrapProjection(
+                                        ElectionAnomalyRecipientRoleIds.DesignatedAuditor,
+                                        ElectionAnomalyRecipientWrapStatusIds.PendingBackfill),
+                                ],
+                                new ElectionAnomalyOwnerCallerWrapProjection(
+                                    ElectionAnomalyRecipientWrapStatusIds.Available,
+                                    "owner-key-fingerprint",
+                                    "owner-encrypted-content-key",
+                                    "x25519-aes-gcm")),
+                        ]),
+                ]));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionAnomalyOwnerTriage(
+            new GetElectionAnomalyOwnerTriageRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+            },
+            CreateSignedServerCallContext(
+                nameof(ElectionsGrpcService.GetElectionAnomalyOwnerTriage),
+                TestActorPublicAddress,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId.ToString(),
+                    ["ActorPublicAddress"] = TestActorPublicAddress,
+                }));
+
+        response.Success.Should().BeTrue();
+        response.HasTriage.Should().BeTrue();
+        response.Triage.ElectionId.Should().Be(electionId.ToString());
+        response.Triage.TotalThreadCount.Should().Be(1);
+        response.Triage.PendingRewrapMessageCount.Should().Be(1);
+        response.Triage.GovernedContinuityHandoffStatusId.Should().Be("governed_path_unavailable");
+        response.Triage.Threads.Should().ContainSingle();
+        response.Triage.Threads[0].SubmitterActorPublicAddress.Should().Be("submitter-address");
+        response.Triage.Threads[0].SubmitterRoleContextId.Should().Be(ElectionAnomalyActorRoleContextIds.Trustee);
+        response.Triage.Threads[0].HasOpenClarificationRequestId.Should().BeTrue();
+        response.Triage.Threads[0].Messages[0].HasCallerOwnerWrap.Should().BeTrue();
+        response.Triage.Threads[0].Messages[0].CallerOwnerWrap.EncryptedContentKey
+            .Should()
+            .Be("owner-encrypted-content-key");
+        typeof(ElectionAnomalyOwnerTriageThreadView).GetProperties()
+            .Should()
+            .NotContain(property => property.Name.Contains("PersonScope", StringComparison.OrdinalIgnoreCase));
+        typeof(ElectionAnomalyOwnerCallerWrapView).GetProperties()
+            .Should()
+            .NotContain(property => property.Name.Contains("PublicAddress", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyAuditorRestrictedReview_WithoutSignedHeaders_RejectsQuery()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var electionId = ElectionId.NewElectionId;
+
+        var act = async () => await sut.GetElectionAnomalyAuditorRestrictedReview(
+            new GetElectionAnomalyAuditorRestrictedReviewRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+            },
+            CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.Unauthenticated);
+        exception.Which.Status.Detail.Should().Contain("requires signed actor-bound headers");
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyAuditorRestrictedReview_WithUnavailableProjection_ReturnsDeniedPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionAnomalyAuditorRestrictedReviewAsync(electionId, TestActorPublicAddress))
+            .ReturnsAsync((ElectionAnomalyAuditorRestrictedReviewProjection?)null);
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionAnomalyAuditorRestrictedReview(
+            new GetElectionAnomalyAuditorRestrictedReviewRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+            },
+            CreateSignedServerCallContext(
+                nameof(ElectionsGrpcService.GetElectionAnomalyAuditorRestrictedReview),
+                TestActorPublicAddress,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId.ToString(),
+                    ["ActorPublicAddress"] = TestActorPublicAddress,
+                }));
+
+        response.Success.Should().BeFalse();
+        response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
+        response.HasReview.Should().BeFalse();
+        response.ErrorMessage.Should().Contain("unavailable");
+        response.Review.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyAuditorRestrictedReview_WithValidRequest_ReturnsIdentitySafeCallerWrap()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var threadId = Guid.NewGuid();
+        var messageId = Guid.NewGuid();
+        var recordedAt = DateTime.UtcNow.AddMinutes(-2);
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionAnomalyAuditorRestrictedReviewAsync(electionId, TestActorPublicAddress))
+            .ReturnsAsync(new ElectionAnomalyAuditorRestrictedReviewProjection(
+                electionId,
+                [
+                    new ElectionAnomalyAuditorRestrictedThreadProjection(
+                        threadId,
+                        electionId,
+                        ElectionAnomalyCategoryIds.SecurityOrIntegrityConcern,
+                        ElectionAnomalyCaseStateIds.UnderReview,
+                        "sha256:thread",
+                        SeverityCandidateId: null,
+                        GovernedDecisionRef: "proposal-1",
+                        HasOpenClarificationRequest: false,
+                        DateTime.UtcNow.AddMinutes(-10),
+                        DateTime.UtcNow.AddMinutes(-1),
+                        [
+                            new ElectionAnomalyRestrictedMessageProjection(
+                                messageId,
+                                ElectionAnomalyMessageKindIds.InitialSubmission,
+                                recordedAt,
+                                "encrypted-body",
+                                "sha256:body",
+                                PlaintextCharacterCount: 31,
+                                [
+                                    new ElectionAnomalyRestrictedRecipientWrapProjection(
+                                        ElectionAnomalyRecipientRoleIds.Submitter,
+                                        ElectionAnomalyRecipientWrapStatusIds.Available),
+                                    new ElectionAnomalyRestrictedRecipientWrapProjection(
+                                        ElectionAnomalyRecipientRoleIds.DesignatedAuditor,
+                                        ElectionAnomalyRecipientWrapStatusIds.Available),
+                                ],
+                                new ElectionAnomalyAuditorCallerWrapProjection(
+                                    ElectionAnomalyRecipientWrapStatusIds.Available,
+                                    "auditor-key-fingerprint",
+                                    "auditor-encrypted-content-key",
+                                    "x25519-aes-gcm")),
+                        ]),
+                ]));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionAnomalyAuditorRestrictedReview(
+            new GetElectionAnomalyAuditorRestrictedReviewRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+            },
+            CreateSignedServerCallContext(
+                nameof(ElectionsGrpcService.GetElectionAnomalyAuditorRestrictedReview),
+                TestActorPublicAddress,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId.ToString(),
+                    ["ActorPublicAddress"] = TestActorPublicAddress,
+                }));
+
+        response.Success.Should().BeTrue();
+        response.HasReview.Should().BeTrue();
+        response.Review.ElectionId.Should().Be(electionId.ToString());
+        response.Review.TotalThreadCount.Should().Be(1);
+        response.Review.DecryptableMessageCount.Should().Be(1);
+        response.Review.PendingRewrapMessageCount.Should().Be(0);
+        response.Review.MissingWrapMessageCount.Should().Be(0);
+        response.Review.Threads.Should().ContainSingle();
+        response.Review.Threads[0].Messages.Should().ContainSingle();
+        response.Review.Threads[0].Messages[0].MessageId.Should().Be(messageId.ToString());
+        response.Review.Threads[0].Messages[0].RecipientStatuses.Should().HaveCount(2);
+        response.Review.Threads[0].Messages[0].HasCallerAuditorWrap.Should().BeTrue();
+        response.Review.Threads[0].Messages[0].CallerAuditorWrap.EncryptedContentKey
+            .Should()
+            .Be("auditor-encrypted-content-key");
+        typeof(ElectionAnomalyRestrictedRecipientStatusView).GetProperties()
+            .Should()
+            .NotContain(property => property.Name.Contains("PublicAddress", StringComparison.OrdinalIgnoreCase));
+        typeof(ElectionAnomalyAuditorCallerWrapView).GetProperties()
+            .Should()
+            .NotContain(property => property.Name.Contains("PublicAddress", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task GetElectionResultView_WithValidRequest_ReturnsResultPayload()
     {
         var mocker = new AutoMocker();

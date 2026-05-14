@@ -54,7 +54,7 @@ public interface IElectionQueryApplicationService
         ElectionId electionId,
         string actorPublicAddress);
 
-    Task<IReadOnlyList<ElectionAnomalyOwnerTriageProjection>> GetElectionAnomalyOwnerTriageAsync(
+    Task<ElectionAnomalyOwnerTriageProjection?> GetElectionAnomalyOwnerTriageAsync(
         ElectionId electionId,
         string actorPublicAddress);
 

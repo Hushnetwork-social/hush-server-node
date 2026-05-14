@@ -1495,6 +1495,17 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         }
     }
 
+    public async Task UpdateAnomalyRecipientWrapAsync(ElectionAnomalyRecipientWrapRecord recipientWrap)
+    {
+        var existing = await Context.ElectionAnomalyRecipientWraps
+            .FirstOrDefaultAsync(x => x.Id == recipientWrap.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(recipientWrap);
+        }
+    }
+
     public async Task SaveAnomalyActionRecordAsync(ElectionAnomalyActionRecord actionRecord) =>
         await Context.ElectionAnomalyActions.AddAsync(actionRecord);
 

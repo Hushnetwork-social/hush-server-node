@@ -83,6 +83,7 @@ public class ElectionAnomalyContractsTests
             EncryptedElectionEnvelopeActionTypes.ClassifyAnomalyThread,
             EncryptedElectionEnvelopeActionTypes.RegisterExternalAnomalyClaimant,
             EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAuditorRecipientRewrap,
         };
 
         actionTypes.Should().Equal(
@@ -92,7 +93,8 @@ public class ElectionAnomalyContractsTests
             "record_anomaly_authority_response",
             "classify_anomaly_thread",
             "register_external_anomaly_claimant",
-            "record_anomaly_attachment_manifest");
+            "record_anomaly_attachment_manifest",
+            "record_anomaly_auditor_recipient_rewrap");
     }
 
     [Fact]
@@ -107,6 +109,7 @@ public class ElectionAnomalyContractsTests
             typeof(ClassifyElectionAnomalyThreadActionPayload),
             typeof(RegisterExternalElectionAnomalyClaimantActionPayload),
             typeof(RecordElectionAnomalyAttachmentManifestActionPayload),
+            typeof(RecordElectionAnomalyAuditorRecipientRewrapActionPayload),
         };
 
         foreach (var payloadType in payloadTypes)
@@ -139,6 +142,7 @@ public class ElectionAnomalyContractsTests
                 "ClassifyElectionAnomalyThread",
                 "RegisterExternalElectionAnomalyClaimant",
                 "RecordElectionAnomalyAttachmentManifest",
+                "RecordElectionAnomalyAuditorRecipientRewrap",
             ],
             "anomaly writes must enter through HushBlockchain.SubmitSignedTransaction");
     }
@@ -154,6 +158,7 @@ public class ElectionAnomalyContractsTests
             typeof(ElectionAnomalyReportManifestThreadProjection),
             typeof(ElectionAnomalyRestrictedMessageProjection),
             typeof(ElectionAnomalyRestrictedRecipientWrapProjection),
+            typeof(ElectionAnomalyAuditorCallerWrapProjection),
         };
 
         foreach (var projectionType in projectionTypes)

@@ -261,6 +261,66 @@ public class ElectionAnomalyIndexingTests
         wrap.WrapStatusId.Should().Be(ElectionAnomalyRecipientWrapStatusIds.PendingBackfill);
     }
 
+    [Fact]
+    public async Task HandleAsync_WithAuditorRecipientRewrap_UpdatesPendingBackfillWrapToAvailable()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election);
+        var message = CreateMessageRecord(thread);
+        var pendingWrap = new ElectionAnomalyRecipientWrapRecord(
+            Guid.NewGuid(),
+            message.Id,
+            thread.Id,
+            election.ElectionId,
+            ElectionAnomalyRecipientRoleIds.DesignatedAuditor,
+            "auditor-address",
+            RecipientKeyFingerprint: string.Empty,
+            EncryptedContentKey: string.Empty,
+            WrapAlgorithm: string.Empty,
+            ElectionAnomalyRecipientWrapStatusIds.PendingBackfill,
+            DateTime.UtcNow.AddMinutes(-5));
+        var action = new RecordElectionAnomalyAuditorRecipientRewrapActionPayload(
+            thread.Id,
+            message.Id,
+            Guid.NewGuid(),
+            "owner-address",
+            "auditor-address",
+            "auditor-key-fingerprint",
+            "auditor-encrypted-content-key",
+            "x25519-aes-gcm");
+        var transaction = CreateValidatedTransaction(election.ElectionId, "owner-address");
+        ElectionAnomalyRecipientWrapRecord? updatedWrap = null;
+        ElectionAnomalyActionRecord? savedAction = null;
+        var repository = CreateRepository(election);
+        repository.Setup(x => x.GetAnomalyThreadAsync(thread.Id)).ReturnsAsync(thread);
+        repository.Setup(x => x.GetAnomalyMessageEnvelopesAsync(thread.Id)).ReturnsAsync([message]);
+        repository.Setup(x => x.GetAnomalyRecipientWrapsAsync(thread.Id)).ReturnsAsync([pendingWrap]);
+        repository
+            .Setup(x => x.UpdateAnomalyRecipientWrapAsync(It.IsAny<ElectionAnomalyRecipientWrapRecord>()))
+            .Callback<ElectionAnomalyRecipientWrapRecord>(record => updatedWrap = record)
+            .Returns(Task.CompletedTask);
+        repository
+            .Setup(x => x.SaveAnomalyActionRecordAsync(It.IsAny<ElectionAnomalyActionRecord>()))
+            .Callback<ElectionAnomalyActionRecord>(record => savedAction = record)
+            .Returns(Task.CompletedTask);
+        var sut = CreateIndexStrategy(
+            transaction,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAuditorRecipientRewrap,
+            action,
+            repository.Object);
+
+        await sut.HandleAsync(transaction);
+
+        updatedWrap.Should().NotBeNull();
+        updatedWrap!.Id.Should().Be(pendingWrap.Id);
+        updatedWrap.WrapStatusId.Should().Be(ElectionAnomalyRecipientWrapStatusIds.Available);
+        updatedWrap.RecipientKeyFingerprint.Should().Be("auditor-key-fingerprint");
+        updatedWrap.EncryptedContentKey.Should().Be("auditor-encrypted-content-key");
+        updatedWrap.WrapAlgorithm.Should().Be("x25519-aes-gcm");
+        savedAction.Should().NotBeNull();
+        savedAction!.ActionOutcomeId.Should().Be(ElectionAnomalyActionOutcomeIds.Accepted);
+    }
+
     private static Mock<IElectionsRepository> CreateRepository(ElectionRecord election)
     {
         var repository = new Mock<IElectionsRepository>();
