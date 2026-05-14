@@ -187,17 +187,89 @@ public sealed class ElectionAnomalyIntegrationTests : IAsyncLifetime
         var ownerTriage = await queryService.GetElectionAnomalyOwnerTriageAsync(
             electionId,
             TestIdentities.Alice.PublicSigningAddress);
-        ownerTriage.Should().ContainSingle();
-        ownerTriage[0].SubmitterActorPublicAddress.Should().Be(TestIdentities.Alice.PublicSigningAddress);
+        ownerTriage.Should().NotBeNull();
+        ownerTriage!.Threads.Should().ContainSingle();
+        ownerTriage.Threads[0].SubmitterActorPublicAddress.Should().Be(TestIdentities.Alice.PublicSigningAddress);
+        ownerTriage.Threads[0].Messages.Should().OnlyContain(x =>
+            x.CallerOwnerWrap != null &&
+            !string.IsNullOrWhiteSpace(x.CallerOwnerWrap.EncryptedContentKey));
+
+        var grpcOwnerTriage = await electionsClient.GetElectionAnomalyOwnerTriageAsync(
+            new GetElectionAnomalyOwnerTriageRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
+            },
+            headers: CreateSignedElectionQueryHeaders(
+                "GetElectionAnomalyOwnerTriage",
+                TestIdentities.Alice,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId.ToString(),
+                    ["ActorPublicAddress"] = TestIdentities.Alice.PublicSigningAddress,
+                }));
+
+        grpcOwnerTriage.Success.Should().BeTrue();
+        grpcOwnerTriage.HasTriage.Should().BeTrue();
+        grpcOwnerTriage.Triage.TotalThreadCount.Should().Be(1);
+        grpcOwnerTriage.Triage.Threads[0].SubmitterActorPublicAddress.Should().Be(TestIdentities.Alice.PublicSigningAddress);
+        grpcOwnerTriage.Triage.Threads[0].Messages.Should().OnlyContain(x =>
+            x.HasCallerOwnerWrap &&
+            !string.IsNullOrWhiteSpace(x.CallerOwnerWrap.EncryptedContentKey));
 
         var trusteeCounts = await queryService.GetElectionAnomalyTrusteeCountsAsync(
             electionId,
             TestIdentities.Charlie.PublicSigningAddress);
         trusteeCounts.Should().NotBeNull();
         trusteeCounts!.TotalThreadCount.Should().Be(1);
+        trusteeCounts.ContinuitySummary.TrusteeContinuityThreadCount.Should().Be(1);
+        trusteeCounts.ContinuitySummary.OpenContinuityThreadCount.Should().Be(1);
+        trusteeCounts.ContinuitySummary.HasContinuityIssue.Should().BeTrue();
         trusteeCounts.GetType().GetProperties()
             .Should()
             .NotContain(property => property.Name.Contains("Message", StringComparison.OrdinalIgnoreCase));
+
+        var grpcTrusteeCounts = await electionsClient.GetElectionAnomalyTrusteeCountsAsync(
+            new GetElectionAnomalyTrusteeCountsRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestIdentities.Charlie.PublicSigningAddress,
+            },
+            headers: CreateSignedElectionQueryHeaders(
+                "GetElectionAnomalyTrusteeCounts",
+                TestIdentities.Charlie,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId.ToString(),
+                    ["ActorPublicAddress"] = TestIdentities.Charlie.PublicSigningAddress,
+                }));
+
+        grpcTrusteeCounts.Success.Should().BeTrue();
+        grpcTrusteeCounts.HasCounts.Should().BeTrue();
+        grpcTrusteeCounts.Counts.TotalThreadCount.Should().Be(1);
+        grpcTrusteeCounts.Counts.CategoryCounts.Should().ContainSingle(x =>
+            x.CategoryId == ElectionAnomalyCategoryIds.TrusteeContinuityAnomaly &&
+            x.Count == 1);
+        grpcTrusteeCounts.Counts.ContinuitySummary.HasContinuityIssue.Should().BeTrue();
+        grpcTrusteeCounts.Counts.ContinuitySummary.OpenContinuityThreadCount.Should().Be(1);
+
+        var grpcVoterTrusteeCounts = await electionsClient.GetElectionAnomalyTrusteeCountsAsync(
+            new GetElectionAnomalyTrusteeCountsRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
+            },
+            headers: CreateSignedElectionQueryHeaders(
+                "GetElectionAnomalyTrusteeCounts",
+                TestIdentities.Alice,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId.ToString(),
+                    ["ActorPublicAddress"] = TestIdentities.Alice.PublicSigningAddress,
+                }));
+
+        grpcVoterTrusteeCounts.Success.Should().BeFalse();
+        grpcVoterTrusteeCounts.HasCounts.Should().BeFalse();
 
         var trusteeRestrictedReview = await queryService.GetElectionAnomalyAuditorRestrictedReviewAsync(
             electionId,
@@ -210,9 +282,157 @@ public sealed class ElectionAnomalyIntegrationTests : IAsyncLifetime
         auditorReview.Should().NotBeNull();
         auditorReview!.Threads.Should().ContainSingle();
         auditorReview.Threads[0].Messages.Should().HaveCount(4);
+        auditorReview.Threads[0].Messages
+            .Should()
+            .AllSatisfy(x =>
+            {
+                x.CallerAuditorWrap.Should().NotBeNull();
+                x.CallerAuditorWrap!.WrapStatusId.Should().Be(ElectionAnomalyRecipientWrapStatusIds.PendingBackfill);
+                x.CallerAuditorWrap.EncryptedContentKey.Should().BeNull();
+            });
         auditorReview.Threads[0].Messages[0].RecipientWraps
             .Should()
             .OnlyContain(x => !string.IsNullOrWhiteSpace(x.RecipientRoleId));
+
+        var grpcAuditorReview = await electionsClient.GetElectionAnomalyAuditorRestrictedReviewAsync(
+            new GetElectionAnomalyAuditorRestrictedReviewRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestIdentities.Bob.PublicSigningAddress,
+            },
+            headers: CreateSignedElectionQueryHeaders(
+                "GetElectionAnomalyAuditorRestrictedReview",
+                TestIdentities.Bob,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId.ToString(),
+                    ["ActorPublicAddress"] = TestIdentities.Bob.PublicSigningAddress,
+                }));
+
+        grpcAuditorReview.Success.Should().BeTrue();
+        grpcAuditorReview.HasReview.Should().BeTrue();
+        grpcAuditorReview.Review.TotalThreadCount.Should().Be(1);
+        grpcAuditorReview.Review.PendingRewrapMessageCount.Should().Be(messages.Count);
+        grpcAuditorReview.Review.DecryptableMessageCount.Should().Be(0);
+        grpcAuditorReview.Review.Threads[0].Messages
+            .Should()
+            .AllSatisfy(x =>
+            {
+                x.HasCallerAuditorWrap.Should().BeTrue();
+                x.CallerAuditorWrap.WrapStatusId.Should().Be(ElectionAnomalyRecipientWrapStatusIds.PendingBackfill);
+                x.CallerAuditorWrap.EncryptedContentKey.Should().BeEmpty();
+            });
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-127")]
+    public async Task SignedAnomalyAuditorRecipientRewrap_UpdatesAuditorRestrictedProjection()
+    {
+        await StartNodeAsync();
+        var electionId = await CreateDraftElectionAsync("FEAT-127 Anomaly Auditor Rewrap");
+        var (submissionTransaction, anomalyThreadId) = TestTransactionFactory.SubmitElectionAnomalyThread(
+            TestIdentities.Alice,
+            TestIdentities.Alice,
+            electionId);
+        (await SubmitBlockchainTransactionAsync(submissionTransaction)).Successfull.Should().BeTrue();
+
+        var grantTransaction = TestTransactionFactory.CreateElectionReportAccessGrant(
+            TestIdentities.Alice,
+            electionId,
+            TestIdentities.Bob.PublicSigningAddress);
+        (await SubmitBlockchainTransactionAsync(grantTransaction)).Successfull.Should().BeTrue();
+
+        await using var scope = _node!.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        var message = await dbContext.Set<ElectionAnomalyMessageEnvelopeRecord>()
+            .SingleAsync(x => x.AnomalyThreadId == anomalyThreadId);
+        var pendingWrap = await dbContext.Set<ElectionAnomalyRecipientWrapRecord>()
+            .SingleAsync(x =>
+                x.AnomalyThreadId == anomalyThreadId &&
+                x.MessageEnvelopeId == message.Id &&
+                x.RecipientRoleId == ElectionAnomalyRecipientRoleIds.DesignatedAuditor &&
+                x.RecipientPublicAddress == TestIdentities.Bob.PublicSigningAddress);
+        pendingWrap.WrapStatusId.Should().Be(ElectionAnomalyRecipientWrapStatusIds.PendingBackfill);
+
+        var rewrapTransaction = TestTransactionFactory.RecordElectionAnomalyAuditorRecipientRewrap(
+            TestIdentities.Alice,
+            TestIdentities.Bob,
+            electionId,
+            anomalyThreadId,
+            message.Id);
+        var rewrapResponse = await SubmitBlockchainTransactionAsync(rewrapTransaction);
+        rewrapResponse.Successfull.Should().BeTrue(rewrapResponse.Message);
+
+        dbContext.ChangeTracker.Clear();
+        var availableWrap = await dbContext.Set<ElectionAnomalyRecipientWrapRecord>()
+            .SingleAsync(x =>
+                x.AnomalyThreadId == anomalyThreadId &&
+                x.MessageEnvelopeId == message.Id &&
+                x.RecipientRoleId == ElectionAnomalyRecipientRoleIds.DesignatedAuditor &&
+                x.RecipientPublicAddress == TestIdentities.Bob.PublicSigningAddress);
+        availableWrap.WrapStatusId.Should().Be(ElectionAnomalyRecipientWrapStatusIds.Available);
+        availableWrap.EncryptedContentKey.Should().NotBeNullOrWhiteSpace();
+
+        var queryService = scope.ServiceProvider.GetRequiredService<IElectionQueryApplicationService>();
+        var ownerTriage = await queryService.GetElectionAnomalyOwnerTriageAsync(
+            electionId,
+            TestIdentities.Alice.PublicSigningAddress);
+        ownerTriage.Should().NotBeNull();
+        ownerTriage!.PendingRewrapMessageCount.Should().Be(0);
+
+        var auditorReview = await queryService.GetElectionAnomalyAuditorRestrictedReviewAsync(
+            electionId,
+            TestIdentities.Bob.PublicSigningAddress);
+        auditorReview.Should().NotBeNull();
+        var auditorMessage = auditorReview!.Threads.Should().ContainSingle().Subject.Messages.Should().ContainSingle().Subject;
+        auditorMessage.CallerAuditorWrap.Should().NotBeNull();
+        auditorMessage.CallerAuditorWrap!.WrapStatusId.Should().Be(ElectionAnomalyRecipientWrapStatusIds.Available);
+        auditorMessage.CallerAuditorWrap.EncryptedContentKey.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-127")]
+    public async Task SignedExternalClaimantRegistration_WithDuplicateReference_IsRejectedAndKeepsSingleThread()
+    {
+        await StartNodeAsync();
+        var electionId = await CreateDraftElectionAsync("FEAT-127 External Claimant Duplicate");
+        const string externalClaimantReferenceHash = "sha256:integration-external-claimant-reference";
+        var (firstTransaction, firstThreadId) = TestTransactionFactory.RegisterExternalElectionAnomalyClaimant(
+            TestIdentities.Alice,
+            electionId,
+            externalClaimantReferenceHash);
+        var firstResponse = await SubmitBlockchainTransactionAsync(firstTransaction);
+        firstResponse.Successfull.Should().BeTrue(firstResponse.Message);
+
+        var duplicateTransaction = TestTransactionFactory.RegisterExternalElectionAnomalyClaimant(
+            TestIdentities.Alice,
+            electionId,
+            externalClaimantReferenceHash).Transaction;
+        var duplicateResponse = await SubmitBlockchainTransactionAsync(duplicateTransaction);
+        duplicateResponse.Successfull.Should().BeFalse("one external claimant reference maps to one anomaly thread");
+        duplicateResponse.ValidationCode.Should().Be(ElectionAnomalyValidationCodes.DuplicateThread);
+
+        await using var scope = _node!.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        var threads = await dbContext.Set<ElectionAnomalyThreadRecord>()
+            .Where(x => x.ElectionId == electionId)
+            .ToListAsync();
+        threads.Should().ContainSingle();
+        var thread = threads.Single();
+        thread.Id.Should().Be(firstThreadId);
+        thread.CurrentCategoryId.Should().Be(ElectionAnomalyCategoryIds.ExternalObjectionOrComplaint);
+        thread.SubmitterRoleContextId.Should().Be(ElectionAnomalyActorRoleContextIds.ExternalClaimantRegistrar);
+        thread.SubmitterRoleEvidenceTypeId.Should().Be(ElectionAnomalyRoleEvidenceTypeIds.ExternalClaimantBridge);
+        thread.SubmitterRoleEvidenceReference.Should().Be($"external-claimant:{externalClaimantReferenceHash}");
+
+        var ownerTriage = await scope.ServiceProvider
+            .GetRequiredService<IElectionQueryApplicationService>()
+            .GetElectionAnomalyOwnerTriageAsync(electionId, TestIdentities.Alice.PublicSigningAddress);
+        ownerTriage.Should().NotBeNull();
+        ownerTriage!.ExternalClaimantThreadCount.Should().Be(1);
+        ownerTriage.Threads.Should().ContainSingle(x =>
+            x.CategoryId == ElectionAnomalyCategoryIds.ExternalObjectionOrComplaint &&
+            x.SubmitterRoleContextId == ElectionAnomalyActorRoleContextIds.ExternalClaimantRegistrar);
     }
 
     [Fact]

@@ -240,6 +240,8 @@ public class EncryptedElectionEnvelopeContentHandler(
                 IsValidRegisterExternalAnomalyClaimantAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest =>
                 IsValidRecordAnomalyAttachmentManifestAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAuditorRecipientRewrap =>
+                IsValidRecordAnomalyAuditorRecipientRewrapAction(decryptedEnvelope, signatory),
             _ => false,
         };
     }
@@ -2451,6 +2453,14 @@ public class EncryptedElectionEnvelopeContentHandler(
                 "Anomaly classification case state id is invalid.");
         }
 
+        if (hasSeverity && !ElectionAnomalySeverityCandidateIds.IsKnown(classifyAction.SeverityCandidateId))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.SeverityCandidateInvalid,
+                "Anomaly severity candidate id is invalid.");
+        }
+
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var context = LoadAnomalyThreadAuthorityContext(
@@ -2464,6 +2474,16 @@ public class EncryptedElectionEnvelopeContentHandler(
                 transactionId,
                 context.ValidationCode ?? ElectionAnomalyValidationCodes.ReadForbidden,
                 context.ValidationMessage ?? "Anomaly classification is not authorized.");
+        }
+
+        if (context.Thread!.HasOpenClarificationRequest &&
+            hasCaseState &&
+            ElectionAnomalyCaseStateIds.IsTerminal(classifyAction.CaseStateId))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.TerminalStateRequiresClosedClarification,
+                "Terminal anomaly classification requires the open clarification request to be closed first.");
         }
 
         return true;
@@ -2547,6 +2567,97 @@ public class EncryptedElectionEnvelopeContentHandler(
                 transactionId,
                 ElectionAnomalyValidationCodes.ClarificationRequestNotOpen,
                 "Submitter attachment manifest does not match the open authority request.");
+        }
+
+        return true;
+    }
+
+    private bool IsValidRecordAnomalyAuditorRecipientRewrapAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
+        var rewrapAction = decryptedEnvelope.DeserializeAction<RecordElectionAnomalyAuditorRecipientRewrapActionPayload>();
+        if (rewrapAction is null ||
+            rewrapAction.AnomalyThreadId == Guid.Empty ||
+            rewrapAction.MessageId == Guid.Empty ||
+            rewrapAction.ActionNonce == Guid.Empty ||
+            string.IsNullOrWhiteSpace(rewrapAction.ActorPublicAddress) ||
+            string.IsNullOrWhiteSpace(rewrapAction.AuditorPublicAddress) ||
+            string.IsNullOrWhiteSpace(rewrapAction.RecipientKeyFingerprint) ||
+            string.IsNullOrWhiteSpace(rewrapAction.EncryptedContentKey) ||
+            string.IsNullOrWhiteSpace(rewrapAction.WrapAlgorithm))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.RecipientWrapMissing,
+                "Auditor anomaly recipient rewrap action payload is incomplete.");
+        }
+
+        if (!HasMatchingActor(signatory, rewrapAction.ActorPublicAddress))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.InvalidActionSignatory,
+                "Auditor anomaly recipient rewrap actor must match the signed transaction signatory.");
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId)
+            .GetAwaiter()
+            .GetResult();
+        if (election is null)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.PersonScopeUnresolved,
+                "Election was not found for auditor anomaly recipient rewrap.");
+        }
+
+        if (!IsAnomalyAuthorityActor(election, rewrapAction.ActorPublicAddress))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.ReadForbidden,
+                "Only the election owner can authorize auditor anomaly recipient rewraps.");
+        }
+
+        var auditorGrant = repository
+            .GetReportAccessGrantAsync(election.ElectionId, rewrapAction.AuditorPublicAddress)
+            .GetAwaiter()
+            .GetResult();
+        if (auditorGrant?.GrantRole != ElectionReportAccessGrantRole.DesignatedAuditor)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.ReadForbidden,
+                "Auditor anomaly recipient rewrap target does not hold a designated-auditor grant.");
+        }
+
+        var thread = LoadAnomalyThread(
+            repository,
+            decryptedEnvelope.Transaction.Payload.ElectionId,
+            rewrapAction.AnomalyThreadId);
+        if (thread is null)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.ClarificationRequestNotOpen,
+                "Anomaly thread was not found for auditor recipient rewrap.");
+        }
+
+        var message = repository
+            .GetAnomalyMessageEnvelopesAsync(thread.Id)
+            .GetAwaiter()
+            .GetResult()
+            .FirstOrDefault(x => x.Id == rewrapAction.MessageId);
+        if (message is null)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.RecipientWrapMissing,
+                "Anomaly message was not found for auditor recipient rewrap.");
         }
 
         return true;

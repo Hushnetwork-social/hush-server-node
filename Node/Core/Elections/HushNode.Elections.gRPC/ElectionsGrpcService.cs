@@ -444,6 +444,150 @@ public class ElectionsGrpcService(
         }
     }
 
+    public override async Task<GetElectionAnomalyTrusteeCountsResponse> GetElectionAnomalyTrusteeCounts(
+        GetElectionAnomalyTrusteeCountsRequest request,
+        ServerCallContext context)
+    {
+        ValidateSignedQuery(
+            nameof(GetElectionAnomalyTrusteeCounts),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+            },
+            context);
+
+        try
+        {
+            var projection = await _queryApplicationService.GetElectionAnomalyTrusteeCountsAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress);
+
+            var response = new GetElectionAnomalyTrusteeCountsResponse
+            {
+                Success = projection is not null,
+                ActorPublicAddress = request.ActorPublicAddress,
+                HasCounts = projection is not null,
+                ErrorMessage = projection is null
+                    ? "Trustee anomaly aggregate visibility is unavailable for this actor."
+                    : string.Empty,
+            };
+
+            if (projection is not null)
+            {
+                response.Counts = projection.ToProto();
+            }
+
+            return response;
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionAnomalyTrusteeCounts));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch trustee anomaly counts."));
+        }
+    }
+
+    public override async Task<GetElectionAnomalyAuditorRestrictedReviewResponse> GetElectionAnomalyAuditorRestrictedReview(
+        GetElectionAnomalyAuditorRestrictedReviewRequest request,
+        ServerCallContext context)
+    {
+        ValidateSignedQuery(
+            nameof(GetElectionAnomalyAuditorRestrictedReview),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+            },
+            context);
+
+        try
+        {
+            var projection = await _queryApplicationService.GetElectionAnomalyAuditorRestrictedReviewAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress);
+
+            var response = new GetElectionAnomalyAuditorRestrictedReviewResponse
+            {
+                Success = projection is not null,
+                ActorPublicAddress = request.ActorPublicAddress,
+                HasReview = projection is not null,
+                ErrorMessage = projection is null
+                    ? "Auditor restricted anomaly review is unavailable for this actor."
+                    : string.Empty,
+            };
+
+            if (projection is not null)
+            {
+                response.Review = projection.ToProto();
+            }
+
+            return response;
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionAnomalyAuditorRestrictedReview));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch auditor anomaly restricted review."));
+        }
+    }
+
+    public override async Task<GetElectionAnomalyOwnerTriageResponse> GetElectionAnomalyOwnerTriage(
+        GetElectionAnomalyOwnerTriageRequest request,
+        ServerCallContext context)
+    {
+        ValidateSignedQuery(
+            nameof(GetElectionAnomalyOwnerTriage),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+            },
+            context);
+
+        try
+        {
+            var projection = await _queryApplicationService.GetElectionAnomalyOwnerTriageAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress);
+
+            var response = new GetElectionAnomalyOwnerTriageResponse
+            {
+                Success = projection is not null,
+                ActorPublicAddress = request.ActorPublicAddress,
+                HasTriage = projection is not null,
+                ErrorMessage = projection is null
+                    ? "Owner anomaly triage is unavailable for this actor."
+                    : string.Empty,
+            };
+
+            if (projection is not null)
+            {
+                response.Triage = projection.ToProto();
+            }
+
+            return response;
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionAnomalyOwnerTriage));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch owner anomaly triage."));
+        }
+    }
+
     public override async Task<GetElectionResultViewResponse> GetElectionResultView(GetElectionResultViewRequest request, ServerCallContext context)
     {
         ValidateSignedQuery(

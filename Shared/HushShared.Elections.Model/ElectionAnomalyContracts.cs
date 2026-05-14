@@ -66,6 +66,40 @@ public static class ElectionAnomalyCaseStateIds
     public static bool IsKnown(string? caseStateId) =>
         !string.IsNullOrWhiteSpace(caseStateId) &&
         All.Contains(caseStateId, StringComparer.Ordinal);
+
+    public static IReadOnlyList<string> Terminal { get; } =
+    [
+        EscalatedToGovernedDecision,
+        ResolvedNonBlocking,
+        ClosedDuplicateFollowup,
+        ClosedNoFurtherSubmitterInput,
+    ];
+
+    public static bool IsTerminal(string? caseStateId) =>
+        !string.IsNullOrWhiteSpace(caseStateId) &&
+        Terminal.Contains(caseStateId, StringComparer.Ordinal);
+}
+
+public static class ElectionAnomalySeverityCandidateIds
+{
+    public const string NotAssessed = "not_assessed";
+    public const string LowOperationalImpact = "low_operational_impact";
+    public const string RequiresAuthorityReview = "requires_authority_review";
+    public const string PotentiallyElectionBlocking = "potentially_election_blocking";
+    public const string SecurityIntegrityCritical = "security_integrity_critical";
+
+    public static IReadOnlyList<string> All { get; } =
+    [
+        NotAssessed,
+        LowOperationalImpact,
+        RequiresAuthorityReview,
+        PotentiallyElectionBlocking,
+        SecurityIntegrityCritical,
+    ];
+
+    public static bool IsKnown(string? severityCandidateId) =>
+        !string.IsNullOrWhiteSpace(severityCandidateId) &&
+        All.Contains(severityCandidateId, StringComparer.Ordinal);
 }
 
 public static class ElectionAnomalyValidationCodes
@@ -84,6 +118,8 @@ public static class ElectionAnomalyValidationCodes
     public const string ClarificationRequestAlreadyOpen = "anomaly_clarification_request_already_open";
     public const string RecipientWrapMissing = "anomaly_recipient_wrap_missing";
     public const string ReadForbidden = "anomaly_read_forbidden";
+    public const string SeverityCandidateInvalid = "anomaly_severity_candidate_invalid";
+    public const string TerminalStateRequiresClosedClarification = "anomaly_terminal_state_requires_closed_clarification";
 
     public static IReadOnlyList<string> All { get; } =
     [
@@ -101,6 +137,8 @@ public static class ElectionAnomalyValidationCodes
         ClarificationRequestAlreadyOpen,
         RecipientWrapMissing,
         ReadForbidden,
+        SeverityCandidateInvalid,
+        TerminalStateRequiresClosedClarification,
     ];
 
     public static bool IsKnown(string? validationCode) =>
@@ -214,13 +252,39 @@ public record ElectionAnomalyRestrictedRecipientWrapProjection(
     string RecipientRoleId,
     string WrapStatusId);
 
+public record ElectionAnomalyAuditorCallerWrapProjection(
+    string WrapStatusId,
+    string? RecipientKeyFingerprint = null,
+    string? EncryptedContentKey = null,
+    string? WrapAlgorithm = null);
+
 public record ElectionAnomalyRestrictedMessageProjection(
     Guid MessageId,
     string MessageKindId,
+    DateTime RecordedAtUtc,
     string EncryptedBody,
     string EncryptedBodyHash,
     int PlaintextCharacterCount,
     IReadOnlyList<ElectionAnomalyRestrictedRecipientWrapProjection> RecipientWraps,
+    ElectionAnomalyAuditorCallerWrapProjection? CallerAuditorWrap = null,
+    Guid? ClarificationRequestId = null,
+    string? AttachmentManifestHash = null);
+
+public record ElectionAnomalyOwnerCallerWrapProjection(
+    string WrapStatusId,
+    string? RecipientKeyFingerprint = null,
+    string? EncryptedContentKey = null,
+    string? WrapAlgorithm = null);
+
+public record ElectionAnomalyOwnerMessageProjection(
+    Guid MessageId,
+    string MessageKindId,
+    DateTime RecordedAtUtc,
+    string EncryptedBody,
+    string EncryptedBodyHash,
+    int PlaintextCharacterCount,
+    IReadOnlyList<ElectionAnomalyRestrictedRecipientWrapProjection> RecipientWraps,
+    ElectionAnomalyOwnerCallerWrapProjection? CallerOwnerWrap = null,
     Guid? ClarificationRequestId = null,
     string? AttachmentManifestHash = null);
 
@@ -237,7 +301,7 @@ public record ElectionAnomalyOwnThreadProjection(
     DateTime UpdatedAtUtc,
     IReadOnlyList<ElectionAnomalyEncryptedMessageProjection> Messages);
 
-public record ElectionAnomalyOwnerTriageProjection(
+public record ElectionAnomalyOwnerTriageThreadProjection(
     Guid AnomalyThreadId,
     ElectionId ElectionId,
     string CategoryId,
@@ -247,10 +311,29 @@ public record ElectionAnomalyOwnerTriageProjection(
     string? GovernedDecisionRef,
     string? SubmitterActorPublicAddress,
     string? SubmitterRoleContextId,
+    ElectionLifecycleState LifecycleStateAtSubmission,
     bool HasOpenClarificationRequest,
+    Guid? OpenClarificationRequestId,
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc,
-    IReadOnlyList<ElectionAnomalyEncryptedMessageProjection> Messages);
+    IReadOnlyList<ElectionAnomalyOwnerMessageProjection> Messages);
+
+public record ElectionAnomalyOwnerTriageProjection(
+    ElectionId ElectionId,
+    int TotalThreadCount,
+    int OpenThreadCount,
+    int AwaitingInformationThreadCount,
+    int ResponsePresentThreadCount,
+    int ExternalClaimantThreadCount,
+    int DecryptableMessageCount,
+    int PendingRewrapMessageCount,
+    int MissingOwnerWrapMessageCount,
+    int AttachmentManifestCount,
+    string GovernedContinuityHandoffStatusId,
+    IReadOnlyList<ElectionAnomalyCategoryCountProjection> CategoryCounts,
+    IReadOnlyList<ElectionAnomalyCaseStateCountProjection> CaseStateCounts,
+    ElectionAnomalyTrusteeContinuitySummaryProjection ContinuitySummary,
+    IReadOnlyList<ElectionAnomalyOwnerTriageThreadProjection> Threads);
 
 public record ElectionAnomalyCategoryCountProjection(
     string CategoryId,
@@ -260,11 +343,20 @@ public record ElectionAnomalyCaseStateCountProjection(
     string CaseStateId,
     int Count);
 
+public record ElectionAnomalyTrusteeContinuitySummaryProjection(
+    int TrusteeContinuityThreadCount,
+    int OpenContinuityThreadCount,
+    int AwaitingInformationContinuityThreadCount,
+    int ClosedContinuityThreadCount,
+    int GovernedDecisionLinkedCount,
+    bool HasContinuityIssue);
+
 public record ElectionAnomalyTrusteeCountsProjection(
     ElectionId ElectionId,
     int TotalThreadCount,
     IReadOnlyList<ElectionAnomalyCategoryCountProjection> CategoryCounts,
-    IReadOnlyList<ElectionAnomalyCaseStateCountProjection> CaseStateCounts);
+    IReadOnlyList<ElectionAnomalyCaseStateCountProjection> CaseStateCounts,
+    ElectionAnomalyTrusteeContinuitySummaryProjection ContinuitySummary);
 
 public record ElectionAnomalyAuditorRestrictedThreadProjection(
     Guid AnomalyThreadId,

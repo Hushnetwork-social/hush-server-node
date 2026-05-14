@@ -498,6 +498,104 @@ public class ElectionAnomalyEnvelopeValidationTests
         validatedTransaction.Should().BeOfType<ValidatedTransaction<EncryptedElectionEnvelopePayload>>();
     }
 
+    [Fact]
+    public void ValidateAndSign_WithKnownSeverityCandidate_ReturnsValidatedOuterEnvelope()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election);
+        var action = new ClassifyElectionAnomalyThreadActionPayload(
+            thread.Id,
+            Guid.NewGuid(),
+            "owner-address",
+            CategoryId: ElectionAnomalyCategoryIds.TrusteeContinuityAnomaly,
+            CaseStateId: ElectionAnomalyCaseStateIds.EscalatedToGovernedDecision,
+            SeverityCandidateId: ElectionAnomalySeverityCandidateIds.PotentiallyElectionBlocking,
+            GovernedDecisionRef: "proposal-7");
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.ClassifyAnomalyThread,
+            action,
+            "owner-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeOfType<ValidatedTransaction<EncryptedElectionEnvelopePayload>>();
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithUnknownSeverityCandidate_ReturnsStableFailure()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election);
+        var action = new ClassifyElectionAnomalyThreadActionPayload(
+            thread.Id,
+            Guid.NewGuid(),
+            "owner-address",
+            CategoryId: ElectionAnomalyCategoryIds.TrusteeContinuityAnomaly,
+            CaseStateId: ElectionAnomalyCaseStateIds.UnderReview,
+            SeverityCandidateId: "critical-ish");
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.ClassifyAnomalyThread,
+            action,
+            "owner-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        harness.Sut.TryTakeValidationFailure(harness.SignedEnvelope.TransactionId.Value, out var failure)
+            .Should()
+            .BeTrue();
+        failure.Code.Should().Be(ElectionAnomalyValidationCodes.SeverityCandidateInvalid);
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithTerminalClassificationWhileClarificationOpen_ReturnsStableFailure()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(
+            election,
+            hasOpenClarificationRequest: true,
+            openClarificationRequestId: Guid.NewGuid());
+        var action = new ClassifyElectionAnomalyThreadActionPayload(
+            thread.Id,
+            Guid.NewGuid(),
+            "owner-address",
+            CaseStateId: ElectionAnomalyCaseStateIds.ResolvedNonBlocking,
+            SeverityCandidateId: ElectionAnomalySeverityCandidateIds.LowOperationalImpact);
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.ClassifyAnomalyThread,
+            action,
+            "owner-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        harness.Sut.TryTakeValidationFailure(harness.SignedEnvelope.TransactionId.Value, out var failure)
+            .Should()
+            .BeTrue();
+        failure.Code.Should().Be(ElectionAnomalyValidationCodes.TerminalStateRequiresClosedClarification);
+    }
+
     private static ValidationHarness CreateHarness(
         ElectionRecord election,
         string actionType,
