@@ -202,6 +202,100 @@ public class ElectionAnomalyIndexingTests
     }
 
     [Fact]
+    public async Task HandleAsync_WithAttachmentManifest_AppendsEventAndSavesManifestRecord()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election);
+        var initialEvent = CreateExistingEvent(thread, sequence: 1);
+        var action = CreateAttachmentManifestAction(
+            thread.Id,
+            "owner-address",
+            ElectionAnomalyAttachmentKindIds.AuthorityEvidence);
+        var transaction = CreateValidatedTransaction(election.ElectionId, "owner-address");
+        ElectionAnomalyThreadEventRecord? savedEvent = null;
+        ElectionAnomalyAttachmentManifestRecord? savedManifest = null;
+        var repository = CreateRepository(election);
+        repository.Setup(x => x.GetAnomalyThreadAsync(thread.Id)).ReturnsAsync(thread);
+        repository.Setup(x => x.GetLatestAnomalyThreadEventAsync(thread.Id)).ReturnsAsync(initialEvent);
+        repository.Setup(x => x.GetAnomalyThreadEventsAsync(thread.Id)).ReturnsAsync([initialEvent]);
+        repository
+            .Setup(x => x.SaveAnomalyThreadEventAsync(It.IsAny<ElectionAnomalyThreadEventRecord>()))
+            .Callback<ElectionAnomalyThreadEventRecord>(record => savedEvent = record)
+            .Returns(Task.CompletedTask);
+        repository
+            .Setup(x => x.SaveAnomalyAttachmentManifestAsync(It.IsAny<ElectionAnomalyAttachmentManifestRecord>()))
+            .Callback<ElectionAnomalyAttachmentManifestRecord>(record => savedManifest = record)
+            .Returns(Task.CompletedTask);
+        repository.Setup(x => x.UpdateAnomalyThreadAsync(It.IsAny<ElectionAnomalyThreadRecord>())).Returns(Task.CompletedTask);
+        repository.Setup(x => x.SaveAnomalyActionRecordAsync(It.IsAny<ElectionAnomalyActionRecord>())).Returns(Task.CompletedTask);
+        var sut = CreateIndexStrategy(
+            transaction,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest,
+            action,
+            repository.Object);
+
+        await sut.HandleAsync(transaction);
+
+        savedEvent.Should().NotBeNull();
+        savedEvent!.EventTypeId.Should().Be(ElectionAnomalyEventTypeIds.AttachmentManifestRecorded);
+        savedManifest.Should().NotBeNull();
+        savedManifest!.Id.Should().Be(action.AttachmentManifestId);
+        savedManifest.EventId.Should().Be(savedEvent.Id);
+        savedManifest.ScannerStatusId.Should().Be(ElectionAnomalyEvidenceScannerStatusIds.Clear);
+        savedManifest.PayloadAvailabilityStatusId.Should().Be(ElectionAnomalyPayloadAvailabilityStatusIds.Available);
+        savedManifest.SourceTransactionId.Should().Be(transaction.TransactionId.Value);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithEvidenceRedaction_AppendsEventAndSavesRedactionRecord()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election);
+        var initialEvent = CreateExistingEvent(thread, sequence: 1);
+        var action = new RecordElectionAnomalyEvidenceRedactionActionPayload(
+            thread.Id,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "owner-address",
+            ElectionAnomalyRedactionTargetKindIds.AttachmentManifest,
+            Guid.NewGuid().ToString(),
+            ElectionAnomalyRedactionReasonIds.PersonalData,
+            Sha256Ref('b'));
+        var transaction = CreateValidatedTransaction(election.ElectionId, "owner-address");
+        ElectionAnomalyThreadEventRecord? savedEvent = null;
+        ElectionAnomalyEvidenceRedactionRecord? savedRedaction = null;
+        var repository = CreateRepository(election);
+        repository.Setup(x => x.GetAnomalyThreadAsync(thread.Id)).ReturnsAsync(thread);
+        repository.Setup(x => x.GetLatestAnomalyThreadEventAsync(thread.Id)).ReturnsAsync(initialEvent);
+        repository.Setup(x => x.GetAnomalyThreadEventsAsync(thread.Id)).ReturnsAsync([initialEvent]);
+        repository
+            .Setup(x => x.SaveAnomalyThreadEventAsync(It.IsAny<ElectionAnomalyThreadEventRecord>()))
+            .Callback<ElectionAnomalyThreadEventRecord>(record => savedEvent = record)
+            .Returns(Task.CompletedTask);
+        repository
+            .Setup(x => x.SaveAnomalyEvidenceRedactionAsync(It.IsAny<ElectionAnomalyEvidenceRedactionRecord>()))
+            .Callback<ElectionAnomalyEvidenceRedactionRecord>(record => savedRedaction = record)
+            .Returns(Task.CompletedTask);
+        repository.Setup(x => x.UpdateAnomalyThreadAsync(It.IsAny<ElectionAnomalyThreadRecord>())).Returns(Task.CompletedTask);
+        repository.Setup(x => x.SaveAnomalyActionRecordAsync(It.IsAny<ElectionAnomalyActionRecord>())).Returns(Task.CompletedTask);
+        var sut = CreateIndexStrategy(
+            transaction,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyEvidenceRedaction,
+            action,
+            repository.Object);
+
+        await sut.HandleAsync(transaction);
+
+        savedEvent.Should().NotBeNull();
+        savedEvent!.EventTypeId.Should().Be(ElectionAnomalyEventTypeIds.EvidenceRedactionRecorded);
+        savedRedaction.Should().NotBeNull();
+        savedRedaction!.Id.Should().Be(action.RedactionEventId);
+        savedRedaction.EventId.Should().Be(savedEvent.Id);
+        savedRedaction.ReasonCodeId.Should().Be(ElectionAnomalyRedactionReasonIds.PersonalData);
+        savedRedaction.OriginalHash.Should().Be(action.OriginalHash);
+    }
+
+    [Fact]
     public async Task HandleAsync_WithAuditorGrantAfterAnomalyMessages_AddsPendingBackfillRecipientWrap()
     {
         var election = CreateElection();
@@ -427,6 +521,28 @@ public class ElectionAnomalyIndexingTests
                     "encrypted-content-key",
                     "x25519-aes-gcm"),
             ]);
+
+    private static RecordElectionAnomalyAttachmentManifestActionPayload CreateAttachmentManifestAction(
+        Guid anomalyThreadId,
+        string actorPublicAddress,
+        string attachmentKindId,
+        Guid? clarificationRequestId = null) =>
+        new(
+            anomalyThreadId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            actorPublicAddress,
+            attachmentKindId,
+            ElectionAnomalyRestrictedPayloadReferences.Create(Guid.NewGuid()),
+            Sha256Ref('a'),
+            Sha256Ref('b'),
+            1024,
+            ElectionAnomalyEvidenceMimeTypes.ApplicationPdf,
+            ElectionAnomalyAttachmentValidationStatusIds.Accepted,
+            clarificationRequestId);
+
+    private static string Sha256Ref(char fill) =>
+        $"sha256:{new string(fill, 64)}";
 
     private static ElectionAnomalyMessageEnvelopeRecord CreateMessageRecord(ElectionAnomalyThreadRecord thread) =>
         new(

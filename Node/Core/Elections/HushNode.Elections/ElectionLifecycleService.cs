@@ -5636,6 +5636,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var rosterEntries = await repository.GetRosterEntriesAsync(election.ElectionId);
         var participationRecords = await repository.GetParticipationRecordsAsync(election.ElectionId);
         var sealedProtocolPackageBinding = await repository.GetSealedProtocolPackageBindingAsync(election.ElectionId);
+        var restrictedAnomalyIntakeManifest = await BuildRestrictedAnomalyIntakeManifestAsync(
+            repository,
+            election.ElectionId);
         var reportBuildResult = _electionReportPackageService.Build(new ElectionReportPackageBuildRequest(
             finalizedElection,
             closeArtifact,
@@ -5657,7 +5660,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
             reportAttemptNumber,
             priorReportAttempt?.Id,
             actorPublicAddress,
-            officialRecordedAt));
+            officialRecordedAt,
+            RestrictedAnomalyIntakeManifest: restrictedAnomalyIntakeManifest));
 
         if (priorReportAttempt is not null &&
             priorReportAttempt.Status == ElectionReportPackageStatus.GenerationFailed &&
@@ -7179,6 +7183,20 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         return true;
+    }
+
+    private static async Task<AnomalyIntakeManifest?> BuildRestrictedAnomalyIntakeManifestAsync(
+        IElectionsRepository repository,
+        ElectionId electionId)
+    {
+        var projection = await ElectionAnomalyEvidenceManifestProjectionBuilder.BuildAsync(
+            repository,
+            electionId,
+            ElectionAnomalyEvidenceManifestScopeIds.Package);
+
+        return projection.Threads.Count == 0 && projection.PackageReadinessBlockerIds.Count == 0
+            ? null
+            : ElectionAnomalyIntakeManifestHasher.FromProjection(projection);
     }
 
     private sealed record Sp04CastValidationOutcome(

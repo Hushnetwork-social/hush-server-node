@@ -359,6 +359,186 @@ namespace HushServerNode.Migrations
                     b.ToTable("ElectionAnomalyActionRecord", "Elections");
                 });
 
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionAnomalyAttachmentManifestRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorPublicAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("ActorRoleId")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<Guid>("AnomalyThreadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AttachmentKindId")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<Guid?>("ClarificationRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("ContentKeyWrapsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("EncryptedPayloadHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("EncryptedPayloadReference")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("EventHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("PayloadAvailabilityStatusId")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ScannerStatusId")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("SourceBlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("SourceBlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ValidationStatusId")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EncryptedPayloadReference")
+                        .IsUnique();
+
+                    b.HasIndex("EventId")
+                        .IsUnique();
+
+                    b.HasIndex("SourceTransactionId")
+                        .IsUnique();
+
+                    b.HasIndex("AnomalyThreadId", "AttachmentKindId");
+
+                    b.HasIndex("AnomalyThreadId", "ClarificationRequestId");
+
+                    b.HasIndex("ElectionId", "PayloadAvailabilityStatusId");
+
+                    b.HasIndex("ElectionId", "ScannerStatusId");
+
+                    b.ToTable("ElectionAnomalyAttachmentManifestRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionAnomalyEvidenceRedactionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorPublicAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<Guid>("AnomalyThreadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("EventHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("HoldReference")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OriginalHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("ReasonCodeId")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReplacementManifestHash")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<long?>("SourceBlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("SourceBlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TargetId")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("TargetKindId")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("TombstoneStatusId")
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId")
+                        .IsUnique();
+
+                    b.HasIndex("SourceTransactionId")
+                        .IsUnique();
+
+                    b.HasIndex("ElectionId", "ReasonCodeId");
+
+                    b.HasIndex("AnomalyThreadId", "TargetKindId", "TargetId");
+
+                    b.ToTable("ElectionAnomalyEvidenceRedactionRecord", "Elections");
+                });
+
             modelBuilder.Entity("HushShared.Elections.Model.ElectionAnomalyMessageEnvelopeRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -464,6 +644,68 @@ namespace HushServerNode.Migrations
                         .IsUnique();
 
                     b.ToTable("ElectionAnomalyRecipientWrapRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionAnomalyRestrictedPayloadRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AnomalyThreadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<byte[]>("EncryptedPayload")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("EncryptedPayloadHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTime?>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("PayloadAvailabilityStatusId")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("PayloadReference")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("ScannerStatusId")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PayloadReference")
+                        .IsUnique();
+
+                    b.HasIndex("AnomalyThreadId", "PayloadAvailabilityStatusId");
+
+                    b.HasIndex("ElectionId", "ScannerStatusId");
+
+                    b.ToTable("ElectionAnomalyRestrictedPayloadRecord", "Elections");
                 });
 
             modelBuilder.Entity("HushShared.Elections.Model.ElectionAnomalyThreadEventRecord", b =>

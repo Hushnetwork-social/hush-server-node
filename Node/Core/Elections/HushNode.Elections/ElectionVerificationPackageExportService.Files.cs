@@ -9,14 +9,16 @@ public sealed partial class ElectionVerificationPackageExportService
 {
     private static void AddReportArtifacts(
         List<ElectionVerificationPackageFile> files,
-        IReadOnlyList<ElectionReportArtifactRecord> artifacts)
+        IReadOnlyList<ElectionReportArtifactRecord> artifacts,
+        VerificationPackageView packageView)
     {
         foreach (var artifact in artifacts.OrderBy(x => x.SortOrder).ThenBy(x => x.FileName, StringComparer.Ordinal))
         {
             var visibility = artifact.AccessScope == ElectionReportArtifactAccessScope.OwnerAuditorOnly
                 ? VerificationArtifactVisibility.Restricted
                 : VerificationArtifactVisibility.Public;
-            if (visibility == VerificationArtifactVisibility.Restricted)
+            if (visibility == VerificationArtifactVisibility.Restricted &&
+                packageView != VerificationPackageView.RestrictedOwnerAuditor)
             {
                 continue;
             }
@@ -24,7 +26,7 @@ public sealed partial class ElectionVerificationPackageExportService
             files.Add(new ElectionVerificationPackageFile(
                 $"{VerificationPackageFileNames.ReportPackageDirectory}/{artifact.FileName}",
                 artifact.MediaType,
-                VerificationArtifactVisibility.Public,
+                visibility,
                 Encoding.UTF8.GetBytes(artifact.Content)));
         }
     }

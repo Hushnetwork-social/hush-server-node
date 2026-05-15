@@ -66,6 +66,64 @@ public record ElectionAnomalyRecipientWrapRecord(
     string WrapStatusId,
     DateTime RecordedAt);
 
+public record ElectionAnomalyAttachmentManifestRecord(
+    Guid Id,
+    Guid AnomalyThreadId,
+    Guid EventId,
+    string EventHash,
+    ElectionId ElectionId,
+    string AttachmentKindId,
+    string EncryptedPayloadReference,
+    string EncryptedPayloadHash,
+    string ContentHash,
+    long SizeBytes,
+    string MimeType,
+    string ValidationStatusId,
+    string ScannerStatusId,
+    string PayloadAvailabilityStatusId,
+    Guid? ClarificationRequestId,
+    string ActorPublicAddress,
+    string ActorRoleId,
+    Guid SourceTransactionId,
+    long? SourceBlockHeight,
+    Guid? SourceBlockId,
+    DateTime RecordedAt,
+    string ContentKeyWrapsJson = "[]");
+
+public record ElectionAnomalyEvidenceRedactionRecord(
+    Guid Id,
+    Guid AnomalyThreadId,
+    Guid EventId,
+    string EventHash,
+    ElectionId ElectionId,
+    string TargetKindId,
+    string TargetId,
+    string ReasonCodeId,
+    string OriginalHash,
+    string? ReplacementManifestHash,
+    string? TombstoneStatusId,
+    string? HoldReference,
+    string ActorPublicAddress,
+    Guid SourceTransactionId,
+    long? SourceBlockHeight,
+    Guid? SourceBlockId,
+    DateTime RecordedAt);
+
+public record ElectionAnomalyRestrictedPayloadRecord(
+    Guid Id,
+    ElectionId ElectionId,
+    Guid AnomalyThreadId,
+    string PayloadReference,
+    byte[] EncryptedPayload,
+    string EncryptedPayloadHash,
+    string ContentHash,
+    long SizeBytes,
+    string MimeType,
+    string ScannerStatusId,
+    string PayloadAvailabilityStatusId,
+    DateTime CreatedAt,
+    DateTime? LastCheckedAt = null);
+
 public record ElectionAnomalyActionRecord(
     Guid Id,
     ElectionId ElectionId,

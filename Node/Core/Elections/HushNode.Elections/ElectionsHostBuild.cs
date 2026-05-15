@@ -91,6 +91,9 @@ public static class ElectionsHostBuild
         services.AddTransient<IElectionEnvelopeCryptoService, ElectionEnvelopeCryptoService>();
         services.AddSingleton<IElectionReportPackageService, ElectionReportPackageService>();
         services.AddSingleton<IElectionVerificationPackageExportService, ElectionVerificationPackageExportService>();
+        services.AddSingleton<IElectionAnomalyEvidenceScanner, ElectionAnomalyEvidenceScanner>();
+        services.AddSingleton<IElectionAnomalyRestrictedPayloadStorageService, ElectionAnomalyRestrictedPayloadStorageService>();
+        services.AddSingleton<IElectionAnomalyTrustedScannerOrchestrationService, ElectionAnomalyTrustedScannerOrchestrationService>();
         services.AddSingleton<IElectionBallotPublicationCryptoService, ElectionBallotPublicationCryptoService>();
         services.AddSingleton<IElectionResultCryptoService, ElectionResultCryptoService>();
         services.AddSingleton<ICloseCountingExecutorEnvelopeCrypto>(sp =>

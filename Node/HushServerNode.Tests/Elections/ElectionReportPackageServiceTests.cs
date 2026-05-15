@@ -471,6 +471,92 @@ public class ElectionReportPackageServiceTests
             humanAudit.Content.Contains(phrase, StringComparison.OrdinalIgnoreCase).Should().BeFalse());
     }
 
+    [Fact]
+    public void Build_WithRestrictedAnomalyIntakeManifest_AddsRestrictedArtifactAndEvidenceGraphNode()
+    {
+        var service = new ElectionReportPackageService();
+        var election = CreateFinalizedElectionForReportPackage();
+        var anomalyManifest = CreateRestrictedAnomalyIntakeManifest(election.ElectionId);
+        var request = CreateReportBuildRequest(election, protocolPackageBinding: null) with
+        {
+            RestrictedAnomalyIntakeManifest = anomalyManifest,
+        };
+
+        var buildResult = service.Build(request);
+
+        buildResult.IsSuccess.Should().BeTrue();
+        buildResult.Package.ArtifactCount.Should().Be(14);
+
+        var anomalyArtifact = buildResult.Artifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKind.MachineRestrictedAnomalyIntakeManifest);
+        anomalyArtifact.AccessScope.Should().Be(ElectionReportArtifactAccessScope.OwnerAuditorOnly);
+        anomalyArtifact.FileName.Should().Be("restricted-anomaly-intake-manifest.json");
+        anomalyArtifact.Content.Should().Contain("\"artifactSchemaId\": \"restricted-anomaly-intake-manifest-artifact-v1\"");
+        anomalyArtifact.Content.Should().Contain("\"manifestHash\": \"sha256:");
+        anomalyArtifact.Content.Should().Contain("\"scopeId\": \"package\"");
+        anomalyArtifact.Content.Should().Contain("\"packageReadinessStatusId\": \"blocked\"");
+        anomalyArtifact.Content.Should().Contain("\"scannerStatusId\": \"pending\"");
+
+        var evidenceGraph = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineEvidenceGraph);
+        evidenceGraph.Content.Should().Contain("\"restrictedAnomalyIntakeManifest\"");
+        evidenceGraph.Content.Should().Contain("\"nodeType\": \"anomaly_intake_manifest\"");
+        evidenceGraph.Content.Should().Contain($"\"artifactId\": \"{anomalyArtifact.Id}\"");
+        evidenceGraph.Content.Should().Contain("\"scopeId\": \"package\"");
+        evidenceGraph.Content.Should().Contain("\"threadCount\": 1");
+        evidenceGraph.Content.Should().Contain("\"attachmentManifestCount\": 1");
+        evidenceGraph.Content.Should().Contain("\"redactionCount\": 1");
+        evidenceGraph.Content.Should().Contain("\"anomalyThreadIds\"");
+        evidenceGraph.Content.Should().Contain($"\"{anomalyManifest.Threads[0].AnomalyThreadId}\"");
+        evidenceGraph.Content.Should().Contain("\"attachmentManifestIds\"");
+        evidenceGraph.Content.Should().Contain($"\"{anomalyManifest.Threads[0].Attachments[0].AttachmentManifestId}\"");
+        evidenceGraph.Content.Should().Contain("\"redactionEventIds\"");
+        evidenceGraph.Content.Should().Contain($"\"{anomalyManifest.Threads[0].Redactions[0].RedactionEventId}\"");
+        evidenceGraph.Content.Should().Contain("\"sourceEventIds\"");
+        evidenceGraph.Content.Should().Contain($"\"{anomalyManifest.Threads[0].Attachments[0].EventId}\"");
+        evidenceGraph.Content.Should().Contain($"\"{anomalyManifest.Threads[0].Redactions[0].EventId}\"");
+
+        var disputeIndex = buildResult.Artifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKind.MachineDisputeReviewIndexProjection);
+        disputeIndex.Content.Should().Contain("MachineRestrictedAnomalyIntakeManifest");
+    }
+
+    [Theory]
+    [InlineData(ElectionAnomalyPackageReadinessStatusIds.Ready)]
+    [InlineData(ElectionAnomalyPackageReadinessStatusIds.Warning)]
+    public void Build_WithRestrictedAnomalyReadinessState_ExportsStatusToArtifactAndGraph(
+        string packageReadinessStatusId)
+    {
+        var service = new ElectionReportPackageService();
+        var election = CreateFinalizedElectionForReportPackage();
+        var blockers = packageReadinessStatusId == ElectionAnomalyPackageReadinessStatusIds.Ready
+            ? Array.Empty<string>()
+            : [ElectionAnomalyPayloadAvailabilityStatusIds.ManifestHashMismatch];
+        var anomalyManifest = CreateRestrictedAnomalyIntakeManifest(election.ElectionId) with
+        {
+            PackageReadinessStatusId = packageReadinessStatusId,
+            PackageReadinessBlockerIds = blockers,
+        };
+        var request = CreateReportBuildRequest(election, protocolPackageBinding: null) with
+        {
+            RestrictedAnomalyIntakeManifest = anomalyManifest,
+        };
+
+        var buildResult = service.Build(request);
+
+        buildResult.IsSuccess.Should().BeTrue();
+        var anomalyArtifact = buildResult.Artifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKind.MachineRestrictedAnomalyIntakeManifest);
+        var evidenceGraph = buildResult.Artifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKind.MachineEvidenceGraph);
+        anomalyArtifact.Content.Should().Contain($"\"packageReadinessStatusId\": \"{packageReadinessStatusId}\"");
+        evidenceGraph.Content.Should().Contain($"\"packageReadinessStatusId\": \"{packageReadinessStatusId}\"");
+        foreach (var blocker in blockers)
+        {
+            anomalyArtifact.Content.Should().Contain($"\"{blocker}\"");
+            evidenceGraph.Content.Should().Contain($"\"{blocker}\"");
+        }
+    }
+
     private static OutcomeRuleDefinition CreatePassFailRule() =>
         new(
             OutcomeRuleKind.PassFail,
@@ -689,6 +775,72 @@ public class ElectionReportPackageServiceTests
             sourceTransactionId: Guid.Parse("11111111-1111-1111-1111-111111111111"),
             sourceBlockHeight: 42,
             sourceBlockId: Guid.Parse("22222222-2222-2222-2222-222222222222"));
+    }
+
+    private static AnomalyIntakeManifest CreateRestrictedAnomalyIntakeManifest(ElectionId electionId)
+    {
+        var threadId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var attachmentManifestId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var recordedAt = new DateTime(2026, 5, 4, 12, 8, 0, DateTimeKind.Utc);
+
+        return new AnomalyIntakeManifest(
+            ElectionAnomalyManifestCanonicalizationIds.Current,
+            electionId.ToString(),
+            ElectionAnomalyEvidenceManifestScopeIds.Package,
+            ElectionAnomalyPackageReadinessStatusIds.Blocked,
+            [ElectionAnomalyEvidenceScannerStatusIds.Pending],
+            [
+                new AnomalyIntakeManifestThread(
+                    threadId,
+                    ElectionAnomalyCategoryIds.SecurityOrIntegrityConcern,
+                    ElectionAnomalyCaseStateIds.UnderReview,
+                    "sha256:thread",
+                    GovernedDecisionRef: "proposal-1",
+                    HasOpenClarificationRequest: true,
+                    OpenClarificationRequestId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+                    recordedAt.AddMinutes(-20),
+                    recordedAt,
+                    Attachments:
+                    [
+                        new AnomalyIntakeManifestAttachment(
+                            attachmentManifestId,
+                            Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+                            $"sha256:{Hash('e')}",
+                            ElectionAnomalyAttachmentKindIds.SubmitterEvidence,
+                            $"{ElectionAnomalyRestrictedPayloadReference.Prefix}eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+                            $"sha256:{Hash('a')}",
+                            $"sha256:{Hash('b')}",
+                            2048,
+                            ElectionAnomalyEvidenceMimeTypes.ApplicationPdf,
+                            ElectionAnomalyAttachmentValidationStatusIds.PendingScan,
+                            ElectionAnomalyEvidenceScannerStatusIds.Pending,
+                            ElectionAnomalyPayloadAvailabilityStatusIds.Available,
+                            ClarificationRequestId: null,
+                            recordedAt,
+                            Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff")),
+                    ],
+                    Redactions:
+                    [
+                        new AnomalyIntakeManifestRedaction(
+                            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                            Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                            $"sha256:{Hash('f')}",
+                            ElectionAnomalyRedactionTargetKindIds.AttachmentManifest,
+                            attachmentManifestId.ToString(),
+                            ElectionAnomalyRedactionReasonIds.PersonalData,
+                            $"sha256:{Hash('b')}",
+                            ReplacementManifestHash: null,
+                            TombstoneStatusId: "redacted",
+                            recordedAt.AddMinutes(1),
+                            Guid.Parse("33333333-3333-3333-3333-333333333333")),
+                    ],
+                    RecipientStatuses:
+                    [
+                        new AnomalyIntakeManifestRecipientStatus(
+                            ElectionAnomalyRecipientRoleIds.ElectionOwner,
+                            ElectionAnomalyRecipientWrapStatusIds.Available),
+                    ]),
+            ]);
     }
 
     private static string Hash(char value) =>

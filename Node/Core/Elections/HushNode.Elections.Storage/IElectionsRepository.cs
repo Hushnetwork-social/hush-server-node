@@ -517,5 +517,47 @@ public interface IElectionsRepository : IRepository
     Task UpdateAnomalyRecipientWrapAsync(ElectionAnomalyRecipientWrapRecord recipientWrap) =>
         Task.CompletedTask;
 
+    Task<IReadOnlyList<ElectionAnomalyAttachmentManifestRecord>> GetAnomalyAttachmentManifestsAsync(Guid anomalyThreadId) =>
+        Task.FromResult<IReadOnlyList<ElectionAnomalyAttachmentManifestRecord>>(
+            Array.Empty<ElectionAnomalyAttachmentManifestRecord>());
+
+    Task<IReadOnlyList<ElectionAnomalyAttachmentManifestRecord>> GetAnomalyAttachmentManifestsForElectionAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionAnomalyAttachmentManifestRecord>>(
+            Array.Empty<ElectionAnomalyAttachmentManifestRecord>());
+
+    Task<IReadOnlyList<ElectionAnomalyAttachmentManifestRecord>> GetAnomalyAttachmentManifestsByPayloadReferenceAsync(
+        string encryptedPayloadReference) =>
+        Task.FromResult<IReadOnlyList<ElectionAnomalyAttachmentManifestRecord>>(
+            Array.Empty<ElectionAnomalyAttachmentManifestRecord>());
+
+    Task<ElectionAnomalyAttachmentManifestRecord?> GetAnomalyAttachmentManifestAsync(Guid attachmentManifestId) =>
+        Task.FromResult<ElectionAnomalyAttachmentManifestRecord?>(null);
+
+    Task SaveAnomalyAttachmentManifestAsync(ElectionAnomalyAttachmentManifestRecord attachmentManifest) =>
+        Task.CompletedTask;
+
+    Task UpdateAnomalyAttachmentManifestAsync(ElectionAnomalyAttachmentManifestRecord attachmentManifest) =>
+        Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionAnomalyEvidenceRedactionRecord>> GetAnomalyEvidenceRedactionsAsync(Guid anomalyThreadId) =>
+        Task.FromResult<IReadOnlyList<ElectionAnomalyEvidenceRedactionRecord>>(
+            Array.Empty<ElectionAnomalyEvidenceRedactionRecord>());
+
+    Task<IReadOnlyList<ElectionAnomalyEvidenceRedactionRecord>> GetAnomalyEvidenceRedactionsForElectionAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionAnomalyEvidenceRedactionRecord>>(
+            Array.Empty<ElectionAnomalyEvidenceRedactionRecord>());
+
+    Task SaveAnomalyEvidenceRedactionAsync(ElectionAnomalyEvidenceRedactionRecord redactionRecord) =>
+        Task.CompletedTask;
+
+    Task<ElectionAnomalyRestrictedPayloadRecord?> GetAnomalyRestrictedPayloadAsync(string payloadReference) =>
+        Task.FromResult<ElectionAnomalyRestrictedPayloadRecord?>(null);
+
+    Task SaveAnomalyRestrictedPayloadAsync(ElectionAnomalyRestrictedPayloadRecord payloadRecord) =>
+        Task.CompletedTask;
+
+    Task UpdateAnomalyRestrictedPayloadAsync(ElectionAnomalyRestrictedPayloadRecord payloadRecord) =>
+        Task.CompletedTask;
+
     Task SaveAnomalyActionRecordAsync(ElectionAnomalyActionRecord actionRecord) => Task.CompletedTask;
 }

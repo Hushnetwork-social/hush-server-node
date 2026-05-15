@@ -66,6 +66,11 @@ public interface IElectionQueryApplicationService
         ElectionId electionId,
         string actorPublicAddress);
 
+    Task<ElectionAnomalyEvidenceManifestProjection?> GetElectionAnomalyEvidenceManifestAsync(
+        ElectionId electionId,
+        string actorPublicAddress,
+        string scopeId);
+
     Task<ElectionAnomalyReportManifestSeedProjection?> GetElectionAnomalyReportManifestSeedAsync(
         ElectionId electionId,
         string actorPublicAddress);

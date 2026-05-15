@@ -194,6 +194,83 @@ public class DownloadAttachmentTests
         ex.Which.StatusCode.Should().Be(StatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task DownloadAttachment_AnomalyRestrictedPayloadReference_ThrowsNotFoundWithoutStorageLookup()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        mocker.Use<IConfiguration>(CreateConfiguration());
+        var feedId = new FeedId(Guid.NewGuid());
+        var userAddress = "user-address-789";
+        var attachmentId = CreateAnomalyPayloadReference();
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.IsUserParticipantOfFeedAsync(feedId, userAddress))
+            .ReturnsAsync(true);
+
+        var sut = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new DownloadAttachmentRequest
+        {
+            AttachmentId = attachmentId,
+            FeedId = feedId.Value.ToString(),
+            RequesterUserAddress = userAddress,
+            ThumbnailOnly = false
+        };
+
+        var mockStream = new Mock<IServerStreamWriter<AttachmentChunk>>();
+        var mockContext = new Mock<ServerCallContext>();
+
+        // Act
+        var act = () => sut.DownloadAttachment(request, mockStream.Object, mockContext.Object);
+
+        // Assert
+        var ex = await act.Should().ThrowAsync<RpcException>();
+        ex.Which.StatusCode.Should().Be(StatusCode.NotFound);
+        mocker.GetMock<IAttachmentStorageService>()
+            .Verify(x => x.GetByIdAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DownloadSocialPostAttachment_AnomalyRestrictedPayloadReference_ThrowsNotFoundWithoutStorageLookup()
+    {
+        // Arrange
+        var mocker = new AutoMocker();
+        mocker.Use<IConfiguration>(CreateConfiguration());
+        var postId = Guid.NewGuid();
+        var attachmentId = CreateAnomalyPayloadReference();
+
+        mocker.GetMock<IFeedsStorageService>()
+            .Setup(x => x.GetSocialPostAsync(postId))
+            .ReturnsAsync(new SocialPostEntity
+            {
+                PostId = postId,
+                ReactionScopeId = postId,
+                AuthorPublicAddress = "owner-address",
+                AudienceVisibility = SocialPostVisibility.Open
+            });
+
+        var sut = mocker.CreateInstance<FeedsGrpcService>();
+        var request = new DownloadSocialPostAttachmentRequest
+        {
+            AttachmentId = attachmentId,
+            PostId = postId.ToString("D"),
+            IsAuthenticated = true,
+            RequesterPublicAddress = "viewer-address"
+        };
+
+        var mockStream = new Mock<IServerStreamWriter<AttachmentChunk>>();
+        var mockContext = new Mock<ServerCallContext>();
+
+        // Act
+        var act = () => sut.DownloadSocialPostAttachment(request, mockStream.Object, mockContext.Object);
+
+        // Assert
+        var ex = await act.Should().ThrowAsync<RpcException>();
+        ex.Which.StatusCode.Should().Be(StatusCode.NotFound);
+        mocker.GetMock<IAttachmentStorageService>()
+            .Verify(x => x.GetByIdAsync(It.IsAny<string>()), Times.Never);
+    }
+
     #region Helpers
 
     private static IConfiguration CreateConfiguration() =>
@@ -203,6 +280,9 @@ public class DownloadAttachmentTests
                 ["Feeds:MaxMessagesPerResponse"] = "100"
             })
             .Build();
+
+    private static string CreateAnomalyPayloadReference() =>
+        $"{FeedAttachmentIdPolicy.ElectionAnomalyRestrictedPayloadReferencePrefix}{Guid.NewGuid():D}";
 
     #endregion
 }

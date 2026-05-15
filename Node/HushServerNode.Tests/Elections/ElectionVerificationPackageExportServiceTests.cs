@@ -349,6 +349,42 @@ public class ElectionVerificationPackageExportServiceTests
     }
 
     [Fact]
+    public void Export_RestrictedPackageWithOwnerOnlyReportArtifact_ShouldIncludeRestrictedReportArtifact()
+    {
+        var request = CreateRequest(
+            VerificationPackageView.RestrictedOwnerAuditor,
+            restrictedAccessAuthorized: true,
+            profileId: VerificationProfileIds.RestrictedOwnerAuditorV1);
+        var content = "{\"artifactSchemaId\":\"restricted-anomaly-intake-manifest-artifact-v1\"}";
+        var artifact = ElectionModelFactory.CreateReportArtifact(
+            request.ReportPackage!.Id,
+            request.Election.ElectionId,
+            ElectionReportArtifactKind.MachineRestrictedAnomalyIntakeManifest,
+            ElectionReportArtifactFormat.Json,
+            ElectionReportArtifactAccessScope.OwnerAuditorOnly,
+            sortOrder: 14,
+            title: "Restricted anomaly intake manifest",
+            fileName: "restricted-anomaly-intake-manifest.json",
+            mediaType: "application/json",
+            contentHash: SHA256.HashData(Encoding.UTF8.GetBytes(content)),
+            content: content);
+
+        var result = Export(request with
+        {
+            ReportArtifacts = [.. request.ReportArtifacts, artifact],
+        });
+
+        result.Success.Should().BeTrue();
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.ReportPackageRestrictedAnomalyIntakeManifest &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+        var manifest = ReadFile<AuditPackageManifestRecord>(result, VerificationPackageFileNames.AuditPackageManifest);
+        manifest.Entries.Should().Contain(x =>
+            x.Path == VerificationPackageFileNames.ReportPackageRestrictedAnomalyIntakeManifest &&
+            x.Visibility == VerificationArtifactVisibility.Restricted);
+    }
+
+    [Fact]
     public void Export_RestrictedPackageWithRegulatoryClaim_ShouldIncludeRestrictedWorkpaper()
     {
         var result = Export(CreateRequest(

@@ -30,6 +30,22 @@ public class ElectionAnomalyPersistenceTests
             .IsUnique
             .Should()
             .BeTrue();
+        FindIndex(context, typeof(ElectionAnomalyAttachmentManifestRecord), "EventId")
+            .IsUnique
+            .Should()
+            .BeTrue();
+        FindIndex(context, typeof(ElectionAnomalyAttachmentManifestRecord), "EncryptedPayloadReference")
+            .IsUnique
+            .Should()
+            .BeTrue();
+        FindIndex(context, typeof(ElectionAnomalyEvidenceRedactionRecord), "EventId")
+            .IsUnique
+            .Should()
+            .BeTrue();
+        FindIndex(context, typeof(ElectionAnomalyRestrictedPayloadRecord), "PayloadReference")
+            .IsUnique
+            .Should()
+            .BeTrue();
     }
 
     [Fact]
@@ -124,6 +140,93 @@ public class ElectionAnomalyPersistenceTests
     }
 
     [Fact]
+    public async Task AnomalyEvidenceRecords_ShouldRoundTripManifestRedactionAndRestrictedPayload()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var electionId = ElectionId.NewElectionId;
+        var threadId = Guid.NewGuid();
+        var eventId = Guid.NewGuid();
+        var payloadId = Guid.NewGuid();
+        var payloadReference = ElectionAnomalyRestrictedPayloadReferences.Create(payloadId);
+        var now = DateTime.UtcNow;
+        var manifest = new ElectionAnomalyAttachmentManifestRecord(
+            Guid.NewGuid(),
+            threadId,
+            eventId,
+            Sha256Ref('e'),
+            electionId,
+            ElectionAnomalyAttachmentKindIds.AuthorityEvidence,
+            payloadReference,
+            Sha256Ref('a'),
+            Sha256Ref('b'),
+            1024,
+            ElectionAnomalyEvidenceMimeTypes.ApplicationPdf,
+            ElectionAnomalyAttachmentValidationStatusIds.Accepted,
+            ElectionAnomalyEvidenceScannerStatusIds.Clear,
+            ElectionAnomalyPayloadAvailabilityStatusIds.Available,
+            ClarificationRequestId: null,
+            "owner-address",
+            ElectionAnomalyRecipientRoleIds.ElectionOwner,
+            Guid.NewGuid(),
+            SourceBlockHeight: 7,
+            SourceBlockId: Guid.NewGuid(),
+            now);
+        var redaction = new ElectionAnomalyEvidenceRedactionRecord(
+            Guid.NewGuid(),
+            threadId,
+            Guid.NewGuid(),
+            Sha256Ref('f'),
+            electionId,
+            ElectionAnomalyRedactionTargetKindIds.AttachmentManifest,
+            manifest.Id.ToString(),
+            ElectionAnomalyRedactionReasonIds.PersonalData,
+            manifest.ContentHash,
+            ReplacementManifestHash: null,
+            TombstoneStatusId: "redacted",
+            HoldReference: null,
+            "owner-address",
+            Guid.NewGuid(),
+            SourceBlockHeight: 8,
+            SourceBlockId: Guid.NewGuid(),
+            now.AddMinutes(1));
+        var payload = new ElectionAnomalyRestrictedPayloadRecord(
+            payloadId,
+            electionId,
+            threadId,
+            payloadReference,
+            [1, 2, 3],
+            manifest.EncryptedPayloadHash,
+            manifest.ContentHash,
+            manifest.SizeBytes,
+            manifest.MimeType,
+            manifest.ScannerStatusId,
+            manifest.PayloadAvailabilityStatusId,
+            now);
+
+        await repository.SaveAnomalyAttachmentManifestAsync(manifest);
+        await repository.SaveAnomalyEvidenceRedactionAsync(redaction);
+        await repository.SaveAnomalyRestrictedPayloadAsync(payload);
+        await context.SaveChangesAsync();
+
+        var savedManifests = await repository.GetAnomalyAttachmentManifestsAsync(threadId);
+        var savedElectionManifests = await repository.GetAnomalyAttachmentManifestsForElectionAsync(electionId);
+        var savedRedactions = await repository.GetAnomalyEvidenceRedactionsAsync(threadId);
+        var savedElectionRedactions = await repository.GetAnomalyEvidenceRedactionsForElectionAsync(electionId);
+        var savedPayload = await repository.GetAnomalyRestrictedPayloadAsync(payloadReference);
+
+        savedManifests.Should().ContainSingle();
+        savedElectionManifests.Should().ContainSingle();
+        savedManifests[0].EncryptedPayloadReference.Should().Be(payloadReference);
+        savedRedactions.Should().ContainSingle();
+        savedElectionRedactions.Should().ContainSingle();
+        savedRedactions[0].OriginalHash.Should().Be(manifest.ContentHash);
+        savedPayload.Should().NotBeNull();
+        savedPayload!.PayloadReference.Should().Be(payloadReference);
+        savedPayload.EncryptedPayload.Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
     public void EventHasher_ShouldBeCanonicalAndTamperSensitive()
     {
         var eventId = Guid.NewGuid();
@@ -211,6 +314,9 @@ public class ElectionAnomalyPersistenceTests
             SourceBlockId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             ActorPublicAddress: "submitter-address",
             occurredAt);
+
+    private static string Sha256Ref(char fill) =>
+        $"sha256:{new string(fill, 64)}";
 
     private static ElectionsRepository CreateRepository(ElectionsDbContext context)
     {

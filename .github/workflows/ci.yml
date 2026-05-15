@@ -70,4 +70,4 @@ jobs:
         HUSH_SERVER_NODE_ROOT: ${{ github.workspace }}
         HUSH_WEB_CLIENT_ROOT: ${{ github.workspace }}/hush-web-client
         HUSH_SP07_RUST_WORKER_PATH: ${{ github.workspace }}/Tools/HushSp07RustWorker/target/release/hush-sp07-rust-worker
-      run: dotnet test --no-build --verbosity normal --filter "Category!=Performance&Category!=PerformanceTest&Category!=E2E&Category!=HS-INT-087-CROSS-RUNTIME-PROOF"
+      run: bash ../.github/scripts/run-dotnet-test-projects.sh

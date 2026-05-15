@@ -91,6 +91,26 @@ internal static partial class ElectionGrpcMappings
         return view;
     }
 
+    public static ElectionAnomalyEvidenceManifestView ToProto(
+        this ElectionAnomalyEvidenceManifestProjection projection)
+    {
+        var view = new ElectionAnomalyEvidenceManifestView
+        {
+            ElectionId = projection.ElectionId.ToString(),
+            ScopeId = projection.ScopeId,
+            CanonicalizationId = projection.CanonicalizationId,
+            ManifestHash = projection.ManifestHash,
+            PackageReadinessStatusId = projection.PackageReadinessStatusId,
+            TotalThreadCount = projection.Threads.Count,
+            AttachmentManifestCount = projection.Threads.Sum(thread => thread.AttachmentManifests.Count),
+            RedactionCount = projection.Threads.Sum(thread => thread.Redactions.Count),
+        };
+
+        view.PackageReadinessBlockerIds.AddRange(projection.PackageReadinessBlockerIds);
+        view.Threads.AddRange(projection.Threads.Select(ToProto));
+        return view;
+    }
+
     private static ElectionAnomalyMessageView ToProto(ElectionAnomalyEncryptedMessageProjection projection)
     {
         var view = new ElectionAnomalyMessageView
@@ -224,6 +244,95 @@ internal static partial class ElectionGrpcMappings
         {
             RecipientRoleId = projection.RecipientRoleId,
             WrapStatusId = projection.WrapStatusId,
+        };
+
+    private static ElectionAnomalyEvidenceManifestThreadView ToProto(
+        ElectionAnomalyEvidenceManifestThreadProjection projection)
+    {
+        var view = new ElectionAnomalyEvidenceManifestThreadView
+        {
+            AnomalyThreadId = projection.AnomalyThreadId.ToString(),
+            ElectionId = projection.ElectionId.ToString(),
+            CategoryId = projection.CategoryId,
+            CaseStateId = projection.CaseStateId,
+            CurrentThreadHash = projection.CurrentThreadHash,
+            GovernedDecisionRef = projection.GovernedDecisionRef ?? string.Empty,
+            HasGovernedDecisionRef = !string.IsNullOrWhiteSpace(projection.GovernedDecisionRef),
+            HasOpenClarificationRequest = projection.HasOpenClarificationRequest,
+            OpenClarificationRequestId = projection.OpenClarificationRequestId?.ToString() ?? string.Empty,
+            HasOpenClarificationRequestId = projection.OpenClarificationRequestId.HasValue,
+            CreatedAt = ToTimestamp(projection.CreatedAtUtc),
+            UpdatedAt = ToTimestamp(projection.UpdatedAtUtc),
+        };
+
+        view.AttachmentManifests.AddRange(projection.AttachmentManifests.Select(ToProto));
+        view.Redactions.AddRange(projection.Redactions.Select(ToProto));
+        view.RecipientStatuses.AddRange(projection.RecipientWraps.Select(ToProto));
+        return view;
+    }
+
+    private static ElectionAnomalyAttachmentManifestView ToProto(
+        ElectionAnomalyAttachmentManifestProjection projection)
+    {
+        var view = new ElectionAnomalyAttachmentManifestView
+        {
+            AttachmentManifestId = projection.AttachmentManifestId.ToString(),
+            AnomalyThreadId = projection.AnomalyThreadId.ToString(),
+            EventId = projection.EventId.ToString(),
+            EventHash = projection.EventHash,
+            AttachmentKindId = projection.AttachmentKindId,
+            EncryptedPayloadReference = projection.EncryptedPayloadReference,
+            EncryptedPayloadHash = projection.EncryptedPayloadHash,
+            ContentHash = projection.ContentHash,
+            SizeBytes = projection.SizeBytes,
+            MimeType = projection.MimeType,
+            ValidationStatusId = projection.ValidationStatusId,
+            ScannerStatusId = projection.ScannerStatusId,
+            PayloadAvailabilityStatusId = projection.PayloadAvailabilityStatusId,
+            ClarificationRequestId = projection.ClarificationRequestId?.ToString() ?? string.Empty,
+            HasClarificationRequest = projection.ClarificationRequestId.HasValue,
+            ActorRoleId = projection.ActorRoleId,
+            RecordedAt = ToTimestamp(projection.RecordedAtUtc),
+            SourceTransactionId = projection.SourceTransactionId.ToString(),
+            HasCallerContentKeyWrap = projection.CallerContentKeyWrap is not null,
+        };
+
+        if (projection.CallerContentKeyWrap is not null)
+        {
+            view.CallerContentKeyWrap = ToProto(projection.CallerContentKeyWrap);
+        }
+
+        return view;
+    }
+
+    private static ElectionAnomalyAttachmentContentKeyWrapView ToProto(
+        ElectionAnomalyAttachmentCallerContentKeyWrapProjection projection) =>
+        new()
+        {
+            WrapStatusId = projection.WrapStatusId,
+            RecipientKeyFingerprint = projection.RecipientKeyFingerprint ?? string.Empty,
+            EncryptedContentKey = projection.EncryptedContentKey ?? string.Empty,
+            WrapAlgorithm = projection.WrapAlgorithm ?? string.Empty,
+        };
+
+    private static ElectionAnomalyEvidenceRedactionView ToProto(
+        ElectionAnomalyEvidenceRedactionProjection projection) =>
+        new()
+        {
+            RedactionEventId = projection.RedactionEventId.ToString(),
+            AnomalyThreadId = projection.AnomalyThreadId.ToString(),
+            EventId = projection.EventId.ToString(),
+            EventHash = projection.EventHash,
+            TargetKindId = projection.TargetKindId,
+            TargetId = projection.TargetId,
+            ReasonCodeId = projection.ReasonCodeId,
+            OriginalHash = projection.OriginalHash,
+            ReplacementManifestHash = projection.ReplacementManifestHash ?? string.Empty,
+            HasReplacementManifestHash = !string.IsNullOrWhiteSpace(projection.ReplacementManifestHash),
+            TombstoneStatusId = projection.TombstoneStatusId ?? string.Empty,
+            HasTombstoneStatus = !string.IsNullOrWhiteSpace(projection.TombstoneStatusId),
+            RecordedAt = ToTimestamp(projection.RecordedAtUtc),
+            SourceTransactionId = projection.SourceTransactionId.ToString(),
         };
 
     private static ElectionAnomalyAuditorCallerWrapView ToProto(

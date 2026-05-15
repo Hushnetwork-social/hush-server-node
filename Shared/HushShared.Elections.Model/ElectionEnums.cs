@@ -317,6 +317,7 @@ public enum ElectionReportArtifactKind
     MachineAuditProvenanceReportProjection = 10,
     MachineOutcomeDeterminationProjection = 11,
     MachineDisputeReviewIndexProjection = 12,
+    MachineRestrictedAnomalyIntakeManifest = 13,
 }
 
 public enum ElectionReportArtifactFormat

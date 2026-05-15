@@ -10,11 +10,13 @@ namespace HushNode.Elections.gRPC;
 public class ElectionsGrpcService(
     Domain.IElectionLifecycleService lifecycleService,
     IElectionQueryApplicationService queryApplicationService,
+    Domain.IElectionAnomalyRestrictedPayloadStorageService restrictedPayloadStorageService,
     ILogger<ElectionsGrpcService> logger)
     : Proto.HushElections.HushElectionsBase
 {
     private readonly Domain.IElectionLifecycleService _lifecycleService = lifecycleService;
     private readonly IElectionQueryApplicationService _queryApplicationService = queryApplicationService;
+    private readonly Domain.IElectionAnomalyRestrictedPayloadStorageService _restrictedPayloadStorageService = restrictedPayloadStorageService;
     private readonly ILogger<ElectionsGrpcService> _logger = logger;
 
     public override Task<ElectionCommandResponse> CreateElectionDraft(Proto.CreateElectionDraftRequest request, ServerCallContext context) =>
@@ -585,6 +587,188 @@ public class ElectionsGrpcService(
         {
             _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionAnomalyOwnerTriage));
             throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch owner anomaly triage."));
+        }
+    }
+
+    public override async Task<GetElectionAnomalyEvidenceManifestResponse> GetElectionAnomalyEvidenceManifest(
+        GetElectionAnomalyEvidenceManifestRequest request,
+        ServerCallContext context)
+    {
+        ValidateSignedQuery(
+            nameof(GetElectionAnomalyEvidenceManifest),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+                ["ScopeId"] = request.ScopeId,
+            },
+            context);
+
+        try
+        {
+            var projection = await _queryApplicationService.GetElectionAnomalyEvidenceManifestAsync(
+                ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                request.ActorPublicAddress,
+                request.ScopeId);
+
+            var response = new GetElectionAnomalyEvidenceManifestResponse
+            {
+                Success = projection is not null,
+                ActorPublicAddress = request.ActorPublicAddress,
+                HasManifest = projection is not null,
+                ErrorMessage = projection is null
+                    ? "Anomaly evidence manifest is unavailable for this actor and scope."
+                    : string.Empty,
+            };
+
+            if (projection is not null)
+            {
+                response.Manifest = projection.ToProto();
+            }
+
+            return response;
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionAnomalyEvidenceManifest));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch anomaly evidence manifest."));
+        }
+    }
+
+    public override async Task<StageElectionAnomalyRestrictedPayloadResponse> StageElectionAnomalyRestrictedPayload(
+        StageElectionAnomalyRestrictedPayloadRequest request,
+        ServerCallContext context)
+    {
+        ValidateSignedQuery(
+            nameof(StageElectionAnomalyRestrictedPayload),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+                ["AnomalyThreadId"] = request.AnomalyThreadId,
+                ["AttachmentKindId"] = request.AttachmentKindId,
+                ["EncryptedPayloadBase64"] = request.EncryptedPayloadBase64,
+                ["EncryptedPayloadHash"] = request.EncryptedPayloadHash,
+                ["ContentHash"] = request.ContentHash,
+                ["SizeBytes"] = request.SizeBytes,
+                ["MimeType"] = request.MimeType,
+                ["ClarificationRequestId"] = request.ClarificationRequestId,
+            },
+            context);
+
+        try
+        {
+            var encryptedPayload = Convert.FromBase64String(request.EncryptedPayloadBase64.Trim());
+            var clarificationRequestId = string.IsNullOrWhiteSpace(request.ClarificationRequestId)
+                ? (Guid?)null
+                : ElectionGrpcMappings.ParseGuid(request.ClarificationRequestId, nameof(request.ClarificationRequestId));
+            var stageResult = await _restrictedPayloadStorageService.StageAsync(
+                new Domain.ElectionAnomalyRestrictedPayloadStageRequest(
+                    ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                    ElectionGrpcMappings.ParseGuid(request.AnomalyThreadId, nameof(request.AnomalyThreadId)),
+                    request.ActorPublicAddress,
+                    request.AttachmentKindId,
+                    encryptedPayload,
+                    request.EncryptedPayloadHash,
+                    request.ContentHash,
+                    request.SizeBytes,
+                    request.MimeType,
+                    clarificationRequestId),
+                context.CancellationToken);
+
+            var response = new StageElectionAnomalyRestrictedPayloadResponse
+            {
+                Success = stageResult.Success,
+                ErrorMessage = stageResult.ErrorMessage ?? string.Empty,
+                ActorPublicAddress = request.ActorPublicAddress,
+                ValidationCode = stageResult.ValidationCode ?? string.Empty,
+            };
+
+            if (stageResult.PayloadRecord is not null)
+            {
+                response.PayloadReference = stageResult.PayloadRecord.PayloadReference;
+                response.EncryptedPayloadHash = stageResult.PayloadRecord.EncryptedPayloadHash;
+                response.ContentHash = stageResult.PayloadRecord.ContentHash;
+                response.SizeBytes = stageResult.PayloadRecord.SizeBytes;
+                response.MimeType = stageResult.PayloadRecord.MimeType;
+                response.ScannerStatusId = stageResult.PayloadRecord.ScannerStatusId;
+                response.PayloadAvailabilityStatusId = stageResult.PayloadRecord.PayloadAvailabilityStatusId;
+            }
+
+            return response;
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(StageElectionAnomalyRestrictedPayload));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to stage anomaly restricted payload."));
+        }
+    }
+
+    public override async Task<GetElectionAnomalyRestrictedPayloadResponse> GetElectionAnomalyRestrictedPayload(
+        GetElectionAnomalyRestrictedPayloadRequest request,
+        ServerCallContext context)
+    {
+        ValidateSignedQuery(
+            nameof(GetElectionAnomalyRestrictedPayload),
+            request.ActorPublicAddress,
+            new Dictionary<string, object?>
+            {
+                ["ElectionId"] = request.ElectionId,
+                ["ActorPublicAddress"] = request.ActorPublicAddress,
+                ["PayloadReference"] = request.PayloadReference,
+            },
+            context);
+
+        try
+        {
+            var retrieveResult = await _restrictedPayloadStorageService.RetrieveAsync(
+                new Domain.ElectionAnomalyRestrictedPayloadRetrieveRequest(
+                    ElectionGrpcMappings.ParseElectionId(request.ElectionId),
+                    request.ActorPublicAddress,
+                    request.PayloadReference),
+                context.CancellationToken);
+
+            var response = new GetElectionAnomalyRestrictedPayloadResponse
+            {
+                Success = retrieveResult.Success,
+                ErrorMessage = retrieveResult.ErrorMessage ?? string.Empty,
+                ActorPublicAddress = request.ActorPublicAddress,
+                PayloadReference = request.PayloadReference,
+                ValidationCode = retrieveResult.ValidationCode ?? string.Empty,
+            };
+
+            if (retrieveResult.PayloadRecord is not null)
+            {
+                response.PayloadReference = retrieveResult.PayloadRecord.PayloadReference;
+                response.EncryptedPayloadBase64 = Convert.ToBase64String(retrieveResult.PayloadRecord.EncryptedPayload);
+                response.EncryptedPayloadHash = retrieveResult.PayloadRecord.EncryptedPayloadHash;
+                response.ContentHash = retrieveResult.PayloadRecord.ContentHash;
+                response.SizeBytes = retrieveResult.PayloadRecord.SizeBytes;
+                response.MimeType = retrieveResult.PayloadRecord.MimeType;
+                response.ScannerStatusId = retrieveResult.PayloadRecord.ScannerStatusId;
+                response.PayloadAvailabilityStatusId = retrieveResult.PayloadRecord.PayloadAvailabilityStatusId;
+            }
+
+            return response;
+        }
+        catch (FormatException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionAnomalyRestrictedPayload));
+            throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch anomaly restricted payload."));
         }
     }
 

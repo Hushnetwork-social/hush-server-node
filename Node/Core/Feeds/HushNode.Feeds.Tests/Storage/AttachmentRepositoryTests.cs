@@ -99,6 +99,101 @@ public class AttachmentRepositoryTests : IClassFixture<FeedsInMemoryDbContextFix
     }
 
     [Fact]
+    public async Task CreateAttachment_AnomalyRestrictedPayloadReference_Throws()
+    {
+        // Arrange
+        using var context = _fixture.CreateContext();
+        var repository = CreateRepository(context);
+        var entity = new AttachmentEntity(
+            CreateAnomalyPayloadReference(),
+            new byte[] { 1, 2, 3 },
+            null,
+            TestDataFactory.CreateFeedMessageId(),
+            512,
+            0,
+            "application/pdf",
+            "evidence.pdf",
+            "hashpdfhashpdfhashpdfhashpdfhashpdfhashpdfhashpdfhashpdfhashpdfh",
+            DateTime.UtcNow);
+
+        // Act
+        var act = () => repository.CreateAttachmentAsync(entity);
+
+        // Assert
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*restricted payload references cannot be stored as feed attachments*");
+    }
+
+    [Fact]
+    public async Task GetById_AnomalyRestrictedPayloadReference_ReturnsNullEvenWhenSeeded()
+    {
+        // Arrange
+        using var context = _fixture.CreateContext();
+        var repository = CreateRepository(context);
+        var id = CreateAnomalyPayloadReference();
+        context.Attachments.Add(new AttachmentEntity(
+            id,
+            new byte[] { 7, 8, 9 },
+            null,
+            TestDataFactory.CreateFeedMessageId(),
+            512,
+            0,
+            "application/pdf",
+            "evidence.pdf",
+            "hashpdfhashpdfhashpdfhashpdfhashpdfhashpdfhashpdfhashpdfhashpdfh",
+            DateTime.UtcNow));
+        await context.SaveChangesAsync();
+
+        // Act
+        var result = await repository.GetByIdAsync(id);
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetByMessageId_AnomalyRestrictedPayloadReference_FiltersReservedRows()
+    {
+        // Arrange
+        using var context = _fixture.CreateContext();
+        var repository = CreateRepository(context);
+        var messageId = TestDataFactory.CreateFeedMessageId();
+        var validAttachment = new AttachmentEntity(
+            Guid.NewGuid().ToString(),
+            new byte[] { 1 },
+            null,
+            messageId,
+            100,
+            0,
+            "image/png",
+            "visible.png",
+            "hash1hash1hash1hash1hash1hash1hash1hash1hash1hash1hash1hash1hash1",
+            DateTime.UtcNow);
+        var reservedAttachment = new AttachmentEntity(
+            CreateAnomalyPayloadReference(),
+            new byte[] { 2 },
+            null,
+            messageId,
+            200,
+            0,
+            "application/pdf",
+            "hidden.pdf",
+            "hash2hash2hash2hash2hash2hash2hash2hash2hash2hash2hash2hash2hash2",
+            DateTime.UtcNow);
+
+        await repository.CreateAttachmentAsync(validAttachment);
+        context.Attachments.Add(reservedAttachment);
+        await context.SaveChangesAsync();
+
+        // Act
+        var results = (await repository.GetByMessageIdAsync(messageId)).ToList();
+
+        // Assert
+        results.Should().ContainSingle();
+        results[0].Id.Should().Be(validAttachment.Id);
+    }
+
+    [Fact]
     public async Task CreateAttachment_NullThumbnail_Succeeds()
     {
         // Arrange
@@ -119,4 +214,7 @@ public class AttachmentRepositoryTests : IClassFixture<FeedsInMemoryDbContextFix
         result.Should().NotBeNull();
         result!.EncryptedThumbnail.Should().BeNull();
     }
+
+    private static string CreateAnomalyPayloadReference() =>
+        $"{FeedAttachmentIdPolicy.ElectionAnomalyRestrictedPayloadReferencePrefix}{Guid.NewGuid():D}";
 }

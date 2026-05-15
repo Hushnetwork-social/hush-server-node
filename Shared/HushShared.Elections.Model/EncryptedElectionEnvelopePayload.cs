@@ -319,7 +319,29 @@ public record RecordElectionAnomalyAttachmentManifestActionPayload(
     long SizeBytes,
     string MimeType,
     string ValidationStatusId,
-    Guid? ClarificationRequestId = null);
+    Guid? ClarificationRequestId = null,
+    IReadOnlyList<ElectionAnomalyAttachmentContentKeyWrapPayload>? ContentKeyWraps = null);
+
+public record ElectionAnomalyAttachmentContentKeyWrapPayload(
+    string RecipientRoleId,
+    string RecipientPublicAddress,
+    string RecipientKeyFingerprint,
+    string EncryptedContentKey,
+    string WrapAlgorithm,
+    string WrapStatusId = ElectionAnomalyRecipientWrapStatusIds.Available);
+
+public record RecordElectionAnomalyEvidenceRedactionActionPayload(
+    Guid AnomalyThreadId,
+    Guid RedactionEventId,
+    Guid ActionNonce,
+    string ActorPublicAddress,
+    string TargetKindId,
+    string TargetId,
+    string ReasonCodeId,
+    string OriginalHash,
+    string? ReplacementManifestHash = null,
+    string? TombstoneStatusId = null,
+    string? HoldReference = null);
 
 public record RecordElectionAnomalyAuditorRecipientRewrapActionPayload(
     Guid AnomalyThreadId,
@@ -372,6 +394,7 @@ public static class EncryptedElectionEnvelopeActionTypes
     public const string ClassifyAnomalyThread = "classify_anomaly_thread";
     public const string RegisterExternalAnomalyClaimant = "register_external_anomaly_claimant";
     public const string RecordAnomalyAttachmentManifest = "record_anomaly_attachment_manifest";
+    public const string RecordAnomalyEvidenceRedaction = "record_anomaly_evidence_redaction";
     public const string RecordAnomalyAuditorRecipientRewrap = "record_anomaly_auditor_recipient_rewrap";
 }
 

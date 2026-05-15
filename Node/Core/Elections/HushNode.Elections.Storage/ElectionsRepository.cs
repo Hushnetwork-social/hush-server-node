@@ -1506,6 +1506,81 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         }
     }
 
+    public async Task<IReadOnlyList<ElectionAnomalyAttachmentManifestRecord>> GetAnomalyAttachmentManifestsAsync(Guid anomalyThreadId) =>
+        await Context.ElectionAnomalyAttachmentManifests
+            .Where(x => x.AnomalyThreadId == anomalyThreadId)
+            .OrderBy(x => x.RecordedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<IReadOnlyList<ElectionAnomalyAttachmentManifestRecord>> GetAnomalyAttachmentManifestsForElectionAsync(ElectionId electionId) =>
+        await Context.ElectionAnomalyAttachmentManifests
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.RecordedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<IReadOnlyList<ElectionAnomalyAttachmentManifestRecord>> GetAnomalyAttachmentManifestsByPayloadReferenceAsync(
+        string encryptedPayloadReference) =>
+        await Context.ElectionAnomalyAttachmentManifests
+            .Where(x => x.EncryptedPayloadReference == encryptedPayloadReference)
+            .OrderBy(x => x.RecordedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<ElectionAnomalyAttachmentManifestRecord?> GetAnomalyAttachmentManifestAsync(Guid attachmentManifestId) =>
+        await Context.ElectionAnomalyAttachmentManifests
+            .FirstOrDefaultAsync(x => x.Id == attachmentManifestId);
+
+    public async Task SaveAnomalyAttachmentManifestAsync(ElectionAnomalyAttachmentManifestRecord attachmentManifest) =>
+        await Context.ElectionAnomalyAttachmentManifests.AddAsync(attachmentManifest);
+
+    public async Task UpdateAnomalyAttachmentManifestAsync(ElectionAnomalyAttachmentManifestRecord attachmentManifest)
+    {
+        var existing = await Context.ElectionAnomalyAttachmentManifests
+            .FirstOrDefaultAsync(x => x.Id == attachmentManifest.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(attachmentManifest);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionAnomalyEvidenceRedactionRecord>> GetAnomalyEvidenceRedactionsAsync(Guid anomalyThreadId) =>
+        await Context.ElectionAnomalyEvidenceRedactions
+            .Where(x => x.AnomalyThreadId == anomalyThreadId)
+            .OrderBy(x => x.RecordedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<IReadOnlyList<ElectionAnomalyEvidenceRedactionRecord>> GetAnomalyEvidenceRedactionsForElectionAsync(ElectionId electionId) =>
+        await Context.ElectionAnomalyEvidenceRedactions
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.RecordedAt)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task SaveAnomalyEvidenceRedactionAsync(ElectionAnomalyEvidenceRedactionRecord redactionRecord) =>
+        await Context.ElectionAnomalyEvidenceRedactions.AddAsync(redactionRecord);
+
+    public async Task<ElectionAnomalyRestrictedPayloadRecord?> GetAnomalyRestrictedPayloadAsync(string payloadReference) =>
+        await Context.ElectionAnomalyRestrictedPayloads
+            .FirstOrDefaultAsync(x => x.PayloadReference == payloadReference);
+
+    public async Task SaveAnomalyRestrictedPayloadAsync(ElectionAnomalyRestrictedPayloadRecord payloadRecord) =>
+        await Context.ElectionAnomalyRestrictedPayloads.AddAsync(payloadRecord);
+
+    public async Task UpdateAnomalyRestrictedPayloadAsync(ElectionAnomalyRestrictedPayloadRecord payloadRecord)
+    {
+        var existing = await Context.ElectionAnomalyRestrictedPayloads
+            .FirstOrDefaultAsync(x => x.Id == payloadRecord.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(payloadRecord);
+        }
+    }
+
     public async Task SaveAnomalyActionRecordAsync(ElectionAnomalyActionRecord actionRecord) =>
         await Context.ElectionAnomalyActions.AddAsync(actionRecord);
 

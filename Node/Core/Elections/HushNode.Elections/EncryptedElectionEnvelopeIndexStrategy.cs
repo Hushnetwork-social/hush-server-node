@@ -115,6 +115,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleRegisterExternalAnomalyClaimantAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest =>
                 await HandleRecordAnomalyAttachmentManifestAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyEvidenceRedaction =>
+                await HandleRecordAnomalyEvidenceRedactionAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.RecordAnomalyAuditorRecipientRewrap =>
                 await HandleRecordAnomalyAuditorRecipientRewrapAsync(decryptedEnvelope),
             _ => ElectionCommandResult.Failure(
@@ -1382,9 +1384,89 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 manifestAction.MimeType,
                 manifestAction.ValidationStatusId,
                 manifestAction.ClarificationRequestId,
+                ContentKeyWraps = manifestAction.ContentKeyWraps,
             }),
             message: null,
-            thread => thread);
+            thread => thread,
+            async (repository, thread, threadEvent, recordedAt) =>
+            {
+                await repository.SaveAnomalyAttachmentManifestAsync(new ElectionAnomalyAttachmentManifestRecord(
+                    manifestAction.AttachmentManifestId,
+                    thread.Id,
+                    threadEvent.Id,
+                    threadEvent.EventHash,
+                    thread.ElectionId,
+                    manifestAction.AttachmentKindId,
+                    manifestAction.EncryptedPayloadReference,
+                    manifestAction.EncryptedPayloadHash,
+                    manifestAction.ContentHash,
+                    manifestAction.SizeBytes,
+                    manifestAction.MimeType,
+                    manifestAction.ValidationStatusId,
+                    ResolveScannerStatusId(manifestAction.ValidationStatusId),
+                    ResolvePayloadAvailabilityStatusId(manifestAction.ValidationStatusId),
+                    manifestAction.ClarificationRequestId,
+                    manifestAction.ActorPublicAddress,
+                    ResolveAttachmentActorRoleId(manifestAction.AttachmentKindId),
+                    threadEvent.SourceTransactionId,
+                    threadEvent.SourceBlockHeight,
+                    threadEvent.SourceBlockId,
+                    recordedAt,
+                    JsonSerializer.Serialize(manifestAction.ContentKeyWraps ?? Array.Empty<ElectionAnomalyAttachmentContentKeyWrapPayload>())));
+            });
+    }
+
+    private async Task<ElectionCommandResult> HandleRecordAnomalyEvidenceRedactionAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var redactionAction = decryptedEnvelope.DeserializeAction<RecordElectionAnomalyEvidenceRedactionActionPayload>();
+        if (redactionAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Record anomaly evidence redaction action payload could not be deserialized.");
+        }
+
+        return await AppendAnomalyEventAsync(
+            decryptedEnvelope,
+            redactionAction.AnomalyThreadId,
+            redactionAction.ActionNonce,
+            redactionAction.ActorPublicAddress,
+            ElectionAnomalyEventTypeIds.EvidenceRedactionRecorded,
+            JsonSerializer.Serialize(new
+            {
+                redactionAction.RedactionEventId,
+                redactionAction.TargetKindId,
+                redactionAction.TargetId,
+                redactionAction.ReasonCodeId,
+                redactionAction.OriginalHash,
+                redactionAction.ReplacementManifestHash,
+                redactionAction.TombstoneStatusId,
+                redactionAction.HoldReference,
+            }),
+            message: null,
+            thread => thread,
+            async (repository, thread, threadEvent, recordedAt) =>
+            {
+                await repository.SaveAnomalyEvidenceRedactionAsync(new ElectionAnomalyEvidenceRedactionRecord(
+                    redactionAction.RedactionEventId,
+                    thread.Id,
+                    threadEvent.Id,
+                    threadEvent.EventHash,
+                    thread.ElectionId,
+                    redactionAction.TargetKindId,
+                    redactionAction.TargetId,
+                    redactionAction.ReasonCodeId,
+                    redactionAction.OriginalHash,
+                    redactionAction.ReplacementManifestHash,
+                    redactionAction.TombstoneStatusId,
+                    redactionAction.HoldReference,
+                    redactionAction.ActorPublicAddress,
+                    threadEvent.SourceTransactionId,
+                    threadEvent.SourceBlockHeight,
+                    threadEvent.SourceBlockId,
+                    recordedAt));
+            });
     }
 
     private async Task<ElectionCommandResult> HandleRecordAnomalyAuditorRecipientRewrapAsync(
@@ -1497,7 +1579,9 @@ public class EncryptedElectionEnvelopeIndexStrategy(
         string eventTypeId,
         string eventPayloadJson,
         ElectionAnomalyMessageEnvelopePayload? message,
-        Func<ElectionAnomalyThreadRecord, ElectionAnomalyThreadRecord> updateThread)
+        Func<ElectionAnomalyThreadRecord, ElectionAnomalyThreadRecord> updateThread,
+        Func<IElectionsRepository, ElectionAnomalyThreadRecord, ElectionAnomalyThreadEventRecord, DateTime, Task>?
+            persistEventSideEffects = null)
     {
         using var unitOfWork = _unitOfWorkProvider.CreateWritable();
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
@@ -1570,6 +1654,11 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             await repository.SaveAnomalyRecipientWrapsAsync(wraps);
         }
 
+        if (persistEventSideEffects is not null)
+        {
+            await persistEventSideEffects(repository, thread, threadEvent, recordedAt);
+        }
+
         await repository.UpdateAnomalyThreadAsync(updatedThread);
         await SaveAnomalyActionRecordAsync(
             repository,
@@ -1639,6 +1728,36 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             EventHash = ElectionAnomalyEventHasher.ComputeEventHash(eventRecord),
         };
     }
+
+    private static string ResolveAttachmentActorRoleId(string attachmentKindId) =>
+        string.Equals(
+            attachmentKindId,
+            ElectionAnomalyAttachmentKindIds.AuthorityRequestedEvidence,
+            StringComparison.Ordinal)
+            ? ElectionAnomalyRecipientRoleIds.Submitter
+            : ElectionAnomalyRecipientRoleIds.ElectionOwner;
+
+    private static string ResolveScannerStatusId(string validationStatusId) =>
+        validationStatusId switch
+        {
+            ElectionAnomalyAttachmentValidationStatusIds.ManifestOnly =>
+                ElectionAnomalyEvidenceScannerStatusIds.NotRequired,
+            ElectionAnomalyAttachmentValidationStatusIds.PendingScan =>
+                ElectionAnomalyEvidenceScannerStatusIds.Pending,
+            ElectionAnomalyAttachmentValidationStatusIds.Accepted =>
+                ElectionAnomalyEvidenceScannerStatusIds.Clear,
+            ElectionAnomalyAttachmentValidationStatusIds.Rejected =>
+                ElectionAnomalyEvidenceScannerStatusIds.Quarantined,
+            _ => ElectionAnomalyEvidenceScannerStatusIds.ScannerUnavailable,
+        };
+
+    private static string ResolvePayloadAvailabilityStatusId(string validationStatusId) =>
+        string.Equals(
+            validationStatusId,
+            ElectionAnomalyAttachmentValidationStatusIds.Rejected,
+            StringComparison.Ordinal)
+            ? ElectionAnomalyPayloadAvailabilityStatusIds.Quarantined
+            : ElectionAnomalyPayloadAvailabilityStatusIds.Available;
 
     private static ElectionAnomalyMessageEnvelopeRecord CreateAnomalyMessageRecord(
         ElectionAnomalyMessageEnvelopePayload message,

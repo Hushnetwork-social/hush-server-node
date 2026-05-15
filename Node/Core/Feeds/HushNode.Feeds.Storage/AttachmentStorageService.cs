@@ -15,6 +15,8 @@ public class AttachmentStorageService(
 
     public async Task CreateAttachmentAsync(AttachmentEntity attachment)
     {
+        FeedAttachmentIdPolicy.EnsureCanStore(attachment);
+
         using var writableUnitOfWork = this._unitOfWorkProvider.CreateWritable();
         await writableUnitOfWork
             .GetRepository<IAttachmentRepository>()
@@ -24,6 +26,11 @@ public class AttachmentStorageService(
 
     public async Task<AttachmentEntity?> GetByIdAsync(string attachmentId)
     {
+        if (FeedAttachmentIdPolicy.IsElectionAnomalyRestrictedPayloadReference(attachmentId))
+        {
+            return null;
+        }
+
         using var readOnlyUnitOfWork = this._unitOfWorkProvider.CreateReadOnly();
         return await readOnlyUnitOfWork
             .GetRepository<IAttachmentRepository>()

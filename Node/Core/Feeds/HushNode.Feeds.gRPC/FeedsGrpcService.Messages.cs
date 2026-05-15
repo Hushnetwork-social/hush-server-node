@@ -812,6 +812,11 @@ public partial class FeedsGrpcService
             throw new RpcException(new Status(StatusCode.PermissionDenied, "Not a participant of this feed"));
         }
 
+        if (FeedAttachmentIdPolicy.IsElectionAnomalyRestrictedPayloadReference(request.AttachmentId))
+        {
+            throw new RpcException(new Status(StatusCode.NotFound, "Attachment not found"));
+        }
+
         // Fetch attachment from storage
         var attachment = await this._attachmentStorageService.GetByIdAsync(request.AttachmentId);
         if (attachment == null)
@@ -891,6 +896,11 @@ public partial class FeedsGrpcService
         if (!canView)
         {
             throw new RpcException(new Status(StatusCode.PermissionDenied, "Not authorized to access this social post attachment"));
+        }
+
+        if (FeedAttachmentIdPolicy.IsElectionAnomalyRestrictedPayloadReference(request.AttachmentId))
+        {
+            throw new RpcException(new Status(StatusCode.NotFound, "Attachment not found"));
         }
 
         var attachment = await this._attachmentStorageService.GetByIdAsync(request.AttachmentId);

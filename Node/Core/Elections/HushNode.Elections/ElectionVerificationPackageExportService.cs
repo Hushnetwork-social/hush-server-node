@@ -22,7 +22,7 @@ public sealed partial class ElectionVerificationPackageExportService : IElection
 
         AddJson(files, VerificationPackageFileNames.ElectionRecord, BuildElectionRecord(request), VerificationArtifactVisibility.Public);
         AddJson(files, VerificationPackageFileNames.VerifierProfile, BuildProfile(request.VerifierProfileId), VerificationArtifactVisibility.Public);
-        AddReportArtifacts(files, request.ReportArtifacts);
+        AddReportArtifacts(files, request.ReportArtifacts, request.PackageView);
         AddJson(files, VerificationPackageFileNames.AcceptedBallotSet, BuildAcceptedBallotSet(request), VerificationArtifactVisibility.Public);
         AddJson(files, VerificationPackageFileNames.PublishedBallotStream, BuildPublishedBallotStream(request), VerificationArtifactVisibility.Public);
         AddJson(files, VerificationPackageFileNames.TallyReplay, BuildTallyReplay(request), VerificationArtifactVisibility.Public);

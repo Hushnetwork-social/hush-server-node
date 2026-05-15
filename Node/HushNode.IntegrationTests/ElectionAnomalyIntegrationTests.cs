@@ -325,6 +325,130 @@ public sealed class ElectionAnomalyIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "FEAT-128")]
+    [Trait("Category", "TwinTest")]
+    public async Task SignedAnomalyEvidenceManifestAndRedaction_ProjectDeterministicRestrictedManifest()
+    {
+        await StartNodeAsync();
+        var electionId = await CreateDraftElectionAsync("FEAT-128 Evidence Manifest TwinTest");
+        var (submissionTransaction, anomalyThreadId) = TestTransactionFactory.SubmitElectionAnomalyThread(
+            TestIdentities.Alice,
+            TestIdentities.Alice,
+            electionId);
+        (await SubmitBlockchainTransactionAsync(submissionTransaction)).Successfull.Should().BeTrue();
+
+        var (
+            attachmentTransaction,
+            attachmentManifestId,
+            encryptedPayloadReference,
+            contentHash) = TestTransactionFactory.RecordElectionAnomalyAuthorityAttachmentManifest(
+            TestIdentities.Alice,
+            electionId,
+            anomalyThreadId);
+        var attachmentResponse = await SubmitBlockchainTransactionAsync(attachmentTransaction);
+        attachmentResponse.Successfull.Should().BeTrue(attachmentResponse.Message);
+
+        var (redactionTransaction, redactionEventId) = TestTransactionFactory.RecordElectionAnomalyEvidenceRedaction(
+            TestIdentities.Alice,
+            electionId,
+            anomalyThreadId,
+            attachmentManifestId,
+            contentHash);
+        var redactionResponse = await SubmitBlockchainTransactionAsync(redactionTransaction);
+        redactionResponse.Successfull.Should().BeTrue(redactionResponse.Message);
+
+        await using var scope = _node!.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+        var storedAttachment = await dbContext.Set<ElectionAnomalyAttachmentManifestRecord>()
+            .SingleAsync(x => x.Id == attachmentManifestId);
+        storedAttachment.AnomalyThreadId.Should().Be(anomalyThreadId);
+        storedAttachment.AttachmentKindId.Should().Be(ElectionAnomalyAttachmentKindIds.AuthorityEvidence);
+        storedAttachment.EncryptedPayloadReference.Should().Be(encryptedPayloadReference);
+        storedAttachment.ContentHash.Should().Be(contentHash);
+        storedAttachment.ValidationStatusId.Should().Be(ElectionAnomalyAttachmentValidationStatusIds.Accepted);
+        storedAttachment.ScannerStatusId.Should().Be(ElectionAnomalyEvidenceScannerStatusIds.Clear);
+        storedAttachment.PayloadAvailabilityStatusId.Should().Be(ElectionAnomalyPayloadAvailabilityStatusIds.Available);
+
+        var storedRedaction = await dbContext.Set<ElectionAnomalyEvidenceRedactionRecord>()
+            .SingleAsync(x => x.Id == redactionEventId);
+        storedRedaction.AnomalyThreadId.Should().Be(anomalyThreadId);
+        storedRedaction.TargetKindId.Should().Be(ElectionAnomalyRedactionTargetKindIds.AttachmentManifest);
+        storedRedaction.TargetId.Should().Be(attachmentManifestId.ToString("D"));
+        storedRedaction.ReasonCodeId.Should().Be(ElectionAnomalyRedactionReasonIds.PersonalData);
+        storedRedaction.OriginalHash.Should().Be(contentHash);
+        storedRedaction.TombstoneStatusId.Should().Be("redacted");
+
+        var queryService = scope.ServiceProvider.GetRequiredService<IElectionQueryApplicationService>();
+        var ownerManifest = await queryService.GetElectionAnomalyEvidenceManifestAsync(
+            electionId,
+            TestIdentities.Alice.PublicSigningAddress,
+            ElectionAnomalyEvidenceManifestScopeIds.Owner);
+        ownerManifest.Should().NotBeNull();
+        ownerManifest!.ScopeId.Should().Be(ElectionAnomalyEvidenceManifestScopeIds.Owner);
+        ownerManifest.CanonicalizationId.Should().Be(ElectionAnomalyManifestCanonicalizationIds.Current);
+        ownerManifest.PackageReadinessStatusId.Should().Be(ElectionAnomalyPackageReadinessStatusIds.Ready);
+        ownerManifest.PackageReadinessBlockerIds.Should().BeEmpty();
+        ownerManifest.ManifestHash.Should().Be(ElectionAnomalyIntakeManifestHasher.ComputeHash(
+            ElectionAnomalyIntakeManifestHasher.FromProjection(ownerManifest)));
+
+        var manifestThread = ownerManifest.Threads.Should().ContainSingle().Subject;
+        manifestThread.AnomalyThreadId.Should().Be(anomalyThreadId);
+        var projectedAttachment = manifestThread.AttachmentManifests.Should().ContainSingle().Subject;
+        projectedAttachment.AttachmentManifestId.Should().Be(attachmentManifestId);
+        projectedAttachment.EncryptedPayloadReference.Should().Be(encryptedPayloadReference);
+        projectedAttachment.ScannerStatusId.Should().Be(ElectionAnomalyEvidenceScannerStatusIds.Clear);
+        projectedAttachment.PayloadAvailabilityStatusId.Should().Be(ElectionAnomalyPayloadAvailabilityStatusIds.Available);
+        var projectedRedaction = manifestThread.Redactions.Should().ContainSingle().Subject;
+        projectedRedaction.RedactionEventId.Should().Be(redactionEventId);
+        projectedRedaction.TargetId.Should().Be(attachmentManifestId.ToString("D"));
+        projectedRedaction.OriginalHash.Should().Be(contentHash);
+        projectedRedaction.TombstoneStatusId.Should().Be("redacted");
+
+        var packageManifest = await queryService.GetElectionAnomalyEvidenceManifestAsync(
+            electionId,
+            TestIdentities.Alice.PublicSigningAddress,
+            ElectionAnomalyEvidenceManifestScopeIds.Package);
+        packageManifest.Should().NotBeNull();
+        packageManifest!.ManifestHash.Should().Be(ElectionAnomalyIntakeManifestHasher.ComputeHash(
+            ElectionAnomalyIntakeManifestHasher.FromProjection(packageManifest)));
+        packageManifest.PackageReadinessStatusId.Should().Be(ElectionAnomalyPackageReadinessStatusIds.Ready);
+        packageManifest.Threads.Should().ContainSingle().Subject.AttachmentManifests
+            .Should()
+            .ContainSingle(x => x.AttachmentManifestId == attachmentManifestId);
+
+        var electionsClient = _grpcFactory!.CreateClient<HushElections.HushElectionsClient>();
+        var grpcManifest = await electionsClient.GetElectionAnomalyEvidenceManifestAsync(
+            new GetElectionAnomalyEvidenceManifestRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestIdentities.Alice.PublicSigningAddress,
+                ScopeId = ElectionAnomalyEvidenceManifestScopeIds.Owner,
+            },
+            headers: CreateSignedElectionQueryHeaders(
+                "GetElectionAnomalyEvidenceManifest",
+                TestIdentities.Alice,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId.ToString(),
+                    ["ActorPublicAddress"] = TestIdentities.Alice.PublicSigningAddress,
+                    ["ScopeId"] = ElectionAnomalyEvidenceManifestScopeIds.Owner,
+                }));
+
+        grpcManifest.Success.Should().BeTrue(grpcManifest.ErrorMessage);
+        grpcManifest.HasManifest.Should().BeTrue();
+        grpcManifest.Manifest.ManifestHash.Should().Be(ownerManifest.ManifestHash);
+        grpcManifest.Manifest.PackageReadinessStatusId.Should().Be(ElectionAnomalyPackageReadinessStatusIds.Ready);
+        grpcManifest.Manifest.PackageReadinessBlockerIds.Should().BeEmpty();
+        grpcManifest.Manifest.AttachmentManifestCount.Should().Be(1);
+        grpcManifest.Manifest.RedactionCount.Should().Be(1);
+        grpcManifest.Manifest.Threads.Should().ContainSingle();
+        grpcManifest.Manifest.Threads[0].AttachmentManifests[0].EncryptedPayloadReference
+            .Should()
+            .Be(encryptedPayloadReference);
+        grpcManifest.Manifest.Threads[0].Redactions[0].OriginalHash.Should().Be(contentHash);
+    }
+
+    [Fact]
     [Trait("Category", "FEAT-127")]
     public async Task SignedAnomalyAuditorRecipientRewrap_UpdatesAuditorRestrictedProjection()
     {

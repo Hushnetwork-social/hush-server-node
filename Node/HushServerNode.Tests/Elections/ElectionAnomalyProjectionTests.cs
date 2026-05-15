@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using HushNode.Elections;
 using HushNode.Elections.gRPC;
@@ -348,6 +349,135 @@ public class ElectionAnomalyProjectionTests
             .NotContain(property => property.Name.Contains("PublicAddress", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task GetElectionAnomalyEvidenceManifestAsync_WithOwner_ReturnsManifestHashAndReadinessBlockers()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election, "owner-address");
+        var attachment = CreateAttachmentManifest(thread) with
+        {
+            ScannerStatusId = ElectionAnomalyEvidenceScannerStatusIds.Pending,
+        };
+        var redaction = CreateRedaction(thread, attachment);
+        var repository = CreateRepository(election, [thread]);
+        SetupThreadMessages(repository, thread, CreateMessage(thread));
+        SetupThreadEvidence(repository, thread, [attachment], [redaction]);
+        var sut = CreateService(repository.Object);
+
+        var projection = await sut.GetElectionAnomalyEvidenceManifestAsync(
+            election.ElectionId,
+            "owner-address",
+            ElectionAnomalyEvidenceManifestScopeIds.Owner);
+
+        projection.Should().NotBeNull();
+        projection!.ManifestHash.Should().StartWith("sha256:");
+        projection.PackageReadinessStatusId.Should().Be(ElectionAnomalyPackageReadinessStatusIds.Blocked);
+        projection.PackageReadinessBlockerIds.Should().Contain(ElectionAnomalyEvidenceScannerStatusIds.Pending);
+        projection.Threads.Should().ContainSingle();
+        projection.Threads[0].AttachmentManifests.Should().ContainSingle();
+        projection.Threads[0].Redactions.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyEvidenceManifestAsync_WithCallerContentKeyWrap_ReturnsCallerWrapOnly()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election, "owner-address");
+        var attachment = CreateAttachmentManifest(thread) with
+        {
+            ContentKeyWrapsJson = JsonSerializer.Serialize(new[]
+            {
+                new ElectionAnomalyAttachmentContentKeyWrapPayload(
+                    ElectionAnomalyRecipientRoleIds.ElectionOwner,
+                    "owner-address",
+                    "owner-key-fingerprint",
+                    "owner-encrypted-content-key",
+                    "x25519-aes-gcm"),
+                new ElectionAnomalyAttachmentContentKeyWrapPayload(
+                    ElectionAnomalyRecipientRoleIds.DesignatedAuditor,
+                    "auditor-address",
+                    "auditor-key-fingerprint",
+                    "auditor-encrypted-content-key",
+                    "x25519-aes-gcm"),
+            }),
+        };
+        var repository = CreateRepository(election, [thread]);
+        SetupThreadMessages(repository, thread, CreateMessage(thread));
+        SetupThreadEvidence(repository, thread, [attachment], []);
+        var sut = CreateService(repository.Object);
+
+        var projection = await sut.GetElectionAnomalyEvidenceManifestAsync(
+            election.ElectionId,
+            "owner-address",
+            ElectionAnomalyEvidenceManifestScopeIds.Owner);
+
+        projection.Should().NotBeNull();
+        var projectedAttachment = projection!.Threads[0].AttachmentManifests[0];
+        projectedAttachment.CallerContentKeyWrap.Should().NotBeNull();
+        projectedAttachment.CallerContentKeyWrap!.EncryptedContentKey
+            .Should()
+            .Be("owner-encrypted-content-key");
+        projectedAttachment.GetType().GetProperties()
+            .Should()
+            .NotContain(property => property.Name.Contains("PublicAddress", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData(ElectionAnomalyEvidenceManifestScopeIds.Owner, "other-address")]
+    [InlineData(ElectionAnomalyEvidenceManifestScopeIds.Auditor, "other-address")]
+    [InlineData(ElectionAnomalyEvidenceManifestScopeIds.Package, "other-address")]
+    public async Task GetElectionAnomalyEvidenceManifestAsync_WithUnauthorizedScope_ReturnsNull(
+        string scopeId,
+        string actorPublicAddress)
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election, "owner-address");
+        var repository = CreateRepository(election, [thread]);
+        SetupThreadMessages(repository, thread, CreateMessage(thread));
+        var sut = CreateService(repository.Object);
+
+        var projection = await sut.GetElectionAnomalyEvidenceManifestAsync(
+            election.ElectionId,
+            actorPublicAddress,
+            scopeId);
+
+        projection.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyEvidenceManifestAsync_WithAuditor_DoesNotExposeSubmitterIdentityFields()
+    {
+        var election = CreateElection();
+        var auditorGrant = ElectionModelFactory.CreateReportAccessGrant(
+            election.ElectionId,
+            "auditor-address",
+            "owner-address",
+            ElectionReportAccessGrantRole.DesignatedAuditor);
+        var thread = CreateThread(election, "owner-address");
+        var attachment = CreateAttachmentManifest(thread);
+        var repository = CreateRepository(election, [thread]);
+        repository
+            .Setup(x => x.GetReportAccessGrantAsync(election.ElectionId, "auditor-address"))
+            .ReturnsAsync(auditorGrant);
+        SetupThreadMessages(repository, thread, CreateMessage(thread));
+        SetupThreadEvidence(repository, thread, [attachment], []);
+        var sut = CreateService(repository.Object);
+
+        var projection = await sut.GetElectionAnomalyEvidenceManifestAsync(
+            election.ElectionId,
+            "auditor-address",
+            ElectionAnomalyEvidenceManifestScopeIds.Auditor);
+
+        projection.Should().NotBeNull();
+        projection!.Threads[0].AttachmentManifests[0].GetType().GetProperties()
+            .Should()
+            .NotContain(property =>
+                property.Name.Contains("Submitter", StringComparison.OrdinalIgnoreCase) ||
+                property.Name.Contains("ActorPublicAddress", StringComparison.OrdinalIgnoreCase) ||
+                property.Name.Contains("PersonScope", StringComparison.OrdinalIgnoreCase) ||
+                property.Name.Contains("RoleContext", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static Mock<IElectionsRepository> CreateRepository(
         ElectionRecord election,
         IReadOnlyList<ElectionAnomalyThreadRecord> threads)
@@ -429,6 +559,20 @@ public class ElectionAnomalyProjectionTests
             .ReturnsAsync(Array.Empty<ElectionAnomalyThreadEventRecord>());
     }
 
+    private static void SetupThreadEvidence(
+        Mock<IElectionsRepository> repository,
+        ElectionAnomalyThreadRecord thread,
+        IReadOnlyList<ElectionAnomalyAttachmentManifestRecord> attachments,
+        IReadOnlyList<ElectionAnomalyEvidenceRedactionRecord> redactions)
+    {
+        repository
+            .Setup(x => x.GetAnomalyAttachmentManifestsAsync(thread.Id))
+            .ReturnsAsync(attachments);
+        repository
+            .Setup(x => x.GetAnomalyEvidenceRedactionsAsync(thread.Id))
+            .ReturnsAsync(redactions);
+    }
+
     private static ElectionQueryApplicationService CreateService(IElectionsRepository repository)
     {
         var unitOfWork = new Mock<IReadOnlyUnitOfWork<ElectionsDbContext>>();
@@ -456,6 +600,56 @@ public class ElectionAnomalyProjectionTests
             PlaintextCharacterCount: 24,
             EncryptionAlgorithm: "x25519-aes-gcm",
             DateTime.UtcNow);
+
+    private static ElectionAnomalyAttachmentManifestRecord CreateAttachmentManifest(
+        ElectionAnomalyThreadRecord thread) =>
+        new(
+            Guid.NewGuid(),
+            thread.Id,
+            Guid.NewGuid(),
+            Sha256Ref('e'),
+            thread.ElectionId,
+            ElectionAnomalyAttachmentKindIds.AuthorityEvidence,
+            ElectionAnomalyRestrictedPayloadReferences.Create(Guid.NewGuid()),
+            Sha256Ref('a'),
+            Sha256Ref('b'),
+            1024,
+            ElectionAnomalyEvidenceMimeTypes.ApplicationPdf,
+            ElectionAnomalyAttachmentValidationStatusIds.Accepted,
+            ElectionAnomalyEvidenceScannerStatusIds.Clear,
+            ElectionAnomalyPayloadAvailabilityStatusIds.Available,
+            ClarificationRequestId: null,
+            "owner-address",
+            ElectionAnomalyRecipientRoleIds.ElectionOwner,
+            Guid.NewGuid(),
+            SourceBlockHeight: null,
+            SourceBlockId: null,
+            DateTime.UtcNow);
+
+    private static ElectionAnomalyEvidenceRedactionRecord CreateRedaction(
+        ElectionAnomalyThreadRecord thread,
+        ElectionAnomalyAttachmentManifestRecord attachment) =>
+        new(
+            Guid.NewGuid(),
+            thread.Id,
+            Guid.NewGuid(),
+            Sha256Ref('f'),
+            thread.ElectionId,
+            ElectionAnomalyRedactionTargetKindIds.AttachmentManifest,
+            attachment.Id.ToString(),
+            ElectionAnomalyRedactionReasonIds.PersonalData,
+            attachment.ContentHash,
+            ReplacementManifestHash: null,
+            TombstoneStatusId: "redacted",
+            HoldReference: null,
+            "owner-address",
+            Guid.NewGuid(),
+            SourceBlockHeight: null,
+            SourceBlockId: null,
+            DateTime.UtcNow);
+
+    private static string Sha256Ref(char fill) =>
+        $"sha256:{new string(fill, 64)}";
 
     private static ElectionAnomalyThreadRecord CreateThread(
         ElectionRecord election,

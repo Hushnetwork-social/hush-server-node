@@ -125,6 +125,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             var humanOutcomeId = Guid.NewGuid();
             var machineDisputeId = Guid.NewGuid();
             var humanDisputeId = Guid.NewGuid();
+            var machineRestrictedAnomalyIntakeManifestId = request.RestrictedAnomalyIntakeManifest is null
+                ? (Guid?)null
+                : Guid.NewGuid();
 
             var artifacts = new List<ElectionReportArtifactRecord>
             {
@@ -175,6 +178,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                     {
                         ArtifactId = machineEvidenceGraphId,
                         ManifestArtifactId = machineManifestId,
+                        RestrictedAnomalyIntakeManifest = BuildRestrictedAnomalyIntakeManifestEvidenceGraphNode(
+                            request.RestrictedAnomalyIntakeManifest,
+                            machineRestrictedAnomalyIntakeManifestId),
                     }),
                 CreateJsonArtifact(
                     request,
@@ -288,6 +294,22 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                     "outcome-determination.md",
                     BuildHumanOutcomeContent(request.Election, outcomeProjection)),
             };
+
+            if (request.RestrictedAnomalyIntakeManifest is not null &&
+                machineRestrictedAnomalyIntakeManifestId.HasValue)
+            {
+                artifacts.Add(CreateJsonArtifact(
+                    request,
+                    packageId,
+                    machineRestrictedAnomalyIntakeManifestId.Value,
+                    null,
+                    ElectionReportArtifactKind.MachineRestrictedAnomalyIntakeManifest,
+                    ElectionReportArtifactAccessScope.OwnerAuditorOnly,
+                    14,
+                    "Restricted anomaly intake manifest",
+                    "restricted-anomaly-intake-manifest.json",
+                    BuildRestrictedAnomalyIntakeManifestArtifact(request.RestrictedAnomalyIntakeManifest)));
+            }
 
             var disputeCatalogEntries = artifacts
                 .Select(x => new DisputeArtifactCatalogEntryProjection(
@@ -500,6 +522,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             BuildProtocolPackageBindingProjection(request.ProtocolPackageBinding),
             BuildOperationalSecurityProjection(request),
             BuildRegulatoryClaimProjection(request),
+            request.RestrictedAnomalyIntakeManifest,
             request.FinalizationSession is null
                 ? null
                 : new FinalizationSessionProjection(
@@ -987,7 +1010,67 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             ProtocolPackageBinding: protocolPackageBinding,
             OperationalSecurity: operationalSecurity,
             RegulatoryClaim: regulatoryClaim,
+            RestrictedAnomalyIntakeManifest: null,
             Trustees: trustees);
+
+    private static EvidenceGraphAnomalyIntakeManifestProjection? BuildRestrictedAnomalyIntakeManifestEvidenceGraphNode(
+        AnomalyIntakeManifest? manifest,
+        Guid? artifactId)
+    {
+        if (manifest is null || !artifactId.HasValue)
+        {
+            return null;
+        }
+
+        return new EvidenceGraphAnomalyIntakeManifestProjection(
+            NodeType: "anomaly_intake_manifest",
+            ArtifactId: artifactId.Value,
+            CanonicalizationId: manifest.CanonicalizationId,
+            ManifestHash: ElectionAnomalyIntakeManifestHasher.ComputeHash(manifest),
+            ScopeId: manifest.ScopeId,
+            PackageReadinessStatusId: manifest.PackageReadinessStatusId,
+            PackageReadinessBlockerIds: manifest.PackageReadinessBlockerIds
+                .OrderBy(x => x, StringComparer.Ordinal)
+                .ToArray(),
+            ThreadCount: manifest.Threads.Count,
+            AttachmentManifestCount: manifest.Threads.Sum(x => x.Attachments.Count),
+            RedactionCount: manifest.Threads.Sum(x => x.Redactions.Count),
+            RecipientStatusCount: manifest.Threads.Sum(x => x.RecipientStatuses.Count),
+            AnomalyThreadIds: manifest.Threads
+                .Select(x => x.AnomalyThreadId)
+                .OrderBy(x => x)
+                .ToArray(),
+            AttachmentManifestIds: manifest.Threads
+                .SelectMany(x => x.Attachments.Select(attachment => attachment.AttachmentManifestId))
+                .OrderBy(x => x)
+                .ToArray(),
+            RedactionEventIds: manifest.Threads
+                .SelectMany(x => x.Redactions.Select(redaction => redaction.RedactionEventId))
+                .OrderBy(x => x)
+                .ToArray(),
+            SourceEventIds: manifest.Threads
+                .SelectMany(x => x.Attachments.Select(attachment => attachment.EventId)
+                    .Concat(x.Redactions.Select(redaction => redaction.EventId)))
+                .OrderBy(x => x)
+                .ToArray());
+    }
+
+    private static RestrictedAnomalyIntakeManifestArtifactProjection BuildRestrictedAnomalyIntakeManifestArtifact(
+        AnomalyIntakeManifest manifest) =>
+        new(
+            ArtifactSchemaId: "restricted-anomaly-intake-manifest-artifact-v1",
+            ManifestHash: ElectionAnomalyIntakeManifestHasher.ComputeHash(manifest),
+            CanonicalizationId: manifest.CanonicalizationId,
+            ScopeId: manifest.ScopeId,
+            PackageReadinessStatusId: manifest.PackageReadinessStatusId,
+            PackageReadinessBlockerIds: manifest.PackageReadinessBlockerIds
+                .OrderBy(x => x, StringComparer.Ordinal)
+                .ToArray(),
+            ThreadCount: manifest.Threads.Count,
+            AttachmentManifestCount: manifest.Threads.Sum(x => x.Attachments.Count),
+            RedactionCount: manifest.Threads.Sum(x => x.Redactions.Count),
+            RecipientStatusCount: manifest.Threads.Sum(x => x.RecipientStatuses.Count),
+            Manifest: manifest);
 
     private static ResultReportProjection BuildResultReportProjection(
         ElectionRecord election,
@@ -1767,6 +1850,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         ProtocolPackageBindingProjection? ProtocolPackageBinding,
         OperationalSecurityProjection OperationalSecurity,
         RegulatoryClaimProjection? RegulatoryClaim,
+        AnomalyIntakeManifest? RestrictedAnomalyIntakeManifest,
         FinalizationSessionProjection? FinalizationSession,
         FinalizationReleaseProjection? FinalizationReleaseEvidence,
         IReadOnlyList<WarningEvidenceProjection> WarningEvidence,
@@ -2020,7 +2104,38 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         ProtocolPackageBindingProjection? ProtocolPackageBinding,
         OperationalSecurityProjection OperationalSecurity,
         RegulatoryClaimProjection? RegulatoryClaim,
+        EvidenceGraphAnomalyIntakeManifestProjection? RestrictedAnomalyIntakeManifest,
         IReadOnlyList<TrusteeProjection> Trustees);
+
+    private sealed record EvidenceGraphAnomalyIntakeManifestProjection(
+        string NodeType,
+        Guid ArtifactId,
+        string CanonicalizationId,
+        string ManifestHash,
+        string ScopeId,
+        string PackageReadinessStatusId,
+        IReadOnlyList<string> PackageReadinessBlockerIds,
+        int ThreadCount,
+        int AttachmentManifestCount,
+        int RedactionCount,
+        int RecipientStatusCount,
+        IReadOnlyList<Guid> AnomalyThreadIds,
+        IReadOnlyList<Guid> AttachmentManifestIds,
+        IReadOnlyList<Guid> RedactionEventIds,
+        IReadOnlyList<Guid> SourceEventIds);
+
+    private sealed record RestrictedAnomalyIntakeManifestArtifactProjection(
+        string ArtifactSchemaId,
+        string ManifestHash,
+        string CanonicalizationId,
+        string ScopeId,
+        string PackageReadinessStatusId,
+        IReadOnlyList<string> PackageReadinessBlockerIds,
+        int ThreadCount,
+        int AttachmentManifestCount,
+        int RedactionCount,
+        int RecipientStatusCount,
+        AnomalyIntakeManifest Manifest);
 
     private sealed record ResultReportProjection(
         Guid MachineArtifactId,

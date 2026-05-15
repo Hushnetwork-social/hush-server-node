@@ -322,6 +322,13 @@ public class BlockchainGrpcService(
         // ID matching check
         if (attachmentRefs != null)
         {
+            var reservedAttachmentRef = attachmentRefs
+                .FirstOrDefault(r => FeedAttachmentIdPolicy.IsElectionAnomalyRestrictedPayloadReference(r.Id));
+            if (reservedAttachmentRef != null)
+            {
+                return "Attachment id is reserved for election anomaly restricted payloads";
+            }
+
             var refIds = new HashSet<string>(attachmentRefs.Select(r => r.Id));
             var blobIds = new HashSet<string>(request.Attachments.Select(b => b.AttachmentId));
 

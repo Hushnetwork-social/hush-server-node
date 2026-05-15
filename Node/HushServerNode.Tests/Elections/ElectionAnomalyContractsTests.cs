@@ -63,7 +63,23 @@ public class ElectionAnomalyContractsTests
             ElectionAnomalyValidationCodes.ClarificationRequestNotOpen,
             ElectionAnomalyValidationCodes.ClarificationRequestAlreadyOpen,
             ElectionAnomalyValidationCodes.RecipientWrapMissing,
-            ElectionAnomalyValidationCodes.ReadForbidden);
+            ElectionAnomalyValidationCodes.ReadForbidden,
+            ElectionAnomalyValidationCodes.SeverityCandidateInvalid,
+            ElectionAnomalyValidationCodes.TerminalStateRequiresClosedClarification,
+            ElectionAnomalyValidationCodes.AttachmentKindInvalid,
+            ElectionAnomalyValidationCodes.AttachmentMimeTypeInvalid,
+            ElectionAnomalyValidationCodes.AttachmentSizeExceeded,
+            ElectionAnomalyValidationCodes.AttachmentCountExceeded,
+            ElectionAnomalyValidationCodes.AttachmentHashInvalid,
+            ElectionAnomalyValidationCodes.AttachmentPayloadReferenceInvalid,
+            ElectionAnomalyValidationCodes.AttachmentRequestMismatch,
+            ElectionAnomalyValidationCodes.AttachmentSubmitterNotAllowed,
+            ElectionAnomalyValidationCodes.AttachmentOperationalEvidenceDisabled,
+            ElectionAnomalyValidationCodes.AttachmentScannerStatusInvalid,
+            ElectionAnomalyValidationCodes.RedactionReasonInvalid,
+            ElectionAnomalyValidationCodes.RedactionTargetInvalid,
+            ElectionAnomalyValidationCodes.RedactionUnauthorized,
+            ElectionAnomalyValidationCodes.RedactionOriginalHashInvalid);
 
         ElectionAnomalyValidationCodes.IsKnown(ElectionAnomalyValidationCodes.DuplicateThread)
             .Should()
@@ -83,6 +99,7 @@ public class ElectionAnomalyContractsTests
             EncryptedElectionEnvelopeActionTypes.ClassifyAnomalyThread,
             EncryptedElectionEnvelopeActionTypes.RegisterExternalAnomalyClaimant,
             EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyEvidenceRedaction,
             EncryptedElectionEnvelopeActionTypes.RecordAnomalyAuditorRecipientRewrap,
         };
 
@@ -94,6 +111,7 @@ public class ElectionAnomalyContractsTests
             "classify_anomaly_thread",
             "register_external_anomaly_claimant",
             "record_anomaly_attachment_manifest",
+            "record_anomaly_evidence_redaction",
             "record_anomaly_auditor_recipient_rewrap");
     }
 
@@ -109,6 +127,7 @@ public class ElectionAnomalyContractsTests
             typeof(ClassifyElectionAnomalyThreadActionPayload),
             typeof(RegisterExternalElectionAnomalyClaimantActionPayload),
             typeof(RecordElectionAnomalyAttachmentManifestActionPayload),
+            typeof(RecordElectionAnomalyEvidenceRedactionActionPayload),
             typeof(RecordElectionAnomalyAuditorRecipientRewrapActionPayload),
         };
 
@@ -142,6 +161,7 @@ public class ElectionAnomalyContractsTests
                 "ClassifyElectionAnomalyThread",
                 "RegisterExternalElectionAnomalyClaimant",
                 "RecordElectionAnomalyAttachmentManifest",
+                "RecordElectionAnomalyEvidenceRedaction",
                 "RecordElectionAnomalyAuditorRecipientRewrap",
             ],
             "anomaly writes must enter through HushBlockchain.SubmitSignedTransaction");

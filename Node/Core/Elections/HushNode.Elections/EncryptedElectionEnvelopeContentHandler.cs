@@ -240,6 +240,8 @@ public class EncryptedElectionEnvelopeContentHandler(
                 IsValidRegisterExternalAnomalyClaimantAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest =>
                 IsValidRecordAnomalyAttachmentManifestAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyEvidenceRedaction =>
+                IsValidRecordAnomalyEvidenceRedactionAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.RecordAnomalyAuditorRecipientRewrap =>
                 IsValidRecordAnomalyAuditorRecipientRewrapAction(decryptedEnvelope, signatory),
             _ => false,
@@ -2521,6 +2523,84 @@ public class EncryptedElectionEnvelopeContentHandler(
                 "Anomaly attachment manifest actor must match the signed transaction signatory.");
         }
 
+        if (!ElectionAnomalyAttachmentKindIds.IsKnown(manifestAction.AttachmentKindId))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.AttachmentKindInvalid,
+                "Anomaly attachment manifest kind is not supported.");
+        }
+
+        if (string.Equals(
+                manifestAction.AttachmentKindId,
+                ElectionAnomalyAttachmentKindIds.SubmitterEvidence,
+                StringComparison.Ordinal))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.AttachmentSubmitterNotAllowed,
+                "Unprompted submitter anomaly evidence is not enabled in v1.");
+        }
+
+        if (string.Equals(
+                manifestAction.AttachmentKindId,
+                ElectionAnomalyAttachmentKindIds.RestrictedOperationalEvidence,
+                StringComparison.Ordinal))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.AttachmentOperationalEvidenceDisabled,
+                "Restricted operational anomaly evidence is disabled unless policy enables it.");
+        }
+
+        if (!ElectionAnomalyAttachmentValidationStatusIds.IsKnown(manifestAction.ValidationStatusId))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.AttachmentScannerStatusInvalid,
+                "Anomaly attachment validation status is not supported.");
+        }
+
+        if (!ElectionAnomalyEvidenceMimeTypes.IsAllowed(manifestAction.MimeType))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.AttachmentMimeTypeInvalid,
+                "Anomaly attachment MIME type is not allowed.");
+        }
+
+        if (!IsSha256Reference(manifestAction.EncryptedPayloadHash) ||
+            !IsSha256Reference(manifestAction.ContentHash))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.AttachmentHashInvalid,
+                "Anomaly attachment manifest hashes must be lowercase sha256 references.");
+        }
+
+        if (!ElectionAnomalyRestrictedPayloadReference.IsValid(manifestAction.EncryptedPayloadReference))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.AttachmentPayloadReferenceInvalid,
+                "Anomaly attachment payload reference is outside the restricted election evidence namespace.");
+        }
+
+        var isSubmitterClarificationEvidence = string.Equals(
+            manifestAction.AttachmentKindId,
+            ElectionAnomalyAttachmentKindIds.AuthorityRequestedEvidence,
+            StringComparison.Ordinal);
+        var perPayloadLimit = isSubmitterClarificationEvidence
+            ? ElectionAnomalyLimits.SubmitterClarificationEvidenceMaxBytes
+            : ElectionAnomalyLimits.AuthorityEvidenceMaxBytes;
+        if (manifestAction.SizeBytes > perPayloadLimit)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.AttachmentSizeExceeded,
+                "Anomaly attachment exceeds the configured per-payload size limit.");
+        }
+
         using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
         var repository = unitOfWork.GetRepository<IElectionsRepository>();
         var election = repository.GetElectionAsync(decryptedEnvelope.Transaction.Payload.ElectionId)
@@ -2538,9 +2618,64 @@ public class EncryptedElectionEnvelopeContentHandler(
                 "Anomaly thread was not found for the attachment manifest.");
         }
 
+        if (!IsValidAttachmentContentKeyWrapPolicy(transactionId, manifestAction, repository, election, thread))
+        {
+            return false;
+        }
+
         if (IsAnomalyAuthorityActor(election, manifestAction.ActorPublicAddress))
         {
+            if (!string.Equals(
+                    manifestAction.AttachmentKindId,
+                    ElectionAnomalyAttachmentKindIds.AuthorityEvidence,
+                    StringComparison.Ordinal))
+            {
+                return RejectWithValidationFailure(
+                    transactionId,
+                    ElectionAnomalyValidationCodes.AttachmentKindInvalid,
+                    "Election authority attachment manifests must use authority evidence in v1.");
+            }
+
+            if (manifestAction.ClarificationRequestId.HasValue)
+            {
+                return RejectWithValidationFailure(
+                    transactionId,
+                    ElectionAnomalyValidationCodes.AttachmentRequestMismatch,
+                    "Election authority evidence is attached to the anomaly thread, not a submitter clarification request.");
+            }
+
+            var authorityManifests = LoadAnomalyAttachmentManifests(repository, thread.Id)
+                .Where(manifest => string.Equals(
+                    manifest.AttachmentKindId,
+                    ElectionAnomalyAttachmentKindIds.AuthorityEvidence,
+                    StringComparison.Ordinal))
+                .ToArray();
+            if (authorityManifests.Length >= ElectionAnomalyLimits.AuthorityEvidenceMaxCount)
+            {
+                return RejectWithValidationFailure(
+                    transactionId,
+                    ElectionAnomalyValidationCodes.AttachmentCountExceeded,
+                    "Authority anomaly evidence exceeds the configured count limit for this thread.");
+            }
+
+            if (authorityManifests.Sum(manifest => manifest.SizeBytes) + manifestAction.SizeBytes >
+                ElectionAnomalyLimits.AuthorityEvidenceMaxTotalBytes)
+            {
+                return RejectWithValidationFailure(
+                    transactionId,
+                    ElectionAnomalyValidationCodes.AttachmentSizeExceeded,
+                    "Authority anomaly evidence exceeds the configured total size limit for this thread.");
+            }
+
             return true;
+        }
+
+        if (!isSubmitterClarificationEvidence)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.AttachmentKindInvalid,
+                "Submitters can only provide evidence requested by an open authority clarification request.");
         }
 
         var readDecision = ElectionAnomalyAuthorization.CanActorReadOwnThread(thread, manifestAction.ActorPublicAddress);
@@ -2567,6 +2702,235 @@ public class EncryptedElectionEnvelopeContentHandler(
                 transactionId,
                 ElectionAnomalyValidationCodes.ClarificationRequestNotOpen,
                 "Submitter attachment manifest does not match the open authority request.");
+        }
+
+        var requestedManifests = LoadAnomalyAttachmentManifests(repository, thread.Id)
+            .Where(manifest =>
+                string.Equals(
+                    manifest.AttachmentKindId,
+                    ElectionAnomalyAttachmentKindIds.AuthorityRequestedEvidence,
+                    StringComparison.Ordinal) &&
+                manifest.ClarificationRequestId == manifestAction.ClarificationRequestId)
+            .ToArray();
+        if (requestedManifests.Length >= ElectionAnomalyLimits.SubmitterClarificationEvidenceMaxCount)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.AttachmentCountExceeded,
+                "Submitter clarification evidence exceeds the configured count limit for this request.");
+        }
+
+        if (requestedManifests.Sum(manifest => manifest.SizeBytes) + manifestAction.SizeBytes >
+            ElectionAnomalyLimits.SubmitterClarificationEvidenceMaxTotalBytes)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.AttachmentSizeExceeded,
+                "Submitter clarification evidence exceeds the configured total size limit for this request.");
+        }
+
+        return true;
+    }
+
+    private bool IsValidAttachmentContentKeyWrapPolicy(
+        Guid transactionId,
+        RecordElectionAnomalyAttachmentManifestActionPayload manifestAction,
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionAnomalyThreadRecord thread)
+    {
+        var wraps = manifestAction.ContentKeyWraps ?? Array.Empty<ElectionAnomalyAttachmentContentKeyWrapPayload>();
+        if (wraps.Count == 0)
+        {
+            return true;
+        }
+
+        var uniqueRecipients = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var wrap in wraps)
+        {
+            if (string.IsNullOrWhiteSpace(wrap.RecipientRoleId) ||
+                string.IsNullOrWhiteSpace(wrap.RecipientPublicAddress) ||
+                string.IsNullOrWhiteSpace(wrap.WrapStatusId) ||
+                string.IsNullOrWhiteSpace(wrap.RecipientKeyFingerprint) ||
+                string.IsNullOrWhiteSpace(wrap.EncryptedContentKey) ||
+                string.IsNullOrWhiteSpace(wrap.WrapAlgorithm) ||
+                !string.Equals(wrap.WrapStatusId, ElectionAnomalyRecipientWrapStatusIds.Available, StringComparison.Ordinal) ||
+                !uniqueRecipients.Add($"{wrap.RecipientRoleId}\u001f{wrap.RecipientPublicAddress}"))
+            {
+                return RejectWithValidationFailure(
+                    transactionId,
+                    ElectionAnomalyValidationCodes.RecipientWrapMissing,
+                    "Anomaly attachment content-key wraps must contain complete, available recipient metadata.");
+            }
+
+            if (string.Equals(wrap.RecipientRoleId, ElectionAnomalyRecipientRoleIds.Submitter, StringComparison.Ordinal))
+            {
+                if (string.Equals(wrap.RecipientPublicAddress, thread.SubmitterActorPublicAddress, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                return RejectWithValidationFailure(
+                    transactionId,
+                    ElectionAnomalyValidationCodes.RecipientWrapMissing,
+                    "Anomaly attachment submitter content-key wrap does not match the thread submitter.");
+            }
+
+            if (string.Equals(wrap.RecipientRoleId, ElectionAnomalyRecipientRoleIds.ElectionOwner, StringComparison.Ordinal))
+            {
+                if (string.Equals(wrap.RecipientPublicAddress, election.OwnerPublicAddress, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                return RejectWithValidationFailure(
+                    transactionId,
+                    ElectionAnomalyValidationCodes.RecipientWrapMissing,
+                    "Anomaly attachment owner content-key wrap does not match the election owner.");
+            }
+
+            if (string.Equals(wrap.RecipientRoleId, ElectionAnomalyRecipientRoleIds.DesignatedAuditor, StringComparison.Ordinal))
+            {
+                var auditorGrant = repository
+                    .GetReportAccessGrantAsync(election.ElectionId, wrap.RecipientPublicAddress)
+                    .GetAwaiter()
+                    .GetResult();
+                if (auditorGrant?.GrantRole == ElectionReportAccessGrantRole.DesignatedAuditor)
+                {
+                    continue;
+                }
+            }
+
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.RecipientWrapMissing,
+                "Anomaly attachment content-key wraps include a recipient outside the evidence visibility policy.");
+        }
+
+        var isSubmitterClarificationEvidence = string.Equals(
+            manifestAction.AttachmentKindId,
+            ElectionAnomalyAttachmentKindIds.AuthorityRequestedEvidence,
+            StringComparison.Ordinal);
+        if (isSubmitterClarificationEvidence)
+        {
+            if (!HasAttachmentContentKeyWrap(wraps, ElectionAnomalyRecipientRoleIds.Submitter, thread.SubmitterActorPublicAddress) ||
+                !HasAttachmentContentKeyWrap(wraps, ElectionAnomalyRecipientRoleIds.ElectionOwner, election.OwnerPublicAddress))
+            {
+                return RejectWithValidationFailure(
+                    transactionId,
+                    ElectionAnomalyValidationCodes.RecipientWrapMissing,
+                    "Submitter clarification evidence must include content-key wraps for the submitter and election owner.");
+            }
+        }
+        else if (!HasAttachmentContentKeyWrap(wraps, ElectionAnomalyRecipientRoleIds.ElectionOwner, election.OwnerPublicAddress))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.RecipientWrapMissing,
+                "Authority evidence must include an election owner content-key wrap.");
+        }
+
+        return true;
+    }
+
+    private bool IsValidRecordAnomalyEvidenceRedactionAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
+        var redactionAction = decryptedEnvelope.DeserializeAction<RecordElectionAnomalyEvidenceRedactionActionPayload>();
+        if (redactionAction is null ||
+            redactionAction.AnomalyThreadId == Guid.Empty ||
+            redactionAction.RedactionEventId == Guid.Empty ||
+            redactionAction.ActionNonce == Guid.Empty ||
+            string.IsNullOrWhiteSpace(redactionAction.ActorPublicAddress) ||
+            string.IsNullOrWhiteSpace(redactionAction.TargetKindId) ||
+            string.IsNullOrWhiteSpace(redactionAction.TargetId) ||
+            string.IsNullOrWhiteSpace(redactionAction.ReasonCodeId) ||
+            string.IsNullOrWhiteSpace(redactionAction.OriginalHash))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.BodyRequired,
+                "Record anomaly evidence redaction action payload is incomplete.");
+        }
+
+        if (!HasMatchingActor(signatory, redactionAction.ActorPublicAddress))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.InvalidActionSignatory,
+                "Anomaly evidence redaction actor must match the signed transaction signatory.");
+        }
+
+        if (!ElectionAnomalyRedactionTargetKindIds.IsKnown(redactionAction.TargetKindId))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.RedactionTargetInvalid,
+                "Anomaly evidence redaction target kind is not supported.");
+        }
+
+        if (!ElectionAnomalyRedactionReasonIds.IsKnown(redactionAction.ReasonCodeId))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.RedactionReasonInvalid,
+                "Anomaly evidence redaction reason is not supported.");
+        }
+
+        if (!IsSha256Reference(redactionAction.OriginalHash) ||
+            (!string.IsNullOrWhiteSpace(redactionAction.ReplacementManifestHash) &&
+             !IsSha256Reference(redactionAction.ReplacementManifestHash)))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.RedactionOriginalHashInvalid,
+                "Anomaly evidence redaction hashes must be lowercase sha256 references.");
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var context = LoadAnomalyThreadAuthorityContext(
+            repository,
+            decryptedEnvelope.Transaction.Payload.ElectionId,
+            redactionAction.AnomalyThreadId,
+            redactionAction.ActorPublicAddress);
+        if (!context.IsSuccess)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                context.ValidationCode ?? ElectionAnomalyValidationCodes.RedactionUnauthorized,
+                context.ValidationMessage ?? "Only the election authority can record anomaly evidence redactions.");
+        }
+
+        if (!Guid.TryParse(redactionAction.TargetId, out var attachmentManifestId))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.RedactionTargetInvalid,
+                "Anomaly evidence redaction target id must reference an attachment manifest.");
+        }
+
+        var targetManifest = repository.GetAnomalyAttachmentManifestAsync(attachmentManifestId)
+            .GetAwaiter()
+            .GetResult();
+        if (targetManifest is null ||
+            targetManifest.AnomalyThreadId != redactionAction.AnomalyThreadId ||
+            targetManifest.ElectionId != decryptedEnvelope.Transaction.Payload.ElectionId)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.RedactionTargetInvalid,
+                "Anomaly evidence redaction target attachment manifest was not found on this thread.");
+        }
+
+        if (!string.Equals(targetManifest.ContentHash, redactionAction.OriginalHash, StringComparison.Ordinal))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.RedactionOriginalHashInvalid,
+                "Anomaly evidence redaction original hash does not match the target attachment manifest.");
         }
 
         return true;
@@ -2702,6 +3066,16 @@ public class EncryptedElectionEnvelopeContentHandler(
         return thread is not null && thread.ElectionId == electionId
             ? thread
             : null;
+    }
+
+    private static IReadOnlyList<ElectionAnomalyAttachmentManifestRecord> LoadAnomalyAttachmentManifests(
+        IElectionsRepository repository,
+        Guid anomalyThreadId)
+    {
+        var loadTask = repository.GetAnomalyAttachmentManifestsAsync(anomalyThreadId);
+        return loadTask is null
+            ? Array.Empty<ElectionAnomalyAttachmentManifestRecord>()
+            : loadTask.GetAwaiter().GetResult();
     }
 
     private AnomalyThreadAuthorityContext LoadAnomalyThreadAuthorityContext(
@@ -2938,6 +3312,15 @@ public class EncryptedElectionEnvelopeContentHandler(
             string.Equals(wrap.RecipientPublicAddress, recipientPublicAddress, StringComparison.Ordinal) &&
             string.Equals(wrap.WrapStatusId, ElectionAnomalyRecipientWrapStatusIds.Available, StringComparison.Ordinal));
 
+    private static bool HasAttachmentContentKeyWrap(
+        IReadOnlyList<ElectionAnomalyAttachmentContentKeyWrapPayload> wraps,
+        string recipientRoleId,
+        string recipientPublicAddress) =>
+        wraps.Any(wrap =>
+            string.Equals(wrap.RecipientRoleId, recipientRoleId, StringComparison.Ordinal) &&
+            string.Equals(wrap.RecipientPublicAddress, recipientPublicAddress, StringComparison.Ordinal) &&
+            string.Equals(wrap.WrapStatusId, ElectionAnomalyRecipientWrapStatusIds.Available, StringComparison.Ordinal));
+
     private bool IsValidCeremonyBootstrap(
         IElectionsRepository repository,
         ElectionId electionId,
@@ -2983,6 +3366,20 @@ public class EncryptedElectionEnvelopeContentHandler(
     private static bool HasMatchingActor(string signatory, string actorPublicAddress) =>
         !string.IsNullOrWhiteSpace(signatory)
         && string.Equals(signatory, actorPublicAddress, StringComparison.Ordinal);
+
+    private static bool IsSha256Reference(string? value)
+    {
+        const string prefix = "sha256:";
+        if (string.IsNullOrWhiteSpace(value) ||
+            !value.StartsWith(prefix, StringComparison.Ordinal) ||
+            value.Length != prefix.Length + 64)
+        {
+            return false;
+        }
+
+        return value[prefix.Length..].All(character =>
+            character is >= '0' and <= '9' or >= 'a' and <= 'f');
+    }
 
     private static bool IsRosterEntryEligibleForCast(
         ElectionRecord election,

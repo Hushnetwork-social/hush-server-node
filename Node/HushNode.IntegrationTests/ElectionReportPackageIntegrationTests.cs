@@ -204,6 +204,66 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "FEAT-128")]
+    [Trait("Category", "TwinTest")]
+    [Trait("Category", "NON_E2E")]
+    public async Task FinalizeElection_WithSignedAnomalyEvidence_IncludesRestrictedManifestArtifact()
+    {
+        var client = await StartClientAsync();
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "FEAT-128 Report Package Handoff",
+            castSubmissionIdempotencyKey: "feat128-package-handoff-cast");
+        var electionId = new ElectionId(Guid.Parse(context.ElectionId));
+        var (_, attachmentManifestId, encryptedPayloadReference) = await RecordReadyAnomalyEvidenceAsync(electionId);
+
+        var finalizeProposalId = await StartGovernedProposalAsync(
+            client,
+            context.ElectionId,
+            ElectionGovernedActionType.Finalize);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, Delta);
+
+        var finalizedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        finalizedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Finalized);
+
+        var ownerResult = await GetElectionResultViewAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            waitForOfficialResult: true);
+        ownerResult.LatestReportPackage.Should().NotBeNull();
+        ownerResult.LatestReportPackage!.Status.Should().Be(ElectionReportPackageStatusProto.ReportPackageSealed);
+        ownerResult.LatestReportPackage.ArtifactCount.Should().Be(14);
+
+        var anomalyArtifact = ownerResult.VisibleReportArtifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactMachineRestrictedAnomalyIntakeManifest);
+        anomalyArtifact.AccessScope.Should().Be(ElectionReportArtifactAccessScopeProto.ReportArtifactOwnerAuditorOnly);
+        anomalyArtifact.Content.Should().Contain("\"artifactSchemaId\": \"restricted-anomaly-intake-manifest-artifact-v1\"");
+        anomalyArtifact.Content.Should().Contain("\"scopeId\": \"package\"");
+        anomalyArtifact.Content.Should().Contain("\"packageReadinessStatusId\": \"ready\"");
+        anomalyArtifact.Content.Should().Contain($"\"attachmentManifestId\": \"{attachmentManifestId}\"");
+        anomalyArtifact.Content.Should().Contain($"\"encryptedPayloadReference\": \"{encryptedPayloadReference}\"");
+        anomalyArtifact.Content.Should().Contain("\"redactionCount\": 1");
+
+        var evidenceGraph = ownerResult.VisibleReportArtifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactMachineEvidenceGraph);
+        evidenceGraph.Content.Should().Contain("\"restrictedAnomalyIntakeManifest\"");
+        evidenceGraph.Content.Should().Contain("\"nodeType\": \"anomaly_intake_manifest\"");
+        evidenceGraph.Content.Should().Contain($"\"artifactId\": \"{anomalyArtifact.Id}\"");
+        evidenceGraph.Content.Should().Contain("\"attachmentManifestCount\": 1");
+        evidenceGraph.Content.Should().Contain("\"redactionCount\": 1");
+
+        var participantResult = await GetElectionResultViewAsync(
+            client,
+            context.ElectionId,
+            Guest,
+            waitForOfficialResult: true);
+        participantResult.VisibleReportArtifacts.Should().BeEmpty();
+    }
+
+    [Fact]
     [Trait("Category", "FEAT-113")]
     public async Task FinalizeElection_WithSealedPackage_ExportsVerificationPackageAndVerifierReplaysLocalFiles()
     {
@@ -789,6 +849,39 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         tallyReadyElection.Election.UnofficialResultArtifactId.Should().NotBeNullOrWhiteSpace();
 
         return new ClosedElectionReadyContext(electionId);
+    }
+
+    private async Task<(Guid AnomalyThreadId, Guid AttachmentManifestId, string EncryptedPayloadReference)> RecordReadyAnomalyEvidenceAsync(
+        ElectionId electionId)
+    {
+        var (submissionTransaction, anomalyThreadId) = TestTransactionFactory.SubmitElectionAnomalyThread(
+            TestIdentities.Alice,
+            TestIdentities.Alice,
+            electionId);
+        var submissionResponse = await SubmitBlockchainTransactionAsync(submissionTransaction);
+        submissionResponse.Successfull.Should().BeTrue(submissionResponse.Message);
+
+        var (
+            attachmentTransaction,
+            attachmentManifestId,
+            encryptedPayloadReference,
+            contentHash) = TestTransactionFactory.RecordElectionAnomalyAuthorityAttachmentManifest(
+            TestIdentities.Alice,
+            electionId,
+            anomalyThreadId);
+        var attachmentResponse = await SubmitBlockchainTransactionAsync(attachmentTransaction);
+        attachmentResponse.Successfull.Should().BeTrue(attachmentResponse.Message);
+
+        var (redactionTransaction, _) = TestTransactionFactory.RecordElectionAnomalyEvidenceRedaction(
+            TestIdentities.Alice,
+            electionId,
+            anomalyThreadId,
+            attachmentManifestId,
+            contentHash);
+        var redactionResponse = await SubmitBlockchainTransactionAsync(redactionTransaction);
+        redactionResponse.Successfull.Should().BeTrue(redactionResponse.Message);
+
+        return (anomalyThreadId, attachmentManifestId, encryptedPayloadReference);
     }
 
     private async Task<ElectionCommandResponse> CreateTrusteeThresholdDraftAsync(

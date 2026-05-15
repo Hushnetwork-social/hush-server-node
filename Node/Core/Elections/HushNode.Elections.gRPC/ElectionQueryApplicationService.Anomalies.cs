@@ -1,4 +1,5 @@
 using System.Text.Json;
+using HushNode.Elections;
 using HushNode.Elections.Storage;
 using HushShared.Elections.Model;
 
@@ -253,6 +254,43 @@ public partial class ElectionQueryApplicationService
                 .Select(x => new ElectionAnomalyCaseStateCountProjection(x.Key, x.Count()))
                 .ToArray(),
             threadProjections);
+    }
+
+    public async Task<ElectionAnomalyEvidenceManifestProjection?> GetElectionAnomalyEvidenceManifestAsync(
+        ElectionId electionId,
+        string actorPublicAddress,
+        string scopeId)
+    {
+        if (string.IsNullOrWhiteSpace(actorPublicAddress) ||
+            !ElectionAnomalyEvidenceManifestScopeIds.IsKnown(scopeId))
+        {
+            return null;
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionAsync(electionId);
+        var reportAccessGrant = await repository.GetReportAccessGrantAsync(electionId, actorPublicAddress);
+        var isOwner = election is not null &&
+            string.Equals(election.OwnerPublicAddress, actorPublicAddress, StringComparison.Ordinal);
+        var isAuditor = reportAccessGrant?.GrantRole == ElectionReportAccessGrantRole.DesignatedAuditor;
+        var isAuthorized = scopeId switch
+        {
+            ElectionAnomalyEvidenceManifestScopeIds.Owner => isOwner,
+            ElectionAnomalyEvidenceManifestScopeIds.Auditor => isAuditor,
+            ElectionAnomalyEvidenceManifestScopeIds.Package => isOwner || isAuditor,
+            _ => false,
+        };
+        if (!isAuthorized)
+        {
+            return null;
+        }
+
+        return await ElectionAnomalyEvidenceManifestProjectionBuilder.BuildAsync(
+            repository,
+            electionId,
+            scopeId,
+            actorPublicAddress);
     }
 
     private static async Task<IReadOnlyList<ElectionAnomalyEncryptedMessageProjection>> BuildEncryptedMessageProjectionsAsync(

@@ -116,6 +116,10 @@ public sealed partial class HushVotingPackageVerifier
                 request.VerifierProfileId,
                 cancellationToken));
             results.AddRange(await CheckPrivacyBoundaryAsync(request.PackagePath, manifest, cancellationToken));
+            results.AddRange(await CheckAnomalyEvidenceManifestAsync(
+                request.PackagePath,
+                manifest,
+                cancellationToken));
             results.AddRange(await CheckSp07PublicationProofEvidenceAsync(
                 request.PackagePath,
                 request.VerifierProfileId,

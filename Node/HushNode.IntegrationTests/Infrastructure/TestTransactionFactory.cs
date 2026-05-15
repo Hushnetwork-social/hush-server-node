@@ -460,6 +460,69 @@ internal static class TestTransactionFactory
         return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
     }
 
+    public static (
+        string Transaction,
+        Guid AttachmentManifestId,
+        string EncryptedPayloadReference,
+        string ContentHash) RecordElectionAnomalyAuthorityAttachmentManifest(
+        TestIdentity owner,
+        ElectionId electionId,
+        Guid anomalyThreadId,
+        string? encryptedPayloadHash = null,
+        string? contentHash = null,
+        string? encryptedPayloadReference = null)
+    {
+        var attachmentManifestId = Guid.NewGuid();
+        encryptedPayloadHash ??= $"sha256:{new string('a', 64)}";
+        contentHash ??= $"sha256:{new string('b', 64)}";
+        encryptedPayloadReference ??= $"{ElectionAnomalyRestrictedPayloadReference.Prefix}{Guid.NewGuid():D}";
+
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest,
+            JsonSerializer.SerializeToElement(new RecordElectionAnomalyAttachmentManifestActionPayload(
+                anomalyThreadId,
+                attachmentManifestId,
+                Guid.NewGuid(),
+                owner.PublicSigningAddress,
+                ElectionAnomalyAttachmentKindIds.AuthorityEvidence,
+                encryptedPayloadReference,
+                encryptedPayloadHash,
+                contentHash,
+                1024,
+                ElectionAnomalyEvidenceMimeTypes.ApplicationPdf,
+                ElectionAnomalyAttachmentValidationStatusIds.Accepted)));
+
+        return (
+            CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope),
+            attachmentManifestId,
+            encryptedPayloadReference,
+            contentHash);
+    }
+
+    public static (string Transaction, Guid RedactionEventId) RecordElectionAnomalyEvidenceRedaction(
+        TestIdentity owner,
+        ElectionId electionId,
+        Guid anomalyThreadId,
+        Guid attachmentManifestId,
+        string originalHash)
+    {
+        var redactionEventId = Guid.NewGuid();
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyEvidenceRedaction,
+            JsonSerializer.SerializeToElement(new RecordElectionAnomalyEvidenceRedactionActionPayload(
+                anomalyThreadId,
+                redactionEventId,
+                Guid.NewGuid(),
+                owner.PublicSigningAddress,
+                ElectionAnomalyRedactionTargetKindIds.AttachmentManifest,
+                attachmentManifestId.ToString("D"),
+                ElectionAnomalyRedactionReasonIds.PersonalData,
+                originalHash,
+                TombstoneStatusId: "redacted")));
+
+        return (CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope), redactionEventId);
+    }
+
     public static (string Transaction, Guid AnomalyThreadId) RegisterExternalElectionAnomalyClaimant(
         TestIdentity owner,
         ElectionId electionId,

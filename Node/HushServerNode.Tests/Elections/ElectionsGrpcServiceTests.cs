@@ -1751,6 +1751,384 @@ public class ElectionsGrpcServiceTests
     }
 
     [Fact]
+    public async Task GetElectionAnomalyEvidenceManifest_WithoutSignedHeaders_RejectsQuery()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var electionId = ElectionId.NewElectionId;
+
+        var act = async () => await sut.GetElectionAnomalyEvidenceManifest(
+            new GetElectionAnomalyEvidenceManifestRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+                ScopeId = ElectionAnomalyEvidenceManifestScopeIds.Owner,
+            },
+            CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.Unauthenticated);
+        exception.Which.Status.Detail.Should().Contain("requires signed actor-bound headers");
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyEvidenceManifest_WithUnavailableProjection_ReturnsDeniedPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionAnomalyEvidenceManifestAsync(
+                electionId,
+                TestActorPublicAddress,
+                ElectionAnomalyEvidenceManifestScopeIds.Owner))
+            .ReturnsAsync((ElectionAnomalyEvidenceManifestProjection?)null);
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionAnomalyEvidenceManifest(
+            new GetElectionAnomalyEvidenceManifestRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+                ScopeId = ElectionAnomalyEvidenceManifestScopeIds.Owner,
+            },
+            CreateSignedServerCallContext(
+                nameof(ElectionsGrpcService.GetElectionAnomalyEvidenceManifest),
+                TestActorPublicAddress,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId.ToString(),
+                    ["ActorPublicAddress"] = TestActorPublicAddress,
+                    ["ScopeId"] = ElectionAnomalyEvidenceManifestScopeIds.Owner,
+                }));
+
+        response.Success.Should().BeFalse();
+        response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
+        response.HasManifest.Should().BeFalse();
+        response.ErrorMessage.Should().Contain("unavailable");
+        response.Manifest.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyEvidenceManifest_WithValidRequest_ReturnsManifestPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var threadId = Guid.NewGuid();
+        var attachmentManifestId = Guid.NewGuid();
+        var attachmentEventId = Guid.NewGuid();
+        var redactionEventId = Guid.NewGuid();
+        var recordedAt = DateTime.UtcNow.AddMinutes(-4);
+        var sourceTransactionId = Guid.NewGuid();
+
+        mocker.GetMock<IElectionQueryApplicationService>()
+            .Setup(x => x.GetElectionAnomalyEvidenceManifestAsync(
+                electionId,
+                TestActorPublicAddress,
+                ElectionAnomalyEvidenceManifestScopeIds.Owner))
+            .ReturnsAsync(new ElectionAnomalyEvidenceManifestProjection(
+                electionId,
+                ElectionAnomalyEvidenceManifestScopeIds.Owner,
+                ElectionAnomalyManifestCanonicalizationIds.Current,
+                "sha256:manifest",
+                ElectionAnomalyPackageReadinessStatusIds.Blocked,
+                [ElectionAnomalyEvidenceScannerStatusIds.Pending],
+                [
+                    new ElectionAnomalyEvidenceManifestThreadProjection(
+                        threadId,
+                        electionId,
+                        ElectionAnomalyCategoryIds.SecurityOrIntegrityConcern,
+                        ElectionAnomalyCaseStateIds.UnderReview,
+                        "sha256:thread",
+                        GovernedDecisionRef: "proposal-1",
+                        HasOpenClarificationRequest: true,
+                        OpenClarificationRequestId: Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                        recordedAt.AddMinutes(-10),
+                        recordedAt,
+                        AttachmentManifests:
+                        [
+                            new ElectionAnomalyAttachmentManifestProjection(
+                                attachmentManifestId,
+                                threadId,
+                                attachmentEventId,
+                                "sha256:attachment-event",
+                                ElectionAnomalyAttachmentKindIds.SubmitterEvidence,
+                                Domain.ElectionAnomalyRestrictedPayloadReferences.Create(Guid.NewGuid()),
+                                "sha256:encrypted-payload",
+                                "sha256:content",
+                                4096,
+                                ElectionAnomalyEvidenceMimeTypes.ApplicationPdf,
+                                ElectionAnomalyAttachmentValidationStatusIds.PendingScan,
+                                ElectionAnomalyEvidenceScannerStatusIds.Pending,
+                                ElectionAnomalyPayloadAvailabilityStatusIds.Available,
+                                ClarificationRequestId: null,
+                                ElectionAnomalyRecipientRoleIds.Submitter,
+                                recordedAt,
+                                sourceTransactionId),
+                        ],
+                        Redactions:
+                        [
+                            new ElectionAnomalyEvidenceRedactionProjection(
+                                redactionEventId,
+                                threadId,
+                                Guid.NewGuid(),
+                                "sha256:redaction-event",
+                                ElectionAnomalyRedactionTargetKindIds.AttachmentManifest,
+                                attachmentManifestId.ToString(),
+                                ElectionAnomalyRedactionReasonIds.PersonalData,
+                                "sha256:content",
+                                ReplacementManifestHash: null,
+                                TombstoneStatusId: "redacted",
+                                recordedAt.AddMinutes(1),
+                                Guid.NewGuid()),
+                        ],
+                        RecipientWraps:
+                        [
+                            new ElectionAnomalyRestrictedRecipientWrapProjection(
+                                ElectionAnomalyRecipientRoleIds.Submitter,
+                                ElectionAnomalyRecipientWrapStatusIds.Available),
+                            new ElectionAnomalyRestrictedRecipientWrapProjection(
+                                ElectionAnomalyRecipientRoleIds.ElectionOwner,
+                                ElectionAnomalyRecipientWrapStatusIds.PendingBackfill),
+                        ]),
+                ]));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+
+        var response = await sut.GetElectionAnomalyEvidenceManifest(
+            new GetElectionAnomalyEvidenceManifestRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+                ScopeId = ElectionAnomalyEvidenceManifestScopeIds.Owner,
+            },
+            CreateSignedServerCallContext(
+                nameof(ElectionsGrpcService.GetElectionAnomalyEvidenceManifest),
+                TestActorPublicAddress,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = electionId.ToString(),
+                    ["ActorPublicAddress"] = TestActorPublicAddress,
+                    ["ScopeId"] = ElectionAnomalyEvidenceManifestScopeIds.Owner,
+                }));
+
+        response.Success.Should().BeTrue();
+        response.HasManifest.Should().BeTrue();
+        response.Manifest.ElectionId.Should().Be(electionId.ToString());
+        response.Manifest.ScopeId.Should().Be(ElectionAnomalyEvidenceManifestScopeIds.Owner);
+        response.Manifest.CanonicalizationId.Should().Be(ElectionAnomalyManifestCanonicalizationIds.Current);
+        response.Manifest.ManifestHash.Should().Be("sha256:manifest");
+        response.Manifest.PackageReadinessStatusId.Should().Be(ElectionAnomalyPackageReadinessStatusIds.Blocked);
+        response.Manifest.PackageReadinessBlockerIds.Should().ContainSingle().Which.Should().Be(ElectionAnomalyEvidenceScannerStatusIds.Pending);
+        response.Manifest.TotalThreadCount.Should().Be(1);
+        response.Manifest.AttachmentManifestCount.Should().Be(1);
+        response.Manifest.RedactionCount.Should().Be(1);
+        response.Manifest.Threads.Should().ContainSingle();
+        response.Manifest.Threads[0].AttachmentManifests.Should().ContainSingle();
+        response.Manifest.Threads[0].AttachmentManifests[0].AttachmentManifestId.Should().Be(attachmentManifestId.ToString());
+        response.Manifest.Threads[0].AttachmentManifests[0].EventHash.Should().Be("sha256:attachment-event");
+        response.Manifest.Threads[0].AttachmentManifests[0].EncryptedPayloadReference.Should().StartWith(ElectionAnomalyRestrictedPayloadReference.Prefix);
+        response.Manifest.Threads[0].Redactions.Should().ContainSingle();
+        response.Manifest.Threads[0].Redactions[0].RedactionEventId.Should().Be(redactionEventId.ToString());
+        response.Manifest.Threads[0].Redactions[0].HasTombstoneStatus.Should().BeTrue();
+        response.Manifest.Threads[0].RecipientStatuses.Should().HaveCount(2);
+        typeof(ElectionAnomalyEvidenceManifestThreadView).GetProperties()
+            .Should()
+            .NotContain(property => property.Name.Contains("PublicAddress", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task StageElectionAnomalyRestrictedPayload_WithoutSignedHeaders_RejectsQuery()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var electionId = ElectionId.NewElectionId;
+
+        var act = async () => await sut.StageElectionAnomalyRestrictedPayload(
+            new StageElectionAnomalyRestrictedPayloadRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+                AnomalyThreadId = Guid.NewGuid().ToString(),
+                AttachmentKindId = ElectionAnomalyAttachmentKindIds.AuthorityRequestedEvidence,
+                EncryptedPayloadBase64 = "AQIDBA==",
+                EncryptedPayloadHash = $"sha256:{Hash('a')}",
+                ContentHash = $"sha256:{Hash('b')}",
+                SizeBytes = 256,
+                MimeType = ElectionAnomalyEvidenceMimeTypes.ImagePng,
+                ClarificationRequestId = Guid.NewGuid().ToString(),
+            },
+            CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.Unauthenticated);
+        exception.Which.Status.Detail.Should().Contain("requires signed actor-bound headers");
+    }
+
+    [Fact]
+    public async Task StageElectionAnomalyRestrictedPayload_WithValidRequest_ReturnsStagedReference()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var threadId = Guid.NewGuid();
+        var clarificationRequestId = Guid.NewGuid();
+        var payloadReference = Domain.ElectionAnomalyRestrictedPayloadReferences.Create(Guid.NewGuid());
+
+        mocker.GetMock<Domain.IElectionAnomalyRestrictedPayloadStorageService>()
+            .Setup(x => x.StageAsync(
+                It.Is<Domain.ElectionAnomalyRestrictedPayloadStageRequest>(stageRequest =>
+                    stageRequest.ElectionId == electionId &&
+                    stageRequest.AnomalyThreadId == threadId &&
+                    stageRequest.ActorPublicAddress == TestActorPublicAddress &&
+                    stageRequest.AttachmentKindId == ElectionAnomalyAttachmentKindIds.AuthorityRequestedEvidence &&
+                    stageRequest.EncryptedPayload.SequenceEqual(new byte[] { 1, 2, 3, 4 }) &&
+                    stageRequest.EncryptedPayloadHash == $"sha256:{Hash('a')}" &&
+                    stageRequest.ContentHash == $"sha256:{Hash('b')}" &&
+                    stageRequest.SizeBytes == 256 &&
+                    stageRequest.MimeType == ElectionAnomalyEvidenceMimeTypes.ImagePng &&
+                    stageRequest.ClarificationRequestId == clarificationRequestId),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Domain.ElectionAnomalyRestrictedPayloadStageResult.Accepted(
+                new ElectionAnomalyRestrictedPayloadRecord(
+                    Guid.NewGuid(),
+                    electionId,
+                    threadId,
+                    payloadReference,
+                    [1, 2, 3, 4],
+                    $"sha256:{Hash('a')}",
+                    $"sha256:{Hash('b')}",
+                    256,
+                    ElectionAnomalyEvidenceMimeTypes.ImagePng,
+                    ElectionAnomalyEvidenceScannerStatusIds.Pending,
+                    ElectionAnomalyPayloadAvailabilityStatusIds.Available,
+                    DateTime.UtcNow)));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new StageElectionAnomalyRestrictedPayloadRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+            AnomalyThreadId = threadId.ToString(),
+            AttachmentKindId = ElectionAnomalyAttachmentKindIds.AuthorityRequestedEvidence,
+            EncryptedPayloadBase64 = "AQIDBA==",
+            EncryptedPayloadHash = $"sha256:{Hash('a')}",
+            ContentHash = $"sha256:{Hash('b')}",
+            SizeBytes = 256,
+            MimeType = ElectionAnomalyEvidenceMimeTypes.ImagePng,
+            ClarificationRequestId = clarificationRequestId.ToString(),
+        };
+
+        var response = await sut.StageElectionAnomalyRestrictedPayload(
+            request,
+            CreateSignedServerCallContext(
+                nameof(ElectionsGrpcService.StageElectionAnomalyRestrictedPayload),
+                TestActorPublicAddress,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = request.ElectionId,
+                    ["ActorPublicAddress"] = request.ActorPublicAddress,
+                    ["AnomalyThreadId"] = request.AnomalyThreadId,
+                    ["AttachmentKindId"] = request.AttachmentKindId,
+                    ["EncryptedPayloadBase64"] = request.EncryptedPayloadBase64,
+                    ["EncryptedPayloadHash"] = request.EncryptedPayloadHash,
+                    ["ContentHash"] = request.ContentHash,
+                    ["SizeBytes"] = request.SizeBytes,
+                    ["MimeType"] = request.MimeType,
+                    ["ClarificationRequestId"] = request.ClarificationRequestId,
+                }));
+
+        response.Success.Should().BeTrue();
+        response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
+        response.PayloadReference.Should().Be(payloadReference);
+        response.EncryptedPayloadHash.Should().Be($"sha256:{Hash('a')}");
+        response.ContentHash.Should().Be($"sha256:{Hash('b')}");
+        response.ScannerStatusId.Should().Be(ElectionAnomalyEvidenceScannerStatusIds.Pending);
+        response.PayloadAvailabilityStatusId.Should().Be(ElectionAnomalyPayloadAvailabilityStatusIds.Available);
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyRestrictedPayload_WithoutSignedHeaders_RejectsQuery()
+    {
+        var mocker = new AutoMocker();
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var electionId = ElectionId.NewElectionId;
+
+        var act = async () => await sut.GetElectionAnomalyRestrictedPayload(
+            new GetElectionAnomalyRestrictedPayloadRequest
+            {
+                ElectionId = electionId.ToString(),
+                ActorPublicAddress = TestActorPublicAddress,
+                PayloadReference = Domain.ElectionAnomalyRestrictedPayloadReferences.Create(Guid.NewGuid()),
+            },
+            CreateMockServerCallContext());
+
+        var exception = await act.Should().ThrowAsync<RpcException>();
+        exception.Which.StatusCode.Should().Be(StatusCode.Unauthenticated);
+        exception.Which.Status.Detail.Should().Contain("requires signed actor-bound headers");
+    }
+
+    [Fact]
+    public async Task GetElectionAnomalyRestrictedPayload_WithValidRequest_ReturnsEncryptedPayload()
+    {
+        var mocker = new AutoMocker();
+        var electionId = ElectionId.NewElectionId;
+        var threadId = Guid.NewGuid();
+        var payloadReference = Domain.ElectionAnomalyRestrictedPayloadReferences.Create(Guid.NewGuid());
+
+        mocker.GetMock<Domain.IElectionAnomalyRestrictedPayloadStorageService>()
+            .Setup(x => x.RetrieveAsync(
+                It.Is<Domain.ElectionAnomalyRestrictedPayloadRetrieveRequest>(retrieveRequest =>
+                    retrieveRequest.ElectionId == electionId &&
+                    retrieveRequest.ActorPublicAddress == TestActorPublicAddress &&
+                    retrieveRequest.PayloadReference == payloadReference),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Domain.ElectionAnomalyRestrictedPayloadRetrieveResult.Accepted(
+                new ElectionAnomalyRestrictedPayloadRecord(
+                    Guid.NewGuid(),
+                    electionId,
+                    threadId,
+                    payloadReference,
+                    [1, 2, 3, 4],
+                    $"sha256:{Hash('a')}",
+                    $"sha256:{Hash('b')}",
+                    256,
+                    ElectionAnomalyEvidenceMimeTypes.ImagePng,
+                    ElectionAnomalyEvidenceScannerStatusIds.Pending,
+                    ElectionAnomalyPayloadAvailabilityStatusIds.Available,
+                    DateTime.UtcNow)));
+
+        var sut = mocker.CreateInstance<ElectionsGrpcService>();
+        var request = new GetElectionAnomalyRestrictedPayloadRequest
+        {
+            ElectionId = electionId.ToString(),
+            ActorPublicAddress = TestActorPublicAddress,
+            PayloadReference = payloadReference,
+        };
+
+        var response = await sut.GetElectionAnomalyRestrictedPayload(
+            request,
+            CreateSignedServerCallContext(
+                nameof(ElectionsGrpcService.GetElectionAnomalyRestrictedPayload),
+                TestActorPublicAddress,
+                new Dictionary<string, object?>
+                {
+                    ["ElectionId"] = request.ElectionId,
+                    ["ActorPublicAddress"] = request.ActorPublicAddress,
+                    ["PayloadReference"] = request.PayloadReference,
+                }));
+
+        response.Success.Should().BeTrue();
+        response.ActorPublicAddress.Should().Be(TestActorPublicAddress);
+        response.PayloadReference.Should().Be(payloadReference);
+        response.EncryptedPayloadBase64.Should().Be("AQIDBA==");
+        response.EncryptedPayloadHash.Should().Be($"sha256:{Hash('a')}");
+        response.ContentHash.Should().Be($"sha256:{Hash('b')}");
+        response.ScannerStatusId.Should().Be(ElectionAnomalyEvidenceScannerStatusIds.Pending);
+        response.PayloadAvailabilityStatusId.Should().Be(ElectionAnomalyPayloadAvailabilityStatusIds.Available);
+    }
+
+    [Fact]
     public async Task GetElectionResultView_WithValidRequest_ReturnsResultPayload()
     {
         var mocker = new AutoMocker();

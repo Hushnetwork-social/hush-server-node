@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using FluentAssertions;
 using HushNode.Elections;
@@ -383,6 +384,146 @@ public class HushVotingPackageVerifierTests
             x.CheckCode == ElectionSp11ProfileIds.StaleTrackerWarningCheckCode &&
             x.ResultCode == VerificationResultCodes.RegulatoryTrackerStale &&
             x.Status == VerificationCheckStatus.Warn);
+    }
+
+    [Fact]
+    public async Task Verify_RestrictedPackageWithAnomalyManifest_ShouldValidateManifestAndEvidenceGraph()
+    {
+        using var package = CreateRestrictedPackageWithAnomalyManifest();
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.RestrictedOwnerAuditorV1));
+
+        result.ExitCode.Should().Be(0);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "ANOM-000" &&
+            x.ResultCode == VerificationResultCodes.AnomalyEvidenceManifestValid &&
+            x.Status == VerificationCheckStatus.Pass);
+    }
+
+    [Fact]
+    public async Task Verify_RestrictedPackageWithTamperedAnomalyManifestHash_ShouldFailSemanticHashCheck()
+    {
+        using var package = CreateRestrictedPackageWithAnomalyManifest();
+        await MutateJsonArtifactAndRefreshPackageAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.ReportPackageRestrictedAnomalyIntakeManifest,
+            root => root["manifestHash"] = $"sha256:{new string('0', 64)}");
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.RestrictedOwnerAuditorV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "ANOM-002" &&
+            x.ResultCode == VerificationResultCodes.AnomalyEvidenceManifestHashMismatch &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_RestrictedPackageWithTamperedAnomalyAttachmentRow_ShouldFailSemanticHashCheck()
+    {
+        using var package = CreateRestrictedPackageWithAnomalyManifest();
+        await MutateJsonArtifactAndRefreshPackageAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.ReportPackageRestrictedAnomalyIntakeManifest,
+            root => MutateFirstAnomalyAttachment(root, attachment => attachment["contentHash"] = $"sha256:{new string('2', 64)}"));
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.RestrictedOwnerAuditorV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "ANOM-002" &&
+            x.ResultCode == VerificationResultCodes.AnomalyEvidenceManifestHashMismatch &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_RestrictedPackageWithTamperedAnomalyRedactionRow_ShouldFailSemanticHashCheck()
+    {
+        using var package = CreateRestrictedPackageWithAnomalyManifest();
+        await MutateJsonArtifactAndRefreshPackageAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.ReportPackageRestrictedAnomalyIntakeManifest,
+            root => MutateFirstAnomalyRedaction(root, redaction => redaction["reasonCodeId"] = ElectionAnomalyRedactionReasonIds.OperationalSafety));
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.RestrictedOwnerAuditorV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "ANOM-002" &&
+            x.ResultCode == VerificationResultCodes.AnomalyEvidenceManifestHashMismatch &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_RestrictedPackageWithTamperedAnomalyRecipientStatus_ShouldFailSemanticHashCheck()
+    {
+        using var package = CreateRestrictedPackageWithAnomalyManifest();
+        await MutateJsonArtifactAndRefreshPackageAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.ReportPackageRestrictedAnomalyIntakeManifest,
+            root => MutateFirstAnomalyRecipientStatus(root, status => status["wrapStatusId"] = ElectionAnomalyRecipientWrapStatusIds.Missing));
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.RestrictedOwnerAuditorV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "ANOM-002" &&
+            x.ResultCode == VerificationResultCodes.AnomalyEvidenceManifestHashMismatch &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_RestrictedPackageWithTamperedAnomalyEvidenceGraphNode_ShouldFailGraphCheck()
+    {
+        using var package = CreateRestrictedPackageWithAnomalyManifest();
+        await MutateJsonArtifactAndRefreshPackageAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.ReportPackageEvidenceGraph,
+            root => root["restrictedAnomalyIntakeManifest"]!.AsObject()["manifestHash"] = $"sha256:{new string('1', 64)}");
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.RestrictedOwnerAuditorV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "ANOM-003" &&
+            x.ResultCode == VerificationResultCodes.AnomalyEvidenceGraphMismatch &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
+    public async Task Verify_RestrictedPackageWithTamperedAnomalyEvidenceGraphIds_ShouldFailGraphCheck()
+    {
+        using var package = CreateRestrictedPackageWithAnomalyManifest();
+        await MutateJsonArtifactAndRefreshPackageAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.ReportPackageEvidenceGraph,
+            root =>
+            {
+                var node = root["restrictedAnomalyIntakeManifest"]!.AsObject();
+                node["attachmentManifestIds"] = new JsonArray("99999999-9999-9999-9999-999999999999");
+            });
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.RestrictedOwnerAuditorV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "ANOM-003" &&
+            x.ResultCode == VerificationResultCodes.AnomalyEvidenceGraphMismatch &&
+            x.Status == VerificationCheckStatus.Fail);
     }
 
     [Fact]
@@ -813,6 +954,185 @@ public class HushVotingPackageVerifierTests
         return directory;
     }
 
+    private static TemporaryPackageDirectory CreateRestrictedPackageWithAnomalyManifest()
+    {
+        var directory = new TemporaryPackageDirectory();
+        var request = ElectionVerificationPackageExportServiceTests.CreateRequest(
+            VerificationPackageView.RestrictedOwnerAuditor,
+            restrictedAccessAuthorized: true,
+            profileId: VerificationProfileIds.RestrictedOwnerAuditorV1);
+        request = request with
+        {
+            ReportArtifacts = [.. request.ReportArtifacts, .. CreateAnomalyReportArtifacts(request)],
+        };
+
+        var export = new ElectionVerificationPackageExportService().Export(request);
+        export.Success.Should().BeTrue();
+        ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
+        return directory;
+    }
+
+    private static IReadOnlyList<ElectionReportArtifactRecord> CreateAnomalyReportArtifacts(
+        ElectionVerificationPackageExportRequest request)
+    {
+        var anomalyArtifactId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var evidenceGraphArtifactId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+        var manifest = CreateRestrictedAnomalyIntakeManifest(request.Election.ElectionId);
+        var manifestHash = ElectionAnomalyIntakeManifestHasher.ComputeHash(manifest);
+        var graphContent = JsonSerializer.Serialize(
+            new
+            {
+                restrictedAnomalyIntakeManifest = new
+                {
+                    nodeType = "anomaly_intake_manifest",
+                    artifactId = anomalyArtifactId,
+                    canonicalizationId = manifest.CanonicalizationId,
+                    manifestHash,
+                    scopeId = manifest.ScopeId,
+                    packageReadinessStatusId = manifest.PackageReadinessStatusId,
+                    packageReadinessBlockerIds = manifest.PackageReadinessBlockerIds
+                        .OrderBy(x => x, StringComparer.Ordinal)
+                        .ToArray(),
+                    threadCount = manifest.Threads.Count,
+                    attachmentManifestCount = manifest.Threads.Sum(x => x.Attachments.Count),
+                    redactionCount = manifest.Threads.Sum(x => x.Redactions.Count),
+                    recipientStatusCount = manifest.Threads.Sum(x => x.RecipientStatuses.Count),
+                    anomalyThreadIds = manifest.Threads
+                        .Select(x => x.AnomalyThreadId)
+                        .OrderBy(x => x)
+                        .ToArray(),
+                    attachmentManifestIds = manifest.Threads
+                        .SelectMany(x => x.Attachments.Select(attachment => attachment.AttachmentManifestId))
+                        .OrderBy(x => x)
+                        .ToArray(),
+                    redactionEventIds = manifest.Threads
+                        .SelectMany(x => x.Redactions.Select(redaction => redaction.RedactionEventId))
+                        .OrderBy(x => x)
+                        .ToArray(),
+                    sourceEventIds = manifest.Threads
+                        .SelectMany(x => x.Attachments.Select(attachment => attachment.EventId)
+                            .Concat(x.Redactions.Select(redaction => redaction.EventId)))
+                        .OrderBy(x => x)
+                        .ToArray(),
+                },
+            },
+            VerificationJson.Options);
+        var artifactContent = JsonSerializer.Serialize(
+            new
+            {
+                artifactSchemaId = "restricted-anomaly-intake-manifest-artifact-v1",
+                manifestHash,
+                canonicalizationId = manifest.CanonicalizationId,
+                scopeId = manifest.ScopeId,
+                packageReadinessStatusId = manifest.PackageReadinessStatusId,
+                packageReadinessBlockerIds = manifest.PackageReadinessBlockerIds
+                    .OrderBy(x => x, StringComparer.Ordinal)
+                    .ToArray(),
+                threadCount = manifest.Threads.Count,
+                attachmentManifestCount = manifest.Threads.Sum(x => x.Attachments.Count),
+                redactionCount = manifest.Threads.Sum(x => x.Redactions.Count),
+                recipientStatusCount = manifest.Threads.Sum(x => x.RecipientStatuses.Count),
+                manifest,
+            },
+            VerificationJson.Options);
+
+        return
+        [
+            ElectionModelFactory.CreateReportArtifact(
+                request.ReportPackage!.Id,
+                request.Election.ElectionId,
+                ElectionReportArtifactKind.MachineEvidenceGraph,
+                ElectionReportArtifactFormat.Json,
+                ElectionReportArtifactAccessScope.OwnerAuditorTrustee,
+                sortOrder: 8,
+                title: "Evidence graph",
+                fileName: "evidence-graph.json",
+                mediaType: "application/json",
+                contentHash: SHA256.HashData(Encoding.UTF8.GetBytes(graphContent)),
+                content: graphContent,
+                preassignedArtifactId: evidenceGraphArtifactId),
+            ElectionModelFactory.CreateReportArtifact(
+                request.ReportPackage!.Id,
+                request.Election.ElectionId,
+                ElectionReportArtifactKind.MachineRestrictedAnomalyIntakeManifest,
+                ElectionReportArtifactFormat.Json,
+                ElectionReportArtifactAccessScope.OwnerAuditorOnly,
+                sortOrder: 14,
+                title: "Restricted anomaly intake manifest",
+                fileName: "restricted-anomaly-intake-manifest.json",
+                mediaType: "application/json",
+                contentHash: SHA256.HashData(Encoding.UTF8.GetBytes(artifactContent)),
+                content: artifactContent,
+                preassignedArtifactId: anomalyArtifactId),
+        ];
+    }
+
+    private static AnomalyIntakeManifest CreateRestrictedAnomalyIntakeManifest(ElectionId electionId)
+    {
+        var threadId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var attachmentManifestId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var recordedAt = new DateTime(2026, 5, 4, 12, 8, 0, DateTimeKind.Utc);
+
+        return new AnomalyIntakeManifest(
+            ElectionAnomalyManifestCanonicalizationIds.Current,
+            electionId.ToString(),
+            ElectionAnomalyEvidenceManifestScopeIds.Package,
+            ElectionAnomalyPackageReadinessStatusIds.Blocked,
+            [ElectionAnomalyEvidenceScannerStatusIds.Pending],
+            [
+                new AnomalyIntakeManifestThread(
+                    threadId,
+                    ElectionAnomalyCategoryIds.SecurityOrIntegrityConcern,
+                    ElectionAnomalyCaseStateIds.UnderReview,
+                    "sha256:thread",
+                    GovernedDecisionRef: "proposal-1",
+                    HasOpenClarificationRequest: true,
+                    OpenClarificationRequestId: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+                    recordedAt.AddMinutes(-20),
+                    recordedAt,
+                    Attachments:
+                    [
+                        new AnomalyIntakeManifestAttachment(
+                            attachmentManifestId,
+                            Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+                            $"sha256:{RepeatHash('e')}",
+                            ElectionAnomalyAttachmentKindIds.SubmitterEvidence,
+                            $"{ElectionAnomalyRestrictedPayloadReference.Prefix}eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+                            $"sha256:{RepeatHash('a')}",
+                            $"sha256:{RepeatHash('b')}",
+                            2048,
+                            ElectionAnomalyEvidenceMimeTypes.ApplicationPdf,
+                            ElectionAnomalyAttachmentValidationStatusIds.PendingScan,
+                            ElectionAnomalyEvidenceScannerStatusIds.Pending,
+                            ElectionAnomalyPayloadAvailabilityStatusIds.Available,
+                            ClarificationRequestId: null,
+                            recordedAt,
+                            Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff")),
+                    ],
+                    Redactions:
+                    [
+                        new AnomalyIntakeManifestRedaction(
+                            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                            Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                            $"sha256:{RepeatHash('f')}",
+                            ElectionAnomalyRedactionTargetKindIds.AttachmentManifest,
+                            attachmentManifestId.ToString(),
+                            ElectionAnomalyRedactionReasonIds.PersonalData,
+                            $"sha256:{RepeatHash('b')}",
+                            ReplacementManifestHash: null,
+                            TombstoneStatusId: "redacted",
+                            recordedAt.AddMinutes(1),
+                            Guid.Parse("33333333-3333-3333-3333-333333333333")),
+                    ],
+                    RecipientStatuses:
+                    [
+                        new AnomalyIntakeManifestRecipientStatus(
+                            ElectionAnomalyRecipientRoleIds.ElectionOwner,
+                            ElectionAnomalyRecipientWrapStatusIds.Available),
+                    ]),
+            ]);
+    }
+
     private static TemporaryPackageDirectory CreateHighAssuranceTrusteePackage()
     {
         var directory = new TemporaryPackageDirectory();
@@ -1131,6 +1451,9 @@ public class HushVotingPackageVerifierTests
     private static string HashHex(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
+    private static string RepeatHash(char value) =>
+        new(char.ToLowerInvariant(value), 64);
+
     private static async Task<ElectionSp09ExternalReviewStatusArtifactRecord> CreateReviewedSp09StatusAsync(
         string packagePath,
         string detailedStatus = ElectionSp09ProfileIds.StatusReviewedForDeclaredScope,
@@ -1376,6 +1699,33 @@ public class HushVotingPackageVerifierTests
         await File.WriteAllTextAsync(
             ResolvePackagePath(packagePath, relativePath),
             JsonSerializer.Serialize(value, VerificationJson.Options));
+
+    private static async Task MutateJsonArtifactAndRefreshPackageAsync(
+        string packagePath,
+        string relativePath,
+        Action<JsonObject> mutate)
+    {
+        var path = ResolvePackagePath(packagePath, relativePath);
+        var root = JsonNode.Parse(await File.ReadAllTextAsync(path))?.AsObject() ??
+            throw new InvalidOperationException($"Package artifact '{relativePath}' is not a JSON object.");
+        mutate(root);
+        await File.WriteAllTextAsync(path, root.ToJsonString(VerificationJson.Options));
+        await RefreshAuditManifestAsync(packagePath);
+    }
+
+    private static void MutateFirstAnomalyAttachment(JsonObject root, Action<JsonObject> mutate) =>
+        mutate(GetFirstAnomalyManifestRow(root, "attachments"));
+
+    private static void MutateFirstAnomalyRedaction(JsonObject root, Action<JsonObject> mutate) =>
+        mutate(GetFirstAnomalyManifestRow(root, "redactions"));
+
+    private static void MutateFirstAnomalyRecipientStatus(JsonObject root, Action<JsonObject> mutate) =>
+        mutate(GetFirstAnomalyManifestRow(root, "recipientStatuses"));
+
+    private static JsonObject GetFirstAnomalyManifestRow(JsonObject root, string collectionName) =>
+        root["manifest"]!.AsObject()["threads"]!.AsArray()[0]!
+            .AsObject()[collectionName]!.AsArray()[0]!
+            .AsObject();
 
     private static async Task RefreshAuditManifestAsync(string packagePath)
     {

@@ -31,7 +31,8 @@ public sealed record ElectionReportPackageBuildRequest(
     string AttemptedByPublicAddress,
     DateTime AttemptedAt,
     ElectionSp10OperationalSecurityStatusArtifactRecord? Sp10OperationalSecurityStatus = null,
-    ElectionSp11RegulatoryClaimStateArtifactRecord? Sp11RegulatoryClaimState = null);
+    ElectionSp11RegulatoryClaimStateArtifactRecord? Sp11RegulatoryClaimState = null,
+    AnomalyIntakeManifest? RestrictedAnomalyIntakeManifest = null);
 
 public sealed record ElectionReportPackageBuildResult(
     bool IsSuccess,

@@ -499,6 +499,296 @@ public class ElectionAnomalyEnvelopeValidationTests
     }
 
     [Fact]
+    public void ValidateAndSign_WithSubmitterRequestedEvidenceForOpenClarification_ReturnsValidatedOuterEnvelope()
+    {
+        var election = CreateElection(ownerPublicAddress: "authority-address");
+        var openClarificationId = Guid.NewGuid();
+        var thread = CreateThread(
+            election,
+            actorPublicAddress: "submitter-address",
+            hasOpenClarificationRequest: true,
+            openClarificationRequestId: openClarificationId);
+        var action = CreateAttachmentManifestAction(
+            thread.Id,
+            "submitter-address",
+            ElectionAnomalyAttachmentKindIds.AuthorityRequestedEvidence,
+            clarificationRequestId: openClarificationId);
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest,
+            action,
+            "submitter-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+                repository
+                    .Setup(x => x.GetAnomalyAttachmentManifestsAsync(thread.Id))
+                    .ReturnsAsync(Array.Empty<ElectionAnomalyAttachmentManifestRecord>());
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeOfType<ValidatedTransaction<EncryptedElectionEnvelopePayload>>();
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithSubmitterEvidenceKind_ReturnsStableFailure()
+    {
+        var election = CreateElection(ownerPublicAddress: "authority-address");
+        var openClarificationId = Guid.NewGuid();
+        var thread = CreateThread(
+            election,
+            actorPublicAddress: "submitter-address",
+            hasOpenClarificationRequest: true,
+            openClarificationRequestId: openClarificationId);
+        var action = CreateAttachmentManifestAction(
+            thread.Id,
+            "submitter-address",
+            ElectionAnomalyAttachmentKindIds.SubmitterEvidence,
+            clarificationRequestId: openClarificationId);
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest,
+            action,
+            "submitter-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        harness.Sut.TryTakeValidationFailure(harness.SignedEnvelope.TransactionId.Value, out var failure)
+            .Should()
+            .BeTrue();
+        failure.Code.Should().Be(ElectionAnomalyValidationCodes.AttachmentSubmitterNotAllowed);
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithOwnerAuthorityEvidence_ReturnsValidatedOuterEnvelope()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election);
+        var action = CreateAttachmentManifestAction(
+            thread.Id,
+            "owner-address",
+            ElectionAnomalyAttachmentKindIds.AuthorityEvidence);
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest,
+            action,
+            "owner-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+                repository
+                    .Setup(x => x.GetAnomalyAttachmentManifestsAsync(thread.Id))
+                    .ReturnsAsync(Array.Empty<ElectionAnomalyAttachmentManifestRecord>());
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeOfType<ValidatedTransaction<EncryptedElectionEnvelopePayload>>();
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithOwnerAuthorityEvidenceContentKeyWraps_ReturnsValidatedOuterEnvelope()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election);
+        var auditorGrant = ElectionModelFactory.CreateReportAccessGrant(
+            election.ElectionId,
+            "auditor-address",
+            "owner-address",
+            ElectionReportAccessGrantRole.DesignatedAuditor);
+        var action = CreateAttachmentManifestAction(
+            thread.Id,
+            "owner-address",
+            ElectionAnomalyAttachmentKindIds.AuthorityEvidence) with
+        {
+            ContentKeyWraps =
+            [
+                CreateAttachmentContentKeyWrap(ElectionAnomalyRecipientRoleIds.ElectionOwner, "owner-address"),
+                CreateAttachmentContentKeyWrap(ElectionAnomalyRecipientRoleIds.DesignatedAuditor, "auditor-address"),
+            ],
+        };
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest,
+            action,
+            "owner-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+                repository
+                    .Setup(x => x.GetAnomalyAttachmentManifestsAsync(thread.Id))
+                    .ReturnsAsync(Array.Empty<ElectionAnomalyAttachmentManifestRecord>());
+                repository
+                    .Setup(x => x.GetReportAccessGrantAsync(election.ElectionId, "auditor-address"))
+                    .ReturnsAsync(auditorGrant);
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeOfType<ValidatedTransaction<EncryptedElectionEnvelopePayload>>();
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithOwnerAuthorityEvidenceWrongOwnerContentKeyWrap_ReturnsStableFailure()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election);
+        var action = CreateAttachmentManifestAction(
+            thread.Id,
+            "owner-address",
+            ElectionAnomalyAttachmentKindIds.AuthorityEvidence) with
+        {
+            ContentKeyWraps =
+            [
+                CreateAttachmentContentKeyWrap(ElectionAnomalyRecipientRoleIds.ElectionOwner, "other-address"),
+            ],
+        };
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest,
+            action,
+            "owner-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+                repository
+                    .Setup(x => x.GetAnomalyAttachmentManifestsAsync(thread.Id))
+                    .ReturnsAsync(Array.Empty<ElectionAnomalyAttachmentManifestRecord>());
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        harness.Sut.TryTakeValidationFailure(harness.SignedEnvelope.TransactionId.Value, out var failure)
+            .Should()
+            .BeTrue();
+        failure.Code.Should().Be(ElectionAnomalyValidationCodes.RecipientWrapMissing);
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithAttachmentReferenceOutsideRestrictedNamespace_ReturnsStableFailure()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election);
+        var action = CreateAttachmentManifestAction(
+            thread.Id,
+            "owner-address",
+            ElectionAnomalyAttachmentKindIds.AuthorityEvidence) with
+        {
+            EncryptedPayloadReference = "feed-attachment:123",
+        };
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyAttachmentManifest,
+            action,
+            "owner-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        harness.Sut.TryTakeValidationFailure(harness.SignedEnvelope.TransactionId.Value, out var failure)
+            .Should()
+            .BeTrue();
+        failure.Code.Should().Be(ElectionAnomalyValidationCodes.AttachmentPayloadReferenceInvalid);
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithOwnerEvidenceRedaction_ReturnsValidatedOuterEnvelope()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election);
+        var targetManifest = CreateAttachmentManifestRecord(thread);
+        var action = new RecordElectionAnomalyEvidenceRedactionActionPayload(
+            thread.Id,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "owner-address",
+            ElectionAnomalyRedactionTargetKindIds.AttachmentManifest,
+            targetManifest.Id.ToString(),
+            ElectionAnomalyRedactionReasonIds.PersonalData,
+            targetManifest.ContentHash);
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyEvidenceRedaction,
+            action,
+            "owner-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+                repository
+                    .Setup(x => x.GetAnomalyAttachmentManifestAsync(targetManifest.Id))
+                    .ReturnsAsync(targetManifest);
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeOfType<ValidatedTransaction<EncryptedElectionEnvelopePayload>>();
+    }
+
+    [Fact]
+    public void ValidateAndSign_WithRedactionOriginalHashMismatch_ReturnsStableFailure()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election);
+        var targetManifest = CreateAttachmentManifestRecord(thread);
+        var action = new RecordElectionAnomalyEvidenceRedactionActionPayload(
+            thread.Id,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "owner-address",
+            ElectionAnomalyRedactionTargetKindIds.AttachmentManifest,
+            targetManifest.Id.ToString(),
+            ElectionAnomalyRedactionReasonIds.PersonalData,
+            Sha256Ref('d'));
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.RecordAnomalyEvidenceRedaction,
+            action,
+            "owner-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+                repository
+                    .Setup(x => x.GetAnomalyAttachmentManifestAsync(targetManifest.Id))
+                    .ReturnsAsync(targetManifest);
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        harness.Sut.TryTakeValidationFailure(harness.SignedEnvelope.TransactionId.Value, out var failure)
+            .Should()
+            .BeTrue();
+        failure.Code.Should().Be(ElectionAnomalyValidationCodes.RedactionOriginalHashInvalid);
+    }
+
+    [Fact]
     public void ValidateAndSign_WithKnownSeverityCandidate_ReturnsValidatedOuterEnvelope()
     {
         var election = CreateElection();
@@ -710,6 +1000,53 @@ public class ElectionAnomalyEnvelopeValidationTests
             characterCount,
             recipientWraps ?? CreateVisibilityWraps());
 
+    private static RecordElectionAnomalyAttachmentManifestActionPayload CreateAttachmentManifestAction(
+        Guid anomalyThreadId,
+        string actorPublicAddress,
+        string attachmentKindId,
+        Guid? clarificationRequestId = null) =>
+        new(
+            anomalyThreadId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            actorPublicAddress,
+            attachmentKindId,
+            ElectionAnomalyRestrictedPayloadReferences.Create(Guid.NewGuid()),
+            Sha256Ref('a'),
+            Sha256Ref('b'),
+            1024,
+            ElectionAnomalyEvidenceMimeTypes.ApplicationPdf,
+            ElectionAnomalyAttachmentValidationStatusIds.Accepted,
+            clarificationRequestId);
+
+    private static ElectionAnomalyAttachmentManifestRecord CreateAttachmentManifestRecord(
+        ElectionAnomalyThreadRecord thread) =>
+        new(
+            Guid.NewGuid(),
+            thread.Id,
+            Guid.NewGuid(),
+            Sha256Ref('e'),
+            thread.ElectionId,
+            ElectionAnomalyAttachmentKindIds.AuthorityEvidence,
+            ElectionAnomalyRestrictedPayloadReferences.Create(Guid.NewGuid()),
+            Sha256Ref('a'),
+            Sha256Ref('b'),
+            1024,
+            ElectionAnomalyEvidenceMimeTypes.ApplicationPdf,
+            ElectionAnomalyAttachmentValidationStatusIds.Accepted,
+            ElectionAnomalyEvidenceScannerStatusIds.Clear,
+            ElectionAnomalyPayloadAvailabilityStatusIds.Available,
+            ClarificationRequestId: null,
+            "owner-address",
+            ElectionAnomalyRecipientRoleIds.ElectionOwner,
+            Guid.NewGuid(),
+            SourceBlockHeight: null,
+            SourceBlockId: null,
+            DateTime.UtcNow);
+
+    private static string Sha256Ref(char fill) =>
+        $"sha256:{new string(fill, 64)}";
+
     private static IReadOnlyList<ElectionAnomalyRecipientWrapPayload> CreateVisibilityWraps(
         string submitterPublicAddress = "owner-address",
         string ownerPublicAddress = "owner-address") =>
@@ -728,15 +1065,34 @@ public class ElectionAnomalyEnvelopeValidationTests
             $"{recipientRoleId}-encrypted-content-key",
             "x25519-aes-gcm");
 
+    private static ElectionAnomalyAttachmentContentKeyWrapPayload CreateAttachmentContentKeyWrap(
+        string recipientRoleId,
+        string recipientPublicAddress) =>
+        new(
+            recipientRoleId,
+            recipientPublicAddress,
+            $"{recipientRoleId}-key-fingerprint",
+            $"{recipientRoleId}-encrypted-content-key",
+            "x25519-aes-gcm");
+
     private static ElectionAnomalyThreadRecord CreateThread(
         ElectionRecord election,
+        string actorPublicAddress = "owner-address",
         bool hasOpenClarificationRequest = false,
         Guid? openClarificationRequestId = null)
     {
+        var reportAccessGrant = string.Equals(election.OwnerPublicAddress, actorPublicAddress, StringComparison.Ordinal)
+            ? null
+            : ElectionModelFactory.CreateReportAccessGrant(
+                election.ElectionId,
+                actorPublicAddress,
+                election.OwnerPublicAddress,
+                ElectionReportAccessGrantRole.DesignatedAuditor);
         var roleResolution = ElectionAnomalyAuthorization.ResolveActorSubmitter(
             election,
-            "owner-address",
-            DateTime.UtcNow);
+            actorPublicAddress,
+            DateTime.UtcNow,
+            reportAccessGrant: reportAccessGrant);
         roleResolution.IsResolved.Should().BeTrue();
 
         return new ElectionAnomalyThreadRecord(
@@ -744,7 +1100,7 @@ public class ElectionAnomalyEnvelopeValidationTests
             election.ElectionId,
             roleResolution.SubmitterPersonScopeId!,
             roleResolution.PersonScopeDerivationVersion,
-            "owner-address",
+            actorPublicAddress,
             roleResolution.RoleContextId,
             roleResolution.RoleEvidenceTypeId!,
             roleResolution.RoleEvidenceReference!,
@@ -764,12 +1120,12 @@ public class ElectionAnomalyEnvelopeValidationTests
             "sha256:thread");
     }
 
-    private static ElectionRecord CreateElection() =>
+    private static ElectionRecord CreateElection(string ownerPublicAddress = "owner-address") =>
         ElectionModelFactory.CreateDraftRecord(
             electionId: ElectionId.NewElectionId,
             title: "Board Election",
             shortDescription: "Annual board vote",
-            ownerPublicAddress: "owner-address",
+            ownerPublicAddress: ownerPublicAddress,
             externalReferenceCode: "ORG-2026-01",
             electionClass: ElectionClass.OrganizationalRemoteVoting,
             bindingStatus: ElectionBindingStatus.Binding,

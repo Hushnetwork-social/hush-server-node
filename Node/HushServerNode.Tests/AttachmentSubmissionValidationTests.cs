@@ -2,6 +2,7 @@ using FluentAssertions;
 using Google.Protobuf;
 using HushNetwork.proto;
 using HushNode.Blockchain.gRPC;
+using HushShared.Elections.Model;
 using HushShared.Feeds.Model;
 using Xunit;
 
@@ -176,6 +177,26 @@ public class AttachmentSubmissionValidationTests
         // Assert
         result.Should().NotBeNull();
         result.Should().Contain("does not match");
+    }
+
+    [Fact]
+    public void ValidateAttachmentBlobs_AnomalyRestrictedPayloadReference_ReturnsReservedIdError()
+    {
+        // Arrange
+        var id = $"{ElectionAnomalyRestrictedPayloadReference.Prefix}{Guid.NewGuid():D}";
+        var refs = new List<AttachmentReference>
+        {
+            new(id, "hash", "image/jpeg", 100, "a.jpg"),
+        };
+        var request = CreateRequest();
+        request.Attachments.Add(CreateSmallBlob(id));
+
+        // Act
+        var result = BlockchainGrpcService.ValidateAttachmentBlobs(request, refs);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Should().Contain("reserved").And.Contain("election anomaly");
     }
 
     #endregion

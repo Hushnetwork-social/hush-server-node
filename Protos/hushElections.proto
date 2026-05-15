@@ -46,6 +46,9 @@ service HushElections {
   rpc GetElectionAnomalyTrusteeCounts(GetElectionAnomalyTrusteeCountsRequest) returns (GetElectionAnomalyTrusteeCountsResponse);
   rpc GetElectionAnomalyOwnerTriage(GetElectionAnomalyOwnerTriageRequest) returns (GetElectionAnomalyOwnerTriageResponse);
   rpc GetElectionAnomalyAuditorRestrictedReview(GetElectionAnomalyAuditorRestrictedReviewRequest) returns (GetElectionAnomalyAuditorRestrictedReviewResponse);
+  rpc GetElectionAnomalyEvidenceManifest(GetElectionAnomalyEvidenceManifestRequest) returns (GetElectionAnomalyEvidenceManifestResponse);
+  rpc StageElectionAnomalyRestrictedPayload(StageElectionAnomalyRestrictedPayloadRequest) returns (StageElectionAnomalyRestrictedPayloadResponse);
+  rpc GetElectionAnomalyRestrictedPayload(GetElectionAnomalyRestrictedPayloadRequest) returns (GetElectionAnomalyRestrictedPayloadResponse);
   rpc GetElectionResultView(GetElectionResultViewRequest) returns (GetElectionResultViewResponse);
   rpc GetElectionVerificationPackageStatus(GetElectionVerificationPackageStatusRequest) returns (GetElectionVerificationPackageStatusResponse);
   rpc ExportElectionVerificationPackage(ExportElectionVerificationPackageRequest) returns (ExportElectionVerificationPackageResponse);
@@ -284,6 +287,7 @@ enum ElectionReportArtifactKindProto {
   ReportArtifactMachineAuditProvenanceReportProjection = 10;
   ReportArtifactMachineOutcomeDeterminationProjection = 11;
   ReportArtifactMachineDisputeReviewIndexProjection = 12;
+  ReportArtifactMachineRestrictedAnomalyIntakeManifest = 13;
 }
 
 enum ElectionReportArtifactFormatProto {
@@ -2022,6 +2026,146 @@ message GetElectionAnomalyAuditorRestrictedReviewResponse {
   string ActorPublicAddress = 3;
   bool HasReview = 4;
   ElectionAnomalyAuditorRestrictedReviewView Review = 5;
+}
+
+message GetElectionAnomalyEvidenceManifestRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string ScopeId = 3;
+}
+
+message ElectionAnomalyAttachmentContentKeyWrapView {
+  string WrapStatusId = 1;
+  string RecipientKeyFingerprint = 2;
+  string EncryptedContentKey = 3;
+  string WrapAlgorithm = 4;
+}
+
+message ElectionAnomalyAttachmentManifestView {
+  string AttachmentManifestId = 1;
+  string AnomalyThreadId = 2;
+  string EventId = 3;
+  string EventHash = 4;
+  string AttachmentKindId = 5;
+  string EncryptedPayloadReference = 6;
+  string EncryptedPayloadHash = 7;
+  string ContentHash = 8;
+  int64 SizeBytes = 9;
+  string MimeType = 10;
+  string ValidationStatusId = 11;
+  string ScannerStatusId = 12;
+  string PayloadAvailabilityStatusId = 13;
+  string ClarificationRequestId = 14;
+  bool HasClarificationRequest = 15;
+  string ActorRoleId = 16;
+  google.protobuf.Timestamp RecordedAt = 17;
+  string SourceTransactionId = 18;
+  ElectionAnomalyAttachmentContentKeyWrapView CallerContentKeyWrap = 19;
+  bool HasCallerContentKeyWrap = 20;
+}
+
+message ElectionAnomalyEvidenceRedactionView {
+  string RedactionEventId = 1;
+  string AnomalyThreadId = 2;
+  string EventId = 3;
+  string EventHash = 4;
+  string TargetKindId = 5;
+  string TargetId = 6;
+  string ReasonCodeId = 7;
+  string OriginalHash = 8;
+  string ReplacementManifestHash = 9;
+  bool HasReplacementManifestHash = 10;
+  string TombstoneStatusId = 11;
+  bool HasTombstoneStatus = 12;
+  google.protobuf.Timestamp RecordedAt = 13;
+  string SourceTransactionId = 14;
+}
+
+message ElectionAnomalyEvidenceManifestThreadView {
+  string AnomalyThreadId = 1;
+  string ElectionId = 2;
+  string CategoryId = 3;
+  string CaseStateId = 4;
+  string CurrentThreadHash = 5;
+  string GovernedDecisionRef = 6;
+  bool HasGovernedDecisionRef = 7;
+  bool HasOpenClarificationRequest = 8;
+  string OpenClarificationRequestId = 9;
+  bool HasOpenClarificationRequestId = 10;
+  google.protobuf.Timestamp CreatedAt = 11;
+  google.protobuf.Timestamp UpdatedAt = 12;
+  repeated ElectionAnomalyAttachmentManifestView AttachmentManifests = 13;
+  repeated ElectionAnomalyEvidenceRedactionView Redactions = 14;
+  repeated ElectionAnomalyRestrictedRecipientStatusView RecipientStatuses = 15;
+}
+
+message ElectionAnomalyEvidenceManifestView {
+  string ElectionId = 1;
+  string ScopeId = 2;
+  string CanonicalizationId = 3;
+  string ManifestHash = 4;
+  string PackageReadinessStatusId = 5;
+  repeated string PackageReadinessBlockerIds = 6;
+  int32 TotalThreadCount = 7;
+  int32 AttachmentManifestCount = 8;
+  int32 RedactionCount = 9;
+  repeated ElectionAnomalyEvidenceManifestThreadView Threads = 10;
+}
+
+message GetElectionAnomalyEvidenceManifestResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ActorPublicAddress = 3;
+  bool HasManifest = 4;
+  ElectionAnomalyEvidenceManifestView Manifest = 5;
+}
+
+message StageElectionAnomalyRestrictedPayloadRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string AnomalyThreadId = 3;
+  string AttachmentKindId = 4;
+  string EncryptedPayloadBase64 = 5;
+  string EncryptedPayloadHash = 6;
+  string ContentHash = 7;
+  int64 SizeBytes = 8;
+  string MimeType = 9;
+  string ClarificationRequestId = 10;
+}
+
+message StageElectionAnomalyRestrictedPayloadResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ActorPublicAddress = 3;
+  string PayloadReference = 4;
+  string EncryptedPayloadHash = 5;
+  string ContentHash = 6;
+  int64 SizeBytes = 7;
+  string MimeType = 8;
+  string ScannerStatusId = 9;
+  string PayloadAvailabilityStatusId = 10;
+  string ValidationCode = 11;
+}
+
+message GetElectionAnomalyRestrictedPayloadRequest {
+  string ElectionId = 1;
+  string ActorPublicAddress = 2;
+  string PayloadReference = 3;
+}
+
+message GetElectionAnomalyRestrictedPayloadResponse {
+  bool Success = 1;
+  string ErrorMessage = 2;
+  string ActorPublicAddress = 3;
+  string PayloadReference = 4;
+  string EncryptedPayloadBase64 = 5;
+  string EncryptedPayloadHash = 6;
+  string ContentHash = 7;
+  int64 SizeBytes = 8;
+  string MimeType = 9;
+  string ScannerStatusId = 10;
+  string PayloadAvailabilityStatusId = 11;
+  string ValidationCode = 12;
 }
 
 message GetElectionResultViewRequest {
