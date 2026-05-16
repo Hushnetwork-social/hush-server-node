@@ -64,6 +64,18 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             var officialResultProjection = BuildResultArtifactProjection(request.OfficialResult);
             var officialResultHash = ComputeHashBytes(SerializeJson(officialResultProjection));
             var ceremonyPublicKey = ResolveCeremonyPublicKeyProjection(request);
+            var machineRestrictedAnomalyIntakeManifestId = request.RestrictedAnomalyIntakeManifest is null
+                ? (Guid?)null
+                : Guid.NewGuid();
+            var publicAnomalySummary = ElectionAnomalyPublicSummaryBuilder.Build(new(
+                request.Election.ElectionId.ToString(),
+                request.RestrictedAnomalyIntakeManifest,
+                machineRestrictedAnomalyIntakeManifestId,
+                request.AttemptedAt));
+            var anomalyReportReadiness = ElectionAnomalyReportReadinessProjectionBuilder.Build(new(
+                publicAnomalySummary,
+                request.RestrictedAnomalyIntakeManifest,
+                ElectionAnomalyPublicArtifactScanStatusIds.Passed));
             var outcomeProjection = BuildOutcomeProjection(
                 request.Election,
                 request.OfficialResult,
@@ -72,7 +84,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 request.Election,
                 request.OfficialResult,
                 outcomeProjection,
-                ceremonyPublicKey);
+                ceremonyPublicKey,
+                publicAnomalySummary,
+                anomalyReportReadiness);
             var protocolPackageBindingProjection = BuildProtocolPackageBindingProjection(request.ProtocolPackageBinding);
             var operationalSecurityProjection = BuildOperationalSecurityProjection(request);
             var regulatoryClaimProjection = BuildRegulatoryClaimProjection(request);
@@ -125,10 +139,6 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             var humanOutcomeId = Guid.NewGuid();
             var machineDisputeId = Guid.NewGuid();
             var humanDisputeId = Guid.NewGuid();
-            var machineRestrictedAnomalyIntakeManifestId = request.RestrictedAnomalyIntakeManifest is null
-                ? (Guid?)null
-                : Guid.NewGuid();
-
             var artifacts = new List<ElectionReportArtifactRecord>
             {
                 CreateJsonArtifact(
@@ -1076,7 +1086,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         ElectionRecord election,
         ElectionResultArtifactRecord officialResult,
         OutcomeDeterminationProjection outcomeProjection,
-        CeremonyPublicKeyProjection? ceremonyPublicKey)
+        CeremonyPublicKeyProjection? ceremonyPublicKey,
+        PublicAnomalySummary publicAnomalySummary,
+        AnomalyReportReadinessProjection anomalyReportReadiness)
     {
         var eligibleCount = Math.Max(officialResult.EligibleToVoteCount, 0);
         var turnoutPercent = eligibleCount == 0
@@ -1128,6 +1140,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             DenominatorHash: BuildHashHex(officialResult.DenominatorEvidence.ActiveDenominatorSetHash),
             OutcomeLabel: outcomeProjection.ConclusionLabel,
             OutcomeSummary: outcomeProjection.ConclusionSummary,
+            PublicAnomalySummary: publicAnomalySummary,
+            AnomalyReportReadiness: anomalyReportReadiness,
             OptionResults: optionResults);
     }
 
@@ -1394,6 +1408,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         builder.AppendLine($"- Outcome label: `{projection.OutcomeLabel}`");
         builder.AppendLine($"- Outcome summary: {projection.OutcomeSummary}");
         builder.AppendLine();
+        AppendHumanAnomalySummaryContent(builder, projection.PublicAnomalySummary, projection.AnomalyReportReadiness);
+        builder.AppendLine();
         builder.AppendLine("| Rank | Option | Votes | Share |");
         builder.AppendLine("|------|--------|-------|-------|");
         foreach (var option in projection.OptionResults)
@@ -1402,6 +1418,72 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         }
 
         return builder.ToString().TrimEnd();
+    }
+
+    private static void AppendHumanAnomalySummaryContent(
+        StringBuilder builder,
+        PublicAnomalySummary summary,
+        AnomalyReportReadinessProjection readiness)
+    {
+        builder.AppendLine("## Anomaly Reporting");
+        builder.AppendLine();
+        builder.AppendLine($"- Public summary schema: `{summary.SchemaId}`");
+        builder.AppendLine($"- Suppression policy: `{summary.SuppressionPolicyId}`");
+        builder.AppendLine($"- Source manifest hash: `{summary.SourceManifestHash ?? "not available"}`");
+        builder.AppendLine($"- Restricted manifest artifact id: `{summary.RestrictedManifestArtifactId?.ToString() ?? "not available"}`");
+        builder.AppendLine($"- Restricted manifest hash: `{summary.RestrictedManifestHash ?? "not available"}`");
+        if (summary.TotalThreadCountMode == ElectionAnomalyPublicSummaryCountModeIds.Exact)
+        {
+            builder.AppendLine($"- Public anomaly thread count: `{summary.TotalThreadCount}`");
+        }
+        else
+        {
+            builder.AppendLine("- Public anomaly thread count: suppressed by privacy policy.");
+        }
+
+        builder.AppendLine($"- Suppressed thread count: `{summary.SuppressedThreadCount}`");
+        builder.AppendLine($"- Aggregated category count: `{summary.AggregatedBucketCount}`");
+        builder.AppendLine($"- Package readiness status: `{readiness.PackageReadinessStatusId}`");
+        builder.AppendLine($"- Package readiness blockers: `{(readiness.PackageReadinessBlockerIds.Count == 0 ? "none" : string.Join("`, `", readiness.PackageReadinessBlockerIds))}`");
+        builder.AppendLine($"- Retention evidence status: `{readiness.RetentionEvidenceStatusId}`");
+        builder.AppendLine($"- Open anomaly case count: `{readiness.OpenCaseCount}`");
+        builder.AppendLine($"- Escalated anomaly case count: `{readiness.EscalatedCaseCount}`");
+        builder.AppendLine($"- Readiness blocks validation claims: `{(readiness.RetentionEvidenceStatus.ReadinessBlocksValidationClaims ? "yes" : "no")}`");
+        builder.AppendLine($"- Report generation read-only status: `{readiness.ReportGenerationReadOnlyStatusId}`");
+        builder.AppendLine(
+            summary.RestrictedManifestArtifactId.HasValue
+                ? "- Restricted anomaly evidence is available only in the owner/auditor report package artifact."
+                : "- No restricted anomaly evidence artifact is linked to this report package.");
+
+        if (summary.SuppressionReasonIds.Count > 0)
+        {
+            builder.AppendLine($"- Public suppression reasons: `{string.Join("`, `", summary.SuppressionReasonIds)}`");
+        }
+        else
+        {
+            builder.AppendLine("- Public suppression reasons: none");
+        }
+
+        builder.AppendLine();
+        if (summary.VisibleBuckets.Count == 0)
+        {
+            builder.AppendLine("No public anomaly categories are present in this report.");
+            return;
+        }
+
+        builder.AppendLine("| Category | Mode | Public count | Reasons | Source categories |");
+        builder.AppendLine("|----------|------|--------------|---------|-------------------|");
+        foreach (var bucket in summary.VisibleBuckets)
+        {
+            var publicCount = bucket.PublicCount?.ToString() ?? "suppressed";
+            var reasons = bucket.SuppressionReasonIds.Count == 0
+                ? "none"
+                : string.Join(", ", bucket.SuppressionReasonIds);
+            var sources = bucket.SourceCategoryIds.Count == 0
+                ? bucket.CategoryId
+                : string.Join(", ", bucket.SourceCategoryIds);
+            builder.AppendLine($"| `{bucket.CategoryId}` | `{bucket.CountMode}` | `{publicCount}` | {reasons} | {sources} |");
+        }
     }
 
     private static string BuildHumanRosterContent(
@@ -2164,6 +2246,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         string DenominatorHash,
         string OutcomeLabel,
         string OutcomeSummary,
+        PublicAnomalySummary PublicAnomalySummary,
+        AnomalyReportReadinessProjection AnomalyReportReadiness,
         IReadOnlyList<ResultOptionShareProjection> OptionResults);
 
     private sealed record ResultOptionShareProjection(

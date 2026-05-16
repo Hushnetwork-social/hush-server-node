@@ -41,6 +41,7 @@ public static class VerificationResultCodes
     public const string AnomalyEvidenceManifestInvalid = "anomaly_evidence_manifest_invalid";
     public const string AnomalyEvidenceManifestHashMismatch = "anomaly_evidence_manifest_hash_mismatch";
     public const string AnomalyEvidenceGraphMismatch = "anomaly_evidence_graph_mismatch";
+    public const string AnomalyEvidenceManifestPrivacyViolation = "anomaly_evidence_manifest_privacy_violation";
     public const string UnsupportedLiveDependency = "unsupported_live_dependency";
     public const string FutureEvidencePending = "future_evidence_pending";
     public const string PublicationProofEvidencePending = "publication_proof_evidence_pending";

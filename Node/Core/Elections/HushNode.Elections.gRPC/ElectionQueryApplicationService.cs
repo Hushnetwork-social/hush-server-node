@@ -9,12 +9,14 @@ using System.Security.Cryptography;
 using System.Text;
 using Olimpo.EntityFramework.Persistency;
 using Timestamp = Google.Protobuf.WellKnownTypes.Timestamp;
+using System.Text.Json;
 
 namespace HushNode.Elections.gRPC;
 
 public partial class ElectionQueryApplicationService : IElectionQueryApplicationService
 {
     private const string TrusteeShareVaultMessageType = "trustee-share-vault-package";
+    private static readonly JsonSerializerOptions ResultReportJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IUnitOfWorkProvider<ElectionsDbContext> _unitOfWorkProvider;
     private readonly ElectionCeremonyOptions _ceremonyOptions;
     private readonly IMemPoolService? _memPoolService;
@@ -1284,6 +1286,17 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
                     .OrderBy(x => x.SortOrder)
                     .ThenBy(x => x.ArtifactKind)
                     .Select(x => x.ToProto()));
+
+                var anomalySurfaces = TryLoadAnomalyTypedSurfaces(reportArtifacts);
+                if (anomalySurfaces.PublicAnomalySummary is not null)
+                {
+                    response.PublicAnomalySummary = anomalySurfaces.PublicAnomalySummary.ToProto();
+                }
+
+                if (anomalySurfaces.AnomalyReportReadiness is not null)
+                {
+                    response.AnomalyReportReadiness = anomalySurfaces.AnomalyReportReadiness.ToProto();
+                }
             }
         }
 
@@ -1305,6 +1318,42 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
         }
 
         return response;
+    }
+
+    private static ResultReportAnomalyTypedSurfaces TryLoadAnomalyTypedSurfaces(
+        IReadOnlyList<ElectionReportArtifactRecord> reportArtifacts)
+    {
+        var resultReportArtifact = reportArtifacts
+            .Where(x =>
+                x.ArtifactKind == ElectionReportArtifactKind.MachineResultReportProjection &&
+                x.Format == ElectionReportArtifactFormat.Json)
+            .OrderBy(x => x.SortOrder)
+            .FirstOrDefault();
+        if (resultReportArtifact is null)
+        {
+            return ResultReportAnomalyTypedSurfaces.Empty;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<ResultReportAnomalyTypedSurfaces>(
+                    resultReportArtifact.Content,
+                    ResultReportJsonOptions) ??
+                ResultReportAnomalyTypedSurfaces.Empty;
+        }
+        catch (JsonException)
+        {
+            return ResultReportAnomalyTypedSurfaces.Empty;
+        }
+    }
+
+    private sealed record ResultReportAnomalyTypedSurfaces
+    {
+        public static ResultReportAnomalyTypedSurfaces Empty { get; } = new();
+
+        public PublicAnomalySummary? PublicAnomalySummary { get; init; }
+
+        public AnomalyReportReadinessProjection? AnomalyReportReadiness { get; init; }
     }
 
     public async Task<GetElectionReportAccessGrantsResponse> GetElectionReportAccessGrantsAsync(

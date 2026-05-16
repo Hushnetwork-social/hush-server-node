@@ -1149,6 +1149,87 @@ internal static partial class ElectionGrpcMappings
             RecordedAt = ToTimestamp(reportArtifact.RecordedAt),
         };
 
+    public static ElectionAnomalyPublicSummaryView ToProto(this PublicAnomalySummary summary)
+    {
+        var proto = new ElectionAnomalyPublicSummaryView
+        {
+            SchemaId = summary.SchemaId,
+            SuppressionPolicyId = summary.SuppressionPolicyId,
+            ElectionId = summary.ElectionId,
+            SourceManifestHash = summary.SourceManifestHash ?? string.Empty,
+            HasSourceManifestHash = !string.IsNullOrWhiteSpace(summary.SourceManifestHash),
+            TotalThreadCount = summary.TotalThreadCount ?? 0,
+            HasTotalThreadCount = summary.TotalThreadCount.HasValue,
+            TotalThreadCountMode = summary.TotalThreadCountMode,
+            AggregatedBucketCount = summary.AggregatedBucketCount,
+            SuppressedThreadCount = summary.SuppressedThreadCount,
+            RestrictedManifestArtifactId = summary.RestrictedManifestArtifactId?.ToString() ?? string.Empty,
+            HasRestrictedManifestArtifactId = summary.RestrictedManifestArtifactId.HasValue,
+            RestrictedManifestHash = summary.RestrictedManifestHash ?? string.Empty,
+            HasRestrictedManifestHash = !string.IsNullOrWhiteSpace(summary.RestrictedManifestHash),
+            GeneratedAt = ToTimestamp(summary.GeneratedAt),
+        };
+
+        proto.VisibleBuckets.AddRange(summary.VisibleBuckets.Select(x => x.ToProto()));
+        proto.SuppressionReasonIds.AddRange(summary.SuppressionReasonIds);
+        return proto;
+    }
+
+    public static ElectionAnomalyPublicSummaryBucketView ToProto(this PublicAnomalySummaryBucket bucket)
+    {
+        var proto = new ElectionAnomalyPublicSummaryBucketView
+        {
+            CategoryId = bucket.CategoryId,
+            CountMode = bucket.CountMode,
+            PublicCount = bucket.PublicCount ?? 0,
+            HasPublicCount = bucket.PublicCount.HasValue,
+        };
+
+        proto.SuppressionReasonIds.AddRange(bucket.SuppressionReasonIds);
+        proto.SourceCategoryIds.AddRange(bucket.SourceCategoryIds);
+        return proto;
+    }
+
+    public static ElectionAnomalyReportReadinessView ToProto(this AnomalyReportReadinessProjection readiness)
+    {
+        var proto = new ElectionAnomalyReportReadinessView
+        {
+            PublicSummarySchemaId = readiness.PublicSummarySchemaId,
+            SuppressionPolicyId = readiness.SuppressionPolicyId,
+            ForbiddenFieldScanStatusId = readiness.ForbiddenFieldScanStatusId,
+            RestrictedManifestArtifactId = readiness.RestrictedManifestArtifactId?.ToString() ?? string.Empty,
+            HasRestrictedManifestArtifactId = readiness.RestrictedManifestArtifactId.HasValue,
+            RestrictedManifestHash = readiness.RestrictedManifestHash ?? string.Empty,
+            HasRestrictedManifestHash = !string.IsNullOrWhiteSpace(readiness.RestrictedManifestHash),
+            PackageReadinessStatusId = readiness.PackageReadinessStatusId,
+            OpenCaseCount = readiness.OpenCaseCount,
+            EscalatedCaseCount = readiness.EscalatedCaseCount,
+            RetentionEvidenceStatusId = readiness.RetentionEvidenceStatusId,
+            RetentionEvidenceStatus = readiness.RetentionEvidenceStatus.ToProto(),
+            HasGovernedLifecycleEvidence = readiness.HasGovernedLifecycleEvidence,
+            ReportGenerationReadOnlyStatusId = readiness.ReportGenerationReadOnlyStatusId,
+        };
+
+        proto.PackageReadinessBlockerIds.AddRange(readiness.PackageReadinessBlockerIds);
+        return proto;
+    }
+
+    public static ElectionAnomalyRetentionEvidenceStatusView ToProto(this AnomalyRetentionEvidenceStatus status)
+    {
+        var proto = new ElectionAnomalyRetentionEvidenceStatusView
+        {
+            StatusId = status.StatusId,
+            RedactionHoldReferenceCount = status.RedactionHoldReferenceCount,
+            OpenCaseCount = status.OpenCaseCount,
+            EscalatedCaseCount = status.EscalatedCaseCount,
+            ReadinessBlocksValidationClaims = status.ReadinessBlocksValidationClaims,
+            Message = status.Message,
+        };
+
+        proto.GovernedDecisionRefs.AddRange(status.GovernedDecisionRefs);
+        return proto;
+    }
+
     public static ProtocolPackageAccessLocationView ToProto(this ProtocolPackageAccessLocationRecord accessLocation) =>
         new()
         {

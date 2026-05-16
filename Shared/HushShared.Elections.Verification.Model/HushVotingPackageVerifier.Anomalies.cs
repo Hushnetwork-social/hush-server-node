@@ -51,11 +51,23 @@ public sealed partial class HushVotingPackageVerifier
             ];
         }
 
+        var artifactContent = await File.ReadAllTextAsync(artifactPath, cancellationToken);
+        var privacyScan = ElectionAnomalyRestrictedArtifactPrivacyScanner.ScanAuditorSafeManifest(artifactContent);
+        var results = new List<VerifierCheckResultRecord>();
+        if (!privacyScan.Passed)
+        {
+            results.Add(CreateResult(
+                "ANOM-005",
+                VerificationCheckStatus.Fail,
+                VerificationResultCodes.AnomalyEvidenceManifestPrivacyViolation,
+                "Restricted anomaly intake manifest contains auditor-unsafe identity or key material fields.",
+                privacyScan.MatchedFieldNames.ToDictionary(x => x, x => "forbidden", StringComparer.Ordinal)));
+        }
+
         var artifact = await ReadJsonAsync<RestrictedAnomalyIntakeManifestArtifactRecord>(
             packagePath,
             VerificationPackageFileNames.ReportPackageRestrictedAnomalyIntakeManifest,
             cancellationToken);
-        var results = new List<VerifierCheckResultRecord>();
         var shapeIssue = ValidateAnomalyIntakeManifestArtifactShape(artifact);
         if (shapeIssue is not null)
         {

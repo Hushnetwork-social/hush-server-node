@@ -61,6 +61,47 @@ public class ElectionVerificationPackageExportServiceTests
     }
 
     [Fact]
+    public void Export_PublicPackageWithRestrictedAnomalyArtifact_ShouldExcludeRestrictedAnomalyContent()
+    {
+        var request = CreateRequest(VerificationPackageView.PublicAnonymous);
+        var content = """
+            {
+              "artifactSchemaId": "restricted-anomaly-intake-manifest-artifact-v1",
+              "submitterActorPublicAddress": "private-address"
+            }
+            """;
+        var artifact = ElectionModelFactory.CreateReportArtifact(
+            request.ReportPackage!.Id,
+            request.Election.ElectionId,
+            ElectionReportArtifactKind.MachineRestrictedAnomalyIntakeManifest,
+            ElectionReportArtifactFormat.Json,
+            ElectionReportArtifactAccessScope.OwnerAuditorOnly,
+            sortOrder: 14,
+            title: "Restricted anomaly intake manifest",
+            fileName: "restricted-anomaly-intake-manifest.json",
+            mediaType: "application/json",
+            contentHash: SHA256.HashData(Encoding.UTF8.GetBytes(content)),
+            content: content);
+
+        var result = Export(request with
+        {
+            ReportArtifacts = [.. request.ReportArtifacts, artifact],
+        });
+
+        result.Success.Should().BeTrue();
+        result.Files.Should().NotContain(x =>
+            x.RelativePath == VerificationPackageFileNames.ReportPackageRestrictedAnomalyIntakeManifest);
+        var publicPayload = string.Join(
+            '\n',
+            result.Files
+                .Where(x => x.Visibility == VerificationArtifactVisibility.Public)
+                .Select(x => x.ContentText));
+        publicPayload.Should().NotContain("restricted-anomaly-intake-manifest-artifact-v1");
+        publicPayload.Should().NotContain("submitterActorPublicAddress");
+        publicPayload.Should().NotContain("private-address");
+    }
+
+    [Fact]
     public void Export_PublicPackage_ShouldIncludePlannedSp09ExternalReviewArtifacts()
     {
         var result = Export(CreateRequest(VerificationPackageView.PublicAnonymous));

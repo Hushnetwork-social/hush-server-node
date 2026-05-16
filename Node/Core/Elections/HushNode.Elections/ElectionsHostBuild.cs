@@ -29,8 +29,7 @@ public static class ElectionsHostBuild
             services.AddSingleton(CreatePublicationWitnessEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreateSp07PublicationProofChunkCoordinatorOptions(hostContext.Configuration));
             services.AddSingleton(CreateSp08ReleaseEvidenceOptions(hostContext.Configuration));
-            services.AddSingleton(_ => Sp07RustWorkerProcessOptions.FromEnvironment(
-                defaultWorkingDirectory: AppContext.BaseDirectory));
+            services.AddSingleton(_ => CreateSp07RustWorkerProcessOptions(hostContext.Configuration));
             services.AddSingleton<ISp07RustWorkerClient, Sp07RustWorkerProcessClient>();
             services.AddSingleton<Sp07PublicationProofChunkCoordinator>();
             services.AddSingleton<IBootstrapper, ElectionCeremonyProfileRegistryBootstrapper>();
@@ -247,6 +246,69 @@ public static class ElectionsHostBuild
                 configuration,
                 "Elections:PublicationWitnessEnvelope:AwsKmsServiceIdentityLabel",
                 "HUSH_ELECTIONS_PUBLICATION_WITNESS_KMS_SERVICE_IDENTITY"));
+
+    internal static Sp07RustWorkerProcessOptions CreateSp07RustWorkerProcessOptions(IConfiguration configuration)
+    {
+        var configuredWorkerPath = GetConfigValue(
+            configuration,
+            "Elections:Sp07PublicationProof:RustWorkerPath",
+            Sp07RustWorkerProcessOptions.WorkerPathEnvironmentVariable);
+
+        var resolvedWorkerPath = configuredWorkerPath
+            ?? TryResolveRepoLocalSp07RustWorkerPath(AppContext.BaseDirectory);
+
+        return Sp07RustWorkerProcessOptions.FromEnvironmentVariables(
+            variableName => variableName switch
+            {
+                Sp07RustWorkerProcessOptions.WorkerPathEnvironmentVariable => resolvedWorkerPath,
+                Sp07RustWorkerProcessOptions.WorkerTimeoutSecondsEnvironmentVariable => GetConfigValue(
+                    configuration,
+                    "Elections:Sp07PublicationProof:WorkerTimeoutSeconds",
+                    Sp07RustWorkerProcessOptions.WorkerTimeoutSecondsEnvironmentVariable),
+                Sp07RustWorkerProcessOptions.WorkerThreadsEnvironmentVariable => GetConfigValue(
+                    configuration,
+                    "Elections:Sp07PublicationProof:WorkerThreads",
+                    Sp07RustWorkerProcessOptions.WorkerThreadsEnvironmentVariable),
+                _ => Environment.GetEnvironmentVariable(variableName)
+            },
+            defaultWorkingDirectory: AppContext.BaseDirectory);
+    }
+
+    internal static string? TryResolveRepoLocalSp07RustWorkerPath(string searchStartDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(searchStartDirectory))
+        {
+            return null;
+        }
+
+        var executableName = OperatingSystem.IsWindows()
+            ? "hush-sp07-rust-worker.exe"
+            : "hush-sp07-rust-worker";
+
+        var current = new DirectoryInfo(searchStartDirectory);
+        while (current is not null)
+        {
+            var workerRoot = Path.Combine(current.FullName, "Tools", "HushSp07RustWorker");
+            if (File.Exists(Path.Combine(workerRoot, "Cargo.toml")))
+            {
+                var candidatePaths = new[]
+                {
+                    Path.Combine(workerRoot, "target", "release", executableName),
+                    Path.Combine(workerRoot, "target", "debug", executableName)
+                };
+
+                var workerPath = candidatePaths.FirstOrDefault(File.Exists);
+                if (workerPath is not null)
+                {
+                    return Path.GetFullPath(workerPath);
+                }
+            }
+
+            current = current.Parent;
+        }
+
+        return null;
+    }
 
     private static Sp07PublicationProofChunkCoordinatorOptions CreateSp07PublicationProofChunkCoordinatorOptions(
         IConfiguration configuration)

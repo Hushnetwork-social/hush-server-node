@@ -3268,6 +3268,139 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionResultViewAsync_WithSealedReportPackageTypedAnomalyProjection_ReturnsSummaryAndReadiness()
+    {
+        var mocker = new AutoMocker();
+        var election = WithSealedBallotDefinition(CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = DateTime.UtcNow.AddMinutes(-1),
+            TallyReadyAt = DateTime.UtcNow.AddMinutes(-5),
+            TallyReadyArtifactId = Guid.NewGuid(),
+            UnofficialResultArtifactId = Guid.NewGuid(),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            FinalizeArtifactId = Guid.NewGuid(),
+        });
+        var reportPackage = CreateSealedVerificationReportPackage(election);
+        var restrictedManifestArtifactId = Guid.NewGuid();
+        var generatedAt = DateTime.SpecifyKind(DateTime.UtcNow.AddMinutes(-1), DateTimeKind.Utc);
+        var publicSummary = new PublicAnomalySummary(
+            ElectionAnomalyPublicSummarySchemaIds.Current,
+            ElectionAnomalyPublicSummarySuppressionPolicyIds.Current,
+            election.ElectionId.ToString(),
+            "sha256:manifest-hash",
+            TotalThreadCount: null,
+            ElectionAnomalyPublicSummaryCountModeIds.Suppressed,
+            [
+                new PublicAnomalySummaryBucket(
+                    ElectionAnomalyCategoryIds.BallotCastingOrReceiptAnomaly,
+                    ElectionAnomalyPublicSummaryCountModeIds.Exact,
+                    4,
+                    Array.Empty<string>(),
+                    [ElectionAnomalyCategoryIds.BallotCastingOrReceiptAnomaly]),
+                new PublicAnomalySummaryBucket(
+                    ElectionAnomalyCategoryIds.OtherProcessAnomaly,
+                    ElectionAnomalyPublicSummaryCountModeIds.Aggregated,
+                    3,
+                    [ElectionAnomalyPublicSummarySuppressionReasonIds.LowCountCategory],
+                    [
+                        ElectionAnomalyCategoryIds.AccessOrAuthenticationAnomaly,
+                        ElectionAnomalyCategoryIds.TrusteeContinuityAnomaly,
+                    ]),
+                new PublicAnomalySummaryBucket(
+                    ElectionAnomalyCategoryIds.SecurityOrIntegrityConcern,
+                    ElectionAnomalyPublicSummaryCountModeIds.Suppressed,
+                    PublicCount: null,
+                    [ElectionAnomalyPublicSummarySuppressionReasonIds.RestrictedEvidenceOnly],
+                    [ElectionAnomalyCategoryIds.SecurityOrIntegrityConcern]),
+            ],
+            AggregatedBucketCount: 2,
+            SuppressedThreadCount: 1,
+            [
+                ElectionAnomalyPublicSummarySuppressionReasonIds.LowCountCategory,
+                ElectionAnomalyPublicSummarySuppressionReasonIds.RestrictedEvidenceOnly,
+            ],
+            restrictedManifestArtifactId,
+            "sha256:manifest-hash",
+            generatedAt);
+        var retentionStatus = new AnomalyRetentionEvidenceStatus(
+            ElectionAnomalyRetentionEvidenceStatusIds.OpenCaseRequiresPolicyReview,
+            ["gov-42"],
+            RedactionHoldReferenceCount: 1,
+            OpenCaseCount: 2,
+            EscalatedCaseCount: 1,
+            ReadinessBlocksValidationClaims: true,
+            "Open anomaly cases require policy review before readiness claims treat anomaly handling as complete.");
+        var readiness = new AnomalyReportReadinessProjection(
+            publicSummary.SchemaId,
+            publicSummary.SuppressionPolicyId,
+            ElectionAnomalyPublicArtifactScanStatusIds.Passed,
+            restrictedManifestArtifactId,
+            publicSummary.RestrictedManifestHash,
+            ElectionAnomalyPackageReadinessStatusIds.Blocked,
+            [ElectionAnomalyPayloadAvailabilityStatusIds.PayloadMissing],
+            OpenCaseCount: 2,
+            EscalatedCaseCount: 1,
+            retentionStatus.StatusId,
+            retentionStatus,
+            HasGovernedLifecycleEvidence: true,
+            ElectionAnomalyReportGenerationReadOnlyStatusIds.Validated);
+        var resultReportContent = JsonSerializer.Serialize(
+            new
+            {
+                publicAnomalySummary = publicSummary,
+                anomalyReportReadiness = readiness,
+            },
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var resultReportArtifact = ElectionModelFactory.CreateReportArtifact(
+            reportPackage.Id,
+            election.ElectionId,
+            ElectionReportArtifactKind.MachineResultReportProjection,
+            ElectionReportArtifactFormat.Json,
+            ElectionReportArtifactAccessScope.OwnerAuditorTrustee,
+            9,
+            "Final result report projection",
+            "result-report.json",
+            "application/json",
+            SHA256.HashData(Encoding.UTF8.GetBytes(resultReportContent)),
+            resultReportContent);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetReportArtifactsAsync(reportPackage.Id)).ReturnsAsync([resultReportArtifact]);
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionResultViewAsync(election.ElectionId, "owner-address");
+
+        response.Success.Should().BeTrue();
+        response.PublicAnomalySummary.Should().NotBeNull();
+        response.PublicAnomalySummary.SchemaId.Should().Be(ElectionAnomalyPublicSummarySchemaIds.Current);
+        response.PublicAnomalySummary.TotalThreadCountMode.Should().Be(ElectionAnomalyPublicSummaryCountModeIds.Suppressed);
+        response.PublicAnomalySummary.HasTotalThreadCount.Should().BeFalse();
+        response.PublicAnomalySummary.VisibleBuckets.Should().HaveCount(3);
+        response.PublicAnomalySummary.VisibleBuckets
+            .Single(x => x.CountMode == ElectionAnomalyPublicSummaryCountModeIds.Exact)
+            .PublicCount.Should().Be(4);
+        response.PublicAnomalySummary.VisibleBuckets
+            .Single(x => x.CountMode == ElectionAnomalyPublicSummaryCountModeIds.Suppressed)
+            .HasPublicCount.Should().BeFalse();
+        response.PublicAnomalySummary.RestrictedManifestArtifactId.Should().Be(restrictedManifestArtifactId.ToString());
+        response.AnomalyReportReadiness.Should().NotBeNull();
+        response.AnomalyReportReadiness.ForbiddenFieldScanStatusId.Should().Be(ElectionAnomalyPublicArtifactScanStatusIds.Passed);
+        response.AnomalyReportReadiness.PackageReadinessStatusId.Should().Be(ElectionAnomalyPackageReadinessStatusIds.Blocked);
+        response.AnomalyReportReadiness.PackageReadinessBlockerIds.Should().Contain(ElectionAnomalyPayloadAvailabilityStatusIds.PayloadMissing);
+        response.AnomalyReportReadiness.RetentionEvidenceStatus.StatusId.Should().Be(
+            ElectionAnomalyRetentionEvidenceStatusIds.OpenCaseRequiresPolicyReview);
+        response.AnomalyReportReadiness.RetentionEvidenceStatus.ReadinessBlocksValidationClaims.Should().BeTrue();
+        response.AnomalyReportReadiness.RetentionEvidenceStatus.GovernedDecisionRefs.Should().ContainSingle("gov-42");
+        response.PublicAnomalySummary.ToString().Should().NotContain("submitterActorPublicAddress");
+    }
+
+    [Fact]
     public async Task GetElectionVerificationPackageStatusAsync_WithOwnerFinalizedDraftProtocol_ReturnsReadyPackageRefsAndHashes()
     {
         var mocker = new AutoMocker();

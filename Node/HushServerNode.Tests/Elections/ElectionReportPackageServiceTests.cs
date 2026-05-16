@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using HushNode.Elections;
 using HushShared.Elections.Model;
@@ -555,6 +556,101 @@ public class ElectionReportPackageServiceTests
             anomalyArtifact.Content.Should().Contain($"\"{blocker}\"");
             evidenceGraph.Content.Should().Contain($"\"{blocker}\"");
         }
+    }
+
+    [Fact]
+    public void Build_WithRestrictedAnomalyIntakeManifest_AddsPublicSummaryToResultReports()
+    {
+        var service = new ElectionReportPackageService();
+        var election = CreateFinalizedElectionForReportPackage();
+        var anomalyManifest = CreateRestrictedAnomalyIntakeManifest(election.ElectionId);
+        var request = CreateReportBuildRequest(election, protocolPackageBinding: null) with
+        {
+            RestrictedAnomalyIntakeManifest = anomalyManifest,
+        };
+
+        var buildResult = service.Build(request);
+
+        buildResult.IsSuccess.Should().BeTrue();
+        var resultProjection = buildResult.Artifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKind.MachineResultReportProjection);
+        resultProjection.Content.Should().Contain("\"publicAnomalySummary\"");
+        resultProjection.Content.Should().Contain("\"schemaId\": \"public-anomaly-summary-v1\"");
+        resultProjection.Content.Should().Contain("\"suppressionPolicyId\": \"anomaly-public-summary-v1\"");
+        resultProjection.Content.Should().Contain("\"sourceManifestHash\": \"sha256:");
+        resultProjection.Content.Should().Contain("\"totalThreadCount\": null");
+        resultProjection.Content.Should().Contain("\"totalThreadCountMode\": \"suppressed\"");
+        resultProjection.Content.Should().Contain("\"low_count_category\"");
+        resultProjection.Content.Should().Contain("\"small_election_identifiability\"");
+        resultProjection.Content.Should().Contain("\"restrictedManifestArtifactId\"");
+        resultProjection.Content.Should().Contain("\"restrictedManifestHash\": \"sha256:");
+        resultProjection.Content.Should().Contain("\"anomalyReportReadiness\"");
+        resultProjection.Content.Should().Contain("\"forbiddenFieldScanStatusId\": \"passed\"");
+        resultProjection.Content.Should().Contain("\"retentionEvidenceStatusId\": \"open_case_requires_policy_review\"");
+        resultProjection.Content.Should().Contain("\"reportGenerationReadOnlyStatusId\": \"validated\"");
+
+        var humanReport = buildResult.Artifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKind.HumanResultReport);
+        humanReport.Content.Should().Contain("## Anomaly Reporting");
+        humanReport.Content.Should().Contain("Public anomaly thread count: suppressed by privacy policy.");
+        humanReport.Content.Should().Contain("Restricted anomaly evidence is available only in the owner/auditor report package artifact.");
+        humanReport.Content.Should().Contain("`low_count_category`");
+        humanReport.Content.Should().Contain("`small_election_identifiability`");
+        humanReport.Content.Should().Contain("Retention evidence status: `open_case_requires_policy_review`");
+        humanReport.Content.Should().Contain("Report generation read-only status: `validated`");
+    }
+
+    [Fact]
+    public void Build_PublicAnomalyResultReports_DoNotContainRestrictedManifestFieldsOrValues()
+    {
+        var service = new ElectionReportPackageService();
+        var election = CreateFinalizedElectionForReportPackage();
+        var anomalyManifest = CreateRestrictedAnomalyIntakeManifest(election.ElectionId);
+        var restrictedPayloadReference = anomalyManifest.Threads[0].Attachments[0].EncryptedPayloadReference;
+        var restrictedEventHash = anomalyManifest.Threads[0].Attachments[0].EventHash;
+        var request = CreateReportBuildRequest(election, protocolPackageBinding: null) with
+        {
+            RestrictedAnomalyIntakeManifest = anomalyManifest,
+        };
+
+        var buildResult = service.Build(request);
+
+        buildResult.IsSuccess.Should().BeTrue();
+        var publicArtifacts = buildResult.Artifacts
+            .Where(x => x.ArtifactKind is
+                ElectionReportArtifactKind.MachineResultReportProjection or
+                ElectionReportArtifactKind.HumanResultReport)
+            .ToArray();
+        publicArtifacts.Should().HaveCount(2);
+        foreach (var artifact in publicArtifacts)
+        {
+            var scan = ElectionAnomalyPublicArtifactPrivacyScanner.Scan(
+                artifact.Content,
+                [restrictedPayloadReference, restrictedEventHash]);
+            scan.Passed.Should().BeTrue($"public artifact {artifact.FileName} must not expose restricted anomaly fields or values");
+        }
+    }
+
+    [Fact]
+    public void Build_WithAnomalyManifest_DoesNotMutateReportInputs()
+    {
+        var service = new ElectionReportPackageService();
+        var election = CreateFinalizedElectionForReportPackage();
+        var anomalyManifest = CreateRestrictedAnomalyIntakeManifest(election.ElectionId);
+        var request = CreateReportBuildRequest(election, protocolPackageBinding: null) with
+        {
+            RestrictedAnomalyIntakeManifest = anomalyManifest,
+        };
+        var electionBefore = JsonSerializer.Serialize(request.Election, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var manifestBefore = JsonSerializer.Serialize(anomalyManifest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        var buildResult = service.Build(request);
+
+        buildResult.IsSuccess.Should().BeTrue();
+        JsonSerializer.Serialize(request.Election, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            .Should().Be(electionBefore);
+        JsonSerializer.Serialize(anomalyManifest, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            .Should().Be(manifestBefore);
     }
 
     private static OutcomeRuleDefinition CreatePassFailRule() =>

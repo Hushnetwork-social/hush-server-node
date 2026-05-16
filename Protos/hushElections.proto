@@ -894,6 +894,63 @@ message ElectionReportArtifactView {
   google.protobuf.Timestamp RecordedAt = 14;
 }
 
+message ElectionAnomalyPublicSummaryBucketView {
+  string CategoryId = 1;
+  string CountMode = 2;
+  int32 PublicCount = 3;
+  bool HasPublicCount = 4;
+  repeated string SuppressionReasonIds = 5;
+  repeated string SourceCategoryIds = 6;
+}
+
+message ElectionAnomalyPublicSummaryView {
+  string SchemaId = 1;
+  string SuppressionPolicyId = 2;
+  string ElectionId = 3;
+  string SourceManifestHash = 4;
+  bool HasSourceManifestHash = 5;
+  int32 TotalThreadCount = 6;
+  bool HasTotalThreadCount = 7;
+  string TotalThreadCountMode = 8;
+  repeated ElectionAnomalyPublicSummaryBucketView VisibleBuckets = 9;
+  int32 AggregatedBucketCount = 10;
+  int32 SuppressedThreadCount = 11;
+  repeated string SuppressionReasonIds = 12;
+  string RestrictedManifestArtifactId = 13;
+  bool HasRestrictedManifestArtifactId = 14;
+  string RestrictedManifestHash = 15;
+  bool HasRestrictedManifestHash = 16;
+  google.protobuf.Timestamp GeneratedAt = 17;
+}
+
+message ElectionAnomalyRetentionEvidenceStatusView {
+  string StatusId = 1;
+  repeated string GovernedDecisionRefs = 2;
+  int32 RedactionHoldReferenceCount = 3;
+  int32 OpenCaseCount = 4;
+  int32 EscalatedCaseCount = 5;
+  bool ReadinessBlocksValidationClaims = 6;
+  string Message = 7;
+}
+
+message ElectionAnomalyReportReadinessView {
+  string PublicSummarySchemaId = 1;
+  string SuppressionPolicyId = 2;
+  string ForbiddenFieldScanStatusId = 3;
+  string RestrictedManifestArtifactId = 4;
+  bool HasRestrictedManifestArtifactId = 5;
+  string RestrictedManifestHash = 6;
+  bool HasRestrictedManifestHash = 7;
+  string PackageReadinessStatusId = 8;
+  repeated string PackageReadinessBlockerIds = 9;
+  int32 OpenCaseCount = 10;
+  int32 EscalatedCaseCount = 11;
+  string RetentionEvidenceStatusId = 12;
+  ElectionAnomalyRetentionEvidenceStatusView RetentionEvidenceStatus = 13;
+  bool HasGovernedLifecycleEvidence = 14;
+  string ReportGenerationReadOnlyStatusId = 15;
+}
+
 message ProtocolPackageAccessLocationView {
   ProtocolPackageAccessLocationKindProto LocationKind = 1;
   string Label = 2;
@@ -2205,6 +2262,8 @@ message GetElectionResultViewResponse {
   ElectionCeremonyBindingSnapshot CeremonySnapshot = 13;
   ElectionProtocolPackageBindingView ProtocolPackageBinding = 14;
   ElectionVerificationPackageStatusView VerificationPackageStatus = 15;
+  ElectionAnomalyPublicSummaryView PublicAnomalySummary = 16;
+  ElectionAnomalyReportReadinessView AnomalyReportReadiness = 17;
 }
 
 message GetElectionVerificationPackageStatusResponse {

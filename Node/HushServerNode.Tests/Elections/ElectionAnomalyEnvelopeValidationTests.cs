@@ -414,6 +414,35 @@ public class ElectionAnomalyEnvelopeValidationTests
     }
 
     [Fact]
+    public void ValidateAndSign_WithExternalClaimantRegistrarClarification_ReturnsValidatedOuterEnvelope()
+    {
+        var election = CreateElection();
+        var openClarificationId = Guid.NewGuid();
+        var thread = CreateExternalClaimantThread(election, openClarificationId);
+        var action = new SubmitElectionAnomalyInformationActionPayload(
+            thread.Id,
+            openClarificationId,
+            Guid.NewGuid(),
+            "owner-address",
+            CreateMessage(ElectionAnomalyMessageKindIds.SubmitterInformationResponse));
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.SubmitAnomalyInformation,
+            action,
+            "owner-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeOfType<ValidatedTransaction<EncryptedElectionEnvelopePayload>>();
+    }
+
+    [Fact]
     public void ValidateAndSign_WithAuthorityResponseAndAllowedRecipients_ReturnsValidatedOuterEnvelope()
     {
         var election = CreateElection();
@@ -886,6 +915,37 @@ public class ElectionAnomalyEnvelopeValidationTests
         failure.Code.Should().Be(ElectionAnomalyValidationCodes.TerminalStateRequiresClosedClarification);
     }
 
+    [Fact]
+    public void ValidateAndSign_WithAwaitingInformationClassificationWithoutRequest_ReturnsStableFailure()
+    {
+        var election = CreateElection();
+        var thread = CreateThread(election);
+        var action = new ClassifyElectionAnomalyThreadActionPayload(
+            thread.Id,
+            Guid.NewGuid(),
+            "owner-address",
+            CaseStateId: ElectionAnomalyCaseStateIds.AuthorityRequestedInformation);
+        var harness = CreateHarness(
+            election,
+            EncryptedElectionEnvelopeActionTypes.ClassifyAnomalyThread,
+            action,
+            "owner-address",
+            repository =>
+            {
+                repository
+                    .Setup(x => x.GetAnomalyThreadAsync(thread.Id))
+                    .ReturnsAsync(thread);
+            });
+
+        var validatedTransaction = harness.Sut.ValidateAndSign(harness.SignedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+        harness.Sut.TryTakeValidationFailure(harness.SignedEnvelope.TransactionId.Value, out var failure)
+            .Should()
+            .BeTrue();
+        failure.Code.Should().Be(ElectionAnomalyValidationCodes.ClarificationRequestNotOpen);
+    }
+
     private static ValidationHarness CreateHarness(
         ElectionRecord election,
         string actionType,
@@ -1112,6 +1172,42 @@ public class ElectionAnomalyEnvelopeValidationTests
             GovernedDecisionRef: null,
             hasOpenClarificationRequest,
             openClarificationRequestId,
+            DateTime.UtcNow.AddMinutes(-5),
+            DateTime.UtcNow.AddMinutes(-5),
+            Guid.NewGuid(),
+            SourceBlockHeight: null,
+            SourceBlockId: null,
+            "sha256:thread");
+    }
+
+    private static ElectionAnomalyThreadRecord CreateExternalClaimantThread(
+        ElectionRecord election,
+        Guid openClarificationRequestId)
+    {
+        var roleResolution = ElectionAnomalyAuthorization.ResolveExternalClaimantSubmitter(
+            election,
+            "owner-address",
+            "claimant-reference-hash",
+            DateTime.UtcNow);
+        roleResolution.IsResolved.Should().BeTrue();
+
+        return new ElectionAnomalyThreadRecord(
+            Guid.NewGuid(),
+            election.ElectionId,
+            roleResolution.SubmitterPersonScopeId!,
+            roleResolution.PersonScopeDerivationVersion,
+            "owner-address",
+            roleResolution.RoleContextId,
+            roleResolution.RoleEvidenceTypeId!,
+            roleResolution.RoleEvidenceReference!,
+            election.LifecycleState,
+            election.AnomalySubmissionWindowClosesAt,
+            ElectionAnomalyCategoryIds.ExternalObjectionOrComplaint,
+            ElectionAnomalyCaseStateIds.AuthorityRequestedInformation,
+            SeverityCandidateId: null,
+            GovernedDecisionRef: null,
+            HasOpenClarificationRequest: true,
+            OpenClarificationRequestId: openClarificationRequestId,
             DateTime.UtcNow.AddMinutes(-5),
             DateTime.UtcNow.AddMinutes(-5),
             Guid.NewGuid(),

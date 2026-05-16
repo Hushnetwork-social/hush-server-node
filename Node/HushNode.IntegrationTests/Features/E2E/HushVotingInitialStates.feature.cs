@@ -153,6 +153,59 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Result report package shows anomaly summary and restricted manifest status")]
+        [Xunit.TraitAttribute("FeatureTitle", "HushVoting Initial Empty States")]
+        [Xunit.TraitAttribute("Description", "Result report package shows anomaly summary and restricted manifest status")]
+        [Xunit.TraitAttribute("Category", "HV-E2E-FEAT-129")]
+        [Xunit.TraitAttribute("Category", "FEAT-129")]
+        [Xunit.TraitAttribute("Category", "PR")]
+        public void ResultReportPackageShowsAnomalySummaryAndRestrictedManifestStatus()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "HV-E2E-FEAT-129",
+                    "FEAT-129",
+                    "PR"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Result report package shows anomaly summary and restricted manifest status", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 24
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 25
+        testRunner.Given("the FEAT-129 anomaly report package query responses are seeded for the browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 26
+        testRunner.When("the user opens the FEAT-129 anomaly result package election", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 27
+        testRunner.Then("the FEAT-129 anomaly report package summary should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 28
+        testRunner.And("the FEAT-129 anomaly readiness strip should show review blockers", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 29
+        testRunner.And("the FEAT-129 restricted anomaly artifact row should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 30
+        testRunner.And("the FEAT-129 report package UI should not leak restricted anomaly payload referen" +
+                        "ces", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 31
+        testRunner.And("the HushVoting screen should not show an election query proxy error", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable

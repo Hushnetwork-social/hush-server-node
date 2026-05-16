@@ -150,6 +150,34 @@ public static class ElectionAnomalyAuthorization
             : new ElectionAnomalyOwnThreadReadDecision(false, ElectionAnomalyValidationCodes.ReadForbidden);
     }
 
+    public static ElectionAnomalyOwnThreadReadDecision CanActorRespondAsSubmitter(
+        ElectionAnomalyThreadRecord thread,
+        string actorPublicAddress)
+    {
+        var ownThreadDecision = CanActorReadOwnThread(thread, actorPublicAddress);
+        if (ownThreadDecision.CanRead)
+        {
+            return ownThreadDecision;
+        }
+
+        var actor = NormalizeAddress(actorPublicAddress);
+        if (string.IsNullOrWhiteSpace(actor))
+        {
+            return new ElectionAnomalyOwnThreadReadDecision(false, ElectionAnomalyValidationCodes.ReadForbidden);
+        }
+
+        var isExternalClaimantBridge =
+            string.Equals(
+                thread.SubmitterRoleContextId,
+                ElectionAnomalyActorRoleContextIds.ExternalClaimantRegistrar,
+                StringComparison.Ordinal) &&
+            string.Equals(thread.SubmitterActorPublicAddress, actor, StringComparison.Ordinal);
+
+        return isExternalClaimantBridge
+            ? new ElectionAnomalyOwnThreadReadDecision(true, null)
+            : new ElectionAnomalyOwnThreadReadDecision(false, ElectionAnomalyValidationCodes.ReadForbidden);
+    }
+
     private static ElectionAnomalyRoleEvidence? SelectEvidence(
         IReadOnlyList<ElectionAnomalyRoleEvidence> candidates,
         string? requestedRoleContextId)

@@ -483,6 +483,26 @@ public class HushVotingPackageVerifierTests
     }
 
     [Fact]
+    public async Task Verify_RestrictedPackageWithAuditorUnsafeAnomalyIdentityField_ShouldFailPrivacyCheck()
+    {
+        using var package = CreateRestrictedPackageWithAnomalyManifest();
+        await MutateJsonArtifactAndRefreshPackageAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.ReportPackageRestrictedAnomalyIntakeManifest,
+            root => root["submitterActorPublicAddress"] = "HUSH-SUBMITTER-PRIVATE-ADDRESS");
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.RestrictedOwnerAuditorV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == "ANOM-005" &&
+            x.ResultCode == VerificationResultCodes.AnomalyEvidenceManifestPrivacyViolation &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
     public async Task Verify_RestrictedPackageWithTamperedAnomalyEvidenceGraphNode_ShouldFailGraphCheck()
     {
         using var package = CreateRestrictedPackageWithAnomalyManifest();

@@ -247,6 +247,52 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         anomalyArtifact.Content.Should().Contain($"\"encryptedPayloadReference\": \"{encryptedPayloadReference}\"");
         anomalyArtifact.Content.Should().Contain("\"redactionCount\": 1");
 
+        var publicSummary = ownerResult.PublicAnomalySummary;
+        publicSummary.Should().NotBeNull();
+        publicSummary!.SchemaId.Should().Be(ElectionAnomalyPublicSummarySchemaIds.Current);
+        publicSummary.SuppressionPolicyId.Should().Be(ElectionAnomalyPublicSummarySuppressionPolicyIds.Current);
+        publicSummary.TotalThreadCountMode.Should().Be(ElectionAnomalyPublicSummaryCountModeIds.Suppressed);
+        publicSummary.HasTotalThreadCount.Should().BeFalse();
+        publicSummary.SuppressedThreadCount.Should().Be(1);
+        publicSummary.SuppressionReasonIds.Should().Contain([
+            ElectionAnomalyPublicSummarySuppressionReasonIds.AggregationNotSafe,
+            ElectionAnomalyPublicSummarySuppressionReasonIds.LowCountCategory,
+            ElectionAnomalyPublicSummarySuppressionReasonIds.SmallElectionIdentifiability,
+        ]);
+        publicSummary.RestrictedManifestArtifactId.Should().Be(anomalyArtifact.Id);
+        publicSummary.HasRestrictedManifestHash.Should().BeTrue();
+        var summaryBucket = publicSummary.VisibleBuckets.Should().ContainSingle().Subject;
+        summaryBucket.CountMode.Should().Be(ElectionAnomalyPublicSummaryCountModeIds.Suppressed);
+        summaryBucket.HasPublicCount.Should().BeFalse();
+        summaryBucket.SuppressionReasonIds.Should().Contain(ElectionAnomalyPublicSummarySuppressionReasonIds.LowCountCategory);
+
+        var readiness = ownerResult.AnomalyReportReadiness;
+        readiness.Should().NotBeNull();
+        readiness!.ForbiddenFieldScanStatusId.Should().Be(ElectionAnomalyPublicArtifactScanStatusIds.Passed);
+        readiness.PackageReadinessStatusId.Should().Be(ElectionAnomalyPackageReadinessStatusIds.Ready);
+        readiness.PackageReadinessBlockerIds.Should().BeEmpty();
+        readiness.RetentionEvidenceStatusId.Should().Be(ElectionAnomalyRetentionEvidenceStatusIds.OpenCaseRequiresPolicyReview);
+        readiness.RetentionEvidenceStatus.StatusId.Should().Be(ElectionAnomalyRetentionEvidenceStatusIds.OpenCaseRequiresPolicyReview);
+        readiness.RetentionEvidenceStatus.OpenCaseCount.Should().Be(1);
+        readiness.RetentionEvidenceStatus.ReadinessBlocksValidationClaims.Should().BeTrue();
+        readiness.ReportGenerationReadOnlyStatusId.Should().Be(ElectionAnomalyReportGenerationReadOnlyStatusIds.Validated);
+
+        var resultReportJson = ownerResult.VisibleReportArtifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactMachineResultReportProjection);
+        resultReportJson.Content.Should().Contain("\"publicAnomalySummary\"");
+        resultReportJson.Content.Should().Contain("\"anomalyReportReadiness\"");
+        resultReportJson.Content.Should().Contain("\"totalThreadCountMode\": \"suppressed\"");
+        resultReportJson.Content.Should().NotContain(encryptedPayloadReference);
+        resultReportJson.Content.Should().NotContain("submitterActorPublicAddress");
+
+        var finalResultReport = ownerResult.VisibleReportArtifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanResultReport);
+        finalResultReport.Content.Should().Contain("## Anomaly Reporting");
+        finalResultReport.Content.Should().Contain("- Public anomaly thread count: suppressed by privacy policy.");
+        finalResultReport.Content.Should().Contain($"- Restricted manifest artifact id: `{anomalyArtifact.Id}`");
+        finalResultReport.Content.Should().NotContain(encryptedPayloadReference);
+        finalResultReport.Content.Should().NotContain("submitterActorPublicAddress");
+
         var evidenceGraph = ownerResult.VisibleReportArtifacts.Single(x =>
             x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactMachineEvidenceGraph);
         evidenceGraph.Content.Should().Contain("\"restrictedAnomalyIntakeManifest\"");
@@ -261,6 +307,34 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             Guest,
             waitForOfficialResult: true);
         participantResult.VisibleReportArtifacts.Should().BeEmpty();
+        participantResult.PublicAnomalySummary.Should().BeNull();
+        participantResult.AnomalyReportReadiness.Should().BeNull();
+
+        var publicExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+        publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
+        publicExport.Files.Should().NotContain(x =>
+            x.RelativePath == VerificationPackageFileNames.ReportPackageRestrictedAnomalyIntakeManifest);
+        publicExport.Files.Should().NotContain(x =>
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
+        var publicPackageText = string.Join(
+            '\n',
+            publicExport.Files.Select(x => Encoding.UTF8.GetString(x.Content.ToByteArray())));
+        publicPackageText.Should().NotContain("restricted-anomaly-intake-manifest-artifact-v1");
+        publicPackageText.Should().NotContain(encryptedPayloadReference);
+
+        var restrictedExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackageRestrictedOwnerAuditor);
+        restrictedExport.Success.Should().BeTrue(restrictedExport.ErrorMessage);
+        restrictedExport.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.ReportPackageRestrictedAnomalyIntakeManifest &&
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactRestricted);
     }
 
     [Fact]

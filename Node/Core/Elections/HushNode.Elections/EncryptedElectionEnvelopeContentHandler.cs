@@ -2304,13 +2304,13 @@ public class EncryptedElectionEnvelopeContentHandler(
                 "Anomaly thread was not found for the clarification response.");
         }
 
-        var readDecision = ElectionAnomalyAuthorization.CanActorReadOwnThread(thread, responseAction.ActorPublicAddress);
+        var readDecision = ElectionAnomalyAuthorization.CanActorRespondAsSubmitter(thread, responseAction.ActorPublicAddress);
         if (!readDecision.CanRead)
         {
             return RejectWithValidationFailure(
                 transactionId,
                 readDecision.ValidationCode ?? ElectionAnomalyValidationCodes.ReadForbidden,
-                "Only the original anomaly submitter can answer a clarification request.");
+                "Only the original anomaly submitter or registered external claimant bridge can answer a clarification request.");
         }
 
         if (!thread.HasOpenClarificationRequest)
@@ -2486,6 +2486,19 @@ public class EncryptedElectionEnvelopeContentHandler(
                 transactionId,
                 ElectionAnomalyValidationCodes.TerminalStateRequiresClosedClarification,
                 "Terminal anomaly classification requires the open clarification request to be closed first.");
+        }
+
+        if (!context.Thread.HasOpenClarificationRequest &&
+            hasCaseState &&
+            string.Equals(
+                classifyAction.CaseStateId,
+                ElectionAnomalyCaseStateIds.AuthorityRequestedInformation,
+                StringComparison.Ordinal))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                ElectionAnomalyValidationCodes.ClarificationRequestNotOpen,
+                "Awaiting information state must be created by an authority clarification request.");
         }
 
         return true;

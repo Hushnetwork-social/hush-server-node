@@ -152,6 +152,51 @@ public class ElectionAnomalyAuthorizationTests
         otherRead.ValidationCode.Should().Be(ElectionAnomalyValidationCodes.ReadForbidden);
     }
 
+    [Fact]
+    public void CanActorRespondAsSubmitter_ShouldAcceptRegisteredExternalClaimantBridge()
+    {
+        var now = DateTime.UtcNow;
+        var election = CreateElection(now);
+        var submitResolution = ElectionAnomalyAuthorization.ResolveExternalClaimantSubmitter(
+            election,
+            election.OwnerPublicAddress,
+            "claimant-reference-hash",
+            now);
+        submitResolution.IsResolved.Should().BeTrue();
+        var thread = new ElectionAnomalyThreadRecord(
+            Guid.NewGuid(),
+            election.ElectionId,
+            submitResolution.SubmitterPersonScopeId!,
+            submitResolution.PersonScopeDerivationVersion,
+            submitResolution.ActorPublicAddress!,
+            submitResolution.RoleContextId,
+            submitResolution.RoleEvidenceTypeId!,
+            submitResolution.RoleEvidenceReference!,
+            submitResolution.LifecycleStateAtSubmission!.Value,
+            election.AnomalySubmissionWindowClosesAt,
+            ElectionAnomalyCategoryIds.ExternalObjectionOrComplaint,
+            ElectionAnomalyCaseStateIds.AuthorityRequestedInformation,
+            SeverityCandidateId: null,
+            GovernedDecisionRef: null,
+            HasOpenClarificationRequest: true,
+            OpenClarificationRequestId: Guid.NewGuid(),
+            now,
+            now,
+            SourceTransactionId: Guid.NewGuid(),
+            SourceBlockHeight: null,
+            SourceBlockId: null,
+            CurrentThreadHash: "sha256:thread");
+
+        var ownRead = ElectionAnomalyAuthorization.CanActorReadOwnThread(thread, election.OwnerPublicAddress);
+        var bridgeResponse = ElectionAnomalyAuthorization.CanActorRespondAsSubmitter(thread, election.OwnerPublicAddress);
+        var otherResponse = ElectionAnomalyAuthorization.CanActorRespondAsSubmitter(thread, "other-address");
+
+        ownRead.CanRead.Should().BeFalse();
+        bridgeResponse.CanRead.Should().BeTrue();
+        otherResponse.CanRead.Should().BeFalse();
+        otherResponse.ValidationCode.Should().Be(ElectionAnomalyValidationCodes.ReadForbidden);
+    }
+
     private static ElectionRecord CreateElection(DateTime now) =>
         ElectionModelFactory.CreateDraftRecord(
             electionId: ElectionId.NewElectionId,
