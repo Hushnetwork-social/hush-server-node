@@ -5,4 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Shared\HushShared.Elections.Model\HushShared.Elections.Model.csproj" />
+    <ProjectReference Include="..\..\..\Shared\HushShared.Elections.Verification.Model\HushShared.Elections.Verification.Model.csproj" />
+  </ItemGroup>
 </Project>
