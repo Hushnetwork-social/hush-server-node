@@ -161,6 +161,135 @@ public sealed class OperationalEvidencePromotionServiceTests
         errors.Should().Contain(error => error.Contains("direct provider account identifier", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void OpsChecker_AcceptedInternalRehearsal_ReturnsAcceptedWithExpectedWarnings()
+    {
+        var paths = CreatePaths();
+
+        var result = OperationalEvidenceChecker.Evaluate(paths);
+
+        result.Status.Should().Be("accepted_with_warnings");
+        result.Blockers.Should().BeEmpty();
+        result.PlaceholderFindings.Should().BeEmpty();
+        result.ForbiddenMaterialFindings.Should().BeEmpty();
+        result.Warnings.Should().BeEquivalentTo(["OPS-006", "OPS-008"]);
+        result.NotApplicable.Should().Contain("OPS-004");
+        result.Checks.Select(check => check.CheckId).Should().Contain(OperationalEvidenceContracts.RequiredOpsCheckIds);
+    }
+
+    [Fact]
+    public void OpsChecker_MissingDeploymentProfile_BlocksOps000()
+    {
+        var paths = CreatePaths();
+        var run = LoadExample(paths, OperationalEvidenceContracts.AcceptedRunFixture);
+        run.Remove("deploymentProfile");
+
+        var result = OperationalEvidenceChecker.Evaluate(paths, run);
+
+        result.Status.Should().Be("blocked");
+        result.Blockers.Should().Contain("OPS-000");
+        result.Checks.Single(check => check.CheckId == "OPS-000").Reason.Should().Contain("Deployment profile");
+    }
+
+    [Fact]
+    public void OpsChecker_Sp08AgreementMissing_BlocksOps001()
+    {
+        var paths = CreatePaths();
+        var run = LoadExample(paths, OperationalEvidenceContracts.AcceptedRunFixture);
+        run["sp08Refs"]!.AsObject()["agreesWithFeat132DeploymentRefs"] = false;
+
+        var result = OperationalEvidenceChecker.Evaluate(paths, run);
+
+        result.Status.Should().Be("blocked");
+        result.Blockers.Should().Contain("OPS-001");
+    }
+
+    [Fact]
+    public void OpsChecker_UnknownDeploymentClassification_BlocksOps001()
+    {
+        var paths = CreatePaths();
+        var run = LoadExample(paths, OperationalEvidenceContracts.AcceptedRunFixture);
+        var feat132Refs = run["feat132Refs"]!.AsObject();
+        feat132Refs["unknownClassificationState"] = "unknown_pending_classification";
+        feat132Refs["impactClassification"] = "unknown_pending_classification";
+
+        var result = OperationalEvidenceChecker.Evaluate(paths, run);
+
+        result.Status.Should().Be("blocked");
+        result.Blockers.Should().Contain("OPS-001");
+    }
+
+    [Fact]
+    public void OpsChecker_CustodyBlocker_BlocksOps003()
+    {
+        var paths = CreatePaths();
+        var run = LoadExample(paths, OperationalEvidenceContracts.AcceptedRunFixture);
+        run["feat131Refs"]!.AsObject()["unresolvedBlockers"] = new JsonArray("CUSTODY-BLOCKER-TEST");
+
+        var result = OperationalEvidenceChecker.Evaluate(paths, run);
+
+        result.Status.Should().Be("blocked");
+        result.Blockers.Should().Contain("OPS-003");
+    }
+
+    [Fact]
+    public void OpsChecker_PublicForbiddenMaterial_BlocksOps005()
+    {
+        var paths = CreatePaths();
+        var run = LoadExample(paths, OperationalEvidenceContracts.AcceptedRunFixture);
+        run["publicLeakTest"] = "arn:aws:kms:eu-west-1:123456789012:key/leaked";
+
+        var result = OperationalEvidenceChecker.Evaluate(paths, run);
+
+        result.Status.Should().Be("blocked");
+        result.Blockers.Should().Contain("OPS-005");
+        result.ForbiddenMaterialFindings.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void OpsChecker_MissingIncidentDeclaration_BlocksOps007()
+    {
+        using var workspace = TempOperationalEvidenceWorkspace.Create();
+        var incident = LoadExample(workspace.Paths, "incidents/incident-source.json");
+        incident.Remove("publicSafeStatement");
+        WriteExample(workspace.Paths, "incidents/incident-source.json", incident);
+
+        var result = OperationalEvidenceChecker.Evaluate(workspace.Paths);
+
+        result.Status.Should().Be("blocked");
+        result.Blockers.Should().Contain("OPS-007");
+    }
+
+    [Fact]
+    public void OpsChecker_IncompleteAccessSnapshot_IsWarningForInternalRehearsal()
+    {
+        using var workspace = TempOperationalEvidenceWorkspace.Create();
+        var access = LoadExample(workspace.Paths, "access-control/access-control-source.json");
+        access.Remove("roleCounts");
+        WriteExample(workspace.Paths, "access-control/access-control-source.json", access);
+
+        var result = OperationalEvidenceChecker.Evaluate(workspace.Paths);
+
+        result.Blockers.Should().BeEmpty();
+        result.Warnings.Should().Contain(["OPS-002", "OPS-006", "OPS-008"]);
+    }
+
+    [Fact]
+    public void OpsChecker_PlaceholderAcceptedEvidence_BlocksScoreIncrease()
+    {
+        var paths = CreatePaths();
+        var run = LoadExample(paths, OperationalEvidenceContracts.AcceptedRunFixture);
+        var placeholderState = run["placeholderState"]!.AsObject();
+        placeholderState["hasPlaceholders"] = true;
+        placeholderState["placeholderRefs"] = new JsonArray("OPS-PLACEHOLDER-001");
+
+        var result = OperationalEvidenceChecker.Evaluate(paths, run);
+
+        result.Status.Should().Be("blocked");
+        result.PlaceholderFindings.Should().Contain("OPS-PLACEHOLDER-001");
+        result.BlocksAcceptedEvidence.Should().BeTrue();
+    }
+
     private static OperationalEvidencePromotionPaths CreatePaths()
     {
         var workspaceRoot = WorkspaceRootFinder.Find(AppContext.BaseDirectory);
@@ -171,4 +300,65 @@ public sealed class OperationalEvidencePromotionServiceTests
         OperationalEvidenceContracts.ReadJsonObject(
             Path.Combine(paths.ExamplesRoot, relativePath),
             relativePath);
+
+    private static void WriteExample(
+        OperationalEvidencePromotionPaths paths,
+        string relativePath,
+        JsonObject value)
+    {
+        var path = Path.Combine(paths.ExamplesRoot, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, value.ToJsonString(new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)
+        {
+            WriteIndented = true,
+        }));
+    }
+
+    private sealed class TempOperationalEvidenceWorkspace : IDisposable
+    {
+        private TempOperationalEvidenceWorkspace(string root, OperationalEvidencePromotionPaths paths)
+        {
+            Root = root;
+            Paths = paths;
+        }
+
+        public string Root { get; }
+
+        public OperationalEvidencePromotionPaths Paths { get; }
+
+        public static TempOperationalEvidenceWorkspace Create()
+        {
+            var basePaths = CreatePaths();
+            var root = Path.Combine(basePaths.WorkspaceRoot, ".tmp-feat133-tests", Guid.NewGuid().ToString("N"));
+            var sourceRoot = Path.Combine(root, "Operational-Evidence");
+            CopyDirectory(basePaths.SourceRoot, sourceRoot);
+            var restrictedRoot = Path.Combine(root, "restricted");
+            Directory.CreateDirectory(restrictedRoot);
+            return new TempOperationalEvidenceWorkspace(root, basePaths with
+            {
+                SourceRoot = sourceRoot,
+                RestrictedTemplateRoot = restrictedRoot,
+            });
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Root))
+            {
+                Directory.Delete(Root, recursive: true);
+            }
+        }
+
+        private static void CopyDirectory(string sourceDirectory, string destinationDirectory)
+        {
+            Directory.CreateDirectory(destinationDirectory);
+            foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+            {
+                var relativePath = Path.GetRelativePath(sourceDirectory, file);
+                var destinationPath = Path.Combine(destinationDirectory, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+                File.Copy(file, destinationPath, overwrite: true);
+            }
+        }
+    }
 }
