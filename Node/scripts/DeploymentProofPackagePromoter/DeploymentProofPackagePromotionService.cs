@@ -214,6 +214,7 @@ public sealed class DeploymentProofPackagePromotionService
         var proofSet = ReadExample(options.Paths, "bindings", "deployment-proof-set.json");
         var ledger = ReadExample(options.Paths, "bindings", "per-election-deployment-binding-ledger.json");
         var readinessFragment = ReadExample(options.Paths, "readiness", "readiness-fragment.json");
+        var downstreamHandoff = ReadExample(options.Paths, "handoffs", "downstream-handoff.json");
         var webClient = FindComponentProof(options.Paths, "hush-web-client", null);
         var serverNode = FindComponentProof(options.Paths, "hush-server-node", null);
 
@@ -224,6 +225,7 @@ public sealed class DeploymentProofPackagePromotionService
             .Concat(DeploymentProofPackageContracts.ValidateCeremony(ceremony))
             .ToList();
         ValidateReadinessFragment(readinessFragment, errors);
+        ValidateDownstreamHandoff(downstreamHandoff, errors);
         if (errors.Count > 0)
         {
             throw new DeploymentProofPackagePromotionException("Rehearsal ceremony validation failed.", errors);
@@ -240,6 +242,7 @@ public sealed class DeploymentProofPackagePromotionService
         {
             new($"{outputRelativeRoot}/deployment-ceremony.json", ToCanonicalJsonBytes(ceremony)),
             new($"{outputRelativeRoot}/readiness-fragment.json", ToCanonicalJsonBytes(readinessFragment)),
+            new($"{outputRelativeRoot}/downstream-handoff.json", ToCanonicalJsonBytes(downstreamHandoff)),
             new($"{outputRelativeRoot}/public-safe-binding-summary.md", TextBytes(publicSummary)),
         };
         var package = BuildPackage(
@@ -271,6 +274,7 @@ public sealed class DeploymentProofPackagePromotionService
                 ["manifestHash"] = package.ManifestHash,
                 ["archiveHash"] = package.ArchiveHash,
                 ["readinessFragmentId"] = GetRequiredString(readinessFragment, "fragmentId"),
+                ["downstreamHandoffId"] = GetRequiredString(downstreamHandoff, "handoffId"),
             }));
     }
 
@@ -479,6 +483,55 @@ public sealed class DeploymentProofPackagePromotionService
         {
             errors.Add("readiness fragment must record RDY-DIM-006 moving from 4 to 8.");
         }
+    }
+
+    private static void ValidateDownstreamHandoff(JsonObject handoff, List<string> errors)
+    {
+        if (GetOptionalString(handoff, "sourceFeature") != "FEAT-132")
+        {
+            errors.Add("downstream handoff must identify FEAT-132 as sourceFeature.");
+        }
+
+        if (GetOptionalString(handoff, "acceptanceGate") != "AT-RDY-005")
+        {
+            errors.Add("downstream handoff must identify AT-RDY-005.");
+        }
+
+        if (handoff["readinessRegisterHandoff"] is not JsonObject readiness ||
+            readiness["dimensionScoreChange"] is not JsonObject scoreChange ||
+            GetOptionalString(scoreChange, "dimensionId") != "RDY-DIM-006" ||
+            scoreChange["previousScore"]?.GetValue<int>() != 4 ||
+            scoreChange["acceptedScore"]?.GetValue<int>() != 8)
+        {
+            errors.Add("downstream handoff must carry RDY-DIM-006 4 -> 8 for FEAT-130.");
+        }
+
+        if (handoff["operationalEvidenceHandoff"] is not JsonObject operational ||
+            operational["webClientProof"] is not JsonObject ||
+            operational["hushServerNodeProof"] is not JsonObject ||
+            string.IsNullOrWhiteSpace(GetOptionalString(operational, "bindingLedgerId")))
+        {
+            errors.Add("downstream handoff must carry FEAT-133 component proof and binding refs.");
+        }
+
+        if (handoff["pilotRehearsalHandoff"] is not JsonObject pilot ||
+            pilot["publicRefs"] is not JsonArray ||
+            pilot["restrictedRefs"] is not JsonArray)
+        {
+            errors.Add("downstream handoff must carry FEAT-141 public and restricted refs.");
+        }
+
+        if (handoff["runtimeVisibilityContract"] is not JsonObject runtime ||
+            runtime["reconciliationCheckpoints"] is not JsonArray checkpoints ||
+            !checkpoints.Any(node => string.Equals(node?.GetValue<string>(), "final_package_export", StringComparison.Ordinal)))
+        {
+            errors.Add("downstream handoff must preserve runtime visibility reconciliation checkpoints.");
+        }
+
+        var publicScan = DeploymentProofPackagePublicRedactionScanner.ScanPublicMarkdown(
+            "downstream-handoff.json",
+            handoff.ToJsonString());
+        errors.AddRange(publicScan);
     }
 
     private static JsonObject FindComponentProof(

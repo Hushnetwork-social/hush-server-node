@@ -507,6 +507,7 @@ public sealed class DeploymentProofPackagePromotionServiceTests
         result.PackageId.Should().Be("DPC-REHEARSAL-20260519-001");
         var publicRoot = Path.Combine(workspace.Paths.PublicOutputRoot, "ceremonies", "DPC-REHEARSAL-20260519-001");
         File.ReadAllText(Path.Combine(publicRoot, "readiness-fragment.json")).Should().Contain("\"acceptedScore\": 8");
+        File.ReadAllText(Path.Combine(publicRoot, "downstream-handoff.json")).Should().Contain("\"consumerFeature\": \"FEAT-133\"");
         File.Exists(Path.Combine(publicRoot, "deployment-ceremony-manifest.json")).Should().BeTrue();
         var restrictedRoot = Path.Combine(workspace.Paths.RestrictedOutputRoot, "DPC-REHEARSAL-20260519-001");
         File.Exists(Path.Combine(restrictedRoot, "restricted-ceremony-evidence-index.md")).Should().BeTrue();
@@ -556,6 +557,80 @@ public sealed class DeploymentProofPackagePromotionServiceTests
 
         act.Should().Throw<DeploymentProofPackagePromotionException>()
             .WithMessage("*Catalog entry conflict*");
+    }
+
+    [Fact]
+    public void DownstreamHandoff_ReadinessFragment_RecordsScoreMovementAndBlockerResolution()
+    {
+        var paths = CreatePaths();
+        var handoff = LoadExample(paths, "handoffs", "downstream-handoff.json");
+        var readiness = handoff["readinessRegisterHandoff"]!.AsObject();
+        var scoreChange = readiness["dimensionScoreChange"]!.AsObject();
+
+        handoff["sourceGap"]!.GetValue<string>().Should().Be("Trusted deployment ceremony");
+        handoff["acceptanceGate"]!.GetValue<string>().Should().Be("AT-RDY-005");
+        readiness["readinessFragmentId"]!.GetValue<string>().Should().Be("RDY-FRAG-AT-RDY-005-FEAT-132-001");
+        scoreChange["dimensionId"]!.GetValue<string>().Should().Be("RDY-DIM-006");
+        scoreChange["previousScore"]!.GetValue<int>().Should().Be(4);
+        scoreChange["acceptedScore"]!.GetValue<int>().Should().Be(8);
+        readiness["resolvedBlockers"]!.AsArray()
+            .Select(node => node!.GetValue<string>())
+            .Should().Contain("RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-002");
+    }
+
+    [Fact]
+    public void DownstreamHandoff_CustodyConsumption_RemainsPublicSafe()
+    {
+        var paths = CreatePaths();
+        var handoffPath = Path.Combine(paths.ExamplesRoot, "handoffs", "downstream-handoff.json");
+        var text = File.ReadAllText(handoffPath);
+        var handoff = DeploymentProofPackageContracts.ReadJsonObject(handoffPath, "downstream-handoff.json");
+        var custody = handoff["custodyHandoffConsumption"]!.AsObject();
+
+        custody["acceptedBindingRequirement"]!.GetValue<string>().Should().Contain("live_aws_kms_custody_evidence");
+        custody["fakeDevCustodyPolicy"]!.GetValue<string>().Should().Be("tests_and_dry_runs_only");
+        custody["publicComponentProofCustodyScope"]!.GetValue<string>().Should().Be("custody_profile_status_only");
+        text.Should().NotContain("arn:aws:kms");
+        text.Should().NotContain("alias/");
+        text.Should().NotContain("decrypt authority");
+        DeploymentProofPackagePublicRedactionScanner.ScanPublicMarkdown("downstream-handoff.json", text).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void DownstreamHandoff_OperationalAndPilotConsumersReceiveStableRefs()
+    {
+        var paths = CreatePaths();
+        var handoff = LoadExample(paths, "handoffs", "downstream-handoff.json");
+        var operational = handoff["operationalEvidenceHandoff"]!.AsObject();
+        var pilot = handoff["pilotRehearsalHandoff"]!.AsObject();
+
+        operational["consumerFeature"]!.GetValue<string>().Should().Be("FEAT-133");
+        operational["webClientProof"]!.AsObject()["deploymentProofId"]!.GetValue<string>().Should().Be("DPP-WEB-20260519-001");
+        operational["hushServerNodeProof"]!.AsObject()["deploymentProofId"]!.GetValue<string>().Should().Be("DPP-SERVER-20260519-001");
+        operational["proofSetId"]!.GetValue<string>().Should().Be("DPS-REHEARSAL-20260519-001");
+        operational["bindingLedgerId"]!.GetValue<string>().Should().Be("DPBL-REHEARSAL-20260519-001");
+        operational["catalogRef"]!.AsObject()["repository"]!.GetValue<string>().Should().Be("https://github.com/Hushnetwork-social/Deployment-Proof-Packages");
+        pilot["consumerFeature"]!.GetValue<string>().Should().Be("FEAT-141");
+        pilot["publicPackageDoesNotRequireRawCustodyOrProviderData"]!.GetValue<bool>().Should().BeTrue();
+        pilot["publicRefs"]!.AsArray().Should().HaveCount(3);
+        pilot["restrictedRefs"]!.AsArray().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void DownstreamHandoff_RuntimeVisibilityContract_PreservesEventModelWithoutUiScope()
+    {
+        var paths = CreatePaths();
+        var handoff = LoadExample(paths, "handoffs", "downstream-handoff.json");
+        var runtime = handoff["runtimeVisibilityContract"]!.AsObject();
+
+        runtime["implementedInFeat132"]!.GetValue<bool>().Should().BeFalse();
+        runtime["productionRuntimeUiScope"]!.GetValue<string>().Should().Be("not_implemented_by_FEAT-132");
+        runtime["eventModelFields"]!.AsArray()
+            .Select(node => node!.GetValue<string>())
+            .Should().Contain(["timestamp", "classification", "reason", "checksRerun", "accountabilityMarker"]);
+        runtime["reconciliationCheckpoints"]!.AsArray()
+            .Select(node => node!.GetValue<string>())
+            .Should().Contain(["Draft -> Open", "Open -> Close", "Close -> Finalize", "Open -> Void", "Close -> Void", "final_package_export"]);
     }
 
     private static DeploymentProofPackagePromotionPaths CreatePaths()
