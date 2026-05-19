@@ -90,6 +90,78 @@ public class AdminOnlyProtectedTallyCustodyEvidenceBuilderTests
             ElectionAdminOnlyProtectedTallyCustodyResultCodes.FinalizationDeletionScheduled);
     }
 
+    [Fact]
+    public void BuildAggregateReadinessEvidence_WithAllGatesAccepted_ProposesTargetScore()
+    {
+        var recordedAt = DateTime.Parse("2026-05-19T01:00:00Z").ToUniversalTime();
+        var election = CreateAdminElection();
+        var authority = new TransparentTestAdminOnlyProtectedTallyCustodyLifecycleAuthority();
+        var envelope = CreateOpenEnvelope(election, recordedAt);
+        var cleanup = authority.BuildFinalizationCleanup(envelope, recordedAt.AddHours(1));
+        var finalEnvelope = cleanup.EnvelopeToPersist!;
+        var open = ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder.BuildOpenEvidence(
+            election,
+            envelope,
+            recordedAt);
+        var finalization = ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder.BuildFinalizationCleanupEvidence(
+            election,
+            finalEnvelope,
+            recordedAt.AddHours(1));
+        var reconciliation = ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder.BuildReconciliationEvidence(
+            election,
+            finalEnvelope,
+            recordedAt.AddHours(2));
+
+        var aggregate = ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder.BuildAggregateReadinessEvidence(
+            election,
+            finalEnvelope,
+            recordedAt.AddHours(3),
+            [open, finalization, reconciliation]);
+
+        aggregate.EvidenceId.Should().Be(ElectionAdminOnlyProtectedTallyCustodyReadinessIds.EvidenceId);
+        aggregate.DimensionId.Should().Be(ElectionAdminOnlyProtectedTallyCustodyReadinessIds.DimensionId);
+        aggregate.BlockerId.Should().Be(ElectionAdminOnlyProtectedTallyCustodyReadinessIds.PilotBlockerId);
+        aggregate.AcceptedGateIds.Should().BeEquivalentTo(
+            ElectionAdminOnlyProtectedTallyCustodyReadinessIds.RequiredGateIds);
+        aggregate.ProposedScore.Should().BeGreaterThanOrEqualTo(8);
+        aggregate.CanProposeTargetScoreIncrease.Should().BeTrue();
+        aggregate.ResidualRiskIds.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void BuildAggregateReadinessEvidence_WithMissingReconciliation_KeepsBlockerOpen()
+    {
+        var recordedAt = DateTime.Parse("2026-05-19T01:00:00Z").ToUniversalTime();
+        var election = CreateAdminElection();
+        var authority = new TransparentTestAdminOnlyProtectedTallyCustodyLifecycleAuthority();
+        var envelope = CreateOpenEnvelope(election, recordedAt);
+        var cleanup = authority.BuildFinalizationCleanup(envelope, recordedAt.AddHours(1));
+        var finalEnvelope = cleanup.EnvelopeToPersist!;
+        var open = ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder.BuildOpenEvidence(
+            election,
+            envelope,
+            recordedAt);
+        var finalization = ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder.BuildFinalizationCleanupEvidence(
+            election,
+            finalEnvelope,
+            recordedAt.AddHours(1));
+
+        var aggregate = ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder.BuildAggregateReadinessEvidence(
+            election,
+            finalEnvelope,
+            recordedAt.AddHours(3),
+            [open, finalization]);
+
+        aggregate.AcceptedGateIds.Should().NotContain(
+            ElectionAdminOnlyProtectedTallyCustodyReadinessIds.ReconciliationGateId);
+        aggregate.ProposedScore.Should().BeNull();
+        aggregate.CanProposeTargetScoreIncrease.Should().BeFalse();
+        aggregate.Exceptions.Should().Contain(x =>
+            x.ReasonCode == ElectionAdminOnlyProtectedTallyCustodyResultCodes.ReconciliationMissing &&
+            x.BlocksReadinessScoreIncrease);
+        aggregate.ResidualRiskIds.Should().Contain("custody_evidence_not_accepted");
+    }
+
     private static ElectionAdminOnlyProtectedTallyEnvelopeRecord CreateOpenEnvelope(
         ElectionRecord election,
         DateTime recordedAt)

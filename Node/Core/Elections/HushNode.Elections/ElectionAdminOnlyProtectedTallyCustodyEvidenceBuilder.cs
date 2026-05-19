@@ -52,6 +52,79 @@ public static class ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder
             includeRestrictedEvidence,
             failureDetail: null);
 
+    public static ElectionAdminOnlyProtectedTallyCustodyReadinessFragment BuildAggregateReadinessEvidence(
+        ElectionRecord election,
+        ElectionAdminOnlyProtectedTallyEnvelopeRecord? envelope,
+        DateTime recordedAt,
+        IReadOnlyList<ElectionAdminOnlyProtectedTallyCustodyReadinessFragment>? gateFragments)
+    {
+        ArgumentNullException.ThrowIfNull(election);
+
+        var fragments = gateFragments ?? Array.Empty<ElectionAdminOnlyProtectedTallyCustodyReadinessFragment>();
+        var acceptedGateIds = fragments
+            .SelectMany(x => x.AcceptedGateIds)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var missingGateIds = ElectionAdminOnlyProtectedTallyCustodyReadinessIds.RequiredGateIds
+            .Where(required => !acceptedGateIds.Contains(required, StringComparer.Ordinal))
+            .ToArray();
+        var sourceExceptions = fragments
+            .SelectMany(x => x.Exceptions)
+            .ToArray();
+        var generatedExceptions = missingGateIds
+            .Select(gateId => BuildMissingGateException(election, gateId, recordedAt))
+            .ToArray();
+        var exceptions = sourceExceptions
+            .Concat(generatedExceptions)
+            .ToArray();
+        var acceptedAllRequiredGates = missingGateIds.Length == 0 &&
+                                       exceptions.All(x => !x.BlocksReadinessScoreIncrease);
+        var publicEvidence = BuildPublicEvidence(
+            election,
+            envelope,
+            ElectionAdminOnlyProtectedTallyCustodyReadinessIds.RequiredGateIds,
+            ResolveAggregateResultCodes(fragments, missingGateIds),
+            recordedAt);
+        var secretScanStatus = PublicEvidenceContainsRestrictedMaterial(publicEvidence, envelope)
+            ? ElectionAdminOnlyProtectedTallyCustodyResultCodes.PublicSecretScanFailed
+            : ElectionAdminOnlyProtectedTallyCustodyResultCodes.PublicSecretScanPassed;
+        publicEvidence = publicEvidence with
+        {
+            PublicRecordSecretScanStatus = secretScanStatus,
+        };
+
+        if (string.Equals(
+                secretScanStatus,
+                ElectionAdminOnlyProtectedTallyCustodyResultCodes.PublicSecretScanFailed,
+                StringComparison.Ordinal))
+        {
+            exceptions =
+            [
+                .. exceptions,
+                new ElectionAdminOnlyProtectedTallyCustodyExceptionEvidence(
+                    BuildExceptionId(election, ElectionAdminOnlyProtectedTallyCustodyActionKind.Reconciliation, recordedAt),
+                    ElectionAdminOnlyProtectedTallyCustodyActionKind.Reconciliation,
+                    ElectionAdminOnlyProtectedTallyCustodyActionResult.ExceptionRequired,
+                    ElectionAdminOnlyProtectedTallyCustodyResultCodes.PublicSecretScanFailed,
+                    "Aggregate custody readiness evidence contains restricted material.",
+                    RestrictedOperatorNotes: null,
+                    BlocksReadinessScoreIncrease: true,
+                    recordedAt),
+            ];
+            acceptedAllRequiredGates = false;
+        }
+
+        return new ElectionAdminOnlyProtectedTallyCustodyReadinessFragment(
+            publicEvidence,
+            RestrictedEvidence: null,
+            exceptions,
+            acceptedGateIds,
+            acceptedAllRequiredGates
+                ? ResolveResidualRiskIds(ElectionAdminOnlyProtectedTallyCustodyActionResult.Passed)
+                : ResolveResidualRiskIds(ElectionAdminOnlyProtectedTallyCustodyActionResult.FailedClosed),
+            ProposedScore: acceptedAllRequiredGates ? 8 : null);
+    }
+
     public static bool PublicEvidenceContainsRestrictedMaterial(
         ElectionAdminOnlyProtectedTallyCustodyPublicEvidence publicEvidence,
         ElectionAdminOnlyProtectedTallyEnvelopeRecord? envelope) =>
@@ -223,6 +296,75 @@ public static class ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder
             ElectionAdminOnlyProtectedTallyCustodyLifecycleState.DeletionScheduled =>
                 [ElectionAdminOnlyProtectedTallyCustodyResultCodes.ReconciliationAccepted],
             _ => [ElectionAdminOnlyProtectedTallyCustodyResultCodes.ReconciliationMissing],
+        };
+
+    private static IReadOnlyList<string> ResolveAggregateResultCodes(
+        IReadOnlyList<ElectionAdminOnlyProtectedTallyCustodyReadinessFragment> fragments,
+        IReadOnlyList<string> missingGateIds)
+    {
+        var resultCodes = fragments
+            .SelectMany(x => x.PublicEvidence.PublicResultCodes)
+            .Concat(missingGateIds.Select(ResolveMissingGateResultCode))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return resultCodes.Length == 0
+            ? [ElectionAdminOnlyProtectedTallyCustodyResultCodes.ReconciliationMissing]
+            : resultCodes;
+    }
+
+    private static ElectionAdminOnlyProtectedTallyCustodyExceptionEvidence BuildMissingGateException(
+        ElectionRecord election,
+        string gateId,
+        DateTime recordedAt)
+    {
+        var actionKind = ResolveActionKindForGate(gateId);
+        var reasonCode = ResolveMissingGateResultCode(gateId);
+        return new ElectionAdminOnlyProtectedTallyCustodyExceptionEvidence(
+            $"custody-{gateId.ToLowerInvariant()}-missing-{ComputeHash($"{election.ElectionId}|{gateId}|{recordedAt:O}")}",
+            actionKind,
+            ElectionAdminOnlyProtectedTallyCustodyActionResult.FailedClosed,
+            reasonCode,
+            ResolveMissingGateImpact(gateId, reasonCode),
+            RestrictedOperatorNotes: null,
+            BlocksReadinessScoreIncrease: true,
+            recordedAt);
+    }
+
+    private static ElectionAdminOnlyProtectedTallyCustodyActionKind ResolveActionKindForGate(string gateId) =>
+        gateId switch
+        {
+            ElectionAdminOnlyProtectedTallyCustodyReadinessIds.OpenGateId =>
+                ElectionAdminOnlyProtectedTallyCustodyActionKind.Open,
+            ElectionAdminOnlyProtectedTallyCustodyReadinessIds.FinalizationGateId =>
+                ElectionAdminOnlyProtectedTallyCustodyActionKind.FinalizationCleanup,
+            ElectionAdminOnlyProtectedTallyCustodyReadinessIds.ReconciliationGateId =>
+                ElectionAdminOnlyProtectedTallyCustodyActionKind.Reconciliation,
+            _ => ElectionAdminOnlyProtectedTallyCustodyActionKind.Reconciliation,
+        };
+
+    private static string ResolveMissingGateResultCode(string gateId) =>
+        gateId switch
+        {
+            ElectionAdminOnlyProtectedTallyCustodyReadinessIds.OpenGateId =>
+                ElectionAdminOnlyProtectedTallyCustodyResultCodes.OpenMissingCustodyRow,
+            ElectionAdminOnlyProtectedTallyCustodyReadinessIds.FinalizationGateId =>
+                ElectionAdminOnlyProtectedTallyCustodyResultCodes.FinalizationMissingDestroyedMarker,
+            ElectionAdminOnlyProtectedTallyCustodyReadinessIds.ReconciliationGateId =>
+                ElectionAdminOnlyProtectedTallyCustodyResultCodes.ReconciliationMissing,
+            _ => ElectionAdminOnlyProtectedTallyCustodyResultCodes.ReconciliationMissing,
+        };
+
+    private static string ResolveMissingGateImpact(string gateId, string reasonCode) =>
+        gateId switch
+        {
+            ElectionAdminOnlyProtectedTallyCustodyReadinessIds.OpenGateId =>
+                $"Open custody evidence is missing. Safe reason code: {reasonCode}.",
+            ElectionAdminOnlyProtectedTallyCustodyReadinessIds.FinalizationGateId =>
+                $"Finalization cleanup evidence is missing. Safe reason code: {reasonCode}.",
+            ElectionAdminOnlyProtectedTallyCustodyReadinessIds.ReconciliationGateId =>
+                $"Custody reconciliation evidence is missing. Safe reason code: {reasonCode}.",
+            _ => $"Custody evidence is missing. Safe reason code: {reasonCode}.",
         };
 
     private static ElectionAdminOnlyProtectedTallyCustodyActionResult ResolveActionResult(
