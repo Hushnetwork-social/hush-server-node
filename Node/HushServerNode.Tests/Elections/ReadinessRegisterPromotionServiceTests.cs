@@ -9,6 +9,10 @@ namespace HushServerNode.Tests.Elections;
 public sealed class ReadinessRegisterPromotionServiceTests
 {
     private static readonly DateTimeOffset FixedGeneratedAt = new(2026, 5, 19, 0, 0, 0, TimeSpan.Zero);
+    private const string CurrentRegisterVersion = "v0.1.1";
+    private const string CurrentRegisterVersionId = "RDY-REG-v0.1.1";
+    private const int CurrentTotalScore = 55;
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -28,14 +32,14 @@ public sealed class ReadinessRegisterPromotionServiceTests
 
         second.ManifestHash.Should().Be(first.ManifestHash);
         second.ArchiveHash.Should().Be(first.ArchiveHash);
-        second.TotalScore.Should().Be(51);
+        second.TotalScore.Should().Be(CurrentTotalScore);
         second.Status.Should().Be("AcceptedInternal");
         File.Exists(Path.Combine(first.VersionOutputRoot, ReadinessRegisterPromotionService.ManifestFileName)).Should().BeTrue();
-        File.Exists(Path.Combine(first.VersionOutputRoot, "HushVoting-Readiness-Register-v0.1.0.zip")).Should().BeTrue();
+        File.Exists(Path.Combine(first.VersionOutputRoot, $"HushVoting-Readiness-Register-{CurrentRegisterVersion}.zip")).Should().BeTrue();
         File.Exists(paths.CatalogPath).Should().BeTrue();
 
         var catalog = JsonNode.Parse(File.ReadAllText(paths.CatalogPath))!.AsObject();
-        catalog["currentRegisterVersionId"]!.GetValue<string>().Should().Be("RDY-REG-v0.1.0");
+        catalog["currentRegisterVersionId"]!.GetValue<string>().Should().Be(CurrentRegisterVersionId);
         catalog["currentManifestHash"]!.GetValue<string>().Should().Be(first.ManifestHash);
         catalog["currentArchiveHash"]!.GetValue<string>().Should().Be(first.ArchiveHash);
     }
@@ -50,7 +54,7 @@ public sealed class ReadinessRegisterPromotionServiceTests
 
         var result = new ReadinessRegisterPromotionService().Promote(options);
 
-        result.RegisterVersionId.Should().Be("RDY-REG-v0.1.0");
+        result.RegisterVersionId.Should().Be(CurrentRegisterVersionId);
         Directory.Exists(result.VersionOutputRoot).Should().BeFalse();
         File.Exists(paths.CatalogPath).Should().BeFalse();
     }
@@ -65,7 +69,7 @@ public sealed class ReadinessRegisterPromotionServiceTests
         {
             register["scoreChanges"]!.AsArray().Add(new JsonObject
             {
-                ["scoreChangeId"] = "RDY-SCORE-20260519-001",
+                ["scoreChangeId"] = "RDY-SCORE-20260519-002",
                 ["dimensionId"] = "RDY-DIM-003",
                 ["direction"] = "increase",
                 ["previousScore"] = 3,
@@ -151,7 +155,7 @@ public sealed class ReadinessRegisterPromotionServiceTests
 
         publicSummary.Should().Contain("## Current Public-Safe Status");
         publicSummary.Should().Contain("## Non-Claims");
-        publicSummary.Should().NotContain("51/100");
+        publicSummary.Should().NotContain($"{CurrentTotalScore}/100");
         var normalizedSummary = publicSummary.ToLowerInvariant();
         normalizedSummary.Should().NotContain("total score");
         normalizedSummary.Should().NotContain("sha-256");
@@ -168,7 +172,7 @@ public sealed class ReadinessRegisterPromotionServiceTests
         var result = new ReadinessRegisterPromotionService().Promote(CreateOptions(paths));
         var scorecard = File.ReadAllText(Path.Combine(result.VersionOutputRoot, ReadinessRegisterPromotionService.ScorecardFileName));
 
-        result.TotalScore.Should().Be(51);
+        result.TotalScore.Should().Be(CurrentTotalScore);
         result.StrongestAllowedClaim.Should().Be("internal_non_binding_rehearsal");
         scorecard.Should().Contain("internal_non_binding_rehearsal");
         scorecard.Should().Contain("allowed_with_limitations");
@@ -176,7 +180,9 @@ public sealed class ReadinessRegisterPromotionServiceTests
         scorecard.Should().Contain("Strongest claim allowed by v1 policy ceiling: friendly_organization_pilot");
         scorecard.Should().Contain("friendly_organization_pilot");
         scorecard.Should().Contain("blocked");
+        scorecard.Should().Contain("RDY-SCORE-20260519-001");
         scorecard.Should().Contain("RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001");
+        scorecard.Should().Contain("green | resolved | FEAT-131");
     }
 
     [Fact]
@@ -231,7 +237,7 @@ public sealed class ReadinessRegisterPromotionServiceTests
         new(
             paths,
             "hushvoting-readiness-register",
-            "v0.1.0",
+            CurrentRegisterVersion,
             "not_for_publication",
             validateOnly,
             Scaffold: false,
