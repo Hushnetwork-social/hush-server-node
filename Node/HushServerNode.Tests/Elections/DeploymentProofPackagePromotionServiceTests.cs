@@ -297,6 +297,109 @@ public sealed class DeploymentProofPackagePromotionServiceTests
         fakeCustodyErrors.Should().Contain(error => error.Contains("fake", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void PublicComponentSummary_IncludesVerifierUsefulFieldsAndScansClean()
+    {
+        var paths = CreatePaths();
+        var webClient = LoadExample(paths, "component-proofs", "hush-web-client-component-proof.json");
+
+        var markdown = DeploymentProofPackageViewRenderer.GetPublicComponentSummary(webClient);
+        var scanErrors = DeploymentProofPackagePublicRedactionScanner.ScanPublicMarkdown("public-safe-deployment-summary.md", markdown);
+
+        markdown.Should().Contain("DPP-WEB-20260519-001");
+        markdown.Should().Contain("hush-web-client");
+        markdown.Should().Contain("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        markdown.Should().Contain("webArtifactHash");
+        markdown.Should().Contain("Runtime Verification");
+        markdown.Should().Contain("website_only_no_protocol_change");
+        markdown.Should().Contain("not_component_scoped");
+        markdown.Should().Contain("REST-DEPLOY-WEB-20260519-001");
+        scanErrors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void PublicBindingSummary_IncludesActiveProofsCatalogAndDeploymentEvents()
+    {
+        var paths = CreatePaths();
+        var proofSet = LoadExample(paths, "bindings", "deployment-proof-set.json");
+        var ledger = LoadExample(paths, "bindings", "per-election-deployment-binding-ledger.json");
+
+        var markdown = DeploymentProofPackageViewRenderer.GetPublicBindingSummary(proofSet, ledger);
+        var scanErrors = DeploymentProofPackagePublicRedactionScanner.ScanPublicMarkdown("public-safe-binding-summary.md", markdown);
+
+        markdown.Should().Contain("HV-REHEARSAL-PUBLIC-20260519-001");
+        markdown.Should().Contain("Draft -> Open");
+        markdown.Should().Contain("DPP-WEB-20260519-001");
+        markdown.Should().Contain("DPP-SERVER-20260519-001");
+        markdown.Should().Contain("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
+        markdown.Should().Contain("DPE-OPEN-20260519-001");
+        markdown.Should().Contain("voting_protocol_no_change");
+        scanErrors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void RestrictedIndexes_IncludePrivateEvidenceRefsWithoutChangingPublicProofRefs()
+    {
+        var paths = CreatePaths();
+        var ceremony = LoadExample(paths, "ceremonies", "deployment-ceremony.json");
+        var webClient = LoadExample(paths, "component-proofs", "hush-web-client-component-proof.json");
+        var serverNode = LoadExample(paths, "component-proofs", "hush-server-node-component-proof.json");
+
+        var ceremonyIndex = DeploymentProofPackageViewRenderer.GetRestrictedCeremonyIndex(ceremony);
+        var deploymentIndex = DeploymentProofPackageViewRenderer.GetRestrictedDeploymentEvidenceIndex(
+            ceremony,
+            [webClient, serverNode]);
+
+        ceremonyIndex.Should().Contain("REST-ENV-BOUNDARY-20260519-001");
+        ceremonyIndex.Should().Contain("REST-CUSTODY-HANDOFF-20260519-001");
+        ceremonyIndex.Should().Contain("FINAL-PACKAGE-REHEARSAL-20260519-001");
+        ceremonyIndex.Should().Contain("VERIFIER-OUTPUT-REHEARSAL-20260519-001");
+        deploymentIndex.Should().Contain("gh-run-web-20260519-001");
+        deploymentIndex.Should().Contain("gh-run-server-20260519-001");
+        deploymentIndex.Should().Contain("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        deploymentIndex.Should().Contain("Public Forbidden Material Scan");
+    }
+
+    [Fact]
+    public void PublicRedactionScanner_RejectsForbiddenMaterialBeforeCatalogUpdate()
+    {
+        const string publicMarkdown = """
+                                      raw log contains arn:aws:kms:eu-west-1:123456789012:key/kms-key-public-leak
+                                      token=secret-value
+                                      https://service.internal/private
+                                      voterEmail: voter@example.com
+                                      legal digital signature claim
+                                      """;
+
+        var errors = DeploymentProofPackagePublicRedactionScanner.ScanPublicMarkdown(
+            "public-safe-deployment-summary.md",
+            publicMarkdown);
+
+        errors.Should().Contain(error => error.Contains("arn:aws:kms", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("direct provider account identifier", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("token=", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("private URL", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("contact detail", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("legal digital signature", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void PublicViews_RenderInformalAccountabilityWithoutSignatureOrCertificationClaims()
+    {
+        var paths = CreatePaths();
+        var serverNode = LoadExample(paths, "component-proofs", "hush-server-node-component-proof.json");
+
+        var markdown = DeploymentProofPackageViewRenderer.GetPublicComponentSummary(serverNode);
+
+        markdown.Should().Contain(DeploymentProofPackageViewRenderer.InformalAccountabilityLabel);
+        markdown.Should().NotContain("certification");
+        markdown.Should().NotContain("external validation");
+        markdown.Should().NotContain("legal digital signature");
+        markdown.Should().NotContain("cryptographic signature");
+        markdown.Should().NotContain("wet signature");
+        markdown.Should().NotContain("external witness");
+    }
+
     private static DeploymentProofPackagePromotionPaths CreatePaths()
     {
         var workspaceRoot = WorkspaceRootFinder.Find(AppContext.BaseDirectory);
