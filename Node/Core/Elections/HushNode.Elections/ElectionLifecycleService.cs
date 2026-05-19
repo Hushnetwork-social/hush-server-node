@@ -33,6 +33,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly ICloseCountingExecutorKeyRegistry _closeCountingExecutorKeyRegistry;
     private readonly ICloseCountingExecutorEnvelopeCrypto _closeCountingExecutorEnvelopeCrypto;
     private readonly IAdminOnlyProtectedTallyEnvelopeCrypto _adminOnlyProtectedTallyEnvelopeCrypto;
+    private readonly IAdminOnlyProtectedTallyCustodyLifecycleAuthority _adminOnlyProtectedTallyCustodyLifecycleAuthority;
     private readonly IElectionSensitiveStorageMaintenance? _sensitiveStorageMaintenance;
     private readonly IElectionPublicationWitnessDeletionService _publicationWitnessDeletionService;
     private readonly IElectionSp07PublicationProofSessionRunner? _publicationProofSessionRunner;
@@ -72,7 +73,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IElectionSensitiveStorageMaintenance? sensitiveStorageMaintenance = null,
         IElectionPublicationWitnessDeletionService? publicationWitnessDeletionService = null,
         IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null,
-        IElectionSp08ReleaseEvidenceProvider? sp08ReleaseEvidenceProvider = null)
+        IElectionSp08ReleaseEvidenceProvider? sp08ReleaseEvidenceProvider = null,
+        IAdminOnlyProtectedTallyCustodyLifecycleAuthority? adminOnlyProtectedTallyCustodyLifecycleAuthority = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _logger = logger;
@@ -85,6 +87,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
         _closeCountingExecutorKeyRegistry = closeCountingExecutorKeyRegistry ?? new InMemoryCloseCountingExecutorKeyRegistry();
         _closeCountingExecutorEnvelopeCrypto = closeCountingExecutorEnvelopeCrypto ?? new UnavailableCloseCountingExecutorEnvelopeCrypto();
         _adminOnlyProtectedTallyEnvelopeCrypto = adminOnlyProtectedTallyEnvelopeCrypto ?? new UnavailableAdminOnlyProtectedTallyEnvelopeCrypto();
+        _adminOnlyProtectedTallyCustodyLifecycleAuthority =
+            adminOnlyProtectedTallyCustodyLifecycleAuthority ??
+            NoOpAdminOnlyProtectedTallyCustodyLifecycleAuthority.Instance;
         _sensitiveStorageMaintenance = sensitiveStorageMaintenance;
         _publicationWitnessDeletionService =
             publicationWitnessDeletionService ?? new ElectionPublicationWitnessDeletionService();
@@ -3404,14 +3409,6 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
 
         var openedAt = DateTime.UtcNow;
-        var sealedProtocolPackageBinding = await _protocolPackageBindingService.SealLatestBindingForOpenAsync(
-            repository,
-            protocolPackageValidation.Binding!,
-            openedAt,
-            actorPublicAddress,
-            sourceTransactionId,
-            sourceBlockHeight,
-            sourceBlockId);
         var frozenRosterEntries = rosterEntries
             .Select(x => x.FreezeAtOpen(
                 openedAt,
@@ -3430,7 +3427,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Provided frozen eligible voter set hash does not match the server-derived eligibility basis.");
         }
 
-        var (openCeremonySnapshot, openCeremonyError) = await ResolveOpenCeremonySnapshotAsync(
+        var (openCeremonySnapshot, openCeremonyError, openCustodyEvidence) = await ResolveOpenCeremonySnapshotAsync(
             repository,
             election,
             selectedProfile,
@@ -3440,10 +3437,23 @@ public class ElectionLifecycleService : IElectionLifecycleService
         {
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.ValidationFailed,
-                string.IsNullOrWhiteSpace(openCeremonyError)
-                    ? "Election cannot open without a valid ceremony binding snapshot."
-                    : openCeremonyError);
+                ResolveCustodySafeFailureMessage(
+                    openCustodyEvidence,
+                    string.IsNullOrWhiteSpace(openCeremonyError)
+                        ? "Election cannot open without a valid ceremony binding snapshot."
+                        : openCeremonyError),
+                BuildCustodySafeValidationErrors(openCustodyEvidence),
+                adminOnlyProtectedTallyCustodyReadinessFragment: openCustodyEvidence);
         }
+
+        var sealedProtocolPackageBinding = await _protocolPackageBindingService.SealLatestBindingForOpenAsync(
+            repository,
+            protocolPackageValidation.Binding!,
+            openedAt,
+            actorPublicAddress,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
 
         var ballotDefinitionSeal = ElectionModelFactory.CreateBallotDefinitionSeal(
             ElectionBallotDefinitionCanonicalizer.CurrentVersion,
@@ -3535,10 +3545,14 @@ public class ElectionLifecycleService : IElectionLifecycleService
             boundaryArtifact: artifact,
             rosterEntries: frozenRosterEntries,
             eligibilitySnapshot: openSnapshot,
-            protocolPackageBinding: sealedProtocolPackageBinding);
+            protocolPackageBinding: sealedProtocolPackageBinding,
+            adminOnlyProtectedTallyCustodyReadinessFragment: openCustodyEvidence);
     }
 
-    private async Task<(ElectionCeremonyBindingSnapshot? Snapshot, string Error)> ResolveOpenCeremonySnapshotAsync(
+    private async Task<(
+        ElectionCeremonyBindingSnapshot? Snapshot,
+        string Error,
+        ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? CustodyEvidence)> ResolveOpenCeremonySnapshotAsync(
         IElectionsRepository repository,
         ElectionRecord election,
         ElectionCeremonyProfileRecord? selectedProfile,
@@ -3549,10 +3563,39 @@ public class ElectionLifecycleService : IElectionLifecycleService
             selectedProfile is null ||
             selectedProfile.DevOnly)
         {
-            return (readinessSnapshot, string.Empty);
+            return (readinessSnapshot, string.Empty, null);
         }
 
         var existingEnvelope = await repository.GetAdminOnlyProtectedTallyEnvelopeAsync(election.ElectionId);
+        if (_adminOnlyProtectedTallyCustodyLifecycleAuthority.RequiresPerElectionCustody(election, selectedProfile))
+        {
+            var custodyResult = _adminOnlyProtectedTallyCustodyLifecycleAuthority.PrepareOpenCustody(
+                election,
+                selectedProfile,
+                existingEnvelope,
+                _curve,
+                openedAt);
+
+            if (custodyResult.EnvelopeToPersist is not null)
+            {
+                await PersistAdminOnlyProtectedTallyEnvelopeAsync(
+                    repository,
+                    existingEnvelope,
+                    custodyResult.EnvelopeToPersist);
+            }
+
+            var custodyEvidence = ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder.BuildOpenEvidence(
+                election,
+                custodyResult.EnvelopeToPersist ?? existingEnvelope,
+                openedAt,
+                includeRestrictedEvidence: false,
+                failureDetail: custodyResult.IsSuccess ? null : custodyResult.Error);
+
+            return custodyResult.IsSuccess
+                ? (custodyResult.Snapshot, string.Empty, custodyEvidence)
+                : (null, custodyResult.Error, custodyEvidence);
+        }
+
         if (existingEnvelope is not null &&
             !existingEnvelope.DestroyedAt.HasValue &&
             string.Equals(existingEnvelope.SelectedProfileId, selectedProfile.ProfileId, StringComparison.Ordinal) &&
@@ -3563,7 +3606,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 out var existingSnapshot,
                 out _))
         {
-            return (existingSnapshot, string.Empty);
+            return (existingSnapshot, string.Empty, null);
         }
 
         if (!ElectionProtectedTallyBinding.TryCreateAdminOnlyProtectedTallyEnvelope(
@@ -3575,7 +3618,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 out var error,
                 createdAt: openedAt))
         {
-            return (null, error);
+            return (null, error, null);
         }
 
         if (existingEnvelope is null)
@@ -3591,8 +3634,44 @@ public class ElectionLifecycleService : IElectionLifecycleService
             });
         }
 
-        return (snapshot, string.Empty);
+        return (snapshot, string.Empty, null);
     }
+
+    private static async Task PersistAdminOnlyProtectedTallyEnvelopeAsync(
+        IElectionsRepository repository,
+        ElectionAdminOnlyProtectedTallyEnvelopeRecord? existingEnvelope,
+        ElectionAdminOnlyProtectedTallyEnvelopeRecord envelope)
+    {
+        if (existingEnvelope is null)
+        {
+            await repository.SaveAdminOnlyProtectedTallyEnvelopeAsync(envelope);
+        }
+        else
+        {
+            await repository.UpdateAdminOnlyProtectedTallyEnvelopeAsync(envelope with
+            {
+                CreatedAt = existingEnvelope.CreatedAt,
+            });
+        }
+    }
+
+    private static string ResolveCustodySafeFailureMessage(
+        ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? custodyEvidence,
+        string fallbackMessage)
+    {
+        var safeCode = custodyEvidence?.PublicEvidence.PublicResultCodes.FirstOrDefault();
+        return string.IsNullOrWhiteSpace(safeCode)
+            ? fallbackMessage
+            : $"Admin-only protected tally custody failed closed. Safe reason code: {safeCode}.";
+    }
+
+    private static IReadOnlyList<string> BuildCustodySafeValidationErrors(
+        ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? custodyEvidence) =>
+        custodyEvidence is null
+            ? Array.Empty<string>()
+            : custodyEvidence.PublicEvidence.PublicResultCodes
+                .Select(code => $"Admin-only protected tally custody reason code: {code}")
+                .ToArray();
 
     private static ElectionCommandResult? ValidateDraftNotBlockedByGovernedOpenProposal(ElectionGovernedProposalRecord? pendingProposal) =>
         pendingProposal?.ActionType == ElectionGovernedActionType.Open
@@ -4202,6 +4281,25 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 {
                     ProfileId = selectedProfile.ProfileId,
                 };
+            }
+            else if (_adminOnlyProtectedTallyCustodyLifecycleAuthority.RequiresPerElectionCustody(
+                         election,
+                         selectedProfile))
+            {
+                if (!_adminOnlyProtectedTallyCustodyLifecycleAuthority.EvaluateOpenReadiness(
+                        election,
+                        selectedProfile,
+                        out var custodyLifecycleError))
+                {
+                    errors.Add(custodyLifecycleError);
+                }
+                else
+                {
+                    ceremonySnapshot = ElectionProtectedTallyBinding.BuildAdminOnlyProtectedTallyBindingSnapshot(election) with
+                    {
+                        ProfileId = selectedProfile.ProfileId,
+                    };
+                }
             }
             else if (!_adminOnlyProtectedTallyEnvelopeCrypto.IsAvailable(out var adminOnlyBindingError))
             {
@@ -5699,11 +5797,15 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         await repository.SaveElectionAsync(finalizedElection);
         await ScrubStoredFinalizationSharesAsync(repository, finalizationShares);
-        await ScrubAdminOnlyProtectedTallyEnvelopeAsync(repository, finalizedElection, officialRecordedAt);
+        var custodyCleanupEvidence = await ScrubAdminOnlyProtectedTallyEnvelopeAsync(
+            repository,
+            finalizedElection,
+            officialRecordedAt);
 
         return ElectionCommandResult.Success(
             finalizedElection,
-            boundaryArtifact: finalizeArtifact);
+            boundaryArtifact: finalizeArtifact,
+            adminOnlyProtectedTallyCustodyReadinessFragment: custodyCleanupEvidence);
     }
 
     private async Task<ElectionCommandResult> StartFinalizationSessionInternalAsync(
@@ -6642,14 +6744,14 @@ public class ElectionLifecycleService : IElectionLifecycleService
         }
     }
 
-    private async Task ScrubAdminOnlyProtectedTallyEnvelopeAsync(
+    private async Task<ElectionAdminOnlyProtectedTallyCustodyReadinessFragment?> ScrubAdminOnlyProtectedTallyEnvelopeAsync(
         IElectionsRepository repository,
         ElectionRecord election,
         DateTime scrubbedAt)
     {
         if (election.GovernanceMode != ElectionGovernanceMode.AdminOnly)
         {
-            return;
+            return null;
         }
 
         var envelope = await repository.GetAdminOnlyProtectedTallyEnvelopeAsync(election.ElectionId);
@@ -6660,15 +6762,40 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 AdminOnlyProtectedTallyEnvelopeCryptoConstants.DestroyedEnvelopeMarker,
                 StringComparison.Ordinal))
         {
-            return;
+            return null;
         }
 
-        await repository.UpdateAdminOnlyProtectedTallyEnvelopeAsync(envelope with
+        var custodyCleanup =
+            _adminOnlyProtectedTallyCustodyLifecycleAuthority.BuildFinalizationCleanup(envelope, scrubbedAt);
+        if (custodyCleanup.Handled && custodyCleanup.EnvelopeToPersist is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(custodyCleanup.Error))
+            {
+                _logger.LogWarning(
+                    "[ElectionLifecycleService] Admin-only protected tally custody cleanup for election {ElectionId} requires retry: {Error}",
+                    election.ElectionId,
+                    custodyCleanup.Error);
+            }
+
+            await repository.UpdateAdminOnlyProtectedTallyEnvelopeAsync(custodyCleanup.EnvelopeToPersist);
+            return ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder.BuildFinalizationCleanupEvidence(
+                election,
+                custodyCleanup.EnvelopeToPersist,
+                scrubbedAt);
+        }
+
+        var destroyedEnvelope = envelope with
         {
             SealedTallyPrivateScalar = AdminOnlyProtectedTallyEnvelopeCryptoConstants.DestroyedEnvelopeMarker,
             DestroyedAt = scrubbedAt,
             LastUpdatedAt = scrubbedAt,
-        });
+        };
+        await repository.UpdateAdminOnlyProtectedTallyEnvelopeAsync(destroyedEnvelope);
+
+        return ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder.BuildFinalizationCleanupEvidence(
+            election,
+            destroyedEnvelope,
+            scrubbedAt);
     }
 
     private async Task CompactAdminOnlyProtectedTallyEnvelopeStorageIfNeededAsync(ElectionRecord? election)

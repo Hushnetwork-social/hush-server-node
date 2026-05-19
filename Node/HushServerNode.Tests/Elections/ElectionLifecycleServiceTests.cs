@@ -2741,6 +2741,99 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task EvaluateOpenReadinessAsync_WithPerElectionCustodyAuthority_DoesNotCreateCustody()
+    {
+        var store = new ElectionStore();
+        var custodyAuthority = new TransparentTestAdminOnlyProtectedTallyCustodyLifecycleAuthority();
+        var service = CreateService(
+            store,
+            adminOnlyProtectedTallyEnvelopeCrypto: new UnavailableAdminOnlyProtectedTallyEnvelopeCrypto(),
+            adminOnlyProtectedTallyCustodyLifecycleAuthority: custodyAuthority);
+        var election = CreateAdminElection(
+            acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]);
+        var warning = ElectionModelFactory.CreateWarningAcknowledgement(
+            election.ElectionId,
+            ElectionWarningCode.LowAnonymitySet,
+            election.CurrentDraftRevision,
+            acknowledgedByPublicAddress: "owner-address");
+
+        store.Elections[election.ElectionId] = election;
+        store.WarningAcknowledgements.Add(warning);
+        SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
+
+        var result = await service.EvaluateOpenReadinessAsync(new EvaluateElectionOpenReadinessRequest(
+            election.ElectionId,
+            RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet]));
+
+        result.IsReadyToOpen.Should().BeTrue();
+        custodyAuthority.ReadinessCheckCount.Should().Be(1);
+        custodyAuthority.PrepareOpenCount.Should().Be(0);
+        store.AdminOnlyProtectedTallyEnvelopes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OpenElectionAsync_WhenPerElectionCustodyFails_PersistsRetryEnvelopeAndReusesItOnRetry()
+    {
+        var store = new ElectionStore();
+        var custodyAuthority = new TransparentTestAdminOnlyProtectedTallyCustodyLifecycleAuthority(
+            failOpen: true);
+        var service = CreateService(
+            store,
+            adminOnlyProtectedTallyEnvelopeCrypto: new UnavailableAdminOnlyProtectedTallyEnvelopeCrypto(),
+            adminOnlyProtectedTallyCustodyLifecycleAuthority: custodyAuthority);
+        var election = CreateAdminElection(
+            acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]);
+        var warning = ElectionModelFactory.CreateWarningAcknowledgement(
+            election.ElectionId,
+            ElectionWarningCode.LowAnonymitySet,
+            election.CurrentDraftRevision,
+            acknowledgedByPublicAddress: "owner-address");
+
+        store.Elections[election.ElectionId] = election;
+        store.WarningAcknowledgements.Add(warning);
+        SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
+
+        var failedOpen = await service.OpenElectionAsync(new OpenElectionRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet]));
+
+        failedOpen.IsSuccess.Should().BeFalse();
+        failedOpen.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        failedOpen.ErrorMessage.Should().Contain(ElectionAdminOnlyProtectedTallyCustodyResultCodes.OpenRetryRequired);
+        failedOpen.ErrorMessage.Should().NotContain(custodyAuthority.OpenFailureMessage);
+        failedOpen.ValidationErrors.Should().Contain(x =>
+            x.Contains(ElectionAdminOnlyProtectedTallyCustodyResultCodes.OpenRetryRequired, StringComparison.Ordinal));
+        failedOpen.AdminOnlyProtectedTallyCustodyReadinessFragment.Should().NotBeNull();
+        failedOpen.AdminOnlyProtectedTallyCustodyReadinessFragment!.PublicEvidence.GateIds.Should()
+            .Contain(ElectionAdminOnlyProtectedTallyCustodyReadinessIds.OpenGateId);
+        store.BoundaryArtifacts.Should().BeEmpty();
+        store.Elections[election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Draft);
+        store.AdminOnlyProtectedTallyEnvelopes.Should().ContainSingle();
+        store.AdminOnlyProtectedTallyEnvelopes[election.ElectionId].CustodyLifecycleState.Should()
+            .Be(ElectionAdminOnlyProtectedTallyCustodyLifecycleState.RetryRequired);
+        custodyAuthority.CreatedEnvelopeCount.Should().Be(1);
+
+        custodyAuthority.FailOpen = false;
+        var retriedOpen = await service.OpenElectionAsync(new OpenElectionRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet]));
+
+        retriedOpen.IsSuccess.Should().BeTrue();
+        retriedOpen.AdminOnlyProtectedTallyCustodyReadinessFragment.Should().NotBeNull();
+        retriedOpen.AdminOnlyProtectedTallyCustodyReadinessFragment!.AcceptedGateIds.Should()
+            .Contain(ElectionAdminOnlyProtectedTallyCustodyReadinessIds.OpenGateId);
+        custodyAuthority.CreatedEnvelopeCount.Should().Be(1);
+        store.AdminOnlyProtectedTallyEnvelopes[election.ElectionId].CustodyLifecycleState.Should()
+            .Be(ElectionAdminOnlyProtectedTallyCustodyLifecycleState.OpenBound);
+        store.AdminOnlyProtectedTallyEnvelopes[election.ElectionId].CustodyMode.Should()
+            .Be(ElectionAdminOnlyProtectedTallyCustodyModes.AwsKmsPerElectionEnvelopeV1);
+    }
+
+    [Fact]
     public async Task StartGovernedProposalAsync_WithValidOpenRequest_PersistsPendingProposal()
     {
         var store = new ElectionStore();
@@ -4879,6 +4972,60 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task FinalizeElectionAsync_WithPerElectionCustody_RecordsDeletionScheduledCleanup()
+    {
+        var store = new ElectionStore();
+        var setup = await SeedClosedAdminElectionReadyForFinalizeAsync(store);
+        var custodyAuthority = new TransparentTestAdminOnlyProtectedTallyCustodyLifecycleAuthority();
+        var service = CreateService(
+            store,
+            adminOnlyProtectedTallyEnvelopeCrypto: new UnavailableAdminOnlyProtectedTallyEnvelopeCrypto(),
+            adminOnlyProtectedTallyCustodyLifecycleAuthority: custodyAuthority);
+        var selectedProfile = store.CeremonyProfiles.TryGetValue(setup.Election.SelectedProfileId, out var profile)
+            ? profile
+            : RegisterCeremonyProfile(
+                store,
+                setup.Election.SelectedProfileId,
+                trusteeCount: 1,
+                requiredApprovalCount: 1);
+        var custodyPreparation = custodyAuthority.PrepareOpenCustody(
+            setup.Election,
+            selectedProfile,
+            existingEnvelope: null,
+            new BabyJubJubCurve(),
+            DateTime.UtcNow);
+        store.AdminOnlyProtectedTallyEnvelopes[setup.Election.ElectionId] =
+            custodyPreparation.EnvelopeToPersist!;
+
+        var result = await service.FinalizeElectionAsync(new FinalizeElectionRequest(
+            ElectionId: setup.Election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            AcceptedBallotSetHash: setup.AcceptedBallotSetHash,
+            FinalEncryptedTallyHash: setup.FinalEncryptedTallyHash,
+            SourceTransactionId: Guid.NewGuid(),
+            SourceBlockHeight: 70,
+            SourceBlockId: Guid.NewGuid()));
+
+        result.IsSuccess.Should().BeTrue();
+        result.AdminOnlyProtectedTallyCustodyReadinessFragment.Should().NotBeNull();
+        result.AdminOnlyProtectedTallyCustodyReadinessFragment!.PublicEvidence.GateIds.Should()
+            .Contain(ElectionAdminOnlyProtectedTallyCustodyReadinessIds.FinalizationGateId);
+        result.AdminOnlyProtectedTallyCustodyReadinessFragment.AcceptedGateIds.Should()
+            .Contain(ElectionAdminOnlyProtectedTallyCustodyReadinessIds.FinalizationGateId);
+        result.AdminOnlyProtectedTallyCustodyReadinessFragment.PublicEvidence.PublicResultCodes.Should()
+            .Contain(ElectionAdminOnlyProtectedTallyCustodyResultCodes.FinalizationDeletionScheduled);
+        var envelope = store.AdminOnlyProtectedTallyEnvelopes[setup.Election.ElectionId];
+        envelope.SealedTallyPrivateScalar.Should()
+            .Be(AdminOnlyProtectedTallyEnvelopeCryptoConstants.DestroyedEnvelopeMarker);
+        envelope.DestroyedAt.Should().NotBeNull();
+        envelope.CustodyLifecycleState.Should()
+            .Be(ElectionAdminOnlyProtectedTallyCustodyLifecycleState.DeletionScheduled);
+        envelope.KmsKeyDisabledAt.Should().NotBeNull();
+        envelope.KmsDeletionScheduledAt.Should().NotBeNull();
+        custodyAuthority.FinalizationCleanupCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task FinalizeElectionAsync_WhenReportPackageGenerationFails_PersistsFailedAttemptAndKeepsElectionClosed()
     {
         var store = new ElectionStore();
@@ -5119,7 +5266,8 @@ public class ElectionLifecycleServiceTests
         IElectionSensitiveStorageMaintenance? sensitiveStorageMaintenance = null,
         IElectionPublicationWitnessDeletionService? publicationWitnessDeletionService = null,
         IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null,
-        IElectionSp08ReleaseEvidenceProvider? sp08ReleaseEvidenceProvider = null)
+        IElectionSp08ReleaseEvidenceProvider? sp08ReleaseEvidenceProvider = null,
+        IAdminOnlyProtectedTallyCustodyLifecycleAuthority? adminOnlyProtectedTallyCustodyLifecycleAuthority = null)
     {
         SeedStandardCeremonyProfiles(store);
 
@@ -5138,7 +5286,8 @@ public class ElectionLifecycleServiceTests
             sensitiveStorageMaintenance: sensitiveStorageMaintenance,
             publicationWitnessDeletionService: publicationWitnessDeletionService,
             publicationProofSessionRunner: publicationProofSessionRunner,
-            sp08ReleaseEvidenceProvider: sp08ReleaseEvidenceProvider);
+            sp08ReleaseEvidenceProvider: sp08ReleaseEvidenceProvider,
+            adminOnlyProtectedTallyCustodyLifecycleAuthority: adminOnlyProtectedTallyCustodyLifecycleAuthority);
     }
 
     private sealed record OpenReadyHighAssuranceSetup(

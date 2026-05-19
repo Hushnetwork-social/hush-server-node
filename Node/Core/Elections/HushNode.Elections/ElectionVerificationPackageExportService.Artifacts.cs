@@ -737,8 +737,18 @@ public sealed partial class ElectionVerificationPackageExportService
 
     private static ElectionSp10OperationalCustodyEvidenceArtifactRecord BuildSp10OperationalCustodyEvidence(
         ElectionVerificationPackageExportRequest request,
-        ElectionSp10OperationalSecurityStatusArtifactRecord status) =>
-        new(
+        ElectionSp10OperationalSecurityStatusArtifactRecord status)
+    {
+        var adminOnlyCustodyEvidence = request.AdminOnlyProtectedTallyEnvelope is null
+            ? null
+            : ElectionAdminOnlyProtectedTallyCustodyEvidenceBuilder
+                .BuildFinalizationCleanupEvidence(
+                    request.Election,
+                    request.AdminOnlyProtectedTallyEnvelope,
+                    request.ExportedAt ?? DateTime.UtcNow)
+                .PublicEvidence;
+
+        return new(
             ElectionSp10ProfileIds.OperationalCustodyEvidenceSchema,
             request.Election.ElectionId.ToString(),
             ElectionSp10ProfileIds.OperationalSecurityProgramVersion,
@@ -751,7 +761,9 @@ public sealed partial class ElectionVerificationPackageExportService
                 VerificationPackageFileNames.Sp10OperationalSecuritySummary,
                 VerificationPackageFileNames.Sp10OperationalCustodyEvidence,
             ],
-            PublicPrivacyBoundary: BuildSp10PublicPrivacyBoundary());
+            PublicPrivacyBoundary: BuildSp10PublicPrivacyBoundary(),
+            AdminOnlyProtectedTallyCustodyEvidence: adminOnlyCustodyEvidence);
+    }
 
     private static ElectionSp10OperationalVerifierOutputArtifactRecord BuildSp10VerifierOutput(
         ElectionVerificationPackageExportRequest request,

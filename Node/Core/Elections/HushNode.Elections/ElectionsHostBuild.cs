@@ -101,6 +101,9 @@ public static class ElectionsHostBuild
         services.AddSingleton<IAdminOnlyProtectedTallyEnvelopeCrypto>(sp =>
             AdminOnlyProtectedTallyEnvelopeCryptoFactory.Create(
                 sp.GetRequiredService<AdminOnlyProtectedTallyEnvelopeCryptoOptions>()));
+        services.AddSingleton<IAdminOnlyProtectedTallyCustodyLifecycleAuthority>(sp =>
+            AdminOnlyProtectedTallyCustodyLifecycleAuthorityFactory.Create(
+                sp.GetRequiredService<AdminOnlyProtectedTallyEnvelopeCryptoOptions>()));
         services.AddSingleton<ICloseCountingExecutorKeyRegistry, InMemoryCloseCountingExecutorKeyRegistry>();
         services.AddSingleton<IElectionPublicationWitnessEnvelopeCrypto>(sp =>
             ElectionPublicationWitnessEnvelopeCryptoFactory.Create(
@@ -128,7 +131,9 @@ public static class ElectionsHostBuild
                 sensitiveStorageMaintenance: sp.GetService<IElectionSensitiveStorageMaintenance>(),
                 publicationWitnessDeletionService: sp.GetRequiredService<IElectionPublicationWitnessDeletionService>(),
                 publicationProofSessionRunner: sp.GetRequiredService<IElectionSp07PublicationProofSessionRunner>(),
-                sp08ReleaseEvidenceProvider: sp.GetRequiredService<IElectionSp08ReleaseEvidenceProvider>()));
+                sp08ReleaseEvidenceProvider: sp.GetRequiredService<IElectionSp08ReleaseEvidenceProvider>(),
+                adminOnlyProtectedTallyCustodyLifecycleAuthority:
+                    sp.GetRequiredService<IAdminOnlyProtectedTallyCustodyLifecycleAuthority>()));
         services.AddHostedService<TallyExecutorBackgroundService>();
     }
 
@@ -193,7 +198,15 @@ public static class ElectionsHostBuild
             AwsKmsServiceIdentityLabel: GetConfigValue(
                 configuration,
                 "Elections:AdminOnlyProtectedTallyEnvelope:AwsKmsServiceIdentityLabel",
-                "HUSH_ELECTIONS_ADMIN_ONLY_KMS_SERVICE_IDENTITY"));
+                "HUSH_ELECTIONS_ADMIN_ONLY_KMS_SERVICE_IDENTITY"),
+            AwsKmsDeletionWindowDays: GetConfigIntValue(
+                configuration,
+                "Elections:AdminOnlyProtectedTallyEnvelope:AwsKmsDeletionWindowDays",
+                "HUSH_ELECTIONS_ADMIN_ONLY_KMS_DELETION_WINDOW_DAYS"),
+            CustodyProviderProfile: GetConfigValue(
+                configuration,
+                "Elections:AdminOnlyProtectedTallyEnvelope:CustodyProviderProfile",
+                "HUSH_ELECTIONS_ADMIN_ONLY_KMS_CUSTODY_PROVIDER_PROFILE"));
 
     private static CloseCountingExecutorEnvelopeCryptoOptions CreateCloseCountingExecutorEnvelopeOptions(
         IConfiguration configuration) =>
@@ -357,6 +370,29 @@ public static class ElectionsHostBuild
             if (!string.IsNullOrWhiteSpace(value))
             {
                 return value.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private static int? GetConfigIntValue(
+        IConfiguration configuration,
+        string key,
+        params string[] environmentVariableNames)
+    {
+        var configured = configuration.GetValue<string>(key);
+        if (int.TryParse(configured, out var configuredValue))
+        {
+            return configuredValue;
+        }
+
+        foreach (var variableName in environmentVariableNames)
+        {
+            var value = Environment.GetEnvironmentVariable(variableName);
+            if (int.TryParse(value, out var environmentValue))
+            {
+                return environmentValue;
             }
         }
 

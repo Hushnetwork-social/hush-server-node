@@ -181,6 +181,42 @@ public class ElectionSp10OperationalSecurityContractTests
         VerificationPrivacyBoundary.IsForbiddenInPublicPackage(fieldName).Should().BeTrue();
     }
 
+    [Theory]
+    [Trait("Category", "FEAT-131")]
+    [Trait("Category", "HV-KMS-CUSTODY")]
+    [InlineData("{\"kmsKeyArn\":\"arn:aws:kms:eu-central-1:111122223333:key/key-secret-123\"}", "kms_key_arn")]
+    [InlineData("{\"kmsAlias\":\"alias/hush-voting/admin-only/test/key-secret-123\"}", "kms_alias")]
+    [InlineData("{\"credential\":\"AKIA1234567890ABCDEF\"}", "aws_access_key_id")]
+    [InlineData("{\"sealedTallyPrivateScalar\":\"[destroyed-admin-only-protected-tally-scalar]\"}", "destroyed_admin_only_scalar_marker")]
+    public void PublicMaterialValueScan_ShouldRejectCustodySecretsAndProviderReferences(
+        string publicText,
+        string expectedMarker)
+    {
+        VerificationPrivacyBoundary.FindForbiddenPublicMaterialValues(publicText)
+            .Should()
+            .Contain(expectedMarker);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-131")]
+    [Trait("Category", "HV-KMS-CUSTODY")]
+    public void RestrictedMaterialValueScan_ShouldAllowKmsReferencesButRejectAwsSecretsAndPlaintextScalar()
+    {
+        var restrictedText = """
+            {
+              "kmsKeyArn": "arn:aws:kms:eu-central-1:111122223333:key/key-secret-123",
+              "kmsAlias": "alias/hush-voting/admin-only/test/key-secret-123",
+              "providerErrorMessage": "aws_secret_access_key=do-not-log",
+              "plaintextScalar": "123456789"
+            }
+            """;
+
+        var markers = VerificationPrivacyBoundary.FindForbiddenRestrictedMaterialValues(restrictedText);
+
+        markers.Should().Contain(["aws_secret_access_key", "plaintext_tally_scalar"]);
+        markers.Should().NotContain(["kms_key_arn", "kms_alias"]);
+    }
+
     [Fact]
     public void PublicOperationalStatus_ShouldRejectRestrictedEvidenceRefs()
     {

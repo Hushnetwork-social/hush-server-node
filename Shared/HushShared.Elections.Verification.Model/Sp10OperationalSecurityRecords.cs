@@ -1,3 +1,5 @@
+using HushShared.Elections.Model;
+
 namespace HushShared.Elections.Verification.Model;
 
 public static class ElectionSp10ProfileIds
@@ -401,7 +403,8 @@ public record ElectionSp10OperationalCustodyEvidenceArtifactRecord(
     string ExecutorKeyLifecycle,
     bool TrusteeThresholdCustodyExpected,
     IReadOnlyList<string> PublicEvidenceFiles,
-    IReadOnlyList<string> PublicPrivacyBoundary)
+    IReadOnlyList<string> PublicPrivacyBoundary,
+    ElectionAdminOnlyProtectedTallyCustodyPublicEvidence? AdminOnlyProtectedTallyCustodyEvidence = null)
 {
     public string Schema { get; init; } =
         ElectionSp10OperationalSecurityStatusArtifactRecord.NormalizeRequiredValue(Schema, nameof(Schema));

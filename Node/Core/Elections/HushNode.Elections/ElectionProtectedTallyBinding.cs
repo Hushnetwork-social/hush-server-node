@@ -188,7 +188,8 @@ public static class ElectionProtectedTallyBinding
         out ElectionAdminOnlyProtectedTallyEnvelopeRecord? envelope,
         out ElectionCeremonyBindingSnapshot? snapshot,
         out string error,
-        DateTime? createdAt = null)
+        DateTime? createdAt = null,
+        ElectionAdminOnlyProtectedTallyCustodyMetadata? custodyMetadata = null)
     {
         envelope = null;
         snapshot = null;
@@ -239,7 +240,8 @@ public static class ElectionProtectedTallyBinding
                 AdminOnlyProtectedTallyEnvelopeCryptoConstants.ScalarEncoding,
                 envelopeCrypto.SealAlgorithm,
                 envelopeCrypto.SealedByServiceIdentity,
-                timestamp);
+                timestamp,
+                custodyMetadata);
 
             return TryBuildAdminOnlyProtectedTallyBindingSnapshot(
                 election,

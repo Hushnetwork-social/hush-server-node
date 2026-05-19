@@ -208,6 +208,38 @@ public class ElectionVerificationPackageExportServiceTests
     }
 
     [Fact]
+    public void Export_PublicPackageWithAdminOnlyCustodyEnvelope_ShouldEmbedPublicSafeCustodyEvidence()
+    {
+        var request = CreateRequest(VerificationPackageView.PublicAnonymous);
+        var envelope = CreateDeletedAdminOnlyCustodyEnvelope(request.Election);
+
+        var result = Export(request with
+        {
+            AdminOnlyProtectedTallyEnvelope = envelope,
+        });
+
+        result.Success.Should().BeTrue();
+        var custody = ReadFile<ElectionSp10OperationalCustodyEvidenceArtifactRecord>(
+            result,
+            VerificationPackageFileNames.Sp10OperationalCustodyEvidence);
+        custody.AdminOnlyProtectedTallyCustodyEvidence.Should().NotBeNull();
+        custody.AdminOnlyProtectedTallyCustodyEvidence!.GateIds.Should()
+            .Contain(ElectionAdminOnlyProtectedTallyCustodyReadinessIds.FinalizationGateId);
+        custody.AdminOnlyProtectedTallyCustodyEvidence.PublicResultCodes.Should()
+            .Contain(ElectionAdminOnlyProtectedTallyCustodyResultCodes.FinalizationDeletionScheduled);
+
+        var publicPayload = string.Join(
+            '\n',
+            result.Files
+                .Where(x => x.Visibility == VerificationArtifactVisibility.Public)
+                .Select(x => x.ContentText));
+        publicPayload.Should().NotContain(envelope.KmsKeyId!);
+        publicPayload.Should().NotContain(envelope.KmsKeyArn!);
+        publicPayload.Should().NotContain(envelope.KmsAlias!);
+        publicPayload.Should().NotContain(AdminOnlyProtectedTallyEnvelopeCryptoConstants.DestroyedEnvelopeMarker);
+    }
+
+    [Fact]
     public void Export_PublicPackageWithRegulatoryClaim_ShouldIncludeOptionalSp11ClaimState()
     {
         var request = CreateRequest(VerificationPackageView.PublicAnonymous) with
@@ -527,6 +559,52 @@ public class ElectionVerificationPackageExportServiceTests
     {
         var file = result.Files.Single(x => x.RelativePath == path);
         return JsonSerializer.Deserialize<T>(file.Content, VerificationJson.Options)!;
+    }
+
+    private static ElectionAdminOnlyProtectedTallyEnvelopeRecord CreateDeletedAdminOnlyCustodyEnvelope(
+        ElectionRecord election)
+    {
+        var recordedAt = DateTime.UnixEpoch.AddMinutes(1);
+        var metadata = new ElectionAdminOnlyProtectedTallyCustodyMetadata(
+            CustodyMode: ElectionAdminOnlyProtectedTallyCustodyModes.AwsKmsPerElectionEnvelopeV1,
+            CustodyProvider: "aws-kms",
+            CustodyProviderProfile: "unit-test",
+            KmsKeyId: "key-secret-123",
+            KmsKeyArn: "arn:aws:kms:eu-central-1:111122223333:key/key-secret-123",
+            KmsAlias: "alias/hush-voting/admin-only/test/key-secret-123",
+            KmsRegion: "eu-central-1",
+            KmsAccountBoundary: "aws-account:111122223333",
+            KmsTagSetHash: "sha256:private-tags",
+            KmsTagsVerifiedAt: recordedAt,
+            EncryptionContextVersion: "admin-only-protected-tally-v1",
+            EncryptionContextHash: "sha256:private-context",
+            CustodyLifecycleState: ElectionAdminOnlyProtectedTallyCustodyLifecycleState.DeletionScheduled,
+            CustodyLastAction: "finalization-kms-schedule-deletion",
+            KmsKeyCreatedAt: recordedAt.AddMinutes(-10),
+            KmsKeyDisabledAt: recordedAt,
+            KmsDeletionScheduledAt: recordedAt,
+            KmsDeletionDate: recordedAt.AddDays(7),
+            DeletionWindowDays: 7,
+            CustodyActionServiceIdentity: "kms-runtime-role",
+            PublicCustodyReferenceHash: "sha256:public-custody-ref",
+            SealedEnvelopeHash: "sha256:sealed-envelope");
+
+        return ElectionModelFactory.CreateAdminOnlyProtectedTallyEnvelope(
+            election.ElectionId,
+            election.SelectedProfileId,
+            tallyPublicKey: [0x01, 0x02, 0x03],
+            tallyPublicKeyFingerprint: "tally-public-key-fingerprint",
+            sealedTallyPrivateScalar: "sealed-scalar-before-destroyed",
+            scalarEncoding: AdminOnlyProtectedTallyEnvelopeCryptoConstants.ScalarEncoding,
+            sealAlgorithm: "aws-kms-v1",
+            sealedByServiceIdentity: "kms-runtime-role",
+            createdAt: recordedAt.AddMinutes(-10),
+            custodyMetadata: metadata) with
+        {
+            SealedTallyPrivateScalar = AdminOnlyProtectedTallyEnvelopeCryptoConstants.DestroyedEnvelopeMarker,
+            DestroyedAt = recordedAt,
+            LastUpdatedAt = recordedAt,
+        };
     }
 
     internal static ElectionVerificationPackageExportRequest CreateRequest(

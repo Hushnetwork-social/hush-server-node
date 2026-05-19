@@ -187,7 +187,8 @@ public partial class ElectionQueryApplicationService
             PublicationWitnesses: [],
             PublicationProofSessions: [],
             PublicationProofTranscripts: [],
-            PublicationWitnessDeletionReceipts: []);
+            PublicationWitnessDeletionReceipts: [],
+            AdminOnlyProtectedTallyEnvelope: null);
 
         return BuildVerificationPackageStatusView(context, includePackageHashes: false);
     }
@@ -252,6 +253,10 @@ public partial class ElectionQueryApplicationService
         var publicationProofTranscripts = await repository.GetPublicationProofTranscriptsAsync(election.ElectionId);
         var publicationWitnessDeletionReceipts =
             await repository.GetPublicationWitnessDeletionReceiptsAsync(election.ElectionId);
+        var adminOnlyProtectedTallyEnvelope =
+            IsVerificationPackageVisible(isOwner, acceptedTrustee, isDesignatedAuditor)
+                ? await repository.GetAdminOnlyProtectedTallyEnvelopeAsync(election.ElectionId)
+                : null;
 
         return new VerificationPackageContext(
             election,
@@ -286,7 +291,8 @@ public partial class ElectionQueryApplicationService
             publicationWitnesses,
             publicationProofSessions,
             publicationProofTranscripts,
-            publicationWitnessDeletionReceipts);
+            publicationWitnessDeletionReceipts,
+            adminOnlyProtectedTallyEnvelope);
     }
 
     private ElectionVerificationPackageStatusView BuildVerificationPackageStatusView(
@@ -2017,7 +2023,8 @@ public partial class ElectionQueryApplicationService
             TrusteeControlDomainRecords: BuildSp06ControlDomainRecords(context),
             PublicationProofTranscripts: context.PublicationProofTranscripts,
             PublicationProofSessions: context.PublicationProofSessions,
-            PublicationWitnessDeletionReceipts: context.PublicationWitnessDeletionReceipts);
+            PublicationWitnessDeletionReceipts: context.PublicationWitnessDeletionReceipts,
+            AdminOnlyProtectedTallyEnvelope: context.AdminOnlyProtectedTallyEnvelope);
 
     private static IReadOnlyList<ElectionTrusteeControlDomainRecord> BuildSp06ControlDomainRecords(
         VerificationPackageContext context)
@@ -2348,7 +2355,8 @@ public partial class ElectionQueryApplicationService
         IReadOnlyList<ElectionPublicationWitnessRecord> PublicationWitnesses,
         IReadOnlyList<ElectionPublicationProofSessionRecord> PublicationProofSessions,
         IReadOnlyList<ElectionPublicationProofTranscriptRecord> PublicationProofTranscripts,
-        IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord> PublicationWitnessDeletionReceipts)
+        IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord> PublicationWitnessDeletionReceipts,
+        ElectionAdminOnlyProtectedTallyEnvelopeRecord? AdminOnlyProtectedTallyEnvelope)
     {
         public bool CanViewPackageStatus => IsVerificationPackageVisible(IsOwner, AcceptedTrustee, IsDesignatedAuditor);
 
