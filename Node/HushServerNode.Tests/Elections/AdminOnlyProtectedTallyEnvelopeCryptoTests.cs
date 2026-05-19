@@ -24,6 +24,36 @@ public class AdminOnlyProtectedTallyEnvelopeCryptoTests
     }
 
     [Fact]
+    public void CustodyLifecycleFactory_WithPerElectionProvider_SelectsPerElectionAuthority()
+    {
+        var authority = AdminOnlyProtectedTallyCustodyLifecycleAuthorityFactory.Create(
+            new AdminOnlyProtectedTallyEnvelopeCryptoOptions(
+                AdminOnlyProtectedTallyEnvelopeCryptoOptions.ProviderAwsKmsPerElection,
+                AwsKmsRegion: "eu-central-1",
+                CustodyProviderProfile: "admin-prod-eu-central-1"));
+
+        try
+        {
+            authority.Should().BeOfType<AwsKmsPerElectionAdminOnlyProtectedTallyCustodyLifecycleAuthority>();
+        }
+        finally
+        {
+            (authority as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void CustodyLifecycleFactory_WithStaticAwsKmsProvider_DoesNotSelectPerElectionAuthority()
+    {
+        var authority = AdminOnlyProtectedTallyCustodyLifecycleAuthorityFactory.Create(
+            new AdminOnlyProtectedTallyEnvelopeCryptoOptions(
+                AdminOnlyProtectedTallyEnvelopeCryptoOptions.ProviderAwsKms,
+                AwsKmsKeyId: "alias/static-admin-only-tally"));
+
+        authority.Should().BeSameAs(NoOpAdminOnlyProtectedTallyCustodyLifecycleAuthority.Instance);
+    }
+
+    [Fact]
     public void SealPrivateScalar_WithAwsKms_UsesConfiguredKeyAndElectionContext()
     {
         var electionId = ElectionId.NewElectionId;
