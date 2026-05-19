@@ -57,14 +57,14 @@ public static class DeploymentProofPackageContracts
 
     private static readonly HashSet<string> ValidClassificationOutputs = new(StringComparer.Ordinal)
     {
-        "voting_protocol_change",
-        "voting_protocol_no_change",
-        "website_only_no_protocol_change",
-        "non_voting_service_no_protocol_change",
-        "operational_config_change",
-        "emergency_change",
-        "rollback",
-        "unknown_pending_classification",
+        DeploymentImpactClasses.VotingProtocolChange,
+        DeploymentImpactClasses.VotingProtocolNoChange,
+        DeploymentImpactClasses.WebsiteOnlyNoProtocolChange,
+        DeploymentImpactClasses.NonVotingServiceNoProtocolChange,
+        DeploymentImpactClasses.OperationalConfigChange,
+        DeploymentImpactClasses.EmergencyChange,
+        DeploymentImpactClasses.Rollback,
+        DeploymentImpactClasses.UnknownPendingClassification,
     };
 
     private static readonly Regex DirectAwsAccountIdPattern = new(@"\b\d{12}\b", RegexOptions.Compiled);
@@ -131,8 +131,16 @@ public static class DeploymentProofPackageContracts
         RequireNonEmpty(proof, "status", errors);
         RequireNonEmpty(proof, "cdProvider", errors);
         RequireNonEmpty(proof, "cdRunId", errors);
+        var deploymentExecutionKind = RequireNonEmpty(proof, "deploymentExecutionKind", errors);
         RequireNonEmpty(proof, "deployedAt", errors);
         RequireNonEmpty(proof, "deploymentTarget", errors);
+        var status = GetStringOrDefault(proof, "status");
+
+        if (string.Equals(status, "accepted", StringComparison.Ordinal) &&
+            !string.Equals(deploymentExecutionKind, "cd_deployment", StringComparison.Ordinal))
+        {
+            errors.Add("accepted component proof must be produced by a real CD deployment, not CI-only evidence.");
+        }
 
         var componentId = GetStringOrDefault(proof, "componentId");
         if (componentId is not null && !ValidComponentIds.Contains(componentId))
@@ -195,14 +203,25 @@ public static class DeploymentProofPackageContracts
         RequireNonEmpty(ledger, "ledgerId", errors);
         RequireNonEmpty(ledger, "schemaVersion", errors);
         RequireNonEmpty(ledger, "generatedAt", errors);
-        RequireNonEmpty(ledger, "status", errors);
+        var status = RequireNonEmpty(ledger, "status", errors);
         RequireNonEmpty(ledger, "visibility", errors);
         RequireNonEmpty(ledger, "electionOrRehearsalId", errors);
         RequireObject(ledger, "lifecycleStateWindow", errors);
-        RequireObject(ledger, "activeProofSetAtOpen", errors);
+        var activeProofSetAtOpen = RequireObject(ledger, "activeProofSetAtOpen", errors);
+        if (activeProofSetAtOpen is not null && string.Equals(status, "accepted", StringComparison.Ordinal))
+        {
+            RequireNonEmpty(activeProofSetAtOpen, "hushWebClientDeploymentProofId", errors);
+            RequireNonEmpty(activeProofSetAtOpen, "hushServerNodeDeploymentProofId", errors);
+        }
+
         RequireNonEmpty(ledger, "activePlatformCeremonyId", errors);
         RequireNonEmpty(ledger, "deploymentProtocolVersion", errors);
-        RequireArray(ledger, "deploymentEvents", errors, minItems: 1);
+        var deploymentEvents = RequireArray(ledger, "deploymentEvents", errors, minItems: 1);
+        if (deploymentEvents is not null && string.Equals(status, "accepted", StringComparison.Ordinal))
+        {
+            ValidateAcceptedDeploymentEvents(deploymentEvents, errors);
+        }
+
         var reconciliation = RequireObject(ledger, "catalogReconciliation", errors);
         if (reconciliation?["checkpointsCovered"] is JsonArray checkpoints)
         {
@@ -246,12 +265,23 @@ public static class DeploymentProofPackageContracts
         RequireObject(ceremony, "deploymentProofSet", errors);
         RequireObject(ceremony, "deploymentEnvironment", errors);
         RequireObject(ceremony, "releaseRefs", errors);
-        RequireObject(ceremony, "custodyProfile", errors);
-        RequireArray(ceremony, "electionCustodyEvidenceRefs", errors, minItems: 1);
+        var custodyProfile = RequireObject(ceremony, "custodyProfile", errors);
+        var custodyEvidenceRefs = RequireArray(ceremony, "electionCustodyEvidenceRefs", errors, minItems: 1);
+        ValidateCustodyEvidence(custodyProfile, custodyEvidenceRefs, errors);
         RequireObject(ceremony, "environmentEvidence", errors);
         ValidateCeremonyStages(ceremony, errors);
         RequireObject(ceremony, "rules", errors);
-        RequireObject(ceremony, "deploymentImpactClassification", errors);
+        var classification = RequireObject(ceremony, "deploymentImpactClassification", errors);
+        if (classification is not null)
+        {
+            ValidateClassificationOutput(classification, errors);
+            if (string.Equals(GetStringOrDefault(ceremony, "status"), "accepted", StringComparison.Ordinal) &&
+                string.Equals(GetStringOrDefault(classification, "outputClass"), DeploymentImpactClasses.UnknownPendingClassification, StringComparison.Ordinal))
+            {
+                errors.Add("accepted ceremony cannot contain unresolved unknown_pending_classification.");
+            }
+        }
+
         RequireArray(ceremony, "finalPackageRefs", errors, minItems: 1);
         RequireArray(ceremony, "verifierOutputRefs", errors, minItems: 1);
         RequireArray(ceremony, "exceptions", errors);
@@ -329,6 +359,72 @@ public static class DeploymentProofPackageContracts
         if (outputClass is not null && !ValidClassificationOutputs.Contains(outputClass))
         {
             errors.Add($"deploymentImpactClassification.outputClass '{outputClass}' is not supported.");
+        }
+
+        RequireArray(classification, "matchedRules", errors, minItems: 1);
+        RequireNonEmpty(classification, "reason", errors);
+        if (classification["blocksAcceptedEvidence"] is null)
+        {
+            errors.Add("deploymentImpactClassification.blocksAcceptedEvidence is required.");
+        }
+    }
+
+    private static void ValidateAcceptedDeploymentEvents(JsonArray deploymentEvents, List<string> errors)
+    {
+        foreach (var deploymentEvent in deploymentEvents.OfType<JsonObject>())
+        {
+            var eventId = GetStringOrDefault(deploymentEvent, "eventId") ?? "<unknown>";
+            var classification = GetStringOrDefault(deploymentEvent, "classification");
+            if (string.Equals(classification, DeploymentImpactClasses.UnknownPendingClassification, StringComparison.Ordinal))
+            {
+                errors.Add($"{eventId} cannot remain unknown_pending_classification in accepted binding ledger evidence.");
+            }
+
+            if (string.Equals(classification, DeploymentImpactClasses.EmergencyChange, StringComparison.Ordinal) ||
+                string.Equals(classification, DeploymentImpactClasses.Rollback, StringComparison.Ordinal))
+            {
+                RequireNonEmpty(deploymentEvent, "reason", errors);
+                RequireArray(deploymentEvent, "checksRerun", errors, minItems: 1);
+                RequireNonEmpty(deploymentEvent, "accountabilityMarker", errors);
+            }
+        }
+    }
+
+    private static void ValidateCustodyEvidence(JsonObject? custodyProfile, JsonArray? custodyEvidenceRefs, List<string> errors)
+    {
+        if (custodyProfile is null)
+        {
+            return;
+        }
+
+        var custodyMode = GetStringOrDefault(custodyProfile, "custodyMode");
+        if (custodyMode is null)
+        {
+            return;
+        }
+
+        if (custodyMode.Contains("fake", StringComparison.OrdinalIgnoreCase) ||
+            custodyMode.Contains("dev", StringComparison.OrdinalIgnoreCase) ||
+            custodyMode.Contains("local", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("accepted election/rehearsal custody evidence cannot use fake, dev, or local custody.");
+        }
+
+        if (!custodyMode.Contains("kms", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (custodyEvidenceRefs is null || custodyEvidenceRefs.Count == 0)
+        {
+            errors.Add("custody mode requires FEAT-131 custody evidence refs by public hash/id and restricted index ref.");
+            return;
+        }
+
+        foreach (var custodyRef in custodyEvidenceRefs.OfType<JsonObject>())
+        {
+            RequireNonEmpty(custodyRef, "publicHashRef", errors);
+            RequireNonEmpty(custodyRef, "restrictedIndexRef", errors);
         }
     }
 
