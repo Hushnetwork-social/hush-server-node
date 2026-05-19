@@ -272,6 +272,31 @@ public class AdminOnlyProtectedTallyEnvelopeCryptoTests
     }
 
     [Fact]
+    public void PerElectionCustodyAuthority_PrepareOpenCustody_WhenKmsCreateFails_ReturnsFailure()
+    {
+        var election = CreateAdminElection();
+        var profile = CreateAdminProfile();
+        var kmsClient = new Mock<IAmazonKeyManagementService>();
+        kmsClient
+            .Setup(x => x.CreateKeyAsync(
+                It.IsAny<CreateKeyRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Amazon.KeyManagementService.AmazonKeyManagementServiceException("access denied"));
+        var authority = CreatePerElectionAuthority(kmsClient.Object);
+
+        var result = authority.PrepareOpenCustody(
+            election,
+            profile,
+            existingEnvelope: null,
+            new BabyJubJubCurve(),
+            DateTime.UtcNow);
+
+        result.IsSuccess.Should().BeFalse();
+        result.EnvelopeToPersist.Should().BeNull();
+        result.Error.Should().Contain("AWS KMS per-election admin-only protected tally custody failed");
+    }
+
+    [Fact]
     public void PerElectionEnvelopeCrypto_TryUnsealPrivateScalar_UsesEnvelopeKeyAndContext()
     {
         var electionId = ElectionId.NewElectionId;
@@ -363,6 +388,43 @@ public class AdminOnlyProtectedTallyEnvelopeCryptoTests
         capturedDisable!.KeyId.Should().Be("key-cleanup-123");
         capturedDeletion.Should().NotBeNull();
         capturedDeletion!.PendingWindowInDays.Should().Be(7);
+    }
+
+    [Fact]
+    public void PerElectionCustodyAuthority_BuildFinalizationCleanup_WhenDisableFails_KeepsScalarDestroyedAndRecordsRetry()
+    {
+        var destroyedAt = DateTime.UtcNow;
+        var kmsClient = new Mock<IAmazonKeyManagementService>();
+        kmsClient
+            .Setup(x => x.DisableKeyAsync(
+                It.IsAny<DisableKeyRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Amazon.KeyManagementService.AmazonKeyManagementServiceException("disable denied"));
+        var authority = CreatePerElectionAuthority(kmsClient.Object);
+        var envelope = ElectionModelFactory.CreateAdminOnlyProtectedTallyEnvelope(
+            ElectionId.NewElectionId,
+            "admin-prod-1of1",
+            [0x01],
+            "fingerprint",
+            Convert.ToBase64String([0x02]),
+            AdminOnlyProtectedTallyEnvelopeCryptoConstants.ScalarEncoding,
+            "aws-kms-v1",
+            custodyMetadata: new ElectionAdminOnlyProtectedTallyCustodyMetadata(
+                CustodyMode: ElectionAdminOnlyProtectedTallyCustodyModes.AwsKmsPerElectionEnvelopeV1,
+                KmsKeyId: "key-cleanup-123",
+                DeletionWindowDays: 7));
+
+        var cleanup = authority.BuildFinalizationCleanup(envelope, destroyedAt);
+
+        cleanup.Handled.Should().BeTrue();
+        cleanup.Error.Should().Contain("requires retry");
+        cleanup.EnvelopeToPersist.Should().NotBeNull();
+        cleanup.EnvelopeToPersist!.SealedTallyPrivateScalar.Should()
+            .Be(AdminOnlyProtectedTallyEnvelopeCryptoConstants.DestroyedEnvelopeMarker);
+        cleanup.EnvelopeToPersist.CustodyLifecycleState.Should()
+            .Be(ElectionAdminOnlyProtectedTallyCustodyLifecycleState.RetryRequired);
+        cleanup.EnvelopeToPersist.CustodyLastErrorCode.Should().Be("KMS_FINALIZATION_CLEANUP_FAILED");
+        cleanup.EnvelopeToPersist.DestroyedAt.Should().Be(destroyedAt);
     }
 
     [Fact]
