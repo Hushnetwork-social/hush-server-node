@@ -108,10 +108,6 @@ public static class OperationalEvidenceArtifactGenerator
             OperationalReadinessFragmentPath,
             OperationalEvidenceArtifactVisibility.Internal,
             BuildOperationalReadinessFragment(run, checkResult, scanFindings)));
-        artifacts.Add(JsonArtifact(
-            DownstreamHandoffPath,
-            OperationalEvidenceArtifactVisibility.Internal,
-            BuildDownstreamHandoff(run, artifacts, checkResult, scanFindings, effectiveGeneratedAt)));
         artifacts.Add(new OperationalEvidenceGeneratedArtifact(
             PublicSummaryMarkdownPath,
             OperationalEvidenceArtifactVisibility.Public,
@@ -122,6 +118,11 @@ public static class OperationalEvidenceArtifactGenerator
             OperationalEvidenceArtifactVisibility.Restricted,
             "text/markdown",
             OperationalEvidenceMarkdownRenderer.RenderRestrictedIndex(run, artifacts)));
+        scanFindings = OperationalEvidenceMaterialScanner.ScanGeneratedArtifacts(artifacts);
+        artifacts.Add(JsonArtifact(
+            DownstreamHandoffPath,
+            OperationalEvidenceArtifactVisibility.Internal,
+            BuildDownstreamHandoff(run, artifacts, checkResult, scanFindings, effectiveGeneratedAt)));
 
         scanFindings = OperationalEvidenceMaterialScanner.ScanGeneratedArtifacts(artifacts);
         var generationStatus = checkResult.BlocksAcceptedEvidence || scanFindings.Count > 0
@@ -229,6 +230,8 @@ public static class OperationalEvidenceArtifactGenerator
             ]));
 
         deployment["feat132Refs"] = Clone(run["feat132Refs"]);
+        deployment["feat132RegisterPromotionTraceability"] =
+            BuildFeat132PromotionTraceability(run["feat132Refs"] as JsonObject, checkResult);
         deployment["sp08Agreement"] = new JsonObject
         {
             ["releaseManifestHash"] = GetString(sp08Refs, "releaseManifestHash"),
@@ -455,6 +458,8 @@ public static class OperationalEvidenceArtifactGenerator
             ["placeholderFindings"] = ToJsonArray(checkResult.PlaceholderFindings),
             ["forbiddenMaterialFindings"] = ToJsonArray(scanFindings.Select(FormatFinding)),
             ["scoreEffect"] = BuildScoreEffect(checkResult, scanFindings),
+            ["feat132RegisterPromotionTraceability"] =
+                BuildFeat132PromotionTraceability(run["feat132Refs"] as JsonObject, checkResult),
             ["claimEffect"] = scanFindings.Count > 0
                 ? "Generated material scan findings block FEAT-130 promotion."
                 : GetString(run, "claimEffect"),
@@ -541,9 +546,14 @@ public static class OperationalEvidenceArtifactGenerator
         {
             ["fragmentId"] = "RDY-EVID-AT-RDY-006-FEAT-133-001",
             ["featureSlice"] = "FEAT-133",
+            ["runId"] = checkResult.RunId,
+            ["status"] = scanFindings.Count > 0 ? "blocked" : checkResult.Status,
+            ["claimLevel"] = GetString(run, "claimLevel"),
             ["sourceGap"] = GetString(run, "sourceGap"),
             ["acceptanceGate"] = GetString(run, "acceptanceGate"),
             ["dimensionId"] = "RDY-DIM-007",
+            ["doesNotMutateRegister"] = true,
+            ["registerPromotionOwner"] = "FEAT-130",
             ["evidenceRefs"] = ToJsonArray(PublicSp10ArtifactPaths.Concat([OperationalCheckResultsPath])),
             ["dimensionScoreChange"] = new JsonObject
             {
@@ -556,7 +566,13 @@ public static class OperationalEvidenceArtifactGenerator
                 ["previousScore"] = 59,
                 ["acceptedScore"] = accepted ? 61 : 59,
             },
-            ["blockerChanges"] = ToJsonArray(checkResult.Blockers.Concat(scanFindings.Select(finding => "OPS-005"))),
+            ["blockerChanges"] = ToJsonArray(checkResult.Blockers.Concat(scanFindings.Select(finding => "OPS-005")).Distinct(StringComparer.Ordinal)),
+            ["warnings"] = ToJsonArray(checkResult.Warnings),
+            ["notApplicable"] = ToJsonArray(checkResult.NotApplicable),
+            ["placeholderFindings"] = ToJsonArray(checkResult.PlaceholderFindings),
+            ["forbiddenMaterialFindings"] = ToJsonArray(scanFindings.Select(FormatFinding)),
+            ["feat132RegisterPromotionTraceability"] =
+                BuildFeat132PromotionTraceability(run["feat132Refs"] as JsonObject, checkResult),
             ["claimEffect"] = accepted
                 ? "Eligible to support internal non-binding rehearsal readiness after FEAT-130 promotion."
                 : "Not eligible for FEAT-130 score promotion until blockers are resolved.",
@@ -581,14 +597,24 @@ public static class OperationalEvidenceArtifactGenerator
                 ["path"] = artifact.RelativePath,
                 ["sha256Hash"] = artifact.Sha256Hash,
             });
+        var wrapperRefs = artifacts
+            .Where(artifact => artifact.Visibility == OperationalEvidenceArtifactVisibility.Internal)
+            .OrderBy(artifact => artifact.RelativePath, StringComparer.Ordinal)
+            .Select(artifact => new JsonObject
+            {
+                ["path"] = artifact.RelativePath,
+                ["sha256Hash"] = artifact.Sha256Hash,
+            });
         var restrictedRefs = artifacts
             .Where(artifact => artifact.Visibility == OperationalEvidenceArtifactVisibility.Restricted)
             .OrderBy(artifact => artifact.RelativePath, StringComparer.Ordinal)
             .Select(artifact => new JsonObject
             {
                 ["refId"] = BuildRestrictedRefId(artifact.RelativePath),
+                ["pathRef"] = artifact.RelativePath,
                 ["sha256Hash"] = artifact.Sha256Hash,
             });
+        var status = scanFindings.Count > 0 ? "blocked" : checkResult.Status;
 
         return new JsonObject
         {
@@ -596,14 +622,29 @@ public static class OperationalEvidenceArtifactGenerator
             ["producerFeature"] = "FEAT-133",
             ["generatedAt"] = FormatTimestamp(generatedAt),
             ["runId"] = checkResult.RunId,
-            ["status"] = scanFindings.Count > 0 ? "blocked" : checkResult.Status,
+            ["status"] = status,
+            ["claimLevel"] = GetString(run, "claimLevel"),
             ["publicPackageRefs"] = ToJsonArray(publicRefs),
+            ["wrapperPackageRefs"] = ToJsonArray(wrapperRefs),
             ["restrictedPackageRefs"] = ToJsonArray(restrictedRefs),
             ["opsSummaryRef"] = OperationalCheckResultsPath,
+            ["exceptionsRef"] = OperationalExceptionsPath,
             ["readinessFragmentRef"] = OperationalReadinessFragmentPath,
             ["feat132Refs"] = BuildFeat132Handoff(run["feat132Refs"] as JsonObject),
             ["feat131Refs"] = BuildFeat131Handoff(run["feat131Refs"] as JsonObject),
             ["exceptions"] = ToJsonArray(checkResult.Warnings.Concat(checkResult.Blockers).Concat(scanFindings.Select(FormatFinding))),
+            ["warnings"] = ToJsonArray(checkResult.Warnings),
+            ["blockers"] = ToJsonArray(checkResult.Blockers.Concat(scanFindings.Select(finding => "OPS-005")).Distinct(StringComparer.Ordinal)),
+            ["notApplicable"] = ToJsonArray(checkResult.NotApplicable),
+            ["placeholderFindings"] = ToJsonArray(checkResult.PlaceholderFindings),
+            ["forbiddenMaterialFindings"] = ToJsonArray(scanFindings.Select(FormatFinding)),
+            ["claimEffect"] = status == "blocked"
+                ? "Downstream consumers must treat this handoff as non-promotable until blockers are resolved."
+                : GetString(run, "claimEffect"),
+            ["readinessRegisterHandoff"] = BuildReadinessRegisterHandoff(checkResult, scanFindings),
+            ["pilotRehearsalHandoff"] = BuildPilotRehearsalHandoff(status),
+            ["feat132RegisterPromotionTraceability"] =
+                BuildFeat132PromotionTraceability(run["feat132Refs"] as JsonObject, checkResult),
             ["residualRisk"] = Clone(run["residualRisk"]),
             ["consumerInstructions"] = new JsonObject
             {
@@ -614,6 +655,40 @@ public static class OperationalEvidenceArtifactGenerator
             },
         };
     }
+
+    private static JsonObject BuildReadinessRegisterHandoff(
+        OperationalEvidenceCheckSetResult checkResult,
+        IReadOnlyList<OperationalEvidenceMaterialFinding> scanFindings) =>
+        new()
+        {
+            ["targetFeature"] = "FEAT-130",
+            ["fragmentRef"] = OperationalReadinessFragmentPath,
+            ["fragmentId"] = "RDY-EVID-AT-RDY-006-FEAT-133-001",
+            ["acceptanceGate"] = "AT-RDY-006",
+            ["dimensionId"] = "RDY-DIM-007",
+            ["directRegisterMutation"] = false,
+            ["registerPromotionOwner"] = "FEAT-130",
+            ["scoreEffect"] = BuildScoreEffect(checkResult, scanFindings),
+            ["promotionPreconditions"] = new JsonArray(
+                "status accepted or accepted_with_warnings",
+                "blockers empty",
+                "placeholderFindings empty",
+                "forbiddenMaterialFindings empty"),
+        };
+
+    private static JsonObject BuildPilotRehearsalHandoff(string status) =>
+        new()
+        {
+            ["targetFeature"] = "FEAT-141",
+            ["handoffRef"] = DownstreamHandoffPath,
+            ["packageClaimLevel"] = "internal_non_binding_rehearsal",
+            ["status"] = status,
+            ["rawPrivateEvidenceRequired"] = false,
+            ["publicPackageSource"] = "publicPackageRefs",
+            ["restrictedPackageSource"] = "restrictedPackageRefs by refId/pathRef/sha256Hash only",
+            ["wrapperPackageSource"] = "wrapperPackageRefs",
+            ["consumerAction"] = "Use this handoff to assemble the pilot/rehearsal evidence package without copying raw private evidence.",
+        };
 
     private static VerifierCheckResultRecord ToVerifierResult(OperationalEvidenceCheckResult check)
     {
@@ -729,8 +804,64 @@ public static class OperationalEvidenceArtifactGenerator
             ["serverNodeProofId"] = GetString(refs, "serverNodeProofId"),
             ["webClientProofHash"] = GetString(refs, "webClientProofHash"),
             ["webClientProofId"] = GetString(refs, "webClientProofId"),
+            ["impactClassification"] = GetString(refs, "impactClassification"),
+            ["unknownClassificationState"] = GetString(refs, "unknownClassificationState"),
+            ["feat130RegisterPromotionState"] = GetFeat132RegisterPromotionState(refs),
         };
     }
+
+    private static JsonObject BuildFeat132PromotionTraceability(
+        JsonObject? refs,
+        OperationalEvidenceCheckSetResult checkResult)
+    {
+        var ops001 = checkResult.Checks.SingleOrDefault(check => check.CheckId == "OPS-001");
+        var acceptedDeploymentEvidencePresent =
+            !string.IsNullOrWhiteSpace(GetString(refs, "webClientProofId")) &&
+            !string.IsNullOrWhiteSpace(GetString(refs, "webClientProofHash")) &&
+            !string.IsNullOrWhiteSpace(GetString(refs, "serverNodeProofId")) &&
+            !string.IsNullOrWhiteSpace(GetString(refs, "serverNodeProofHash")) &&
+            !string.IsNullOrWhiteSpace(GetString(refs, "deploymentProofSetId")) &&
+            !string.IsNullOrWhiteSpace(GetString(refs, "bindingLedgerId")) &&
+            refs?["publicCatalogRef"] is JsonObject &&
+            !string.IsNullOrWhiteSpace(GetString(refs, "impactClassification")) &&
+            GetString(refs, "unknownClassificationState") == "none" &&
+            GetString(refs, "impactClassification") != "unknown_pending_classification";
+        var registerPromotionState = acceptedDeploymentEvidencePresent
+            ? GetFeat132RegisterPromotionState(refs)
+            : "blocked_missing_or_unresolved_feat132_evidence";
+        var promoted = string.Equals(
+            registerPromotionState,
+            "promoted_in_feat130_register",
+            StringComparison.Ordinal);
+        var ops001Passed = ops001?.Status == OperationalEvidenceCheckStatuses.Passed;
+
+        return new JsonObject
+        {
+            ["sourceFeature"] = "FEAT-132",
+            ["readinessRegisterOwner"] = "FEAT-130",
+            ["registerPromotionState"] = registerPromotionState,
+            ["pendingFeat130Promotion"] = acceptedDeploymentEvidencePresent && !promoted,
+            ["acceptedDeploymentEvidencePresent"] = acceptedDeploymentEvidencePresent,
+            ["ops001Status"] = ops001?.Status ?? "missing",
+            ["ops001CanPassFromAcceptedRefs"] = acceptedDeploymentEvidencePresent && ops001Passed,
+            ["doesNotBlockOps001"] = acceptedDeploymentEvidencePresent && ops001Passed,
+            ["claimImpact"] = acceptedDeploymentEvidencePresent
+                ? "Traceability only; FEAT-133 can use accepted FEAT-132 refs while FEAT-130 promotion remains separate."
+                : "FEAT-133 accepted evidence is blocked until FEAT-132 refs are accepted and classified.",
+            ["evidenceRefs"] = ToJsonArray(new[]
+            {
+                GetString(refs, "webClientProofId"),
+                GetString(refs, "serverNodeProofId"),
+                GetString(refs, "deploymentProofSetId"),
+                GetString(refs, "bindingLedgerId"),
+            }.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value!)),
+        };
+    }
+
+    private static string GetFeat132RegisterPromotionState(JsonObject? refs) =>
+        GetString(refs, "feat130RegisterPromotionState") ??
+        GetString(refs, "registerPromotionState") ??
+        "pending_feat130_promotion";
 
     private static JsonObject BuildFeat131Handoff(JsonObject? refs) =>
         new()

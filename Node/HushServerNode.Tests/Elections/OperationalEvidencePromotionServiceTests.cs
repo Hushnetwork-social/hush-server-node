@@ -452,6 +452,140 @@ public sealed class OperationalEvidencePromotionServiceTests
     }
 
     [Fact]
+    public void ArtifactGenerator_ReadinessFragment_IsFeat130CompatibleAndDoesNotPromote()
+    {
+        var paths = CreatePaths();
+
+        var generated = OperationalEvidenceArtifactGenerator.Generate(paths, FixedGeneratedAt);
+        var readiness = ParseArtifact(generated, OperationalEvidenceArtifactGenerator.OperationalReadinessFragmentPath);
+
+        readiness["fragmentId"]!.GetValue<string>().Should().Be("RDY-EVID-AT-RDY-006-FEAT-133-001");
+        readiness["acceptanceGate"]!.GetValue<string>().Should().Be("AT-RDY-006");
+        readiness["dimensionId"]!.GetValue<string>().Should().Be("RDY-DIM-007");
+        readiness["doesNotMutateRegister"]!.GetValue<bool>().Should().BeTrue();
+        readiness["registerPromotionOwner"]!.GetValue<string>().Should().Be("FEAT-130");
+        readiness["warnings"]!.AsArray()
+            .Select(node => node!.GetValue<string>())
+            .Should()
+            .BeEquivalentTo(["OPS-006", "OPS-008"]);
+        readiness["dimensionScoreChange"]!.AsObject()["acceptedScore"]!.GetValue<int>().Should().Be(8);
+        readiness["totalScoreChange"]!.AsObject()["acceptedScore"]!.GetValue<int>().Should().Be(61);
+        readiness["evidenceRefs"]!.AsArray()
+            .Select(node => node!.GetValue<string>())
+            .Should()
+            .Contain([
+                VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+                OperationalEvidenceArtifactGenerator.OperationalCheckResultsPath,
+            ]);
+    }
+
+    [Fact]
+    public void ArtifactGenerator_DownstreamHandoff_IsFeat141CompatibleWithoutRawPrivateEvidence()
+    {
+        var paths = CreatePaths();
+
+        var generated = OperationalEvidenceArtifactGenerator.Generate(paths, FixedGeneratedAt);
+        var handoffArtifact = generated.GetArtifact(OperationalEvidenceArtifactGenerator.DownstreamHandoffPath);
+        var handoff = ParseArtifact(generated, OperationalEvidenceArtifactGenerator.DownstreamHandoffPath);
+
+        handoff["producerFeature"]!.GetValue<string>().Should().Be("FEAT-133");
+        handoff["status"]!.GetValue<string>().Should().Be("accepted_with_warnings");
+        handoff["publicPackageRefs"]!.AsArray()
+            .Select(node => node!.AsObject()["path"]!.GetValue<string>())
+            .Should()
+            .Contain([
+                VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+                OperationalEvidenceArtifactGenerator.PublicSummaryMarkdownPath,
+            ]);
+        handoff["wrapperPackageRefs"]!.AsArray()
+            .Select(node => node!.AsObject()["path"]!.GetValue<string>())
+            .Should()
+            .Contain([
+                OperationalEvidenceArtifactGenerator.OperationalRunPath,
+                OperationalEvidenceArtifactGenerator.OperationalCheckResultsPath,
+                OperationalEvidenceArtifactGenerator.OperationalExceptionsPath,
+                OperationalEvidenceArtifactGenerator.OperationalReadinessFragmentPath,
+            ]);
+        var restrictedRefs = handoff["restrictedPackageRefs"]!.AsArray()
+            .Select(node => node!.AsObject())
+            .ToArray();
+        restrictedRefs.Should().OnlyContain(reference =>
+            reference["refId"] != null &&
+            reference["pathRef"] != null &&
+            reference["sha256Hash"] != null);
+        handoff["pilotRehearsalHandoff"]!.AsObject()["targetFeature"]!.GetValue<string>().Should().Be("FEAT-141");
+        handoff["pilotRehearsalHandoff"]!.AsObject()["rawPrivateEvidenceRequired"]!.GetValue<bool>().Should().BeFalse();
+        handoffArtifact.Content.Should()
+            .NotContain("rawLogRestrictedRefs")
+            .And.NotContain("arn:aws:kms")
+            .And.NotContain("BEGIN PRIVATE KEY");
+    }
+
+    [Fact]
+    public void ArtifactGenerator_Feat132PendingPromotionTraceability_DoesNotBlockOps001()
+    {
+        var paths = CreatePaths();
+
+        var generated = OperationalEvidenceArtifactGenerator.Generate(paths, FixedGeneratedAt);
+        var handoff = ParseArtifact(generated, OperationalEvidenceArtifactGenerator.DownstreamHandoffPath);
+        var traceability = handoff["feat132RegisterPromotionTraceability"]!.AsObject();
+
+        generated.CheckResult.Checks.Single(check => check.CheckId == "OPS-001").Status.Should().Be("passed");
+        traceability["registerPromotionState"]!.GetValue<string>().Should().Be("pending_feat130_promotion");
+        traceability["pendingFeat130Promotion"]!.GetValue<bool>().Should().BeTrue();
+        traceability["acceptedDeploymentEvidencePresent"]!.GetValue<bool>().Should().BeTrue();
+        traceability["doesNotBlockOps001"]!.GetValue<bool>().Should().BeTrue();
+    }
+
+    [Fact]
+    public void ArtifactGenerator_UnresolvedFeat132Evidence_BlocksOps001Traceability()
+    {
+        var paths = CreatePaths();
+        var run = LoadExample(paths, OperationalEvidenceContracts.AcceptedRunFixture);
+        var feat132Refs = run["feat132Refs"]!.AsObject();
+        feat132Refs["unknownClassificationState"] = "unknown_pending_classification";
+        feat132Refs["impactClassification"] = "unknown_pending_classification";
+
+        var generated = OperationalEvidenceArtifactGenerator.Generate(paths, run, FixedGeneratedAt);
+        var handoff = ParseArtifact(generated, OperationalEvidenceArtifactGenerator.DownstreamHandoffPath);
+        var traceability = handoff["feat132RegisterPromotionTraceability"]!.AsObject();
+
+        generated.GenerationStatus.Should().Be("blocked");
+        generated.CheckResult.Blockers.Should().Contain("OPS-001");
+        traceability["registerPromotionState"]!.GetValue<string>().Should().Be("blocked_missing_or_unresolved_feat132_evidence");
+        traceability["acceptedDeploymentEvidencePresent"]!.GetValue<bool>().Should().BeFalse();
+        traceability["doesNotBlockOps001"]!.GetValue<bool>().Should().BeFalse();
+    }
+
+    [Fact]
+    public void ArtifactGenerator_BlockedOrPlaceholderEvidence_DoesNotRaiseReadinessScore()
+    {
+        var paths = CreatePaths();
+        var run = LoadExample(paths, OperationalEvidenceContracts.AcceptedRunFixture);
+        var placeholderState = run["placeholderState"]!.AsObject();
+        placeholderState["hasPlaceholders"] = true;
+        placeholderState["placeholderRefs"] = new JsonArray("OPS-PLACEHOLDER-001");
+
+        var generated = OperationalEvidenceArtifactGenerator.Generate(paths, run, FixedGeneratedAt);
+        var readiness = ParseArtifact(generated, OperationalEvidenceArtifactGenerator.OperationalReadinessFragmentPath);
+        var handoff = ParseArtifact(generated, OperationalEvidenceArtifactGenerator.DownstreamHandoffPath);
+
+        readiness["dimensionScoreChange"]!.AsObject()["acceptedScore"]!.GetValue<int>().Should().Be(6);
+        readiness["totalScoreChange"]!.AsObject()["acceptedScore"]!.GetValue<int>().Should().Be(59);
+        readiness["placeholderFindings"]!.AsArray()
+            .Select(node => node!.GetValue<string>())
+            .Should()
+            .Contain("OPS-PLACEHOLDER-001");
+        handoff["readinessRegisterHandoff"]!.AsObject()["scoreEffect"]!.AsObject()["acceptedScore"]!.GetValue<int>()
+            .Should()
+            .Be(6);
+        handoff["placeholderFindings"]!.AsArray()
+            .Select(node => node!.GetValue<string>())
+            .Should()
+            .Contain("OPS-PLACEHOLDER-001");
+    }
+
+    [Fact]
     public void PromotionService_ValidateOnly_WritesNoFiles()
     {
         using var workspace = TempOperationalEvidenceWorkspace.Create();

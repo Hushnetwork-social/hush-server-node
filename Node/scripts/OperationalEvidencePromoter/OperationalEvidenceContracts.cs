@@ -285,6 +285,12 @@ public static class OperationalEvidenceContracts
         RequireValue(readiness, "featureSlice", "FEAT-133", errors);
         RequireValue(readiness, "acceptanceGate", "AT-RDY-006", errors);
         RequireValue(readiness, "dimensionId", "RDY-DIM-007", errors);
+        RequireValue(readiness, "registerPromotionOwner", "FEAT-130", errors);
+        if (readiness["doesNotMutateRegister"]?.GetValue<bool>() != true)
+        {
+            errors.Add("doesNotMutateRegister must be true.");
+        }
+
         if (readiness["dimensionScoreChange"] is not JsonObject dimensionScoreChange ||
             dimensionScoreChange["previousScore"]?.GetValue<int>() != 6 ||
             dimensionScoreChange["acceptedScore"]?.GetValue<int>() != 8)
@@ -299,6 +305,8 @@ public static class OperationalEvidenceContracts
             errors.Add("totalScoreChange must record 59 -> 61.");
         }
 
+        RequireNonEmptyArray(readiness, "warnings", errors);
+        RequirePresent(readiness, "feat132RegisterPromotionTraceability", errors);
         ScanForbiddenPublicMaterial(readiness, "$", errors);
         return errors;
     }
@@ -309,9 +317,13 @@ public static class OperationalEvidenceContracts
         RequireValue(handoff, "producerFeature", "FEAT-133", errors);
         RequireValue(handoff, "runId", "OPS-RUN-REHEARSAL-20260519-001", errors);
         RequireNonEmptyArray(handoff, "publicPackageRefs", errors);
+        RequireNonEmptyArray(handoff, "wrapperPackageRefs", errors);
         RequireNonEmptyArray(handoff, "restrictedPackageRefs", errors);
         RequirePresent(handoff, "feat132Refs", errors);
         RequirePresent(handoff, "feat131Refs", errors);
+        RequirePresent(handoff, "readinessRegisterHandoff", errors);
+        RequirePresent(handoff, "pilotRehearsalHandoff", errors);
+        RequirePresent(handoff, "feat132RegisterPromotionTraceability", errors);
         if (handoff["consumerInstructions"] is not JsonObject consumers ||
             consumers["FEAT-130"] is null ||
             consumers["FEAT-137"] is null ||
@@ -385,6 +397,7 @@ public static class OperationalEvidenceContracts
                      "impactClassification",
                      "restrictedRefs",
                      "unknownClassificationState",
+                     "feat130RegisterPromotionState",
                  })
         {
             RequirePresent(refs, propertyName, errors);
