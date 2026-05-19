@@ -474,6 +474,7 @@ public record ElectionCommandResult
     public ElectionFinalizationShareRecord? FinalizationShare { get; init; }
     public ElectionFinalizationReleaseEvidenceRecord? FinalizationReleaseEvidence { get; init; }
     public ProtocolPackageBindingRecord? ProtocolPackageBinding { get; init; }
+    public ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? AdminOnlyProtectedTallyCustodyReadinessFragment { get; init; }
 
     public static ElectionCommandResult Success(
         ElectionRecord election,
@@ -498,7 +499,8 @@ public record ElectionCommandResult
         ElectionFinalizationSessionRecord? finalizationSession = null,
         ElectionFinalizationShareRecord? finalizationShare = null,
         ElectionFinalizationReleaseEvidenceRecord? finalizationReleaseEvidence = null,
-        ProtocolPackageBindingRecord? protocolPackageBinding = null) =>
+        ProtocolPackageBindingRecord? protocolPackageBinding = null,
+        ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? adminOnlyProtectedTallyCustodyReadinessFragment = null) =>
         new()
         {
             IsSuccess = true,
@@ -526,13 +528,15 @@ public record ElectionCommandResult
             FinalizationShare = finalizationShare,
             FinalizationReleaseEvidence = finalizationReleaseEvidence,
             ProtocolPackageBinding = protocolPackageBinding,
+            AdminOnlyProtectedTallyCustodyReadinessFragment = adminOnlyProtectedTallyCustodyReadinessFragment,
         };
 
     public static ElectionCommandResult Failure(
         ElectionCommandErrorCode errorCode,
         string errorMessage,
         IReadOnlyList<string>? validationErrors = null,
-        ElectionRosterImportEvidenceRecord? rosterImportEvidence = null) =>
+        ElectionRosterImportEvidenceRecord? rosterImportEvidence = null,
+        ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? adminOnlyProtectedTallyCustodyReadinessFragment = null) =>
         new()
         {
             IsSuccess = false,
@@ -540,6 +544,7 @@ public record ElectionCommandResult
             ErrorMessage = errorMessage,
             ValidationErrors = validationErrors ?? Array.Empty<string>(),
             RosterImportEvidence = rosterImportEvidence,
+            AdminOnlyProtectedTallyCustodyReadinessFragment = adminOnlyProtectedTallyCustodyReadinessFragment,
         };
 }
 

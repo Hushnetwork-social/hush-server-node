@@ -2802,6 +2802,13 @@ public class ElectionLifecycleServiceTests
 
         failedOpen.IsSuccess.Should().BeFalse();
         failedOpen.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        failedOpen.ErrorMessage.Should().Contain(ElectionAdminOnlyProtectedTallyCustodyResultCodes.OpenRetryRequired);
+        failedOpen.ErrorMessage.Should().NotContain(custodyAuthority.OpenFailureMessage);
+        failedOpen.ValidationErrors.Should().Contain(x =>
+            x.Contains(ElectionAdminOnlyProtectedTallyCustodyResultCodes.OpenRetryRequired, StringComparison.Ordinal));
+        failedOpen.AdminOnlyProtectedTallyCustodyReadinessFragment.Should().NotBeNull();
+        failedOpen.AdminOnlyProtectedTallyCustodyReadinessFragment!.PublicEvidence.GateIds.Should()
+            .Contain(ElectionAdminOnlyProtectedTallyCustodyReadinessIds.OpenGateId);
         store.BoundaryArtifacts.Should().BeEmpty();
         store.Elections[election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Draft);
         store.AdminOnlyProtectedTallyEnvelopes.Should().ContainSingle();
@@ -2816,6 +2823,9 @@ public class ElectionLifecycleServiceTests
             RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet]));
 
         retriedOpen.IsSuccess.Should().BeTrue();
+        retriedOpen.AdminOnlyProtectedTallyCustodyReadinessFragment.Should().NotBeNull();
+        retriedOpen.AdminOnlyProtectedTallyCustodyReadinessFragment!.AcceptedGateIds.Should()
+            .Contain(ElectionAdminOnlyProtectedTallyCustodyReadinessIds.OpenGateId);
         custodyAuthority.CreatedEnvelopeCount.Should().Be(1);
         store.AdminOnlyProtectedTallyEnvelopes[election.ElectionId].CustodyLifecycleState.Should()
             .Be(ElectionAdminOnlyProtectedTallyCustodyLifecycleState.OpenBound);
@@ -4997,6 +5007,13 @@ public class ElectionLifecycleServiceTests
             SourceBlockId: Guid.NewGuid()));
 
         result.IsSuccess.Should().BeTrue();
+        result.AdminOnlyProtectedTallyCustodyReadinessFragment.Should().NotBeNull();
+        result.AdminOnlyProtectedTallyCustodyReadinessFragment!.PublicEvidence.GateIds.Should()
+            .Contain(ElectionAdminOnlyProtectedTallyCustodyReadinessIds.FinalizationGateId);
+        result.AdminOnlyProtectedTallyCustodyReadinessFragment.AcceptedGateIds.Should()
+            .Contain(ElectionAdminOnlyProtectedTallyCustodyReadinessIds.FinalizationGateId);
+        result.AdminOnlyProtectedTallyCustodyReadinessFragment.PublicEvidence.PublicResultCodes.Should()
+            .Contain(ElectionAdminOnlyProtectedTallyCustodyResultCodes.FinalizationDeletionScheduled);
         var envelope = store.AdminOnlyProtectedTallyEnvelopes[setup.Election.ElectionId];
         envelope.SealedTallyPrivateScalar.Should()
             .Be(AdminOnlyProtectedTallyEnvelopeCryptoConstants.DestroyedEnvelopeMarker);

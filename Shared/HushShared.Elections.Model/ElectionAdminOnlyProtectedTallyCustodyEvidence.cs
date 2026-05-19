@@ -17,6 +17,33 @@ public static class ElectionAdminOnlyProtectedTallyCustodyReadinessIds
     ];
 }
 
+public static class ElectionAdminOnlyProtectedTallyCustodyResultCodes
+{
+    public const string OpenBound = "custody_open_bound";
+    public const string OpenRetryRequired = "custody_open_retry_required";
+    public const string OpenExceptionRequired = "custody_open_exception_required";
+    public const string OpenProviderUnavailable = "custody_open_provider_unavailable";
+    public const string OpenMissingCustodyRow = "custody_open_missing_private_row";
+    public const string OpenLegacyCompatibility = "custody_open_legacy_compatibility";
+    public const string OpenNotRequired = "custody_open_not_required";
+
+    public const string FinalizationDeletionScheduled = "custody_finalization_deletion_scheduled";
+    public const string FinalizationKeyDisabled = "custody_finalization_key_disabled";
+    public const string FinalizationScalarDestroyed = "custody_finalization_scalar_destroyed";
+    public const string FinalizationRetryRequired = "custody_finalization_retry_required";
+    public const string FinalizationExceptionRequired = "custody_finalization_exception_required";
+    public const string FinalizationMissingDestroyedMarker = "custody_finalization_missing_destroyed_marker";
+    public const string FinalizationLegacyCompatibility = "custody_finalization_legacy_compatibility";
+
+    public const string ReconciliationAccepted = "custody_reconciliation_accepted";
+    public const string ReconciliationRetryRequired = "custody_reconciliation_retry_required";
+    public const string ReconciliationExceptionRequired = "custody_reconciliation_exception_required";
+    public const string ReconciliationMissing = "custody_reconciliation_missing";
+
+    public const string PublicSecretScanPassed = "public_secret_scan_passed";
+    public const string PublicSecretScanFailed = "public_secret_scan_failed";
+}
+
 public enum ElectionAdminOnlyProtectedTallyCustodyActionKind
 {
     Open = 0,
