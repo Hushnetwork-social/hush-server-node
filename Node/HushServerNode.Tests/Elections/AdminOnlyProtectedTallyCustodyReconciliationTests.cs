@@ -6,6 +6,8 @@ using Xunit;
 
 namespace HushServerNode.Tests.Elections;
 
+[Trait("Category", "FEAT-131")]
+[Trait("Category", "HV-KMS-CUSTODY")]
 public class AdminOnlyProtectedTallyCustodyReconciliationTests
 {
     [Fact]

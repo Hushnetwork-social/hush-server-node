@@ -382,6 +382,13 @@ public sealed partial class HushVotingPackageVerifier
             status.PublicPrivacyBoundary
                 .Concat(deployment.PublicPrivacyBoundary)
                 .Concat(custody.PublicPrivacyBoundary));
+        var forbiddenValueMarkers = VerificationPrivacyBoundary.FindForbiddenPublicMaterialValues(
+            string.Join(
+                '\n',
+                System.Text.Json.JsonSerializer.Serialize(status),
+                System.Text.Json.JsonSerializer.Serialize(deployment),
+                System.Text.Json.JsonSerializer.Serialize(custody),
+                System.Text.Json.JsonSerializer.Serialize(verifierOutput)));
         var forbiddenWording = new List<string>();
         AddForbiddenOperationalWording(forbiddenWording, "feat106_readiness_caveat", status.Feat106ReadinessCaveat);
         AddForbiddenOperationalWording(forbiddenWording, "primary_issue", status.PrimaryIssue);
@@ -392,6 +399,7 @@ public sealed partial class HushVotingPackageVerifier
 
         if (status.DoesNotCompleteFeat106Readiness &&
             forbiddenBoundaryFields.Count == 0 &&
+            forbiddenValueMarkers.Count == 0 &&
             forbiddenWording.Count == 0)
         {
             return CreateResult(
@@ -406,6 +414,10 @@ public sealed partial class HushVotingPackageVerifier
         foreach (var phrase in forbiddenWording)
         {
             evidence[phrase] = "forbidden_wording";
+        }
+        foreach (var marker in forbiddenValueMarkers)
+        {
+            evidence[$"value:{marker}"] = "forbidden_value";
         }
 
         if (!status.DoesNotCompleteFeat106Readiness)

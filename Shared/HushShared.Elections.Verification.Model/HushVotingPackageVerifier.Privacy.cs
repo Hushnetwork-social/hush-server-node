@@ -35,6 +35,7 @@ public sealed partial class HushVotingPackageVerifier
 
             var text = await File.ReadAllTextAsync(ResolvePackagePath(packagePath, entry.Path), cancellationToken);
             forbiddenFields.AddRange(VerificationPrivacyBoundary.FindForbiddenPublicFields(CollectJsonPropertyNames(text)));
+            forbiddenFields.AddRange(VerificationPrivacyBoundary.FindForbiddenPublicMaterialValues(text));
         }
 
         var distinctFields = forbiddenFields

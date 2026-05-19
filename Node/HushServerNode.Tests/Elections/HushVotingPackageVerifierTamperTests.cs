@@ -57,6 +57,7 @@ public class HushVotingPackageVerifierTamperTests
             { "tamper-sp10-missing-backup-restore", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.OperationalSecurityBackupRestoreMissing, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-sp10-missing-access-log", VerificationProfileIds.HighAssuranceV1, VerificationResultCodes.OperationalSecurityAuditorRoomMissing, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-sp10-forbidden-leak", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.OperationalSecurityForbiddenMaterial, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
+            { "tamper-sp10-kms-public-value-leak", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.OperationalSecurityForbiddenMaterial, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
             { "tamper-sp11-stale-tracker", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.RegulatoryTrackerStale, VerificationCheckStatus.Warn, VerificationOverallStatus.Warn, 0 },
             { "tamper-sp11-blocked-certification-claim", VerificationProfileIds.DevelopmentCurrentV1, VerificationResultCodes.RegulatoryClaimBlockedCertification, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, 1 },
         };
@@ -624,6 +625,15 @@ public class HushVotingPackageVerifierTamperTests
                     {
                         PublicPrivacyBoundary = ["rawLogLine"],
                         Feat106ReadinessCaveat = "Certified for public elections.",
+                    });
+                return;
+
+            case "tamper-sp10-kms-public-value-leak":
+                await MutateSp10StatusAndRefreshAsync(
+                    packagePath,
+                    status => status with
+                    {
+                        PrimaryIssue = "Public summary leaked arn:aws:kms:eu-central-1:111122223333:key/key-secret-123.",
                     });
                 return;
 
