@@ -98,6 +98,22 @@ public sealed class DeploymentProofPackagePromotionServiceTests
         errors.Should().Contain(error => error.Contains("direct provider account identifier", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData("hush-web-client", "hush-web-client-component-proof.json")]
+    [InlineData("hush-server-node", "hush-server-node-component-proof.json")]
+    public void ComponentProof_CdGeneratedAcceptedEvidence_IsAccepted(string componentId, string fileName)
+    {
+        var paths = CreatePaths();
+        var proof = LoadExample(paths, "component-proofs", fileName);
+
+        proof["componentId"]!.GetValue<string>().Should().Be(componentId);
+        proof["status"]!.GetValue<string>().Should().Be("accepted");
+        proof["deploymentExecutionKind"]!.GetValue<string>().Should().Be("cd_deployment");
+        proof["cdProvider"]!.GetValue<string>().Should().NotBeNullOrWhiteSpace();
+        proof["cdRunId"]!.GetValue<string>().Should().NotBeNullOrWhiteSpace();
+        DeploymentProofPackageContracts.ValidateComponentProof(proof).Should().BeEmpty();
+    }
+
     [Fact]
     public void Classifier_UnknownPath_FailsClosedAndBlocksAcceptedEvidence()
     {
@@ -283,6 +299,35 @@ public sealed class DeploymentProofPackagePromotionServiceTests
         errors.Should().Contain(error => error.Contains("hushServerNodeDeploymentProofId", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("Draft -> Open")]
+    [InlineData("Open -> Close")]
+    [InlineData("Close -> Finalize")]
+    [InlineData("Open -> Void")]
+    [InlineData("Close -> Void")]
+    [InlineData("final_package_export")]
+    public void BindingLedger_ReconciliationCoverage_RequiresEveryLifecycleCheckpoint(string missingCheckpoint)
+    {
+        var paths = CreatePaths();
+        var ledger = LoadExample(paths, "bindings", "per-election-deployment-binding-ledger.json");
+        var reconciliation = ledger["catalogReconciliation"]!.AsObject();
+        var checkpoints = reconciliation["checkpointsCovered"]!.AsArray();
+        var filtered = new JsonArray();
+        foreach (var checkpoint in checkpoints.Select(node => node!.GetValue<string>()))
+        {
+            if (!string.Equals(checkpoint, missingCheckpoint, StringComparison.Ordinal))
+            {
+                filtered.Add(checkpoint);
+            }
+        }
+
+        reconciliation["checkpointsCovered"] = filtered;
+
+        var errors = DeploymentProofPackageContracts.ValidateBindingLedger(ledger);
+
+        errors.Should().Contain(error => error.Contains(missingCheckpoint, StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Ceremony_MissingCustodyRefsOrFakeCustody_FailClosed()
     {
@@ -367,9 +412,19 @@ public sealed class DeploymentProofPackagePromotionServiceTests
     {
         const string publicMarkdown = """
                                       raw log contains arn:aws:kms:eu-west-1:123456789012:key/kms-key-public-leak
+                                      kmsKeyId=kms-key-public-leak
+                                      alias/hush-voting-election-key
+                                      decrypt authority role
+                                      aws_access_key_id=AKIAEXAMPLEPUBLICLEAK
+                                      secret=not-public
                                       token=secret-value
                                       https://service.internal/private
+                                      voter data row
                                       voterEmail: voter@example.com
+                                      voteChoice=approved
+                                      raw support log entry
+                                      raw anomaly log entry
+                                      operator contact owner@example.com
                                       legal digital signature claim
                                       """;
 
@@ -379,10 +434,49 @@ public sealed class DeploymentProofPackagePromotionServiceTests
 
         errors.Should().Contain(error => error.Contains("arn:aws:kms", StringComparison.OrdinalIgnoreCase));
         errors.Should().Contain(error => error.Contains("direct provider account identifier", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("kmsKeyId", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("alias/", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("decrypt authority", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("aws_access_key_id", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("secret=", StringComparison.OrdinalIgnoreCase));
         errors.Should().Contain(error => error.Contains("token=", StringComparison.OrdinalIgnoreCase));
         errors.Should().Contain(error => error.Contains("private URL", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("voter data", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("voteChoice", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("raw support log", StringComparison.OrdinalIgnoreCase));
+        errors.Should().Contain(error => error.Contains("raw anomaly log", StringComparison.OrdinalIgnoreCase));
         errors.Should().Contain(error => error.Contains("contact detail", StringComparison.OrdinalIgnoreCase));
         errors.Should().Contain(error => error.Contains("legal digital signature", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Promote_PublicForbiddenMaterial_LeavesCatalogUnchanged()
+    {
+        using var workspace = TempPromotionWorkspace.Create(mutableSource: true);
+        var service = new DeploymentProofPackagePromotionService();
+        service.Promote(CreatePromotionOptions(
+            workspace.Paths,
+            DeploymentProofPackagePromotionService.ModeComponentProof,
+            componentId: "hush-web-client",
+            deploymentProofId: "DPP-WEB-20260519-001"));
+        var catalogBefore = File.ReadAllText(workspace.Paths.CatalogPath);
+
+        var componentProofPath = Path.Combine(
+            workspace.Paths.ComponentProofExamplesRoot,
+            "hush-web-client-component-proof.json");
+        var componentProof = DeploymentProofPackageContracts.ReadJsonObject(componentProofPath, "hush-web-client-component-proof.json");
+        componentProof["runtimeVerification"]!.AsObject()["rawLogLeak"] = "raw log token=not-public";
+        File.WriteAllText(componentProofPath, componentProof.ToJsonString());
+
+        var act = () => service.Promote(CreatePromotionOptions(
+            workspace.Paths,
+            DeploymentProofPackagePromotionService.ModeComponentProof,
+            componentId: "hush-web-client",
+            deploymentProofId: "DPP-WEB-20260519-001"));
+
+        act.Should().Throw<DeploymentProofPackagePromotionException>()
+            .Where(ex => ex.Details.Any(detail => detail.Contains("raw log", StringComparison.OrdinalIgnoreCase)));
+        File.ReadAllText(workspace.Paths.CatalogPath).Should().Be(catalogBefore);
     }
 
     [Fact]
@@ -441,6 +535,30 @@ public sealed class DeploymentProofPackagePromotionServiceTests
         Directory.Exists(workspace.Paths.RestrictedOutputRoot).Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(DeploymentProofPackagePromotionService.ModeComponentProof, "hush-web-client", "DPP-WEB-20260519-001")]
+    [InlineData(DeploymentProofPackagePromotionService.ModeBindingLedger, null, null)]
+    [InlineData(DeploymentProofPackagePromotionService.ModeRehearsalCeremony, null, null)]
+    public void Promote_WithValidateOnlyMode_DoesNotWritePromotedArtifacts(
+        string mode,
+        string? componentId,
+        string? deploymentProofId)
+    {
+        using var workspace = TempPromotionWorkspace.Create();
+
+        var result = new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            workspace.Paths,
+            mode,
+            componentId,
+            deploymentProofId,
+            validateOnly: true));
+
+        result.Mode.Should().Be(mode);
+        result.WrittenFiles.Should().BeEmpty();
+        Directory.Exists(workspace.Paths.PublicOutputRoot).Should().BeFalse();
+        Directory.Exists(workspace.Paths.RestrictedOutputRoot).Should().BeFalse();
+    }
+
     [Fact]
     public void Promote_WithOutputRootOutsideWorkspace_FailsClosed()
     {
@@ -457,6 +575,21 @@ public sealed class DeploymentProofPackagePromotionServiceTests
 
         act.Should().Throw<DeploymentProofPackagePromotionException>()
             .WithMessage("*escapes the workspace root*");
+    }
+
+    [Fact]
+    public void Promote_MissingComponentProofSource_FailsClosed()
+    {
+        using var workspace = TempPromotionWorkspace.Create();
+
+        var act = () => new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            workspace.Paths,
+            DeploymentProofPackagePromotionService.ModeComponentProof,
+            componentId: "hush-web-client",
+            deploymentProofId: "DPP-WEB-MISSING"));
+
+        act.Should().Throw<DeploymentProofPackagePromotionException>()
+            .WithMessage("*Component proof source was not found*");
     }
 
     [Fact]
@@ -479,6 +612,28 @@ public sealed class DeploymentProofPackagePromotionServiceTests
     }
 
     [Fact]
+    public void Promote_ServerNodeComponentProof_WritesIndependentPublicPackageAndCatalogEntry()
+    {
+        using var workspace = TempPromotionWorkspace.Create();
+
+        var result = new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            workspace.Paths,
+            DeploymentProofPackagePromotionService.ModeComponentProof,
+            componentId: "hush-server-node",
+            deploymentProofId: "DPP-SERVER-20260519-001"));
+
+        result.PackageId.Should().Be("DPP-SERVER-20260519-001");
+        var outputRoot = Path.Combine(workspace.Paths.PublicOutputRoot, "packages", "hush-server-node", "DPP-SERVER-20260519-001");
+        File.Exists(Path.Combine(outputRoot, "deployment-proof-package.json")).Should().BeTrue();
+        File.Exists(Path.Combine(outputRoot, "deployment-proof-manifest.json")).Should().BeTrue();
+        File.Exists(Path.Combine(outputRoot, "public-safe-deployment-summary.md")).Should().BeTrue();
+        File.Exists(Path.Combine(outputRoot, "deployment-proof-package.zip")).Should().BeTrue();
+        var catalog = File.ReadAllText(workspace.Paths.CatalogPath);
+        catalog.Should().Contain("DPP-SERVER-20260519-001");
+        catalog.Should().Contain("hush-server-node");
+    }
+
+    [Fact]
     public void Promote_BindingLedger_WritesElectionBindingPackage()
     {
         using var workspace = TempPromotionWorkspace.Create();
@@ -493,6 +648,12 @@ public sealed class DeploymentProofPackagePromotionServiceTests
         File.Exists(Path.Combine(outputRoot, "per-election-deployment-binding-ledger.json")).Should().BeTrue();
         File.Exists(Path.Combine(outputRoot, "per-election-deployment-binding-ledger-manifest.json")).Should().BeTrue();
         File.Exists(Path.Combine(outputRoot, "public-safe-binding-summary.md")).Should().BeTrue();
+        var proofSet = File.ReadAllText(Path.Combine(outputRoot, "deployment-proof-set.json"));
+        var ledger = File.ReadAllText(Path.Combine(outputRoot, "per-election-deployment-binding-ledger.json"));
+        proofSet.Should().Contain("DPP-WEB-20260519-001");
+        proofSet.Should().Contain("DPP-SERVER-20260519-001");
+        ledger.Should().Contain("DPP-WEB-20260519-001");
+        ledger.Should().Contain("DPP-SERVER-20260519-001");
     }
 
     [Fact]
@@ -506,12 +667,42 @@ public sealed class DeploymentProofPackagePromotionServiceTests
 
         result.PackageId.Should().Be("DPC-REHEARSAL-20260519-001");
         var publicRoot = Path.Combine(workspace.Paths.PublicOutputRoot, "ceremonies", "DPC-REHEARSAL-20260519-001");
+        File.Exists(Path.Combine(publicRoot, "deployment-ceremony.json")).Should().BeTrue();
+        File.Exists(Path.Combine(publicRoot, "public-safe-binding-summary.md")).Should().BeTrue();
         File.ReadAllText(Path.Combine(publicRoot, "readiness-fragment.json")).Should().Contain("\"acceptedScore\": 8");
         File.ReadAllText(Path.Combine(publicRoot, "downstream-handoff.json")).Should().Contain("\"consumerFeature\": \"FEAT-133\"");
         File.Exists(Path.Combine(publicRoot, "deployment-ceremony-manifest.json")).Should().BeTrue();
+        File.Exists(Path.Combine(publicRoot, "deployment-ceremony.zip")).Should().BeTrue();
+        File.ReadAllText(workspace.Paths.CatalogPath).Should().Contain("DPC-REHEARSAL-20260519-001");
         var restrictedRoot = Path.Combine(workspace.Paths.RestrictedOutputRoot, "DPC-REHEARSAL-20260519-001");
         File.Exists(Path.Combine(restrictedRoot, "restricted-ceremony-evidence-index.md")).Should().BeTrue();
         File.Exists(Path.Combine(restrictedRoot, "restricted-deployment-evidence-index.md")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Promote_RehearsalCeremony_ProducesSyntheticNonConfidentialPackage()
+    {
+        using var workspace = TempPromotionWorkspace.Create();
+
+        var result = new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            workspace.Paths,
+            DeploymentProofPackagePromotionService.ModeRehearsalCeremony));
+
+        result.WrittenFiles.Should().Contain(path => path.EndsWith("readiness-fragment.json", StringComparison.Ordinal));
+        result.WrittenFiles.Should().Contain(path => path.EndsWith("restricted-ceremony-evidence-index.md", StringComparison.Ordinal));
+        result.WrittenFiles.Should().Contain(path => path.EndsWith("restricted-deployment-evidence-index.md", StringComparison.Ordinal));
+        var publicTextFiles = result.WrittenFiles
+            .Where(path => path.StartsWith(workspace.Paths.PublicOutputRoot, StringComparison.OrdinalIgnoreCase))
+            .Where(path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".md", StringComparison.OrdinalIgnoreCase));
+        foreach (var publicTextFile in publicTextFiles)
+        {
+            var content = File.ReadAllText(publicTextFile);
+            DeploymentProofPackagePublicRedactionScanner.ScanPublicMarkdown(Path.GetFileName(publicTextFile), content)
+                .Should().BeEmpty(publicTextFile);
+            content.Contains("customer roster", StringComparison.OrdinalIgnoreCase).Should().BeFalse(publicTextFile);
+            content.Contains("legally binding ballot", StringComparison.OrdinalIgnoreCase).Should().BeFalse(publicTextFile);
+            content.Contains("sensitive personal data", StringComparison.OrdinalIgnoreCase).Should().BeFalse(publicTextFile);
+        }
     }
 
     [Fact]
@@ -533,6 +724,7 @@ public sealed class DeploymentProofPackagePromotionServiceTests
 
         secondResult.ManifestHash.Should().Be(firstResult.ManifestHash);
         secondResult.ArchiveHash.Should().Be(firstResult.ArchiveHash);
+        File.ReadAllText(second.Paths.CatalogPath).Should().Be(File.ReadAllText(first.Paths.CatalogPath));
     }
 
     [Fact]
@@ -679,12 +871,21 @@ public sealed class DeploymentProofPackagePromotionServiceTests
 
         public DeploymentProofPackagePromotionPaths Paths { get; }
 
-        public static TempPromotionWorkspace Create()
+        public static TempPromotionWorkspace Create(bool mutableSource = false)
         {
             var basePaths = CreatePaths();
             var root = Path.Combine(basePaths.WorkspaceRoot, ".tmp-feat132-tests", Guid.NewGuid().ToString("N"));
+            var sourceRoot = mutableSource
+                ? Path.Combine(root, "source")
+                : basePaths.SourceRoot;
+            if (mutableSource)
+            {
+                CopyDirectory(basePaths.SourceRoot, sourceRoot);
+            }
+
             var paths = basePaths with
             {
+                SourceRoot = sourceRoot,
                 PublicOutputRoot = Path.Combine(root, "public"),
                 RestrictedOutputRoot = Path.Combine(root, "restricted"),
             };
@@ -697,6 +898,18 @@ public sealed class DeploymentProofPackagePromotionServiceTests
             if (Directory.Exists(Root))
             {
                 Directory.Delete(Root, recursive: true);
+            }
+        }
+
+        private static void CopyDirectory(string sourceDirectory, string destinationDirectory)
+        {
+            Directory.CreateDirectory(destinationDirectory);
+            foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+            {
+                var relativePath = Path.GetRelativePath(sourceDirectory, file);
+                var destinationPath = Path.Combine(destinationDirectory, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+                File.Copy(file, destinationPath, overwrite: true);
             }
         }
     }
