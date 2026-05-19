@@ -1,0 +1,29 @@
+{
+  "manifestId": "DPM-DPP-WEB-20260519-001",
+  "packageKind": "component_proof",
+  "packageId": "DPP-WEB-20260519-001",
+  "generatedAt": "2026-05-19T10:20:00Z",
+  "canonicalizationVersion": "1.0",
+  "files": [
+    {
+      "relativePath": "deployment-proof-package.json",
+      "sha256Hash": "7878787878787878787878787878787878787878787878787878787878787878",
+      "sizeBytes": 1024
+    }
+  ],
+  "hashes": {
+    "packageHash": "9090909090909090909090909090909090909090909090909090909090909090"
+  },
+  "archive": {
+    "relativePath": "HushVoting-Deployment-Proof-DPP-WEB-20260519-001.zip",
+    "sha256Hash": "abababababababababababababababababababababababababababababababab"
+  },
+  "sourceRefs": ["DPP-WEB-20260519-001"],
+  "validationResults": {
+    "status": "passed"
+  },
+  "redactionScanResults": {
+    "status": "passed",
+    "forbiddenFindings": []
+  }
+}

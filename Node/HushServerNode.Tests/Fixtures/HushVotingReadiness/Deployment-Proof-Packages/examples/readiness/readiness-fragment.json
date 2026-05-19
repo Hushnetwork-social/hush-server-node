@@ -1,0 +1,40 @@
+{
+  "fragmentId": "RDY-FRAG-AT-RDY-005-FEAT-132-001",
+  "sourceGap": "Trusted deployment ceremony",
+  "acceptanceGate": "AT-RDY-005",
+  "featureSlice": "FEAT-132",
+  "evidenceRefs": [
+    "DPP-WEB-20260519-001",
+    "DPP-SERVER-20260519-001",
+    "DPS-REHEARSAL-20260519-001",
+    "DPBL-REHEARSAL-20260519-001"
+  ],
+  "dimensionScoreChange": {
+    "dimensionId": "RDY-DIM-006",
+    "previousScore": 4,
+    "acceptedScore": 8,
+    "generatedDiff": "RDY-DIM-006 4 -> 8"
+  },
+  "blockerChanges": [
+    {
+      "blockerId": "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-002",
+      "previousStatus": "red",
+      "acceptedStatus": "green",
+      "reason": "Synthetic accepted deployment proof fixture covers AT-RDY-005."
+    }
+  ],
+  "claimEffect": "Eligible to support internal non-binding rehearsal and controlled pilot preparation when other EPIC-015 blocker gates are accepted.",
+  "residualRisk": "Limited operating history and deployment variance remain after v1 evidence.",
+  "signoff": {
+    "engineering": {
+      "role": "engineering",
+      "signerId": "aboimpinto-hushvoting-owner",
+      "samePersonTwoHat": true
+    },
+    "operationsProduct": {
+      "role": "operations_product",
+      "signerId": "aboimpinto-hushvoting-owner",
+      "samePersonTwoHat": true
+    }
+  }
+}

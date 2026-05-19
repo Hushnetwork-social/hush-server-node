@@ -1,0 +1,18 @@
+{
+  "classificationId": "DIC-WEB-20260519-001",
+  "generatedAt": "2026-05-19T10:05:00Z",
+  "inputRef": {
+    "classificationInputId": "DICI-WEB-20260519-001",
+    "sha256Hash": "5656565656565656565656565656565656565656565656565656565656565656"
+  },
+  "outputClass": "website_only_no_protocol_change",
+  "matchedRules": ["website-only-no-protocol-change"],
+  "evidenceRefs": ["DPP-WEB-20260519-001"],
+  "reason": "Synthetic fixture changed only web presentation artifact while voting-critical refs stayed unchanged.",
+  "requiresManualOwnerReview": false,
+  "blocksAcceptedEvidence": false,
+  "accountabilityMarker": {
+    "ownerId": "aboimpinto-hushvoting-owner",
+    "basis": "Informal v1 classification accountability marker."
+  }
+}

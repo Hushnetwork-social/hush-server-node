@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/incident-source.schema.json",
+  "title": "HushVoting Operational Incident Source",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "incidentPolicyId",
+    "incidentRegisterVersion",
+    "incidentRegisterHash",
+    "monitoringWindow",
+    "declarationActorHash",
+    "declarationAt",
+    "incidentCount",
+    "publicSafeStatement",
+    "restrictedIncidentRefs",
+    "evidenceStatus",
+    "exceptionRefs"
+  ]
+}

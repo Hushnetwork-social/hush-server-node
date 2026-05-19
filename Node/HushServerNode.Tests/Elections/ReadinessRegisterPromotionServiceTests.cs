@@ -208,27 +208,12 @@ public sealed class ReadinessRegisterPromotionServiceTests
 
     private static string CreateWorkspace()
     {
-        var tempRoot = Path.Combine(Path.GetTempPath(), $"hush-feat-130-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(Path.Combine(tempRoot, "hush-memory-bank"));
-        Directory.CreateDirectory(Path.Combine(tempRoot, "hush-documents"));
-        Directory.CreateDirectory(Path.Combine(tempRoot, "hush-server-node"));
-        return tempRoot;
+        return HushVotingReadinessTestArtifacts.CreateEmptyWorkspace("hush-feat-130-");
     }
 
     private static void CopyBaselineSources(ReadinessRegisterPromotionPaths paths)
     {
-        var workspaceRoot = WorkspaceRootFinder.Find(AppContext.BaseDirectory);
-        var sourceRoot = Path.Combine(workspaceRoot, "hush-memory-bank", "Overview", "HushVotingReadiness", "Readiness-Register");
-        Directory.CreateDirectory(paths.SourceRoot);
-        foreach (var fileName in new[]
-                 {
-                     ReadinessRegisterPromotionService.SchemaFileName,
-                     ReadinessRegisterPromotionService.RegisterFileName,
-                     ReadinessRegisterPromotionService.ExampleFileName,
-                 })
-        {
-            File.Copy(Path.Combine(sourceRoot, fileName), Path.Combine(paths.SourceRoot, fileName), overwrite: true);
-        }
+        HushVotingReadinessTestArtifacts.CopyReadinessRegisterSources(paths);
     }
 
     private static ReadinessRegisterPromotionOptions CreateOptions(

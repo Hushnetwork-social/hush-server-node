@@ -1,0 +1,152 @@
+{
+  "handoffId": "OPS-HANDOFF-FEAT-133-OPS-RUN-REHEARSAL-20260519-001",
+  "producerFeature": "FEAT-133",
+  "generatedAt": "2026-05-19T12:35:00Z",
+  "runId": "OPS-RUN-REHEARSAL-20260519-001",
+  "status": "accepted_with_warnings",
+  "claimLevel": "internal_non_binding_rehearsal",
+  "publicPackageRefs": [
+    {
+      "path": "artifacts/election-record/operational-security-summary.json",
+      "sha256Hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "path": "artifacts/election-record/operational-deployment-evidence.json",
+      "sha256Hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "path": "artifacts/election-record/operational-custody-evidence.json",
+      "sha256Hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "path": "artifacts/election-record/operational-verifier-output.json",
+      "sha256Hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    {
+      "path": "public-safe-operational-summary.md",
+      "sha256Hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    }
+  ],
+  "wrapperPackageRefs": [
+    {
+      "path": "operational-run.json",
+      "sha256Hash": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "path": "operational-check-results.json",
+      "sha256Hash": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    {
+      "path": "operational-exceptions.json",
+      "sha256Hash": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "path": "operational-readiness-fragment.json",
+      "sha256Hash": "4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ],
+  "restrictedPackageRefs": [
+    {
+      "refId": "REST-FEAT-133-OPERATIONAL_ACCESS_CONTROL_SNAPSHOT",
+      "pathRef": "artifacts/restricted/operational-access-control-snapshot.json",
+      "sha256Hash": "abababababababababababababababababababababababababababababababab"
+    },
+    {
+      "refId": "REST-FEAT-133-OPERATIONAL_LOGGING_EVIDENCE",
+      "pathRef": "artifacts/restricted/operational-logging-evidence.json",
+      "sha256Hash": "bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc"
+    },
+    {
+      "refId": "REST-FEAT-133-RESTRICTED_OPERATIONAL_EVIDENCE_INDEX",
+      "pathRef": "restricted-operational-evidence-index.md",
+      "sha256Hash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+    }
+  ],
+  "opsSummaryRef": "operational-check-results.json",
+  "exceptionsRef": "operational-exceptions.json",
+  "readinessFragmentRef": "operational-readiness-fragment.json",
+  "feat132Refs": {
+    "webClientProofId": "DPP-WEB-20260519-001",
+    "webClientProofHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "serverNodeProofId": "DPP-SERVER-20260519-001",
+    "serverNodeProofHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "deploymentProofSetId": "DPS-REHEARSAL-20260519-001",
+    "bindingLedgerId": "DPBL-REHEARSAL-20260519-001",
+    "publicCatalogRef": "https://github.com/Hushnetwork-social/Deployment-Proof-Packages/deployment-proof-catalog.json@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "impactClassification": "voting_protocol_no_change",
+    "unknownClassificationState": "none",
+    "feat130RegisterPromotionState": "pending_feat130_promotion"
+  },
+  "feat131Refs": {
+    "custodyEvidenceId": "RDY-EVID-AT-RDY-002-FEAT-131-001",
+    "publicCustodyHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "restrictedCustodyIndexRef": "REST-CUSTODY-HANDOFF-20260519-001"
+  },
+  "exceptions": ["OPS-006", "OPS-008"],
+  "warnings": ["OPS-006", "OPS-008"],
+  "blockers": [],
+  "notApplicable": ["OPS-004"],
+  "placeholderFindings": [],
+  "forbiddenMaterialFindings": [],
+  "claimEffect": "Eligible for FEAT-130 promotion as internal non-binding rehearsal evidence only.",
+  "readinessRegisterHandoff": {
+    "targetFeature": "FEAT-130",
+    "fragmentRef": "operational-readiness-fragment.json",
+    "fragmentId": "RDY-EVID-AT-RDY-006-FEAT-133-001",
+    "acceptanceGate": "AT-RDY-006",
+    "dimensionId": "RDY-DIM-007",
+    "directRegisterMutation": false,
+    "registerPromotionOwner": "FEAT-130",
+    "scoreEffect": {
+      "dimensionId": "RDY-DIM-007",
+      "previousScore": 6,
+      "acceptedScore": 8,
+      "totalPreviousScore": 59,
+      "totalAcceptedScore": 61
+    },
+    "promotionPreconditions": [
+      "status accepted or accepted_with_warnings",
+      "blockers empty",
+      "placeholderFindings empty",
+      "forbiddenMaterialFindings empty"
+    ]
+  },
+  "pilotRehearsalHandoff": {
+    "targetFeature": "FEAT-141",
+    "handoffRef": "downstream-handoff.json",
+    "packageClaimLevel": "internal_non_binding_rehearsal",
+    "status": "accepted_with_warnings",
+    "rawPrivateEvidenceRequired": false,
+    "publicPackageSource": "publicPackageRefs",
+    "restrictedPackageSource": "restrictedPackageRefs by refId/pathRef/sha256Hash only",
+    "wrapperPackageSource": "wrapperPackageRefs",
+    "consumerAction": "Use this handoff to assemble the pilot/rehearsal evidence package without copying raw private evidence."
+  },
+  "feat132RegisterPromotionTraceability": {
+    "sourceFeature": "FEAT-132",
+    "readinessRegisterOwner": "FEAT-130",
+    "registerPromotionState": "pending_feat130_promotion",
+    "pendingFeat130Promotion": true,
+    "acceptedDeploymentEvidencePresent": true,
+    "ops001Status": "passed",
+    "ops001CanPassFromAcceptedRefs": true,
+    "doesNotBlockOps001": true,
+    "claimImpact": "Traceability only; FEAT-133 can use accepted FEAT-132 refs while FEAT-130 promotion remains separate.",
+    "evidenceRefs": [
+      "DPP-WEB-20260519-001",
+      "DPP-SERVER-20260519-001",
+      "DPS-REHEARSAL-20260519-001",
+      "DPBL-REHEARSAL-20260519-001"
+    ]
+  },
+  "residualRisk": [
+    "Latest restore evidence is profile-level rather than rehearsal-specific.",
+    "No auditor-room grant occurred in this internal rehearsal."
+  ],
+  "consumerInstructions": {
+    "FEAT-130": "Promote operational-readiness-fragment.json when evidence state is accepted or accepted_with_warnings for internal rehearsal.",
+    "FEAT-137": "Consume logging policy and restricted log refs without copying raw logs.",
+    "FEAT-141": "Include public package refs, restricted refs by id/hash, warnings, residual risk, and claim wording impact.",
+    "FEAT-142": "Read promoted FEAT-130 register state; do not consume FEAT-133 files directly."
+  }
+}

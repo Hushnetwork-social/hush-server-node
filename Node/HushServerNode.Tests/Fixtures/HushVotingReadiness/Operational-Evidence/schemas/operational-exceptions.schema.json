@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/operational-exceptions.schema.json",
+  "title": "HushVoting Operational Exceptions",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "runId",
+    "generatedAt",
+    "exceptions",
+    "blockingExceptionIds",
+    "warningExceptionIds",
+    "deferredExceptionIds",
+    "placeholderExceptionIds",
+    "claimImpactSummary"
+  ]
+}

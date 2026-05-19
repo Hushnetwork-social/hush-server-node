@@ -1,0 +1,10 @@
+{
+  "runId": "OPS-RUN-REHEARSAL-20260519-001",
+  "generatedAt": "2026-05-19T12:35:00Z",
+  "exceptions": ["OPS-006-WARN-LATEST-RESTORE", "OPS-008-WARN-ZERO-GRANTS"],
+  "blockingExceptionIds": [],
+  "warningExceptionIds": ["OPS-006-WARN-LATEST-RESTORE", "OPS-008-WARN-ZERO-GRANTS"],
+  "deferredExceptionIds": [],
+  "placeholderExceptionIds": [],
+  "claimImpactSummary": "Warnings are allowed for internal non-binding rehearsal only and do not support stronger rollout claims."
+}

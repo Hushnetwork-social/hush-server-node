@@ -1,0 +1,36 @@
+{
+  "catalogVersion": "1.0",
+  "generatedAt": "2026-05-19T10:25:00Z",
+  "publicRepository": "https://github.com/Hushnetwork-social/Deployment-Proof-Packages",
+  "componentProofs": [
+    {
+      "deploymentProofId": "DPP-WEB-20260519-001",
+      "componentId": "hush-web-client",
+      "status": "accepted",
+      "manifestHash": "9090909090909090909090909090909090909090909090909090909090909090"
+    },
+    {
+      "deploymentProofId": "DPP-SERVER-20260519-001",
+      "componentId": "hush-server-node",
+      "status": "accepted",
+      "manifestHash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+    }
+  ],
+  "proofSets": [
+    {
+      "proofSetId": "DPS-REHEARSAL-20260519-001",
+      "status": "accepted"
+    }
+  ],
+  "ceremonies": [
+    {
+      "ceremonyId": "DPC-REHEARSAL-20260519-001",
+      "status": "accepted"
+    }
+  ],
+  "supersededProofs": [],
+  "latestAcceptedByComponentAndTarget": {
+    "hush-web-client:hushvoting-managed-aws-container-public-safe-fixture": "DPP-WEB-20260519-001",
+    "hush-server-node:hushvoting-managed-aws-container-public-safe-fixture": "DPP-SERVER-20260519-001"
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "handoffId": "DPP-HANDOFF-FEAT-132-20260519-001",
+  "generatedAt": "2026-05-19T12:00:00Z",
+  "sourceFeature": "FEAT-132",
+  "sourceGap": "Trusted deployment ceremony",
+  "acceptanceGate": "AT-RDY-005",
+  "readinessRegisterHandoff": {
+    "consumerFeature": "FEAT-130",
+    "readinessFragmentId": "RDY-FRAG-AT-RDY-005-FEAT-132-001",
+    "dimensionScoreChange": {
+      "dimensionId": "RDY-DIM-006",
+      "previousScore": 4,
+      "acceptedScore": 8,
+      "requiresAcceptedEvidence": true
+    },
+    "resolvedBlockers": [
+      "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-002"
+    ],
+    "claimEffect": "Eligible to support internal non-binding rehearsal and controlled pilot preparation when other EPIC-015 blocker gates are accepted.",
+    "residualRisk": "Limited operating history and deployment variance remain after v1 evidence."
+  },
+  "custodyHandoffConsumption": {
+    "consumerSource": "FEAT-131",
+    "custodyMode": "aws_kms_per_election_envelope_v1",
+    "acceptedBindingRequirement": "accepted_rehearsal_or_election_binding_requires_live_aws_kms_custody_evidence_when_the_profile_requires_it",
+    "fakeDevCustodyPolicy": "tests_and_dry_runs_only",
+    "publicSafeCustodyRefs": [
+      {
+        "evidenceId": "RDY-EVID-AT-RDY-002-FEAT-131-001",
+        "publicHashRef": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "restrictedIndexRef": "REST-CUSTODY-HANDOFF-20260519-001"
+      }
+    ],
+    "publicComponentProofCustodyScope": "custody_profile_status_only",
+    "restrictedOnlyEvidence": [
+      "provider_environment_refs",
+      "restricted_custody_row_refs",
+      "disposable_kms_cleanup_safety_refs",
+      "operator_reviewer_role_refs"
+    ]
+  },
+  "operationalEvidenceHandoff": {
+    "consumerFeature": "FEAT-133",
+    "webClientProof": {
+      "deploymentProofId": "DPP-WEB-20260519-001",
+      "packageHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "hushServerNodeProof": {
+      "deploymentProofId": "DPP-SERVER-20260519-001",
+      "packageHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "proofSetId": "DPS-REHEARSAL-20260519-001",
+    "bindingLedgerId": "DPBL-REHEARSAL-20260519-001",
+    "catalogRef": {
+      "repository": "https://github.com/Hushnetwork-social/Deployment-Proof-Packages",
+      "path": "deployment-proof-catalog.json",
+      "commit": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "restrictedEvidenceRefs": [
+      {
+        "refId": "REST-DEPLOY-WEB-20260519-001",
+        "sha256Hash": "4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      {
+        "refId": "REST-DEPLOY-SERVER-20260519-001",
+        "sha256Hash": "9999999999999999999999999999999999999999999999999999999999999999"
+      }
+    ],
+    "opsChecksCanConsumeWithoutRawProviderData": true
+  },
+  "pilotRehearsalHandoff": {
+    "consumerFeature": "FEAT-141",
+    "publicRefs": [
+      "packages/hush-web-client/DPP-WEB-20260519-001/",
+      "packages/hush-server-node/DPP-SERVER-20260519-001/",
+      "election-bindings/HV-REHEARSAL-PUBLIC-20260519-001/DPBL-REHEARSAL-20260519-001/"
+    ],
+    "restrictedRefs": [
+      "Deployment-Ceremonies/DPC-REHEARSAL-20260519-001/restricted-ceremony-evidence-index.md",
+      "Deployment-Ceremonies/DPC-REHEARSAL-20260519-001/restricted-deployment-evidence-index.md"
+    ],
+    "exceptionStatus": "none_open",
+    "claimWordingImpact": "internal_non_binding_rehearsal_and_controlled_pilot_preparation_only",
+    "residualRisk": "Limited operating history and deployment variance remain after v1 evidence.",
+    "publicPackageDoesNotRequireRawCustodyOrProviderData": true
+  },
+  "runtimeVisibilityContract": {
+    "implementedInFeat132": false,
+    "downstreamFeatureNeeded": true,
+    "eventModelFields": [
+      "eventId",
+      "timestamp",
+      "lifecycleCheckpoint",
+      "classification",
+      "reason",
+      "beforeRefs",
+      "afterRefs",
+      "checksRerun",
+      "accountabilityMarker"
+    ],
+    "reconciliationCheckpoints": [
+      "Draft -> Open",
+      "Open -> Close",
+      "Close -> Finalize",
+      "Open -> Void",
+      "Close -> Void",
+      "final_package_export"
+    ],
+    "productionRuntimeUiScope": "not_implemented_by_FEAT-132"
+  }
+}

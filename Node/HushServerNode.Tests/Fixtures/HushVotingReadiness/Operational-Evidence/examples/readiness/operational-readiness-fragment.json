@@ -1,0 +1,60 @@
+{
+  "fragmentId": "RDY-EVID-AT-RDY-006-FEAT-133-001",
+  "featureSlice": "FEAT-133",
+  "runId": "OPS-RUN-REHEARSAL-20260519-001",
+  "status": "accepted_with_warnings",
+  "claimLevel": "internal_non_binding_rehearsal",
+  "sourceGap": "Operational readiness package",
+  "acceptanceGate": "AT-RDY-006",
+  "dimensionId": "RDY-DIM-007",
+  "doesNotMutateRegister": true,
+  "registerPromotionOwner": "FEAT-130",
+  "evidenceRefs": [
+    "artifacts/election-record/operational-security-summary.json",
+    "artifacts/election-record/operational-deployment-evidence.json",
+    "artifacts/election-record/operational-custody-evidence.json",
+    "artifacts/election-record/operational-verifier-output.json",
+    "operational-check-results.json"
+  ],
+  "dimensionScoreChange": {
+    "previousScore": 6,
+    "acceptedScore": 8,
+    "requiresAcceptedEvidence": true
+  },
+  "totalScoreChange": {
+    "previousScore": 59,
+    "acceptedScore": 61
+  },
+  "blockerChanges": [],
+  "warnings": ["OPS-006", "OPS-008"],
+  "notApplicable": ["OPS-004"],
+  "placeholderFindings": [],
+  "forbiddenMaterialFindings": [],
+  "feat132RegisterPromotionTraceability": {
+    "sourceFeature": "FEAT-132",
+    "readinessRegisterOwner": "FEAT-130",
+    "registerPromotionState": "pending_feat130_promotion",
+    "pendingFeat130Promotion": true,
+    "acceptedDeploymentEvidencePresent": true,
+    "ops001Status": "passed",
+    "ops001CanPassFromAcceptedRefs": true,
+    "doesNotBlockOps001": true,
+    "claimImpact": "Traceability only; FEAT-133 can use accepted FEAT-132 refs while FEAT-130 promotion remains separate.",
+    "evidenceRefs": [
+      "DPP-WEB-20260519-001",
+      "DPP-SERVER-20260519-001",
+      "DPS-REHEARSAL-20260519-001",
+      "DPBL-REHEARSAL-20260519-001"
+    ]
+  },
+  "claimEffect": "Eligible to support internal non-binding rehearsal readiness after FEAT-130 promotion.",
+  "residualRisk": [
+    "Limited operating history remains after one internal rehearsal.",
+    "Site-specific monitoring and backup evidence can vary by deployment."
+  ],
+  "signoff": {
+    "engineeringOwner": "hushvoting-engineering-owner",
+    "productOwner": "hushvoting-product-owner"
+  },
+  "promotionInstructions": "FEAT-130 must promote this fragment; FEAT-133 must not update the readiness register directly."
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/access-control-source.schema.json",
+  "title": "HushVoting Operational Access Control Source",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "accessPolicyId",
+    "accessPolicyVersion",
+    "snapshotGeneratedAt",
+    "roleCounts",
+    "snapshotHash",
+    "restrictedActorHashesRef",
+    "grantRevocationRefs",
+    "supportAuditorReasonCodes",
+    "evidenceStatus",
+    "exceptionRefs"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "custodyEvidenceId": "RDY-EVID-AT-RDY-002-FEAT-131-001",
+  "acceptedGateIds": ["AT-RDY-002", "AT-RDY-003", "AT-RDY-004"],
+  "custodyMode": "aws_kms_per_election_envelope_v1",
+  "custodyStatus": "accepted",
+  "publicCustodyHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "restrictedCustodyIndexRef": "REST-CUSTODY-HANDOFF-20260519-001",
+  "requiredForProfile": true,
+  "unresolvedBlockers": [],
+  "residualRiskIds": ["CUSTODY-RISK-OPERATING-HISTORY"]
+}

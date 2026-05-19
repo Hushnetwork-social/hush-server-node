@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/auditor-room-source.schema.json",
+  "title": "HushVoting Auditor Room Source",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "auditorRoomModelVersion",
+    "accessLogRef",
+    "grantCount",
+    "noAccessDeclaration",
+    "restrictedGrantRefs",
+    "evidenceStatus",
+    "exceptionRefs"
+  ]
+}

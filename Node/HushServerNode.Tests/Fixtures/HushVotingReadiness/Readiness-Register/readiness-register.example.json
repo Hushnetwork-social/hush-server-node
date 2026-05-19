@@ -1,0 +1,658 @@
+{
+  "schemaVersion": "1.0",
+  "registerId": "hushvoting-readiness-register",
+  "registerVersion": "v0.1.0",
+  "registerVersionId": "RDY-REG-v0.1.0",
+  "status": "DraftInternal",
+  "parentEpic": "EPIC-015",
+  "sourceGapRegister": "example",
+  "createdAt": "2026-05-18T22:00:00Z",
+  "promotedAt": "2026-05-19T00:00:00Z",
+  "sourceCommit": "example",
+  "claimPolicy": {
+    "minimumConfidenceScore": 70,
+    "strongerTargetScore": 80,
+    "strongestAllowedV1Claim": "friendly_organization_pilot",
+    "alwaysBlockedV1Claims": [
+      "production_organizational_rollout",
+      "public_or_state_election"
+    ],
+    "publicScoreAllowed": false,
+    "numericScoreVisibility": [
+      "internal",
+      "restricted_reviewer"
+    ]
+  },
+  "score": {
+    "total": 0,
+    "baselineTotal": 51,
+    "dimensionCount": 10,
+    "dimensionIds": [
+      "RDY-DIM-001",
+      "RDY-DIM-002",
+      "RDY-DIM-003",
+      "RDY-DIM-004",
+      "RDY-DIM-005",
+      "RDY-DIM-006",
+      "RDY-DIM-007",
+      "RDY-DIM-008",
+      "RDY-DIM-009",
+      "RDY-DIM-010"
+    ],
+    "minimumConfidenceScore": 70,
+    "strongerTargetScore": 80
+  },
+  "dimensions": [
+    {
+      "dimensionId": "RDY-DIM-001",
+      "name": "Protocol/spec/proof package",
+      "weight": 10,
+      "currentScore": 0,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Example protocol gap"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "evidenceIds": [],
+      "blockerIds": [],
+      "residualRisk": "Example residual risk.",
+      "scoreRationale": "Example dimension row."
+    },
+    {
+      "dimensionId": "RDY-DIM-002",
+      "name": "Verifier/sample/tamper corpus",
+      "weight": 10,
+      "currentScore": 0,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Example verifier gap"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-007"
+      ],
+      "evidenceIds": [],
+      "blockerIds": [],
+      "residualRisk": "Example residual risk.",
+      "scoreRationale": "Example dimension row."
+    },
+    {
+      "dimensionId": "RDY-DIM-003",
+      "name": "Cross-device receipt/inclusion verification",
+      "weight": 10,
+      "currentScore": 0,
+      "targetScoreBeforeReviewPilot": 7,
+      "sourceGapRows": [
+        "Example receipt gap"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-008"
+      ],
+      "evidenceIds": [],
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001"
+      ],
+      "residualRisk": "Example residual risk.",
+      "scoreRationale": "Example dimension row."
+    },
+    {
+      "dimensionId": "RDY-DIM-004",
+      "name": "Publication/counting evidence",
+      "weight": 10,
+      "currentScore": 0,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Example publication gap"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "evidenceIds": [],
+      "blockerIds": [],
+      "residualRisk": "Example residual risk.",
+      "scoreRationale": "Example dimension row."
+    },
+    {
+      "dimensionId": "RDY-DIM-005",
+      "name": "Per-election KMS custody lifecycle",
+      "weight": 10,
+      "currentScore": 0,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Example custody gap"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-002"
+      ],
+      "evidenceIds": [],
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001"
+      ],
+      "residualRisk": "Example residual risk.",
+      "scoreRationale": "Example dimension row."
+    },
+    {
+      "dimensionId": "RDY-DIM-006",
+      "name": "Trusted deployment ceremony",
+      "weight": 10,
+      "currentScore": 0,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Example deployment gap"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-005"
+      ],
+      "evidenceIds": [],
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001"
+      ],
+      "residualRisk": "Example residual risk.",
+      "scoreRationale": "Example dimension row."
+    },
+    {
+      "dimensionId": "RDY-DIM-007",
+      "name": "Operational evidence package",
+      "weight": 10,
+      "currentScore": 0,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Example operations gap"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-006"
+      ],
+      "evidenceIds": [],
+      "blockerIds": [],
+      "residualRisk": "Example residual risk.",
+      "scoreRationale": "Example dimension row."
+    },
+    {
+      "dimensionId": "RDY-DIM-008",
+      "name": "Retention/log privacy proof",
+      "weight": 10,
+      "currentScore": 0,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Example retention gap"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-009"
+      ],
+      "evidenceIds": [],
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001"
+      ],
+      "residualRisk": "Example residual risk.",
+      "scoreRationale": "Example dimension row."
+    },
+    {
+      "dimensionId": "RDY-DIM-009",
+      "name": "Dispute/continuity readiness dependency",
+      "weight": 10,
+      "currentScore": 0,
+      "targetScoreBeforeReviewPilot": 7,
+      "sourceGapRows": [
+        "Example dispute gap"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-011"
+      ],
+      "evidenceIds": [],
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001"
+      ],
+      "residualRisk": "Example residual risk.",
+      "scoreRationale": "Example dimension row."
+    },
+    {
+      "dimensionId": "RDY-DIM-010",
+      "name": "Pilot/legal/governance delivery wrapper",
+      "weight": 10,
+      "currentScore": 0,
+      "targetScoreBeforeReviewPilot": 7,
+      "sourceGapRows": [
+        "Example pilot gap"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-013"
+      ],
+      "evidenceIds": [],
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001"
+      ],
+      "residualRisk": "Example residual risk.",
+      "scoreRationale": "Example dimension row."
+    }
+  ],
+  "claimLevels": [
+    {
+      "claimLevel": "internal_development",
+      "blockerSeverity": "green",
+      "status": "allowed",
+      "allowedWording": "Example internal development tracking is allowed.",
+      "limitationWording": "",
+      "blockedWording": "",
+      "blockerIds": [],
+      "publicSafeStatus": "not_for_publication"
+    },
+    {
+      "claimLevel": "internal_non_binding_rehearsal",
+      "blockerSeverity": "amber",
+      "status": "allowed_with_limitations",
+      "allowedWording": "Example internal non-binding rehearsal is allowed with limitations.",
+      "limitationWording": "Example rehearsal must remain non-binding.",
+      "blockedWording": "",
+      "blockerIds": [
+        "RDY-BLOCK-INTERNAL_NON_BINDING_REHEARSAL-001"
+      ],
+      "publicSafeStatus": "not_for_publication"
+    },
+    {
+      "claimLevel": "friendly_organization_pilot",
+      "blockerSeverity": "red",
+      "status": "blocked",
+      "allowedWording": "",
+      "limitationWording": "",
+      "blockedWording": "Example pilot claim is blocked.",
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001"
+      ],
+      "publicSafeStatus": "not_ready_for_public_claim"
+    },
+    {
+      "claimLevel": "production_organizational_rollout",
+      "blockerSeverity": "red",
+      "status": "blocked",
+      "allowedWording": "",
+      "limitationWording": "",
+      "blockedWording": "Example production claim is blocked.",
+      "blockerIds": [
+        "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001"
+      ],
+      "publicSafeStatus": "public_claim_blocked"
+    },
+    {
+      "claimLevel": "public_or_state_election",
+      "blockerSeverity": "red",
+      "status": "blocked",
+      "allowedWording": "",
+      "limitationWording": "",
+      "blockedWording": "Example public or state election claim is blocked.",
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001"
+      ],
+      "publicSafeStatus": "public_claim_blocked"
+    }
+  ],
+  "blockers": [
+    {
+      "blockerId": "RDY-BLOCK-INTERNAL_NON_BINDING_REHEARSAL-001",
+      "claimLevel": "internal_non_binding_rehearsal",
+      "severity": "amber",
+      "status": "open",
+      "description": "Example rehearsal limitation.",
+      "featureId": "FEAT-130",
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-001"
+      ],
+      "limitationWording": "Example rehearsal must remain non-binding.",
+      "resolutionCriteria": "Example resolution criteria."
+    },
+    {
+      "blockerId": "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001",
+      "claimLevel": "friendly_organization_pilot",
+      "severity": "red",
+      "status": "open",
+      "description": "Example pilot blocker.",
+      "featureId": "FEAT-130",
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-003"
+      ],
+      "limitationWording": "",
+      "resolutionCriteria": "Example pilot blocker resolution criteria."
+    },
+    {
+      "blockerId": "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+      "claimLevel": "production_organizational_rollout",
+      "severity": "red",
+      "status": "open",
+      "description": "Example production blocker.",
+      "featureId": "FEAT-130",
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-010"
+      ],
+      "limitationWording": "",
+      "resolutionCriteria": "Example production blocker resolution criteria."
+    },
+    {
+      "blockerId": "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+      "claimLevel": "public_or_state_election",
+      "severity": "red",
+      "status": "open",
+      "description": "Example public election blocker.",
+      "featureId": "FEAT-130",
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-010"
+      ],
+      "limitationWording": "",
+      "resolutionCriteria": "Example public election blocker resolution criteria."
+    }
+  ],
+  "evidenceItems": [
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-001-FEAT-130-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-130",
+      "sourceGapRow": "Example accepted evidence",
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-001"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "example",
+      "visibility": "restricted_reviewer",
+      "status": "accepted",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-EXAMPLE-ACCEPTED",
+          "status": "pass",
+          "summary": "Example accepted evidence.",
+          "detailsRef": "example"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Example event-based invalidation rule.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "Example accepted residual risk.",
+      "claimEffect": "none",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Example engineering signoff.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Example operations/product signoff.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": []
+    },
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-002-FEAT-131-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-131",
+      "sourceGapRow": "Example blocked evidence",
+      "acceptanceGateIds": [
+        "AT-RDY-002"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-005"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "example",
+      "visibility": "restricted_reviewer",
+      "status": "blocked",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-EXAMPLE-BLOCKED",
+          "status": "warn",
+          "summary": "Example blocked evidence.",
+          "detailsRef": "example"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Example blocked evidence can become usable after prerequisites are met.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "Example blocked residual risk.",
+      "claimEffect": "block",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Example blocked evidence review.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Example blocked claim review.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001"
+      ]
+    },
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-014-FEAT-134-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-134",
+      "sourceGapRow": "Example stale evidence",
+      "acceptanceGateIds": [
+        "AT-RDY-014"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-007"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "example",
+      "visibility": "restricted_reviewer",
+      "status": "accepted",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-EXAMPLE-STALE",
+          "status": "warn",
+          "summary": "Example stale time-sensitive evidence.",
+          "detailsRef": "example"
+        }
+      ],
+      "freshness": {
+        "state": "stale_time_sensitive",
+        "invalidationRule": "Time-sensitive dependency and vulnerability evidence requires periodic refresh.",
+        "staleReason": "Example dependency scan is older than the accepted support-readiness window.",
+        "timeSensitive": true
+      },
+      "residualRisk": "Example stale residual risk.",
+      "claimEffect": "downgrade",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Example stale evidence signoff.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Example stale claim signoff.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [
+        "RDY-EXC-20260518-001"
+      ],
+      "relatedBlockerIds": []
+    },
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-008-FEAT-136-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-136",
+      "sourceGapRow": "Example rejected evidence",
+      "acceptanceGateIds": [
+        "AT-RDY-008"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-003"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "example",
+      "visibility": "restricted_reviewer",
+      "status": "rejected",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-EXAMPLE-REJECTED",
+          "status": "fail",
+          "summary": "Example rejected evidence.",
+          "detailsRef": "example"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Rejected evidence must be replaced by new evidence.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "Example rejected residual risk.",
+      "claimEffect": "none",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Example rejection review.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Example rejected claim review.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": []
+    }
+  ],
+  "scoreChanges": [
+    {
+      "scoreChangeId": "RDY-SCORE-20260518-001",
+      "dimensionId": "RDY-DIM-007",
+      "direction": "decrease",
+      "previousScore": 1,
+      "proposedScore": 0,
+      "acceptedScore": 0,
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-014-FEAT-134-001"
+      ],
+      "sourceGapRow": "Example stale evidence",
+      "acceptanceGateIds": [
+        "AT-RDY-014"
+      ],
+      "blockerImpactBefore": [],
+      "blockerImpactAfter": [],
+      "claimImpact": "Example downgrade caused by stale time-sensitive evidence.",
+      "reason": "Example stale evidence no longer supports the current claim.",
+      "generatedDiff": "RDY-DIM-007 1 -> 0",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Example protective score decrease.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Example protective claim downgrade.",
+          "samePersonTwoHat": true
+        }
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "exceptionId": "RDY-EXC-20260518-001",
+      "type": "client_declined",
+      "status": "open",
+      "sourceGapRow": "Controlled pilot evidence",
+      "acceptanceGateIds": [
+        "AT-RDY-013"
+      ],
+      "claimLevels": [
+        "friendly_organization_pilot"
+      ],
+      "reason": "Client may decline optional internal rehearsal; pilot claim remains blocked until replacement evidence is accepted.",
+      "owner": "HushVoting readiness owner",
+      "reviewDate": "2026-06-18",
+      "compensatingEvidenceIds": [],
+      "scoreImpact": "No score increase.",
+      "claimWordingImpact": "Pilot claim remains blocked.",
+      "severity": "block"
+    }
+  ],
+  "generatedViews": {
+    "scorecardPath": "readiness-scorecard.md",
+    "restrictedReviewerExtractPath": "restricted-reviewer-extract.md",
+    "publicSafeSummaryPath": "public-safe-summary.md",
+    "publicSafePublicationStatus": "not_for_publication"
+  },
+  "signoffPolicy": {
+    "requiredRoles": [
+      "engineering",
+      "operations_product"
+    ],
+    "allowSamePersonTwoHat": true,
+    "requiresTwoHatMarkerWhenSameSigner": true,
+    "independentDualControlClaimAllowed": false,
+    "samePersonWording": "The same accountable owner currently signs both engineering and operations/product roles; this is a two-hat internal baseline and not an independent dual-control approval."
+  }
+}

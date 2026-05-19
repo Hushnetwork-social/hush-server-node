@@ -1,0 +1,32 @@
+{
+  "exceptions": [
+    {
+      "exceptionId": "OPS-006-WARN-LATEST-RESTORE",
+      "relatedOpsCheck": "OPS-006",
+      "severity": "warning",
+      "state": "accepted_with_warnings",
+      "reason": "Latest valid restore test covers the same deployment profile but was not rehearsal-specific.",
+      "claimImpact": "Allowed for internal non-binding rehearsal only.",
+      "allowedForClaimLevel": "internal_non_binding_rehearsal",
+      "evidenceRefs": ["RESTORE-TEST-MANAGED-SAAS-20260518-001"],
+      "ownerRole": "engineeringOwner",
+      "createdAt": "2026-05-19T12:30:00Z",
+      "expiresAt": null,
+      "residualRisk": "Repeat with rehearsal-specific restore proof before stronger rollout claims."
+    },
+    {
+      "exceptionId": "OPS-008-WARN-ZERO-GRANTS",
+      "relatedOpsCheck": "OPS-008",
+      "severity": "warning",
+      "state": "accepted_with_warnings",
+      "reason": "Auditor-room access log exists with zero grants and a no-access declaration.",
+      "claimImpact": "Allowed for internal non-binding rehearsal only.",
+      "allowedForClaimLevel": "internal_non_binding_rehearsal",
+      "evidenceRefs": ["REST-AUDITOR-ROOM-ACCESS-LOG-20260519-001"],
+      "ownerRole": "productOwner",
+      "createdAt": "2026-05-19T12:30:00Z",
+      "expiresAt": null,
+      "residualRisk": "Future pilot should exercise restricted auditor-room access."
+    }
+  ]
+}

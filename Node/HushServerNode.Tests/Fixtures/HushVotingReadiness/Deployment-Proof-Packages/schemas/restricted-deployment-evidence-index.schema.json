@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/restricted-deployment-evidence-index.schema.json",
+  "title": "HushVoting Restricted Deployment Evidence Index",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "restrictedIndexId",
+    "visibility",
+    "ceremonyId",
+    "deploymentProofIds",
+    "providerEnvironmentRefs",
+    "custodyEvidenceRefs",
+    "reviewerNotesRefs",
+    "operatorRefs",
+    "forbiddenPublicMaterialSummary",
+    "publicHashRefs"
+  ],
+  "properties": {
+    "restrictedIndexId": { "type": "string", "minLength": 1 },
+    "visibility": { "const": "restricted" }
+  }
+}

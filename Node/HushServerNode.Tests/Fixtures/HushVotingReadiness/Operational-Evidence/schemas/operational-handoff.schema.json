@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/operational-handoff.schema.json",
+  "title": "HushVoting Operational Downstream Handoff",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "handoffId",
+    "producerFeature",
+    "generatedAt",
+    "runId",
+    "status",
+    "claimLevel",
+    "publicPackageRefs",
+    "wrapperPackageRefs",
+    "restrictedPackageRefs",
+    "opsSummaryRef",
+    "exceptionsRef",
+    "readinessFragmentRef",
+    "feat132Refs",
+    "feat131Refs",
+    "exceptions",
+    "warnings",
+    "blockers",
+    "notApplicable",
+    "placeholderFindings",
+    "forbiddenMaterialFindings",
+    "claimEffect",
+    "readinessRegisterHandoff",
+    "pilotRehearsalHandoff",
+    "feat132RegisterPromotionTraceability",
+    "residualRisk",
+    "consumerInstructions"
+  ],
+  "properties": {
+    "producerFeature": { "const": "FEAT-133" }
+  }
+}

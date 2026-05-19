@@ -1,0 +1,45 @@
+{
+  "rulesVersion": "1.0",
+  "serviceOwnershipMap": {
+    "hush-web-client": ["hush-web-client/src/hush-voting/**"],
+    "hush-server-node-voting": ["hush-server-node/Node/Core/Elections/**", "hush-server-node/Shared/HushShared.Elections*/**"],
+    "protocol-omega": ["hush-memory-bank/Overview/ProtocolOmega/**", "protocol-omega-packages/**"],
+    "non-voting-service": ["hush-server-node/Node/Core/Feeds/**", "hush-server-node/Node/Core/Reactions/**"]
+  },
+  "votingCriticalPathRules": [
+    {
+      "ruleId": "voting-critical-path",
+      "outputClass": "voting_protocol_change",
+      "reason": "Any ballot, eligibility, custody, evidence, tally, verifier, final package, protocol, circuit, or election-critical migration change is voting-critical."
+    }
+  ],
+  "artifactDiffRules": [
+    {
+      "ruleId": "website-only-no-protocol-change",
+      "outputClass": "website_only_no_protocol_change",
+      "requiresUnchangedRefs": ["protocolPackageHash", "verifierHash", "backendVotingCriticalHash", "custodyProfile", "dbMigrationState", "deploymentProfile"]
+    }
+  ],
+  "configDiffRules": [
+    {
+      "ruleId": "operational-config-recorded",
+      "outputClass": "operational_config_change",
+      "requiresConfigProfileHash": true
+    }
+  ],
+  "emergencyRules": [
+    {
+      "ruleId": "emergency-non-state-breaking",
+      "requiresReason": true,
+      "requiresRerunChecks": true
+    }
+  ],
+  "rollbackRules": [
+    {
+      "ruleId": "rollback-to-approved-artifact-set",
+      "requiresApprovedArtifactSet": true,
+      "requiresStateCompatibility": true
+    }
+  ],
+  "defaultUnknownPolicy": "unknown_pending_classification"
+}

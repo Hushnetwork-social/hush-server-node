@@ -1,0 +1,9 @@
+{
+  "auditorRoomModelVersion": "auditor-room-v1",
+  "accessLogRef": "REST-AUDITOR-ROOM-ACCESS-LOG-20260519-001",
+  "grantCount": 0,
+  "noAccessDeclaration": "No auditor-room access was granted during the internal rehearsal.",
+  "restrictedGrantRefs": [],
+  "evidenceStatus": "accepted_with_warnings",
+  "exceptionRefs": ["OPS-008-WARN-ZERO-GRANTS"]
+}

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/component-deployment-proof-package.schema.json",
+  "title": "HushVoting Component Deployment Proof Package",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "deploymentProofId",
+    "componentId",
+    "componentVersion",
+    "status",
+    "cdProvider",
+    "cdRunId",
+    "deploymentExecutionKind",
+    "deployedAt",
+    "deploymentTarget",
+    "sourceRef",
+    "artifactRefs",
+    "runtimeVerification",
+    "deploymentImpactClassification",
+    "accountabilityAttestations",
+    "publicRepositoryRef",
+    "restrictedEvidenceRefs",
+    "previousProofId",
+    "supersedesProofIds",
+    "generatedViews"
+  ],
+  "properties": {
+    "deploymentProofId": { "type": "string", "minLength": 1 },
+    "componentId": { "enum": ["hush-web-client", "hush-server-node"] },
+    "componentVersion": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["draft", "validated", "accepted", "degraded", "blocked", "superseded"] },
+    "cdProvider": { "type": "string", "minLength": 1 },
+    "cdRunId": { "type": "string", "minLength": 1 },
+    "deploymentExecutionKind": { "enum": ["cd_deployment", "ci_preflight_only"] },
+    "deployedAt": { "type": "string", "format": "date-time" },
+    "deploymentTarget": { "type": "string", "minLength": 1 },
+    "sourceRef": {
+      "type": "object",
+      "required": ["repository", "refType", "value", "immutable"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "refType": { "enum": ["commit", "tag_immutable"] },
+        "value": { "type": "string", "minLength": 7 },
+        "immutable": { "const": true }
+      }
+    },
+    "artifactRefs": { "type": "object", "minProperties": 1 },
+    "runtimeVerification": { "type": "object", "minProperties": 1 },
+    "deploymentImpactClassification": { "type": "object", "minProperties": 1 },
+    "accountabilityAttestations": { "type": "array", "minItems": 1 },
+    "publicRepositoryRef": { "type": "object", "minProperties": 1 },
+    "restrictedEvidenceRefs": { "type": "array" },
+    "previousProofId": { "type": ["string", "null"] },
+    "supersedesProofIds": { "type": "array" },
+    "generatedViews": { "type": "object", "minProperties": 1 }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/operational-run.schema.json",
+  "title": "HushVoting Operational Run",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "runId",
+    "schemaVersion",
+    "generatedAt",
+    "status",
+    "claimLevel",
+    "rehearsalPublicId",
+    "sourceGap",
+    "acceptanceGate",
+    "deploymentProfile",
+    "custodyProfile",
+    "sourceRefs",
+    "outputRoots",
+    "feat132Refs",
+    "feat131Refs",
+    "sp08Refs",
+    "sp10Refs",
+    "evidenceState",
+    "placeholderState",
+    "exceptionPolicy",
+    "signoff",
+    "residualRisk",
+    "claimEffect"
+  ],
+  "properties": {
+    "status": { "enum": ["accepted", "accepted_with_warnings", "blocked", "development_placeholder", "not_collected", "not_applicable"] },
+    "claimLevel": { "enum": ["internal_non_binding_rehearsal", "friendly_organization_pilot", "strong_rollout_claim"] },
+    "acceptanceGate": { "const": "AT-RDY-006" }
+  }
+}

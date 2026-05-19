@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/deployment-impact-classifier-rules.schema.json",
+  "title": "HushVoting Deployment Impact Classifier Rules",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "rulesVersion",
+    "serviceOwnershipMap",
+    "votingCriticalPathRules",
+    "artifactDiffRules",
+    "configDiffRules",
+    "emergencyRules",
+    "rollbackRules",
+    "defaultUnknownPolicy"
+  ],
+  "properties": {
+    "rulesVersion": { "type": "string", "minLength": 1 },
+    "defaultUnknownPolicy": { "const": "unknown_pending_classification" }
+  }
+}

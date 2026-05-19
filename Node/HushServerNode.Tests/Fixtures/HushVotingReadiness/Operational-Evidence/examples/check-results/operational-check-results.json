@@ -1,0 +1,49 @@
+{
+  "resultId": "OPS-RESULT-REHEARSAL-20260519-001",
+  "runId": "OPS-RUN-REHEARSAL-20260519-001",
+  "generatedAt": "2026-05-19T12:35:00Z",
+  "status": "accepted_with_warnings",
+  "claimLevel": "internal_non_binding_rehearsal",
+  "checks": [
+    { "checkId": "OPS-000", "status": "passed", "severity": "required", "reason": "Deployment profile is present and supported." },
+    { "checkId": "OPS-001", "status": "passed", "severity": "required", "reason": "FEAT-132 refs and SP-08 refs are present and compatible." },
+    { "checkId": "OPS-002", "status": "passed", "severity": "required", "reason": "Access-control snapshot is present and public/restricted split is clean." },
+    { "checkId": "OPS-003", "status": "passed", "severity": "required", "reason": "Required FEAT-131 custody refs are accepted." },
+    { "checkId": "OPS-004", "status": "not_applicable", "severity": "profile_specific", "reason": "Executor key lifecycle path is not used by this rehearsal profile." },
+    { "checkId": "OPS-005", "status": "passed", "severity": "required", "reason": "Generated FEAT-133 files passed forbidden-material scans." },
+    { "checkId": "OPS-006", "status": "warning", "severity": "warning", "reason": "Latest valid restore test covers the same deployment profile." },
+    { "checkId": "OPS-007", "status": "passed", "severity": "required", "reason": "No-incident declaration is present." },
+    { "checkId": "OPS-008", "status": "warning", "severity": "warning", "reason": "Auditor-room access log exists with zero grants." }
+  ],
+  "blockers": [],
+  "warnings": ["OPS-006", "OPS-008"],
+  "notApplicable": ["OPS-004"],
+  "placeholderFindings": [],
+  "forbiddenMaterialFindings": [],
+  "scoreEffect": {
+    "dimensionId": "RDY-DIM-007",
+    "previousScore": 6,
+    "acceptedScore": 8,
+    "totalPreviousScore": 59,
+    "totalAcceptedScore": 61
+  },
+  "feat132RegisterPromotionTraceability": {
+    "sourceFeature": "FEAT-132",
+    "readinessRegisterOwner": "FEAT-130",
+    "registerPromotionState": "pending_feat130_promotion",
+    "pendingFeat130Promotion": true,
+    "acceptedDeploymentEvidencePresent": true,
+    "ops001Status": "passed",
+    "ops001CanPassFromAcceptedRefs": true,
+    "doesNotBlockOps001": true,
+    "claimImpact": "Traceability only; FEAT-133 can use accepted FEAT-132 refs while FEAT-130 promotion remains separate.",
+    "evidenceRefs": [
+      "DPP-WEB-20260519-001",
+      "DPP-SERVER-20260519-001",
+      "DPS-REHEARSAL-20260519-001",
+      "DPBL-REHEARSAL-20260519-001"
+    ]
+  },
+  "claimEffect": "Internal non-binding rehearsal evidence can be promoted by FEAT-130 with warning residual risks.",
+  "summary": "Operational evidence accepted with warnings for internal non-binding rehearsal scope."
+}

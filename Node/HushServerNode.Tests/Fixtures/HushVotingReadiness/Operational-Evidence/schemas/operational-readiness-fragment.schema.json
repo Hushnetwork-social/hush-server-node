@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/operational-readiness-fragment.schema.json",
+  "title": "HushVoting Operational Readiness Fragment",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "fragmentId",
+    "featureSlice",
+    "runId",
+    "status",
+    "claimLevel",
+    "sourceGap",
+    "acceptanceGate",
+    "dimensionId",
+    "doesNotMutateRegister",
+    "registerPromotionOwner",
+    "evidenceRefs",
+    "dimensionScoreChange",
+    "totalScoreChange",
+    "blockerChanges",
+    "warnings",
+    "notApplicable",
+    "placeholderFindings",
+    "forbiddenMaterialFindings",
+    "feat132RegisterPromotionTraceability",
+    "claimEffect",
+    "residualRisk",
+    "signoff",
+    "promotionInstructions"
+  ],
+  "properties": {
+    "fragmentId": { "const": "RDY-EVID-AT-RDY-006-FEAT-133-001" },
+    "featureSlice": { "const": "FEAT-133" },
+    "acceptanceGate": { "const": "AT-RDY-006" },
+    "dimensionId": { "const": "RDY-DIM-007" }
+  }
+}

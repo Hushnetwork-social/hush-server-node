@@ -1,0 +1,17 @@
+{
+  "accessPolicyId": "SP10-ACCESS-CONTROL",
+  "accessPolicyVersion": "access-control-v1",
+  "snapshotGeneratedAt": "2026-05-19T12:10:00Z",
+  "roleCounts": {
+    "electionOwner": 1,
+    "operator": 1,
+    "support": 0,
+    "auditor": 0
+  },
+  "snapshotHash": "abababababababababababababababababababababababababababababababab",
+  "restrictedActorHashesRef": "REST-ACCESS-ACTOR-HASHES-20260519-001",
+  "grantRevocationRefs": ["REST-ACCESS-GRANTS-20260519-001"],
+  "supportAuditorReasonCodes": [],
+  "evidenceStatus": "accepted",
+  "exceptionRefs": []
+}

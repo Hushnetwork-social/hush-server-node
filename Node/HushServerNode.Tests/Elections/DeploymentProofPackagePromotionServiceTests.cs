@@ -500,7 +500,11 @@ public sealed class DeploymentProofPackagePromotionServiceTests
     public void PromoterCliArtifacts_ExistAndArgumentsParseExpectedModes()
     {
         var paths = CreatePaths();
-        var wrapperPath = Path.Combine(paths.WorkspaceRoot, "hush-server-node", "Node", "scripts", "promote-deployment-proof-package.ps1");
+        var wrapperPath = Path.Combine(
+            HushVotingReadinessTestArtifacts.ServerNodeRoot,
+            "Node",
+            "scripts",
+            "promote-deployment-proof-package.ps1");
 
         File.Exists(wrapperPath).Should().BeTrue();
         var arguments = CommandLineArguments.Parse(
@@ -827,8 +831,7 @@ public sealed class DeploymentProofPackagePromotionServiceTests
 
     private static DeploymentProofPackagePromotionPaths CreatePaths()
     {
-        var workspaceRoot = WorkspaceRootFinder.Find(AppContext.BaseDirectory);
-        return DeploymentProofPackagePromotionPaths.FromWorkspaceRoot(workspaceRoot);
+        return HushVotingReadinessTestArtifacts.CreateDeploymentProofPackagePaths();
     }
 
     private static JsonObject LoadExample(

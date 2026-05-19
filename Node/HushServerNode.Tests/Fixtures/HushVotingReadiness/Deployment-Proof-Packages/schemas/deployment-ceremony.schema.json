@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/deployment-ceremony.schema.json",
+  "title": "HushVoting Deployment Ceremony",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "ceremonyId",
+    "ceremonyVersion",
+    "status",
+    "claimLevel",
+    "rehearsalElectionId",
+    "deploymentProfile",
+    "deploymentProtocolVersion",
+    "publicDeploymentProofRepository",
+    "componentDeploymentProofs",
+    "deploymentProofSet",
+    "deploymentEnvironment",
+    "releaseRefs",
+    "custodyProfile",
+    "electionCustodyEvidenceRefs",
+    "environmentEvidence",
+    "ceremonyStages",
+    "rules",
+    "deploymentImpactClassification",
+    "finalPackageRefs",
+    "verifierOutputRefs",
+    "exceptions",
+    "accountabilityAttestations",
+    "generatedViews",
+    "readinessFragment"
+  ],
+  "properties": {
+    "ceremonyId": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["draft", "validated", "accepted", "degraded", "blocked", "superseded"] },
+    "claimLevel": { "enum": ["internal_non_binding_rehearsal", "friendly_organization_pilot", "production_organizational_rollout"] },
+    "ceremonyStages": { "type": "array", "minItems": 6 }
+  }
+}

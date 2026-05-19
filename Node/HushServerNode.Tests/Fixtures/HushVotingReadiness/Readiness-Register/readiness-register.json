@@ -1,0 +1,1234 @@
+{
+  "schemaVersion": "1.0",
+  "registerId": "hushvoting-readiness-register",
+  "registerVersion": "v0.1.1",
+  "registerVersionId": "RDY-REG-v0.1.1",
+  "status": "AcceptedInternal",
+  "parentEpic": "EPIC-015",
+  "sourceGapRegister": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Technical-Delivery-Gap-Assessment-2026-05-18.md",
+  "createdAt": "2026-05-18T22:00:00Z",
+  "promotedAt": "2026-05-19T12:00:00Z",
+  "sourceCommit": "65c10c8",
+  "claimPolicy": {
+    "minimumConfidenceScore": 70,
+    "strongerTargetScore": 80,
+    "strongestAllowedV1Claim": "friendly_organization_pilot",
+    "alwaysBlockedV1Claims": [
+      "production_organizational_rollout",
+      "public_or_state_election"
+    ],
+    "publicScoreAllowed": false,
+    "numericScoreVisibility": [
+      "internal",
+      "restricted_reviewer"
+    ]
+  },
+  "score": {
+    "total": 55,
+    "baselineTotal": 51,
+    "dimensionCount": 10,
+    "dimensionIds": [
+      "RDY-DIM-001",
+      "RDY-DIM-002",
+      "RDY-DIM-003",
+      "RDY-DIM-004",
+      "RDY-DIM-005",
+      "RDY-DIM-006",
+      "RDY-DIM-007",
+      "RDY-DIM-008",
+      "RDY-DIM-009",
+      "RDY-DIM-010"
+    ],
+    "minimumConfidenceScore": 70,
+    "strongerTargetScore": 80
+  },
+  "dimensions": [
+    {
+      "dimensionId": "RDY-DIM-001",
+      "name": "Protocol/spec/proof package",
+      "weight": 10,
+      "currentScore": 8,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Protocol/evidence architecture"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-001-FEAT-130-001"
+      ],
+      "blockerIds": [],
+      "residualRisk": "Package refs can become stale after future implementation changes.",
+      "scoreRationale": "Protocol Omega package and readiness gap assessment exist, but the readiness register itself is the baseline control."
+    },
+    {
+      "dimensionId": "RDY-DIM-002",
+      "name": "Verifier/sample/tamper corpus",
+      "weight": 10,
+      "currentScore": 6,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Verifier/sample/tamper corpus"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-007"
+      ],
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-007-FEAT-112-001"
+      ],
+      "blockerIds": [],
+      "residualRisk": "More real-world election shapes and platforms need additional samples.",
+      "scoreRationale": "Protocol package evidence exists, but the public verifier sample and tamper corpus still needs FEAT-135."
+    },
+    {
+      "dimensionId": "RDY-DIM-003",
+      "name": "Cross-device receipt/inclusion verification",
+      "weight": 10,
+      "currentScore": 3,
+      "targetScoreBeforeReviewPilot": 7,
+      "sourceGapRows": [
+        "Cross-device receipt/inclusion verification"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-008"
+      ],
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-008-FEAT-136-001"
+      ],
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-003"
+      ],
+      "residualRisk": "Device loss, offline handling, manual entry, and accessibility edge cases may remain.",
+      "scoreRationale": "Verification direction is known, but FEAT-136 must deliver the cross-device path before pilot claims can open."
+    },
+    {
+      "dimensionId": "RDY-DIM-004",
+      "name": "Publication/counting evidence",
+      "weight": 10,
+      "currentScore": 7,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Protocol/evidence architecture"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-001-FEAT-113-001"
+      ],
+      "blockerIds": [],
+      "residualRisk": "Publication and counting evidence must stay bound to current release and package refs.",
+      "scoreRationale": "EPIC-013 publication/counting evidence exists, with remaining readiness binding handled by this register."
+    },
+    {
+      "dimensionId": "RDY-DIM-005",
+      "name": "Per-election KMS custody lifecycle",
+      "weight": 10,
+      "currentScore": 8,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Per-election KMS custody lifecycle"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-002",
+        "AT-RDY-003",
+        "AT-RDY-004"
+      ],
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-002-FEAT-131-001"
+      ],
+      "blockerIds": [],
+      "residualRisk": "Cloud-provider incidents, IAM drift, regional availability, deployment variants, and limited operating history may remain.",
+      "scoreRationale": "FEAT-131 delivered accepted internal evidence for fail-closed open, finalization cleanup, reconciliation, redaction, and focused verification."
+    },
+    {
+      "dimensionId": "RDY-DIM-006",
+      "name": "Trusted deployment ceremony",
+      "weight": 10,
+      "currentScore": 4,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Trusted deployment ceremony"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-005"
+      ],
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-005-FEAT-132-001"
+      ],
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-002"
+      ],
+      "residualRisk": "Repeated operating history grows only after more elections.",
+      "scoreRationale": "Release integrity evidence exists, but FEAT-132 must prove the controlled ceremony path."
+    },
+    {
+      "dimensionId": "RDY-DIM-007",
+      "name": "Operational evidence package",
+      "weight": 10,
+      "currentScore": 6,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Operational readiness package",
+        "Security/dependency/support readiness"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-006",
+        "AT-RDY-014"
+      ],
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-006-FEAT-133-001"
+      ],
+      "blockerIds": [],
+      "residualRisk": "Site-specific monitoring, backup, incident, operator, dependency, and support evidence may vary by deployment.",
+      "scoreRationale": "Operational direction and support/security artifacts exist, but FEAT-133 and FEAT-134 must package repeatable evidence."
+    },
+    {
+      "dimensionId": "RDY-DIM-008",
+      "name": "Retention/log privacy proof",
+      "weight": 10,
+      "currentScore": 4,
+      "targetScoreBeforeReviewPilot": 8,
+      "sourceGapRows": [
+        "Retention/log privacy proof"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-009",
+        "AT-RDY-010"
+      ],
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-009-FEAT-137-001"
+      ],
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-004"
+      ],
+      "residualRisk": "New diagnostics or observability tools can reintroduce correlation risk without ongoing scans.",
+      "scoreRationale": "Privacy intent exists, but FEAT-137 must prove retention and log privacy boundaries."
+    },
+    {
+      "dimensionId": "RDY-DIM-009",
+      "name": "Dispute/continuity readiness dependency",
+      "weight": 10,
+      "currentScore": 4,
+      "targetScoreBeforeReviewPilot": 7,
+      "sourceGapRows": [
+        "Dispute/continuity readiness",
+        "ElectionOwner void decision and publication replacement"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-011",
+        "AT-RDY-015"
+      ],
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-011-FEAT-139-001"
+      ],
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-005"
+      ],
+      "residualRisk": "Customer governance may still decide remedies, deadlines, and authority actions.",
+      "scoreRationale": "Anomaly/dispute direction exists, but FEAT-138 and FEAT-139 must prove void and continuity readiness."
+    },
+    {
+      "dimensionId": "RDY-DIM-010",
+      "name": "Pilot/legal/governance delivery wrapper",
+      "weight": 10,
+      "currentScore": 5,
+      "targetScoreBeforeReviewPilot": 7,
+      "sourceGapRows": [
+        "Legal/governance boundary wrapper",
+        "Controlled pilot evidence"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-012",
+        "AT-RDY-013",
+        "AT-RDY-014"
+      ],
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-013-FEAT-141-001"
+      ],
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006",
+        "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001"
+      ],
+      "residualRisk": "Broader confidence depends on more elections, organizations, and operating conditions.",
+      "scoreRationale": "The governance boundary is understood, but pilot evidence and wrapper artifacts remain to be delivered."
+    }
+  ],
+  "claimLevels": [
+    {
+      "claimLevel": "internal_development",
+      "blockerSeverity": "green",
+      "status": "allowed",
+      "allowedWording": "HushVoting may use this register for internal development tracking and implementation planning.",
+      "limitationWording": "",
+      "blockedWording": "",
+      "blockerIds": [],
+      "publicSafeStatus": "not_for_publication"
+    },
+    {
+      "claimLevel": "internal_non_binding_rehearsal",
+      "blockerSeverity": "amber",
+      "status": "allowed_with_limitations",
+      "allowedWording": "HushVoting may run an internal non-binding rehearsal when all remaining blockers stay visible.",
+      "limitationWording": "The rehearsal must be clearly labelled non-binding and must not be presented as customer, production, or public election readiness.",
+      "blockedWording": "",
+      "blockerIds": [
+        "RDY-BLOCK-INTERNAL_NON_BINDING_REHEARSAL-001"
+      ],
+      "publicSafeStatus": "not_for_publication"
+    },
+    {
+      "claimLevel": "friendly_organization_pilot",
+      "blockerSeverity": "red",
+      "status": "blocked",
+      "allowedWording": "",
+      "limitationWording": "",
+      "blockedWording": "Friendly organization pilot readiness is blocked until the score reaches the minimum confidence band and the remaining pilot-critical red blockers are resolved.",
+      "blockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-002",
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-003",
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-004",
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-005",
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006"
+      ],
+      "publicSafeStatus": "not_ready_for_public_claim"
+    },
+    {
+      "claimLevel": "production_organizational_rollout",
+      "blockerSeverity": "red",
+      "status": "blocked",
+      "allowedWording": "",
+      "limitationWording": "",
+      "blockedWording": "Production organizational rollout is blocked by the v1 claim policy.",
+      "blockerIds": [
+        "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001"
+      ],
+      "publicSafeStatus": "public_claim_blocked"
+    },
+    {
+      "claimLevel": "public_or_state_election",
+      "blockerSeverity": "red",
+      "status": "blocked",
+      "allowedWording": "",
+      "limitationWording": "",
+      "blockedWording": "Public or state election readiness is blocked by the v1 claim policy.",
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001"
+      ],
+      "publicSafeStatus": "public_claim_blocked"
+    }
+  ],
+  "blockers": [
+    {
+      "blockerId": "RDY-BLOCK-INTERNAL_NON_BINDING_REHEARSAL-001",
+      "claimLevel": "internal_non_binding_rehearsal",
+      "severity": "amber",
+      "status": "open",
+      "description": "Rehearsal is non-binding only and must display remaining pilot red blockers as limitations.",
+      "featureId": "FEAT-130",
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-001"
+      ],
+      "limitationWording": "Internal rehearsal is allowed only as a non-binding run with all pilot blockers visible.",
+      "resolutionCriteria": "Promoted register keeps non-binding wording and visible blocker list in all generated internal/restricted outputs."
+    },
+    {
+      "blockerId": "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001",
+      "claimLevel": "friendly_organization_pilot",
+      "severity": "green",
+      "status": "resolved",
+      "description": "Per-election KMS custody lifecycle accepted for internal readiness evidence.",
+      "featureId": "FEAT-131",
+      "acceptanceGateIds": [
+        "AT-RDY-002",
+        "AT-RDY-003",
+        "AT-RDY-004"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-005"
+      ],
+      "limitationWording": "",
+      "resolutionCriteria": "Resolved by FEAT-131 accepted fail-closed custody lifecycle evidence and readiness fragment."
+    },
+    {
+      "blockerId": "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-002",
+      "claimLevel": "friendly_organization_pilot",
+      "severity": "red",
+      "status": "open",
+      "description": "Trusted deployment ceremony proof missing.",
+      "featureId": "FEAT-132",
+      "acceptanceGateIds": [
+        "AT-RDY-005"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-006"
+      ],
+      "limitationWording": "",
+      "resolutionCriteria": "FEAT-132 delivers accepted deployment ceremony proof and readiness fragment."
+    },
+    {
+      "blockerId": "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-003",
+      "claimLevel": "friendly_organization_pilot",
+      "severity": "red",
+      "status": "open",
+      "description": "Cross-device receipt/inclusion verification not delivered.",
+      "featureId": "FEAT-136",
+      "acceptanceGateIds": [
+        "AT-RDY-008"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-003"
+      ],
+      "limitationWording": "",
+      "resolutionCriteria": "FEAT-136 delivers accepted cross-device receipt/inclusion verification evidence."
+    },
+    {
+      "blockerId": "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-004",
+      "claimLevel": "friendly_organization_pilot",
+      "severity": "red",
+      "status": "open",
+      "description": "Retention/log privacy proof missing.",
+      "featureId": "FEAT-137",
+      "acceptanceGateIds": [
+        "AT-RDY-009",
+        "AT-RDY-010"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-008"
+      ],
+      "limitationWording": "",
+      "resolutionCriteria": "FEAT-137 delivers accepted retention/log privacy proof and readiness fragment."
+    },
+    {
+      "blockerId": "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-005",
+      "claimLevel": "friendly_organization_pilot",
+      "severity": "red",
+      "status": "open",
+      "description": "ElectionOwner void decision and voided-publication replacement not delivered.",
+      "featureId": "FEAT-138",
+      "acceptanceGateIds": [
+        "AT-RDY-015"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-009"
+      ],
+      "limitationWording": "",
+      "resolutionCriteria": "FEAT-138 delivers accepted ElectionOwner void decision and VOID publication replacement evidence."
+    },
+    {
+      "blockerId": "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006",
+      "claimLevel": "friendly_organization_pilot",
+      "severity": "red",
+      "status": "open",
+      "description": "Pilot evidence package/rehearsal not produced.",
+      "featureId": "FEAT-141",
+      "acceptanceGateIds": [
+        "AT-RDY-013"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-010"
+      ],
+      "limitationWording": "",
+      "resolutionCriteria": "FEAT-141 delivers accepted controlled pilot evidence package or explicitly bounded rehearsal package."
+    },
+    {
+      "blockerId": "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+      "claimLevel": "production_organizational_rollout",
+      "severity": "red",
+      "status": "open",
+      "description": "Production organizational rollout is outside v1 claim policy.",
+      "featureId": "FEAT-130",
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-010"
+      ],
+      "limitationWording": "",
+      "resolutionCriteria": "A later readiness register version explicitly supersedes the v1 claim policy with accepted evidence."
+    },
+    {
+      "blockerId": "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+      "claimLevel": "public_or_state_election",
+      "severity": "red",
+      "status": "open",
+      "description": "Public or state election readiness is outside v1 claim policy.",
+      "featureId": "FEAT-130",
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-010"
+      ],
+      "limitationWording": "",
+      "resolutionCriteria": "A later readiness register version explicitly supersedes the v1 claim policy with accepted evidence and external prerequisites."
+    }
+  ],
+  "evidenceItems": [
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-001-FEAT-130-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-130",
+      "sourceGapRow": "Protocol/evidence architecture",
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-001"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "RDY-REG-v0.1.0",
+      "visibility": "restricted_reviewer",
+      "status": "accepted",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [
+        {
+          "artifactId": "ART-RDY-GAP-20260518",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Technical-Delivery-Gap-Assessment-2026-05-18.md",
+          "sha256Hash": "2de7e099895023fe4d4ef481fa4ff77c84bda6c2be2150e4bed297479f5257e0",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "text/markdown",
+          "sizeBytes": 36244,
+          "visibility": "restricted_reviewer"
+        }
+      ],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-001-GAP-REGISTER",
+          "status": "pass",
+          "summary": "Gap register maps source gaps to EPIC-015 and FEAT-130 through FEAT-142.",
+          "detailsRef": "hush-memory-bank/Features/00_EPICS/EPIC-015-hushvoting-technical-delivery-readiness/EpicDescription.md"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Event-based invalidation when EPIC-015 score policy or source gap rows change.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "Future implementation changes can stale package refs and require a superseding register.",
+      "claimEffect": "none",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Technical readiness register and score policy reviewed.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Product and delivery readiness wording reviewed.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": [
+        "RDY-BLOCK-INTERNAL_NON_BINDING_REHEARSAL-001"
+      ]
+    },
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-007-FEAT-112-001",
+      "parentEpic": "EPIC-013",
+      "featureId": "FEAT-112",
+      "sourceGapRow": "Verifier/sample/tamper corpus",
+      "acceptanceGateIds": [
+        "AT-RDY-007"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-002"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "protocol-omega-v1.2.0",
+      "visibility": "restricted_reviewer",
+      "status": "observed",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [
+        {
+          "artifactId": "ART-PROTOCOL-CATALOG",
+          "relativePath": "hush-server-node/Node/Core/Elections/HushNode.Elections/ProtocolPackages/ApprovedProtocolPackageCatalog.json",
+          "sha256Hash": "52701a4fe6e0a00421714c1f92b7b00735f2598c6d9b63b9d0e5f62c94864eb7",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 1483,
+          "visibility": "restricted_reviewer"
+        }
+      ],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-007-BASELINE",
+          "status": "warn",
+          "summary": "Protocol package exists, but public sample and tamper corpus still need FEAT-135.",
+          "detailsRef": "FEAT-135"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Event-based invalidation when protocol package, verifier contract, or sample corpus changes.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "Runnable public sample and tamper corpus remain incomplete.",
+      "claimEffect": "none",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed Protocol Omega package catalog.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed remaining delivery gap.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": []
+    },
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-008-FEAT-136-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-136",
+      "sourceGapRow": "Cross-device receipt/inclusion verification",
+      "acceptanceGateIds": [
+        "AT-RDY-008"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-003"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "not_release_specific",
+      "visibility": "restricted_reviewer",
+      "status": "observed",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [
+        {
+          "artifactId": "ART-RDY-GAP-20260518-CROSS-DEVICE",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Technical-Delivery-Gap-Assessment-2026-05-18.md",
+          "sha256Hash": "2de7e099895023fe4d4ef481fa4ff77c84bda6c2be2150e4bed297479f5257e0",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "text/markdown",
+          "sizeBytes": 36244,
+          "visibility": "restricted_reviewer"
+        }
+      ],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-008-BASELINE",
+          "status": "warn",
+          "summary": "Cross-device verification is identified and planned, not delivered.",
+          "detailsRef": "FEAT-136"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Event-based invalidation when receipt package semantics or verifier contract changes.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "Cross-device receipt import path is not yet implemented.",
+      "claimEffect": "block",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed readiness gap and feature ownership.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed pilot blocker.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-003"
+      ]
+    },
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-001-FEAT-113-001",
+      "parentEpic": "EPIC-013",
+      "featureId": "FEAT-113",
+      "sourceGapRow": "Protocol/evidence architecture",
+      "acceptanceGateIds": [
+        "AT-RDY-001"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-004"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "protocol-omega-v1.2.0",
+      "visibility": "restricted_reviewer",
+      "status": "accepted",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [
+        {
+          "artifactId": "ART-PROTOCOL-CATALOG-PUBLICATION",
+          "relativePath": "hush-server-node/Node/Core/Elections/HushNode.Elections/ProtocolPackages/ApprovedProtocolPackageCatalog.json",
+          "sha256Hash": "52701a4fe6e0a00421714c1f92b7b00735f2598c6d9b63b9d0e5f62c94864eb7",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 1483,
+          "visibility": "restricted_reviewer"
+        }
+      ],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-001-PUBLICATION",
+          "status": "pass",
+          "summary": "Publication/counting evidence is present in the Protocol Omega package baseline.",
+          "detailsRef": "hush-server-node/Node/Core/Elections/HushNode.Elections/ProtocolPackages/ApprovedProtocolPackageCatalog.json"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Event-based invalidation when protocol package or publication/counting contract changes.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "Publication/counting evidence must remain bound to current release scope.",
+      "claimEffect": "none",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Accepted current Protocol Omega publication evidence baseline.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Accepted current publication evidence for internal baseline only.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": []
+    },
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-002-FEAT-131-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-131",
+      "sourceGapRow": "Per-election KMS custody lifecycle",
+      "acceptanceGateIds": [
+        "AT-RDY-002",
+        "AT-RDY-003",
+        "AT-RDY-004"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-005"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "not_release_specific",
+      "visibility": "restricted_reviewer",
+      "status": "accepted",
+      "producedAt": "2026-05-19T12:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [
+        {
+          "artifactId": "ART-RDY-FEAT131-HANDOFF-20260519",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Operational-Security/FEAT-131-Custody-Evidence-Handoff.md",
+          "sha256Hash": "dbcb0c6a984f9de87eb10d4909a372ebf8d1efc2239167d05c3e55cf40cde1a5",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "text/markdown",
+          "sizeBytes": 4556,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT131-EVIDENCE-MODEL-20260519",
+          "relativePath": "hush-server-node/Shared/HushShared.Elections.Model/ElectionAdminOnlyProtectedTallyCustodyEvidence.cs",
+          "sha256Hash": "337beddb7eb46bcdaed7b8e65cc71816a649b55f5a87167494f9980e36fd79a6",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "text/x-csharp",
+          "sizeBytes": 10534,
+          "visibility": "restricted_reviewer"
+        }
+      ],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-002-FEAT131-OPEN",
+          "status": "pass",
+          "summary": "Protected Admin-Only open fails closed unless per-election KMS custody evidence is complete.",
+          "detailsRef": "FEAT-131 Phase 8"
+        },
+        {
+          "checkId": "CHK-RDY-003-FEAT131-FINALIZE",
+          "status": "pass",
+          "summary": "Finalization destroys sealed scalar material and records key disablement/deletion scheduling or retry state.",
+          "detailsRef": "FEAT-131 Phase 8"
+        },
+        {
+          "checkId": "CHK-RDY-004-FEAT131-RECONCILE",
+          "status": "pass",
+          "summary": "Custody reconciliation detects stale, orphaned, drifted, retry, and unresolved exception states.",
+          "detailsRef": "FEAT-131 Phase 8"
+        },
+        {
+          "checkId": "CHK-RDY-005-FEAT131-REDACTION",
+          "status": "pass",
+          "summary": "Public package and operational verifier checks reject forbidden KMS identifiers, credential markers, raw sealed scalar, plaintext scalar, and decrypt-authority material.",
+          "detailsRef": "FEAT-131 Phase 8"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Event-based invalidation when custody mode, KMS provider, IAM configuration, or election lifecycle changes.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "Cloud-provider incidents, IAM drift, regional availability, deployment variants, and limited operating history may remain.",
+      "claimEffect": "score_increase",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-19T12:00:00Z",
+          "basis": "Accepted FEAT-131 focused build, unit, integration, redaction, and export verification evidence.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-19T12:00:00Z",
+          "basis": "Accepted FEAT-131 custody evidence for internal readiness scoring; downstream ceremony, operational, and pilot blockers remain separate.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001"
+      ]
+    },
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-005-FEAT-132-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-132",
+      "sourceGapRow": "Trusted deployment ceremony",
+      "acceptanceGateIds": [
+        "AT-RDY-005"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-006"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "not_release_specific",
+      "visibility": "restricted_reviewer",
+      "status": "observed",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [
+        {
+          "artifactId": "ART-RDY-GAP-20260518-DEPLOYMENT",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Technical-Delivery-Gap-Assessment-2026-05-18.md",
+          "sha256Hash": "2de7e099895023fe4d4ef481fa4ff77c84bda6c2be2150e4bed297479f5257e0",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "text/markdown",
+          "sizeBytes": 36244,
+          "visibility": "restricted_reviewer"
+        }
+      ],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-005-BASELINE",
+          "status": "warn",
+          "summary": "Deployment ceremony proof requires FEAT-132 controlled run evidence.",
+          "detailsRef": "FEAT-132"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Event-based invalidation when deployment artifact, ceremony procedure, or operating profile changes.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "Trusted deployment ceremony evidence is not yet produced.",
+      "claimEffect": "block",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed deployment ceremony gap.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed pilot blocker.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-002"
+      ]
+    },
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-006-FEAT-133-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-133",
+      "sourceGapRow": "Operational readiness package",
+      "acceptanceGateIds": [
+        "AT-RDY-006",
+        "AT-RDY-014"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-007"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "not_release_specific",
+      "visibility": "restricted_reviewer",
+      "status": "observed",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [
+        {
+          "artifactId": "ART-MOBILE-BENCHMARK-APPDEF",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Mobile-Benchmark-Application-Definition.md",
+          "sha256Hash": "900653766838a766fce45c7444f178d94896162f535d326fe5bdf951c52abe9f",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "text/markdown",
+          "sizeBytes": 37731,
+          "visibility": "restricted_reviewer"
+        }
+      ],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-006-BASELINE",
+          "status": "warn",
+          "summary": "Operational and support artifacts exist in parts, but FEAT-133 and FEAT-134 must package repeatable evidence.",
+          "detailsRef": "FEAT-133; FEAT-134"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Event-based invalidation for package changes; time-sensitive refresh for dependency/support facts.",
+        "staleReason": "",
+        "timeSensitive": true
+      },
+      "residualRisk": "Operational package and support/security evidence are not yet complete.",
+      "claimEffect": "none",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed operational evidence baseline.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed delivery package gap.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": []
+    },
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-009-FEAT-137-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-137",
+      "sourceGapRow": "Retention/log privacy proof",
+      "acceptanceGateIds": [
+        "AT-RDY-009",
+        "AT-RDY-010"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-008"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "not_release_specific",
+      "visibility": "restricted_reviewer",
+      "status": "observed",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [
+        {
+          "artifactId": "ART-RDY-GAP-20260518-RETENTION",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Technical-Delivery-Gap-Assessment-2026-05-18.md",
+          "sha256Hash": "2de7e099895023fe4d4ef481fa4ff77c84bda6c2be2150e4bed297479f5257e0",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "text/markdown",
+          "sizeBytes": 36244,
+          "visibility": "restricted_reviewer"
+        }
+      ],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-009-BASELINE",
+          "status": "warn",
+          "summary": "Retention/log privacy proof is identified but not delivered.",
+          "detailsRef": "FEAT-137"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Event-based invalidation when logging, diagnostic, retention, or publication code changes.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "Retention/log privacy proof is missing.",
+      "claimEffect": "block",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed privacy proof gap.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed pilot blocker.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-004"
+      ]
+    },
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-011-FEAT-139-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-139",
+      "sourceGapRow": "Dispute/continuity readiness",
+      "acceptanceGateIds": [
+        "AT-RDY-011",
+        "AT-RDY-015"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-009"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "not_release_specific",
+      "visibility": "restricted_reviewer",
+      "status": "observed",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [
+        {
+          "artifactId": "ART-RDY-EPIC015-ACCEPTANCE",
+          "relativePath": "hush-memory-bank/Features/00_EPICS/EPIC-015-hushvoting-technical-delivery-readiness/AcceptanceTest.md",
+          "sha256Hash": "8eb99536bf437e8d76e2bd664ad16c62a7dd48351751ea1dea5e7920d16455a1",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "text/markdown",
+          "sizeBytes": 9176,
+          "visibility": "restricted_reviewer"
+        }
+      ],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-011-BASELINE",
+          "status": "warn",
+          "summary": "Dispute/continuity and void replacement readiness are feature-owned but not delivered.",
+          "detailsRef": "FEAT-138; FEAT-139"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Event-based invalidation when anomaly, void, publication, or customer governance flow changes.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "Void decision and dispute readiness evidence are incomplete.",
+      "claimEffect": "block",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed dispute/continuity readiness gap.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed pilot blocker.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-005"
+      ]
+    },
+    {
+      "evidenceId": "RDY-EVID-AT-RDY-013-FEAT-141-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-141",
+      "sourceGapRow": "Controlled pilot evidence",
+      "acceptanceGateIds": [
+        "AT-RDY-012",
+        "AT-RDY-013",
+        "AT-RDY-014"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-010"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "not_release_specific",
+      "visibility": "restricted_reviewer",
+      "status": "observed",
+      "producedAt": "2026-05-18T22:00:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [
+        {
+          "artifactId": "ART-RDY-FEAT130-SPEC",
+          "relativePath": "hush-memory-bank/Features/04_COMPLETED/FEAT-130-readiness-claim-register-scorecard/FeatureDescription.md",
+          "sha256Hash": "b13c0548f838009f2e4e6692683268c8ba2e1f7ffb5cf905cfecb8f1c44e2a75",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "text/markdown",
+          "sizeBytes": 66546,
+          "visibility": "restricted_reviewer"
+        }
+      ],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-013-BASELINE",
+          "status": "warn",
+          "summary": "Pilot package and legal/governance wrapper are planned but not delivered.",
+          "detailsRef": "FEAT-140; FEAT-141"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Event-based invalidation when pilot scope, governance wrapper, or support readiness changes.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "Controlled pilot package and governance wrapper remain incomplete.",
+      "claimEffect": "block",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed pilot/governance readiness gap.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-18T22:00:00Z",
+          "basis": "Observed pilot blocker.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006",
+        "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001"
+      ]
+    }
+  ],
+  "scoreChanges": [
+    {
+      "scoreChangeId": "RDY-SCORE-20260519-001",
+      "dimensionId": "RDY-DIM-005",
+      "direction": "increase",
+      "previousScore": 4,
+      "proposedScore": 8,
+      "acceptedScore": 8,
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-002-FEAT-131-001"
+      ],
+      "acceptanceGateIds": [
+        "AT-RDY-002",
+        "AT-RDY-003",
+        "AT-RDY-004"
+      ],
+      "blockerImpactBefore": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001"
+      ],
+      "blockerImpactAfter": [],
+      "claimImpact": "Per-election KMS custody blocker resolved. Friendly organization pilot remains blocked by total score below the minimum confidence band and by other EPIC-015 pilot-critical blockers.",
+      "reason": "FEAT-131 delivered accepted internal evidence for fail-closed open, finalization cleanup, reconciliation, redaction, and focused verification.",
+      "generatedDiff": "RDY-DIM-005 currentScore 4 -> 8; total score 51 -> 55; RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001 open/red -> resolved/green.",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-19T12:00:00Z",
+          "basis": "Accepted FEAT-131 focused build, unit, integration, redaction, and export verification evidence.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-19T12:00:00Z",
+          "basis": "Accepted FEAT-131 custody evidence for internal readiness scoring; downstream ceremony, operational, and pilot blockers remain separate.",
+          "samePersonTwoHat": true
+        }
+      }
+    }
+  ],
+  "exceptions": [],
+  "generatedViews": {
+    "scorecardPath": "readiness-scorecard.md",
+    "restrictedReviewerExtractPath": "restricted-reviewer-extract.md",
+    "publicSafeSummaryPath": "public-safe-summary.md",
+    "publicSafePublicationStatus": "not_for_publication"
+  },
+  "signoffPolicy": {
+    "requiredRoles": [
+      "engineering",
+      "operations_product"
+    ],
+    "allowSamePersonTwoHat": true,
+    "requiresTwoHatMarkerWhenSameSigner": true,
+    "independentDualControlClaimAllowed": false,
+    "samePersonWording": "The same accountable owner currently signs both engineering and operations/product roles; this is a two-hat internal baseline and not an independent dual-control approval."
+  }
+}

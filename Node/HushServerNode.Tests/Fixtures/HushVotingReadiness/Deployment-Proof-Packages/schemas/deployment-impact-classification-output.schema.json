@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/deployment-impact-classification-output.schema.json",
+  "title": "HushVoting Deployment Impact Classification Output",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "classificationId",
+    "generatedAt",
+    "inputRef",
+    "outputClass",
+    "matchedRules",
+    "evidenceRefs",
+    "reason",
+    "requiresManualOwnerReview",
+    "blocksAcceptedEvidence",
+    "accountabilityMarker"
+  ],
+  "properties": {
+    "classificationId": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "outputClass": {
+      "enum": [
+        "voting_protocol_change",
+        "voting_protocol_no_change",
+        "website_only_no_protocol_change",
+        "non_voting_service_no_protocol_change",
+        "operational_config_change",
+        "emergency_change",
+        "rollback",
+        "unknown_pending_classification"
+      ]
+    }
+  }
+}

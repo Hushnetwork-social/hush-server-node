@@ -1,0 +1,39 @@
+{
+  "restrictedIndexId": "REST-DEPLOYMENT-20260519-001",
+  "visibility": "restricted",
+  "ceremonyId": "DPC-REHEARSAL-20260519-001",
+  "deploymentProofIds": ["DPP-WEB-20260519-001", "DPP-SERVER-20260519-001"],
+  "providerEnvironmentRefs": [
+    {
+      "refId": "REST-ENV-BOUNDARY-20260519-001",
+      "description": "Restricted provider boundary reference for synthetic rehearsal fixture."
+    }
+  ],
+  "custodyEvidenceRefs": [
+    {
+      "refId": "REST-CUSTODY-HANDOFF-20260519-001",
+      "publicHashRef": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    }
+  ],
+  "reviewerNotesRefs": [
+    {
+      "refId": "REST-REVIEWER-NOTES-20260519-001"
+    }
+  ],
+  "operatorRefs": [
+    {
+      "role": "operator",
+      "operatorRef": "REST-OPERATOR-ROLE-20260519-001"
+    }
+  ],
+  "forbiddenPublicMaterialSummary": {
+    "publicScanStatus": "passed",
+    "findings": []
+  },
+  "publicHashRefs": [
+    {
+      "publicRefId": "DPP-WEB-20260519-001",
+      "sha256Hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ]
+}

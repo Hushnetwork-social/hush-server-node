@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/operational-check-results.schema.json",
+  "title": "HushVoting Operational Check Results",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "resultId",
+    "runId",
+    "generatedAt",
+    "status",
+    "claimLevel",
+    "checks",
+    "blockers",
+    "warnings",
+    "notApplicable",
+    "placeholderFindings",
+    "forbiddenMaterialFindings",
+    "scoreEffect",
+    "feat132RegisterPromotionTraceability",
+    "claimEffect",
+    "summary"
+  ]
+}

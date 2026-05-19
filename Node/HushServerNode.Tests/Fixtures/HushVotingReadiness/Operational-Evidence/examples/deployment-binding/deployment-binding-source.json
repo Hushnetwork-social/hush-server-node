@@ -1,0 +1,27 @@
+{
+  "webClientProofId": "DPP-WEB-20260519-001",
+  "webClientProofHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "serverNodeProofId": "DPP-SERVER-20260519-001",
+  "serverNodeProofHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "deploymentProofSetId": "DPS-REHEARSAL-20260519-001",
+  "bindingLedgerId": "DPBL-REHEARSAL-20260519-001",
+  "publicCatalogRef": {
+    "repository": "https://github.com/Hushnetwork-social/Deployment-Proof-Packages",
+    "path": "deployment-proof-catalog.json",
+    "commit": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "impactClassification": "voting_protocol_no_change",
+  "emergencyChangeMarkers": [],
+  "restrictedRefs": [
+    {
+      "refId": "REST-DEPLOY-WEB-20260519-001",
+      "sha256Hash": "4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    {
+      "refId": "REST-DEPLOY-SERVER-20260519-001",
+      "sha256Hash": "9999999999999999999999999999999999999999999999999999999999999999"
+    }
+  ],
+  "unknownClassificationState": "none",
+  "feat130RegisterPromotionState": "pending_feat130_promotion"
+}

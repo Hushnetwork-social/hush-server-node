@@ -1,0 +1,16 @@
+{
+  "incidentPolicyId": "SP10-INCIDENT-POLICY",
+  "incidentRegisterVersion": "incident-register-v1",
+  "incidentRegisterHash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+  "monitoringWindow": {
+    "from": "2026-05-19T11:00:00Z",
+    "to": "2026-05-19T12:30:00Z"
+  },
+  "declarationActorHash": "1111111111111111111111111111111111111111111111111111111111111111",
+  "declarationAt": "2026-05-19T12:31:00Z",
+  "incidentCount": 0,
+  "publicSafeStatement": "No operational incident was recorded during the synthetic internal rehearsal monitoring window.",
+  "restrictedIncidentRefs": ["REST-INCIDENT-REGISTER-20260519-001"],
+  "evidenceStatus": "accepted",
+  "exceptionRefs": []
+}

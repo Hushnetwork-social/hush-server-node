@@ -1,0 +1,69 @@
+{
+  "classificationInputId": "DICI-WEB-20260519-001",
+  "changedPaths": [
+    "hush-web-client/src/hush-voting/components/StatusBanner.tsx"
+  ],
+  "affectedServices": [
+    "hush-web-client"
+  ],
+  "releaseManifestDiffAvailable": true,
+  "artifactRefsBeforeAfterAvailable": true,
+  "sbomOrDependencyDiffAvailableWhenApplicable": true,
+  "releaseManifestDiff": {
+    "beforeRef": "release-manifest-before-public-hash",
+    "afterRef": "release-manifest-after-public-hash"
+  },
+  "artifactRefsBefore": {
+    "webArtifactHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "protocolPackageHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "verifierHash": "7777777777777777777777777777777777777777777777777777777777777777",
+    "packageExporterHash": "8888888888888888888888888888888888888888888888888888888888888888",
+    "backendVotingCriticalHash": "abababababababababababababababababababababababababababababababab",
+    "dbMigrationState": "migration-state-feat132-fixture",
+    "custodyProfile": "aws_kms_per_election_envelope_v1",
+    "deploymentProfile": "hushvoting_managed_aws_container_v1"
+  },
+  "artifactRefsAfter": {
+    "webArtifactHash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "protocolPackageHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "verifierHash": "7777777777777777777777777777777777777777777777777777777777777777",
+    "packageExporterHash": "8888888888888888888888888888888888888888888888888888888888888888",
+    "backendVotingCriticalHash": "abababababababababababababababababababababababababababababababab",
+    "dbMigrationState": "migration-state-feat132-fixture",
+    "custodyProfile": "aws_kms_per_election_envelope_v1",
+    "deploymentProfile": "hushvoting_managed_aws_container_v1"
+  },
+  "diffFlags": {
+    "protocolPackageHashChanged": false,
+    "circuitOrKeyRefChanged": false,
+    "backendVotingCriticalHashChanged": false,
+    "backendImageDigestChanged": false,
+    "webArtifactHashChanged": true,
+    "verifierOrExporterHashChanged": false,
+    "dbMigrationStateChanged": false,
+    "custodyProfileChanged": false,
+    "deploymentProfileChanged": false,
+    "configProfileHashChanged": false,
+    "configProfileHashRecorded": true
+  },
+  "semanticChangeFlags": {
+    "ballotDefinitionChanged": false,
+    "eligibilityOrCheckoffChanged": false,
+    "custodySemanticsChanged": false,
+    "acceptedBallotSemanticsChanged": false,
+    "publishedEvidenceSemanticsChanged": false,
+    "tallyOrCountingLogicChanged": false,
+    "verifierOutputSemanticsChanged": false,
+    "finalPackageSchemaChanged": false,
+    "electionCriticalDbMigrationChanged": false
+  },
+  "specialChange": {
+    "isEmergencyChange": false,
+    "isRollback": false,
+    "reason": null,
+    "rerunChecks": []
+  },
+  "evidenceRefs": [
+    "DPP-WEB-20260519-001"
+  ]
+}

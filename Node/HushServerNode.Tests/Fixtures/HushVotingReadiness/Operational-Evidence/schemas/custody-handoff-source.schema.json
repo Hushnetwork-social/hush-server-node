@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/custody-handoff-source.schema.json",
+  "title": "HushVoting Operational Custody Handoff Source",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "custodyEvidenceId",
+    "acceptedGateIds",
+    "custodyMode",
+    "custodyStatus",
+    "publicCustodyHash",
+    "restrictedCustodyIndexRef",
+    "requiredForProfile",
+    "unresolvedBlockers",
+    "residualRiskIds"
+  ]
+}

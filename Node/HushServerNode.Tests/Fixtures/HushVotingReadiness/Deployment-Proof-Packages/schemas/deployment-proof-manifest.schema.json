@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/deployment-proof-manifest.schema.json",
+  "title": "HushVoting Deployment Proof Manifest",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "manifestId",
+    "packageKind",
+    "packageId",
+    "generatedAt",
+    "canonicalizationVersion",
+    "files",
+    "hashes",
+    "archive",
+    "sourceRefs",
+    "validationResults",
+    "redactionScanResults"
+  ],
+  "properties": {
+    "manifestId": { "type": "string", "minLength": 1 },
+    "files": { "type": "array" },
+    "archive": { "type": "object" }
+  }
+}

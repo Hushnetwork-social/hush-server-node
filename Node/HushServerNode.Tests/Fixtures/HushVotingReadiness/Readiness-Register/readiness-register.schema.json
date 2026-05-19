@@ -1,0 +1,873 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/readiness-register.schema.json",
+  "title": "HushVoting Readiness Register",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "registerId",
+    "registerVersion",
+    "registerVersionId",
+    "status",
+    "parentEpic",
+    "sourceGapRegister",
+    "createdAt",
+    "promotedAt",
+    "sourceCommit",
+    "claimPolicy",
+    "score",
+    "dimensions",
+    "claimLevels",
+    "blockers",
+    "evidenceItems",
+    "scoreChanges",
+    "exceptions",
+    "generatedViews",
+    "signoffPolicy"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "registerId": {
+      "const": "hushvoting-readiness-register"
+    },
+    "registerVersion": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "registerVersionId": {
+      "type": "string",
+      "pattern": "^RDY-REG-v[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "status": {
+      "enum": [
+        "DraftInternal",
+        "AcceptedInternal",
+        "ReviewerReady",
+        "Superseded",
+        "Blocked"
+      ]
+    },
+    "parentEpic": {
+      "const": "EPIC-015"
+    },
+    "sourceGapRegister": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "promotedAt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "sourceCommit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "claimPolicy": {
+      "$ref": "#/$defs/claimPolicy"
+    },
+    "score": {
+      "$ref": "#/$defs/score"
+    },
+    "dimensions": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/dimension"
+      }
+    },
+    "claimLevels": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/claimLevel"
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/blocker"
+      }
+    },
+    "evidenceItems": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidenceItem"
+      }
+    },
+    "scoreChanges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/scoreChange"
+      }
+    },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/exception"
+      }
+    },
+    "generatedViews": {
+      "$ref": "#/$defs/generatedViews"
+    },
+    "signoffPolicy": {
+      "$ref": "#/$defs/signoffPolicy"
+    }
+  },
+  "$defs": {
+    "claimLevelId": {
+      "enum": [
+        "internal_development",
+        "internal_non_binding_rehearsal",
+        "friendly_organization_pilot",
+        "production_organizational_rollout",
+        "public_or_state_election"
+      ]
+    },
+    "dimensionId": {
+      "enum": [
+        "RDY-DIM-001",
+        "RDY-DIM-002",
+        "RDY-DIM-003",
+        "RDY-DIM-004",
+        "RDY-DIM-005",
+        "RDY-DIM-006",
+        "RDY-DIM-007",
+        "RDY-DIM-008",
+        "RDY-DIM-009",
+        "RDY-DIM-010"
+      ]
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "claimPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimumConfidenceScore",
+        "strongerTargetScore",
+        "strongestAllowedV1Claim",
+        "alwaysBlockedV1Claims",
+        "publicScoreAllowed",
+        "numericScoreVisibility"
+      ],
+      "properties": {
+        "minimumConfidenceScore": {
+          "const": 70
+        },
+        "strongerTargetScore": {
+          "const": 80
+        },
+        "strongestAllowedV1Claim": {
+          "const": "friendly_organization_pilot"
+        },
+        "alwaysBlockedV1Claims": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "publicScoreAllowed": {
+          "const": false
+        },
+        "numericScoreVisibility": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "score": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "baselineTotal",
+        "dimensionCount",
+        "dimensionIds",
+        "minimumConfidenceScore",
+        "strongerTargetScore"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "baselineTotal": {
+          "const": 51
+        },
+        "dimensionCount": {
+          "const": 10
+        },
+        "dimensionIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "minimumConfidenceScore": {
+          "const": 70
+        },
+        "strongerTargetScore": {
+          "const": 80
+        }
+      }
+    },
+    "dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dimensionId",
+        "name",
+        "weight",
+        "currentScore",
+        "targetScoreBeforeReviewPilot",
+        "sourceGapRows",
+        "acceptanceGateIds",
+        "evidenceIds",
+        "blockerIds",
+        "residualRisk",
+        "scoreRationale"
+      ],
+      "properties": {
+        "dimensionId": {
+          "$ref": "#/$defs/dimensionId"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "weight": {
+          "const": 10
+        },
+        "currentScore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "targetScoreBeforeReviewPilot": {
+          "type": "integer",
+          "minimum": 7,
+          "maximum": 10
+        },
+        "sourceGapRows": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "acceptanceGateIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "evidenceIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "residualRisk": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "scoreRationale": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "claimLevel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claimLevel",
+        "blockerSeverity",
+        "status",
+        "allowedWording",
+        "limitationWording",
+        "blockedWording",
+        "blockerIds",
+        "publicSafeStatus"
+      ],
+      "properties": {
+        "claimLevel": {
+          "$ref": "#/$defs/claimLevelId"
+        },
+        "blockerSeverity": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "status": {
+          "enum": [
+            "allowed",
+            "allowed_with_limitations",
+            "blocked",
+            "downgraded"
+          ]
+        },
+        "allowedWording": {
+          "type": "string"
+        },
+        "limitationWording": {
+          "type": "string"
+        },
+        "blockedWording": {
+          "type": "string"
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "publicSafeStatus": {
+          "enum": [
+            "not_for_publication",
+            "not_ready_for_public_claim",
+            "pilot_only_with_limitations",
+            "public_claim_blocked"
+          ]
+        }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blockerId",
+        "claimLevel",
+        "severity",
+        "status",
+        "description",
+        "featureId",
+        "acceptanceGateIds",
+        "dimensionIds",
+        "limitationWording",
+        "resolutionCriteria"
+      ],
+      "properties": {
+        "blockerId": {
+          "type": "string",
+          "pattern": "^RDY-BLOCK-[A-Z0-9_]+-[0-9]{3}$"
+        },
+        "claimLevel": {
+          "$ref": "#/$defs/claimLevelId"
+        },
+        "severity": {
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "status": {
+          "enum": [
+            "open",
+            "resolved",
+            "superseded"
+          ]
+        },
+        "description": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "featureId": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "acceptanceGateIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "dimensionIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "limitationWording": {
+          "type": "string"
+        },
+        "resolutionCriteria": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "evidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceId",
+        "parentEpic",
+        "featureId",
+        "sourceGapRow",
+        "acceptanceGateIds",
+        "dimensionIds",
+        "electionScope",
+        "releaseScope",
+        "visibility",
+        "status",
+        "producedAt",
+        "owner",
+        "artifactRefs",
+        "checkResults",
+        "freshness",
+        "residualRisk",
+        "claimEffect",
+        "signoffs",
+        "relatedExceptionIds",
+        "relatedBlockerIds"
+      ],
+      "properties": {
+        "evidenceId": {
+          "type": "string",
+          "pattern": "^RDY-EVID-AT-RDY-[0-9]{3}-FEAT-[0-9]{3}-[0-9]{3}$"
+        },
+        "parentEpic": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "featureId": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "sourceGapRow": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "acceptanceGateIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "dimensionIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "electionScope": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "releaseScope": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "visibility": {
+          "enum": [
+            "internal",
+            "restricted_reviewer",
+            "public_safe"
+          ]
+        },
+        "status": {
+          "enum": [
+            "missing",
+            "placeholder",
+            "draft",
+            "observed",
+            "accepted",
+            "blocked",
+            "rejected",
+            "superseded"
+          ]
+        },
+        "producedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "owner": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "artifactRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifactRef"
+          }
+        },
+        "checkResults": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/checkResult"
+          }
+        },
+        "freshness": {
+          "$ref": "#/$defs/freshness"
+        },
+        "residualRisk": {
+          "type": "string"
+        },
+        "claimEffect": {
+          "enum": [
+            "none",
+            "score_increase",
+            "downgrade",
+            "block",
+            "unblock",
+            "residual_risk_update"
+          ]
+        },
+        "signoffs": {
+          "$ref": "#/$defs/signoffs"
+        },
+        "relatedExceptionIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "relatedBlockerIds": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactId",
+        "relativePath",
+        "sha256Hash",
+        "hashAlgorithm",
+        "mediaType",
+        "sizeBytes",
+        "visibility"
+      ],
+      "properties": {
+        "artifactId": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "relativePath": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "sha256Hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "hashAlgorithm": {
+          "const": "SHA-256"
+        },
+        "mediaType": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "visibility": {
+          "enum": [
+            "internal",
+            "restricted_reviewer",
+            "public_safe"
+          ]
+        }
+      }
+    },
+    "checkResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkId",
+        "status",
+        "summary",
+        "detailsRef"
+      ],
+      "properties": {
+        "checkId": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "warn",
+            "not_run"
+          ]
+        },
+        "summary": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "detailsRef": {
+          "type": "string"
+        }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "invalidationRule",
+        "staleReason",
+        "timeSensitive"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "current",
+            "stale_event_invalidated",
+            "stale_time_sensitive",
+            "superseded"
+          ]
+        },
+        "invalidationRule": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "staleReason": {
+          "type": "string"
+        },
+        "timeSensitive": {
+          "type": "boolean"
+        }
+      }
+    },
+    "signoffs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engineering",
+        "operationsProduct"
+      ],
+      "properties": {
+        "engineering": {
+          "$ref": "#/$defs/signoff"
+        },
+        "operationsProduct": {
+          "$ref": "#/$defs/signoff"
+        }
+      }
+    },
+    "signoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "signerId",
+        "signerName",
+        "signedAt",
+        "basis",
+        "samePersonTwoHat"
+      ],
+      "properties": {
+        "role": {
+          "enum": [
+            "engineering",
+            "operations_product"
+          ]
+        },
+        "signerId": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "signerName": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "signedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "basis": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "samePersonTwoHat": {
+          "type": "boolean"
+        }
+      }
+    },
+    "scoreChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scoreChangeId",
+        "dimensionId",
+        "direction",
+        "previousScore",
+        "proposedScore",
+        "acceptedScore",
+        "evidenceIds",
+        "sourceGapRow",
+        "acceptanceGateIds",
+        "blockerImpactBefore",
+        "blockerImpactAfter",
+        "claimImpact",
+        "reason",
+        "generatedDiff",
+        "signoffs"
+      ],
+      "properties": {
+        "scoreChangeId": {
+          "type": "string",
+          "pattern": "^RDY-SCORE-[0-9]{8}-[0-9]{3}$"
+        },
+        "dimensionId": {
+          "$ref": "#/$defs/dimensionId"
+        },
+        "direction": {
+          "enum": [
+            "increase",
+            "decrease"
+          ]
+        },
+        "previousScore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "proposedScore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "acceptedScore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "evidenceIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "sourceGapRow": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "acceptanceGateIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "blockerImpactBefore": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "blockerImpactAfter": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "claimImpact": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "reason": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "generatedDiff": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "signoffs": {
+          "$ref": "#/$defs/signoffs"
+        }
+      }
+    },
+    "exception": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exceptionId",
+        "type",
+        "status",
+        "sourceGapRow",
+        "acceptanceGateIds",
+        "claimLevels",
+        "reason",
+        "owner",
+        "reviewDate",
+        "compensatingEvidenceIds",
+        "scoreImpact",
+        "claimWordingImpact",
+        "severity"
+      ],
+      "properties": {
+        "exceptionId": {
+          "type": "string",
+          "pattern": "^RDY-EXC-[0-9]{8}-[0-9]{3}$"
+        },
+        "type": {
+          "enum": [
+            "skipped",
+            "unavailable",
+            "deferred",
+            "stale_invalidated",
+            "client_declined"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "sourceGapRow": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "acceptanceGateIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "claimLevels": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "reason": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "owner": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "reviewDate": {
+          "type": "string"
+        },
+        "compensatingEvidenceIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "scoreImpact": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "claimWordingImpact": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "severity": {
+          "enum": [
+            "warn",
+            "downgrade",
+            "block"
+          ]
+        }
+      }
+    },
+    "generatedViews": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scorecardPath",
+        "restrictedReviewerExtractPath",
+        "publicSafeSummaryPath",
+        "publicSafePublicationStatus"
+      ],
+      "properties": {
+        "scorecardPath": {
+          "const": "readiness-scorecard.md"
+        },
+        "restrictedReviewerExtractPath": {
+          "const": "restricted-reviewer-extract.md"
+        },
+        "publicSafeSummaryPath": {
+          "const": "public-safe-summary.md"
+        },
+        "publicSafePublicationStatus": {
+          "enum": [
+            "not_for_publication",
+            "not_ready_for_public_claim",
+            "pilot_only_with_limitations",
+            "public_claim_blocked"
+          ]
+        }
+      }
+    },
+    "signoffPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requiredRoles",
+        "allowSamePersonTwoHat",
+        "requiresTwoHatMarkerWhenSameSigner",
+        "independentDualControlClaimAllowed",
+        "samePersonWording"
+      ],
+      "properties": {
+        "requiredRoles": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "allowSamePersonTwoHat": {
+          "const": true
+        },
+        "requiresTwoHatMarkerWhenSameSigner": {
+          "const": true
+        },
+        "independentDualControlClaimAllowed": {
+          "const": false
+        },
+        "samePersonWording": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    }
+  }
+}

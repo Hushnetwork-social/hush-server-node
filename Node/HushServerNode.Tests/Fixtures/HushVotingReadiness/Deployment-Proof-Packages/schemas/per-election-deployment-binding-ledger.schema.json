@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/per-election-deployment-binding-ledger.schema.json",
+  "title": "HushVoting Per-Election Deployment Binding Ledger",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "ledgerId",
+    "schemaVersion",
+    "generatedAt",
+    "status",
+    "visibility",
+    "electionOrRehearsalId",
+    "lifecycleStateWindow",
+    "activeProofSetAtOpen",
+    "activePlatformCeremonyId",
+    "deploymentProtocolVersion",
+    "deploymentEvents",
+    "catalogReconciliation",
+    "unknownClassificationPolicy",
+    "finalBindingSummary"
+  ],
+  "properties": {
+    "ledgerId": { "type": "string", "minLength": 1 },
+    "schemaVersion": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["draft", "validated", "accepted", "degraded", "blocked", "superseded"] },
+    "visibility": { "enum": ["public", "restricted", "internal"] },
+    "deploymentEvents": { "type": "array" }
+  }
+}

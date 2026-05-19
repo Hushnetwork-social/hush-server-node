@@ -1,0 +1,62 @@
+{
+  "deploymentProofId": "DPP-WEB-20260519-001",
+  "componentId": "hush-web-client",
+  "componentVersion": "v0.1.0-feat132-fixture",
+  "status": "accepted",
+  "cdProvider": "github_actions",
+  "cdRunId": "gh-run-web-20260519-001",
+  "deploymentExecutionKind": "cd_deployment",
+  "deployedAt": "2026-05-19T10:00:00Z",
+  "deploymentTarget": "hushvoting-managed-aws-container-public-safe-fixture",
+  "sourceRef": {
+    "repository": "https://github.com/Hushnetwork-social/hush-web-client",
+    "refType": "commit",
+    "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "immutable": true
+  },
+  "artifactRefs": {
+    "webArtifactHash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "clientBundleHash": "2222222222222222222222222222222222222222222222222222222222222222",
+    "publicVerifierBundleHash": "3333333333333333333333333333333333333333333333333333333333333333"
+  },
+  "runtimeVerification": {
+    "status": "passed",
+    "checkedAt": "2026-05-19T10:05:00Z",
+    "observedArtifactHash": "1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "deploymentImpactClassification": {
+    "classificationId": "DIC-WEB-20260519-001",
+    "outputClass": "website_only_no_protocol_change",
+    "matchedRules": ["webclient-artifact-only"],
+    "reason": "Synthetic fixture proves web artifact changed while protocol, verifier, backend, custody, database, and deployment profile refs stayed unchanged.",
+    "blocksAcceptedEvidence": false
+  },
+  "accountabilityAttestations": [
+    {
+      "role": "component_owner",
+      "ownerId": "aboimpinto-hushvoting-owner",
+      "basis": "Informal v1 accountability marker for synthetic fixture.",
+      "samePersonTwoHat": true
+    }
+  ],
+  "publicRepositoryRef": {
+    "repository": "https://github.com/Hushnetwork-social/Deployment-Proof-Packages",
+    "path": "packages/hush-web-client/DPP-WEB-20260519-001/",
+    "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "restrictedEvidenceRefs": [
+    {
+      "refId": "REST-DEPLOY-WEB-20260519-001",
+      "sha256Hash": "4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ],
+  "previousProofId": null,
+  "supersedesProofIds": [],
+  "generatedViews": {
+    "publicSafeSummaryPath": "public-safe-deployment-summary.md",
+    "publicSafeSummaryHash": "5555555555555555555555555555555555555555555555555555555555555555"
+  },
+  "custodyProfile": {
+    "publicSafeStatus": "not_component_scoped"
+  }
+}

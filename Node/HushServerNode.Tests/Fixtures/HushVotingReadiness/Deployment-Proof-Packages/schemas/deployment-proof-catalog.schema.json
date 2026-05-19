@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/deployment-proof-catalog.schema.json",
+  "title": "HushVoting Deployment Proof Catalog",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "catalogVersion",
+    "generatedAt",
+    "publicRepository",
+    "componentProofs",
+    "proofSets",
+    "ceremonies",
+    "supersededProofs",
+    "latestAcceptedByComponentAndTarget"
+  ],
+  "properties": {
+    "catalogVersion": { "type": "string", "minLength": 1 },
+    "publicRepository": { "type": "string", "minLength": 1 },
+    "componentProofs": { "type": "array" },
+    "proofSets": { "type": "array" }
+  }
+}

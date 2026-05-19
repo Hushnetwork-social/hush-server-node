@@ -725,11 +725,8 @@ public sealed class OperationalEvidencePromotionServiceTests
     [Fact]
     public void PowerShellWrapper_ExistsAtStableScriptPath()
     {
-        var paths = CreatePaths();
-
         File.Exists(Path.Combine(
-                paths.WorkspaceRoot,
-                "hush-server-node",
+                HushVotingReadinessTestArtifacts.ServerNodeRoot,
                 "Node",
                 "scripts",
                 "promote-operational-evidence.ps1"))
@@ -739,8 +736,7 @@ public sealed class OperationalEvidencePromotionServiceTests
 
     private static OperationalEvidencePromotionPaths CreatePaths()
     {
-        var workspaceRoot = WorkspaceRootFinder.Find(AppContext.BaseDirectory);
-        return OperationalEvidencePromotionPaths.FromWorkspaceRoot(workspaceRoot);
+        return HushVotingReadinessTestArtifacts.CreateOperationalEvidencePaths();
     }
 
     private static readonly DateTimeOffset FixedGeneratedAt = DateTimeOffset.Parse("2026-05-19T13:00:00Z");

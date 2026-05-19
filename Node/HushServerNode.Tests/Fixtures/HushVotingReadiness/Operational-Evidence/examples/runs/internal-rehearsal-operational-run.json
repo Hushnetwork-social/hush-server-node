@@ -1,0 +1,108 @@
+{
+  "runId": "OPS-RUN-REHEARSAL-20260519-001",
+  "schemaVersion": "operational-run-v1",
+  "generatedAt": "2026-05-19T12:30:00Z",
+  "status": "accepted_with_warnings",
+  "claimLevel": "internal_non_binding_rehearsal",
+  "rehearsalPublicId": "HV-REHEARSAL-PUBLIC-20260519-001",
+  "electionPublicId": "HV-REHEARSAL-PUBLIC-20260519-001",
+  "sourceGap": "Operational readiness package",
+  "acceptanceGate": "AT-RDY-006",
+  "deploymentProfile": {
+    "profileId": "HUSHVOTING-MANAGED-SAAS-REHEARSAL",
+    "profileVersion": "sp10-profile-v1"
+  },
+  "custodyProfile": {
+    "custodyMode": "aws_kms_per_election_envelope_v1",
+    "custodyRequired": true
+  },
+  "sourceRefs": {
+    "deploymentBindingSource": "examples/deployment-binding/deployment-binding-source.json",
+    "custodyHandoffSource": "examples/custody/custody-handoff-source.json",
+    "accessControlSource": "examples/access-control/access-control-source.json",
+    "loggingSource": "examples/logging/logging-source.json",
+    "backupRestoreSource": "examples/backup-restore/backup-restore-source.json",
+    "incidentSource": "examples/incidents/incident-source.json",
+    "auditorRoomSource": "examples/auditor-room/auditor-room-source.json",
+    "exceptionsSource": "examples/exceptions/exceptions-source.json",
+    "checkResults": "examples/check-results/operational-check-results.json",
+    "operationalExceptions": "examples/check-results/operational-exceptions.json",
+    "readinessFragment": "examples/readiness/operational-readiness-fragment.json",
+    "handoff": "examples/handoffs/operational-handoff.json"
+  },
+  "outputRoots": {
+    "packageOutputRoot": ".tmp-feat133-operational-package",
+    "restrictedOutputRoot": "hush-documents/PrivateServer_ElectronicVoting/Operational-Security/FEAT-133-Operational-Evidence/OPS-RUN-REHEARSAL-20260519-001"
+  },
+  "feat132Refs": {
+    "webClientProofId": "DPP-WEB-20260519-001",
+    "webClientProofHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "serverNodeProofId": "DPP-SERVER-20260519-001",
+    "serverNodeProofHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "deploymentProofSetId": "DPS-REHEARSAL-20260519-001",
+    "bindingLedgerId": "DPBL-REHEARSAL-20260519-001",
+    "publicCatalogRef": {
+      "repository": "https://github.com/Hushnetwork-social/Deployment-Proof-Packages",
+      "path": "deployment-proof-catalog.json",
+      "commit": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "impactClassification": "voting_protocol_no_change",
+    "emergencyChangeMarkers": [],
+    "restrictedRefs": [
+      {
+        "refId": "REST-DEPLOY-WEB-20260519-001",
+        "sha256Hash": "4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    ],
+    "unknownClassificationState": "none",
+    "feat130RegisterPromotionState": "pending_feat130_promotion"
+  },
+  "feat131Refs": {
+    "custodyEvidenceId": "RDY-EVID-AT-RDY-002-FEAT-131-001",
+    "acceptedGateIds": ["AT-RDY-002", "AT-RDY-003", "AT-RDY-004"],
+    "custodyMode": "aws_kms_per_election_envelope_v1",
+    "custodyStatus": "accepted",
+    "publicCustodyHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "restrictedCustodyIndexRef": "REST-CUSTODY-HANDOFF-20260519-001",
+    "requiredForProfile": true,
+    "unresolvedBlockers": [],
+    "residualRiskIds": ["CUSTODY-RISK-OPERATING-HISTORY"]
+  },
+  "sp08Refs": {
+    "releaseManifestHash": "1212121212121212121212121212121212121212121212121212121212121212",
+    "immutableDeploymentRef": "SP08-RELEASE-REHEARSAL-20260519-001",
+    "agreesWithFeat132DeploymentRefs": true
+  },
+  "sp10Refs": {
+    "deploymentProfileId": "HUSHVOTING-MANAGED-SAAS-REHEARSAL",
+    "deploymentProfileVersion": "sp10-profile-v1",
+    "runbookVersion": "sp10-runbook-v1",
+    "loggingPolicyVersion": "privacy-safe-logging-v1",
+    "backupRestorePolicyVersion": "backup-restore-v1",
+    "incidentPolicyVersion": "incident-register-v1",
+    "auditorRoomModelVersion": "auditor-room-v1",
+    "accessControlPolicyVersion": "access-control-v1"
+  },
+  "evidenceState": {
+    "state": "accepted_with_warnings",
+    "warnings": ["OPS-006", "OPS-008"],
+    "blockers": []
+  },
+  "placeholderState": {
+    "hasPlaceholders": false,
+    "placeholderRefs": []
+  },
+  "exceptionPolicy": {
+    "warningsAllowedForClaimLevel": true,
+    "blockersAllowedForClaimLevel": false
+  },
+  "signoff": {
+    "engineeringOwner": "hushvoting-engineering-owner",
+    "productOwner": "hushvoting-product-owner"
+  },
+  "residualRisk": [
+    "Limited operating history remains after one internal rehearsal.",
+    "Site-specific monitoring and backup evidence can vary by deployment."
+  ],
+  "claimEffect": "Eligible for FEAT-130 promotion as internal non-binding rehearsal evidence only."
+}

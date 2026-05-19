@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/readiness-fragment.schema.json",
+  "title": "HushVoting Readiness Fragment",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "fragmentId",
+    "sourceGap",
+    "acceptanceGate",
+    "featureSlice",
+    "evidenceRefs",
+    "dimensionScoreChange",
+    "blockerChanges",
+    "claimEffect",
+    "residualRisk",
+    "signoff"
+  ],
+  "properties": {
+    "fragmentId": { "type": "string", "minLength": 1 },
+    "sourceGap": { "const": "Trusted deployment ceremony" },
+    "acceptanceGate": { "const": "AT-RDY-005" },
+    "featureSlice": { "const": "FEAT-132" }
+  }
+}

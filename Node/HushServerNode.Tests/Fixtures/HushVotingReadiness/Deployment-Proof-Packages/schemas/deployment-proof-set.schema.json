@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/deployment-proof-set.schema.json",
+  "title": "HushVoting Deployment Proof Set",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "proofSetId",
+    "electionOrRehearsalPublicId",
+    "lifecycleCheckpoint",
+    "catalogRef",
+    "componentProofs",
+    "componentProofPackageHashes",
+    "deploymentEventsSincePreviousCheckpoint",
+    "evidenceStatus",
+    "publicSafeResultSummary"
+  ],
+  "properties": {
+    "proofSetId": { "type": "string", "minLength": 1 },
+    "electionOrRehearsalPublicId": { "type": "string", "minLength": 1 },
+    "lifecycleCheckpoint": { "type": "string", "minLength": 1 },
+    "catalogRef": { "type": "object", "minProperties": 1 },
+    "componentProofs": {
+      "type": "object",
+      "required": ["hushWebClientDeploymentProofId", "hushServerNodeDeploymentProofId"]
+    },
+    "componentProofPackageHashes": { "type": "array", "minItems": 2 },
+    "deploymentEventsSincePreviousCheckpoint": { "type": "array" },
+    "evidenceStatus": { "enum": ["draft", "validated", "accepted", "degraded", "blocked", "superseded"] },
+    "publicSafeResultSummary": { "type": "string", "minLength": 1 }
+  }
+}

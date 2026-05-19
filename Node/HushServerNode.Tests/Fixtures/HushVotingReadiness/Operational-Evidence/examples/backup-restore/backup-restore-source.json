@@ -1,0 +1,12 @@
+{
+  "backupPolicyId": "SP10-BACKUP-POLICY",
+  "restorePolicyId": "SP10-RESTORE-POLICY",
+  "restoreTestRef": "RESTORE-TEST-MANAGED-SAAS-20260518-001",
+  "restoreTestAt": "2026-05-18T18:00:00Z",
+  "restoreScope": "same_deployment_profile_latest_valid_restore",
+  "deploymentProfileCovered": "HUSHVOTING-MANAGED-SAAS-REHEARSAL",
+  "restoreResult": "passed",
+  "residualRisk": "Restore test was latest valid profile-level test, not rehearsal-specific.",
+  "evidenceStatus": "accepted_with_warnings",
+  "exceptionRefs": ["OPS-006-WARN-LATEST-RESTORE"]
+}

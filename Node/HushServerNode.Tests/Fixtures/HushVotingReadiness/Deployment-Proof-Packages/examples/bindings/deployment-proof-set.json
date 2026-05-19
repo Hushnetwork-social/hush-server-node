@@ -1,0 +1,27 @@
+{
+  "proofSetId": "DPS-REHEARSAL-20260519-001",
+  "electionOrRehearsalPublicId": "HV-REHEARSAL-PUBLIC-20260519-001",
+  "lifecycleCheckpoint": "Draft -> Open",
+  "catalogRef": {
+    "repository": "https://github.com/Hushnetwork-social/Deployment-Proof-Packages",
+    "commit": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "path": "deployment-proof-catalog.json"
+  },
+  "componentProofs": {
+    "hushWebClientDeploymentProofId": "DPP-WEB-20260519-001",
+    "hushServerNodeDeploymentProofId": "DPP-SERVER-20260519-001"
+  },
+  "componentProofPackageHashes": [
+    {
+      "deploymentProofId": "DPP-WEB-20260519-001",
+      "sha256Hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "deploymentProofId": "DPP-SERVER-20260519-001",
+      "sha256Hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "deploymentEventsSincePreviousCheckpoint": [],
+  "evidenceStatus": "accepted",
+  "publicSafeResultSummary": "Synthetic rehearsal proof set binds active WebClient and HushServerNode component proof packages before open."
+}
