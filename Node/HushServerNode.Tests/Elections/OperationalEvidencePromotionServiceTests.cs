@@ -451,6 +451,158 @@ public sealed class OperationalEvidencePromotionServiceTests
             .Equal(second.Artifacts.Select(artifact => (artifact.RelativePath, artifact.Content)));
     }
 
+    [Fact]
+    public void PromotionService_ValidateOnly_WritesNoFiles()
+    {
+        using var workspace = TempOperationalEvidenceWorkspace.Create();
+        var packageOutputRoot = Path.Combine(workspace.Root, "package-output");
+        var restrictedOutputRoot = Path.Combine(workspace.Root, "restricted-output");
+
+        var result = new OperationalEvidencePromotionService().Promote(new OperationalEvidencePromotionOptions(
+            workspace.Paths,
+            Mode: null,
+            RunId: null,
+            GeneratedAt: FixedGeneratedAt,
+            PackageOutputRoot: packageOutputRoot,
+            RestrictedOutputRoot: restrictedOutputRoot,
+            ValidateOnly: true,
+            AllowLiveCapture: false));
+
+        result.Mode.Should().Be(OperationalEvidencePromotionService.ModeValidateOnly);
+        result.WrittenFiles.Should().BeEmpty();
+        Directory.Exists(packageOutputRoot).Should().BeFalse();
+        Directory.Exists(restrictedOutputRoot).Should().BeFalse();
+    }
+
+    [Fact]
+    public void PromotionService_CheckOnly_ReturnsOpsResultsWithoutWrites()
+    {
+        using var workspace = TempOperationalEvidenceWorkspace.Create();
+        var packageOutputRoot = Path.Combine(workspace.Root, "package-output");
+        var restrictedOutputRoot = Path.Combine(workspace.Root, "restricted-output");
+
+        var result = new OperationalEvidencePromotionService().Promote(new OperationalEvidencePromotionOptions(
+            workspace.Paths,
+            OperationalEvidencePromotionService.ModeCheckOnly,
+            RunId: "OPS-RUN-REHEARSAL-20260519-001",
+            GeneratedAt: FixedGeneratedAt,
+            PackageOutputRoot: packageOutputRoot,
+            RestrictedOutputRoot: restrictedOutputRoot,
+            ValidateOnly: false,
+            AllowLiveCapture: false));
+
+        result.Mode.Should().Be(OperationalEvidencePromotionService.ModeCheckOnly);
+        result.CheckResult.Checks.Select(check => check.CheckId).Should().Contain(OperationalEvidenceContracts.RequiredOpsCheckIds);
+        result.WrittenFiles.Should().BeEmpty();
+        Directory.Exists(packageOutputRoot).Should().BeFalse();
+        Directory.Exists(restrictedOutputRoot).Should().BeFalse();
+    }
+
+    [Fact]
+    public void PromotionService_RehearsalPackage_WritesRequiredArtifactsDeterministically()
+    {
+        using var workspace = TempOperationalEvidenceWorkspace.Create();
+        var packageOutputRoot = Path.Combine(workspace.Root, "package-output");
+        var restrictedOutputRoot = Path.Combine(workspace.Root, "restricted-output");
+        var service = new OperationalEvidencePromotionService();
+        var options = new OperationalEvidencePromotionOptions(
+            workspace.Paths,
+            OperationalEvidencePromotionService.ModeRehearsalPackage,
+            RunId: "OPS-RUN-REHEARSAL-20260519-001",
+            GeneratedAt: FixedGeneratedAt,
+            PackageOutputRoot: packageOutputRoot,
+            RestrictedOutputRoot: restrictedOutputRoot,
+            ValidateOnly: false,
+            AllowLiveCapture: false);
+
+        var first = service.Promote(options);
+        var second = service.Promote(options);
+
+        File.Exists(Path.Combine(packageOutputRoot, VerificationPackageFileNames.Sp10OperationalSecuritySummary))
+            .Should()
+            .BeTrue();
+        File.Exists(Path.Combine(packageOutputRoot, OperationalEvidenceArtifactGenerator.OperationalReadinessFragmentPath))
+            .Should()
+            .BeTrue();
+        File.Exists(Path.Combine(restrictedOutputRoot, VerificationPackageFileNames.RestrictedSp10AccessControlSnapshot))
+            .Should()
+            .BeTrue();
+        first.Artifacts.Select(artifact => (artifact.RelativePath, artifact.Sha256Hash))
+            .Should()
+            .Equal(second.Artifacts.Select(artifact => (artifact.RelativePath, artifact.Sha256Hash)));
+        second.WrittenFiles.Count.Should().Be(first.Artifacts.Count);
+    }
+
+    [Fact]
+    public void PromotionService_RehearsalPackage_RejectsExistingDifferentOutput()
+    {
+        using var workspace = TempOperationalEvidenceWorkspace.Create();
+        var packageOutputRoot = Path.Combine(workspace.Root, "package-output");
+        var restrictedOutputRoot = Path.Combine(workspace.Root, "restricted-output");
+        var service = new OperationalEvidencePromotionService();
+        var options = new OperationalEvidencePromotionOptions(
+            workspace.Paths,
+            OperationalEvidencePromotionService.ModeRehearsalPackage,
+            RunId: null,
+            GeneratedAt: FixedGeneratedAt,
+            PackageOutputRoot: packageOutputRoot,
+            RestrictedOutputRoot: restrictedOutputRoot,
+            ValidateOnly: false,
+            AllowLiveCapture: false);
+        service.Promote(options);
+        File.WriteAllText(
+            Path.Combine(packageOutputRoot, VerificationPackageFileNames.Sp10OperationalSecuritySummary),
+            "changed");
+
+        var act = () => service.Promote(options);
+
+        act.Should()
+            .Throw<OperationalEvidencePromotionException>()
+            .WithMessage("Existing generated output differs*");
+    }
+
+    [Fact]
+    public void PromotionService_SourceTraversal_IsRejectedBeforeWrites()
+    {
+        using var workspace = TempOperationalEvidenceWorkspace.Create();
+        var run = LoadExample(workspace.Paths, OperationalEvidenceContracts.AcceptedRunFixture);
+        run["sourceRefs"]!.AsObject()["loggingSource"] = "../outside.json";
+        WriteExample(workspace.Paths, OperationalEvidenceContracts.AcceptedRunFixture, run);
+        var packageOutputRoot = Path.Combine(workspace.Root, "package-output");
+        var restrictedOutputRoot = Path.Combine(workspace.Root, "restricted-output");
+
+        var act = () => new OperationalEvidencePromotionService().Promote(new OperationalEvidencePromotionOptions(
+            workspace.Paths,
+            OperationalEvidencePromotionService.ModeRehearsalPackage,
+            RunId: null,
+            GeneratedAt: FixedGeneratedAt,
+            PackageOutputRoot: packageOutputRoot,
+            RestrictedOutputRoot: restrictedOutputRoot,
+            ValidateOnly: false,
+            AllowLiveCapture: false));
+
+        act.Should()
+            .Throw<OperationalEvidencePromotionException>()
+            .WithMessage("Operational run source paths failed containment checks.");
+        Directory.Exists(packageOutputRoot).Should().BeFalse();
+        Directory.Exists(restrictedOutputRoot).Should().BeFalse();
+    }
+
+    [Fact]
+    public void PowerShellWrapper_ExistsAtStableScriptPath()
+    {
+        var paths = CreatePaths();
+
+        File.Exists(Path.Combine(
+                paths.WorkspaceRoot,
+                "hush-server-node",
+                "Node",
+                "scripts",
+                "promote-operational-evidence.ps1"))
+            .Should()
+            .BeTrue();
+    }
+
     private static OperationalEvidencePromotionPaths CreatePaths()
     {
         var workspaceRoot = WorkspaceRootFinder.Find(AppContext.BaseDirectory);
