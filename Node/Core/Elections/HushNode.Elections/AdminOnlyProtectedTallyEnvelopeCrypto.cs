@@ -128,12 +128,15 @@ public sealed record AdminOnlyProtectedTallyEnvelopeCryptoOptions(
     string? AwsKmsKeyId = null,
     string? AwsKmsRegion = null,
     string? AwsKmsServiceUrl = null,
-    string? AwsKmsServiceIdentityLabel = null)
+    string? AwsKmsServiceIdentityLabel = null,
+    int? AwsKmsDeletionWindowDays = null,
+    string? CustodyProviderProfile = null)
 {
     public const string ProviderAuto = "auto";
     public const string ProviderUnavailable = "unavailable";
     public const string ProviderWindowsDpapi = "windows-dpapi";
     public const string ProviderAwsKms = "aws-kms";
+    public const string ProviderAwsKmsPerElection = "aws-kms-per-election";
 
     public static AdminOnlyProtectedTallyEnvelopeCryptoOptions Default { get; } =
         new(ProviderAuto);
@@ -154,6 +157,11 @@ public static class AdminOnlyProtectedTallyEnvelopeCryptoFactory
         {
             AdminOnlyProtectedTallyEnvelopeCryptoOptions.ProviderAwsKms =>
                 CreateAwsKmsProvider(resolvedOptions),
+            AdminOnlyProtectedTallyEnvelopeCryptoOptions.ProviderAwsKmsPerElection =>
+                new AwsKmsPerElectionAdminOnlyProtectedTallyEnvelopeCrypto(
+                    resolvedOptions,
+                    CreateAwsKmsClient(resolvedOptions),
+                    disposeClient: true),
             AdminOnlyProtectedTallyEnvelopeCryptoOptions.ProviderWindowsDpapi =>
                 OperatingSystem.IsWindows()
                     ? new WindowsDpapiAdminOnlyProtectedTallyEnvelopeCrypto()
@@ -196,7 +204,7 @@ public static class AdminOnlyProtectedTallyEnvelopeCryptoFactory
             disposeClient: true);
     }
 
-    private static IAmazonKeyManagementService CreateAwsKmsClient(
+    internal static IAmazonKeyManagementService CreateAwsKmsClient(
         AdminOnlyProtectedTallyEnvelopeCryptoOptions options)
     {
         var serviceUrl = options.AwsKmsServiceUrl?.Trim();
