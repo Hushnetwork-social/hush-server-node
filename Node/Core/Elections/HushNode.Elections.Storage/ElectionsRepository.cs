@@ -6,6 +6,19 @@ namespace HushNode.Elections.Storage;
 
 public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElectionsRepository
 {
+    private static readonly ElectionAdminOnlyProtectedTallyCustodyLifecycleState[] CustodyReconciliationStates =
+    [
+        ElectionAdminOnlyProtectedTallyCustodyLifecycleState.ProviderUnavailable,
+        ElectionAdminOnlyProtectedTallyCustodyLifecycleState.KeyCreated,
+        ElectionAdminOnlyProtectedTallyCustodyLifecycleState.SealedScalarPersisted,
+        ElectionAdminOnlyProtectedTallyCustodyLifecycleState.OpenReady,
+        ElectionAdminOnlyProtectedTallyCustodyLifecycleState.ScalarDestroyed,
+        ElectionAdminOnlyProtectedTallyCustodyLifecycleState.KeyDisabled,
+        ElectionAdminOnlyProtectedTallyCustodyLifecycleState.RetryRequired,
+        ElectionAdminOnlyProtectedTallyCustodyLifecycleState.ExceptionRequired,
+        ElectionAdminOnlyProtectedTallyCustodyLifecycleState.OrphanedKey,
+    ];
+
     public async Task<ElectionRecord?> GetElectionAsync(ElectionId electionId) =>
         await Context.Elections.FirstOrDefaultAsync(x => x.ElectionId == electionId);
 
@@ -1324,6 +1337,36 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
     public async Task<ElectionAdminOnlyProtectedTallyEnvelopeRecord?> GetAdminOnlyProtectedTallyEnvelopeAsync(ElectionId electionId) =>
         await Context.ElectionAdminOnlyProtectedTallyEnvelopes
             .FirstOrDefaultAsync(x => x.ElectionId == electionId);
+
+    public async Task<ElectionAdminOnlyProtectedTallyEnvelopeRecord?> GetAdminOnlyProtectedTallyEnvelopeAsync(
+        ElectionId electionId,
+        string selectedProfileId)
+    {
+        var normalizedSelectedProfileId = selectedProfileId.Trim();
+        return await Context.ElectionAdminOnlyProtectedTallyEnvelopes
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == electionId &&
+                x.SelectedProfileId == normalizedSelectedProfileId);
+    }
+
+    public async Task<IReadOnlyList<ElectionAdminOnlyProtectedTallyEnvelopeRecord>>
+        GetAdminOnlyProtectedTallyEnvelopesForCustodyReconciliationAsync(DateTime? staleBefore = null)
+    {
+        var query = Context.ElectionAdminOnlyProtectedTallyEnvelopes
+            .Where(x =>
+                x.CustodyMode == ElectionAdminOnlyProtectedTallyCustodyModes.AwsKmsPerElectionEnvelopeV1 &&
+                CustodyReconciliationStates.Contains(x.CustodyLifecycleState));
+
+        if (staleBefore is not null)
+        {
+            query = query.Where(x => x.LastReconciledAt == null || x.LastReconciledAt <= staleBefore.Value);
+        }
+
+        return await query
+            .OrderBy(x => x.LastReconciledAt ?? DateTime.MinValue)
+            .ThenBy(x => x.SelectedProfileId)
+            .ToListAsync();
+    }
 
     public async Task SaveAdminOnlyProtectedTallyEnvelopeAsync(ElectionAdminOnlyProtectedTallyEnvelopeRecord envelope) =>
         await Context.ElectionAdminOnlyProtectedTallyEnvelopes.AddAsync(envelope);

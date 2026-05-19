@@ -1558,6 +1558,41 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.DestroyedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.SealedByServiceIdentity).HasColumnType("varchar(160)");
             entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.CustodyMode).HasColumnType("varchar(96)");
+            entity.Property(x => x.CustodyProvider).HasColumnType("varchar(96)");
+            entity.Property(x => x.CustodyProviderProfile).HasColumnType("varchar(128)");
+            entity.Property(x => x.KmsKeyId).HasColumnType("varchar(256)");
+            entity.Property(x => x.KmsKeyArn).HasColumnType("text");
+            entity.Property(x => x.KmsAlias).HasColumnType("varchar(256)");
+            entity.Property(x => x.KmsRegion).HasColumnType("varchar(64)");
+            entity.Property(x => x.KmsAccountBoundary).HasColumnType("varchar(160)");
+            entity.Property(x => x.KmsTagSetHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.KmsTagsVerifiedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.EncryptionContextVersion).HasColumnType("varchar(64)");
+            entity.Property(x => x.EncryptionContextHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.CustodyLifecycleState)
+                .HasConversion<string>()
+                .HasColumnType("varchar(40)")
+                .HasDefaultValue(ElectionAdminOnlyProtectedTallyCustodyLifecycleState.NotRequired);
+            entity.Property(x => x.CustodyLastAction).HasColumnType("varchar(96)");
+            entity.Property(x => x.CustodyLastErrorCode).HasColumnType("varchar(128)");
+            entity.Property(x => x.CustodyLastErrorMessage).HasColumnType("text");
+            entity.Property(x => x.CustodyRetryCount).HasColumnType("integer");
+            entity.Property(x => x.CustodyNextRetryAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LastReconciledAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.CustodyExceptionId).HasColumnType("varchar(160)");
+            entity.Property(x => x.KmsKeyCreatedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.KmsKeyDisabledAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.KmsDeletionScheduledAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.KmsDeletionDate).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.DeletionWindowDays).HasColumnType("integer");
+            entity.Property(x => x.CustodyActionServiceIdentity).HasColumnType("varchar(160)");
+            entity.Property(x => x.PublicCustodyReferenceHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.SealedEnvelopeHash).HasColumnType("varchar(128)");
+
+            entity.HasIndex(x => new { x.ElectionId, x.SelectedProfileId });
+            entity.HasIndex(x => new { x.CustodyMode, x.CustodyLifecycleState });
+            entity.HasIndex(x => x.KmsAlias);
         });
     }
 

@@ -11,7 +11,8 @@ public static partial class ElectionModelFactory
         string scalarEncoding,
         string sealAlgorithm,
         string? sealedByServiceIdentity = null,
-        DateTime? createdAt = null)
+        DateTime? createdAt = null,
+        ElectionAdminOnlyProtectedTallyCustodyMetadata? custodyMetadata = null)
     {
         if (string.IsNullOrWhiteSpace(selectedProfileId))
         {
@@ -55,6 +56,35 @@ public static partial class ElectionModelFactory
             timestamp,
             DestroyedAt: null,
             SealedByServiceIdentity: NormalizeOptionalText(sealedByServiceIdentity),
-            LastUpdatedAt: timestamp);
+            LastUpdatedAt: timestamp,
+            CustodyMode: custodyMetadata?.CustodyMode,
+            CustodyProvider: custodyMetadata?.CustodyProvider,
+            CustodyProviderProfile: custodyMetadata?.CustodyProviderProfile,
+            KmsKeyId: custodyMetadata?.KmsKeyId,
+            KmsKeyArn: custodyMetadata?.KmsKeyArn,
+            KmsAlias: custodyMetadata?.KmsAlias,
+            KmsRegion: custodyMetadata?.KmsRegion,
+            KmsAccountBoundary: custodyMetadata?.KmsAccountBoundary,
+            KmsTagSetHash: custodyMetadata?.KmsTagSetHash,
+            KmsTagsVerifiedAt: custodyMetadata?.KmsTagsVerifiedAt,
+            EncryptionContextVersion: custodyMetadata?.EncryptionContextVersion,
+            EncryptionContextHash: custodyMetadata?.EncryptionContextHash,
+            CustodyLifecycleState: custodyMetadata?.CustodyLifecycleState ??
+                ElectionAdminOnlyProtectedTallyCustodyLifecycleState.NotRequired,
+            CustodyLastAction: custodyMetadata?.CustodyLastAction,
+            CustodyLastErrorCode: custodyMetadata?.CustodyLastErrorCode,
+            CustodyLastErrorMessage: custodyMetadata?.CustodyLastErrorMessage,
+            CustodyRetryCount: custodyMetadata?.CustodyRetryCount ?? 0,
+            CustodyNextRetryAt: custodyMetadata?.CustodyNextRetryAt,
+            LastReconciledAt: custodyMetadata?.LastReconciledAt,
+            CustodyExceptionId: custodyMetadata?.CustodyExceptionId,
+            KmsKeyCreatedAt: custodyMetadata?.KmsKeyCreatedAt,
+            KmsKeyDisabledAt: custodyMetadata?.KmsKeyDisabledAt,
+            KmsDeletionScheduledAt: custodyMetadata?.KmsDeletionScheduledAt,
+            KmsDeletionDate: custodyMetadata?.KmsDeletionDate,
+            DeletionWindowDays: custodyMetadata?.DeletionWindowDays,
+            CustodyActionServiceIdentity: custodyMetadata?.CustodyActionServiceIdentity,
+            PublicCustodyReferenceHash: custodyMetadata?.PublicCustodyReferenceHash,
+            SealedEnvelopeHash: custodyMetadata?.SealedEnvelopeHash);
     }
 }

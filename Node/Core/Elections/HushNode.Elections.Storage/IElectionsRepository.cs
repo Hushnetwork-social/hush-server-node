@@ -448,6 +448,16 @@ public interface IElectionsRepository : IRepository
     Task<ElectionAdminOnlyProtectedTallyEnvelopeRecord?> GetAdminOnlyProtectedTallyEnvelopeAsync(ElectionId electionId) =>
         Task.FromResult<ElectionAdminOnlyProtectedTallyEnvelopeRecord?>(null);
 
+    Task<ElectionAdminOnlyProtectedTallyEnvelopeRecord?> GetAdminOnlyProtectedTallyEnvelopeAsync(
+        ElectionId electionId,
+        string selectedProfileId) =>
+        Task.FromResult<ElectionAdminOnlyProtectedTallyEnvelopeRecord?>(null);
+
+    Task<IReadOnlyList<ElectionAdminOnlyProtectedTallyEnvelopeRecord>>
+        GetAdminOnlyProtectedTallyEnvelopesForCustodyReconciliationAsync(DateTime? staleBefore = null) =>
+        Task.FromResult<IReadOnlyList<ElectionAdminOnlyProtectedTallyEnvelopeRecord>>(
+            Array.Empty<ElectionAdminOnlyProtectedTallyEnvelopeRecord>());
+
     Task SaveAdminOnlyProtectedTallyEnvelopeAsync(ElectionAdminOnlyProtectedTallyEnvelopeRecord envelope) =>
         Task.CompletedTask;
 

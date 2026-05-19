@@ -148,11 +148,95 @@ namespace HushNode.Elections.Storage.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CustodyActionServiceIdentity")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("CustodyExceptionId")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("CustodyLastAction")
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("CustodyLastErrorCode")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("CustodyLastErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CustodyLifecycleState")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(40)")
+                        .HasDefaultValue("NotRequired");
+
+                    b.Property<string>("CustodyMode")
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<DateTime?>("CustodyNextRetryAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CustodyProvider")
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("CustodyProviderProfile")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<int>("CustodyRetryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DeletionWindowDays")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("DestroyedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EncryptionContextHash")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("EncryptionContextVersion")
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("KmsAccountBoundary")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("KmsAlias")
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<DateTime?>("KmsDeletionDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("KmsDeletionScheduledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("KmsKeyArn")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("KmsKeyCreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("KmsKeyDisabledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("KmsKeyId")
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<string>("KmsRegion")
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("KmsTagSetHash")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTime?>("KmsTagsVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastReconciledAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("LastUpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PublicCustodyReferenceHash")
+                        .HasColumnType("varchar(128)");
 
                     b.Property<string>("ScalarEncoding")
                         .IsRequired()
@@ -164,6 +248,9 @@ namespace HushNode.Elections.Storage.Migrations
 
                     b.Property<string>("SealedByServiceIdentity")
                         .HasColumnType("varchar(160)");
+
+                    b.Property<string>("SealedEnvelopeHash")
+                        .HasColumnType("varchar(128)");
 
                     b.Property<string>("SealedTallyPrivateScalar")
                         .IsRequired()
@@ -182,6 +269,12 @@ namespace HushNode.Elections.Storage.Migrations
                         .HasColumnType("varchar(256)");
 
                     b.HasKey("ElectionId");
+
+                    b.HasIndex("KmsAlias");
+
+                    b.HasIndex("CustodyMode", "CustodyLifecycleState");
+
+                    b.HasIndex("ElectionId", "SelectedProfileId");
 
                     b.ToTable("ElectionAdminOnlyProtectedTallyEnvelopeRecord", "Elections");
                 });
