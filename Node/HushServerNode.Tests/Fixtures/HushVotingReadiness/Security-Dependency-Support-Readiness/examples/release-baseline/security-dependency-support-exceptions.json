@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1.0",
+  "exceptions": [
+    {
+      "exceptionId": "SDS-EXC-LIC-001",
+      "sourceGap": "Third-party dependency-license gate",
+      "acceptanceGate": "AT-RDY-014",
+      "affectedClaim": "friendly_organization_pilot",
+      "ownerSignoff": "AboimPinto Consulting security maintainer",
+      "reason": "snarkjs GPL-3.0 classification requires distribution-boundary review before pilot wording.",
+      "reviewDate": "2026-06-15",
+      "expiryDate": "2026-07-31",
+      "compensatingEvidence": [
+        "manual license classification",
+        "distribution-boundary review required before pilot"
+      ],
+      "scoreImpact": "warning_for_internal_rehearsal",
+      "claimWordingImpact": "No stronger production claim until replacement, isolation, or formal license decision.",
+      "action": "replace_isolate_or_formally_accept_before_pilot"
+    },
+    {
+      "exceptionId": "SDS-EXC-DISCLOSURE-001",
+      "sourceGap": "Disclosure process gate",
+      "acceptanceGate": "AT-RDY-014",
+      "affectedClaim": "friendly_organization_pilot",
+      "ownerSignoff": "AboimPinto Consulting security maintainer",
+      "reason": "Security intake placeholder is defined but the concrete private pilot channel is not configured yet.",
+      "reviewDate": "2026-06-01",
+      "expiryDate": "2026-06-30",
+      "compensatingEvidence": [
+        "private escalation owner assigned",
+        "public/private boundary defined"
+      ],
+      "scoreImpact": "warning_for_internal_rehearsal",
+      "claimWordingImpact": "Pilot claim remains blocked until concrete private intake exists.",
+      "action": "configure_private_security_intake_before_pilot"
+    }
+  ]
+}

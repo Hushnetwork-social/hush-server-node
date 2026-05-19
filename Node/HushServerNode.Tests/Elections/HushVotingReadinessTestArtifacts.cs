@@ -1,6 +1,7 @@
 using DeploymentProofPackagePromoter;
 using OperationalEvidencePromoter;
 using ReadinessRegisterPromoter;
+using SecurityDependencySupportReadinessPromoter;
 
 namespace HushServerNode.Tests.Elections;
 
@@ -17,6 +18,9 @@ internal static class HushVotingReadinessTestArtifacts
     public static OperationalEvidencePromotionPaths CreateOperationalEvidencePaths() =>
         OperationalEvidencePromotionPaths.FromWorkspaceRoot(SharedWorkspaceRoot.Value);
 
+    public static SecurityDependencySupportPromotionPaths CreateSecurityDependencySupportPaths() =>
+        SecurityDependencySupportPromotionPaths.FromWorkspaceRoot(SharedWorkspaceRoot.Value);
+
     public static string CreateEmptyWorkspace(string prefix)
     {
         var root = Path.Combine(Path.GetTempPath(), $"{prefix}{Guid.NewGuid():N}");
@@ -25,6 +29,7 @@ internal static class HushVotingReadinessTestArtifacts
         Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "Deployment-Ceremonies"));
         Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "HushVoting-Readiness-Register"));
         Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "Operational-Security", "FEAT-133-Operational-Evidence"));
+        Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "Security-Dependency-Support-Readiness"));
         Directory.CreateDirectory(Path.Combine(root, "hush-server-node"));
         return root;
     }
@@ -39,6 +44,7 @@ internal static class HushVotingReadinessTestArtifacts
         CopyDirectory(Path.Combine(FixtureRoot, "Deployment-Proof-Packages"), Path.Combine(readinessRoot, "Deployment-Proof-Packages"));
         CopyDirectory(Path.Combine(FixtureRoot, "Operational-Evidence"), Path.Combine(readinessRoot, "Operational-Evidence"));
         CopyDirectory(Path.Combine(FixtureRoot, "Readiness-Register"), Path.Combine(readinessRoot, "Readiness-Register"));
+        CopyDirectory(Path.Combine(FixtureRoot, "Security-Dependency-Support-Readiness"), Path.Combine(readinessRoot, "Security-Dependency-Support-Readiness"));
         return root;
     }
 

@@ -1,0 +1,48 @@
+{
+  "proofId": "SDS-PRIVACY-HV-REL-BASELINE-2026-05",
+  "exportSchemaRef": "support-export-schema-v1",
+  "fixtureRefs": [
+    "support-export-fixture-anonymous-voter-client.json",
+    "support-export-fixture-election-owner-anomaly.json"
+  ],
+  "allowedFields": [
+    "caseId",
+    "electionIdHash",
+    "workflow",
+    "clientPlatform",
+    "errorCode",
+    "timestamp",
+    "operatorNotePublicSafe"
+  ],
+  "restrictedFields": [
+    "hashedActorId",
+    "tenantScopedCaseLink",
+    "internalTraceId"
+  ],
+  "forbiddenFields": [
+    "voteChoice",
+    "receiptSecret",
+    "voterIdentityReceiptJoin",
+    "trusteeRawShares",
+    "executorPrivateKeys",
+    "authTokens",
+    "credentials"
+  ],
+  "scanResults": [
+    {
+      "fixtureRef": "support-export-fixture-anonymous-voter-client.json",
+      "result": "passed",
+      "forbiddenFindings": []
+    },
+    {
+      "fixtureRef": "support-export-fixture-election-owner-anomaly.json",
+      "result": "passed",
+      "forbiddenFindings": []
+    }
+  ],
+  "privacyResult": "passed",
+  "claimImpact": {
+    "internal_non_binding_rehearsal": "accepted",
+    "friendly_organization_pilot": "accepted_when_fixture_set_matches_pilot_export_schema"
+  }
+}

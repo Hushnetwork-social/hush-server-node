@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushvoting.local/schemas/security-support-handoff.schema.json",
+  "title": "FEAT-134 Security Support Handoff",
+  "type": "object",
+  "required": [
+    "handoffId",
+    "producerFeature",
+    "releaseScope",
+    "acceptedEvidenceIds",
+    "unresolvedBlockers",
+    "acceptedExceptions",
+    "claimImpact",
+    "freshness",
+    "publicSafeSummaryPath",
+    "restrictedEvidenceIndexPath",
+    "consumerInstructions"
+  ],
+  "properties": {
+    "handoffId": { "type": "string" },
+    "producerFeature": { "const": "FEAT-134" },
+    "releaseScope": { "type": "object" },
+    "acceptedEvidenceIds": { "type": "array" },
+    "unresolvedBlockers": { "type": "array" },
+    "acceptedExceptions": { "type": "array" },
+    "claimImpact": { "type": "object" },
+    "freshness": { "type": "object" },
+    "publicSafeSummaryPath": { "type": "string" },
+    "restrictedEvidenceIndexPath": { "type": "string" },
+    "consumerInstructions": { "type": "object" }
+  },
+  "additionalProperties": true
+}

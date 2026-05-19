@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushvoting.local/schemas/support-export-privacy-proof.schema.json",
+  "title": "FEAT-134 Support Export Privacy Proof",
+  "type": "object",
+  "required": [
+    "proofId",
+    "exportSchemaRef",
+    "fixtureRefs",
+    "allowedFields",
+    "restrictedFields",
+    "forbiddenFields",
+    "scanResults",
+    "privacyResult",
+    "claimImpact"
+  ],
+  "properties": {
+    "proofId": { "type": "string" },
+    "exportSchemaRef": { "type": "string" },
+    "fixtureRefs": { "type": "array" },
+    "allowedFields": { "type": "array" },
+    "restrictedFields": { "type": "array" },
+    "forbiddenFields": { "type": "array" },
+    "scanResults": { "type": "array" },
+    "privacyResult": { "type": "string" },
+    "claimImpact": { "type": "object" }
+  },
+  "additionalProperties": true
+}

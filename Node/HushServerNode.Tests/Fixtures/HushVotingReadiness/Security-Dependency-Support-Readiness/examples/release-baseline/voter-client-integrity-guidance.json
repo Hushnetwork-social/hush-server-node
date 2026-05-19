@@ -1,0 +1,45 @@
+{
+  "guidanceId": "SDS-CLIENT-HV-REL-BASELINE-2026-05",
+  "claimBearingPaths": [
+    "desktop_web",
+    "mobile_web"
+  ],
+  "supportedPaths": [
+    "desktop_web",
+    "mobile_web"
+  ],
+  "conditionalPaths": [
+    {
+      "path": "mobile_web",
+      "condition": "Requires current FEAT-121 mobile web benchmark/platform evidence and FEAT-103 accessibility coverage."
+    }
+  ],
+  "unsupportedPaths": [],
+  "notAvailableV1Paths": [
+    {
+      "path": "qr_cross_device_verification",
+      "status": "not_available_v1",
+      "reason": "QR/cross-device verification is explicitly outside the v1 production claim until a later feature delivers it."
+    },
+    {
+      "path": "native_mobile_app_integrity",
+      "status": "not_available_v1",
+      "reason": "No native mobile app claim exists for v1."
+    }
+  ],
+  "mobileEvidenceRefs": [
+    "FEAT-121-mobile-web-platform-baseline",
+    "FEAT-103-voter-mobile-accessibility-evidence"
+  ],
+  "sameDeviceLimitations": [
+    "Receipt/inclusion verification is same-device or file-import based in v1.",
+    "Cross-device receipt verification remains visible as not_available_v1."
+  ],
+  "fallbackWarnings": [
+    "Unsupported device/browser combinations must route to election-owner support before stronger claims."
+  ],
+  "claimImpact": {
+    "internal_non_binding_rehearsal": "accepted_with_warnings",
+    "friendly_organization_pilot": "accepted_only_when_mobile_refs_are_current"
+  }
+}

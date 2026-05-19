@@ -1,0 +1,32 @@
+{
+  "processId": "SDS-DISCLOSURE-HV-REL-BASELINE-2026-05",
+  "intakeChannel": "security-intake-private-v1",
+  "concretePilotChannelConfigured": false,
+  "triageOwner": "AboimPinto Consulting security maintainer",
+  "severityRubric": {
+    "critical": "possible vote secrecy, tally integrity, authentication bypass, or key custody compromise",
+    "high": "material election workflow compromise without confirmed vote secrecy loss",
+    "medium": "bounded security issue with compensating control or limited workflow impact",
+    "low": "defense-in-depth or documentation issue"
+  },
+  "embargoRule": "Keep sensitive technical detail private until remediation and owner-approved disclosure.",
+  "customerNotificationRule": "Notify affected election owner before any public statement when an active election could be affected.",
+  "publicPrivateBoundary": {
+    "publicSafeAllowed": [
+      "existence of intake process",
+      "status category",
+      "high-level remediation state"
+    ],
+    "restrictedOnly": [
+      "private raw reports",
+      "exploit detail",
+      "operator contact data",
+      "tenant-specific evidence"
+    ]
+  },
+  "pilotReadinessStatus": "warning_until_concrete_private_channel_configured",
+  "claimImpact": {
+    "internal_non_binding_rehearsal": "accepted_with_warnings",
+    "friendly_organization_pilot": "blocked_until_concrete_private_channel_configured"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushvoting.local/schemas/security-dependency-support-manifest.schema.json",
+  "title": "FEAT-134 Manifest",
+  "type": "object",
+  "required": [
+    "manifestId",
+    "packageId",
+    "version",
+    "generatedAt",
+    "canonicalizationVersion",
+    "files",
+    "hashes",
+    "schemaHashes",
+    "archive",
+    "sourceRefs",
+    "validationResults",
+    "redactionScanResults"
+  ],
+  "properties": {
+    "manifestId": { "type": "string" },
+    "packageId": { "type": "string" },
+    "version": { "type": "string" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "canonicalizationVersion": { "type": "string" },
+    "files": { "type": "array" },
+    "hashes": { "type": "object" },
+    "schemaHashes": { "type": "array" },
+    "archive": { "type": "object" },
+    "sourceRefs": { "type": "object" },
+    "validationResults": { "type": "object" },
+    "redactionScanResults": { "type": "array" }
+  },
+  "additionalProperties": true
+}

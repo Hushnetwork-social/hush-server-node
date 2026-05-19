@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushvoting.local/schemas/support-readiness-index.schema.json",
+  "title": "FEAT-134 Support Readiness Index",
+  "type": "object",
+  "required": [
+    "indexId",
+    "supportCategories",
+    "runbookRefs",
+    "escalationRefs",
+    "privacyRules",
+    "ownerStatus",
+    "missingRunbooks",
+    "claimImpact"
+  ],
+  "properties": {
+    "indexId": { "type": "string" },
+    "supportCategories": { "type": "array" },
+    "runbookRefs": { "type": "array" },
+    "escalationRefs": { "type": "array" },
+    "privacyRules": { "type": "array" },
+    "ownerStatus": { "type": "string" },
+    "missingRunbooks": { "type": "array" },
+    "claimImpact": { "type": "object" }
+  },
+  "additionalProperties": true
+}

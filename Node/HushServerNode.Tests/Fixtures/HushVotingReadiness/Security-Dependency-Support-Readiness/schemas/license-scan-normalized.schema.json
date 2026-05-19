@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushvoting.local/schemas/license-scan-normalized.schema.json",
+  "title": "FEAT-134 Normalized License Scan",
+  "type": "object",
+  "required": [
+    "scanId",
+    "scannerProvenance",
+    "policyVersion",
+    "licenseFindings",
+    "unknownLicenses",
+    "restrictedLicenses",
+    "rejectedLicenses",
+    "noticeObligations",
+    "exceptionRefs",
+    "claimImpact"
+  ],
+  "properties": {
+    "scanId": { "type": "string" },
+    "scannerProvenance": { "type": "array" },
+    "policyVersion": { "type": "string" },
+    "licenseFindings": { "type": "array" },
+    "unknownLicenses": { "type": "array" },
+    "restrictedLicenses": { "type": "array" },
+    "rejectedLicenses": { "type": "array" },
+    "noticeObligations": { "type": "array" },
+    "exceptionRefs": { "type": "array" },
+    "claimImpact": { "type": "object" }
+  },
+  "additionalProperties": true
+}

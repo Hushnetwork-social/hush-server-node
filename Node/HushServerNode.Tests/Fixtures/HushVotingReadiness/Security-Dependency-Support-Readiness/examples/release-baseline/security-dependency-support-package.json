@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.0",
+  "packageId": "SDS-HV-REL-BASELINE-2026-05-v0.1.0",
+  "featureId": "FEAT-134",
+  "sourceGap": "Security dependency and support readiness evidence",
+  "acceptanceGate": "AT-RDY-014",
+  "releaseScope": {
+    "releaseScopeId": "HV-REL-BASELINE-2026-05",
+    "releaseId": "HV-REL-BASELINE-2026-05",
+    "version": "v0.1.0",
+    "deploymentProofPackageRefs": [
+      "DPP-WEB-BASELINE-2026-05",
+      "DPP-SERVER-BASELINE-2026-05"
+    ],
+    "includedHushVotingPaths": [
+      "hush-web-client",
+      "hush-server-node/Node/Core/Elections",
+      "hush-server-node/Shared/HushShared.Elections.Model",
+      "hush-server-node/Shared/HushShared.Elections.Verification.Model"
+    ],
+    "excludedPaths": [
+      "hush-feeds",
+      "hush-network blockchain services outside the HushVoting release path"
+    ],
+    "lockfileRefs": [
+      "hush-web-client/package-lock.json",
+      "hush-server-node/Node/**/*.csproj"
+    ],
+    "artifactRefs": [
+      "FEAT-132 deployment proof package refs",
+      "FEAT-133 operational evidence refs"
+    ]
+  },
+  "claimLevel": "internal_non_binding_rehearsal",
+  "targetClaimLevels": [
+    "friendly_organization_pilot"
+  ],
+  "generatedAt": "2026-05-19T00:00:00Z",
+  "generatedBy": "FEAT-134 baseline source fixture",
+  "status": "development_placeholder",
+  "sourceRefs": {
+    "dependencyInventory": "examples/release-baseline/dependency-inventory.json",
+    "licenseScan": "examples/release-baseline/license-scan-normalized.json",
+    "vulnerabilityScan": "examples/release-baseline/vulnerability-scan-normalized.json",
+    "disclosureProcess": "examples/release-baseline/disclosure-process.json",
+    "accessibilityEvidence": "examples/release-baseline/accessibility-evidence-index.json",
+    "voterClientGuidance": "examples/release-baseline/voter-client-integrity-guidance.json",
+    "supportReadiness": "examples/release-baseline/support-readiness-index.json",
+    "supportExportPrivacyProof": "examples/release-baseline/support-export-privacy-proof.json",
+    "exceptions": "examples/release-baseline/security-dependency-support-exceptions.json"
+  },
+  "componentScopes": [
+    {
+      "componentId": "hush-web-client",
+      "kind": "web_client",
+      "claimBearing": true
+    },
+    {
+      "componentId": "hush-server-node",
+      "kind": "server_node",
+      "claimBearing": true
+    },
+    {
+      "componentId": "verifier-package-generator",
+      "kind": "support_tooling",
+      "claimBearing": true
+    }
+  ],
+  "claimBearingClientPaths": [
+    "desktop_web",
+    "mobile_web"
+  ],
+  "scannerProvenanceRefs": [
+    "SCN-NPM-AUDIT-BASELINE",
+    "SCN-DOTNET-LIST-PACKAGE-BASELINE",
+    "SCN-MANUAL-LICENSE-BASELINE"
+  ],
+  "dependencyInventoryRef": "examples/release-baseline/dependency-inventory.json",
+  "licenseScanRef": "examples/release-baseline/license-scan-normalized.json",
+  "vulnerabilityScanRef": "examples/release-baseline/vulnerability-scan-normalized.json",
+  "disclosureProcessRef": "examples/release-baseline/disclosure-process.json",
+  "accessibilityEvidenceRef": "examples/release-baseline/accessibility-evidence-index.json",
+  "voterClientGuidanceRef": "examples/release-baseline/voter-client-integrity-guidance.json",
+  "supportReadinessRef": "examples/release-baseline/support-readiness-index.json",
+  "supportExportPrivacyProofRef": "examples/release-baseline/support-export-privacy-proof.json",
+  "exceptionRefs": [
+    "SDS-EXC-LIC-001",
+    "SDS-EXC-DISCLOSURE-001"
+  ],
+  "freshness": {
+    "vulnerabilityEvidenceProducedAt": "2026-05-19T00:00:00Z",
+    "vulnerabilityFreshUntil": "2026-06-18T00:00:00Z",
+    "maxAgeDays": 30
+  },
+  "claimImpact": {
+    "internal_non_binding_rehearsal": "accepted_with_warnings",
+    "friendly_organization_pilot": "blocked_until_private_intake_channel_configured",
+    "production_organizational_rollout": "not_claimed",
+    "public_or_state_election": "not_claimed"
+  },
+  "generatedViews": {
+    "publicSafeSummary": "public-safe-security-dependency-support-summary.md",
+    "restrictedEvidenceIndex": "restricted-security-dependency-support-evidence-index.md"
+  },
+  "handoffRef": "security-support-handoff.json",
+  "manifestRef": "security-dependency-support-manifest.json"
+}

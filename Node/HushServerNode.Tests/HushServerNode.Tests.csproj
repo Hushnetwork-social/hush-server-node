@@ -43,6 +43,7 @@
     <ProjectReference Include="..\scripts\ReadinessRegisterPromoter\ReadinessRegisterPromoter.csproj" />
     <ProjectReference Include="..\scripts\DeploymentProofPackagePromoter\DeploymentProofPackagePromoter.csproj" />
     <ProjectReference Include="..\scripts\OperationalEvidencePromoter\OperationalEvidencePromoter.csproj" />
+    <ProjectReference Include="..\scripts\SecurityDependencySupportReadinessPromoter\SecurityDependencySupportReadinessPromoter.csproj" />
   </ItemGroup>
 
   <ItemGroup>
