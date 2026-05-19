@@ -41,6 +41,7 @@
     <ProjectReference Include="..\..\Shared\HushShared.Elections.Verification.Model\HushShared.Elections.Verification.Model.csproj" />
     <ProjectReference Include="..\..\Shared\HushShared.Elections.PublicationProof\HushShared.Elections.PublicationProof.csproj" />
     <ProjectReference Include="..\scripts\ReadinessRegisterPromoter\ReadinessRegisterPromoter.csproj" />
+    <ProjectReference Include="..\scripts\DeploymentProofPackagePromoter\DeploymentProofPackagePromoter.csproj" />
   </ItemGroup>
 
 </Project>
