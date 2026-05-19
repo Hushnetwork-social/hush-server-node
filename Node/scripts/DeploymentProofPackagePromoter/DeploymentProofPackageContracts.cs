@@ -6,20 +6,25 @@ namespace DeploymentProofPackagePromoter;
 
 public sealed record DeploymentProofPackagePromotionPaths(
     string WorkspaceRoot,
-    string SourceRoot)
+    string SourceRoot,
+    string PublicOutputRoot,
+    string RestrictedOutputRoot)
 {
     public string SchemasRoot => Path.Combine(SourceRoot, "schemas");
     public string ExamplesRoot => Path.Combine(SourceRoot, "examples");
     public string ComponentProofExamplesRoot => Path.Combine(ExamplesRoot, "component-proofs");
     public string BindingExamplesRoot => Path.Combine(ExamplesRoot, "bindings");
     public string CeremonyExamplesRoot => Path.Combine(ExamplesRoot, "ceremonies");
+    public string CatalogPath => Path.Combine(PublicOutputRoot, "deployment-proof-catalog.json");
 
     public static DeploymentProofPackagePromotionPaths FromWorkspaceRoot(string workspaceRoot)
     {
         var root = Path.GetFullPath(workspaceRoot);
         return new DeploymentProofPackagePromotionPaths(
             root,
-            Path.Combine(root, "hush-memory-bank", "Overview", "HushVotingReadiness", "Deployment-Proof-Packages"));
+            Path.Combine(root, "hush-memory-bank", "Overview", "HushVotingReadiness", "Deployment-Proof-Packages"),
+            Path.Combine(root, "Deployment-Proof-Packages"),
+            Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "Deployment-Ceremonies"));
     }
 }
 

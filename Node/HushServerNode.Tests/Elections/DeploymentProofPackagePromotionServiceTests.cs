@@ -7,6 +7,8 @@ namespace HushServerNode.Tests.Elections;
 
 public sealed class DeploymentProofPackagePromotionServiceTests
 {
+    private static readonly DateTimeOffset FixedGeneratedAt = new(2026, 5, 19, 0, 0, 0, TimeSpan.Zero);
+
     [Fact]
     public void SchemaSet_RequiredSchemas_ArePresentAndLoadable()
     {
@@ -400,6 +402,162 @@ public sealed class DeploymentProofPackagePromotionServiceTests
         markdown.Should().NotContain("external witness");
     }
 
+    [Fact]
+    public void PromoterCliArtifacts_ExistAndArgumentsParseExpectedModes()
+    {
+        var paths = CreatePaths();
+        var wrapperPath = Path.Combine(paths.WorkspaceRoot, "hush-server-node", "Node", "scripts", "promote-deployment-proof-package.ps1");
+
+        File.Exists(wrapperPath).Should().BeTrue();
+        var arguments = CommandLineArguments.Parse(
+        [
+            "--mode",
+            DeploymentProofPackagePromotionService.ModeComponentProof,
+            "--workspace-root",
+            paths.WorkspaceRoot,
+            "--component-id",
+            "hush-web-client",
+            "--deployment-proof-id",
+            "DPP-WEB-20260519-001",
+            "--validate-only",
+        ]);
+
+        arguments["mode"].Should().Be(DeploymentProofPackagePromotionService.ModeComponentProof);
+        arguments.ContainsKey("validate-only").Should().BeTrue();
+    }
+
+    [Fact]
+    public void Promote_WithValidateOnlyAndNoMode_ValidatesFixturesWithoutWriting()
+    {
+        using var workspace = TempPromotionWorkspace.Create();
+
+        var result = new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            workspace.Paths,
+            mode: null,
+            validateOnly: true));
+
+        result.Mode.Should().Be("validate_all");
+        Directory.Exists(workspace.Paths.PublicOutputRoot).Should().BeFalse();
+        Directory.Exists(workspace.Paths.RestrictedOutputRoot).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Promote_WithOutputRootOutsideWorkspace_FailsClosed()
+    {
+        var paths = CreatePaths() with
+        {
+            PublicOutputRoot = Path.Combine(Path.GetTempPath(), $"feat132-outside-{Guid.NewGuid():N}"),
+        };
+
+        var act = () => new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            paths,
+            DeploymentProofPackagePromotionService.ModeComponentProof,
+            componentId: "hush-web-client",
+            deploymentProofId: "DPP-WEB-20260519-001"));
+
+        act.Should().Throw<DeploymentProofPackagePromotionException>()
+            .WithMessage("*escapes the workspace root*");
+    }
+
+    [Fact]
+    public void Promote_ComponentProof_WritesPublicPackageManifestArchiveAndCatalog()
+    {
+        using var workspace = TempPromotionWorkspace.Create();
+
+        var result = new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            workspace.Paths,
+            DeploymentProofPackagePromotionService.ModeComponentProof,
+            componentId: "hush-web-client",
+            deploymentProofId: "DPP-WEB-20260519-001"));
+
+        result.PackageId.Should().Be("DPP-WEB-20260519-001");
+        File.Exists(Path.Combine(workspace.Paths.PublicOutputRoot, "packages", "hush-web-client", "DPP-WEB-20260519-001", "deployment-proof-package.json")).Should().BeTrue();
+        File.Exists(Path.Combine(workspace.Paths.PublicOutputRoot, "packages", "hush-web-client", "DPP-WEB-20260519-001", "deployment-proof-manifest.json")).Should().BeTrue();
+        File.Exists(Path.Combine(workspace.Paths.PublicOutputRoot, "packages", "hush-web-client", "DPP-WEB-20260519-001", "public-safe-deployment-summary.md")).Should().BeTrue();
+        File.Exists(Path.Combine(workspace.Paths.PublicOutputRoot, "packages", "hush-web-client", "DPP-WEB-20260519-001", "deployment-proof-package.zip")).Should().BeTrue();
+        File.ReadAllText(workspace.Paths.CatalogPath).Should().Contain("DPP-WEB-20260519-001");
+    }
+
+    [Fact]
+    public void Promote_BindingLedger_WritesElectionBindingPackage()
+    {
+        using var workspace = TempPromotionWorkspace.Create();
+
+        var result = new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            workspace.Paths,
+            DeploymentProofPackagePromotionService.ModeBindingLedger));
+
+        result.PackageId.Should().Be("DPBL-REHEARSAL-20260519-001");
+        var outputRoot = Path.Combine(workspace.Paths.PublicOutputRoot, "election-bindings", "HV-REHEARSAL-PUBLIC-20260519-001", "DPBL-REHEARSAL-20260519-001");
+        File.Exists(Path.Combine(outputRoot, "deployment-proof-set.json")).Should().BeTrue();
+        File.Exists(Path.Combine(outputRoot, "per-election-deployment-binding-ledger.json")).Should().BeTrue();
+        File.Exists(Path.Combine(outputRoot, "per-election-deployment-binding-ledger-manifest.json")).Should().BeTrue();
+        File.Exists(Path.Combine(outputRoot, "public-safe-binding-summary.md")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Promote_RehearsalCeremony_WritesPublicRefsRestrictedIndexesAndReadinessFragment()
+    {
+        using var workspace = TempPromotionWorkspace.Create();
+
+        var result = new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            workspace.Paths,
+            DeploymentProofPackagePromotionService.ModeRehearsalCeremony));
+
+        result.PackageId.Should().Be("DPC-REHEARSAL-20260519-001");
+        var publicRoot = Path.Combine(workspace.Paths.PublicOutputRoot, "ceremonies", "DPC-REHEARSAL-20260519-001");
+        File.ReadAllText(Path.Combine(publicRoot, "readiness-fragment.json")).Should().Contain("\"acceptedScore\": 8");
+        File.Exists(Path.Combine(publicRoot, "deployment-ceremony-manifest.json")).Should().BeTrue();
+        var restrictedRoot = Path.Combine(workspace.Paths.RestrictedOutputRoot, "DPC-REHEARSAL-20260519-001");
+        File.Exists(Path.Combine(restrictedRoot, "restricted-ceremony-evidence-index.md")).Should().BeTrue();
+        File.Exists(Path.Combine(restrictedRoot, "restricted-deployment-evidence-index.md")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Promote_SameSourceAndTimestamp_ProducesDeterministicManifestAndArchiveHashes()
+    {
+        using var first = TempPromotionWorkspace.Create();
+        using var second = TempPromotionWorkspace.Create();
+
+        var firstResult = new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            first.Paths,
+            DeploymentProofPackagePromotionService.ModeComponentProof,
+            componentId: "hush-web-client",
+            deploymentProofId: "DPP-WEB-20260519-001"));
+        var secondResult = new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            second.Paths,
+            DeploymentProofPackagePromotionService.ModeComponentProof,
+            componentId: "hush-web-client",
+            deploymentProofId: "DPP-WEB-20260519-001"));
+
+        secondResult.ManifestHash.Should().Be(firstResult.ManifestHash);
+        secondResult.ArchiveHash.Should().Be(firstResult.ArchiveHash);
+    }
+
+    [Fact]
+    public void Promote_CatalogConflictWithDifferentHash_FailsClosed()
+    {
+        using var workspace = TempPromotionWorkspace.Create();
+        new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            workspace.Paths,
+            DeploymentProofPackagePromotionService.ModeComponentProof,
+            componentId: "hush-web-client",
+            deploymentProofId: "DPP-WEB-20260519-001"));
+
+        var catalog = DeploymentProofPackageContracts.ReadJsonObject(workspace.Paths.CatalogPath, "catalog");
+        catalog["componentProofs"]!.AsArray()[0]!.AsObject()["manifestHash"] = new string('0', 64);
+        File.WriteAllText(workspace.Paths.CatalogPath, catalog.ToJsonString());
+
+        var act = () => new DeploymentProofPackagePromotionService().Promote(CreatePromotionOptions(
+            workspace.Paths,
+            DeploymentProofPackagePromotionService.ModeComponentProof,
+            componentId: "hush-web-client",
+            deploymentProofId: "DPP-WEB-20260519-001"));
+
+        act.Should().Throw<DeploymentProofPackagePromotionException>()
+            .WithMessage("*Catalog entry conflict*");
+    }
+
     private static DeploymentProofPackagePromotionPaths CreatePaths()
     {
         var workspaceRoot = WorkspaceRootFinder.Find(AppContext.BaseDirectory);
@@ -413,6 +571,60 @@ public sealed class DeploymentProofPackagePromotionServiceTests
         DeploymentProofPackageContracts.ReadJsonObject(
             Path.Combine(paths.ExamplesRoot, folder, fileName),
             fileName);
+
+    private static DeploymentProofPackagePromotionOptions CreatePromotionOptions(
+        DeploymentProofPackagePromotionPaths paths,
+        string? mode,
+        string? componentId = null,
+        string? deploymentProofId = null,
+        bool validateOnly = false) =>
+        new(
+            paths,
+            mode,
+            componentId,
+            deploymentProofId,
+            CeremonyId: null,
+            ClassificationInput: null,
+            CdProvider: null,
+            CdRunId: null,
+            FixedGeneratedAt,
+            validateOnly,
+            Scaffold: false,
+            CaptureLiveEvidence: false);
+
+    private sealed class TempPromotionWorkspace : IDisposable
+    {
+        private TempPromotionWorkspace(string root, DeploymentProofPackagePromotionPaths paths)
+        {
+            Root = root;
+            Paths = paths;
+        }
+
+        public string Root { get; }
+
+        public DeploymentProofPackagePromotionPaths Paths { get; }
+
+        public static TempPromotionWorkspace Create()
+        {
+            var basePaths = CreatePaths();
+            var root = Path.Combine(basePaths.WorkspaceRoot, ".tmp-feat132-tests", Guid.NewGuid().ToString("N"));
+            var paths = basePaths with
+            {
+                PublicOutputRoot = Path.Combine(root, "public"),
+                RestrictedOutputRoot = Path.Combine(root, "restricted"),
+            };
+
+            return new TempPromotionWorkspace(root, paths);
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Root))
+            {
+                Directory.Delete(Root, recursive: true);
+            }
+        }
+    }
 
     private static DeploymentImpactClassificationInput CreateWebsiteOnlyInput() =>
         new()
