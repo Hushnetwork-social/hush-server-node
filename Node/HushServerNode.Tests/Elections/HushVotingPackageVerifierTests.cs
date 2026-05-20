@@ -557,6 +557,7 @@ public class HushVotingPackageVerifierTests
             VerificationProfileIds.PublicAnonymousV1));
 
         result.ExitCode.Should().Be(0);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Pass);
         result.Output.Results.Should().Contain(x =>
             x.CheckCode == "VFY-SP07-000" &&
             x.ResultCode == VerificationResultCodes.PublicationProofEvidenceValid &&
@@ -564,6 +565,10 @@ public class HushVotingPackageVerifierTests
         result.Output.Results.Should().NotContain(x =>
             x.CheckCode == "VFY-SP07-010" &&
             x.Status == VerificationCheckStatus.Fail);
+        result.Output.Results.Should().NotContain(x =>
+            x.ResultCode == VerificationResultCodes.PublicationProofExternalReviewPending);
+        result.Output.Results.Should().NotContain(x =>
+            x.ResultCode == VerificationResultCodes.ExternalReviewNotComplete);
     }
 
     [Fact]

@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Core\Elections\HushNode.Elections\HushNode.Elections.csproj" />
     <ProjectReference Include="..\..\..\Shared\HushShared.Elections.Verification.Model\HushShared.Elections.Verification.Model.csproj" />
   </ItemGroup>
 </Project>

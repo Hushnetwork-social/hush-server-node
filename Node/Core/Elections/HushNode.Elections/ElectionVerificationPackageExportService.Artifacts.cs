@@ -692,7 +692,7 @@ public sealed partial class ElectionVerificationPackageExportService
             AuditorRoomAccessLogHashOrRestrictedRef: null,
             BlocksHighAssurance: ElectionSp10OperationalSecurityRules.BlocksHighAssurance(evidenceState),
             PrimaryResultCode: ElectionSp10OperationalSecurityRules.GetPrimaryResultCode(evidenceState),
-            PrimaryIssue: "Development-only SP-10 operational evidence is exported for this package. FEAT-106 readiness, legal validation, public-election approval, and certification remain out of scope.",
+            PrimaryIssue: "Development-only SP-10 operational evidence is exported for this package. Rollout readiness, legal validation, public-election approval, and certification remain out of scope.",
             PublicEvidenceFiles:
             [
                 VerificationPackageFileNames.Sp10OperationalSecuritySummary,
@@ -815,7 +815,7 @@ public sealed partial class ElectionVerificationPackageExportService
                 ElectionSp10ProfileIds.DeploymentProfileDeclaredCheckCode,
                 VerificationCheckStatus.Pass,
                 VerificationResultCodes.OperationalSecurityProfileDeclared,
-                "SP-10 managed deployment profile is declared without implying FEAT-106 readiness.",
+                "SP-10 managed deployment profile is declared without implying rollout readiness.",
                 new Dictionary<string, string>
                 {
                     ["deployment_profile_id"] = status.DeploymentProfileId,

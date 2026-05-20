@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using HushShared.Elections.Model;
 
 namespace HushShared.Elections.Verification.Model;
@@ -93,7 +94,7 @@ public static class ElectionSp10ProfileIds
                 DeploymentProfileDeclaredCheckCode,
                 VerificationResultCodes.OperationalSecurityProfileDeclared,
                 VerificationCheckStatus.Pass,
-                "Managed deployment profile is declared without implying FEAT-106 readiness."),
+                "Managed deployment profile is declared without implying rollout readiness."),
             [ReleaseDeploymentBindingCheckCode] = new(
                 ReleaseDeploymentBindingCheckCode,
                 VerificationResultCodes.OperationalSecurityReleaseBindingMissing,
@@ -140,7 +141,7 @@ public static class ElectionSp10ProfileIds
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [EvidenceStateNotAvailable] =
-                "Operational security evidence is not available for this package; FEAT-106 readiness is not completed.",
+                "Operational security evidence is not available for this package; rollout readiness is not completed.",
             [EvidenceStateDevelopmentPlaceholder] =
                 "Development-only operational placeholders are present and cannot support high-assurance operational claims.",
             [EvidenceStateManagedProfileDeclared] =
@@ -279,6 +280,7 @@ public record ElectionSp10OperationalSecurityStatusArtifactRecord(
     string ProgramVersion,
     string DeploymentProfileId,
     string EvidenceState,
+    [property: JsonPropertyName("doesNotCompleteOperationalReadiness")]
     bool DoesNotCompleteFeat106Readiness,
     string Feat106ReadinessCaveat,
     string? ReleaseEvidenceMode,
@@ -303,6 +305,7 @@ public record ElectionSp10OperationalSecurityStatusArtifactRecord(
     public string DeploymentProfileId { get; init; } =
         NormalizeRequiredValue(DeploymentProfileId, nameof(DeploymentProfileId));
     public string EvidenceState { get; init; } = NormalizeRequiredValue(EvidenceState, nameof(EvidenceState));
+    [JsonPropertyName("operationalReadinessCaveat")]
     public string Feat106ReadinessCaveat { get; init; } =
         NormalizeRequiredValue(Feat106ReadinessCaveat, nameof(Feat106ReadinessCaveat));
     public string? ReleaseEvidenceMode { get; init; } = NormalizeOptionalValue(ReleaseEvidenceMode);
@@ -668,12 +671,12 @@ public static class ElectionSp10OperationalSecurityRules
 
         if (status.DoesNotCompleteFeat106Readiness is false)
         {
-            errors.Add("operational evidence must explicitly keep FEAT-106 readiness separate");
+            errors.Add("operational evidence must explicitly keep rollout readiness separate");
         }
 
         if (ContainsForbiddenClaimPhrase(status.Feat106ReadinessCaveat))
         {
-            errors.Add("FEAT-106 readiness caveat contains unsupported readiness or certification wording");
+            errors.Add("operational readiness caveat contains unsupported readiness or certification wording");
         }
 
         var expectedBlock = BlocksHighAssurance(status.EvidenceState);

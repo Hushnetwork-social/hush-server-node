@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace HushShared.Elections.Verification.Model;
 
@@ -348,6 +349,8 @@ public static class ElectionSp08ReleaseIntegrityRules
 
 public static class ElectionSp08ReleaseManifestHasher
 {
+    private static readonly JsonSerializerOptions CanonicalJsonOptions = CreateCanonicalJsonOptions();
+
     public static string ComputeReleaseManifestHash(ElectionSp08ReleaseManifestArtifactRecord manifest)
     {
         ArgumentNullException.ThrowIfNull(manifest);
@@ -355,7 +358,7 @@ public static class ElectionSp08ReleaseManifestHasher
         var canonical = Canonicalize(manifest);
 
         return VerificationCanonicalHash.ComputeSha256LowerHex(
-            JsonSerializer.Serialize(canonical, VerificationJson.Options));
+            JsonSerializer.Serialize(canonical, CanonicalJsonOptions));
     }
 
     public static ElectionSp08ReleaseManifestArtifactRecord Canonicalize(
@@ -379,6 +382,17 @@ public static class ElectionSp08ReleaseManifestHasher
                 .OrderBy(x => x, StringComparer.Ordinal)
                 .ToArray(),
         };
+    }
+
+    private static JsonSerializerOptions CreateCanonicalJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            WriteIndented = false,
+        };
+
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        return options;
     }
 }
 
