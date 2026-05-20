@@ -25,6 +25,14 @@ internal static class HushVotingReadinessTestArtifacts
     public static VerifierCorpusPromotionPaths CreateVerifierCorpusPaths() =>
         VerifierCorpusPromotionPaths.FromWorkspaceRoot(SharedWorkspaceRoot.Value);
 
+    public static string CreateVerifierCorpusWorkspace()
+    {
+        var root = CreateEmptyWorkspace("hush-verifier-corpus-");
+        var readinessRoot = Path.Combine(root, "hush-memory-bank", "Overview", "HushVotingReadiness");
+        CopyDirectory(Path.Combine(FixtureRoot, "Verifier-Corpus"), Path.Combine(readinessRoot, "Verifier-Corpus"));
+        return root;
+    }
+
     public static string CreateEmptyWorkspace(string prefix)
     {
         var root = Path.Combine(Path.GetTempPath(), $"{prefix}{Guid.NewGuid():N}");

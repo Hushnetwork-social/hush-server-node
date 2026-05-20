@@ -168,8 +168,8 @@ public sealed class VerifierCorpusGenerationTests
     [Fact]
     public async Task Promotion_ValidateOnly_ShouldNotWritePublicRoot()
     {
-        var workspaceRoot = WorkspaceRootFinder.Find(Directory.GetCurrentDirectory());
-        var paths = VerifierCorpusPromotionPaths.FromWorkspaceRoot(workspaceRoot);
+        using var workspace = TempVerifierCorpusPromotionWorkspace.Create();
+        var paths = workspace.Paths;
         var publicRootExistsBefore = Directory.Exists(paths.PublicOutputRoot);
         var before = publicRootExistsBefore
             ? Directory.EnumerateFiles(paths.PublicOutputRoot, "*", SearchOption.AllDirectories)
@@ -206,56 +206,41 @@ public sealed class VerifierCorpusGenerationTests
     [Fact]
     public async Task Promotion_Generate_ShouldWriteVersionedRepositoryLayout()
     {
-        var workspaceRoot = WorkspaceRootFinder.Find(Directory.GetCurrentDirectory());
-        var paths = VerifierCorpusPromotionPaths.FromWorkspaceRoot(workspaceRoot);
-        var publicRoot = Path.Combine(
-            workspaceRoot,
-            ".tmp-feat135-tests",
-            Guid.NewGuid().ToString("N"),
-            "HushVoting-Verifier-Corpus");
+        using var workspace = TempVerifierCorpusPromotionWorkspace.Create();
+        var paths = workspace.Paths;
+        var publicRoot = paths.PublicOutputRoot;
 
-        try
-        {
-            var result = await new VerifierCorpusPromotionService().PromoteAsync(new VerifierCorpusPromotionOptions(
-                paths,
-                publicRoot,
-                "v0.1.0",
-                FixedGeneratedAt,
-                ValidateOnly: false,
-                PublicRepositoryRef: "test-ref",
-                VerifierSourceRef: "test-source-ref",
-                VerifierHash: "sha256:test-verifier-hash",
-                WindowsReviewerReplayValidated: true,
-                LinuxReviewerReplayValidated: true));
+        var result = await new VerifierCorpusPromotionService().PromoteAsync(new VerifierCorpusPromotionOptions(
+            paths,
+            publicRoot,
+            "v0.1.0",
+            FixedGeneratedAt,
+            ValidateOnly: false,
+            PublicRepositoryRef: "test-ref",
+            VerifierSourceRef: "test-source-ref",
+            VerifierHash: "sha256:test-verifier-hash",
+            WindowsReviewerReplayValidated: true,
+            LinuxReviewerReplayValidated: true));
 
-            result.OutputRoot.Replace('\\', '/').Should().EndWith("/HushVoting-Verifier-Corpus/hushvoting-v1/v0.1.0");
-            File.Exists(Path.Combine(publicRoot, "README.md")).Should().BeTrue();
-            File.Exists(Path.Combine(publicRoot, VerifierCorpusPromotionService.CorpusIndexFileName)).Should().BeTrue();
-            File.Exists(Path.Combine(publicRoot, "hushvoting-v1", "v0.1.0", "corpus-manifest.json")).Should().BeTrue();
-            Directory.Exists(Path.Combine(publicRoot, "packages")).Should().BeFalse("the repository root must not mix versioned corpus package files");
+        result.OutputRoot.Replace('\\', '/').Should().EndWith("/HushVoting-Verifier-Corpus/hushvoting-v1/v0.1.0");
+        File.Exists(Path.Combine(publicRoot, "README.md")).Should().BeTrue();
+        File.Exists(Path.Combine(publicRoot, VerifierCorpusPromotionService.CorpusIndexFileName)).Should().BeTrue();
+        File.Exists(Path.Combine(publicRoot, "hushvoting-v1", "v0.1.0", "corpus-manifest.json")).Should().BeTrue();
+        Directory.Exists(Path.Combine(publicRoot, "packages")).Should().BeFalse("the repository root must not mix versioned corpus package files");
 
-            var index = ReadJson(VerifierCorpusPromotionService.CorpusIndexFileName, publicRoot);
-            index["latest"]!["path"]!.GetValue<string>().Should().Be("hushvoting-v1/v0.1.0/corpus-manifest.json");
+        var index = ReadJson(VerifierCorpusPromotionService.CorpusIndexFileName, publicRoot);
+        index["latest"]!["path"]!.GetValue<string>().Should().Be("hushvoting-v1/v0.1.0/corpus-manifest.json");
 
-            var versionReadme = await File.ReadAllTextAsync(Path.Combine(publicRoot, "hushvoting-v1", "v0.1.0", "README.md"));
-            versionReadme.Should().Contain("..\\..\\..\\hush-server-node");
-            versionReadme.Should().Contain("../../../hush-server-node");
-        }
-        finally
-        {
-            var tempRoot = Path.Combine(workspaceRoot, ".tmp-feat135-tests");
-            if (Directory.Exists(tempRoot))
-            {
-                Directory.Delete(tempRoot, recursive: true);
-            }
-        }
+        var versionReadme = await File.ReadAllTextAsync(Path.Combine(publicRoot, "hushvoting-v1", "v0.1.0", "README.md"));
+        versionReadme.Should().Contain("..\\..\\..\\hush-server-node");
+        versionReadme.Should().Contain("../../../hush-server-node");
     }
 
     [Fact]
     public async Task Promotion_OutputRootOutsideWorkspace_ShouldFailBeforeWriting()
     {
-        var workspaceRoot = WorkspaceRootFinder.Find(Directory.GetCurrentDirectory());
-        var paths = VerifierCorpusPromotionPaths.FromWorkspaceRoot(workspaceRoot);
+        using var workspace = TempVerifierCorpusPromotionWorkspace.Create();
+        var paths = workspace.Paths;
         var outsideRoot = Path.Combine(Path.GetTempPath(), "HushVoting-Verifier-Corpus");
 
         var act = async () => await new VerifierCorpusPromotionService().PromoteAsync(new VerifierCorpusPromotionOptions(
@@ -295,6 +280,30 @@ public sealed class VerifierCorpusGenerationTests
             var root = Path.Combine(Path.GetTempPath(), $"hush-verifier-corpus-{Guid.NewGuid():N}");
             return new TempCorpusWorkspace(root);
         }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Root))
+            {
+                Directory.Delete(Root, recursive: true);
+            }
+        }
+    }
+
+    private sealed class TempVerifierCorpusPromotionWorkspace : IDisposable
+    {
+        private TempVerifierCorpusPromotionWorkspace(string root)
+        {
+            Root = root;
+            Paths = VerifierCorpusPromotionPaths.FromWorkspaceRoot(root);
+        }
+
+        public string Root { get; }
+
+        public VerifierCorpusPromotionPaths Paths { get; }
+
+        public static TempVerifierCorpusPromotionWorkspace Create() =>
+            new(HushVotingReadinessTestArtifacts.CreateVerifierCorpusWorkspace());
 
         public void Dispose()
         {
