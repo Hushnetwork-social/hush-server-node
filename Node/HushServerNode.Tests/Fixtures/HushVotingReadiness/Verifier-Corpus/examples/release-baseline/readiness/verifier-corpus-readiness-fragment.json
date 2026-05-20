@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "verifier-corpus-readiness-fragment.v1",
+  "fragmentId": "RDY-EVID-AT-RDY-007-FEAT-135-001",
+  "featureSlice": "FEAT-135",
+  "sourceGap": "verifier_sample_tamper_corpus",
+  "acceptanceGate": "AT-RDY-007",
+  "dimensionId": "technical_delivery_readiness",
+  "evidenceRefs": [
+    { "label": "corpus manifest", "path": "corpus-manifest.json", "hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999" },
+    { "label": "good sample package", "path": "packages/sample-good-finalized-election", "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111" },
+    { "label": "fixture index", "path": "fixtures/fixture-index.json", "hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222" }
+  ],
+  "checkResults": [
+    { "checkId": "VC-001", "status": "pending", "reason": "Good sample verifier run is generated in Phase 3." },
+    { "checkId": "VC-002", "status": "pending", "reason": "Tamper package verifier runs are generated in Phase 3." },
+    { "checkId": "VC-003", "status": "pending", "reason": "Clean-machine validation is generated in Phase 5." },
+    { "checkId": "VC-004", "status": "pending", "reason": "No-secret scan is generated in Phase 4." }
+  ],
+  "status": "draft",
+  "visibility": "public",
+  "claimEffect": "May support AT-RDY-007 once generated artifacts pass; does not by itself update the readiness register.",
+  "residualRisk": "Synthetic corpus covers the v1 public anonymous sample and bounded tamper set, not all future election shapes or operating history.",
+  "doesNotMutateRegister": true,
+  "promotionInstructions": "Feed this fragment into the FEAT-130 readiness register promoter only after generated corpus validation has passed."
+}

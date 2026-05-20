@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushvoting.local/schemas/dependency-inventory.schema.json",
+  "title": "FEAT-134 Dependency Inventory",
+  "type": "object",
+  "required": [
+    "inventoryId",
+    "releaseScopeId",
+    "components",
+    "lockfileRefs",
+    "scannerProvenance",
+    "knownOmissions",
+    "generatedAt",
+    "claimImpact"
+  ],
+  "properties": {
+    "inventoryId": { "type": "string" },
+    "releaseScopeId": { "type": "string" },
+    "components": { "type": "array" },
+    "lockfileRefs": { "type": "array" },
+    "scannerProvenance": { "type": "array" },
+    "knownOmissions": { "type": "array" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "claimImpact": { "type": "object" }
+  },
+  "additionalProperties": true
+}

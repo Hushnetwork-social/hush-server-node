@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushvoting.local/schemas/voter-client-integrity-guidance.schema.json",
+  "title": "FEAT-134 Voter Client Integrity Guidance",
+  "type": "object",
+  "required": [
+    "guidanceId",
+    "claimBearingPaths",
+    "supportedPaths",
+    "conditionalPaths",
+    "unsupportedPaths",
+    "notAvailableV1Paths",
+    "mobileEvidenceRefs",
+    "sameDeviceLimitations",
+    "fallbackWarnings",
+    "claimImpact"
+  ],
+  "properties": {
+    "guidanceId": { "type": "string" },
+    "claimBearingPaths": { "type": "array" },
+    "supportedPaths": { "type": "array" },
+    "conditionalPaths": { "type": "array" },
+    "unsupportedPaths": { "type": "array" },
+    "notAvailableV1Paths": { "type": "array" },
+    "mobileEvidenceRefs": { "type": "array" },
+    "sameDeviceLimitations": { "type": "array" },
+    "fallbackWarnings": { "type": "array" },
+    "claimImpact": { "type": "object" }
+  },
+  "additionalProperties": true
+}

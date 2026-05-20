@@ -114,7 +114,7 @@ public class ElectionSp10OperationalSecurityContractTests
             doesNotCompleteFeat106: false);
 
         ElectionSp10OperationalSecurityRules.Validate(status).Should()
-            .Contain(x => x.Contains("FEAT-106 readiness separate", StringComparison.Ordinal));
+            .Contain(x => x.Contains("rollout readiness separate", StringComparison.Ordinal));
     }
 
     [Fact]

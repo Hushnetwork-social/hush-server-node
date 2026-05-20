@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushvoting.local/schemas/security-dependency-support-readiness-fragment.schema.json",
+  "title": "FEAT-134 Readiness Fragment",
+  "type": "object",
+  "required": [
+    "fragmentId",
+    "featureSlice",
+    "sourceGap",
+    "acceptanceGate",
+    "dimensionIds",
+    "doesNotMutateRegister",
+    "evidenceRefs",
+    "blockerChanges",
+    "warnings",
+    "freshness",
+    "claimEffect",
+    "residualRisk",
+    "signoff",
+    "promotionInstructions"
+  ],
+  "properties": {
+    "fragmentId": { "type": "string" },
+    "featureSlice": { "const": "FEAT-134" },
+    "acceptanceGate": { "const": "AT-RDY-014" },
+    "doesNotMutateRegister": { "const": true }
+  },
+  "additionalProperties": true
+}

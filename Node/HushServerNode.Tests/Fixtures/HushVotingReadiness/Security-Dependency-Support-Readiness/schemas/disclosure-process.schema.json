@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushvoting.local/schemas/disclosure-process.schema.json",
+  "title": "FEAT-134 Disclosure Process",
+  "type": "object",
+  "required": [
+    "processId",
+    "intakeChannel",
+    "triageOwner",
+    "severityRubric",
+    "embargoRule",
+    "customerNotificationRule",
+    "publicPrivateBoundary",
+    "pilotReadinessStatus",
+    "claimImpact"
+  ],
+  "properties": {
+    "processId": { "type": "string" },
+    "intakeChannel": { "type": "string" },
+    "triageOwner": { "type": "string" },
+    "severityRubric": { "type": "object" },
+    "embargoRule": { "type": "string" },
+    "customerNotificationRule": { "type": "string" },
+    "publicPrivateBoundary": { "type": "object" },
+    "pilotReadinessStatus": { "type": "string" },
+    "claimImpact": { "type": "object" }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,84 @@
+{
+  "inventoryId": "SDS-INV-HV-REL-BASELINE-2026-05",
+  "releaseScopeId": "HV-REL-BASELINE-2026-05",
+  "components": [
+    {
+      "componentId": "hush-web-client",
+      "packageManager": "npm",
+      "scope": "client_runtime",
+      "lockfileRefs": [
+        "hush-web-client/package-lock.json"
+      ],
+      "dependencies": [
+        {
+          "name": "next",
+          "version": "baseline-lockfile",
+          "license": "MIT",
+          "classification": "allowed",
+          "pathType": "client_runtime"
+        },
+        {
+          "name": "snarkjs",
+          "version": "baseline-lockfile",
+          "license": "GPL-3.0",
+          "classification": "restricted",
+          "pathType": "client_runtime",
+          "exceptionRef": "SDS-EXC-LIC-001"
+        }
+      ]
+    },
+    {
+      "componentId": "hush-server-node",
+      "packageManager": "nuget",
+      "scope": "server_runtime",
+      "lockfileRefs": [
+        "hush-server-node/Node/**/*.csproj"
+      ],
+      "dependencies": [
+        {
+          "name": "Microsoft.EntityFrameworkCore",
+          "version": "9.0.2",
+          "license": "MIT",
+          "classification": "allowed",
+          "pathType": "server_runtime"
+        }
+      ]
+    }
+  ],
+  "lockfileRefs": [
+    "hush-web-client/package-lock.json",
+    "hush-server-node/Node/**/*.csproj"
+  ],
+  "scannerProvenance": [
+    {
+      "scannerId": "SCN-NPM-AUDIT-BASELINE",
+      "toolName": "npm audit",
+      "toolVersion": "baseline",
+      "runAt": "2026-05-19T00:00:00Z",
+      "inputRefs": [
+        "hush-web-client/package-lock.json"
+      ],
+      "rawReportHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "normalizerVersion": "feat134-normalizer-v1",
+      "normalizedHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "scannerId": "SCN-DOTNET-LIST-PACKAGE-BASELINE",
+      "toolName": "dotnet list package",
+      "toolVersion": "baseline",
+      "runAt": "2026-05-19T00:00:00Z",
+      "inputRefs": [
+        "hush-server-node/Node/**/*.csproj"
+      ],
+      "rawReportHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "normalizerVersion": "feat134-normalizer-v1",
+      "normalizedHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ],
+  "knownOmissions": [],
+  "generatedAt": "2026-05-19T00:00:00Z",
+  "claimImpact": {
+    "internal_non_binding_rehearsal": "accepted",
+    "friendly_organization_pilot": "accepted_when_current"
+  }
+}

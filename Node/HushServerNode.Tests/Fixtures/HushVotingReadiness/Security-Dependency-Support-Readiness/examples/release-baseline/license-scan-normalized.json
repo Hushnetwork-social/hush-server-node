@@ -1,0 +1,50 @@
+{
+  "scanId": "SDS-LIC-HV-REL-BASELINE-2026-05",
+  "scannerProvenance": [
+    {
+      "scannerId": "SCN-MANUAL-LICENSE-BASELINE",
+      "toolName": "manual-license-classification",
+      "toolVersion": "feat134-v1",
+      "runAt": "2026-05-19T00:00:00Z",
+      "inputRefs": [
+        "hush-web-client/package-lock.json",
+        "hush-server-node/Node/**/*.csproj"
+      ],
+      "rawReportHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "normalizerVersion": "feat134-normalizer-v1",
+      "normalizedHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  ],
+  "policyVersion": "DEPENDENCY_HARDENING_AND_LICENSE_POLICY-v1",
+  "licenseFindings": [
+    {
+      "findingId": "SDS-LIC-001",
+      "dependencyName": "snarkjs",
+      "componentId": "hush-web-client",
+      "license": "GPL-3.0",
+      "classification": "restricted",
+      "scope": "client_runtime",
+      "status": "exceptioned",
+      "exceptionRef": "SDS-EXC-LIC-001",
+      "obligation": "Review browser distribution boundary before any stronger public claim."
+    }
+  ],
+  "unknownLicenses": [],
+  "restrictedLicenses": [
+    "GPL-3.0"
+  ],
+  "rejectedLicenses": [],
+  "noticeObligations": [
+    {
+      "dependencyName": "snarkjs",
+      "requiredNotice": "GPL review notice and distribution-boundary decision before pilot."
+    }
+  ],
+  "exceptionRefs": [
+    "SDS-EXC-LIC-001"
+  ],
+  "claimImpact": {
+    "internal_non_binding_rehearsal": "accepted_with_warnings",
+    "friendly_organization_pilot": "blocked_without_exception_or_replacement"
+  }
+}

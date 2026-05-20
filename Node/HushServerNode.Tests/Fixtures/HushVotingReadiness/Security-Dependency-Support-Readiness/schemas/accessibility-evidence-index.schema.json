@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushvoting.local/schemas/accessibility-evidence-index.schema.json",
+  "title": "FEAT-134 Accessibility Evidence Index",
+  "type": "object",
+  "required": [
+    "indexId",
+    "feat103EvidenceRefs",
+    "workflowCoverage",
+    "staleCoverage",
+    "missingCoverage",
+    "blockingWorkflows",
+    "claimImpact"
+  ],
+  "properties": {
+    "indexId": { "type": "string" },
+    "feat103EvidenceRefs": { "type": "array" },
+    "workflowCoverage": { "type": "array" },
+    "staleCoverage": { "type": "array" },
+    "missingCoverage": { "type": "array" },
+    "blockingWorkflows": { "type": "array" },
+    "claimImpact": { "type": "object" }
+  },
+  "additionalProperties": true
+}

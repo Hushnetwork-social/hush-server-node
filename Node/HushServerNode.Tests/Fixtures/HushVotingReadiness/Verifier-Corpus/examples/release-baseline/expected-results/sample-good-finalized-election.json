@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "verifier-corpus-expected-result.v1",
+  "fixtureId": "sample-good-finalized-election",
+  "profileId": "public_anonymous_v1",
+  "expectedOverallStatus": "pass",
+  "expectedExitCode": 0,
+  "requiredResultCodes": [
+    "package_structure_valid",
+    "package_manifest_valid"
+  ],
+  "requiredCheckStatuses": {
+    "VFY-PKG-001": "pass",
+    "VFY-PKG-002": "pass"
+  },
+  "ignoredFields": [
+    "verifiedAt",
+    "outputPath",
+    "absolutePackagePath"
+  ],
+  "stableOutputExcerpt": {
+    "packageId": "synthetic-hushvoting-public-sample",
+    "verifierProfileId": "public_anonymous_v1",
+    "overallStatus": "pass"
+  },
+  "normalizedOutputHash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+  "outputRef": "expected-results/sample-good-finalized-election/VerifierOutput.normalized.json"
+}

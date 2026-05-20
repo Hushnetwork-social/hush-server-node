@@ -1,0 +1,40 @@
+{
+  "indexId": "SDS-SUPPORT-HV-REL-BASELINE-2026-05",
+  "supportCategories": [
+    "access-login",
+    "voter-client",
+    "receipt-verification",
+    "trustee-key-ceremony",
+    "publication-counting",
+    "deployment-runtime",
+    "security-report",
+    "accessibility",
+    "dispute-anomaly-escalation"
+  ],
+  "runbookRefs": [
+    "runbooks/support-access-login.md",
+    "runbooks/support-voter-client.md",
+    "runbooks/support-receipt-verification.md",
+    "runbooks/support-trustee-key-ceremony.md",
+    "runbooks/support-publication-counting.md",
+    "runbooks/support-deployment-runtime.md",
+    "runbooks/support-security-report.md",
+    "runbooks/support-accessibility.md",
+    "runbooks/support-dispute-anomaly-escalation.md"
+  ],
+  "escalationRefs": [
+    "security-intake-private-v1",
+    "election-owner-void-decision-record",
+    "support-manager-review"
+  ],
+  "privacyRules": [
+    "Support exports must not join voter identity to ballot, receipt, or vote choice.",
+    "Raw auth tokens, credentials, trustee raw shares, and private keys are forbidden in support exports."
+  ],
+  "ownerStatus": "draft_runbooks_ready_for_internal_rehearsal",
+  "missingRunbooks": [],
+  "claimImpact": {
+    "internal_non_binding_rehearsal": "accepted",
+    "friendly_organization_pilot": "requires_owner_review_and_current_runbooks"
+  }
+}

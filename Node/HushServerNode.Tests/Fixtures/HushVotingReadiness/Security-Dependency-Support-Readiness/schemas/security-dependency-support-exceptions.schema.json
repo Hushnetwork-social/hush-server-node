@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushvoting.local/schemas/security-dependency-support-exceptions.schema.json",
+  "title": "FEAT-134 Exceptions",
+  "type": "object",
+  "required": [ "schemaVersion", "exceptions" ],
+  "properties": {
+    "schemaVersion": { "type": "string" },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "exceptionId",
+          "sourceGap",
+          "acceptanceGate",
+          "affectedClaim",
+          "ownerSignoff",
+          "reason",
+          "reviewDate",
+          "expiryDate",
+          "compensatingEvidence",
+          "scoreImpact",
+          "claimWordingImpact",
+          "action"
+        ]
+      }
+    }
+  },
+  "additionalProperties": true
+}

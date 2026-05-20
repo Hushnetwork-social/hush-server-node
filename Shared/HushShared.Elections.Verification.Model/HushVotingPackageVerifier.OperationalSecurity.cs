@@ -263,7 +263,7 @@ public sealed partial class HushVotingPackageVerifier
                 ? VerificationResultCodes.OperationalSecurityProfileDeclared
                 : VerificationResultCodes.OperationalSecurityEvidenceMissing,
             valid
-                ? "SP-10 managed deployment profile is declared without implying FEAT-106 readiness."
+                ? "SP-10 managed deployment profile is declared without implying rollout readiness."
                 : "SP-10 deployment profile or evidence state is unsupported.",
             new Dictionary<string, string>
             {
@@ -390,7 +390,7 @@ public sealed partial class HushVotingPackageVerifier
                 System.Text.Json.JsonSerializer.Serialize(custody),
                 System.Text.Json.JsonSerializer.Serialize(verifierOutput)));
         var forbiddenWording = new List<string>();
-        AddForbiddenOperationalWording(forbiddenWording, "feat106_readiness_caveat", status.Feat106ReadinessCaveat);
+        AddForbiddenOperationalWording(forbiddenWording, "operational_readiness_caveat", status.Feat106ReadinessCaveat);
         AddForbiddenOperationalWording(forbiddenWording, "primary_issue", status.PrimaryIssue);
         foreach (var result in verifierOutput.Results)
         {
@@ -422,7 +422,7 @@ public sealed partial class HushVotingPackageVerifier
 
         if (!status.DoesNotCompleteFeat106Readiness)
         {
-            evidence["does_not_complete_feat106_readiness"] = "false";
+            evidence["does_not_complete_operational_readiness"] = "false";
         }
 
         return CreateResult(

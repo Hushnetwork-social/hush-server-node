@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/verifier-corpus/verifier-corpus-downstream-handoff.schema.json",
+  "title": "HushVoting Public Verifier Corpus Downstream Handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "handoffId",
+    "producerFeature",
+    "corpusVersion",
+    "publicRepositoryRef",
+    "manifestHash",
+    "goodPackageHash",
+    "fixtureIndexHash",
+    "verifierSourceRef",
+    "verifierHash",
+    "cleanMachineValidationSummary",
+    "noSecretScanResult",
+    "feat136ReuseNotes",
+    "feat141ConsumerInstructions",
+    "residualRisk"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "verifier-corpus-downstream-handoff.v1" },
+    "handoffId": { "type": "string", "minLength": 1 },
+    "producerFeature": { "type": "string", "const": "FEAT-135" },
+    "corpusVersion": { "type": "string", "minLength": 1 },
+    "publicRepositoryRef": { "type": "object" },
+    "manifestHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "goodPackageHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "fixtureIndexHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "verifierSourceRef": { "type": "object" },
+    "verifierHash": { "type": "string" },
+    "cleanMachineValidationSummary": { "type": "object" },
+    "noSecretScanResult": { "type": "object" },
+    "feat136ReuseNotes": { "type": "object" },
+    "feat141ConsumerInstructions": { "type": "object" },
+    "residualRisk": { "type": "string", "minLength": 1 }
+  }
+}

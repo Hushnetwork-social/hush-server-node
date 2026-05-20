@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "verifier-corpus-downstream-handoff.v1",
+  "handoffId": "verifier-corpus-v0.1.0-downstream-handoff",
+  "producerFeature": "FEAT-135",
+  "corpusVersion": "v0.1.0",
+  "publicRepositoryRef": {
+    "url": "https://github.com/Hushnetwork-social/HushVoting-Verifier-Corpus",
+    "refType": "branch",
+    "value": "main",
+    "immutable": false
+  },
+  "manifestHash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+  "goodPackageHash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "fixtureIndexHash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "verifierSourceRef": {
+    "repository": "https://github.com/Hushnetwork-social/hush-server-node",
+    "projectPath": "Tools/HushVotingVerifier/HushVotingVerifier.csproj",
+    "refType": "commit",
+    "value": "0000000000000000000000000000000000000000",
+    "immutable": true
+  },
+  "verifierHash": "",
+  "cleanMachineValidationSummary": {
+    "path": "validation/clean-machine-validation-summary.json",
+    "windowsStatus": "pending",
+    "linuxStatus": "pending",
+    "macosStatus": "documented_not_gate"
+  },
+  "noSecretScanResult": {
+    "path": "validation/no-secret-scan-result.json",
+    "status": "pending"
+  },
+  "feat136ReuseNotes": {
+    "consumerFeature": "FEAT-136",
+    "handoffKey": "receipt_inclusion_reuse",
+    "reusableRefs": [
+      "packages/sample-good-finalized-election",
+      "expected-results/sample-good-finalized-election.json"
+    ],
+    "reservedExtension": "FEAT-136 may add receipt import, QR, manual-code, or device-camera fixtures without changing the FEAT-135 verifier engine."
+  },
+  "feat141ConsumerInstructions": {
+    "consumerFeature": "FEAT-141",
+    "handoffKey": "pilot_evidence_package",
+    "requiredInputs": [
+      "publicRepositoryRef",
+      "manifestHash",
+      "goodPackageHash",
+      "fixtureIndexHash",
+      "cleanMachineValidationSummary",
+      "noSecretScanResult",
+      "readiness fragment"
+    ],
+    "usageBoundary": "Use as public synthetic verifier evidence, not as real election operating history."
+  },
+  "residualRisk": "FEAT-135 does not prove real deployment, real customer election, external validation, or every election shape; FEAT-141 carries observed delivery evidence."
+}

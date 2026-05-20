@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "verifier-corpus-manifest.v1",
+  "corpusId": "hushvoting-public-verifier-corpus",
+  "corpusVersion": "v0.1.0",
+  "status": "draft",
+  "visibility": "public",
+  "publicRepository": {
+    "url": "https://github.com/Hushnetwork-social/HushVoting-Verifier-Corpus",
+    "defaultBranch": "main"
+  },
+  "publicRepositoryRef": {
+    "refType": "branch",
+    "value": "main",
+    "immutable": false,
+    "publicationMode": "maintainer_push"
+  },
+  "protocolPackage": {
+    "packageId": "omega-hushvoting-v1",
+    "version": "v1.2.0",
+    "repository": "https://github.com/Hushnetwork-social/protocol-omega-packages",
+    "ref": "v1.2.0",
+    "packageHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "doesNotMutateProtocolPackage": true
+  },
+  "verifier": {
+    "repository": "https://github.com/Hushnetwork-social/hush-server-node",
+    "sourceRef": {
+      "refType": "commit",
+      "value": "0000000000000000000000000000000000000000",
+      "immutable": true
+    },
+    "projectPath": "Tools/HushVotingVerifier/HushVotingVerifier.csproj",
+    "runtime": ".NET 9",
+    "profileId": "public_anonymous_v1",
+    "binaryRelease": {
+      "available": false,
+      "releaseRef": "",
+      "binaryHash": ""
+    }
+  },
+  "generator": {
+    "name": "VerifierCorpusPromoter",
+    "sourceRef": {
+      "repository": "https://github.com/Hushnetwork-social/hush-server-node",
+      "projectPath": "Node/scripts/VerifierCorpusPromoter",
+      "refType": "commit",
+      "value": "0000000000000000000000000000000000000000",
+      "immutable": true
+    },
+    "canonicalizationVersion": "feat135-canonical-json-v1"
+  },
+  "goodSample": {
+    "fixtureId": "sample-good-finalized-election",
+    "packagePath": "packages/sample-good-finalized-election",
+    "packageHash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "expectedResultRef": "expected-results/sample-good-finalized-election.json"
+  },
+  "fixtureIndex": {
+    "path": "fixtures/fixture-index.json",
+    "hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "fixtures": [
+      { "fixtureId": "sample-good-finalized-election", "family": "good_sample", "manifestRef": "fixtures/sample-good-finalized-election/fixture-manifest.json", "expectedResultRef": "expected-results/sample-good-finalized-election.json", "requiredForV1": true },
+      { "fixtureId": "tamper-missing-artifact", "family": "package_manifest", "manifestRef": "fixtures/tamper-missing-artifact/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-missing-artifact.json", "requiredForV1": true },
+      { "fixtureId": "tamper-artifact-hash", "family": "package_manifest", "manifestRef": "fixtures/tamper-artifact-hash/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-artifact-hash.json", "requiredForV1": true },
+      { "fixtureId": "tamper-malformed-package-json", "family": "package_manifest", "manifestRef": "fixtures/tamper-malformed-package-json/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-malformed-package-json.json", "requiredForV1": true },
+      { "fixtureId": "tamper-profile-mismatch", "family": "profile_input", "manifestRef": "fixtures/tamper-profile-mismatch/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-profile-mismatch.json", "requiredForV1": true },
+      { "fixtureId": "tamper-unsupported-live-dependency", "family": "profile_input", "manifestRef": "fixtures/tamper-unsupported-live-dependency/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-unsupported-live-dependency.json", "requiredForV1": true },
+      { "fixtureId": "tamper-wrong-election-id", "family": "election_identity", "manifestRef": "fixtures/tamper-wrong-election-id/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-wrong-election-id.json", "requiredForV1": true },
+      { "fixtureId": "tamper-duplicate-nullifier", "family": "accepted_ballots", "manifestRef": "fixtures/tamper-duplicate-nullifier/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-duplicate-nullifier.json", "requiredForV1": true },
+      { "fixtureId": "tamper-accepted-set-hash", "family": "accepted_ballots", "manifestRef": "fixtures/tamper-accepted-set-hash/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-accepted-set-hash.json", "requiredForV1": true },
+      { "fixtureId": "tamper-published-stream-sequence", "family": "published_ballots", "manifestRef": "fixtures/tamper-published-stream-sequence/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-published-stream-sequence.json", "requiredForV1": true },
+      { "fixtureId": "tamper-published-stream-hash", "family": "published_ballots", "manifestRef": "fixtures/tamper-published-stream-hash/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-published-stream-hash.json", "requiredForV1": true },
+      { "fixtureId": "tamper-sp04-receipt-set-hash", "family": "sp04_challenge_spoil", "manifestRef": "fixtures/tamper-sp04-receipt-set-hash/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-sp04-receipt-set-hash.json", "requiredForV1": true },
+      { "fixtureId": "tamper-sp04-count", "family": "sp04_challenge_spoil", "manifestRef": "fixtures/tamper-sp04-count/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-sp04-count.json", "requiredForV1": true },
+      { "fixtureId": "tamper-sp04-accepted-binding", "family": "sp04_challenge_spoil", "manifestRef": "fixtures/tamper-sp04-accepted-binding/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-sp04-accepted-binding.json", "requiredForV1": true },
+      { "fixtureId": "tamper-sp05-public-named-field", "family": "sp05_public_boundary", "manifestRef": "fixtures/tamper-sp05-public-named-field/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-sp05-public-named-field.json", "requiredForV1": true },
+      { "fixtureId": "tamper-sp05-count-reconciliation", "family": "sp05_public_boundary", "manifestRef": "fixtures/tamper-sp05-count-reconciliation/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-sp05-count-reconciliation.json", "requiredForV1": true },
+      { "fixtureId": "tamper-sp08-release-manifest-hash", "family": "sp08_release_integrity", "manifestRef": "fixtures/tamper-sp08-release-manifest-hash/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-sp08-release-manifest-hash.json", "requiredForV1": true },
+      { "fixtureId": "tamper-sp08-mutable-artifact-reference", "family": "sp08_release_integrity", "manifestRef": "fixtures/tamper-sp08-mutable-artifact-reference/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-sp08-mutable-artifact-reference.json", "requiredForV1": true },
+      { "fixtureId": "tamper-sp08-component-hash-mismatch", "family": "sp08_release_integrity", "manifestRef": "fixtures/tamper-sp08-component-hash-mismatch/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-sp08-component-hash-mismatch.json", "requiredForV1": true },
+      { "fixtureId": "tamper-sp08-protocol-package-mismatch", "family": "sp08_release_integrity", "manifestRef": "fixtures/tamper-sp08-protocol-package-mismatch/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-sp08-protocol-package-mismatch.json", "requiredForV1": true },
+      { "fixtureId": "tamper-sp08-circuit-key-hash-mismatch", "family": "sp08_release_integrity", "manifestRef": "fixtures/tamper-sp08-circuit-key-hash-mismatch/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-sp08-circuit-key-hash-mismatch.json", "requiredForV1": true },
+      { "fixtureId": "tamper-sp10-forbidden-leak", "family": "sp10_operational_public_boundary", "manifestRef": "fixtures/tamper-sp10-forbidden-leak/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-sp10-forbidden-leak.json", "requiredForV1": true },
+      { "fixtureId": "tamper-sp10-kms-public-value-leak", "family": "sp10_operational_public_boundary", "manifestRef": "fixtures/tamper-sp10-kms-public-value-leak/fixture-manifest.json", "expectedResultRef": "expected-results/tamper-sp10-kms-public-value-leak.json", "requiredForV1": true }
+    ]
+  },
+  "validationSummary": {
+    "path": "validation/clean-machine-validation-summary.json",
+    "hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "windowsStatus": "pending",
+    "linuxStatus": "pending",
+    "macosStatus": "documented_not_gate"
+  },
+  "noSecretScan": {
+    "path": "validation/no-secret-scan-result.json",
+    "status": "pending",
+    "forbiddenMaterialListRef": "examples/public-forbidden-material.json"
+  },
+  "readinessFragment": {
+    "path": "readiness/verifier-corpus-readiness-fragment.json",
+    "hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "status": "draft"
+  },
+  "downstreamHandoff": {
+    "path": "handoff/verifier-corpus-downstream-handoff.json",
+    "hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "status": "draft"
+  },
+  "generatedAt": "2026-05-20T00:00:00Z",
+  "supersessionRules": [
+    "Regenerate and revalidate the corpus when verifier result codes, package schema, Protocol Omega package refs, SP-07, SP-08, or SP-10 public verifier behavior changes.",
+    "Accepted public evidence must be superseded if the verifier source ref no longer matches the corpus manifest."
+  ],
+  "publicBoundaryStatement": "Synthetic public corpus only. No private backend, real voter data, restricted owner/auditor evidence, cloud credentials, KMS identifiers, trustee raw shares, receipt secrets, or legal/certification claim is included."
+}

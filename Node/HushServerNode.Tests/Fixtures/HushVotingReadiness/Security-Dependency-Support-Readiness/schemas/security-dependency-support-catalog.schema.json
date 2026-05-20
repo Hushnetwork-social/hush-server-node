@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushvoting.local/schemas/security-dependency-support-catalog.schema.json",
+  "title": "FEAT-134 Catalog",
+  "type": "object",
+  "required": [
+    "catalogVersion",
+    "generatedAt",
+    "packages",
+    "currentByReleaseScope",
+    "supersededPackages",
+    "hashConflictPolicy"
+  ],
+  "properties": {
+    "catalogVersion": { "type": "string" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "packages": { "type": "array" },
+    "currentByReleaseScope": { "type": "object" },
+    "supersededPackages": { "type": "array" },
+    "hashConflictPolicy": { "type": "string" }
+  },
+  "additionalProperties": true
+}

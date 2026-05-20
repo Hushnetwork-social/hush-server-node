@@ -1,0 +1,27 @@
+{
+  "indexId": "SDS-A11Y-HV-REL-BASELINE-2026-05",
+  "feat103EvidenceRefs": [
+    "FEAT-103-accessibility-baseline",
+    "FEAT-103-owner-trustee-voter-auditor-verifier-surfaces"
+  ],
+  "workflowCoverage": [
+    {
+      "workflowId": "voter-desktop-cast-and-receipt",
+      "platform": "desktop_web",
+      "status": "current"
+    },
+    {
+      "workflowId": "voter-mobile-cast-and-receipt",
+      "platform": "mobile_web",
+      "status": "current",
+      "mobileEvidenceRef": "FEAT-121-mobile-web-platform-baseline"
+    }
+  ],
+  "staleCoverage": [],
+  "missingCoverage": [],
+  "blockingWorkflows": [],
+  "claimImpact": {
+    "internal_non_binding_rehearsal": "accepted",
+    "friendly_organization_pilot": "accepted_when_feat103_and_feat121_refs_current"
+  }
+}

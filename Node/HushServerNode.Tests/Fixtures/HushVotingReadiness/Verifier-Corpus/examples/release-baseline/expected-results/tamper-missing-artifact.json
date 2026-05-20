@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "verifier-corpus-expected-result.v1",
+  "fixtureId": "tamper-missing-artifact",
+  "profileId": "public_anonymous_v1",
+  "expectedOverallStatus": "fail",
+  "expectedExitCode": 1,
+  "requiredResultCodes": [
+    "package_manifest_missing_artifact"
+  ],
+  "requiredCheckStatuses": {
+    "VFY-PKG-001": "fail"
+  },
+  "ignoredFields": [
+    "verifiedAt",
+    "outputPath",
+    "absolutePackagePath"
+  ],
+  "stableOutputExcerpt": {
+    "verifierProfileId": "public_anonymous_v1",
+    "overallStatus": "fail",
+    "primaryResultCode": "package_manifest_missing_artifact"
+  },
+  "normalizedOutputHash": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+  "outputRef": "expected-results/tamper-missing-artifact/VerifierOutput.normalized.json"
+}

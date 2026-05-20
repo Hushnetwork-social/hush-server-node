@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/verifier-corpus/fixture-manifest.schema.json",
+  "title": "HushVoting Public Verifier Corpus Fixture Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "fixtureId",
+    "fixtureFamily",
+    "status",
+    "visibility",
+    "profileId",
+    "packagePath",
+    "packageHash",
+    "mutation",
+    "changedArtifact",
+    "expectedPrimaryResultCode",
+    "expectedCheckStatus",
+    "expectedOverallStatus",
+    "expectedExitCode",
+    "expectedOutputRef",
+    "proofStatement",
+    "secondaryFailuresAllowed",
+    "verifierInvocation",
+    "forbiddenMaterialScan"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "verifier-corpus-fixture-manifest.v1" },
+    "fixtureId": { "type": "string", "minLength": 1 },
+    "fixtureFamily": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "enum": [ "draft", "accepted", "blocked", "superseded" ] },
+    "visibility": { "type": "string", "const": "public" },
+    "profileId": { "type": "string", "const": "public_anonymous_v1" },
+    "packagePath": { "type": "string", "pattern": "^packages/.+" },
+    "packageHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "mutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "mutationId", "mutationType", "summary", "sourceFixtureId" ],
+      "properties": {
+        "mutationId": { "type": "string", "minLength": 1 },
+        "mutationType": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string", "minLength": 1 },
+        "sourceFixtureId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "changedArtifact": { "type": "string", "minLength": 1 },
+    "expectedPrimaryResultCode": { "type": "string", "minLength": 1 },
+    "expectedCheckStatus": { "type": "string", "enum": [ "pass", "warn", "fail", "notApplicable" ] },
+    "expectedOverallStatus": { "type": "string", "enum": [ "pass", "warn", "fail", "notAvailable" ] },
+    "expectedExitCode": { "type": "integer", "minimum": 0, "maximum": 4 },
+    "expectedOutputRef": { "type": "string", "pattern": "^expected-results/.+\\.json$" },
+    "proofStatement": { "type": "string", "minLength": 1 },
+    "secondaryFailuresAllowed": { "type": "boolean" },
+    "verifierInvocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "profileId", "packageArgument", "outputArgumentRequired" ],
+      "properties": {
+        "profileId": { "type": "string", "const": "public_anonymous_v1" },
+        "packageArgument": { "type": "string", "minLength": 1 },
+        "outputArgumentRequired": { "type": "boolean" }
+      }
+    },
+    "forbiddenMaterialScan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "expectedStatus", "forbiddenMaterialListRef" ],
+      "properties": {
+        "expectedStatus": { "type": "string", "enum": [ "pass", "fail" ] },
+        "forbiddenMaterialListRef": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

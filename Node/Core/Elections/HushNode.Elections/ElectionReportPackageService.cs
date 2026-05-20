@@ -1740,13 +1740,13 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         RegulatoryClaimProjection? regulatoryClaim)
     {
         var sectionStart = builder.Length;
-        builder.AppendLine("- SP-10 operational security boundary: operational evidence state only; no FEAT-106 rollout readiness, legal validation, public-election approval, or certification is asserted.");
+        builder.AppendLine("- SP-10 operational security boundary: operational evidence state only; no rollout readiness, legal validation, public-election approval, or certification is asserted.");
         builder.AppendLine($"- SP-10 program version: `{operationalSecurity.ProgramVersion}`");
         builder.AppendLine($"- SP-10 deployment profile: `{operationalSecurity.DeploymentProfileId}`");
         builder.AppendLine($"- SP-10 evidence state: `{operationalSecurity.EvidenceState}`");
         builder.AppendLine($"- SP-10 primary result: `{operationalSecurity.PrimaryResultCode}`");
         builder.AppendLine($"- SP-10 blocks high assurance: `{operationalSecurity.BlocksHighAssurance}`");
-        builder.AppendLine($"- SP-10 FEAT-106 caveat: {operationalSecurity.Feat106ReadinessCaveat}");
+        builder.AppendLine($"- SP-10 operational readiness caveat: {operationalSecurity.Feat106ReadinessCaveat}");
         builder.AppendLine($"- SP-10 release evidence mode: `{operationalSecurity.ReleaseEvidenceMode ?? "not recorded"}`");
         builder.AppendLine($"- SP-10 release manifest hash: `{operationalSecurity.ReleaseManifestHash ?? "not recorded"}`");
         builder.AppendLine($"- SP-10 immutable deployment ref: `{operationalSecurity.ImmutableDeploymentRef ?? "not recorded"}`");

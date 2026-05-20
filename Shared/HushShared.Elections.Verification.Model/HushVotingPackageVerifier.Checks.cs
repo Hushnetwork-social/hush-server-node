@@ -438,7 +438,8 @@ public sealed partial class HushVotingPackageVerifier
                 cancellationToken));
         }
 
-        if (results.All(x => x.Status != VerificationCheckStatus.Fail) &&
+        if (isHighAssurance &&
+            results.All(x => x.Status != VerificationCheckStatus.Fail) &&
             string.Equals(
                 transcript.ExternalReviewStatus,
                 ElectionSp07ProfileIds.ExternalReviewStatus,
@@ -528,23 +529,27 @@ public sealed partial class HushVotingPackageVerifier
         if (!string.Equals(status.Availability, ElectionSp09ProfileIds.AvailabilityAvailable, StringComparison.Ordinal))
         {
             var claimedReviewed = ElectionSp09ExternalReviewRules.IsReviewedClaimState(status.ClaimState);
-            results.Add(CreateResult(
-                claimedReviewed
-                    ? ElectionSp09ProfileIds.ClaimNotAllowedCheckCode
-                    : ElectionSp09ProfileIds.ReviewNotCompleteCheckCode,
-                claimedReviewed ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn,
-                claimedReviewed
-                    ? VerificationResultCodes.ExternalReviewClaimNotAllowed
-                    : VerificationResultCodes.ExternalReviewNotComplete,
-                claimedReviewed
-                    ? "Package claims reviewed external-review status without available reviewer evidence."
-                    : "External examination program is defined; no reviewer conclusion is available.",
-                new Dictionary<string, string>
-                {
-                    ["review_status"] = status.DetailedStatus,
-                    ["review_availability"] = status.Availability,
-                    ["claim_state"] = status.ClaimState,
-                }));
+            var publicAnonymous = string.Equals(profileId, VerificationProfileIds.PublicAnonymousV1, StringComparison.Ordinal);
+            if (claimedReviewed || !publicAnonymous)
+            {
+                results.Add(CreateResult(
+                    claimedReviewed
+                        ? ElectionSp09ProfileIds.ClaimNotAllowedCheckCode
+                        : ElectionSp09ProfileIds.ReviewNotCompleteCheckCode,
+                    claimedReviewed ? VerificationCheckStatus.Fail : VerificationCheckStatus.Warn,
+                    claimedReviewed
+                        ? VerificationResultCodes.ExternalReviewClaimNotAllowed
+                        : VerificationResultCodes.ExternalReviewNotComplete,
+                    claimedReviewed
+                        ? "Package claims reviewed external-review status without available reviewer evidence."
+                        : "External examination program is defined; no reviewer conclusion is available.",
+                    new Dictionary<string, string>
+                    {
+                        ["review_status"] = status.DetailedStatus,
+                        ["review_availability"] = status.Availability,
+                        ["claim_state"] = status.ClaimState,
+                    }));
+            }
         }
 
         return results;
