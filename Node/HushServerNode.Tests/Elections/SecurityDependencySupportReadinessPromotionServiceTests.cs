@@ -315,7 +315,7 @@ public sealed class SecurityDependencySupportReadinessPromotionServiceTests
         service.Promote(options);
         Directory.Delete(Path.Combine(outputRoot, "packages"), recursive: true);
         var package = LoadExample(workspace.Paths, "examples/release-baseline/security-dependency-support-package.json");
-        package["generatedBy"] = "mutated-for-hash-conflict";
+        package["claimLevel"] = "mutated-for-hash-conflict";
         WriteExample(workspace.Paths, "examples/release-baseline/security-dependency-support-package.json", package);
 
         var act = () => service.Promote(options);
