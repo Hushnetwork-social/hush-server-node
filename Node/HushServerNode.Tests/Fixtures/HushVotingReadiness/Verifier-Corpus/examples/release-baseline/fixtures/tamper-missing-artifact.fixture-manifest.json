@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "verifier-corpus-fixture-manifest.v1",
+  "fixtureId": "tamper-missing-artifact",
+  "fixtureFamily": "package_manifest",
+  "status": "draft",
+  "visibility": "public",
+  "profileId": "public_anonymous_v1",
+  "packagePath": "packages/tamper-missing-artifact",
+  "packageHash": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+  "mutation": {
+    "mutationId": "remove-manifest-listed-artifact",
+    "mutationType": "delete_file",
+    "summary": "Remove one artifact that remains listed in the audit package manifest.",
+    "sourceFixtureId": "sample-good-finalized-election"
+  },
+  "changedArtifact": "artifacts/public/accepted-ballots.json",
+  "expectedPrimaryResultCode": "package_manifest_missing_artifact",
+  "expectedCheckStatus": "fail",
+  "expectedOverallStatus": "fail",
+  "expectedExitCode": 1,
+  "expectedOutputRef": "expected-results/tamper-missing-artifact.json",
+  "proofStatement": "The verifier fails closed when a manifest-listed public artifact is absent from the package folder.",
+  "secondaryFailuresAllowed": true,
+  "verifierInvocation": {
+    "profileId": "public_anonymous_v1",
+    "packageArgument": "packages/tamper-missing-artifact",
+    "outputArgumentRequired": false
+  },
+  "forbiddenMaterialScan": {
+    "expectedStatus": "pass",
+    "forbiddenMaterialListRef": "examples/public-forbidden-material.json"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "verifier-corpus-fixture-manifest.v1",
+  "fixtureId": "sample-good-finalized-election",
+  "fixtureFamily": "good_sample",
+  "status": "draft",
+  "visibility": "public",
+  "profileId": "public_anonymous_v1",
+  "packagePath": "packages/sample-good-finalized-election",
+  "packageHash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "mutation": {
+    "mutationId": "none",
+    "mutationType": "none",
+    "summary": "Untampered synthetic finalized election package.",
+    "sourceFixtureId": "sample-good-finalized-election"
+  },
+  "changedArtifact": "none",
+  "expectedPrimaryResultCode": "package_structure_valid",
+  "expectedCheckStatus": "pass",
+  "expectedOverallStatus": "pass",
+  "expectedExitCode": 0,
+  "expectedOutputRef": "expected-results/sample-good-finalized-election.json",
+  "proofStatement": "The public verifier can replay a synthetic finalized package with no private backend access and obtain an overall pass.",
+  "secondaryFailuresAllowed": false,
+  "verifierInvocation": {
+    "profileId": "public_anonymous_v1",
+    "packageArgument": "packages/sample-good-finalized-election",
+    "outputArgumentRequired": false
+  },
+  "forbiddenMaterialScan": {
+    "expectedStatus": "pass",
+    "forbiddenMaterialListRef": "examples/public-forbidden-material.json"
+  }
+}

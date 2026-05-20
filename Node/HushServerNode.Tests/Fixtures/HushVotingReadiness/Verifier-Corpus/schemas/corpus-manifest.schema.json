@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/verifier-corpus/corpus-manifest.schema.json",
+  "title": "HushVoting Public Verifier Corpus Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "corpusId",
+    "corpusVersion",
+    "status",
+    "visibility",
+    "publicRepository",
+    "publicRepositoryRef",
+    "protocolPackage",
+    "verifier",
+    "generator",
+    "goodSample",
+    "fixtureIndex",
+    "validationSummary",
+    "noSecretScan",
+    "readinessFragment",
+    "downstreamHandoff",
+    "generatedAt",
+    "supersessionRules",
+    "publicBoundaryStatement"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "verifier-corpus-manifest.v1" },
+    "corpusId": { "type": "string", "minLength": 1 },
+    "corpusVersion": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "enum": [ "draft", "accepted", "blocked", "superseded" ] },
+    "visibility": { "type": "string", "const": "public" },
+    "publicRepository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "url", "defaultBranch" ],
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "defaultBranch": { "type": "string", "minLength": 1 }
+      }
+    },
+    "publicRepositoryRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "refType", "value", "immutable", "publicationMode" ],
+      "properties": {
+        "refType": { "type": "string", "enum": [ "branch", "commit", "tag_immutable" ] },
+        "value": { "type": "string", "minLength": 1 },
+        "immutable": { "type": "boolean" },
+        "publicationMode": { "type": "string", "enum": [ "maintainer_push", "release_archive" ] }
+      }
+    },
+    "protocolPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "packageId", "version", "repository", "ref", "packageHash", "doesNotMutateProtocolPackage" ],
+      "properties": {
+        "packageId": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "repository": { "type": "string", "format": "uri" },
+        "ref": { "type": "string", "minLength": 1 },
+        "packageHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "doesNotMutateProtocolPackage": { "type": "boolean" }
+      }
+    },
+    "verifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "repository", "sourceRef", "projectPath", "runtime", "profileId", "binaryRelease" ],
+      "properties": {
+        "repository": { "type": "string", "format": "uri" },
+        "sourceRef": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [ "refType", "value", "immutable" ],
+          "properties": {
+            "refType": { "type": "string", "enum": [ "commit", "tag_immutable" ] },
+            "value": { "type": "string", "minLength": 1 },
+            "immutable": { "type": "boolean", "const": true }
+          }
+        },
+        "projectPath": { "type": "string", "const": "Tools/HushVotingVerifier/HushVotingVerifier.csproj" },
+        "runtime": { "type": "string", "const": ".NET 9" },
+        "profileId": { "type": "string", "const": "public_anonymous_v1" },
+        "binaryRelease": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [ "available", "releaseRef", "binaryHash" ],
+          "properties": {
+            "available": { "type": "boolean" },
+            "releaseRef": { "type": "string" },
+            "binaryHash": { "type": "string" }
+          }
+        }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [ "name", "sourceRef", "canonicalizationVersion" ],
+      "properties": {
+        "name": { "type": "string", "const": "VerifierCorpusPromoter" },
+        "sourceRef": { "type": "object" },
+        "canonicalizationVersion": { "type": "string", "const": "feat135-canonical-json-v1" }
+      }
+    },
+    "goodSample": { "type": "object" },
+    "fixtureIndex": { "type": "object" },
+    "validationSummary": { "type": "object" },
+    "noSecretScan": { "type": "object" },
+    "readinessFragment": { "type": "object" },
+    "downstreamHandoff": { "type": "object" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "supersessionRules": { "type": "array", "items": { "type": "string" } },
+    "publicBoundaryStatement": { "type": "string", "minLength": 1 }
+  }
+}

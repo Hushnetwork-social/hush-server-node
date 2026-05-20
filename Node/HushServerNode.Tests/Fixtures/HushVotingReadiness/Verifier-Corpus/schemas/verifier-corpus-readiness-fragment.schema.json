@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/verifier-corpus/verifier-corpus-readiness-fragment.schema.json",
+  "title": "HushVoting Public Verifier Corpus Readiness Fragment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "fragmentId",
+    "featureSlice",
+    "sourceGap",
+    "acceptanceGate",
+    "dimensionId",
+    "evidenceRefs",
+    "checkResults",
+    "status",
+    "visibility",
+    "claimEffect",
+    "residualRisk",
+    "doesNotMutateRegister",
+    "promotionInstructions"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "verifier-corpus-readiness-fragment.v1" },
+    "fragmentId": { "type": "string", "minLength": 1 },
+    "featureSlice": { "type": "string", "minLength": 1 },
+    "sourceGap": { "type": "string", "const": "verifier_sample_tamper_corpus" },
+    "acceptanceGate": { "type": "string", "const": "AT-RDY-007" },
+    "dimensionId": { "type": "string", "minLength": 1 },
+    "evidenceRefs": { "type": "array", "items": { "type": "object" } },
+    "checkResults": { "type": "array", "items": { "type": "object" } },
+    "status": { "type": "string", "enum": [ "draft", "accepted", "blocked", "superseded" ] },
+    "visibility": { "type": "string", "const": "public" },
+    "claimEffect": { "type": "string", "minLength": 1 },
+    "residualRisk": { "type": "string", "minLength": 1 },
+    "doesNotMutateRegister": { "type": "boolean", "const": true },
+    "promotionInstructions": { "type": "string", "minLength": 1 }
+  }
+}

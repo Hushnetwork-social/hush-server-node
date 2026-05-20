@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "verifier-corpus-forbidden-material.v1",
+  "scanId": "verifier-corpus-public-forbidden-material-v1",
+  "scope": "public_corpus",
+  "terms": [
+    { "category": "private_key", "fragments": [ "BEGIN PRIVATE KEY", "raw trustee share", "decrypt authority" ], "severity": "blocker" },
+    { "category": "cloud_secret", "fragments": [ "aws_secret_access_key", "aws_access_key_id", "client_secret", "password=", "token=" ], "severity": "blocker" },
+    { "category": "provider_kms_identifier", "fragments": [ "arn:aws:kms", "kmsKeyId", "kms_key_id", "alias/" ], "severity": "blocker" },
+    { "category": "voter_private_data", "fragments": [ "voterEmail", "voteChoice", "receipt secret", "named voter identity joined to ballot" ], "severity": "blocker" },
+    { "category": "restricted_operational_data", "fragments": [ "raw log", "operator contact", "device id", "support case joined to voter" ], "severity": "blocker" },
+    { "category": "unsupported_claim", "fragments": [ "certified voting system", "legal approval granted", "public-election approved", "real customer election proof" ], "severity": "blocker" }
+  ],
+  "regexes": [
+    { "category": "aws_account_id", "pattern": "\\b[0-9]{12}\\b", "severity": "blocker" },
+    { "category": "ip_address", "pattern": "\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b", "severity": "blocker" }
+  ],
+  "allowedSyntheticMarkers": [
+    "synthetic",
+    "example.invalid",
+    "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  ]
+}

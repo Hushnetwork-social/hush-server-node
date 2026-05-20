@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "verifier-corpus-fixture-index.v1",
+  "corpusVersion": "v0.1.0",
+  "profileId": "public_anonymous_v1",
+  "fixtureCount": 23,
+  "fixtureIds": [
+    "sample-good-finalized-election",
+    "tamper-missing-artifact",
+    "tamper-artifact-hash",
+    "tamper-malformed-package-json",
+    "tamper-profile-mismatch",
+    "tamper-unsupported-live-dependency",
+    "tamper-wrong-election-id",
+    "tamper-duplicate-nullifier",
+    "tamper-accepted-set-hash",
+    "tamper-published-stream-sequence",
+    "tamper-published-stream-hash",
+    "tamper-sp04-receipt-set-hash",
+    "tamper-sp04-count",
+    "tamper-sp04-accepted-binding",
+    "tamper-sp05-public-named-field",
+    "tamper-sp05-count-reconciliation",
+    "tamper-sp08-release-manifest-hash",
+    "tamper-sp08-mutable-artifact-reference",
+    "tamper-sp08-component-hash-mismatch",
+    "tamper-sp08-protocol-package-mismatch",
+    "tamper-sp08-circuit-key-hash-mismatch",
+    "tamper-sp10-forbidden-leak",
+    "tamper-sp10-kms-public-value-leak"
+  ]
+}

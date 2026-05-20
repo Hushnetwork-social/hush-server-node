@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/verifier-corpus/expected-result.schema.json",
+  "title": "HushVoting Public Verifier Corpus Expected Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "fixtureId",
+    "profileId",
+    "expectedOverallStatus",
+    "expectedExitCode",
+    "requiredResultCodes",
+    "requiredCheckStatuses",
+    "ignoredFields",
+    "stableOutputExcerpt",
+    "normalizedOutputHash",
+    "outputRef"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "verifier-corpus-expected-result.v1" },
+    "fixtureId": { "type": "string", "minLength": 1 },
+    "profileId": { "type": "string", "const": "public_anonymous_v1" },
+    "expectedOverallStatus": { "type": "string", "enum": [ "pass", "warn", "fail", "notAvailable" ] },
+    "expectedExitCode": { "type": "integer", "minimum": 0, "maximum": 4 },
+    "requiredResultCodes": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "requiredCheckStatuses": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "enum": [ "pass", "warn", "fail", "notApplicable" ] }
+    },
+    "ignoredFields": { "type": "array", "items": { "type": "string" } },
+    "stableOutputExcerpt": { "type": "object" },
+    "normalizedOutputHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "outputRef": { "type": "string", "minLength": 1 }
+  }
+}
