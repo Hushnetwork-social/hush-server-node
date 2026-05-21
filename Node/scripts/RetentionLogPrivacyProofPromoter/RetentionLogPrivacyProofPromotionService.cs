@@ -45,7 +45,10 @@ public sealed class RetentionLogPrivacyProofPromotionService
         {
             throw new RetentionLogPrivacyProofPromotionException(
                 $"Unsupported retention/log privacy proof mode: {mode}",
-                ["Supported modes: validate_only, check_only, package."]);
+                [
+                    "Supported generator modes: validate_only, check_only, package.",
+                    "Use CLI mode validate_package to validate an existing generated package folder.",
+                ]);
         }
 
         ValidateWorkspaceShape(options.Paths.WorkspaceRoot);
