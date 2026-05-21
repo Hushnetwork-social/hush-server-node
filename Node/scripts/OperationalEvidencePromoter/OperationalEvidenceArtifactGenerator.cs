@@ -632,6 +632,7 @@ public static class OperationalEvidenceArtifactGenerator
             ["readinessFragmentRef"] = OperationalReadinessFragmentPath,
             ["feat132Refs"] = BuildFeat132Handoff(run["feat132Refs"] as JsonObject),
             ["feat131Refs"] = BuildFeat131Handoff(run["feat131Refs"] as JsonObject),
+            ["feat137Refs"] = BuildFeat137Handoff(run["feat137Refs"] as JsonObject),
             ["exceptions"] = ToJsonArray(checkResult.Warnings.Concat(checkResult.Blockers).Concat(scanFindings.Select(FormatFinding))),
             ["warnings"] = ToJsonArray(checkResult.Warnings),
             ["blockers"] = ToJsonArray(checkResult.Blockers.Concat(scanFindings.Select(finding => "OPS-005")).Distinct(StringComparer.Ordinal)),
@@ -649,7 +650,7 @@ public static class OperationalEvidenceArtifactGenerator
             ["consumerInstructions"] = new JsonObject
             {
                 ["FEAT-130"] = "Promote operational-readiness-fragment.json only when evidence state is accepted or accepted_with_warnings and no blockers exist.",
-                ["FEAT-137"] = "Consume logging policy and restricted log refs without copying raw logs.",
+                ["FEAT-137"] = "Include retention/log privacy proof package refs by id/hash and do not copy restricted evidence, raw logs, support records, or diagnostic material.",
                 ["FEAT-141"] = "Include public package refs, restricted refs by id/hash, warnings, residual risk, and claim wording impact.",
                 ["FEAT-142"] = "Read promoted FEAT-130 register state; do not consume FEAT-133 files directly.",
             },
@@ -807,6 +808,32 @@ public static class OperationalEvidenceArtifactGenerator
             ["impactClassification"] = GetString(refs, "impactClassification"),
             ["unknownClassificationState"] = GetString(refs, "unknownClassificationState"),
             ["feat130RegisterPromotionState"] = GetFeat132RegisterPromotionState(refs),
+        };
+    }
+
+    private static JsonObject BuildFeat137Handoff(JsonObject? refs)
+    {
+        if (refs is not null)
+        {
+            return (JsonObject)refs.DeepClone();
+        }
+
+        return new JsonObject
+        {
+            ["proofFamily"] = "retention_log_privacy",
+            ["readinessEvidenceId"] = "RDY-EVID-AT-RDY-009-FEAT-137-001",
+            ["readinessRegisterVersionId"] = "RDY-REG-v0.1.2",
+            ["readinessManifestHash"] = "f4ccafc0fce0c4cfe4cbcf3f067b4390f5e69c2f69bd5d93b05db431f7c04960",
+            ["proofPackagePath"] = "hush-documents/PrivateServer_ElectronicVoting/Retention-Log-Privacy-Proof/package/retention-log-privacy-proof-package.json",
+            ["proofPackageHash"] = "974a462ff80c84716f0945103a624bc30d0fe7b201d5d3224fd274c42ce4bbfe",
+            ["readinessFragmentPath"] = "hush-documents/PrivateServer_ElectronicVoting/Retention-Log-Privacy-Proof/package/readiness-fragment.json",
+            ["readinessFragmentHash"] = "c45a3b15bf470a67e4ff85519c610b618d80f15f4dd35da244d7db94349bef63",
+            ["publicSummaryPath"] = "hush-documents/PrivateServer_ElectronicVoting/Retention-Log-Privacy-Proof/package/public-safe-retention-log-privacy-summary.md",
+            ["publicSummaryHash"] = "2f175fde331ff1b96a7072a2acd5cffa799b1c1d4932f9cdfec45577222a95b3",
+            ["restrictedEvidenceIndexPath"] = "hush-documents/PrivateServer_ElectronicVoting/Retention-Log-Privacy-Proof/package/restricted-retention-log-privacy-evidence-index.md",
+            ["restrictedEvidenceIndexHash"] = "468333f729032a4810609ca6ce9ff57c13eb7250f27a0eb8b06fc0ca99124de1",
+            ["claimLimit"] = "No external certification, third-party validation, production operating-history assurance, or jurisdiction-specific legal retention approval is claimed.",
+            ["failureAction"] = "Missing, stale, mismatched, blocked, or unknown privacy proof must downgrade or block retention/log privacy claims.",
         };
     }
 

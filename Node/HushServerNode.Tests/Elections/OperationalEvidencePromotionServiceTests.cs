@@ -147,6 +147,10 @@ public sealed class OperationalEvidencePromotionServiceTests
         handoff["consumerInstructions"]!.AsObject().Should().ContainKey("FEAT-137");
         handoff["consumerInstructions"]!.AsObject().Should().ContainKey("FEAT-141");
         handoff["consumerInstructions"]!.AsObject().Should().ContainKey("FEAT-142");
+        handoff["feat137Refs"]!.AsObject()["proofPackageHash"]!.GetValue<string>()
+            .Should().Be("974a462ff80c84716f0945103a624bc30d0fe7b201d5d3224fd274c42ce4bbfe");
+        handoff["feat137Refs"]!.AsObject()["failureAction"]!.GetValue<string>()
+            .Should().Contain("downgrade or block retention/log privacy claims");
     }
 
     [Fact]

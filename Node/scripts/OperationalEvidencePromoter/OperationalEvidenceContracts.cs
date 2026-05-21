@@ -321,9 +321,18 @@ public static class OperationalEvidenceContracts
         RequireNonEmptyArray(handoff, "restrictedPackageRefs", errors);
         RequirePresent(handoff, "feat132Refs", errors);
         RequirePresent(handoff, "feat131Refs", errors);
+        RequirePresent(handoff, "feat137Refs", errors);
         RequirePresent(handoff, "readinessRegisterHandoff", errors);
         RequirePresent(handoff, "pilotRehearsalHandoff", errors);
         RequirePresent(handoff, "feat132RegisterPromotionTraceability", errors);
+        if (handoff["feat137Refs"] is not JsonObject feat137Refs ||
+            feat137Refs["proofPackageHash"] is null ||
+            feat137Refs["readinessRegisterVersionId"] is null ||
+            feat137Refs["failureAction"] is null)
+        {
+            errors.Add("feat137Refs must include proofPackageHash, readinessRegisterVersionId, and failureAction.");
+        }
+
         if (handoff["consumerInstructions"] is not JsonObject consumers ||
             consumers["FEAT-130"] is null ||
             consumers["FEAT-137"] is null ||
