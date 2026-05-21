@@ -935,6 +935,8 @@ public class ElectionLifecycleServiceTests
         store.BallotMemPoolEntries.Should().ContainSingle();
         store.BallotMemPoolEntries[0].QueuedAt.Should().Be(result.AcceptedBallot.AcceptedAt);
         store.CastIdempotencyRecords.Should().ContainSingle();
+        store.CastIdempotencyRecords.Single().IdempotencyKeyHash.Should().Be(ComputeScopedHash("cast-key-1"));
+        store.CastIdempotencyRecords.Single().IdempotencyKeyHash.Should().NotBe("cast-key-1");
     }
 
     [Fact]
@@ -1086,6 +1088,59 @@ public class ElectionLifecycleServiceTests
         result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.BallotDefinitionHashMismatch);
         store.AcceptedBallots.Should().BeEmpty();
         store.CheckoffConsumptions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WithTamperedPreparedBallotHash_ReturnsPreparedBallotHashMismatch()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        var request = CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-tampered-prepared",
+            ballotNullifier: "nullifier-tampered-prepared") with
+        {
+            PreparedBallotHash = "prepared-hash-tampered",
+        };
+
+        var result = await service.AcceptBallotCastAsync(request);
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.PreparedBallotHashMismatch);
+        store.AcceptedBallots.Should().BeEmpty();
+        store.CheckoffConsumptions.Should().BeEmpty();
+        store.CastIdempotencyRecords.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WithAlreadyFinalizedCeremony_ReturnsAlreadyVoted()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+        var ceremony = store.VoterCeremonyRecords.Single(x =>
+            x.ElectionId == scenario.Election.ElectionId &&
+            string.Equals(
+                x.OrganizationVoterId,
+                scenario.RosterEntry.OrganizationVoterId,
+                StringComparison.OrdinalIgnoreCase));
+        store.VoterCeremonyRecords.Remove(ceremony);
+        store.VoterCeremonyRecords.Add(ceremony with
+        {
+            FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
+        });
+
+        var result = await service.AcceptBallotCastAsync(CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-finalized-ceremony",
+            ballotNullifier: "nullifier-finalized-ceremony"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.AlreadyVoted);
+        store.AcceptedBallots.Should().BeEmpty();
+        store.CheckoffConsumptions.Should().BeEmpty();
+        store.CastIdempotencyRecords.Should().BeEmpty();
     }
 
     [Fact]
@@ -1312,6 +1367,64 @@ public class ElectionLifecycleServiceTests
                 scenario.Election.ElectionId.ToString(),
                 ComputeScopedHash("cast-key-cache")),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task AcceptBallotCastAsync_WhenIdempotencyCacheFails_ReturnsSuccessAfterDurableCommit()
+    {
+        var store = new ElectionStore();
+        var cacheService = new Mock<IElectionCastIdempotencyCacheService>();
+        cacheService
+            .Setup(x => x.SetAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ThrowsAsync(new InvalidOperationException("cache unavailable"));
+        var service = CreateService(store, castIdempotencyCacheService: cacheService.Object);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+
+        var result = await service.AcceptBallotCastAsync(CreateCastRequest(
+            scenario,
+            idempotencyKey: "cast-key-cache-failure",
+            ballotNullifier: "nullifier-cache-failure"));
+
+        result.IsSuccess.Should().BeTrue();
+        store.CheckoffConsumptions.Should().ContainSingle();
+        store.AcceptedBallots.Should().ContainSingle();
+        store.CastIdempotencyRecords.Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData(nameof(FakeElectionsRepository.SaveParticipationRecordAsync))]
+    [InlineData(nameof(FakeElectionsRepository.SaveCheckoffConsumptionAsync))]
+    [InlineData(nameof(FakeElectionsRepository.SaveAcceptedBallotAsync))]
+    [InlineData(nameof(FakeElectionsRepository.SaveBallotMemPoolEntryAsync))]
+    [InlineData(nameof(FakeElectionsRepository.SaveCastIdempotencyRecordAsync))]
+    [InlineData(nameof(FakeElectionsRepository.UpdatePreparedBallotCommitmentAsync))]
+    [InlineData(nameof(FakeElectionsRepository.UpdateVoterCeremonyRecordAsync))]
+    [InlineData(nameof(FakeElectionsRepository.SaveElectionAsync))]
+    [InlineData(nameof(FakeWritableUnitOfWork.CommitAsync))]
+    public async Task AcceptBallotCastAsync_WhenAtomicCastEffectFails_RollsBackAllCastEffects(
+        string failingOperation)
+    {
+        var store = new ElectionStore
+        {
+            ThrowBeforeOperationName = failingOperation,
+        };
+        var service = CreateService(store);
+        var scenario = SeedOpenElectionForCast(store, createCommitmentRegistration: true);
+
+        var result = await service.AcceptBallotCastAsync(CreateCastRequest(
+            scenario,
+            idempotencyKey: $"cast-key-fail-{failingOperation}",
+            ballotNullifier: $"nullifier-fail-{failingOperation}"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureReason.Should().Be(ElectionCastAcceptanceFailureReason.ValidationFailed);
+        result.ErrorMessage.Should().Be("Cast acceptance failed before commit; no cast effects were persisted.");
+        result.ErrorMessage.Should().NotContain(scenario.RosterEntry.OrganizationVoterId);
+        result.ErrorMessage.Should().NotContain("voter-address");
+        result.ErrorMessage.Should().NotContain(scenario.PreparedBallotCommitment!.PreparedBallotHash);
+        result.ErrorMessage.Should().NotContain($"nullifier-fail-{failingOperation}");
+        AssertNoAcceptedCastEffectsPersisted(store, scenario);
+        store.ActiveWritableUnitOfWorkCount.Should().Be(0);
     }
 
     [Fact]
@@ -6079,6 +6192,31 @@ public class ElectionLifecycleServiceTests
         return new DateTime(anchor.Year, anchor.Month, anchor.Day, anchor.Hour, anchor.Minute, 0, DateTimeKind.Utc);
     }
 
+    private static void AssertNoAcceptedCastEffectsPersisted(
+        ElectionStore store,
+        CastAcceptanceScenario scenario)
+    {
+        store.ParticipationRecords.Should().BeEmpty();
+        store.CheckoffConsumptions.Should().BeEmpty();
+        store.AcceptedBallots.Should().BeEmpty();
+        store.BallotMemPoolEntries.Should().BeEmpty();
+        store.CastIdempotencyRecords.Should().BeEmpty();
+
+        var finalPrepared = store.PreparedBallotCommitments.Single(x =>
+            x.PreparedBallotId == scenario.PreparedBallotCommitment!.PreparedBallotId);
+        finalPrepared.State.Should().Be(ElectionPreparedBallotState.Prepared);
+        finalPrepared.AcceptedBallotId.Should().BeNull();
+        finalPrepared.CastAt.Should().BeNull();
+
+        var ceremony = store.VoterCeremonyRecords.Single(x =>
+            x.ElectionId == scenario.Election.ElectionId &&
+            string.Equals(
+                x.OrganizationVoterId,
+                scenario.RosterEntry.OrganizationVoterId,
+                StringComparison.OrdinalIgnoreCase));
+        ceremony.FinalState.Should().Be(ElectionVoterCeremonyFinalState.None);
+    }
+
     private static TrusteeFinalizationScenario SeedClosedTrusteeElectionForFinalization(
         ElectionStore store,
         int requiredApprovalCount)
@@ -7092,6 +7230,103 @@ public class ElectionLifecycleServiceTests
         public TaskCompletionSource<bool>? GetElectionForUpdateEntered { get; set; }
         public TaskCompletionSource<bool>? ReleaseGetElectionForUpdate { get; set; }
         public int ActiveWritableUnitOfWorkCount { get; set; }
+        public string? ThrowBeforeOperationName { get; set; }
+        public List<string> RepositoryOperations { get; } = [];
+
+        public void ThrowIfConfigured(string operationName)
+        {
+            RepositoryOperations.Add(operationName);
+            if (string.Equals(ThrowBeforeOperationName, operationName, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Forced test failure before {operationName}.");
+            }
+        }
+
+        public ElectionStore CreateTransactionalCopy()
+        {
+            var copy = new ElectionStore
+            {
+                GetElectionForUpdateEntered = GetElectionForUpdateEntered,
+                ReleaseGetElectionForUpdate = ReleaseGetElectionForUpdate,
+                ThrowBeforeOperationName = ThrowBeforeOperationName,
+            };
+
+            copy.ReplaceDataFrom(this);
+            return copy;
+        }
+
+        public void ReplaceDataFrom(ElectionStore source)
+        {
+            ReplaceDictionary(Elections, source.Elections);
+            ReplaceDictionary(ElectionEnvelopeAccessRecords, source.ElectionEnvelopeAccessRecords);
+            ReplaceList(ResultArtifacts, source.ResultArtifacts);
+            ReplaceList(DraftSnapshots, source.DraftSnapshots);
+            ReplaceList(RosterEntries, source.RosterEntries);
+            ReplaceList(EligibilityActivationEvents, source.EligibilityActivationEvents);
+            ReplaceList(ParticipationRecords, source.ParticipationRecords);
+            ReplaceList(CommitmentRegistrations, source.CommitmentRegistrations);
+            ReplaceList(VoterCeremonyRecords, source.VoterCeremonyRecords);
+            ReplaceList(PreparedBallotCommitments, source.PreparedBallotCommitments);
+            ReplaceList(SpoiledPreparedBallots, source.SpoiledPreparedBallots);
+            ReplaceList(CheckoffConsumptions, source.CheckoffConsumptions);
+            ReplaceList(EligibilitySnapshots, source.EligibilitySnapshots);
+            ReplaceList(RosterImportEvidences, source.RosterImportEvidences);
+            ReplaceList(EligibilityPolicyEvidences, source.EligibilityPolicyEvidences);
+            ReplaceList(CommitmentSchemeEvidences, source.CommitmentSchemeEvidences);
+            ReplaceList(BoundaryArtifacts, source.BoundaryArtifacts);
+            ReplaceList(AcceptedBallots, source.AcceptedBallots);
+            ReplaceList(BallotMemPoolEntries, source.BallotMemPoolEntries);
+            ReplaceList(PublishedBallots, source.PublishedBallots);
+            ReplaceList(CastIdempotencyRecords, source.CastIdempotencyRecords);
+            ReplaceList(WarningAcknowledgements, source.WarningAcknowledgements);
+            ReplaceDictionary(TrusteeInvitations, source.TrusteeInvitations);
+            ReplaceDictionary(GovernedProposals, source.GovernedProposals);
+            ReplaceList(GovernedProposalApprovals, source.GovernedProposalApprovals);
+            ReplaceDictionary(CeremonyProfiles, source.CeremonyProfiles);
+            ReplaceDictionary(CeremonyVersions, source.CeremonyVersions);
+            ReplaceList(CeremonyTranscriptEvents, source.CeremonyTranscriptEvents);
+            ReplaceList(CeremonyMessageEnvelopes, source.CeremonyMessageEnvelopes);
+            ReplaceDictionary(CeremonyTrusteeStates, source.CeremonyTrusteeStates);
+            ReplaceDictionary(CeremonyShareCustodyRecords, source.CeremonyShareCustodyRecords);
+            ReplaceDictionary(CloseCountingJobs, source.CloseCountingJobs);
+            ReplaceDictionary(ExecutorSessionKeyEnvelopes, source.ExecutorSessionKeyEnvelopes);
+            ReplaceDictionary(AdminOnlyProtectedTallyEnvelopes, source.AdminOnlyProtectedTallyEnvelopes);
+            ReplaceDictionary(TallyExecutorLeases, source.TallyExecutorLeases);
+            ReplaceDictionary(FinalizationSessions, source.FinalizationSessions);
+            ReplaceList(FinalizationShares, source.FinalizationShares);
+            ReplaceList(FinalizationReleaseEvidenceRecords, source.FinalizationReleaseEvidenceRecords);
+            ReplaceList(PublicationProofSessions, source.PublicationProofSessions);
+            ReplaceList(PublicationProofTranscripts, source.PublicationProofTranscripts);
+            ReplaceList(PublicationWitnessDeletionReceipts, source.PublicationWitnessDeletionReceipts);
+            ReplaceDictionary(ReportPackages, source.ReportPackages);
+            ReplaceList(ReportArtifacts, source.ReportArtifacts);
+            ReplaceList(ReportAccessGrants, source.ReportAccessGrants);
+            ReplaceList(ApprovedProtocolPackageCatalogEntries, source.ApprovedProtocolPackageCatalogEntries);
+            ReplaceList(ProtocolPackageBindings, source.ProtocolPackageBindings);
+        }
+
+        public void ClearTransactionalOnlyState()
+        {
+            RepositoryOperations.Clear();
+        }
+
+        private static void ReplaceList<T>(List<T> target, IEnumerable<T> source)
+        {
+            target.Clear();
+            target.AddRange(source);
+        }
+
+        private static void ReplaceDictionary<TKey, TValue>(
+            Dictionary<TKey, TValue> target,
+            IEnumerable<KeyValuePair<TKey, TValue>> source)
+            where TKey : notnull
+        {
+            target.Clear();
+            foreach (var item in source)
+            {
+                target[item.Key] = item.Value;
+            }
+        }
     }
 
     private static CredentialsProfile CreateTestNodeCredentials()
@@ -7249,10 +7484,10 @@ public class ElectionLifecycleServiceTests
             new FakeReadOnlyUnitOfWork(new FakeElectionsRepository(store));
 
         public IWritableUnitOfWork<ElectionsDbContext> CreateWritable() =>
-            new FakeWritableUnitOfWork(new FakeElectionsRepository(store), store);
+            new FakeWritableUnitOfWork(store);
 
         public IWritableUnitOfWork<ElectionsDbContext> CreateWritable(System.Data.IsolationLevel isolationLevel) =>
-            new FakeWritableUnitOfWork(new FakeElectionsRepository(store), store);
+            new FakeWritableUnitOfWork(store);
     }
 
     private sealed class FakeReadOnlyUnitOfWork(FakeElectionsRepository repository) : IReadOnlyUnitOfWork<ElectionsDbContext>
@@ -7273,19 +7508,28 @@ public class ElectionLifecycleServiceTests
     private sealed class FakeWritableUnitOfWork : IWritableUnitOfWork<ElectionsDbContext>
     {
         private readonly FakeElectionsRepository _repository;
-        private readonly ElectionStore _store;
+        private readonly ElectionStore _committedStore;
+        private readonly ElectionStore _workingStore;
+        private bool _committed;
         private bool _disposed;
 
-        public FakeWritableUnitOfWork(FakeElectionsRepository repository, ElectionStore store)
+        public FakeWritableUnitOfWork(ElectionStore store)
         {
-            _repository = repository;
-            _store = store;
-            _store.ActiveWritableUnitOfWorkCount++;
+            _committedStore = store;
+            _workingStore = store.CreateTransactionalCopy();
+            _repository = new FakeElectionsRepository(_workingStore);
+            _committedStore.ActiveWritableUnitOfWorkCount++;
         }
 
         public ElectionsDbContext Context => null!;
 
-        public Task CommitAsync() => Task.CompletedTask;
+        public Task CommitAsync()
+        {
+            _committedStore.ThrowIfConfigured(nameof(CommitAsync));
+            _committedStore.ReplaceDataFrom(_workingStore);
+            _committed = true;
+            return Task.CompletedTask;
+        }
 
         public TRepository GetRepository<TRepository>()
             where TRepository : IRepository =>
@@ -7293,7 +7537,11 @@ public class ElectionLifecycleServiceTests
                 ? (TRepository)(object)_repository
                 : throw new InvalidOperationException($"Repository {typeof(TRepository).Name} is not supported by this test harness.");
 
-        public Task RollbackAsync() => Task.CompletedTask;
+        public Task RollbackAsync()
+        {
+            _committed = false;
+            return Task.CompletedTask;
+        }
 
         public void Dispose()
         {
@@ -7302,7 +7550,12 @@ public class ElectionLifecycleServiceTests
                 return;
             }
 
-            _store.ActiveWritableUnitOfWorkCount--;
+            if (!_committed)
+            {
+                _workingStore.ClearTransactionalOnlyState();
+            }
+
+            _committedStore.ActiveWritableUnitOfWorkCount--;
             _disposed = true;
         }
     }
@@ -7334,6 +7587,7 @@ public class ElectionLifecycleServiceTests
 
         public Task SaveElectionAsync(ElectionRecord election)
         {
+            store.ThrowIfConfigured(nameof(SaveElectionAsync));
             store.Elections[election.ElectionId] = election;
             return Task.CompletedTask;
         }
@@ -7497,6 +7751,7 @@ public class ElectionLifecycleServiceTests
 
         public Task SaveParticipationRecordAsync(ElectionParticipationRecord participationRecord)
         {
+            store.ThrowIfConfigured(nameof(SaveParticipationRecordAsync));
             store.ParticipationRecords.RemoveAll(x =>
                 x.ElectionId == participationRecord.ElectionId &&
                 string.Equals(x.OrganizationVoterId, participationRecord.OrganizationVoterId, StringComparison.OrdinalIgnoreCase));
@@ -7574,7 +7829,13 @@ public class ElectionLifecycleServiceTests
         }
 
         public Task UpdateVoterCeremonyRecordAsync(ElectionVoterCeremonyRecord ceremonyRecord) =>
-            SaveVoterCeremonyRecordAsync(ceremonyRecord);
+            UpdateVoterCeremonyRecordWithFailureAsync(ceremonyRecord);
+
+        private Task UpdateVoterCeremonyRecordWithFailureAsync(ElectionVoterCeremonyRecord ceremonyRecord)
+        {
+            store.ThrowIfConfigured(nameof(UpdateVoterCeremonyRecordAsync));
+            return SaveVoterCeremonyRecordAsync(ceremonyRecord);
+        }
 
         public Task<IReadOnlyList<ElectionPreparedBallotCommitmentRecord>> GetPreparedBallotCommitmentsAsync(ElectionId electionId) =>
             Task.FromResult<IReadOnlyList<ElectionPreparedBallotCommitmentRecord>>(
@@ -7604,7 +7865,13 @@ public class ElectionLifecycleServiceTests
         }
 
         public Task UpdatePreparedBallotCommitmentAsync(ElectionPreparedBallotCommitmentRecord preparedBallotCommitment) =>
-            SavePreparedBallotCommitmentAsync(preparedBallotCommitment);
+            UpdatePreparedBallotCommitmentWithFailureAsync(preparedBallotCommitment);
+
+        private Task UpdatePreparedBallotCommitmentWithFailureAsync(ElectionPreparedBallotCommitmentRecord preparedBallotCommitment)
+        {
+            store.ThrowIfConfigured(nameof(UpdatePreparedBallotCommitmentAsync));
+            return SavePreparedBallotCommitmentAsync(preparedBallotCommitment);
+        }
 
         public Task<IReadOnlyList<ElectionSpoiledPreparedBallotRecord>> GetSpoiledPreparedBallotsAsync(ElectionId electionId) =>
             Task.FromResult<IReadOnlyList<ElectionSpoiledPreparedBallotRecord>>(
@@ -7642,6 +7909,7 @@ public class ElectionLifecycleServiceTests
 
         public Task SaveCheckoffConsumptionAsync(ElectionCheckoffConsumptionRecord checkoffConsumption)
         {
+            store.ThrowIfConfigured(nameof(SaveCheckoffConsumptionAsync));
             store.CheckoffConsumptions.RemoveAll(x =>
                 x.ElectionId == checkoffConsumption.ElectionId &&
                 string.Equals(x.OrganizationVoterId, checkoffConsumption.OrganizationVoterId, StringComparison.OrdinalIgnoreCase));
@@ -7763,6 +8031,7 @@ public class ElectionLifecycleServiceTests
 
         public Task SaveAcceptedBallotAsync(ElectionAcceptedBallotRecord acceptedBallot)
         {
+            store.ThrowIfConfigured(nameof(SaveAcceptedBallotAsync));
             store.AcceptedBallots.RemoveAll(x => x.Id == acceptedBallot.Id);
             store.AcceptedBallots.Add(acceptedBallot);
             return Task.CompletedTask;
@@ -7793,6 +8062,7 @@ public class ElectionLifecycleServiceTests
 
         public Task SaveBallotMemPoolEntryAsync(ElectionBallotMemPoolRecord ballotMemPoolEntry)
         {
+            store.ThrowIfConfigured(nameof(SaveBallotMemPoolEntryAsync));
             store.BallotMemPoolEntries.RemoveAll(x => x.Id == ballotMemPoolEntry.Id);
             store.BallotMemPoolEntries.Add(ballotMemPoolEntry);
             return Task.CompletedTask;
@@ -7828,6 +8098,7 @@ public class ElectionLifecycleServiceTests
 
         public Task SaveCastIdempotencyRecordAsync(ElectionCastIdempotencyRecord idempotencyRecord)
         {
+            store.ThrowIfConfigured(nameof(SaveCastIdempotencyRecordAsync));
             store.CastIdempotencyRecords.RemoveAll(x =>
                 x.ElectionId == idempotencyRecord.ElectionId &&
                 string.Equals(x.IdempotencyKeyHash, idempotencyRecord.IdempotencyKeyHash, StringComparison.Ordinal));

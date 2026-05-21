@@ -1386,57 +1386,57 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
             var protectedAcceptedAt = CreateProtectedAcceptedBallotTimestamp(election);
 
-            try
+            var updatedElection = election with
             {
-                var updatedElection = election with
-                {
-                    LastUpdatedAt = acceptedAt,
-                };
-                var participationRecord = existingParticipation is null
-                    ? ElectionModelFactory.CreateParticipationRecord(
-                        request.ElectionId,
-                        rosterEntry.OrganizationVoterId,
-                        ElectionParticipationStatus.CountedAsVoted,
-                        acceptedAt)
-                    : existingParticipation.UpdateStatus(
-                        ElectionParticipationStatus.CountedAsVoted,
-                        acceptedAt);
-                var newCheckoffConsumption = ElectionModelFactory.CreateCheckoffConsumptionRecord(
+                LastUpdatedAt = acceptedAt,
+            };
+            var participationRecord = existingParticipation is null
+                ? ElectionModelFactory.CreateParticipationRecord(
                     request.ElectionId,
                     rosterEntry.OrganizationVoterId,
+                    ElectionParticipationStatus.CountedAsVoted,
+                    acceptedAt)
+                : existingParticipation.UpdateStatus(
+                    ElectionParticipationStatus.CountedAsVoted,
                     acceptedAt);
-                var acceptedBallot = ElectionModelFactory.CreateAcceptedBallotRecord(
-                    request.ElectionId,
-                    request.EncryptedBallotPackage,
-                    request.ProofBundle,
-                    request.BallotNullifier,
-                    protectedAcceptedAt,
-                    request.PreparedBallotId,
-                    request.PreparedBallotHash,
-                    request.ReceiptCommitment,
-                    request.ReceiptCommitmentScheme,
-                    request.BallotDefinitionVersion,
-                    request.BallotDefinitionHash);
-                var ballotMemPoolEntry = ElectionModelFactory.CreateBallotMemPoolEntry(
-                    request.ElectionId,
-                    acceptedBallot.Id,
-                    protectedAcceptedAt);
-                var idempotencyRecord = ElectionModelFactory.CreateCastIdempotencyRecord(
-                    request.ElectionId,
-                    idempotencyKeyHash,
-                    acceptedAt);
-                var castPreparedBallot = sp04Validation.PreparedBallotCommitment! with
-                {
-                    State = ElectionPreparedBallotState.Cast,
-                    AcceptedBallotId = acceptedBallot.Id,
-                    CastAt = acceptedAt,
-                };
-                var completedCeremony = sp04Validation.CeremonyRecord! with
-                {
-                    FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
-                    LastUpdatedAt = acceptedAt,
-                };
+            var newCheckoffConsumption = ElectionModelFactory.CreateCheckoffConsumptionRecord(
+                request.ElectionId,
+                rosterEntry.OrganizationVoterId,
+                acceptedAt);
+            var acceptedBallot = ElectionModelFactory.CreateAcceptedBallotRecord(
+                request.ElectionId,
+                request.EncryptedBallotPackage,
+                request.ProofBundle,
+                request.BallotNullifier,
+                protectedAcceptedAt,
+                request.PreparedBallotId,
+                request.PreparedBallotHash,
+                request.ReceiptCommitment,
+                request.ReceiptCommitmentScheme,
+                request.BallotDefinitionVersion,
+                request.BallotDefinitionHash);
+            var ballotMemPoolEntry = ElectionModelFactory.CreateBallotMemPoolEntry(
+                request.ElectionId,
+                acceptedBallot.Id,
+                protectedAcceptedAt);
+            var idempotencyRecord = ElectionModelFactory.CreateCastIdempotencyRecord(
+                request.ElectionId,
+                idempotencyKeyHash,
+                acceptedAt);
+            var castPreparedBallot = sp04Validation.PreparedBallotCommitment! with
+            {
+                State = ElectionPreparedBallotState.Cast,
+                AcceptedBallotId = acceptedBallot.Id,
+                CastAt = acceptedAt,
+            };
+            var completedCeremony = sp04Validation.CeremonyRecord! with
+            {
+                FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
+                LastUpdatedAt = acceptedAt,
+            };
 
+            try
+            {
                 await repository.SaveParticipationRecordAsync(participationRecord);
                 await repository.SaveCheckoffConsumptionAsync(newCheckoffConsumption);
                 await repository.SaveAcceptedBallotAsync(acceptedBallot);
@@ -1446,25 +1446,41 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 await repository.UpdateVoterCeremonyRecordAsync(completedCeremony);
                 await repository.SaveElectionAsync(updatedElection);
                 await unitOfWork.CommitAsync();
-                if (_castIdempotencyCacheService is not null)
+            }
+            catch (ArgumentException ex)
+            {
+                await unitOfWork.RollbackAsync();
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.ValidationFailed,
+                    ex.Message);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                await unitOfWork.RollbackAsync();
+                return ElectionCastAcceptanceResult.Failure(
+                    ElectionCastAcceptanceFailureReason.ValidationFailed,
+                    "Cast acceptance failed before commit; no cast effects were persisted.");
+            }
+
+            if (_castIdempotencyCacheService is not null)
+            {
+                try
                 {
                     await _castIdempotencyCacheService.SetAsync(
                         request.ElectionId.ToString(),
                         idempotencyKeyHash);
                 }
+                catch
+                {
+                    // The durable cast is already committed; cache population is a best-effort accelerator only.
+                }
+            }
 
-                return ElectionCastAcceptanceResult.Success(
-                    updatedElection,
-                    acceptedBallot,
-                    idempotencyRecord,
-                    castPreparedBallot);
-            }
-            catch (ArgumentException ex)
-            {
-                return ElectionCastAcceptanceResult.Failure(
-                    ElectionCastAcceptanceFailureReason.ValidationFailed,
-                    ex.Message);
-            }
+            return ElectionCastAcceptanceResult.Success(
+                updatedElection,
+                acceptedBallot,
+                idempotencyRecord,
+                castPreparedBallot);
         }
         finally
         {
