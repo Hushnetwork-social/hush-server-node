@@ -26,6 +26,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly ILogger<ElectionLifecycleService> _logger;
     private readonly ElectionCeremonyOptions _ceremonyOptions;
     private readonly IElectionCastIdempotencyCacheService? _castIdempotencyCacheService;
+    private readonly IElectionVoidPublicCacheService? _voidPublicCacheService;
     private readonly IElectionResultCryptoService? _electionResultCryptoService;
     private readonly IElectionReportPackageService _electionReportPackageService;
     private readonly ICredentialsProvider? _credentialsProvider;
@@ -64,6 +65,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IElectionCastIdempotencyCacheService? castIdempotencyCacheService,
         IElectionResultCryptoService? electionResultCryptoService = null,
         IElectionReportPackageService? electionReportPackageService = null,
+        IElectionVoidPublicCacheService? voidPublicCacheService = null,
         ICredentialsProvider? credentialsProvider = null,
         IIdentityService? identityService = null,
         ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null,
@@ -80,6 +82,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
         _logger = logger;
         _ceremonyOptions = ceremonyOptions;
         _castIdempotencyCacheService = castIdempotencyCacheService;
+        _voidPublicCacheService = voidPublicCacheService;
         _electionResultCryptoService = electionResultCryptoService;
         _electionReportPackageService = electionReportPackageService ?? new ElectionReportPackageService();
         _credentialsProvider = credentialsProvider;
@@ -2742,14 +2745,26 @@ public class ElectionLifecycleService : IElectionLifecycleService
             election.ElectionId,
             decision.Id,
             voidedAt);
+        var supersededArtifacts = new List<ElectionVoidSupersededArtifactRecord>();
         foreach (var supersededPackage in supersededPackages)
         {
-            await repository.SaveVoidSupersededArtifactAsync(CreateVoidSupersededReportPackageReference(
+            var supersededArtifact = CreateVoidSupersededReportPackageReference(
                 election.ElectionId,
                 decision.Id,
                 supersededPackage,
-                voidedAt));
+                voidedAt);
+            supersededArtifacts.Add(supersededArtifact);
+            await repository.SaveVoidSupersededArtifactAsync(supersededArtifact);
         }
+
+        var publicationOutcome = await SealVoidPublicationAttemptAsync(
+            repository,
+            updatedElection,
+            decisionWithAttempt,
+            publicationAttempt,
+            supersededArtifacts,
+            request.ActorPublicAddress,
+            voidedAt);
 
         await BlockVoidConflictingWorkAsync(
             repository,
@@ -2762,11 +2777,13 @@ public class ElectionLifecycleService : IElectionLifecycleService
         await repository.SaveElectionAsync(updatedElection);
         await unitOfWork.CommitAsync();
 
+        await WarmVoidPublicCacheAsync(publicationOutcome);
+
         return ElectionCommandResult.Success(
             updatedElection,
             boundaryArtifact: artifact,
-            voidDecision: decisionWithAttempt,
-            voidPublicationAttempt: publicationAttempt,
+            voidDecision: publicationOutcome.Decision,
+            voidPublicationAttempt: publicationOutcome.PublicationAttempt,
             supersededReportPackages: supersededPackages);
     }
 
@@ -2831,13 +2848,23 @@ public class ElectionLifecycleService : IElectionLifecycleService
         };
 
         await repository.SaveVoidPublicationAttemptAsync(publicationAttempt);
-        await repository.UpdateVoidDecisionAsync(updatedDecision);
+        var supersededArtifacts = await repository.GetVoidSupersededArtifactsAsync(decision.Id);
+        var publicationOutcome = await SealVoidPublicationAttemptAsync(
+            repository,
+            election,
+            updatedDecision,
+            publicationAttempt,
+            supersededArtifacts,
+            request.ActorPublicAddress,
+            retriedAt);
         await unitOfWork.CommitAsync();
+
+        await WarmVoidPublicCacheAsync(publicationOutcome);
 
         return ElectionCommandResult.Success(
             election,
-            voidDecision: updatedDecision,
-            voidPublicationAttempt: publicationAttempt);
+            voidDecision: publicationOutcome.Decision,
+            voidPublicationAttempt: publicationOutcome.PublicationAttempt);
     }
 
     public async Task<ElectionCommandResult> SubmitFinalizationShareAsync(SubmitElectionFinalizationShareRequest request)
@@ -3369,6 +3396,117 @@ public class ElectionLifecycleService : IElectionLifecycleService
             },
         };
 
+    private async Task<VoidPublicationSealOutcome> SealVoidPublicationAttemptAsync(
+        IElectionsRepository repository,
+        ElectionRecord voidedElection,
+        ElectionVoidDecisionRecord decision,
+        ElectionVoidPublicationAttemptRecord publicationAttempt,
+        IReadOnlyList<ElectionVoidSupersededArtifactRecord> supersededArtifacts,
+        string attemptedByPublicAddress,
+        DateTime attemptedAt)
+    {
+        var historicalUnofficialResult =
+            voidedElection.UnofficialResultArtifactId.HasValue &&
+            decision.PreviousLifecycleState == ElectionLifecycleState.Closed
+                ? await repository.GetResultArtifactAsync(voidedElection.UnofficialResultArtifactId.Value)
+                : null;
+        var previousVoidReportPackage = await ResolveLatestVoidReportPackageAsync(repository, voidedElection.ElectionId);
+        var buildResult = _electionReportPackageService.BuildVoid(new ElectionVoidReportPackageBuildRequest(
+            voidedElection,
+            decision,
+            publicationAttempt,
+            supersededArtifacts,
+            historicalUnofficialResult,
+            AttemptNumber: publicationAttempt.AttemptNumber,
+            PreviousReportPackageId: previousVoidReportPackage?.Id,
+            attemptedByPublicAddress,
+            attemptedAt));
+
+        await repository.SaveReportPackageAsync(buildResult.Package);
+        foreach (var artifact in buildResult.Artifacts)
+        {
+            await repository.SaveReportArtifactAsync(artifact);
+        }
+
+        await repository.UpdateVoidPublicationAttemptAsync(buildResult.PublicationAttempt);
+        var updatedDecision = decision with
+        {
+            CurrentPublicationAttemptId = buildResult.PublicationAttempt.Id,
+            PublicationStatus = buildResult.PublicationAttempt.Status,
+        };
+        await repository.UpdateVoidDecisionAsync(updatedDecision);
+
+        return new VoidPublicationSealOutcome(
+            updatedDecision,
+            buildResult.PublicationAttempt,
+            buildResult.PublicStatus,
+            buildResult.Artifacts);
+    }
+
+    private static async Task<ElectionReportPackageRecord?> ResolveLatestVoidReportPackageAsync(
+        IElectionsRepository repository,
+        ElectionId electionId)
+    {
+        var packages = await repository.GetReportPackagesAsync(electionId);
+        return packages
+            .Where(x => x.PackageKind == ElectionReportPackageKind.Void)
+            .OrderByDescending(x => x.AttemptedAt)
+            .ThenByDescending(x => x.AttemptNumber)
+            .FirstOrDefault();
+    }
+
+    private async Task WarmVoidPublicCacheAsync(VoidPublicationSealOutcome publicationOutcome)
+    {
+        if (_voidPublicCacheService is null ||
+            publicationOutcome.PublicStatus is null ||
+            publicationOutcome.PublicationAttempt.Status != ElectionVoidPublicationAttemptStatus.Sealed)
+        {
+            return;
+        }
+
+        var electionId = publicationOutcome.PublicStatus.ElectionId.ToString();
+        var publicationAttemptId = publicationOutcome.PublicationAttempt.Id;
+        var cachedAt = DateTime.UtcNow;
+        var statusArtifact = publicationOutcome.Artifacts.FirstOrDefault(x =>
+            x.FileName == VerificationPackageFileNames.VoidPublicStatus &&
+            x.AccessScope == ElectionReportArtifactAccessScope.Public);
+        if (statusArtifact is not null)
+        {
+            await _voidPublicCacheService.SetPublicStatusAsync(
+                electionId,
+                CreateVoidCacheEnvelope(statusArtifact, publicationAttemptId, cachedAt));
+        }
+
+        foreach (var artifact in publicationOutcome.Artifacts.Where(x =>
+                     x.AccessScope == ElectionReportArtifactAccessScope.Public))
+        {
+            await _voidPublicCacheService.SetPublicArtifactAsync(
+                electionId,
+                publicationOutcome.PublicStatus.VoidDecisionId,
+                publicationAttemptId,
+                artifact.FileName,
+                CreateVoidCacheEnvelope(artifact, publicationAttemptId, cachedAt));
+        }
+    }
+
+    private static ElectionVoidPublicCacheEnvelope CreateVoidCacheEnvelope(
+        ElectionReportArtifactRecord artifact,
+        Guid publicationAttemptId,
+        DateTime cachedAt) =>
+        artifact.Format == ElectionReportArtifactFormat.Binary
+            ? new ElectionVoidPublicCacheEnvelope(
+                artifact.MediaType,
+                CreateSha256Fingerprint(artifact.ContentHash),
+                publicationAttemptId,
+                cachedAt,
+                PayloadBase64: artifact.Content)
+            : new ElectionVoidPublicCacheEnvelope(
+                artifact.MediaType,
+                CreateSha256Fingerprint(artifact.ContentHash),
+                publicationAttemptId,
+                cachedAt,
+                PayloadText: artifact.Content);
+
     private async Task BlockVoidConflictingWorkAsync(
         IElectionsRepository repository,
         ElectionId electionId,
@@ -3466,6 +3604,12 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
     private static string CreateSha256Fingerprint(byte[] hash) =>
         $"sha256:{Convert.ToHexString(hash).ToLowerInvariant()}";
+
+    private sealed record VoidPublicationSealOutcome(
+        ElectionVoidDecisionRecord Decision,
+        ElectionVoidPublicationAttemptRecord PublicationAttempt,
+        ElectionVoidPublicStatusRecord? PublicStatus,
+        IReadOnlyList<ElectionReportArtifactRecord> Artifacts);
 
     private async Task<ElectionCommandResult?> ValidateGovernedProposalStartAsync(
         IElectionsRepository repository,

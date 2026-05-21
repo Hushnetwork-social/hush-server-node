@@ -624,6 +624,18 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
                     logger);
             });
 
+            // Register public VOID publication cache service (FEAT-138)
+            services.AddSingleton<IElectionVoidPublicCacheService>(sp =>
+            {
+                var connectionMultiplexer = sp.GetRequiredService<IConnectionMultiplexer>();
+                var redisSettings = sp.GetRequiredService<IOptions<RedisSettings>>().Value;
+                var logger = sp.GetRequiredService<ILogger<ElectionVoidPublicCacheService>>();
+                return new ElectionVoidPublicCacheService(
+                    connectionMultiplexer,
+                    redisSettings.InstanceName,
+                    logger);
+            });
+
             // Register feed participants cache service (FEAT-050)
             services.AddSingleton<IFeedParticipantsCacheService>(sp =>
             {

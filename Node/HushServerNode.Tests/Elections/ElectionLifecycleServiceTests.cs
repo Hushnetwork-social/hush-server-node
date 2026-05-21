@@ -3690,7 +3690,7 @@ public class ElectionLifecycleServiceTests
 
     [Fact]
     [Trait("Category", "FEAT-138")]
-    public async Task VoidElectionAsync_WithOwnerOnOpenElection_PersistsDecisionBoundaryAndPendingAttempt()
+    public async Task VoidElectionAsync_WithOwnerOnOpenElection_PersistsDecisionBoundaryAndSealedAttempt()
     {
         var store = new ElectionStore();
         var service = CreateService(store);
@@ -3723,17 +3723,69 @@ public class ElectionLifecycleServiceTests
         result.VoidDecision!.PreviousLifecycleState.Should().Be(ElectionLifecycleState.Open);
         result.VoidDecision.ResultingLifecycleState.Should().Be(ElectionLifecycleState.Voided);
         result.VoidDecision.ActorRole.Should().Be(ElectionVoidDecisionRecord.ElectionOwnerRole);
-        result.VoidDecision.PublicationStatus.Should().Be(ElectionVoidPublicationAttemptStatus.Pending);
+        result.VoidDecision.PublicationStatus.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
         result.VoidPublicationAttempt.Should().NotBeNull();
         result.VoidPublicationAttempt!.AttemptNumber.Should().Be(1);
-        result.VoidPublicationAttempt.Status.Should().Be(ElectionVoidPublicationAttemptStatus.Pending);
+        result.VoidPublicationAttempt.Status.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
+        result.VoidPublicationAttempt.ReportPackageId.Should().NotBeNull();
         store.VoidDecisions.Should().ContainSingle();
         store.VoidPublicationAttempts.Should().ContainSingle();
+        store.ReportPackages.Values.Should().ContainSingle(x => x.PackageKind == ElectionReportPackageKind.Void);
+        store.ReportArtifacts.Should().Contain(x => x.FileName == VerificationPackageFileNames.VoidPublicStatus);
         store.Elections[election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Voided);
         store.GovernedProposals[governedProposal.Id].ExecutionStatus.Should()
             .Be(ElectionGovernedProposalExecutionStatus.ExecutionFailed);
         store.GovernedProposals[governedProposal.Id].ExecutionFailureReason.Should()
             .Contain("Superseded by ElectionOwner void decision");
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task VoidElectionAsync_WithPublicCache_WarmsOnlyPublicVoidArtifacts()
+    {
+        var store = new ElectionStore();
+        var cacheService = new FakeElectionVoidPublicCacheService();
+        var service = CreateService(store, voidPublicCacheService: cacheService);
+        var election = CreateOpenElection();
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "Trustee key quorum was lost and the election cannot continue."));
+
+        result.IsSuccess.Should().BeTrue();
+        result.VoidDecision.Should().NotBeNull();
+        result.VoidPublicationAttempt.Should().NotBeNull();
+        cacheService.StatusWrites.Should().ContainSingle(x =>
+            x.ElectionId == election.ElectionId.ToString() &&
+            x.Envelope.PublicationAttemptId == result.VoidPublicationAttempt!.Id &&
+            x.Envelope.PayloadText!.Contains("\"status\": \"VOID\"", StringComparison.Ordinal));
+
+        var cachedArtifactNames = cacheService.ArtifactWrites
+            .Select(x => x.ArtifactName)
+            .ToArray();
+        cachedArtifactNames.Should().Contain(
+        [
+            VerificationPackageFileNames.VoidDecision,
+            VerificationPackageFileNames.PublicVoidSummary,
+            VerificationPackageFileNames.VoidPublicStatus,
+            VerificationPackageFileNames.VoidSupersededArtifacts,
+            VerificationPackageFileNames.VoidVerifierResult,
+            VerificationPackageFileNames.VoidPackageManifest,
+            VerificationPackageFileNames.VoidPackageArchive,
+        ]);
+        cachedArtifactNames.Should().NotContain(VerificationPackageFileNames.RestrictedVoidEvidenceIndex);
+        cachedArtifactNames.Should().NotContain(VerificationPackageFileNames.RestrictedHistoricalUnofficialResult);
+        cacheService.ArtifactWrites.Should().OnlyContain(x =>
+            x.ElectionId == election.ElectionId.ToString() &&
+            x.VoidDecisionId == result.VoidDecision!.Id &&
+            x.PublicationAttemptId == result.VoidPublicationAttempt!.Id);
+        cacheService.ArtifactWrites.Single(x =>
+                x.ArtifactName == VerificationPackageFileNames.VoidPackageArchive)
+            .Envelope.PayloadBase64
+            .Should()
+            .NotBeNullOrWhiteSpace();
     }
 
     [Theory]
@@ -3765,7 +3817,7 @@ public class ElectionLifecycleServiceTests
         result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Voided);
         result.VoidDecision!.PreviousLifecycleState.Should().Be(lifecycleState);
         result.VoidDecision.ResultingLifecycleState.Should().Be(ElectionLifecycleState.Voided);
-        result.VoidPublicationAttempt!.Status.Should().Be(ElectionVoidPublicationAttemptStatus.Pending);
+        result.VoidPublicationAttempt!.Status.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
     }
 
     [Fact]
@@ -3904,7 +3956,7 @@ public class ElectionLifecycleServiceTests
 
     [Fact]
     [Trait("Category", "FEAT-138")]
-    public async Task RetryVoidPublicationAsync_WithOwnerOnVoidedElection_CreatesNextPendingAttempt()
+    public async Task RetryVoidPublicationAsync_WithOwnerOnVoidedElection_CreatesNextSealedAttempt()
     {
         var store = new ElectionStore();
         var service = CreateService(store);
@@ -3927,7 +3979,49 @@ public class ElectionLifecycleServiceTests
         retryResult.VoidPublicationAttempt.Should().NotBeNull();
         retryResult.VoidPublicationAttempt!.AttemptNumber.Should().Be(2);
         retryResult.VoidPublicationAttempt.PreviousAttemptId.Should().Be(voidResult.VoidPublicationAttempt!.Id);
+        retryResult.VoidPublicationAttempt.Status.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
         retryResult.VoidDecision!.CurrentPublicationAttemptId.Should().Be(retryResult.VoidPublicationAttempt.Id);
+        store.VoidPublicationAttempts.Should().HaveCount(2);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task RetryVoidPublicationAsync_AfterFailedVoidPackageGeneration_SealsSameDecisionWithNewAttempt()
+    {
+        var store = new ElectionStore();
+        var reportPackageService = new FakeElectionReportPackageService(failBuildAttempts: 1);
+        var service = CreateService(store, electionReportPackageService: reportPackageService);
+        var election = CreateOpenElection();
+        store.Elections[election.ElectionId] = election;
+
+        var voidResult = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "Trustee key quorum was lost and the election cannot continue."));
+        var retryResult = await service.RetryVoidPublicationAsync(new RetryVoidPublicationRequest(
+            election.ElectionId,
+            "owner-address",
+            voidResult.VoidDecision!.Id));
+
+        voidResult.IsSuccess.Should().BeTrue();
+        voidResult.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        voidResult.VoidDecision!.PublicationStatus.Should().Be(ElectionVoidPublicationAttemptStatus.GenerationFailed);
+        voidResult.VoidPublicationAttempt!.Status.Should().Be(ElectionVoidPublicationAttemptStatus.GenerationFailed);
+        voidResult.VoidPublicationAttempt.FailureCode.Should().Be("FORCED_VOID_PACKAGE_FAILURE");
+
+        retryResult.IsSuccess.Should().BeTrue();
+        retryResult.VoidDecision!.Id.Should().Be(voidResult.VoidDecision.Id);
+        retryResult.VoidDecision.PublicationStatus.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
+        retryResult.VoidPublicationAttempt!.AttemptNumber.Should().Be(2);
+        retryResult.VoidPublicationAttempt.PreviousAttemptId.Should().Be(voidResult.VoidPublicationAttempt.Id);
+        retryResult.VoidPublicationAttempt.Status.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
+
+        store.Elections[election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        store.ReportPackages.Values.Should().HaveCount(2);
+        store.ReportPackages.Values.Should().ContainSingle(x => x.Status == ElectionReportPackageStatus.GenerationFailed);
+        store.ReportPackages.Values.Should().ContainSingle(x =>
+            x.Status == ElectionReportPackageStatus.Sealed &&
+            x.PackageKind == ElectionReportPackageKind.Void);
         store.VoidPublicationAttempts.Should().HaveCount(2);
     }
 
@@ -5613,6 +5707,7 @@ public class ElectionLifecycleServiceTests
         IElectionCastIdempotencyCacheService? castIdempotencyCacheService = null,
         IElectionResultCryptoService? electionResultCryptoService = null,
         IElectionReportPackageService? electionReportPackageService = null,
+        IElectionVoidPublicCacheService? voidPublicCacheService = null,
         ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null,
         ICredentialsProvider? credentialsProvider = null,
         IIdentityService? identityService = null,
@@ -5633,6 +5728,7 @@ public class ElectionLifecycleServiceTests
             castIdempotencyCacheService,
             electionResultCryptoService,
             electionReportPackageService,
+            voidPublicCacheService,
             credentialsProvider ?? new FakeCredentialsProvider(),
             identityService ?? new FakeIdentityService(),
             closeCountingExecutorKeyRegistry,
@@ -7725,7 +7821,111 @@ public class ElectionLifecycleServiceTests
                     finalizationReleaseEvidenceId: request.FinalizationReleaseEvidence?.Id,
                     attemptedAt: request.AttemptedAt));
         }
+
+        public ElectionVoidReportPackageBuildResult BuildVoid(ElectionVoidReportPackageBuildRequest request)
+        {
+            var successResult = _inner.BuildVoid(request);
+            if (_remainingFailures <= 0 || !successResult.IsSuccess)
+            {
+                return successResult;
+            }
+
+            _remainingFailures--;
+            var failedAttempt = ElectionModelFactory.CreateFailedVoidPublicationAttempt(
+                request.Election.ElectionId,
+                request.Decision.Id,
+                request.PublicationAttempt.AttemptNumber,
+                request.PublicationAttempt.FrozenEvidenceHash,
+                request.PublicationAttempt.FrozenEvidenceFingerprint,
+                request.AttemptedByPublicAddress,
+                "FORCED_VOID_PACKAGE_FAILURE",
+                "Forced VOID package failure for test coverage.",
+                previousAttemptId: request.PublicationAttempt.PreviousAttemptId,
+                attemptedAt: request.AttemptedAt,
+                preassignedAttemptId: request.PublicationAttempt.Id);
+            var failedPackage = ElectionModelFactory.CreateFailedVoidReportPackageAttempt(
+                request.Election.ElectionId,
+                request.AttemptNumber,
+                request.Decision.Id,
+                request.PublicationAttempt.Id,
+                request.PublicationAttempt.FrozenEvidenceHash,
+                request.PublicationAttempt.FrozenEvidenceFingerprint,
+                request.AttemptedByPublicAddress,
+                "FORCED_VOID_PACKAGE_FAILURE",
+                "Forced VOID package failure for test coverage.",
+                previousAttemptId: request.PreviousReportPackageId,
+                attemptedAt: request.AttemptedAt);
+
+            return ElectionVoidReportPackageBuildResult.Failure(failedPackage, failedAttempt);
+        }
     }
+
+    private sealed class FakeElectionVoidPublicCacheService : IElectionVoidPublicCacheService
+    {
+        private readonly Dictionary<string, ElectionVoidPublicCacheEnvelope> _statuses = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, ElectionVoidPublicCacheEnvelope> _artifacts = new(StringComparer.Ordinal);
+
+        public List<VoidStatusCacheWrite> StatusWrites { get; } = [];
+
+        public List<VoidArtifactCacheWrite> ArtifactWrites { get; } = [];
+
+        public Task<ElectionVoidPublicCacheEnvelope?> GetPublicStatusAsync(string electionId) =>
+            Task.FromResult(_statuses.TryGetValue(electionId, out var envelope) ? envelope : null);
+
+        public Task<ElectionVoidPublicCacheEnvelope?> GetPublicArtifactAsync(
+            string electionId,
+            Guid voidDecisionId,
+            Guid publicationAttemptId,
+            string artifactName)
+        {
+            var key = CreateArtifactKey(electionId, voidDecisionId, publicationAttemptId, artifactName);
+            return Task.FromResult(_artifacts.TryGetValue(key, out var envelope) ? envelope : null);
+        }
+
+        public Task SetPublicStatusAsync(
+            string electionId,
+            ElectionVoidPublicCacheEnvelope envelope)
+        {
+            _statuses[electionId] = envelope;
+            StatusWrites.Add(new VoidStatusCacheWrite(electionId, envelope));
+            return Task.CompletedTask;
+        }
+
+        public Task SetPublicArtifactAsync(
+            string electionId,
+            Guid voidDecisionId,
+            Guid publicationAttemptId,
+            string artifactName,
+            ElectionVoidPublicCacheEnvelope envelope)
+        {
+            _artifacts[CreateArtifactKey(electionId, voidDecisionId, publicationAttemptId, artifactName)] = envelope;
+            ArtifactWrites.Add(new VoidArtifactCacheWrite(
+                electionId,
+                voidDecisionId,
+                publicationAttemptId,
+                artifactName,
+                envelope));
+            return Task.CompletedTask;
+        }
+
+        private static string CreateArtifactKey(
+            string electionId,
+            Guid voidDecisionId,
+            Guid publicationAttemptId,
+            string artifactName) =>
+            $"{electionId}:{voidDecisionId:N}:{publicationAttemptId:N}:{artifactName}";
+    }
+
+    private sealed record VoidStatusCacheWrite(
+        string ElectionId,
+        ElectionVoidPublicCacheEnvelope Envelope);
+
+    private sealed record VoidArtifactCacheWrite(
+        string ElectionId,
+        Guid VoidDecisionId,
+        Guid PublicationAttemptId,
+        string ArtifactName,
+        ElectionVoidPublicCacheEnvelope Envelope);
 
     private sealed class FakeUnitOfWorkProvider(ElectionStore store) : IUnitOfWorkProvider<ElectionsDbContext>
     {
@@ -8802,9 +9002,11 @@ public class ElectionLifecycleServiceTests
         public Task<ElectionReportPackageRecord?> GetLatestReportPackageAsync(ElectionId electionId) =>
             Task.FromResult(
                 store.ReportPackages.Values
-                    .Where(x => x.ElectionId == electionId)
-                    .OrderByDescending(x => x.AttemptNumber)
-                    .ThenByDescending(x => x.AttemptedAt)
+                    .Where(x =>
+                        x.ElectionId == electionId &&
+                        x.Status != ElectionReportPackageStatus.SupersededByVoid)
+                    .OrderByDescending(x => x.AttemptedAt)
+                    .ThenByDescending(x => x.AttemptNumber)
                     .FirstOrDefault());
 
         public Task<ElectionReportPackageRecord?> GetReportPackageAsync(Guid reportPackageId) =>

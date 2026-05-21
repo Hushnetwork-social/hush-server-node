@@ -9,6 +9,16 @@ public static class VerificationPackageFileNames
     public const string VerifierOutput = "verifier-output/VerifierOutput.json";
     public const string VerifierSummary = "verifier-output/VerifierSummary.md";
 
+    public const string VoidDecision = "void-decision.json";
+    public const string PublicVoidSummary = "public-void-summary.md";
+    public const string VoidPublicStatus = "void-public-status.json";
+    public const string VoidSupersededArtifacts = "superseded-artifacts.json";
+    public const string VoidVerifierResult = "void-verifier-result.json";
+    public const string RestrictedVoidEvidenceIndex = "restricted-void-evidence-index.md";
+    public const string RestrictedHistoricalUnofficialResult = "restricted/historical-unofficial-result.json";
+    public const string VoidPackageManifest = "void-package-manifest.json";
+    public const string VoidPackageArchive = "void-package.zip";
+
     public const string ReportPackageDirectory = "artifacts/report-package";
     public const string ElectionRecordDirectory = "artifacts/election-record";
     public const string RestrictedDirectory = "artifacts/restricted";
@@ -85,6 +95,23 @@ public static class VerificationPackageFileNames
         ReportPackageDirectory,
         ElectionRecordDirectory,
         RestrictedDirectory,
+    ];
+
+    public static IReadOnlyList<string> VoidPublicFiles { get; } =
+    [
+        VoidDecision,
+        PublicVoidSummary,
+        VoidPublicStatus,
+        VoidSupersededArtifacts,
+        VoidVerifierResult,
+        VoidPackageManifest,
+        VoidPackageArchive,
+    ];
+
+    public static IReadOnlyList<string> VoidRestrictedFiles { get; } =
+    [
+        RestrictedVoidEvidenceIndex,
+        RestrictedHistoricalUnofficialResult,
     ];
 }
 

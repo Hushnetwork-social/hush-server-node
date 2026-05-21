@@ -357,18 +357,29 @@ public enum ElectionReportArtifactKind
     MachineOutcomeDeterminationProjection = 11,
     MachineDisputeReviewIndexProjection = 12,
     MachineRestrictedAnomalyIntakeManifest = 13,
+    MachineVoidDecision = 14,
+    HumanVoidSummary = 15,
+    MachineVoidPublicStatus = 16,
+    MachineVoidSupersededArtifacts = 17,
+    MachineVoidVerifierResult = 18,
+    HumanRestrictedVoidEvidenceIndex = 19,
+    MachineRestrictedHistoricalUnofficialResult = 20,
+    MachineVoidPackageManifest = 21,
+    MachineVoidPackageArchive = 22,
 }
 
 public enum ElectionReportArtifactFormat
 {
     Markdown = 0,
     Json = 1,
+    Binary = 2,
 }
 
 public enum ElectionReportArtifactAccessScope
 {
     OwnerAuditorOnly = 0,
     OwnerAuditorTrustee = 1,
+    Public = 2,
 }
 
 public enum ElectionReportAccessGrantRole

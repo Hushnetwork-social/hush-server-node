@@ -123,6 +123,7 @@ public static class ElectionsHostBuild
                 sp.GetRequiredService<IElectionCastIdempotencyCacheService>(),
                 sp.GetRequiredService<IElectionResultCryptoService>(),
                 sp.GetRequiredService<IElectionReportPackageService>(),
+                sp.GetService<IElectionVoidPublicCacheService>(),
                 sp.GetRequiredService<ICredentialsProvider>(),
                 sp.GetService<IIdentityService>(),
                 sp.GetRequiredService<ICloseCountingExecutorKeyRegistry>(),

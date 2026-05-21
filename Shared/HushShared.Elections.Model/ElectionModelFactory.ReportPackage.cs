@@ -165,6 +165,53 @@ public static partial class ElectionModelFactory
             VoidPublicationAttemptId: voidPublicationAttemptId);
     }
 
+    public static ElectionReportPackageRecord CreateFailedVoidReportPackageAttempt(
+        ElectionId electionId,
+        int attemptNumber,
+        Guid voidDecisionId,
+        Guid voidPublicationAttemptId,
+        byte[] frozenEvidenceHash,
+        string frozenEvidenceFingerprint,
+        string attemptedByPublicAddress,
+        string failureCode,
+        string failureReason,
+        Guid? previousAttemptId = null,
+        DateTime? attemptedAt = null,
+        Guid? preassignedPackageId = null)
+    {
+        if (attemptNumber < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(attemptNumber), "Attempt number must be at least 1.");
+        }
+
+        return new ElectionReportPackageRecord(
+            preassignedPackageId ?? Guid.NewGuid(),
+            electionId,
+            attemptNumber,
+            previousAttemptId,
+            FinalizationSessionId: null,
+            TallyReadyArtifactId: null,
+            UnofficialResultArtifactId: null,
+            OfficialResultArtifactId: null,
+            FinalizeArtifactId: null,
+            CloseBoundaryArtifactId: null,
+            CloseEligibilitySnapshotId: null,
+            FinalizationReleaseEvidenceId: null,
+            ElectionReportPackageStatus.GenerationFailed,
+            CloneBytes(frozenEvidenceHash) ?? Array.Empty<byte>(),
+            NormalizeRequiredText(frozenEvidenceFingerprint, nameof(frozenEvidenceFingerprint)),
+            PackageHash: null,
+            ArtifactCount: 0,
+            FailureCode: NormalizeRequiredText(failureCode, nameof(failureCode)),
+            FailureReason: NormalizeRequiredText(failureReason, nameof(failureReason)),
+            AttemptedAt: attemptedAt ?? DateTime.UtcNow,
+            SealedAt: null,
+            AttemptedByPublicAddress: NormalizeRequiredText(attemptedByPublicAddress, nameof(attemptedByPublicAddress)),
+            PackageKind: ElectionReportPackageKind.Void,
+            VoidDecisionId: voidDecisionId,
+            VoidPublicationAttemptId: voidPublicationAttemptId);
+    }
+
     public static ElectionReportArtifactRecord CreateReportArtifact(
         Guid reportPackageId,
         ElectionId electionId,

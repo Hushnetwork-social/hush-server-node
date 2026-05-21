@@ -206,9 +206,11 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task<ElectionReportPackageRecord?> GetLatestReportPackageAsync(ElectionId electionId) =>
         await Context.ElectionReportPackages
-            .Where(x => x.ElectionId == electionId)
-            .OrderByDescending(x => x.AttemptNumber)
-            .ThenByDescending(x => x.AttemptedAt)
+            .Where(x =>
+                x.ElectionId == electionId &&
+                x.Status != ElectionReportPackageStatus.SupersededByVoid)
+            .OrderByDescending(x => x.AttemptedAt)
+            .ThenByDescending(x => x.AttemptNumber)
             .FirstOrDefaultAsync();
 
     public async Task<ElectionReportPackageRecord?> GetSealedReportPackageAsync(ElectionId electionId) =>

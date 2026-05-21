@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using FluentAssertions;
 using HushNode.Elections;
@@ -653,6 +654,96 @@ public class ElectionReportPackageServiceTests
             .Should().Be(manifestBefore);
     }
 
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public void BuildVoid_WithVoidedElection_CreatesPublicVoidPackageAndRestrictedEvidenceIndex()
+    {
+        var service = new ElectionReportPackageService();
+        var internalEvidenceRecordId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
+        var request = CreateVoidReportBuildRequest(internalEvidenceRecordId);
+
+        var buildResult = service.BuildVoid(request);
+
+        buildResult.IsSuccess.Should().BeTrue();
+        buildResult.Package.PackageKind.Should().Be(ElectionReportPackageKind.Void);
+        buildResult.Package.VoidDecisionId.Should().Be(request.Decision.Id);
+        buildResult.Package.VoidPublicationAttemptId.Should().Be(request.PublicationAttempt.Id);
+        buildResult.PublicationAttempt.Status.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
+        buildResult.PublicationAttempt.ReportPackageId.Should().Be(buildResult.Package.Id);
+        buildResult.PublicStatus.Should().NotBeNull();
+        buildResult.PublicStatus!.Status.Should().Be("VOID");
+        buildResult.PublicStatus.VerifierResultCode.Should().Be(VerificationResultCodes.ElectionVoided);
+        buildResult.RestrictedEvidenceIndex.Should().NotBeNull();
+
+        buildResult.Artifacts.Select(x => x.FileName).Should().Contain(
+        [
+            VerificationPackageFileNames.VoidDecision,
+            VerificationPackageFileNames.PublicVoidSummary,
+            VerificationPackageFileNames.VoidPublicStatus,
+            VerificationPackageFileNames.VoidSupersededArtifacts,
+            VerificationPackageFileNames.VoidVerifierResult,
+            VerificationPackageFileNames.RestrictedVoidEvidenceIndex,
+            VerificationPackageFileNames.RestrictedHistoricalUnofficialResult,
+            VerificationPackageFileNames.VoidPackageManifest,
+            VerificationPackageFileNames.VoidPackageArchive,
+        ]);
+
+        var publicArtifacts = buildResult.Artifacts
+            .Where(x => x.AccessScope == ElectionReportArtifactAccessScope.Public)
+            .ToArray();
+        publicArtifacts.Select(x => x.FileName).Should().Contain(
+        [
+            VerificationPackageFileNames.VoidDecision,
+            VerificationPackageFileNames.PublicVoidSummary,
+            VerificationPackageFileNames.VoidPublicStatus,
+            VerificationPackageFileNames.VoidSupersededArtifacts,
+            VerificationPackageFileNames.VoidVerifierResult,
+            VerificationPackageFileNames.VoidPackageManifest,
+            VerificationPackageFileNames.VoidPackageArchive,
+        ]);
+        publicArtifacts.Select(x => x.FileName).Should().NotContain(VerificationPackageFileNames.RestrictedVoidEvidenceIndex);
+        publicArtifacts.Select(x => x.FileName).Should().NotContain(VerificationPackageFileNames.RestrictedHistoricalUnofficialResult);
+
+        var publicText = string.Join(
+            "\n",
+            publicArtifacts
+                .Where(x => x.Format != ElectionReportArtifactFormat.Binary)
+                .Select(x => x.Content));
+        publicText.Should().NotContain("internalRecordId");
+        publicText.Should().NotContain("Internal record id");
+        publicText.Should().NotContain(internalEvidenceRecordId.ToString());
+        publicText.Should().Contain("\"resultCode\": \"election_voided\"");
+
+        var restrictedIndex = buildResult.Artifacts.Single(x =>
+            x.FileName == VerificationPackageFileNames.RestrictedVoidEvidenceIndex);
+        restrictedIndex.AccessScope.Should().Be(ElectionReportArtifactAccessScope.OwnerAuditorOnly);
+        restrictedIndex.Content.Should().Contain(internalEvidenceRecordId.ToString());
+
+        var manifestArtifact = buildResult.Artifacts.Single(x =>
+            x.FileName == VerificationPackageFileNames.VoidPackageManifest);
+        manifestArtifact.Content.Should().NotContain(VerificationPackageFileNames.RestrictedVoidEvidenceIndex);
+        manifestArtifact.Content.Should().NotContain(VerificationPackageFileNames.RestrictedHistoricalUnofficialResult);
+
+        var zipArtifact = buildResult.Artifacts.Single(x =>
+            x.FileName == VerificationPackageFileNames.VoidPackageArchive);
+        zipArtifact.Format.Should().Be(ElectionReportArtifactFormat.Binary);
+        zipArtifact.MediaType.Should().Be("application/zip");
+        using var archive = new ZipArchive(
+            new MemoryStream(Convert.FromBase64String(zipArtifact.Content)),
+            ZipArchiveMode.Read);
+        archive.Entries.Select(x => x.FullName).Should().Contain(
+        [
+            VerificationPackageFileNames.VoidDecision,
+            VerificationPackageFileNames.PublicVoidSummary,
+            VerificationPackageFileNames.VoidPublicStatus,
+            VerificationPackageFileNames.VoidSupersededArtifacts,
+            VerificationPackageFileNames.VoidVerifierResult,
+            VerificationPackageFileNames.VoidPackageManifest,
+        ]);
+        archive.Entries.Select(x => x.FullName).Should().NotContain(VerificationPackageFileNames.RestrictedVoidEvidenceIndex);
+        archive.Entries.Select(x => x.FullName).Should().NotContain(VerificationPackageFileNames.RestrictedHistoricalUnofficialResult);
+    }
+
     private static OutcomeRuleDefinition CreatePassFailRule() =>
         new(
             OutcomeRuleKind.PassFail,
@@ -823,6 +914,104 @@ public class ElectionReportPackageServiceTests
             PreviousAttemptId: null,
             AttemptedByPublicAddress: "owner-address",
             AttemptedAt: new DateTime(2026, 5, 4, 12, 11, 0, DateTimeKind.Utc));
+    }
+
+    private static ElectionVoidReportPackageBuildRequest CreateVoidReportBuildRequest(Guid internalEvidenceRecordId)
+    {
+        var preVoidElection = CreateFinalizedElectionForReportPackage() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            FinalizedAt = null,
+            OfficialResultArtifactId = null,
+            CloseArtifactId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000001"),
+            TallyReadyArtifactId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002"),
+            ClosedAt = new DateTime(2026, 5, 4, 12, 0, 0, DateTimeKind.Utc),
+            TallyReadyAt = new DateTime(2026, 5, 4, 12, 5, 0, DateTimeKind.Utc),
+        };
+        var denominatorEvidence = new ElectionResultDenominatorEvidence(
+            ElectionEligibilitySnapshotType.Close,
+            EligibilitySnapshotId: null,
+            BoundaryArtifactId: preVoidElection.CloseArtifactId,
+            ActiveDenominatorSetHash: new byte[] { 1, 2, 3, 4 });
+        var unofficialResult = ElectionModelFactory.CreateResultArtifact(
+            preVoidElection.ElectionId,
+            ElectionResultArtifactKind.Unofficial,
+            ElectionResultArtifactVisibility.PublicPlaintext,
+            "Historical unofficial result",
+            [
+                new ElectionResultOptionCount("yes", "Yes", "Approve the proposal", 1, 1, 1),
+                new ElectionResultOptionCount("no", "No", "Reject the proposal", 2, 2, 0),
+            ],
+            blankCount: 0,
+            totalVotedCount: 1,
+            eligibleToVoteCount: 1,
+            didNotVoteCount: 0,
+            denominatorEvidence,
+            recordedByPublicAddress: "owner-address",
+            tallyReadyArtifactId: preVoidElection.TallyReadyArtifactId,
+            publicPayload: "{\"mode\":\"historical-unofficial\"}",
+            recordedAt: new DateTime(2026, 5, 4, 12, 6, 0, DateTimeKind.Utc));
+        preVoidElection = preVoidElection with
+        {
+            UnofficialResultArtifactId = unofficialResult.Id,
+        };
+        var evidenceReference = ElectionModelFactory.CreateVoidEvidenceReference(
+            ElectionVoidEvidenceReferenceKind.InternalAnomalyThread,
+            "ANOMALY-THREAD-0001",
+            internalEvidenceRecordId,
+            referenceHash: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            recordedAt: new DateTime(2026, 5, 4, 12, 7, 0, DateTimeKind.Utc));
+        var decision = ElectionModelFactory.CreateVoidDecision(
+            preVoidElection,
+            "owner-address",
+            "The election owner accepted a governance dispute and voided the election.",
+            Guid.Parse("bbbbbbbb-0000-0000-0000-000000000003"),
+            [evidenceReference],
+            sourceTransactionId: Guid.Parse("bbbbbbbb-0000-0000-0000-000000000004"),
+            sourceBlockHeight: 88,
+            sourceBlockId: Guid.Parse("bbbbbbbb-0000-0000-0000-000000000005"),
+            decidedAt: new DateTime(2026, 5, 4, 12, 8, 0, DateTimeKind.Utc));
+        var pendingAttempt = ElectionModelFactory.CreatePendingVoidPublicationAttempt(
+            preVoidElection.ElectionId,
+            decision.Id,
+            attemptNumber: 1,
+            frozenEvidenceHash: new byte[] { 9, 8, 7, 6 },
+            frozenEvidenceFingerprint: "sha256:09080706",
+            attemptedByPublicAddress: "owner-address",
+            attemptedAt: new DateTime(2026, 5, 4, 12, 9, 0, DateTimeKind.Utc));
+        decision = decision with
+        {
+            CurrentPublicationAttemptId = pendingAttempt.Id,
+        };
+        var voidedElection = preVoidElection with
+        {
+            LifecycleState = ElectionLifecycleState.Voided,
+            VoteAcceptanceLockedAt = new DateTime(2026, 5, 4, 12, 8, 0, DateTimeKind.Utc),
+        };
+        var supersededPackageId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000006");
+        var supersededArtifacts =
+            new[]
+            {
+                ElectionModelFactory.CreateVoidSupersededArtifact(
+                    preVoidElection.ElectionId,
+                    decision.Id,
+                    ElectionVoidSupersededArtifactKind.ReportPackage,
+                    $"report-package:{supersededPackageId:N}",
+                    reportPackageId: supersededPackageId,
+                    artifactHash: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                    supersededAt: new DateTime(2026, 5, 4, 12, 8, 30, DateTimeKind.Utc)),
+            };
+
+        return new ElectionVoidReportPackageBuildRequest(
+            voidedElection,
+            decision,
+            pendingAttempt,
+            supersededArtifacts,
+            unofficialResult,
+            AttemptNumber: 1,
+            PreviousReportPackageId: supersededPackageId,
+            AttemptedByPublicAddress: "owner-address",
+            AttemptedAt: new DateTime(2026, 5, 4, 12, 9, 0, DateTimeKind.Utc));
     }
 
     private static ProtocolPackageBindingRecord CreateSealedProtocolPackageBinding(ElectionRecord election)
