@@ -154,6 +154,31 @@ public sealed class RetentionLogPrivacyProofPromoterTests
             .Should().Contain(x => x.Contains("Artifact hash mismatch", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void ValidateOutputFolder_WithPackageValidationBlocker_ReturnsError()
+    {
+        using var workspace = TempRetentionLogPrivacyProofWorkspace.Create();
+        new RetentionLogPrivacyProofPromotionService().Promote(new(
+            workspace.Paths,
+            RetentionLogPrivacyProofPromotionService.ModePackage,
+            FixedGeneratedAt,
+            null,
+            FixedSourceRefs.ServerNodeCommitRef,
+            FixedSourceRefs.MemoryBankCommitRef,
+            FixedSourceRefs.DocumentsCommitRef,
+            ValidateOnly: false));
+        var packagePath = Path.Combine(workspace.Paths.PackageOutputRoot, RetentionLogPrivacyProofContracts.PackagePath);
+        var package = JsonNode.Parse(File.ReadAllText(packagePath))!.AsObject();
+        package["evidenceStatus"] = "blocked";
+        var validationStatus = package["validationStatus"]!.AsObject();
+        validationStatus["status"] = "blocked";
+        validationStatus["blockers"] = new JsonArray("RLP-004");
+        File.WriteAllText(packagePath, RetentionLogPrivacyProofContracts.CanonicalJson(package));
+
+        RetentionLogPrivacyProofPromotionService.ValidateOutputFolder(workspace.Paths.PackageOutputRoot)
+            .Should().Contain(x => x.Contains("validation blockers", StringComparison.Ordinal));
+    }
+
     private sealed class TempRetentionLogPrivacyProofWorkspace : IDisposable
     {
         private TempRetentionLogPrivacyProofWorkspace(string root)

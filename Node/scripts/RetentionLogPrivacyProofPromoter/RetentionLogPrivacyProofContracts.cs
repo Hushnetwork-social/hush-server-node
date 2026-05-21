@@ -185,7 +185,15 @@ public static partial class RetentionLogPrivacyProofContracts
         var packageArtifact = byPath.GetValueOrDefault(PackagePath);
         if (packageArtifact is not null)
         {
-            errors.AddRange(ValidatePackageManifestHashes(packageArtifact, byPath));
+            if (JsonNode.Parse(packageArtifact.Content) is not JsonObject packageManifest)
+            {
+                errors.Add("Package artifact is not a JSON object.");
+            }
+            else
+            {
+                errors.AddRange(ValidatePackageManifestHashes(packageManifest, byPath));
+                errors.AddRange(ValidatePackageManifestStatus(packageManifest));
+            }
         }
 
         errors.AddRange(ScanGeneratedArtifacts(package.Artifacts)
@@ -214,15 +222,9 @@ public static partial class RetentionLogPrivacyProofContracts
     }
 
     private static IEnumerable<string> ValidatePackageManifestHashes(
-        RetentionLogPrivacyProofGeneratedArtifact packageArtifact,
+        JsonObject package,
         IReadOnlyDictionary<string, RetentionLogPrivacyProofGeneratedArtifact> byPath)
     {
-        if (JsonNode.Parse(packageArtifact.Content) is not JsonObject package)
-        {
-            yield return "Package artifact is not a JSON object.";
-            yield break;
-        }
-
         if (package["artifactHashes"] is not JsonArray artifactHashes)
         {
             yield return "Package artifact missing artifactHashes.";
@@ -242,6 +244,68 @@ public static partial class RetentionLogPrivacyProofContracts
             if (!string.Equals(expectedHash, artifact.Sha256Hash, StringComparison.Ordinal))
             {
                 yield return $"Artifact hash mismatch for {path}.";
+            }
+        }
+    }
+
+    private static IEnumerable<string> ValidatePackageManifestStatus(JsonObject package)
+    {
+        if (!string.Equals(package["evidenceStatus"]?.GetValue<string>(), "accepted", StringComparison.Ordinal))
+        {
+            yield return "Package evidenceStatus is not accepted.";
+        }
+
+        if (package["exceptionSummary"] is not JsonObject exceptionSummary ||
+            exceptionSummary["unresolvedExceptions"] is not JsonArray unresolvedExceptions)
+        {
+            yield return "Package artifact missing unresolved exception summary.";
+        }
+        else if (unresolvedExceptions.Count > 0)
+        {
+            yield return "Package artifact contains unresolved exceptions.";
+        }
+
+        if (package["validationStatus"] is not JsonObject validationStatus)
+        {
+            yield return "Package artifact missing validationStatus.";
+            yield break;
+        }
+
+        if (!string.Equals(validationStatus["status"]?.GetValue<string>(), "accepted", StringComparison.Ordinal))
+        {
+            yield return "Package validationStatus is not accepted.";
+        }
+
+        if (validationStatus["blockers"] is not JsonArray blockers)
+        {
+            yield return "Package artifact missing validation blockers list.";
+        }
+        else if (blockers.Count > 0)
+        {
+            yield return "Package artifact contains validation blockers.";
+        }
+
+        if (validationStatus["checks"] is not JsonArray checks)
+        {
+            yield return "Package artifact missing validation checks.";
+            yield break;
+        }
+
+        var checksById = checks
+            .OfType<JsonObject>()
+            .Where(check => check["checkId"] is not null)
+            .ToDictionary(check => check["checkId"]!.GetValue<string>(), StringComparer.Ordinal);
+        foreach (var requiredCheckId in RequiredCheckIds)
+        {
+            if (!checksById.TryGetValue(requiredCheckId, out var check))
+            {
+                yield return $"Package artifact missing validation check: {requiredCheckId}";
+                continue;
+            }
+
+            if (!string.Equals(check["status"]?.GetValue<string>(), "passed", StringComparison.Ordinal))
+            {
+                yield return $"Package artifact validation check is not passed: {requiredCheckId}";
             }
         }
     }
