@@ -13,6 +13,16 @@ $ErrorActionPreference = "Stop"
 $workspaceRoot = Split-Path -Parent $PSScriptRoot
 $projectPath = Join-Path $workspaceRoot "Node\HushNode.IntegrationTests\HushNode.IntegrationTests.csproj"
 $testResultsRoot = Join-Path $workspaceRoot "TestResults"
+$defaultUserDotnet = Join-Path $env:USERPROFILE ".dotnet\dotnet.exe"
+$dotnetExe = if ($env:DOTNET_EXE) {
+    $env:DOTNET_EXE
+}
+elseif (Test-Path $defaultUserDotnet) {
+    $defaultUserDotnet
+}
+else {
+    "dotnet"
+}
 
 function Initialize-Sp07WorkerPath {
     if ($env:HUSH_SP07_RUST_WORKER_PATH) {
@@ -62,6 +72,7 @@ $allBlocks = @(
     @{ Name = "IdentityNameChange"; Filter = 'Category=IdentityNameChange&Category!=LONG_RUNNING' },
     @{ Name = "HV-E2E-EMPTY-INITIAL"; Filter = 'Category=HV-E2E-EMPTY-INITIAL&Category!=LONG_RUNNING' },
     @{ Name = "HV-E2E-FEAT-129"; Filter = 'Category=HV-E2E-FEAT-129&Category!=LONG_RUNNING' },
+    @{ Name = "HV-E2E-FEAT-136"; Filter = 'Category=HV-E2E-FEAT-136&Category!=LONG_RUNNING' },
     @{ Name = "HS-E2E-084-NAV"; Filter = 'Category=HS-E2E-084-NAV' },
     @{ Name = "HS-E2E-085-CIRCLE-REMOVAL"; Filter = 'Category=HS-E2E-085-CIRCLE-REMOVAL' },
     @{ Name = "HS-E2E-085-BOOTSTRAP-STABLE"; Filter = 'Category=HS-E2E-085-BOOTSTRAP-STABLE' },
@@ -173,6 +184,7 @@ function Stop-StaleIntegrationTestHosts {
 
 function Start-BlockProcess {
     param(
+        [string]$DotnetExe,
         [string]$ProjectPath,
         [string]$Filter,
         [string]$WorkingDirectory,
@@ -199,13 +211,14 @@ function Start-BlockProcess {
         $arguments += "--no-restore"
     }
 
-    Start-Process -FilePath "dotnet" -ArgumentList $arguments -PassThru -WorkingDirectory $WorkingDirectory
+    Start-Process -FilePath $DotnetExe -ArgumentList $arguments -PassThru -WorkingDirectory $WorkingDirectory
 }
 
 Write-Host "E2E block runner starting..."
 Write-Host "Project: $projectPath"
 Write-Host "Blocks: $($selectedBlocks.Count)"
 Write-Host "BlockNames: $($selectedBlocks.Name -join ', ')"
+Write-Host "Dotnet: $dotnetExe"
 Write-Host "PollSeconds: $PollSeconds"
 Write-Host "StaleMinutes: $StaleMinutes"
 Write-Host "MaxMinutes: $MaxMinutes"
@@ -229,7 +242,7 @@ foreach ($block in $selectedBlocks) {
 
         $beforeRun = Get-LatestRunInfo -RootPath $testResultsRoot
         $startTime = Get-Date
-        $process = Start-BlockProcess -ProjectPath $projectPath -Filter $block.Filter -WorkingDirectory $workspaceRoot -NoBuild $NoBuild -MaxMinutes $MaxMinutes
+        $process = Start-BlockProcess -DotnetExe $dotnetExe -ProjectPath $projectPath -Filter $block.Filter -WorkingDirectory $workspaceRoot -NoBuild $NoBuild -MaxMinutes $MaxMinutes
         $lastReportedRunName = $null
         $staleTriggered = $false
         $firstObservedRun = $null
