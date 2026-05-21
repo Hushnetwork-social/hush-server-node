@@ -2496,9 +2496,13 @@ public class ElectionQueryApplicationServiceTests
         response.ReceiptMatchesAcceptedCheckoff.Should().BeTrue();
         response.ParticipationCountedAsVoted.Should().BeTrue();
         response.TallyVerificationAvailable.Should().BeFalse();
-        response.VerifiedReceiptId.Should().Be(BuildExpectedReceiptId(checkoffConsumption));
-        response.VerifiedAcceptanceId.Should().Be(checkoffConsumption.Id.ToString());
-        response.VerifiedServerProof.Should().Be(BuildExpectedReceiptProof(checkoffConsumption));
+        response.VerifiedReceiptId.Should().BeEmpty();
+        response.VerifiedAcceptanceId.Should().BeEmpty();
+        response.VerifiedServerProof.Should().BeEmpty();
+        response.HasBoundReceipt.Should().BeFalse();
+        response.ReceiptCommitmentInAcceptedSet.Should().BeFalse();
+        response.VerifiedReceiptCommitment.Should().BeEmpty();
+        response.VerifiedPreparedBallotId.Should().BeEmpty();
     }
 
     [Fact]
@@ -2556,16 +2560,16 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
-    public async Task VerifyElectionReceiptAsync_WithBoundReceiptCommitment_ReturnsAcceptedSetMatch()
+    public async Task VerifyElectionReceiptAsync_WithCheckoffAndBoundReceipt_DoesNotResolveAcceptedSet()
     {
         var mocker = new AutoMocker();
         var openedAt = DateTime.UtcNow.AddMinutes(-15);
-        var election = WithSealedBallotDefinition(CreateAdminElection() with
+        var election = CreateAdminElection() with
         {
-            LifecycleState = ElectionLifecycleState.Open,
+            LifecycleState = ElectionLifecycleState.Finalized,
             OpenedAt = openedAt,
             LastUpdatedAt = openedAt,
-        });
+        };
         var rosterEntry = ElectionModelFactory.CreateRosterEntry(
                 election.ElectionId,
                 "1001",
@@ -2578,44 +2582,10 @@ public class ElectionQueryApplicationServiceTests
             "1001",
             ElectionParticipationStatus.CountedAsVoted,
             openedAt.AddMinutes(4));
-        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
-            ElectionBoundaryArtifactType.Open,
-            election with { OpenArtifactId = Guid.NewGuid() },
-            recordedByPublicAddress: "owner-address",
-            recordedAt: openedAt,
-            frozenEligibleVoterSetHash: [1, 2, 3, 4]);
-        election = election with
-        {
-            OpenArtifactId = openArtifact.Id,
-        };
-        var preparedBallotId = Guid.NewGuid();
-        var acceptedBallot = ElectionModelFactory.CreateAcceptedBallotRecord(
-            election.ElectionId,
-            "ciphertext-final",
-            "proof-final",
-            "nullifier-final",
-            acceptedAt: openedAt.AddMinutes(5),
-            preparedBallotId: preparedBallotId,
-            preparedBallotHash: "prepared-final",
-            receiptCommitment: "receipt-commitment-final",
-            receiptCommitmentScheme: "sha256(receipt_secret|prepared_ballot_hash|accepted_ballot_id)",
-            ballotDefinitionVersion: election.BallotDefinitionVersion,
-            ballotDefinitionHash: election.BallotDefinitionHash);
-        var preparedBallot = ElectionModelFactory.CreatePreparedBallotCommitmentRecord(
+        var checkoffConsumption = ElectionModelFactory.CreateCheckoffConsumptionRecord(
             election.ElectionId,
             "1001",
-            "voter-address",
-            "prepared-final",
-            election.BallotDefinitionVersion!.Value,
-            election.BallotDefinitionHash!,
-            "sp04-proof-v1",
-            openedAt.AddMinutes(4),
-            preparedBallotId: preparedBallotId) with
-        {
-            State = ElectionPreparedBallotState.Cast,
-            AcceptedBallotId = acceptedBallot.Id,
-            CastAt = acceptedBallot.AcceptedAt,
-        };
+            openedAt.AddMinutes(4));
 
         ConfigureReadOnlyRepository(mocker, repo =>
         {
@@ -2624,11 +2594,46 @@ public class ElectionQueryApplicationServiceTests
                 .ReturnsAsync(rosterEntry);
             repo.Setup(x => x.GetParticipationRecordAsync(election.ElectionId, "1001"))
                 .ReturnsAsync(participation);
-            repo.Setup(x => x.GetBoundaryArtifactsAsync(election.ElectionId)).ReturnsAsync([openArtifact]);
-            repo.Setup(x => x.GetPreparedBallotCommitmentsAsync(election.ElectionId))
-                .ReturnsAsync([preparedBallot]);
+            repo.Setup(x => x.GetCheckoffConsumptionAsync(election.ElectionId, "1001"))
+                .ReturnsAsync(checkoffConsumption);
             repo.Setup(x => x.GetAcceptedBallotsAsync(election.ElectionId))
-                .ReturnsAsync([acceptedBallot]);
+                .ThrowsAsync(new InvalidOperationException("Accepted-ballot lookup should not be used by voter receipt verification."));
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.VerifyElectionReceiptAsync(
+            election.ElectionId,
+            "voter-address",
+            BuildExpectedReceiptId(checkoffConsumption),
+            checkoffConsumption.Id.ToString(),
+            BuildExpectedReceiptProof(checkoffConsumption),
+            receiptCommitment: "receipt-commitment-final",
+            preparedBallotId: Guid.NewGuid().ToString());
+
+        response.Success.Should().BeTrue();
+        response.ReceiptMatchesAcceptedCheckoff.Should().BeTrue();
+        response.ParticipationCountedAsVoted.Should().BeTrue();
+        response.TallyVerificationAvailable.Should().BeTrue();
+        response.HasBoundReceipt.Should().BeFalse();
+        response.ReceiptCommitmentInAcceptedSet.Should().BeFalse();
+        response.VerifiedReceiptCommitment.Should().BeEmpty();
+        response.VerifiedPreparedBallotId.Should().BeEmpty();
+        mocker.GetMock<IElectionsRepository>()
+            .Verify(x => x.GetAcceptedBallotsAsync(It.IsAny<ElectionId>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task VerifyElectionReceiptAsync_WithBoundReceiptCommitmentOnly_RequiresPublicPackageVerifier()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection();
+        var preparedBallotId = Guid.NewGuid();
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetAcceptedBallotsAsync(election.ElectionId))
+                .ThrowsAsync(new InvalidOperationException("Accepted-ballot lookup should not be used by voter receipt verification."));
         });
 
         var sut = CreateQueryService(mocker);
@@ -2642,13 +2647,17 @@ public class ElectionQueryApplicationServiceTests
             receiptCommitment: "receipt-commitment-final",
             preparedBallotId: preparedBallotId.ToString());
 
-        response.Success.Should().BeTrue();
+        response.Success.Should().BeFalse();
+        response.ErrorMessage.Should().Be(
+            "Package-bound receipt inclusion must be verified against the finalized public verification package.");
         response.HasAcceptedCheckoff.Should().BeFalse();
-        response.HasBoundReceipt.Should().BeTrue();
-        response.ReceiptCommitmentInAcceptedSet.Should().BeTrue();
-        response.VerifiedReceiptCommitment.Should().Be("receipt-commitment-final");
-        response.VerifiedPreparedBallotId.Should().Be(preparedBallotId.ToString());
-        response.ParticipationCountedAsVoted.Should().BeTrue();
+        response.HasBoundReceipt.Should().BeFalse();
+        response.ReceiptCommitmentInAcceptedSet.Should().BeFalse();
+        response.VerifiedReceiptCommitment.Should().BeEmpty();
+        response.VerifiedPreparedBallotId.Should().BeEmpty();
+        response.ParticipationCountedAsVoted.Should().BeFalse();
+        mocker.GetMock<IElectionsRepository>()
+            .Verify(x => x.GetAcceptedBallotsAsync(It.IsAny<ElectionId>()), Times.Never);
     }
 
     [Fact]

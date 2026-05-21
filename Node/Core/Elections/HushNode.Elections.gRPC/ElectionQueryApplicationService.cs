@@ -988,7 +988,6 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
         var normalizedAcceptanceId = acceptanceId?.Trim() ?? string.Empty;
         var normalizedServerProof = serverProof?.Trim() ?? string.Empty;
         var normalizedReceiptCommitment = receiptCommitment?.Trim() ?? string.Empty;
-        var normalizedPreparedBallotId = preparedBallotId?.Trim() ?? string.Empty;
 
         var hasLegacyCheckoffReceipt =
             !string.IsNullOrWhiteSpace(normalizedReceiptId) &&
@@ -1003,6 +1002,17 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             {
                 Success = false,
                 ErrorMessage = "ReceiptId, AcceptanceId, and ServerProof or ReceiptCommitment are required to verify the receipt.",
+                ActorPublicAddress = normalizedActorPublicAddress,
+                ElectionId = electionId.ToString(),
+            };
+        }
+
+        if (!hasLegacyCheckoffReceipt)
+        {
+            return new VerifyElectionReceiptResponse
+            {
+                Success = false,
+                ErrorMessage = "Package-bound receipt inclusion must be verified against the finalized public verification package.",
                 ActorPublicAddress = normalizedActorPublicAddress,
                 ElectionId = electionId.ToString(),
             };
@@ -1032,21 +1042,6 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             string.Equals(votingView.ReceiptId, normalizedReceiptId, StringComparison.Ordinal) &&
             string.Equals(votingView.AcceptanceId, normalizedAcceptanceId, StringComparison.Ordinal) &&
             string.Equals(votingView.ServerProof, normalizedServerProof, StringComparison.Ordinal);
-        ElectionAcceptedBallotRecord? matchedBoundReceipt = null;
-        if (hasBoundReceiptCommitment)
-        {
-            using var receiptUnitOfWork = _unitOfWorkProvider.CreateReadOnly();
-            var receiptRepository = receiptUnitOfWork.GetRepository<IElectionsRepository>();
-            var acceptedBallots = await receiptRepository.GetAcceptedBallotsAsync(electionId);
-            var hasPreparedBallotFilter = Guid.TryParse(normalizedPreparedBallotId, out var preparedBallotIdFilter);
-            matchedBoundReceipt = acceptedBallots.FirstOrDefault(x =>
-                !string.IsNullOrWhiteSpace(x.ReceiptCommitment) &&
-                string.Equals(x.ReceiptCommitment, normalizedReceiptCommitment, StringComparison.Ordinal) &&
-                (!hasPreparedBallotFilter || x.PreparedBallotId == preparedBallotIdFilter));
-        }
-
-        var hasStoredBoundReceipt = matchedBoundReceipt is not null;
-        var receiptCommitmentInAcceptedSet = hasBoundReceiptCommitment && hasStoredBoundReceipt;
 
         return new VerifyElectionReceiptResponse
         {
@@ -1062,14 +1057,16 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             TallyVerificationAvailable =
                 lifecycleState == ElectionLifecycleStateProto.Closed ||
                 lifecycleState == ElectionLifecycleStateProto.Finalized,
-            VerifiedReceiptId = votingView.ReceiptId ?? string.Empty,
-            VerifiedAcceptanceId = votingView.AcceptanceId ?? string.Empty,
-            VerifiedServerProof = votingView.ServerProof ?? string.Empty,
-            HasBoundReceipt = hasStoredBoundReceipt,
-            ReceiptCommitmentInAcceptedSet = receiptCommitmentInAcceptedSet,
-            VerifiedReceiptCommitment = matchedBoundReceipt?.ReceiptCommitment ?? string.Empty,
-            VerifiedReceiptCommitmentScheme = matchedBoundReceipt?.ReceiptCommitmentScheme ?? string.Empty,
-            VerifiedPreparedBallotId = matchedBoundReceipt?.PreparedBallotId?.ToString() ?? string.Empty,
+            // This authenticated endpoint proves only identity-side checkoff consumption. Receipt
+            // inclusion remains anonymous and must be checked with the finalized public package.
+            VerifiedReceiptId = string.Empty,
+            VerifiedAcceptanceId = string.Empty,
+            VerifiedServerProof = string.Empty,
+            HasBoundReceipt = false,
+            ReceiptCommitmentInAcceptedSet = false,
+            VerifiedReceiptCommitment = string.Empty,
+            VerifiedReceiptCommitmentScheme = string.Empty,
+            VerifiedPreparedBallotId = string.Empty,
         };
     }
 

@@ -526,11 +526,12 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             TestIdentities.Alice,
             receiptEntry.ReceiptCommitment,
             receiptEntry.PreparedBallotId);
-        receiptVerification.Success.Should().BeTrue(receiptVerification.ErrorMessage);
-        receiptVerification.HasBoundReceipt.Should().BeTrue();
-        receiptVerification.ReceiptCommitmentInAcceptedSet.Should().BeTrue();
-        receiptVerification.ParticipationCountedAsVoted.Should().BeTrue();
-        receiptVerification.VerifiedPreparedBallotId.Should().Be(receiptEntry.PreparedBallotId);
+        receiptVerification.Success.Should().BeFalse();
+        receiptVerification.ErrorMessage.Should().Be(
+            "Package-bound receipt inclusion must be verified against the finalized public verification package.");
+        receiptVerification.HasBoundReceipt.Should().BeFalse();
+        receiptVerification.ReceiptCommitmentInAcceptedSet.Should().BeFalse();
+        receiptVerification.VerifiedPreparedBallotId.Should().BeEmpty();
 
         var publicPayload = string.Join(
             '\n',
