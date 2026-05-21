@@ -1,4 +1,5 @@
 using FluentAssertions;
+using HushNode.Elections.gRPC;
 using HushNetwork.proto;
 using HushShared.Elections.Model;
 using HushShared.Elections.Verification.Model;
@@ -48,7 +49,65 @@ public class ElectionVoidContractsTests
         ((int)ElectionReportPackageStatusProto.ReportPackageGenerationFailed).Should().Be(0);
         ((int)ElectionReportPackageStatusProto.ReportPackageSealed).Should().Be(1);
         ((int)ElectionReportPackageStatusProto.ReportPackageSupersededByVoid).Should().Be(2);
+        ((int)ElectionReportPackageKindProto.ReportPackageFinalResult).Should().Be(0);
+        ((int)ElectionReportPackageKindProto.ReportPackageVoid).Should().Be(1);
+        ((int)ElectionVerificationPackageStatusProto.VerificationPackageVoided).Should().Be(6);
+        ((int)ElectionVoidPublicationAttemptStatusProto.VoidPublicationSealed).Should().Be(2);
         VerificationResultCodes.ElectionVoided.Should().Be("election_voided");
+    }
+
+    [Fact]
+    public void ReportPackageSummaryProto_ShouldExposeSupersededVoidMetadata()
+    {
+        var election = CreateElection(ElectionLifecycleState.Finalized) with
+        {
+            TallyReadyArtifactId = Guid.NewGuid(),
+            UnofficialResultArtifactId = Guid.NewGuid(),
+            OfficialResultArtifactId = Guid.NewGuid(),
+            FinalizeArtifactId = Guid.NewGuid(),
+        };
+        var voidDecisionId = Guid.NewGuid();
+        var supersededAt = DateTime.UtcNow;
+        var reportPackage = ElectionModelFactory.CreateSealedReportPackage(
+                election.ElectionId,
+                attemptNumber: 1,
+                tallyReadyArtifactId: election.TallyReadyArtifactId.Value,
+                unofficialResultArtifactId: election.UnofficialResultArtifactId.Value,
+                officialResultArtifactId: election.OfficialResultArtifactId.Value,
+                finalizeArtifactId: election.FinalizeArtifactId.Value,
+                frozenEvidenceHash: [1, 2, 3],
+                frozenEvidenceFingerprint: "final-package",
+                packageHash: [4, 5, 6],
+                artifactCount: 1,
+                attemptedByPublicAddress: "owner-address")
+            .SupersedeByVoid(voidDecisionId, supersededAt);
+
+        var proto = InvokeReportPackageToProto(reportPackage);
+
+        proto.Status.Should().Be(ElectionReportPackageStatusProto.ReportPackageSupersededByVoid);
+        proto.PackageKind.Should().Be(ElectionReportPackageKindProto.ReportPackageFinalResult);
+        proto.SupersededByVoidDecisionId.Should().Be(voidDecisionId.ToString());
+        proto.HasSupersededAt.Should().BeTrue();
+    }
+
+    private static ElectionReportPackageSummaryView InvokeReportPackageToProto(
+        ElectionReportPackageRecord reportPackage)
+    {
+        var mappingsType = typeof(ElectionQueryApplicationService).Assembly.GetType(
+            "HushNode.Elections.gRPC.ElectionGrpcMappings");
+        mappingsType.Should().NotBeNull();
+        var method = mappingsType!.GetMethods(System.Reflection.BindingFlags.Static |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic)
+            .Single(x =>
+            {
+                var parameters = x.GetParameters();
+                return x.Name == "ToProto" &&
+                    parameters.Length == 1 &&
+                    parameters[0].ParameterType == typeof(ElectionReportPackageRecord);
+            });
+
+        return ((ElectionReportPackageSummaryView?)method.Invoke(null, [reportPackage]))!;
     }
 
     [Theory]

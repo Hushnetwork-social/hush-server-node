@@ -4256,6 +4256,167 @@ public class ElectionQueryApplicationServiceTests
     }
 
     [Fact]
+    public async Task GetElectionVerificationPackageStatusAsync_WithVoidedElection_ReturnsPublicVoidPackageForVoter()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Voided,
+        };
+        var sourceElection = election with { LifecycleState = ElectionLifecycleState.Open };
+        var decision = ElectionModelFactory.CreateVoidDecision(
+            sourceElection,
+            "owner-address",
+            "Trustee threshold could not be satisfied after the close ceremony.",
+            Guid.NewGuid());
+        var attemptId = Guid.NewGuid();
+        var reportPackage = ElectionModelFactory.CreateSealedVoidReportPackage(
+            election.ElectionId,
+            attemptNumber: 1,
+            decision.Id,
+            attemptId,
+            frozenEvidenceHash: [1, 2, 3],
+            frozenEvidenceFingerprint: "void-fingerprint",
+            packageHash: [9, 8, 7],
+            artifactCount: 4,
+            attemptedByPublicAddress: "owner-address",
+            attemptedAt: DateTime.UtcNow.AddMinutes(-1),
+            sealedAt: DateTime.UtcNow);
+        var attempt = ElectionModelFactory.CreateSealedVoidPublicationAttempt(
+            election.ElectionId,
+            decision.Id,
+            attemptNumber: 1,
+            frozenEvidenceHash: [1, 2, 3],
+            frozenEvidenceFingerprint: "void-fingerprint",
+            packageHash: [9, 8, 7],
+            artifactCount: 4,
+            attemptedByPublicAddress: "owner-address",
+            reportPackageId: reportPackage.Id,
+            publicStatusArtifactRef: VerificationPackageFileNames.VoidPublicStatus,
+            voidPackageArtifactRef: VerificationPackageFileNames.VoidPackageArchive,
+            preassignedAttemptId: attemptId);
+        decision = decision with
+        {
+            CurrentPublicationAttemptId = attempt.Id,
+            PublicationStatus = ElectionVoidPublicationAttemptStatus.Sealed,
+        };
+        var artifacts = CreateVoidReportArtifacts(election, reportPackage, decision, attempt);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetVoidDecisionAsync(election.ElectionId)).ReturnsAsync(decision);
+            repo.Setup(x => x.GetVoidPublicationAttemptsAsync(decision.Id)).ReturnsAsync([attempt]);
+            repo.Setup(x => x.GetReportPackageAsync(reportPackage.Id)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetReportArtifactsAsync(reportPackage.Id)).ReturnsAsync(artifacts);
+            repo.Setup(x => x.GetVoidSupersededArtifactsAsync(decision.Id))
+                .ReturnsAsync(Array.Empty<ElectionVoidSupersededArtifactRecord>());
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var response = await sut.GetElectionVerificationPackageStatusAsync(election.ElectionId, "voter-address");
+
+        response.Success.Should().BeTrue();
+        response.Status.IsVisible.Should().BeTrue();
+        response.Status.Status.Should().Be(ElectionVerificationPackageStatusProto.VerificationPackageVoided);
+        response.Status.PublicPackage.IsAvailable.Should().BeTrue();
+        response.Status.PublicPackage.PackageKind.Should().Be(ElectionReportPackageKindProto.ReportPackageVoid);
+        response.Status.PublicPackage.VoidDecisionId.Should().Be(decision.Id.ToString());
+        response.Status.RestrictedPackage.IsAvailable.Should().BeFalse();
+        response.Status.RestrictedPackage.Blocker.Should().Be(
+            ElectionVerificationPackageBlockerProto.VerificationPackageBlockerUnauthorized);
+        response.Status.LastVerifierResult.ResultCode.Should().Be(VerificationResultCodes.ElectionVoided);
+        response.Status.LastVerifierResult.PackageHash.Should().Be("090807");
+        response.Status.VoidPublicationStatus.Status.Should().Be(
+            ElectionVoidPublicationAttemptStatusProto.VoidPublicationSealed);
+        response.Status.VoidPublicationStatus.VoidPackageArtifactRef.Should().Be(VerificationPackageFileNames.VoidPackageArchive);
+    }
+
+    [Fact]
+    public async Task ExportElectionVerificationPackageAsync_WithVoidedElectionPublicPackage_ExcludesRestrictedVoidEvidence()
+    {
+        var mocker = new AutoMocker();
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Voided,
+        };
+        var sourceElection = election with { LifecycleState = ElectionLifecycleState.Closed };
+        var decision = ElectionModelFactory.CreateVoidDecision(
+            sourceElection,
+            "owner-address",
+            "Trustee threshold could not be satisfied after the close ceremony.",
+            Guid.NewGuid());
+        var attemptId = Guid.NewGuid();
+        var reportPackage = ElectionModelFactory.CreateSealedVoidReportPackage(
+            election.ElectionId,
+            attemptNumber: 1,
+            decision.Id,
+            attemptId,
+            frozenEvidenceHash: [1, 2, 3],
+            frozenEvidenceFingerprint: "void-fingerprint",
+            packageHash: [9, 8, 7],
+            artifactCount: 4,
+            attemptedByPublicAddress: "owner-address",
+            attemptedAt: DateTime.UtcNow.AddMinutes(-1),
+            sealedAt: DateTime.UtcNow);
+        var attempt = ElectionModelFactory.CreateSealedVoidPublicationAttempt(
+            election.ElectionId,
+            decision.Id,
+            attemptNumber: 1,
+            frozenEvidenceHash: [1, 2, 3],
+            frozenEvidenceFingerprint: "void-fingerprint",
+            packageHash: [9, 8, 7],
+            artifactCount: 4,
+            attemptedByPublicAddress: "owner-address",
+            reportPackageId: reportPackage.Id,
+            publicStatusArtifactRef: VerificationPackageFileNames.VoidPublicStatus,
+            voidPackageArtifactRef: VerificationPackageFileNames.VoidPackageArchive,
+            preassignedAttemptId: attemptId);
+        decision = decision with
+        {
+            CurrentPublicationAttemptId = attempt.Id,
+            PublicationStatus = ElectionVoidPublicationAttemptStatus.Sealed,
+        };
+        var artifacts = CreateVoidReportArtifacts(election, reportPackage, decision, attempt);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetLatestReportPackageAsync(election.ElectionId)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetVoidDecisionAsync(election.ElectionId)).ReturnsAsync(decision);
+            repo.Setup(x => x.GetVoidPublicationAttemptsAsync(decision.Id)).ReturnsAsync([attempt]);
+            repo.Setup(x => x.GetReportPackageAsync(reportPackage.Id)).ReturnsAsync(reportPackage);
+            repo.Setup(x => x.GetReportArtifactsAsync(reportPackage.Id)).ReturnsAsync(artifacts);
+            repo.Setup(x => x.GetVoidSupersededArtifactsAsync(decision.Id))
+                .ReturnsAsync(Array.Empty<ElectionVoidSupersededArtifactRecord>());
+        });
+
+        var sut = CreateQueryService(mocker);
+
+        var publicExport = await sut.ExportElectionVerificationPackageAsync(
+            election.ElectionId,
+            "voter-address",
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+        var restrictedExport = await sut.ExportElectionVerificationPackageAsync(
+            election.ElectionId,
+            "owner-address",
+            ElectionVerificationPackageViewProto.VerificationPackageRestrictedOwnerAuditor);
+
+        publicExport.Success.Should().BeTrue();
+        publicExport.ResultCode.Should().Be(VerificationResultCodes.ElectionVoided);
+        publicExport.PackageHash.Should().Be("090807");
+        publicExport.Files.Select(x => x.RelativePath).Should().Contain(VerificationPackageFileNames.VoidPackageManifest);
+        publicExport.Files.Select(x => x.RelativePath).Should().Contain(VerificationPackageFileNames.VoidPackageArchive);
+        publicExport.Files.Select(x => x.RelativePath).Should().NotContain(
+            VerificationPackageFileNames.RestrictedVoidEvidenceIndex);
+        restrictedExport.Success.Should().BeTrue();
+        restrictedExport.Files.Select(x => x.RelativePath).Should().Contain(
+            VerificationPackageFileNames.RestrictedVoidEvidenceIndex);
+    }
+
+    [Fact]
     public async Task GetElectionReportAccessGrantsAsync_WithOwnerRole_ReturnsSortedGrantList()
     {
         var mocker = new AutoMocker();
@@ -4888,6 +5049,120 @@ public class ElectionQueryApplicationServiceTests
             attemptedByPublicAddress: "owner-address",
             attemptedAt: DateTime.UtcNow.AddMinutes(-1),
             sealedAt: DateTime.UtcNow);
+
+    private static IReadOnlyList<ElectionReportArtifactRecord> CreateVoidReportArtifacts(
+        ElectionRecord election,
+        ElectionReportPackageRecord reportPackage,
+        ElectionVoidDecisionRecord decision,
+        ElectionVoidPublicationAttemptRecord attempt)
+    {
+        var publicStatus = $$"""
+            {
+              "electionId": "{{election.ElectionId}}",
+              "voidDecisionId": "{{decision.Id}}",
+              "publicationAttemptId": "{{attempt.Id}}",
+              "status": "VOID",
+              "publicJustification": "{{decision.PublicJustification}}",
+              "verifierResultCode": "{{VerificationResultCodes.ElectionVoided}}",
+              "voidPackageArtifactRef": "{{VerificationPackageFileNames.VoidPackageArchive}}",
+              "voidPackageHash": "090807",
+              "publishedAt": "{{DateTime.UtcNow:O}}",
+              "supersededArtifacts": []
+            }
+            """;
+        var manifest = $$"""
+            {
+              "schemaId": "hushvoting-void-package-manifest-v1",
+              "electionId": "{{election.ElectionId}}",
+              "voidDecisionId": "{{decision.Id}}",
+              "publicationAttemptId": "{{attempt.Id}}",
+              "entries": []
+            }
+            """;
+
+        return
+        [
+            CreateVoidReportArtifact(
+                reportPackage,
+                election,
+                ElectionReportArtifactKind.MachineVoidDecision,
+                ElectionReportArtifactFormat.Json,
+                ElectionReportArtifactAccessScope.Public,
+                1,
+                "VOID decision",
+                VerificationPackageFileNames.VoidDecision,
+                "application/json",
+                $$"""{"voidDecisionId":"{{decision.Id}}","publicJustification":"{{decision.PublicJustification}}"}"""),
+            CreateVoidReportArtifact(
+                reportPackage,
+                election,
+                ElectionReportArtifactKind.MachineVoidPublicStatus,
+                ElectionReportArtifactFormat.Json,
+                ElectionReportArtifactAccessScope.Public,
+                2,
+                "VOID public status",
+                VerificationPackageFileNames.VoidPublicStatus,
+                "application/json",
+                publicStatus),
+            CreateVoidReportArtifact(
+                reportPackage,
+                election,
+                ElectionReportArtifactKind.MachineVoidPackageManifest,
+                ElectionReportArtifactFormat.Json,
+                ElectionReportArtifactAccessScope.Public,
+                3,
+                "VOID package manifest",
+                VerificationPackageFileNames.VoidPackageManifest,
+                "application/json",
+                manifest),
+            CreateVoidReportArtifact(
+                reportPackage,
+                election,
+                ElectionReportArtifactKind.MachineVoidPackageArchive,
+                ElectionReportArtifactFormat.Binary,
+                ElectionReportArtifactAccessScope.Public,
+                4,
+                "VOID package archive",
+                VerificationPackageFileNames.VoidPackageArchive,
+                "application/zip",
+                Convert.ToBase64String([1, 2, 3, 4])),
+            CreateVoidReportArtifact(
+                reportPackage,
+                election,
+                ElectionReportArtifactKind.HumanRestrictedVoidEvidenceIndex,
+                ElectionReportArtifactFormat.Markdown,
+                ElectionReportArtifactAccessScope.OwnerAuditorOnly,
+                5,
+                "Restricted VOID evidence index",
+                VerificationPackageFileNames.RestrictedVoidEvidenceIndex,
+                "text/markdown",
+                "# Restricted VOID evidence"),
+        ];
+    }
+
+    private static ElectionReportArtifactRecord CreateVoidReportArtifact(
+        ElectionReportPackageRecord reportPackage,
+        ElectionRecord election,
+        ElectionReportArtifactKind artifactKind,
+        ElectionReportArtifactFormat format,
+        ElectionReportArtifactAccessScope accessScope,
+        int sortOrder,
+        string title,
+        string fileName,
+        string mediaType,
+        string content) =>
+        ElectionModelFactory.CreateReportArtifact(
+            reportPackage.Id,
+            election.ElectionId,
+            artifactKind,
+            format,
+            accessScope,
+            sortOrder,
+            title,
+            fileName,
+            mediaType,
+            SHA256.HashData(Encoding.UTF8.GetBytes(content)),
+            content);
 
     private static ProtocolPackageAccessLocationRecord CreateProtocolPackageAccessLocation(string contentHash) =>
         ElectionModelFactory.CreateProtocolPackageAccessLocation(

@@ -1129,6 +1129,14 @@ internal static partial class ElectionGrpcMappings
                 : new Timestamp(),
             HasSealedAt = reportPackage.SealedAt.HasValue,
             AttemptedByPublicAddress = reportPackage.AttemptedByPublicAddress,
+            PackageKind = (ElectionReportPackageKindProto)(int)reportPackage.PackageKind,
+            VoidDecisionId = reportPackage.VoidDecisionId?.ToString() ?? string.Empty,
+            VoidPublicationAttemptId = reportPackage.VoidPublicationAttemptId?.ToString() ?? string.Empty,
+            SupersededByVoidDecisionId = reportPackage.SupersededByVoidDecisionId?.ToString() ?? string.Empty,
+            SupersededAt = reportPackage.SupersededAt.HasValue
+                ? ToTimestamp(reportPackage.SupersededAt.Value)
+                : new Timestamp(),
+            HasSupersededAt = reportPackage.SupersededAt.HasValue,
         };
 
     public static ElectionReportArtifactView ToProto(this ElectionReportArtifactRecord reportArtifact) =>
