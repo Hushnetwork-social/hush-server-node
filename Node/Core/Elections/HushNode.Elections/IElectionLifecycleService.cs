@@ -61,6 +61,10 @@ public interface IElectionLifecycleService
 
     Task<ElectionCommandResult> FinalizeElectionAsync(FinalizeElectionRequest request);
 
+    Task<ElectionCommandResult> VoidElectionAsync(VoidElectionRequest request);
+
+    Task<ElectionCommandResult> RetryVoidPublicationAsync(RetryVoidPublicationRequest request);
+
     Task<ElectionCommandResult> SubmitFinalizationShareAsync(SubmitElectionFinalizationShareRequest request);
 
     Task<ElectionCommandResult> ExecuteCloseCountingJobAsync(ExecuteElectionCloseCountingJobRequest request);
@@ -282,6 +286,23 @@ public record FinalizeElectionRequest(
     long? SourceBlockHeight = null,
     Guid? SourceBlockId = null);
 
+public record VoidElectionRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    string PublicJustification,
+    IReadOnlyList<ElectionVoidEvidenceReferenceRecord>? EvidenceReferences = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
+public record RetryVoidPublicationRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    Guid VoidDecisionId,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
 public record SubmitElectionFinalizationShareRequest(
     ElectionId ElectionId,
     Guid FinalizationSessionId,
@@ -475,6 +496,9 @@ public record ElectionCommandResult
     public ElectionFinalizationReleaseEvidenceRecord? FinalizationReleaseEvidence { get; init; }
     public ProtocolPackageBindingRecord? ProtocolPackageBinding { get; init; }
     public ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? AdminOnlyProtectedTallyCustodyReadinessFragment { get; init; }
+    public ElectionVoidDecisionRecord? VoidDecision { get; init; }
+    public ElectionVoidPublicationAttemptRecord? VoidPublicationAttempt { get; init; }
+    public IReadOnlyList<ElectionReportPackageRecord> SupersededReportPackages { get; init; } = Array.Empty<ElectionReportPackageRecord>();
 
     public static ElectionCommandResult Success(
         ElectionRecord election,
@@ -500,7 +524,10 @@ public record ElectionCommandResult
         ElectionFinalizationShareRecord? finalizationShare = null,
         ElectionFinalizationReleaseEvidenceRecord? finalizationReleaseEvidence = null,
         ProtocolPackageBindingRecord? protocolPackageBinding = null,
-        ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? adminOnlyProtectedTallyCustodyReadinessFragment = null) =>
+        ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? adminOnlyProtectedTallyCustodyReadinessFragment = null,
+        ElectionVoidDecisionRecord? voidDecision = null,
+        ElectionVoidPublicationAttemptRecord? voidPublicationAttempt = null,
+        IReadOnlyList<ElectionReportPackageRecord>? supersededReportPackages = null) =>
         new()
         {
             IsSuccess = true,
@@ -529,6 +556,9 @@ public record ElectionCommandResult
             FinalizationReleaseEvidence = finalizationReleaseEvidence,
             ProtocolPackageBinding = protocolPackageBinding,
             AdminOnlyProtectedTallyCustodyReadinessFragment = adminOnlyProtectedTallyCustodyReadinessFragment,
+            VoidDecision = voidDecision,
+            VoidPublicationAttempt = voidPublicationAttempt,
+            SupersededReportPackages = supersededReportPackages ?? Array.Empty<ElectionReportPackageRecord>(),
         };
 
     public static ElectionCommandResult Failure(

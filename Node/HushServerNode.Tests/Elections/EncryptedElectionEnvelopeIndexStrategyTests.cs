@@ -156,6 +156,73 @@ public class EncryptedElectionEnvelopeIndexStrategyTests
         capturedRequest.BallotDefinitionHash.Should().Equal(ballotDefinitionHash);
     }
 
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task HandleAsync_WithVoidElectionEnvelope_ForwardsVoidRequest()
+    {
+        var electionId = ElectionId.NewElectionId;
+        var transaction = CreateValidatedTransaction(electionId);
+        var evidenceReference = ElectionModelFactory.CreateVoidEvidenceReference(
+            ElectionVoidEvidenceReferenceKind.InternalAnomalyThread,
+            "anomaly-thread-1",
+            internalRecordId: Guid.NewGuid());
+        var action = new VoidElectionActionPayload(
+            "owner-address",
+            "Trustee key quorum was lost and the election cannot continue.",
+            [evidenceReference]);
+        var election = CreateElection(electionId);
+        VoidElectionRequest? capturedRequest = null;
+
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        lifecycleService
+            .Setup(x => x.VoidElectionAsync(It.IsAny<VoidElectionRequest>()))
+            .Callback<VoidElectionRequest>(request => capturedRequest = request)
+            .ReturnsAsync(ElectionCommandResult.Success(election));
+
+        var sut = CreateIndexStrategy(transaction, EncryptedElectionEnvelopeActionTypes.VoidElection, action, lifecycleService.Object);
+
+        await sut.HandleAsync(transaction);
+
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.ElectionId.Should().Be(electionId);
+        capturedRequest.ActorPublicAddress.Should().Be("owner-address");
+        capturedRequest.PublicJustification.Should().Be(action.PublicJustification);
+        capturedRequest.EvidenceReferences.Should().ContainSingle();
+        capturedRequest.SourceTransactionId.Should().Be(transaction.TransactionId.Value);
+        capturedRequest.SourceBlockHeight.Should().Be(42);
+        capturedRequest.SourceBlockId.Should().Be(TestBlockId.Value);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task HandleAsync_WithRetryVoidPublicationEnvelope_ForwardsRetryRequest()
+    {
+        var electionId = ElectionId.NewElectionId;
+        var transaction = CreateValidatedTransaction(electionId);
+        var voidDecisionId = Guid.NewGuid();
+        var action = new RetryVoidPublicationActionPayload("owner-address", voidDecisionId);
+        var election = CreateElection(electionId) with { LifecycleState = ElectionLifecycleState.Voided };
+        RetryVoidPublicationRequest? capturedRequest = null;
+
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        lifecycleService
+            .Setup(x => x.RetryVoidPublicationAsync(It.IsAny<RetryVoidPublicationRequest>()))
+            .Callback<RetryVoidPublicationRequest>(request => capturedRequest = request)
+            .ReturnsAsync(ElectionCommandResult.Success(election));
+
+        var sut = CreateIndexStrategy(transaction, EncryptedElectionEnvelopeActionTypes.RetryVoidPublication, action, lifecycleService.Object);
+
+        await sut.HandleAsync(transaction);
+
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.ElectionId.Should().Be(electionId);
+        capturedRequest.ActorPublicAddress.Should().Be("owner-address");
+        capturedRequest.VoidDecisionId.Should().Be(voidDecisionId);
+        capturedRequest.SourceTransactionId.Should().Be(transaction.TransactionId.Value);
+        capturedRequest.SourceBlockHeight.Should().Be(42);
+        capturedRequest.SourceBlockId.Should().Be(TestBlockId.Value);
+    }
+
     private static readonly BlockId TestBlockId = new(Guid.Parse("ab9f92a3-5e14-4d73-8755-99708f48e03c"));
 
     private static EncryptedElectionEnvelopeIndexStrategy CreateIndexStrategy<TAction>(

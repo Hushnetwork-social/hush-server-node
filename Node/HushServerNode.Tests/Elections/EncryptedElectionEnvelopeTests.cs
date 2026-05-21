@@ -1699,6 +1699,128 @@ public class EncryptedElectionEnvelopeTests
         failure.Code.Should().Be("election_finalization_share_plaintext_forbidden");
     }
 
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public void ValidateAndSign_WithValidVoidElectionEnvelope_ReturnsValidatedOuterEnvelope()
+    {
+        var validatorSigningKeys = new DigitalSignature();
+        var validatorEncryptKeys = new EncryptKeys();
+        var election = CreateElectionRecord(ElectionLifecycleState.Open);
+        var signedEnvelope = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            EncryptedElectionEnvelopePayloadHandler.CreateNew(
+                election.ElectionId,
+                EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+                "node-envelope",
+                "actor-envelope",
+                "encrypted-payload"),
+            new SignatureInfo("owner-address", "signature"));
+
+        var cryptoService = new Mock<IElectionEnvelopeCryptoService>();
+        cryptoService
+            .Setup(x => x.TryDecryptSigned(It.IsAny<AbstractTransaction>()))
+            .Returns(new DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>>(
+                signedEnvelope,
+                EncryptedElectionEnvelopeActionTypes.VoidElection,
+                JsonSerializer.Serialize(new VoidElectionActionPayload(
+                    "owner-address",
+                    "Trustee key quorum was lost and the election cannot continue."))));
+
+        var repository = new Mock<IElectionsRepository>();
+        repository.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+        repository.Setup(x => x.GetVoidDecisionAsync(election.ElectionId)).ReturnsAsync((ElectionVoidDecisionRecord?)null);
+
+        var readOnlyUnitOfWork = new Mock<Olimpo.EntityFramework.Persistency.IReadOnlyUnitOfWork<ElectionsDbContext>>();
+        readOnlyUnitOfWork
+            .Setup(x => x.GetRepository<IElectionsRepository>())
+            .Returns(repository.Object);
+
+        var unitOfWorkProvider = new Mock<Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext>>();
+        unitOfWorkProvider
+            .Setup(x => x.CreateReadOnly())
+            .Returns(readOnlyUnitOfWork.Object);
+
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        credentialsProvider
+            .Setup(x => x.GetCredentials())
+            .Returns(new CredentialsProfile
+            {
+                PublicSigningAddress = validatorSigningKeys.PublicAddress,
+                PrivateSigningKey = validatorSigningKeys.PrivateKey,
+                PublicEncryptAddress = validatorEncryptKeys.PublicKey,
+                PrivateEncryptKey = validatorEncryptKeys.PrivateKey,
+            });
+
+        var validationService = new Mock<ICreateElectionDraftValidationService>();
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        var sut = CreateContentHandler(
+            cryptoService.Object,
+            validationService.Object,
+            credentialsProvider.Object,
+            unitOfWorkProvider.Object,
+            lifecycleService.Object);
+
+        var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
+
+        validatedTransaction.Should().BeOfType<ValidatedTransaction<EncryptedElectionEnvelopePayload>>();
+        ((ValidatedTransaction<EncryptedElectionEnvelopePayload>)validatedTransaction!)
+            .ValidatorSignature
+            .Signatory
+            .Should()
+            .Be(validatorSigningKeys.PublicAddress);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public void ValidateAndSign_WithNonOwnerVoidElectionEnvelope_ReturnsNull()
+    {
+        var election = CreateElectionRecord(ElectionLifecycleState.Open);
+        var signedEnvelope = new SignedTransaction<EncryptedElectionEnvelopePayload>(
+            EncryptedElectionEnvelopePayloadHandler.CreateNew(
+                election.ElectionId,
+                EncryptedElectionEnvelopePayloadHandler.CurrentEnvelopeVersion,
+                "node-envelope",
+                "actor-envelope",
+                "encrypted-payload"),
+            new SignatureInfo("trustee-a", "signature"));
+
+        var cryptoService = new Mock<IElectionEnvelopeCryptoService>();
+        cryptoService
+            .Setup(x => x.TryDecryptSigned(It.IsAny<AbstractTransaction>()))
+            .Returns(new DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>>(
+                signedEnvelope,
+                EncryptedElectionEnvelopeActionTypes.VoidElection,
+                JsonSerializer.Serialize(new VoidElectionActionPayload(
+                    "trustee-a",
+                    "Trustee key quorum was lost and the election cannot continue."))));
+
+        var repository = new Mock<IElectionsRepository>();
+        repository.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+
+        var readOnlyUnitOfWork = new Mock<Olimpo.EntityFramework.Persistency.IReadOnlyUnitOfWork<ElectionsDbContext>>();
+        readOnlyUnitOfWork
+            .Setup(x => x.GetRepository<IElectionsRepository>())
+            .Returns(repository.Object);
+
+        var unitOfWorkProvider = new Mock<Olimpo.EntityFramework.Persistency.IUnitOfWorkProvider<ElectionsDbContext>>();
+        unitOfWorkProvider
+            .Setup(x => x.CreateReadOnly())
+            .Returns(readOnlyUnitOfWork.Object);
+
+        var credentialsProvider = new Mock<ICredentialsProvider>();
+        var validationService = new Mock<ICreateElectionDraftValidationService>();
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        var sut = CreateContentHandler(
+            cryptoService.Object,
+            validationService.Object,
+            credentialsProvider.Object,
+            unitOfWorkProvider.Object,
+            lifecycleService.Object);
+
+        var validatedTransaction = sut.ValidateAndSign(signedEnvelope);
+
+        validatedTransaction.Should().BeNull();
+    }
+
     private static ElectionDraftSpecification CreateDraftSpecification() =>
         new(
             Title: "Board Election",
@@ -1738,6 +1860,64 @@ public class EncryptedElectionEnvelopeTests
             [
                 ElectionWarningCode.LowAnonymitySet,
             ]);
+
+    private static ElectionRecord CreateElectionRecord(ElectionLifecycleState lifecycleState)
+    {
+        var draft = CreateDraftSpecification();
+        var election = ElectionModelFactory.CreateDraftRecord(
+            electionId: ElectionId.NewElectionId,
+            title: draft.Title,
+            shortDescription: draft.ShortDescription,
+            ownerPublicAddress: "owner-address",
+            externalReferenceCode: draft.ExternalReferenceCode,
+            electionClass: draft.ElectionClass,
+            bindingStatus: draft.BindingStatus,
+            selectedProfileId: draft.SelectedProfileId,
+            selectedProfileDevOnly: false,
+            governanceMode: draft.GovernanceMode,
+            disclosureMode: draft.DisclosureMode,
+            participationPrivacyMode: draft.ParticipationPrivacyMode,
+            voteUpdatePolicy: draft.VoteUpdatePolicy,
+            eligibilitySourceType: draft.EligibilitySourceType,
+            eligibilityMutationPolicy: draft.EligibilityMutationPolicy,
+            outcomeRule: draft.OutcomeRule,
+            approvedClientApplications: draft.ApprovedClientApplications,
+            protocolOmegaVersion: draft.ProtocolOmegaVersion,
+            reportingPolicy: draft.ReportingPolicy,
+            reviewWindowPolicy: draft.ReviewWindowPolicy,
+            ownerOptions: draft.OwnerOptions,
+            acknowledgedWarningCodes: draft.AcknowledgedWarningCodes);
+
+        return lifecycleState switch
+        {
+            ElectionLifecycleState.Open => election with
+            {
+                LifecycleState = ElectionLifecycleState.Open,
+                OpenedAt = DateTime.UtcNow,
+                OpenArtifactId = Guid.NewGuid(),
+            },
+            ElectionLifecycleState.Closed => election with
+            {
+                LifecycleState = ElectionLifecycleState.Closed,
+                OpenedAt = DateTime.UtcNow.AddHours(-2),
+                OpenArtifactId = Guid.NewGuid(),
+                ClosedAt = DateTime.UtcNow.AddHours(-1),
+                CloseArtifactId = Guid.NewGuid(),
+                VoteAcceptanceLockedAt = DateTime.UtcNow.AddHours(-1),
+            },
+            ElectionLifecycleState.Voided => election with
+            {
+                LifecycleState = ElectionLifecycleState.Voided,
+            },
+            ElectionLifecycleState.Finalized => election with
+            {
+                LifecycleState = ElectionLifecycleState.Finalized,
+                FinalizedAt = DateTime.UtcNow,
+                FinalizeArtifactId = Guid.NewGuid(),
+            },
+            _ => election,
+        };
+    }
 
     private static string CreateDevModeAcceptedBallotPackageForTests() =>
         JsonSerializer.Serialize(new

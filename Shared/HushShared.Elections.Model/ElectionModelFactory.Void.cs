@@ -98,6 +98,36 @@ public static partial class ElectionModelFactory
             NormalizeRequiredText(attemptedByPublicAddress, nameof(attemptedByPublicAddress)));
     }
 
+    public static ElectionVoidPublicationAttemptRecord CreatePendingVoidPublicationAttempt(
+        ElectionId electionId,
+        Guid voidDecisionId,
+        int attemptNumber,
+        byte[] frozenEvidenceHash,
+        string frozenEvidenceFingerprint,
+        string attemptedByPublicAddress,
+        Guid? previousAttemptId = null,
+        DateTime? attemptedAt = null,
+        Guid? preassignedAttemptId = null) =>
+        new(
+            preassignedAttemptId ?? Guid.NewGuid(),
+            electionId,
+            voidDecisionId,
+            attemptNumber,
+            previousAttemptId,
+            ReportPackageId: null,
+            ElectionVoidPublicationAttemptStatus.Pending,
+            CloneBytes(frozenEvidenceHash) ?? Array.Empty<byte>(),
+            NormalizeRequiredText(frozenEvidenceFingerprint, nameof(frozenEvidenceFingerprint)),
+            PackageHash: null,
+            ArtifactCount: 0,
+            FailureCode: null,
+            FailureReason: null,
+            PublicStatusArtifactRef: null,
+            VoidPackageArtifactRef: null,
+            attemptedAt ?? DateTime.UtcNow,
+            SealedAt: null,
+            NormalizeRequiredText(attemptedByPublicAddress, nameof(attemptedByPublicAddress)));
+
     public static ElectionVoidPublicationAttemptRecord CreateFailedVoidPublicationAttempt(
         ElectionId electionId,
         Guid voidDecisionId,

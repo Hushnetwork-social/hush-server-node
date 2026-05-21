@@ -204,6 +204,10 @@ public class EncryptedElectionEnvelopeContentHandler(
                 IsValidCloseElectionAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.FinalizeElection =>
                 IsValidFinalizeElectionAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.VoidElection =>
+                IsValidVoidElectionAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.RetryVoidPublication =>
+                IsValidRetryVoidPublicationAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.SubmitFinalizationShare =>
                 IsValidSubmitFinalizationShareAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.StartCeremony =>
@@ -1385,6 +1389,98 @@ public class EncryptedElectionEnvelopeContentHandler(
             new SignatureInfo(signatory, decryptedEnvelope.Transaction.UserSignature!.Signature));
 
         return _finalizeElectionContentHandler.ValidateAndSign(signedTransaction) is not null;
+    }
+
+    private bool IsValidVoidElectionAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
+        var voidAction = decryptedEnvelope.DeserializeAction<VoidElectionActionPayload>();
+        if (voidAction is null || !HasMatchingActor(signatory, voidAction.ActorPublicAddress))
+        {
+            return false;
+        }
+
+        var justificationValidation = ElectionVoidPublicJustificationValidator.Validate(voidAction.PublicJustification);
+        if (!justificationValidation.IsValid)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "void_justification_invalid",
+                $"Void justification is not valid for public publication: {string.Join(", ", justificationValidation.Errors)}.");
+        }
+
+        var evidenceErrors = ElectionVoidEvidenceReferenceValidator.Validate(voidAction.EvidenceReferences);
+        if (evidenceErrors.Count > 0)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "void_evidence_references_invalid",
+                $"Void evidence references are invalid: {string.Join(", ", evidenceErrors)}.");
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var electionId = decryptedEnvelope.Transaction.Payload.ElectionId;
+        var election = repository.GetElectionAsync(electionId).GetAwaiter().GetResult();
+        if (election is null)
+        {
+            return false;
+        }
+
+        if (!string.Equals(election.OwnerPublicAddress, signatory, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var existingDecision = repository.GetVoidDecisionAsync(electionId).GetAwaiter().GetResult();
+        if (existingDecision is not null || election.LifecycleState == ElectionLifecycleState.Voided)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "void_decision_duplicate",
+                "A void decision already exists for this election.");
+        }
+
+        if (election.LifecycleState == ElectionLifecycleState.Finalized)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "void_finalized_election_rejected",
+                "Finalized elections cannot be voided.");
+        }
+
+        return election.LifecycleState is ElectionLifecycleState.Draft
+            or ElectionLifecycleState.Open
+            or ElectionLifecycleState.Closed;
+    }
+
+    private bool IsValidRetryVoidPublicationAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var retryAction = decryptedEnvelope.DeserializeAction<RetryVoidPublicationActionPayload>();
+        if (retryAction is null ||
+            retryAction.VoidDecisionId == Guid.Empty ||
+            !HasMatchingActor(signatory, retryAction.ActorPublicAddress))
+        {
+            return false;
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var electionId = decryptedEnvelope.Transaction.Payload.ElectionId;
+        var election = repository.GetElectionAsync(electionId).GetAwaiter().GetResult();
+        if (election is null ||
+            election.LifecycleState != ElectionLifecycleState.Voided ||
+            !string.Equals(election.OwnerPublicAddress, signatory, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var decision = repository.GetVoidDecisionAsync(retryAction.VoidDecisionId).GetAwaiter().GetResult();
+        return decision is not null && decision.ElectionId == electionId;
     }
 
     private bool IsValidSubmitFinalizationShareAction(
