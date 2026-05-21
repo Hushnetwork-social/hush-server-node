@@ -354,10 +354,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 acceptAction.OrganizationVoterId));
 
         return result.IsSuccess && result.Election is not null
-            ? ElectionCommandResult.Success(
-                result.Election,
-                rosterEntry: result.RosterEntry,
-                participationRecord: result.ParticipationRecord)
+            ? ElectionCommandResult.Success(result.Election)
             : ElectionCommandResult.Failure(
                 result.FailureReason switch
                 {
@@ -404,7 +401,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 registerAction.OrganizationVoterId));
 
         return result.IsSuccess && result.Election is not null
-            ? ElectionCommandResult.Success(result.Election, rosterEntry: result.RosterEntry)
+            ? ElectionCommandResult.Success(result.Election)
             : ElectionCommandResult.Failure(
                 result.FailureReason switch
                 {
@@ -448,7 +445,7 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 spoilAction.OrganizationVoterId));
 
         return result.IsSuccess && result.Election is not null
-            ? ElectionCommandResult.Success(result.Election, rosterEntry: result.RosterEntry)
+            ? ElectionCommandResult.Success(result.Election)
             : ElectionCommandResult.Failure(
                 result.FailureReason switch
                 {

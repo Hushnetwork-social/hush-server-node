@@ -587,10 +587,6 @@ public record ElectionCastAcceptanceResult
     public ElectionCastAcceptanceFailureReason FailureReason { get; init; }
     public string? ErrorMessage { get; init; }
     public ElectionRecord? Election { get; init; }
-    public ElectionRosterEntryRecord? RosterEntry { get; init; }
-    public ElectionCommitmentRegistrationRecord? CommitmentRegistration { get; init; }
-    public ElectionParticipationRecord? ParticipationRecord { get; init; }
-    public ElectionCheckoffConsumptionRecord? CheckoffConsumption { get; init; }
     public ElectionAcceptedBallotRecord? AcceptedBallot { get; init; }
     public ElectionCastIdempotencyRecord? CastIdempotencyRecord { get; init; }
     public ElectionPreparedBallotCommitmentRecord? PreparedBallotCommitment { get; init; }
@@ -598,10 +594,6 @@ public record ElectionCastAcceptanceResult
 
     public static ElectionCastAcceptanceResult Success(
         ElectionRecord election,
-        ElectionRosterEntryRecord rosterEntry,
-        ElectionCommitmentRegistrationRecord commitmentRegistration,
-        ElectionParticipationRecord participationRecord,
-        ElectionCheckoffConsumptionRecord checkoffConsumption,
         ElectionAcceptedBallotRecord acceptedBallot,
         ElectionCastIdempotencyRecord castIdempotencyRecord,
         ElectionPreparedBallotCommitmentRecord? preparedBallotCommitment = null,
@@ -611,10 +603,6 @@ public record ElectionCastAcceptanceResult
             IsSuccess = true,
             FailureReason = ElectionCastAcceptanceFailureReason.None,
             Election = election,
-            RosterEntry = rosterEntry,
-            CommitmentRegistration = commitmentRegistration,
-            ParticipationRecord = participationRecord,
-            CheckoffConsumption = checkoffConsumption,
             AcceptedBallot = acceptedBallot,
             CastIdempotencyRecord = castIdempotencyRecord,
             PreparedBallotCommitment = preparedBallotCommitment,
@@ -638,25 +626,16 @@ public record ElectionPreparedBallotCommitmentResult
     public ElectionPreparedBallotCommitmentFailureReason FailureReason { get; init; }
     public string? ErrorMessage { get; init; }
     public ElectionRecord? Election { get; init; }
-    public ElectionRosterEntryRecord? RosterEntry { get; init; }
-    public ElectionCommitmentRegistrationRecord? CommitmentRegistration { get; init; }
-    public ElectionVoterCeremonyRecord? CeremonyRecord { get; init; }
     public ElectionPreparedBallotCommitmentRecord? PreparedBallotCommitment { get; init; }
 
     public static ElectionPreparedBallotCommitmentResult Success(
         ElectionRecord election,
-        ElectionRosterEntryRecord rosterEntry,
-        ElectionCommitmentRegistrationRecord commitmentRegistration,
-        ElectionVoterCeremonyRecord ceremonyRecord,
         ElectionPreparedBallotCommitmentRecord preparedBallotCommitment) =>
         new()
         {
             IsSuccess = true,
             FailureReason = ElectionPreparedBallotCommitmentFailureReason.None,
             Election = election,
-            RosterEntry = rosterEntry,
-            CommitmentRegistration = commitmentRegistration,
-            CeremonyRecord = ceremonyRecord,
             PreparedBallotCommitment = preparedBallotCommitment,
         };
 
@@ -677,26 +656,20 @@ public record ElectionSpoilPreparedBallotResult
     public ElectionSpoilPreparedBallotFailureReason FailureReason { get; init; }
     public string? ErrorMessage { get; init; }
     public ElectionRecord? Election { get; init; }
-    public ElectionRosterEntryRecord? RosterEntry { get; init; }
     public ElectionPreparedBallotCommitmentRecord? PreparedBallotCommitment { get; init; }
     public ElectionSpoiledPreparedBallotRecord? SpoiledPreparedBallot { get; init; }
-    public ElectionVoterCeremonyRecord? CeremonyRecord { get; init; }
 
     public static ElectionSpoilPreparedBallotResult Success(
         ElectionRecord election,
-        ElectionRosterEntryRecord rosterEntry,
         ElectionPreparedBallotCommitmentRecord preparedBallotCommitment,
-        ElectionSpoiledPreparedBallotRecord spoiledPreparedBallot,
-        ElectionVoterCeremonyRecord ceremonyRecord) =>
+        ElectionSpoiledPreparedBallotRecord spoiledPreparedBallot) =>
         new()
         {
             IsSuccess = true,
             FailureReason = ElectionSpoilPreparedBallotFailureReason.None,
             Election = election,
-            RosterEntry = rosterEntry,
             PreparedBallotCommitment = preparedBallotCommitment,
             SpoiledPreparedBallot = spoiledPreparedBallot,
-            CeremonyRecord = ceremonyRecord,
         };
 
     public static ElectionSpoilPreparedBallotResult Failure(

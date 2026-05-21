@@ -131,7 +131,7 @@ public class BlockProductionControlTests
     }
 
     [Fact]
-    public async Task OnBlockFinalized_WithoutPendingTask_ShouldNotThrow()
+    public void OnBlockFinalized_WithoutPendingTask_ShouldNotThrow()
     {
         // Arrange
         using var control = new BlockProductionControl();

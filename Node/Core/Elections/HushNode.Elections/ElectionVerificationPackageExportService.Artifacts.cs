@@ -1209,8 +1209,7 @@ public sealed partial class ElectionVerificationPackageExportService
                 x.CeremonyProfileId,
                 x.PreparedPackageCount,
                 x.SpoiledPackageCount,
-                x.FinalState,
-                x.FinalAcceptedBallotId))
+                x.FinalState))
             .ToArray();
 
     private static IReadOnlyList<ElectionSp04RestrictedPreparedBallotRecord> BuildRestrictedSp04PreparedBallots(
@@ -1221,8 +1220,6 @@ public sealed partial class ElectionVerificationPackageExportService
             .Select(x => new ElectionSp04RestrictedPreparedBallotRecord(
                 x.PreparedBallotId,
                 x.ElectionId,
-                x.OrganizationVoterId,
-                x.LinkedActorPublicAddress,
                 x.PreparedBallotHash,
                 x.BallotDefinitionVersion,
                 x.BallotDefinitionHash,
@@ -1489,25 +1486,9 @@ public sealed partial class ElectionVerificationPackageExportService
                         x.OrganizationVoterId,
                         participation?.ParticipationStatus ?? ElectionParticipationStatus.DidNotVote,
                         checkoff?.Id,
-                        checkoff?.ConsumedAt,
-                        checkoff is null ? null : ComputeAcceptedBallotReference(request, x.OrganizationVoterId));
+                        checkoff?.ConsumedAt);
                 })
                 .ToArray());
-    }
-
-    private static string? ComputeAcceptedBallotReference(
-        ElectionVerificationPackageExportRequest request,
-        string organizationVoterId)
-    {
-        var commitment = (request.CommitmentRegistrations ?? Array.Empty<ElectionCommitmentRegistrationRecord>())
-            .FirstOrDefault(x => string.Equals(x.OrganizationVoterId, organizationVoterId, StringComparison.OrdinalIgnoreCase));
-        if (commitment is null)
-        {
-            return null;
-        }
-
-        return VerificationCanonicalHash.ComputeSha256UpperHex(
-            $"{request.Election.ElectionId}|{organizationVoterId}|{commitment.CommitmentHash}");
     }
 
     private static string ComputeOrganizationVoterIdSetHash(IEnumerable<string> organizationVoterIds)

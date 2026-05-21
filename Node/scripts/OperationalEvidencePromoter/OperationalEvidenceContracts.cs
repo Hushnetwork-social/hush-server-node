@@ -100,6 +100,8 @@ public static class OperationalEvidenceContracts
         "voteChoice",
         "voterEmail",
         "operator contact",
+        "hush-documents",
+        "PrivateServer_ElectronicVoting",
     ];
 
     public static IReadOnlyList<string> ValidateSchemaSet(string schemasRoot)
@@ -321,9 +323,12 @@ public static class OperationalEvidenceContracts
         RequireNonEmptyArray(handoff, "restrictedPackageRefs", errors);
         RequirePresent(handoff, "feat132Refs", errors);
         RequirePresent(handoff, "feat131Refs", errors);
+        RequirePresent(handoff, "feat137Refs", errors);
         RequirePresent(handoff, "readinessRegisterHandoff", errors);
         RequirePresent(handoff, "pilotRehearsalHandoff", errors);
         RequirePresent(handoff, "feat132RegisterPromotionTraceability", errors);
+        ValidateFeat137Refs(handoff["feat137Refs"] as JsonObject, errors);
+
         if (handoff["consumerInstructions"] is not JsonObject consumers ||
             consumers["FEAT-130"] is null ||
             consumers["FEAT-137"] is null ||
@@ -456,6 +461,72 @@ public static class OperationalEvidenceContracts
         }
     }
 
+    private static void ValidateFeat137Refs(JsonObject? refs, List<string> errors)
+    {
+        if (refs is null)
+        {
+            errors.Add("feat137Refs is required.");
+            return;
+        }
+
+        foreach (var propertyName in new[]
+                 {
+                     "proofFamily",
+                     "readinessEvidenceId",
+                     "readinessRegisterVersionId",
+                     "readinessManifestHash",
+                     "proofPackageHash",
+                     "readinessFragmentHash",
+                     "publicSummaryHash",
+                     "failureAction",
+                 })
+        {
+            RequireNonEmptyString(refs, propertyName, "feat137Refs", errors);
+        }
+
+        ValidateFeat137PublicEvidenceRefs(refs["publicEvidenceRefs"] as JsonObject, errors);
+
+        if (GetStringOrDefault(refs, "proofFamily") != "retention_log_privacy")
+        {
+            errors.Add("feat137Refs.proofFamily must be retention_log_privacy.");
+        }
+
+        var failureAction = GetStringOrDefault(refs, "failureAction") ?? string.Empty;
+        if (!failureAction.Contains("downgrade", StringComparison.OrdinalIgnoreCase) ||
+            !failureAction.Contains("block", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("feat137Refs.failureAction must require downgrade and block behavior.");
+        }
+    }
+
+    private static void ValidateFeat137PublicEvidenceRefs(JsonObject? refs, List<string> errors)
+    {
+        if (refs is null)
+        {
+            errors.Add("feat137Refs.publicEvidenceRefs is required.");
+            return;
+        }
+
+        foreach (var propertyName in new[]
+                 {
+                     "repository",
+                     "commit",
+                     "packageRoot",
+                     "proofPackagePath",
+                     "readinessFragmentPath",
+                     "publicSummaryPath",
+                 })
+        {
+            RequireNonEmptyString(refs, propertyName, "feat137Refs.publicEvidenceRefs", errors);
+        }
+
+        var repository = GetStringOrDefault(refs, "repository") ?? string.Empty;
+        if (!repository.StartsWith("https://github.com/Hushnetwork-social/", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("feat137Refs.publicEvidenceRefs.repository must point to a public Hushnetwork-social GitHub repository.");
+        }
+    }
+
     private static void ValidatePlaceholderState(JsonObject run, List<string> errors)
     {
         if (run["placeholderState"] is not JsonObject placeholderState)
@@ -507,6 +578,14 @@ public static class OperationalEvidenceContracts
         if (obj[propertyName] is null)
         {
             errors.Add($"{propertyName} is required.");
+        }
+    }
+
+    private static void RequireNonEmptyString(JsonObject obj, string propertyName, string owner, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(GetStringOrDefault(obj, propertyName)))
+        {
+            errors.Add($"{owner}.{propertyName} is required and must be a non-empty string.");
         }
     }
 

@@ -30,7 +30,6 @@ public record ElectionVoterCeremonyRecord(
     ElectionVoterCeremonyFinalState FinalState,
     DateTime CreatedAt,
     DateTime LastUpdatedAt,
-    Guid? FinalAcceptedBallotId = null,
     Guid? SourceTransactionId = null,
     long? SourceBlockHeight = null,
     Guid? SourceBlockId = null)
@@ -59,8 +58,6 @@ public record ElectionVoterCeremonyRecord(
 public record ElectionPreparedBallotCommitmentRecord(
     Guid PreparedBallotId,
     ElectionId ElectionId,
-    string OrganizationVoterId,
-    string LinkedActorPublicAddress,
     string PreparedBallotHash,
     int BallotDefinitionVersion,
     byte[] BallotDefinitionHash,
@@ -77,16 +74,6 @@ public record ElectionPreparedBallotCommitmentRecord(
     long? SourceBlockHeight = null,
     Guid? SourceBlockId = null)
 {
-    public string OrganizationVoterId { get; init; } =
-        ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
-            OrganizationVoterId,
-            nameof(OrganizationVoterId));
-
-    public string LinkedActorPublicAddress { get; init; } =
-        ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
-            LinkedActorPublicAddress,
-            nameof(LinkedActorPublicAddress));
-
     public string PreparedBallotHash { get; init; } =
         ElectionCommitmentRegistrationRecord.NormalizeRequiredValue(
             PreparedBallotHash,

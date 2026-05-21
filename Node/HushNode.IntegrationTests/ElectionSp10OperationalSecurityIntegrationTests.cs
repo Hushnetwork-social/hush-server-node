@@ -396,7 +396,6 @@ public sealed class ElectionSp10OperationalSecurityIntegrationTests
                 PreparedPackageCount = 2,
                 SpoiledPackageCount = 1,
                 FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
-                FinalAcceptedBallotId = acceptedBallots[0].Id,
                 LastUpdatedAt = openedAt.AddMinutes(4),
             },
             ElectionModelFactory.CreateVoterCeremonyRecord(
@@ -410,7 +409,6 @@ public sealed class ElectionSp10OperationalSecurityIntegrationTests
                 PreparedPackageCount = 2,
                 SpoiledPackageCount = 1,
                 FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
-                FinalAcceptedBallotId = acceptedBallots[1].Id,
                 LastUpdatedAt = openedAt.AddMinutes(4),
             },
         };

@@ -132,8 +132,14 @@ public class ElectionSp04ContractTests
             precommittedAt: now,
             ttl: TimeSpan.FromMinutes(15));
 
-        prepared.OrganizationVoterId.Should().Be("voter-001");
-        prepared.LinkedActorPublicAddress.Should().Be("actor-address");
+        typeof(ElectionPreparedBallotCommitmentRecord)
+            .GetProperty("OrganizationVoterId")
+            .Should()
+            .BeNull("prepared ballot commitments must be anonymous durable records");
+        typeof(ElectionPreparedBallotCommitmentRecord)
+            .GetProperty("LinkedActorPublicAddress")
+            .Should()
+            .BeNull("prepared ballot commitments must not carry linked actor identity");
         prepared.PreparedBallotHash.Should().Be("prepared-hash");
         prepared.ProofStatementId.Should().Be("proof-statement");
         prepared.ExpiresAt.Should().Be(now.AddMinutes(15));

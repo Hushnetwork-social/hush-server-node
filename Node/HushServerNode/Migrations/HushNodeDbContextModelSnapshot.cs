@@ -2433,14 +2433,6 @@ namespace HushServerNode.Migrations
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("LinkedActorPublicAddress")
-                        .IsRequired()
-                        .HasColumnType("varchar(160)");
-
-                    b.Property<string>("OrganizationVoterId")
-                        .IsRequired()
-                        .HasColumnType("varchar(128)");
-
                     b.Property<DateTime>("PrecommittedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2473,12 +2465,12 @@ namespace HushServerNode.Migrations
 
                     b.HasKey("PreparedBallotId");
 
+                    b.HasIndex("ElectionId", "PrecommittedAt");
+
                     b.HasIndex("ElectionId", "PreparedBallotHash")
                         .IsUnique();
 
                     b.HasIndex("ElectionId", "State");
-
-                    b.HasIndex("ElectionId", "OrganizationVoterId", "PrecommittedAt");
 
                     b.ToTable("ElectionPreparedBallotCommitmentRecord", "Elections");
                 });
@@ -3685,9 +3677,6 @@ namespace HushServerNode.Migrations
                     b.Property<string>("ElectionId")
                         .IsRequired()
                         .HasColumnType("varchar(40)");
-
-                    b.Property<Guid?>("FinalAcceptedBallotId")
-                        .HasColumnType("uuid");
 
                     b.Property<string>("FinalState")
                         .IsRequired()
