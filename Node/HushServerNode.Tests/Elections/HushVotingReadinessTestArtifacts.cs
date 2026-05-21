@@ -3,6 +3,7 @@ using OperationalEvidencePromoter;
 using ReadinessRegisterPromoter;
 using SecurityDependencySupportReadinessPromoter;
 using VerifierCorpusPromoter;
+using VoidDecisionReadinessPromoter;
 
 namespace HushServerNode.Tests.Elections;
 
@@ -25,6 +26,9 @@ internal static class HushVotingReadinessTestArtifacts
     public static VerifierCorpusPromotionPaths CreateVerifierCorpusPaths() =>
         VerifierCorpusPromotionPaths.FromWorkspaceRoot(SharedWorkspaceRoot.Value);
 
+    public static VoidDecisionReadinessPromotionPaths CreateVoidDecisionReadinessPaths() =>
+        VoidDecisionReadinessPromotionPaths.FromWorkspaceRoot(SharedWorkspaceRoot.Value);
+
     public static string CreateVerifierCorpusWorkspace()
     {
         var root = CreateEmptyWorkspace("hush-verifier-corpus-");
@@ -42,7 +46,9 @@ internal static class HushVotingReadinessTestArtifacts
         Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "HushVoting-Readiness-Register"));
         Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "Operational-Security", "FEAT-133-Operational-Evidence"));
         Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "Security-Dependency-Support-Readiness"));
+        Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "Void-Decision-Publication-Replacement"));
         Directory.CreateDirectory(Path.Combine(root, "hush-memory-bank", "Overview", "HushVotingReadiness", "Verifier-Corpus"));
+        Directory.CreateDirectory(Path.Combine(root, "hush-memory-bank", "Overview", "HushVotingReadiness", "Void-Decision-Publication-Replacement"));
         Directory.CreateDirectory(Path.Combine(root, "HushVoting-Verifier-Corpus"));
         Directory.CreateDirectory(Path.Combine(root, "hush-server-node"));
         return root;
@@ -60,6 +66,7 @@ internal static class HushVotingReadinessTestArtifacts
         CopyDirectory(Path.Combine(FixtureRoot, "Readiness-Register"), Path.Combine(readinessRoot, "Readiness-Register"));
         CopyDirectory(Path.Combine(FixtureRoot, "Security-Dependency-Support-Readiness"), Path.Combine(readinessRoot, "Security-Dependency-Support-Readiness"));
         CopyDirectory(Path.Combine(FixtureRoot, "Verifier-Corpus"), Path.Combine(readinessRoot, "Verifier-Corpus"));
+        CopyDirectory(Path.Combine(FixtureRoot, "Void-Decision-Publication-Replacement"), Path.Combine(readinessRoot, "Void-Decision-Publication-Replacement"));
         return root;
     }
 

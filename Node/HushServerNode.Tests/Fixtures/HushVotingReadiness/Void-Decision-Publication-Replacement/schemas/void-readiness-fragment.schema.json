@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FEAT-138 Void Readiness Fragment",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "fragmentId",
+    "featureSlice",
+    "sourceGap",
+    "acceptanceGate",
+    "status",
+    "doesNotMutateRegister",
+    "registerPromotionOwner",
+    "evidenceRefs",
+    "focusedVerification",
+    "blockers",
+    "forbiddenMaterialFindings",
+    "dimensionScoreChange",
+    "claimEffect",
+    "residualRisk",
+    "signoff",
+    "promotionInstructions"
+  ]
+}

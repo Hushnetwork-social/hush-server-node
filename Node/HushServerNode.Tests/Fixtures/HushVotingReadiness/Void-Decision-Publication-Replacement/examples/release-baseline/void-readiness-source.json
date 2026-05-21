@@ -1,0 +1,138 @@
+{
+  "schemaVersion": "void-readiness-source.v1",
+  "sourceId": "VOID-SOURCE-FEAT-138-RELEASE-BASELINE",
+  "featureId": "FEAT-138",
+  "acceptanceGate": "AT-RDY-015",
+  "sourceGap": "ElectionOwner void decision and publication replacement",
+  "status": "blocked",
+  "generatedAt": "2026-05-22T00:00:00Z",
+  "evidenceRefs": [
+    {
+      "evidenceId": "FEAT138-SERVER-VOID-CONTRACTS",
+      "path": "hush-server-node/Node/HushServerNode.Tests/Elections",
+      "sha256Hash": "aaf8af580fd360edc4f2d8f12d13f5bde832dd2e2168e45a5b13fa92e74a0b6b",
+      "description": "Owner-only void decision, lifecycle, publication, verifier, cache, and report package tests."
+    },
+    {
+      "evidenceId": "FEAT138-WEB-VOID-SURFACES",
+      "path": "hush-web-client/src/modules/elections",
+      "sha256Hash": "df17d44f8c1c2afc16f74b74d8b10c873a1ff098dd4286a80d95c7d1efc9c71b",
+      "description": "Owner danger zone, void status, retry, public/voter workspace, and superseded artifact UI tests."
+    },
+    {
+      "evidenceId": "FEAT138-PHASE-DOCS",
+      "path": "hush-memory-bank/Features/03_IN_PROGRESS/FEAT-138-electionowner-void-decision-voided-publication-replacement",
+      "sha256Hash": "0db0c4093297d4cc32d59d37510c3f04a2bc2ead98a72ec4af91ed43f1cfcda5",
+      "description": "Feature, phase, design, traceability, and code review records."
+    }
+  ],
+  "focusedVerification": [
+    {
+      "checkId": "FEAT138-SERVER-UNIT",
+      "status": "passed",
+      "command": "dotnet test Node/HushServerNode.Tests/HushServerNode.Tests.csproj --no-build --filter FullyQualifiedName~ElectionVoidContractsTests|FullyQualifiedName~ElectionQueryApplicationServiceTests",
+      "evidenceRef": "FEAT138-SERVER-VOID-CONTRACTS"
+    },
+    {
+      "checkId": "FEAT138-WEB-FOCUSED",
+      "status": "passed",
+      "command": "npm run test:run -- src/modules/elections/VoidElectionPanels.test.tsx src/modules/elections/HushVotingVoterSection.test.tsx src/modules/elections/VerificationPackageStatusSection.test.tsx src/modules/elections/ElectionResultArtifactsSection.test.tsx src/modules/elections/ElectionHubContracts.test.ts src/modules/elections/HushVotingArtifactsSection.test.tsx",
+      "evidenceRef": "FEAT138-WEB-VOID-SURFACES"
+    },
+    {
+      "checkId": "FEAT138-WEB-LINT-BUILD",
+      "status": "passed",
+      "command": "npm run lint -- --quiet && npm run build",
+      "evidenceRef": "FEAT138-WEB-VOID-SURFACES"
+    },
+    {
+      "checkId": "FEAT138-INT",
+      "status": "blocked",
+      "command": "dotnet test Node/HushNode.IntegrationTests/HushNode.IntegrationTests.csproj --filter HV-INT-FEAT-138",
+      "blocker": "Focused TwinTest block is not implemented yet."
+    },
+    {
+      "checkId": "FEAT138-E2E",
+      "status": "blocked",
+      "command": "dotnet test Node/HushNode.IntegrationTests/HushNode.IntegrationTests.csproj --filter HV-E2E-FEAT-138",
+      "blocker": "Focused Playwright E2E block is not implemented yet."
+    }
+  ],
+  "publicArtifactSamples": [
+    {
+      "path": "public/void-status.json",
+      "content": "{\"state\":\"VOID\",\"voidDecisionId\":\"void_decision_sample_001\",\"publicJustification\":\"ElectionOwner voided the election because continuation was not possible.\",\"resultClaim\":\"No final result is claimed for this election.\",\"publicationAttemptId\":\"void_publication_attempt_sample_001\"}"
+    },
+    {
+      "path": "public/void-report-summary.md",
+      "content": "# VOID report summary\n\nThe election was voided by the ElectionOwner. This report replaces the current public status and supersedes earlier result-facing artifacts. No final outcome is claimed."
+    },
+    {
+      "path": "redis/public-void-status-payload.json",
+      "content": "{\"contentType\":\"application/json\",\"sha256Hash\":\"sample-public-status-hash\",\"publicationAttemptId\":\"void_publication_attempt_sample_001\",\"state\":\"VOID\",\"ttlDays\":7}"
+    }
+  ],
+  "scoreEffect": {
+    "dimensionId": "RDY-DIM-009",
+    "previousScore": 4,
+    "acceptedScore": 6,
+    "targetGapAfterAcceptedEvidence": 1,
+    "notZeroReason": "FEAT-138 proves the owner void/replacement slice only. FEAT-139 continuity handling, repeated operating evidence, and runtime proof binding features still determine whether the wider dispute/continuity gap can reach zero."
+  },
+  "claimEffect": {
+    "whenBlocked": "Do not claim AT-RDY-015 is ready for FEAT-130 promotion.",
+    "whenAccepted": "FEAT-130 may evaluate this fragment as FEAT-138 evidence for AT-RDY-015 and RDY-DIM-009 score movement from 4 to 6."
+  },
+  "residualRisk": {
+    "gapTarget": 1,
+    "remainingAfterAcceptance": [
+      "Focused TwinTest and E2E blocks must exist and pass before this fragment can become accepted.",
+      "FEAT-139 still owns the broader dispute and continuity readiness workflow.",
+      "FEAT-143 and FEAT-144 runtime binding evidence must be consumed when those features exist.",
+      "Gap zero still requires repeated operating evidence and final readiness-register promotion."
+    ]
+  },
+  "pba013Handoff": {
+    "actionRegisterRow": "PBA-013",
+    "runtimeActions": [
+      "signed void_election transaction",
+      "signed void publication retry transaction",
+      "lifecycle checkpoint transition to Voided",
+      "current public VOID package/status lookup",
+      "historical superseded package lookup",
+      "Redis public payload cache with durable-storage fallback"
+    ],
+    "unresolvedRuntimeBindingNeeds": [
+      "FEAT-143 deployment proof binding refs when an open or closed election is voided",
+      "FEAT-144 web-client runtime proof binding when defined"
+    ],
+    "draftVoidPolicy": "Draft -> Voided does not require deployment proof binding.",
+    "blockingPolicy": "Missing FEAT-143/FEAT-144 refs must downgrade runtime readiness claims but must not block the owner void decision itself."
+  },
+  "voidEvidenceContract": {
+    "publicEvidence": [
+      "void decision id",
+      "public justification",
+      "previous and resulting lifecycle state",
+      "VOID package/status refs",
+      "election_voided verifier result",
+      "superseded artifact ids and hashes"
+    ],
+    "restrictedEvidence": [
+      "void evidence index",
+      "anomaly bodies and support records",
+      "historical unofficial result when it exists",
+      "operator logs and retry diagnostics"
+    ],
+    "forbiddenInPublicArtifacts": [
+      "private keys",
+      "provider KMS identifiers",
+      "raw support logs",
+      "voter identities",
+      "ballot selections",
+      "accepted ballot set details",
+      "tally totals",
+      "raw trustee shares"
+    ]
+  }
+}

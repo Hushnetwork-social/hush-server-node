@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FEAT-138 Void Readiness Source",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "sourceId",
+    "featureId",
+    "acceptanceGate",
+    "sourceGap",
+    "status",
+    "generatedAt",
+    "evidenceRefs",
+    "focusedVerification",
+    "publicArtifactSamples",
+    "scoreEffect",
+    "claimEffect",
+    "residualRisk",
+    "pba013Handoff",
+    "voidEvidenceContract"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "void-readiness-source.v1" },
+    "featureId": { "const": "FEAT-138" },
+    "acceptanceGate": { "const": "AT-RDY-015" },
+    "evidenceRefs": { "type": "array", "minItems": 1 },
+    "focusedVerification": { "type": "array", "minItems": 1 },
+    "publicArtifactSamples": { "type": "array", "minItems": 1 }
+  }
+}
