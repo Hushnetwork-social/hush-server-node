@@ -5,8 +5,8 @@ try
     if (args.Contains("--help", StringComparer.OrdinalIgnoreCase))
     {
         Console.WriteLine("RetentionLogPrivacyProofPromoter validates and generates retention/log privacy proof packages.");
-        Console.WriteLine("Modes: validate_only, check_only, package.");
-        Console.WriteLine("Options: --workspace-root, --output-root, --generated-at, --validate-only, --mode.");
+        Console.WriteLine("Modes: validate_only, validate_package, check_only, package.");
+        Console.WriteLine("Options: --workspace-root, --output-root, --package-root, --generated-at, --validate-only, --mode.");
         Console.WriteLine("Source refs: --server-source-ref, --memory-bank-source-ref, --documents-source-ref.");
         return 0;
     }
@@ -16,10 +16,37 @@ try
         ? configuredWorkspaceRoot
         : WorkspaceRootFinder.Find(Directory.GetCurrentDirectory());
     var paths = RetentionLogPrivacyProofPromotionPaths.FromWorkspaceRoot(workspaceRoot);
+    var requestedMode = CommandLineArguments.TryGetValue(arguments, "mode", out var mode)
+        ? mode
+        : null;
+    var modeToRun = arguments.ContainsKey("validate-only")
+        ? RetentionLogPrivacyProofPromotionService.ModeValidateOnly
+        : requestedMode;
+
+    if (string.Equals(modeToRun, RetentionLogPrivacyProofPromotionService.ModeValidatePackage, StringComparison.OrdinalIgnoreCase))
+    {
+        var packageRoot = CommandLineArguments.TryGetValue(arguments, "package-root", out var configuredPackageRoot)
+            ? configuredPackageRoot
+            : CommandLineArguments.TryGetValue(arguments, "output-root", out var configuredOutputRoot)
+                ? configuredOutputRoot
+                : paths.PackageOutputRoot;
+        var validationErrors = RetentionLogPrivacyProofPromotionService.ValidateOutputFolder(packageRoot);
+        if (validationErrors.Count > 0)
+        {
+            throw new RetentionLogPrivacyProofPromotionException(
+                "Generated retention/log privacy proof output failed validation.",
+                validationErrors);
+        }
+
+        Console.WriteLine("Validated generated retention/log privacy proof output.");
+        Console.WriteLine($"Package root: {Path.GetFullPath(packageRoot)}");
+        Console.WriteLine("Status: accepted");
+        return 0;
+    }
 
     var options = new RetentionLogPrivacyProofPromotionOptions(
         paths,
-        CommandLineArguments.TryGetValue(arguments, "mode", out var mode) ? mode : null,
+        requestedMode,
         CommandLineArguments.TryGetValue(arguments, "generated-at", out var generatedAt)
             ? RetentionLogPrivacyProofPromotionService.ParseTimestamp(generatedAt)
             : null,

@@ -33,6 +33,7 @@ public sealed class RetentionLogPrivacyProofPromotionException(
 public sealed class RetentionLogPrivacyProofPromotionService
 {
     public const string ModeValidateOnly = "validate_only";
+    public const string ModeValidatePackage = "validate_package";
     public const string ModeCheckOnly = "check_only";
     public const string ModePackage = "package";
 
