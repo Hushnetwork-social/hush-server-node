@@ -325,13 +325,7 @@ public static class OperationalEvidenceContracts
         RequirePresent(handoff, "readinessRegisterHandoff", errors);
         RequirePresent(handoff, "pilotRehearsalHandoff", errors);
         RequirePresent(handoff, "feat132RegisterPromotionTraceability", errors);
-        if (handoff["feat137Refs"] is not JsonObject feat137Refs ||
-            feat137Refs["proofPackageHash"] is null ||
-            feat137Refs["readinessRegisterVersionId"] is null ||
-            feat137Refs["failureAction"] is null)
-        {
-            errors.Add("feat137Refs must include proofPackageHash, readinessRegisterVersionId, and failureAction.");
-        }
+        ValidateFeat137Refs(handoff["feat137Refs"] as JsonObject, errors);
 
         if (handoff["consumerInstructions"] is not JsonObject consumers ||
             consumers["FEAT-130"] is null ||
@@ -465,6 +459,42 @@ public static class OperationalEvidenceContracts
         }
     }
 
+    private static void ValidateFeat137Refs(JsonObject? refs, List<string> errors)
+    {
+        if (refs is null)
+        {
+            errors.Add("feat137Refs is required.");
+            return;
+        }
+
+        foreach (var propertyName in new[]
+                 {
+                     "proofFamily",
+                     "readinessEvidenceId",
+                     "readinessRegisterVersionId",
+                     "readinessManifestHash",
+                     "proofPackageHash",
+                     "readinessFragmentHash",
+                     "publicSummaryHash",
+                     "failureAction",
+                 })
+        {
+            RequireNonEmptyString(refs, propertyName, "feat137Refs", errors);
+        }
+
+        if (GetStringOrDefault(refs, "proofFamily") != "retention_log_privacy")
+        {
+            errors.Add("feat137Refs.proofFamily must be retention_log_privacy.");
+        }
+
+        var failureAction = GetStringOrDefault(refs, "failureAction") ?? string.Empty;
+        if (!failureAction.Contains("downgrade", StringComparison.OrdinalIgnoreCase) ||
+            !failureAction.Contains("block", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("feat137Refs.failureAction must require downgrade and block behavior.");
+        }
+    }
+
     private static void ValidatePlaceholderState(JsonObject run, List<string> errors)
     {
         if (run["placeholderState"] is not JsonObject placeholderState)
@@ -516,6 +546,14 @@ public static class OperationalEvidenceContracts
         if (obj[propertyName] is null)
         {
             errors.Add($"{propertyName} is required.");
+        }
+    }
+
+    private static void RequireNonEmptyString(JsonObject obj, string propertyName, string owner, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(GetStringOrDefault(obj, propertyName)))
+        {
+            errors.Add($"{owner}.{propertyName} is required and must be a non-empty string.");
         }
     }
 

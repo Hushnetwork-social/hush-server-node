@@ -154,6 +154,30 @@ public sealed class OperationalEvidencePromotionServiceTests
     }
 
     [Fact]
+    public void DownstreamHandoff_MissingFeat137ProofHash_FailsContractValidation()
+    {
+        var paths = CreatePaths();
+        var handoff = LoadExample(paths, OperationalEvidenceContracts.HandoffFixture);
+        handoff["feat137Refs"]!.AsObject()["proofPackageHash"] = string.Empty;
+
+        var errors = OperationalEvidenceContracts.ValidateOperationalHandoff(handoff);
+
+        errors.Should().Contain(error => error.Contains("feat137Refs.proofPackageHash", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void DownstreamHandoff_Feat137FailureActionMustDowngradeAndBlock()
+    {
+        var paths = CreatePaths();
+        var handoff = LoadExample(paths, OperationalEvidenceContracts.HandoffFixture);
+        handoff["feat137Refs"]!.AsObject()["failureAction"] = "Record a note only.";
+
+        var errors = OperationalEvidenceContracts.ValidateOperationalHandoff(handoff);
+
+        errors.Should().Contain(error => error.Contains("downgrade and block", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void PublicExamples_ForbiddenMaterial_FailsContractValidation()
     {
         var paths = CreatePaths();
