@@ -62,6 +62,7 @@ enum ElectionLifecycleStateProto {
   Open = 1;
   Closed = 2;
   Finalized = 3;
+  Voided = 4;
 }
 
 enum ElectionClassProto {
@@ -271,6 +272,7 @@ enum OfficialResultVisibilityPolicyProto {
 enum ElectionReportPackageStatusProto {
   ReportPackageGenerationFailed = 0;
   ReportPackageSealed = 1;
+  ReportPackageSupersededByVoid = 2;
 }
 
 enum ElectionReportArtifactKindProto {
@@ -409,6 +411,7 @@ enum ElectionBoundaryArtifactTypeProto {
   CloseArtifact = 1;
   TallyReadyArtifact = 2;
   FinalizeArtifact = 3;
+  VoidArtifact = 4;
 }
 
 enum ElectionWarningCodeProto {

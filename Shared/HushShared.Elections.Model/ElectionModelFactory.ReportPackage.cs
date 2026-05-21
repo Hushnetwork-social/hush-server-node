@@ -109,6 +109,62 @@ public static partial class ElectionModelFactory
             AttemptedByPublicAddress: NormalizeRequiredText(attemptedByPublicAddress, nameof(attemptedByPublicAddress)));
     }
 
+    public static ElectionReportPackageRecord CreateSealedVoidReportPackage(
+        ElectionId electionId,
+        int attemptNumber,
+        Guid voidDecisionId,
+        Guid voidPublicationAttemptId,
+        byte[] frozenEvidenceHash,
+        string frozenEvidenceFingerprint,
+        byte[] packageHash,
+        int artifactCount,
+        string attemptedByPublicAddress,
+        Guid? previousAttemptId = null,
+        DateTime? attemptedAt = null,
+        DateTime? sealedAt = null,
+        Guid? preassignedPackageId = null)
+    {
+        if (attemptNumber < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(attemptNumber), "Attempt number must be at least 1.");
+        }
+
+        if (artifactCount < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(artifactCount), "Artifact count must be at least 1.");
+        }
+
+        var attemptedTimestamp = attemptedAt ?? DateTime.UtcNow;
+        var sealedTimestamp = sealedAt ?? attemptedTimestamp;
+
+        return new ElectionReportPackageRecord(
+            preassignedPackageId ?? Guid.NewGuid(),
+            electionId,
+            attemptNumber,
+            previousAttemptId,
+            FinalizationSessionId: null,
+            TallyReadyArtifactId: null,
+            UnofficialResultArtifactId: null,
+            OfficialResultArtifactId: null,
+            FinalizeArtifactId: null,
+            CloseBoundaryArtifactId: null,
+            CloseEligibilitySnapshotId: null,
+            FinalizationReleaseEvidenceId: null,
+            ElectionReportPackageStatus.Sealed,
+            CloneBytes(frozenEvidenceHash) ?? Array.Empty<byte>(),
+            NormalizeRequiredText(frozenEvidenceFingerprint, nameof(frozenEvidenceFingerprint)),
+            CloneBytes(packageHash) ?? Array.Empty<byte>(),
+            artifactCount,
+            FailureCode: null,
+            FailureReason: null,
+            AttemptedAt: attemptedTimestamp,
+            SealedAt: sealedTimestamp,
+            AttemptedByPublicAddress: NormalizeRequiredText(attemptedByPublicAddress, nameof(attemptedByPublicAddress)),
+            PackageKind: ElectionReportPackageKind.Void,
+            VoidDecisionId: voidDecisionId,
+            VoidPublicationAttemptId: voidPublicationAttemptId);
+    }
+
     public static ElectionReportArtifactRecord CreateReportArtifact(
         Guid reportPackageId,
         ElectionId electionId,

@@ -81,6 +81,37 @@ public interface IElectionsRepository : IRepository
 
     Task SaveReportAccessGrantAsync(ElectionReportAccessGrantRecord reportAccessGrant) => Task.CompletedTask;
 
+    Task<ElectionVoidDecisionRecord?> GetVoidDecisionAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionVoidDecisionRecord?>(null);
+
+    Task<ElectionVoidDecisionRecord?> GetVoidDecisionAsync(Guid voidDecisionId) =>
+        Task.FromResult<ElectionVoidDecisionRecord?>(null);
+
+    Task SaveVoidDecisionAsync(ElectionVoidDecisionRecord voidDecision) => Task.CompletedTask;
+
+    Task UpdateVoidDecisionAsync(ElectionVoidDecisionRecord voidDecision) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionVoidPublicationAttemptRecord>> GetVoidPublicationAttemptsAsync(Guid voidDecisionId) =>
+        Task.FromResult<IReadOnlyList<ElectionVoidPublicationAttemptRecord>>(Array.Empty<ElectionVoidPublicationAttemptRecord>());
+
+    Task<ElectionVoidPublicationAttemptRecord?> GetLatestVoidPublicationAttemptAsync(Guid voidDecisionId) =>
+        Task.FromResult<ElectionVoidPublicationAttemptRecord?>(null);
+
+    Task SaveVoidPublicationAttemptAsync(ElectionVoidPublicationAttemptRecord publicationAttempt) => Task.CompletedTask;
+
+    Task UpdateVoidPublicationAttemptAsync(ElectionVoidPublicationAttemptRecord publicationAttempt) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionVoidSupersededArtifactRecord>> GetVoidSupersededArtifactsAsync(Guid voidDecisionId) =>
+        Task.FromResult<IReadOnlyList<ElectionVoidSupersededArtifactRecord>>(Array.Empty<ElectionVoidSupersededArtifactRecord>());
+
+    Task SaveVoidSupersededArtifactAsync(ElectionVoidSupersededArtifactRecord supersededArtifact) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionReportPackageRecord>> SupersedeReportPackagesByVoidAsync(
+        ElectionId electionId,
+        Guid voidDecisionId,
+        DateTime supersededAt) =>
+        Task.FromResult<IReadOnlyList<ElectionReportPackageRecord>>(Array.Empty<ElectionReportPackageRecord>());
+
     Task<IReadOnlyList<ApprovedProtocolPackageCatalogEntryRecord>> GetApprovedProtocolPackageCatalogEntriesAsync() =>
         Task.FromResult<IReadOnlyList<ApprovedProtocolPackageCatalogEntryRecord>>(Array.Empty<ApprovedProtocolPackageCatalogEntryRecord>());
 

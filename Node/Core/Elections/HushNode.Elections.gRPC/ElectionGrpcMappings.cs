@@ -492,6 +492,7 @@ internal static partial class ElectionGrpcMappings
                 ElectionBoundaryArtifactType.Close => ElectionBoundaryArtifactTypeProto.CloseArtifact,
                 ElectionBoundaryArtifactType.TallyReady => ElectionBoundaryArtifactTypeProto.TallyReadyArtifact,
                 ElectionBoundaryArtifactType.Finalize => ElectionBoundaryArtifactTypeProto.FinalizeArtifact,
+                ElectionBoundaryArtifactType.Void => ElectionBoundaryArtifactTypeProto.VoidArtifact,
                 _ => throw new ArgumentOutOfRangeException(nameof(artifact)),
             },
             LifecycleState = (ElectionLifecycleStateProto)(int)artifact.LifecycleState,
