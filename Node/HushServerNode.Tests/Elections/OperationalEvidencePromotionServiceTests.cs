@@ -149,6 +149,10 @@ public sealed class OperationalEvidencePromotionServiceTests
         handoff["consumerInstructions"]!.AsObject().Should().ContainKey("FEAT-142");
         handoff["feat137Refs"]!.AsObject()["proofPackageHash"]!.GetValue<string>()
             .Should().Be("974a462ff80c84716f0945103a624bc30d0fe7b201d5d3224fd274c42ce4bbfe");
+        handoff["feat137Refs"]!.AsObject()["publicEvidenceRefs"]!.AsObject()["repository"]!.GetValue<string>()
+            .Should().Be("https://github.com/Hushnetwork-social/HushVoting-Readiness-Proof-Packages");
+        handoff["feat137Refs"]!.AsObject()["proofPackagePath"]!.GetValue<string>()
+            .Should().NotContain("hush-documents");
         handoff["feat137Refs"]!.AsObject()["failureAction"]!.GetValue<string>()
             .Should().Contain("downgrade or block retention/log privacy claims");
     }
@@ -175,6 +179,19 @@ public sealed class OperationalEvidencePromotionServiceTests
         var errors = OperationalEvidenceContracts.ValidateOperationalHandoff(handoff);
 
         errors.Should().Contain(error => error.Contains("downgrade and block", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void DownstreamHandoff_PrivateFeat137RepositoryPath_FailsContractValidation()
+    {
+        var paths = CreatePaths();
+        var handoff = LoadExample(paths, OperationalEvidenceContracts.HandoffFixture);
+        handoff["feat137Refs"]!.AsObject()["proofPackagePath"] =
+            "hush-documents/PrivateServer_ElectronicVoting/Retention-Log-Privacy-Proof/package/retention-log-privacy-proof-package.json";
+
+        var errors = OperationalEvidenceContracts.ValidateOperationalHandoff(handoff);
+
+        errors.Should().Contain(error => error.Contains("hush-documents", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

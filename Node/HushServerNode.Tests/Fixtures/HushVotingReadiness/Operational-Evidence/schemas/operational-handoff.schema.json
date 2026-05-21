@@ -19,6 +19,7 @@
     "readinessFragmentRef",
     "feat132Refs",
     "feat131Refs",
+    "feat137Refs",
     "exceptions",
     "warnings",
     "blockers",
@@ -33,6 +34,34 @@
     "consumerInstructions"
   ],
   "properties": {
-    "producerFeature": { "const": "FEAT-133" }
+    "producerFeature": { "const": "FEAT-133" },
+    "feat137Refs": {
+      "type": "object",
+      "required": [
+        "proofFamily",
+        "readinessEvidenceId",
+        "readinessRegisterVersionId",
+        "readinessManifestHash",
+        "publicEvidenceRefs",
+        "proofPackageHash",
+        "readinessFragmentHash",
+        "publicSummaryHash",
+        "failureAction"
+      ],
+      "properties": {
+        "proofFamily": { "const": "retention_log_privacy" },
+        "publicEvidenceRefs": {
+          "type": "object",
+          "required": [
+            "repository",
+            "commit",
+            "packageRoot",
+            "proofPackagePath",
+            "readinessFragmentPath",
+            "publicSummaryPath"
+          ]
+        }
+      }
+    }
   }
 }

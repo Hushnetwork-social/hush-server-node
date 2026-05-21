@@ -100,6 +100,8 @@ public static class OperationalEvidenceContracts
         "voteChoice",
         "voterEmail",
         "operator contact",
+        "hush-documents",
+        "PrivateServer_ElectronicVoting",
     ];
 
     public static IReadOnlyList<string> ValidateSchemaSet(string schemasRoot)
@@ -482,6 +484,8 @@ public static class OperationalEvidenceContracts
             RequireNonEmptyString(refs, propertyName, "feat137Refs", errors);
         }
 
+        ValidateFeat137PublicEvidenceRefs(refs["publicEvidenceRefs"] as JsonObject, errors);
+
         if (GetStringOrDefault(refs, "proofFamily") != "retention_log_privacy")
         {
             errors.Add("feat137Refs.proofFamily must be retention_log_privacy.");
@@ -492,6 +496,34 @@ public static class OperationalEvidenceContracts
             !failureAction.Contains("block", StringComparison.OrdinalIgnoreCase))
         {
             errors.Add("feat137Refs.failureAction must require downgrade and block behavior.");
+        }
+    }
+
+    private static void ValidateFeat137PublicEvidenceRefs(JsonObject? refs, List<string> errors)
+    {
+        if (refs is null)
+        {
+            errors.Add("feat137Refs.publicEvidenceRefs is required.");
+            return;
+        }
+
+        foreach (var propertyName in new[]
+                 {
+                     "repository",
+                     "commit",
+                     "packageRoot",
+                     "proofPackagePath",
+                     "readinessFragmentPath",
+                     "publicSummaryPath",
+                 })
+        {
+            RequireNonEmptyString(refs, propertyName, "feat137Refs.publicEvidenceRefs", errors);
+        }
+
+        var repository = GetStringOrDefault(refs, "repository") ?? string.Empty;
+        if (!repository.StartsWith("https://github.com/Hushnetwork-social/", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("feat137Refs.publicEvidenceRefs.repository must point to a public Hushnetwork-social GitHub repository.");
         }
     }
 
