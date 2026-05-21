@@ -2210,7 +2210,6 @@ public sealed partial class HushVotingPackageVerifier
             .Where(x =>
                 !preparedById.TryGetValue(x.PreparedBallotId, out var preparedRecord) ||
                 preparedRecord.State != HushShared.Elections.Model.ElectionPreparedBallotState.Cast ||
-                preparedRecord.AcceptedBallotId != x.AcceptedBallotId ||
                 preparedRecord.BallotDefinitionVersion != evidence.BallotDefinitionVersion ||
                 !BytesEqual(preparedRecord.BallotDefinitionHash, evidence.BallotDefinitionHash))
             .ToArray();
@@ -2470,18 +2469,6 @@ public sealed partial class HushVotingPackageVerifier
                     ["public_counted_participation_count"] = summary.CountedParticipationCount.ToString(),
                     ["restricted_counted_checkoff_count"] = countedCheckoffCount.ToString(),
                 }));
-        }
-
-        var unsupportedConsumption = checkoff.Entries.FirstOrDefault(x =>
-            x.CheckoffConsumptionId.HasValue &&
-            string.IsNullOrWhiteSpace(x.AcceptedBallotReference));
-        if (unsupportedConsumption is not null)
-        {
-            results.Add(CreateResult(
-                "ELI-010",
-                VerificationCheckStatus.Fail,
-                VerificationResultCodes.EligibilityConsumptionWithoutAcceptedCast,
-                "Restricted checkoff consumption exists without accepted ballot reference evidence."));
         }
 
         return results;

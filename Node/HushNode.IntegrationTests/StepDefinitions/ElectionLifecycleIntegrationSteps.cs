@@ -2486,10 +2486,10 @@ public sealed class ElectionLifecycleIntegrationSteps
             "challenge prepared-ballot commitment");
 
         var preparedView = await GetElectionVotingViewAsync(actor);
-        preparedView.PreparedBallotId.Should().Be(preparedBallotId.ToString());
-        preparedView.PreparedBallotHash.Should().Be(preparedBallotHash);
-        preparedView.PreparedBallotState.Should().Be(PreparedBallotStateProto.PreparedBallotPrepared);
-        preparedView.HasPreparedBallotExpiresAt.Should().BeTrue();
+        preparedView.PreparedBallotId.Should().BeEmpty();
+        preparedView.PreparedBallotHash.Should().BeEmpty();
+        preparedView.HasPreparedBallotExpiresAt.Should().BeFalse();
+        preparedView.ChallengeSatisfied.Should().BeFalse();
 
         var spoiledTranscriptHash = ComputeLowerHexSha256(
             $"spoiled-transcript|{GetElectionId()}|{preparedBallotId:N}|{preparedBallotHash}|{submissionIdempotencyKey}");
@@ -2559,11 +2559,11 @@ public sealed class ElectionLifecycleIntegrationSteps
             "final prepared-ballot commitment");
 
         var preparedView = await GetElectionVotingViewAsync(actor);
-        preparedView.PreparedBallotId.Should().Be(preparedBallotId.ToString());
-        preparedView.PreparedBallotHash.Should().Be(preparedBallotHash);
-        preparedView.PreparedBallotState.Should().Be(PreparedBallotStateProto.PreparedBallotPrepared);
+        preparedView.PreparedBallotId.Should().BeEmpty();
+        preparedView.PreparedBallotHash.Should().BeEmpty();
+        preparedView.ReceiptCommitment.Should().BeEmpty();
         preparedView.ChallengeSatisfied.Should().BeTrue();
-        preparedView.Sp04BlockerCode.Should().BeEmpty();
+        preparedView.Sp04BlockerCode.Should().Be("prepared_package_missing");
 
         return BuildSp04CastBinding(
             preparedBallotId,

@@ -91,8 +91,7 @@ public record ElectionSp05RestrictedCheckoffLedgerEntryRecord(
     string OrganizationVoterId,
     ElectionParticipationStatus ParticipationStatus,
     Guid? CheckoffConsumptionId,
-    DateTime? ConsumedAt,
-    string? AcceptedBallotReference);
+    DateTime? ConsumedAt);
 
 public record ElectionSp05RestrictedDisputesArtifactRecord(
     string ElectionId,

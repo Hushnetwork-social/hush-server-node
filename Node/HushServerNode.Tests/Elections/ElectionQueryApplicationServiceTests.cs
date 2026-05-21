@@ -2094,7 +2094,6 @@ public class ElectionQueryApplicationServiceTests
             PreparedPackageCount = 2,
             SpoiledPackageCount = 1,
             FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
-            FinalAcceptedBallotId = acceptedBallot.Id,
             LastUpdatedAt = acceptedBallot.AcceptedAt,
         };
         var checkoffConsumption = ElectionModelFactory.CreateCheckoffConsumptionRecord(
@@ -2136,15 +2135,15 @@ public class ElectionQueryApplicationServiceTests
         response.RequiredChallengeCount.Should().Be(1);
         response.SpoiledPackageCount.Should().Be(1);
         response.ChallengeSatisfied.Should().BeTrue();
-        response.PreparedBallotId.Should().Be(finalPreparedId.ToString());
-        response.PreparedBallotHash.Should().Be("prepared-final");
-        response.PreparedBallotState.Should().Be(PreparedBallotStateProto.PreparedBallotCast);
-        response.HasPreparedBallotPrecommittedAt.Should().BeTrue();
-        response.HasPreparedBallotExpiresAt.Should().BeTrue();
-        response.ReceiptCommitment.Should().Be("receipt-commitment-final");
-        response.ReceiptCommitmentScheme.Should().Contain("sha256");
+        response.PreparedBallotId.Should().BeEmpty();
+        response.PreparedBallotHash.Should().BeEmpty();
+        response.PreparedBallotState.Should().Be(PreparedBallotStateProto.PreparedBallotPrepared);
+        response.HasPreparedBallotPrecommittedAt.Should().BeFalse();
+        response.HasPreparedBallotExpiresAt.Should().BeFalse();
+        response.ReceiptCommitment.Should().BeEmpty();
+        response.ReceiptCommitmentScheme.Should().BeEmpty();
         response.HasReceiptPublicPackageBinding.Should().BeFalse();
-        response.ReceiptPublicPackageBindingUnavailableReason.Should().Be("election_not_finalized");
+        response.ReceiptPublicPackageBindingUnavailableReason.Should().BeEmpty();
         response.Sp04BlockerCode.Should().Be("final_cast_accepted");
     }
 
@@ -2216,7 +2215,6 @@ public class ElectionQueryApplicationServiceTests
             PreparedPackageCount = 1,
             SpoiledPackageCount = 1,
             FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
-            FinalAcceptedBallotId = acceptedBallot.Id,
             LastUpdatedAt = acceptedBallot.AcceptedAt,
         };
         var packageBinding = ElectionReceiptPublicPackageBindingResult.Available(
@@ -2254,18 +2252,18 @@ public class ElectionQueryApplicationServiceTests
             submissionIdempotencyKey: null);
 
         response.Success.Should().BeTrue();
-        response.ReceiptCommitment.Should().Be(acceptedBallot.ReceiptCommitment);
-        response.PreparedBallotHash.Should().Be(acceptedBallot.PreparedBallotHash);
-        response.HasReceiptPublicPackageBinding.Should().BeTrue();
-        response.ReceiptPublicPackageId.Should().Be(packageBinding.PackageId);
-        response.ReceiptPublicPackageHash.Should().Be(packageBinding.PackageHash);
-        response.ReceiptPublicVerifierProfileId.Should().Be(VerificationProfileIds.PublicAnonymousV1);
+        response.ReceiptCommitment.Should().BeEmpty();
+        response.PreparedBallotHash.Should().BeEmpty();
+        response.HasReceiptPublicPackageBinding.Should().BeFalse();
+        response.ReceiptPublicPackageId.Should().BeEmpty();
+        response.ReceiptPublicPackageHash.Should().BeEmpty();
+        response.ReceiptPublicVerifierProfileId.Should().BeEmpty();
         response.ReceiptPublicPackageBindingUnavailableReason.Should().BeEmpty();
         receiptPackageBindingResolver.Verify(
             x => x.ResolvePublicPackageBindingAsync(
                 It.IsAny<IElectionsRepository>(),
                 It.Is<ElectionRecord>(record => record.ElectionId == election.ElectionId)),
-            Times.Once);
+            Times.Never);
     }
 
     [Fact]
@@ -3605,7 +3603,6 @@ public class ElectionQueryApplicationServiceTests
             PreparedPackageCount = 2,
             SpoiledPackageCount = 1,
             FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
-            FinalAcceptedBallotId = acceptedBallot.Id,
         };
 
         ConfigureReadOnlyRepository(mocker, repo =>

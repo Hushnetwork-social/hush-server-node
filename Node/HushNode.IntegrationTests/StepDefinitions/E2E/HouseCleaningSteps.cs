@@ -127,7 +127,7 @@ internal sealed class HouseCleaningSteps : BrowserStepsBase
     }
 
     [Given(@"Alice has a chat with ""(.*)""")]
-    public async Task GivenAliceHasChatWith(string participantName)
+    public void GivenAliceHasChatWith(string participantName)
     {
         // This would require Bob to create an identity and Alice to initiate a chat
         // For now, store the participant name for later steps
@@ -421,7 +421,7 @@ internal sealed class HouseCleaningSteps : BrowserStepsBase
     }
 
     [Then(@"the cleanup should have been attempted before unload")]
-    public async Task ThenCleanupShouldHaveBeenAttemptedBeforeUnload()
+    public void ThenCleanupShouldHaveBeenAttemptedBeforeUnload()
     {
         // This is best-effort verification - the cleanup may not complete
         // Document that manual testing is recommended for this scenario

@@ -934,7 +934,6 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
     {
         response.RequiredChallengeCount = 1;
 
-        var nowUtc = DateTime.UtcNow;
         var ceremonyRecord = await repository.GetVoterCeremonyRecordAsync(
             electionId,
             selfRosterEntry.OrganizationVoterId);
@@ -950,87 +949,14 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             response.ChallengeSatisfied = ceremonyRecord.SpoiledPackageCount >= response.RequiredChallengeCount;
         }
 
-        var preparedBallots = (await repository.GetPreparedBallotCommitmentsAsync(electionId))
-            .Where(x =>
-                string.Equals(
-                    x.OrganizationVoterId,
-                    selfRosterEntry.OrganizationVoterId,
-                    StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(
-                    x.LinkedActorPublicAddress,
-                    actorPublicAddress,
-                    StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(x => x.PrecommittedAt)
-            .ThenByDescending(x => x.PreparedBallotId)
-            .ToArray();
-
-        var acceptedBallotId = ceremonyOwnedByActor ? ceremonyRecord!.FinalAcceptedBallotId : null;
-        var castPreparedBallot = preparedBallots.FirstOrDefault(x => x.AcceptedBallotId.HasValue);
-        acceptedBallotId ??= castPreparedBallot?.AcceptedBallotId;
-
-        var acceptedBallot = acceptedBallotId.HasValue
-            ? (await repository.GetAcceptedBallotsAsync(electionId)).FirstOrDefault(x => x.Id == acceptedBallotId.Value)
-            : null;
-        var activePreparedBallot = preparedBallots.FirstOrDefault(x =>
-            x.State == ElectionPreparedBallotState.Prepared &&
-            !x.IsExpired(nowUtc));
-        var displayPreparedBallot = acceptedBallot is not null && acceptedBallot.PreparedBallotId.HasValue
-            ? preparedBallots.FirstOrDefault(x => x.PreparedBallotId == acceptedBallot.PreparedBallotId.Value) ??
-              castPreparedBallot
-            : activePreparedBallot ?? preparedBallots.FirstOrDefault();
-
-        if (displayPreparedBallot is not null)
-        {
-            response.PreparedBallotId = displayPreparedBallot.PreparedBallotId.ToString();
-            response.PreparedBallotHash = displayPreparedBallot.PreparedBallotHash;
-            response.PreparedBallotState = MapPreparedBallotState(displayPreparedBallot, nowUtc);
-            response.PreparedBallotPrecommittedAt = ToProtoTimestamp(displayPreparedBallot.PrecommittedAt);
-            response.HasPreparedBallotPrecommittedAt = true;
-            response.PreparedBallotExpiresAt = ToProtoTimestamp(displayPreparedBallot.ExpiresAt);
-            response.HasPreparedBallotExpiresAt = true;
-        }
-
-        if (acceptedBallot is not null)
-        {
-            if (acceptedBallot.PreparedBallotId.HasValue)
-            {
-                response.PreparedBallotId = acceptedBallot.PreparedBallotId.Value.ToString();
-            }
-
-            if (!string.IsNullOrWhiteSpace(acceptedBallot.PreparedBallotHash))
-            {
-                response.PreparedBallotHash = acceptedBallot.PreparedBallotHash;
-            }
-
-            response.ReceiptCommitment = acceptedBallot.ReceiptCommitment ?? string.Empty;
-            response.ReceiptCommitmentScheme = acceptedBallot.ReceiptCommitmentScheme ?? string.Empty;
-        }
-
-        var blocker = ResolveSp04VotingBlocker(response, activePreparedBallot, acceptedBallot);
+        var blocker = ResolveSp04VotingBlocker(response);
         response.Sp04BlockerCode = blocker.Code;
         response.Sp04BlockerMessage = blocker.Message;
     }
 
-    private static PreparedBallotStateProto MapPreparedBallotState(
-        ElectionPreparedBallotCommitmentRecord preparedBallot,
-        DateTime nowUtc)
+    private static (string Code, string Message) ResolveSp04VotingBlocker(GetElectionVotingViewResponse response)
     {
-        if (preparedBallot.State == ElectionPreparedBallotState.Prepared &&
-            preparedBallot.IsExpired(nowUtc))
-        {
-            return PreparedBallotStateProto.PreparedBallotExpired;
-        }
-
-        return (PreparedBallotStateProto)(int)preparedBallot.State;
-    }
-
-    private static (string Code, string Message) ResolveSp04VotingBlocker(
-        GetElectionVotingViewResponse response,
-        ElectionPreparedBallotCommitmentRecord? activePreparedBallot,
-        ElectionAcceptedBallotRecord? acceptedBallot)
-    {
-        if (acceptedBallot is not null ||
-            response.PersonalParticipationStatus == ElectionParticipationStatusProto.ParticipationCountedAsVoted)
+        if (response.PersonalParticipationStatus == ElectionParticipationStatusProto.ParticipationCountedAsVoted)
         {
             return ("final_cast_accepted", "The final ballot has already been accepted.");
         }
@@ -1045,12 +971,7 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             return ("challenge_required", "At least one prepared ballot package must be challenged and spoiled before final cast.");
         }
 
-        if (activePreparedBallot is null)
-        {
-            return ("prepared_package_missing", "A fresh prepared ballot package is required before final cast.");
-        }
-
-        return (string.Empty, string.Empty);
+        return ("prepared_package_missing", "A fresh prepared ballot package is required before final cast.");
     }
 
     public async Task<VerifyElectionReceiptResponse> VerifyElectionReceiptAsync(
@@ -1111,15 +1032,21 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             string.Equals(votingView.ReceiptId, normalizedReceiptId, StringComparison.Ordinal) &&
             string.Equals(votingView.AcceptanceId, normalizedAcceptanceId, StringComparison.Ordinal) &&
             string.Equals(votingView.ServerProof, normalizedServerProof, StringComparison.Ordinal);
-        var hasStoredBoundReceipt = !string.IsNullOrWhiteSpace(votingView.ReceiptCommitment);
-        var preparedBallotMatches =
-            string.IsNullOrWhiteSpace(normalizedPreparedBallotId) ||
-            string.Equals(votingView.PreparedBallotId, normalizedPreparedBallotId, StringComparison.OrdinalIgnoreCase);
-        var receiptCommitmentInAcceptedSet =
-            hasBoundReceiptCommitment &&
-            hasStoredBoundReceipt &&
-            preparedBallotMatches &&
-            string.Equals(votingView.ReceiptCommitment, normalizedReceiptCommitment, StringComparison.Ordinal);
+        ElectionAcceptedBallotRecord? matchedBoundReceipt = null;
+        if (hasBoundReceiptCommitment)
+        {
+            using var receiptUnitOfWork = _unitOfWorkProvider.CreateReadOnly();
+            var receiptRepository = receiptUnitOfWork.GetRepository<IElectionsRepository>();
+            var acceptedBallots = await receiptRepository.GetAcceptedBallotsAsync(electionId);
+            var hasPreparedBallotFilter = Guid.TryParse(normalizedPreparedBallotId, out var preparedBallotIdFilter);
+            matchedBoundReceipt = acceptedBallots.FirstOrDefault(x =>
+                !string.IsNullOrWhiteSpace(x.ReceiptCommitment) &&
+                string.Equals(x.ReceiptCommitment, normalizedReceiptCommitment, StringComparison.Ordinal) &&
+                (!hasPreparedBallotFilter || x.PreparedBallotId == preparedBallotIdFilter));
+        }
+
+        var hasStoredBoundReceipt = matchedBoundReceipt is not null;
+        var receiptCommitmentInAcceptedSet = hasBoundReceiptCommitment && hasStoredBoundReceipt;
 
         return new VerifyElectionReceiptResponse
         {
@@ -1140,9 +1067,9 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
             VerifiedServerProof = votingView.ServerProof ?? string.Empty,
             HasBoundReceipt = hasStoredBoundReceipt,
             ReceiptCommitmentInAcceptedSet = receiptCommitmentInAcceptedSet,
-            VerifiedReceiptCommitment = votingView.ReceiptCommitment ?? string.Empty,
-            VerifiedReceiptCommitmentScheme = votingView.ReceiptCommitmentScheme ?? string.Empty,
-            VerifiedPreparedBallotId = votingView.PreparedBallotId ?? string.Empty,
+            VerifiedReceiptCommitment = matchedBoundReceipt?.ReceiptCommitment ?? string.Empty,
+            VerifiedReceiptCommitmentScheme = matchedBoundReceipt?.ReceiptCommitmentScheme ?? string.Empty,
+            VerifiedPreparedBallotId = matchedBoundReceipt?.PreparedBallotId?.ToString() ?? string.Empty,
         };
     }
 

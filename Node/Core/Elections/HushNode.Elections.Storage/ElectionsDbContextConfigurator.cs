@@ -475,7 +475,6 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.FinalState).HasConversion<string>().HasColumnType("varchar(32)");
             entity.Property(x => x.CreatedAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.LastUpdatedAt).HasColumnType("timestamp with time zone");
-            entity.Property(x => x.FinalAcceptedBallotId).HasColumnType("uuid");
             entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
             entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
             entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
@@ -499,8 +498,6 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
                     x => x.ToString(),
                     x => ElectionIdHandler.CreateFromString(x))
                 .HasColumnType("varchar(40)");
-            entity.Property(x => x.OrganizationVoterId).HasColumnType("varchar(128)");
-            entity.Property(x => x.LinkedActorPublicAddress).HasColumnType("varchar(160)");
             entity.Property(x => x.PreparedBallotHash).HasColumnType("varchar(256)");
             entity.Property(x => x.BallotDefinitionVersion).HasColumnType("integer");
             entity.Property(x => x.BallotDefinitionHash).HasColumnType("bytea");
@@ -518,7 +515,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
 
             entity.HasIndex(x => new { x.ElectionId, x.PreparedBallotHash }).IsUnique();
-            entity.HasIndex(x => new { x.ElectionId, x.OrganizationVoterId, x.PrecommittedAt });
+            entity.HasIndex(x => new { x.ElectionId, x.PrecommittedAt });
             entity.HasIndex(x => new { x.ElectionId, x.State });
         });
     }

@@ -76,14 +76,11 @@ public record ElectionSp04RestrictedCeremonyRecord(
     string CeremonyProfileId,
     int PreparedPackageCount,
     int SpoiledPackageCount,
-    ElectionVoterCeremonyFinalState FinalState,
-    Guid? FinalAcceptedBallotId);
+    ElectionVoterCeremonyFinalState FinalState);
 
 public record ElectionSp04RestrictedPreparedBallotRecord(
     Guid PreparedBallotId,
     ElectionId ElectionId,
-    string OrganizationVoterId,
-    string LinkedActorPublicAddress,
     string PreparedBallotHash,
     int BallotDefinitionVersion,
     byte[] BallotDefinitionHash,

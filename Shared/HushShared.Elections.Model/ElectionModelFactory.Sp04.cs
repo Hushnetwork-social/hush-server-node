@@ -49,7 +49,6 @@ public static partial class ElectionModelFactory
             ElectionVoterCeremonyFinalState.None,
             timestamp,
             timestamp,
-            FinalAcceptedBallotId: null,
             sourceTransactionId,
             sourceBlockHeight,
             sourceBlockId);
@@ -82,8 +81,6 @@ public static partial class ElectionModelFactory
         return new ElectionPreparedBallotCommitmentRecord(
             preparedBallotId ?? Guid.NewGuid(),
             electionId,
-            NormalizeRequiredText(organizationVoterId, nameof(organizationVoterId)),
-            NormalizeRequiredText(linkedActorPublicAddress, nameof(linkedActorPublicAddress)),
             NormalizeRequiredText(preparedBallotHash, nameof(preparedBallotHash)),
             ballotDefinitionVersion,
             CloneBytes(ballotDefinitionHash)!,

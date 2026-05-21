@@ -1021,9 +1021,6 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
             return ElectionPreparedBallotCommitmentResult.Success(
                 updatedElection,
-                rosterEntry,
-                commitmentRegistration,
-                updatedCeremony,
                 preparedBallotCommitment);
         }
         catch (ArgumentException ex)
@@ -1105,13 +1102,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         var preparedBallotCommitment = await repository.GetPreparedBallotCommitmentAsync(request.PreparedBallotId);
         if (preparedBallotCommitment is null ||
-            preparedBallotCommitment.ElectionId != request.ElectionId ||
-            !string.Equals(preparedBallotCommitment.OrganizationVoterId, rosterEntry.OrganizationVoterId, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(preparedBallotCommitment.LinkedActorPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
+            preparedBallotCommitment.ElectionId != request.ElectionId)
         {
             return ElectionSpoilPreparedBallotResult.Failure(
                 ElectionSpoilPreparedBallotFailureReason.PreparedBallotMissing,
-                "The prepared ballot commitment was not found for this election and voter.");
+                "The prepared ballot commitment was not found for this election.");
         }
 
         if (!string.Equals(preparedBallotCommitment.PreparedBallotHash, request.PreparedBallotHash, StringComparison.Ordinal))
@@ -1220,10 +1215,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
             return ElectionSpoilPreparedBallotResult.Success(
                 updatedElection,
-                rosterEntry,
                 updatedPreparedBallot,
-                spoiledPreparedBallot,
-                updatedCeremony);
+                spoiledPreparedBallot);
         }
         catch (ArgumentException ex)
         {
@@ -1441,7 +1434,6 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 var completedCeremony = sp04Validation.CeremonyRecord! with
                 {
                     FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
-                    FinalAcceptedBallotId = acceptedBallot.Id,
                     LastUpdatedAt = acceptedAt,
                 };
 
@@ -1463,10 +1455,6 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
                 return ElectionCastAcceptanceResult.Success(
                     updatedElection,
-                    rosterEntry,
-                    commitmentRegistration,
-                    participationRecord,
-                    newCheckoffConsumption,
                     acceptedBallot,
                     idempotencyRecord,
                     castPreparedBallot);
@@ -3828,13 +3816,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
         var preparedBallotCommitment = await repository.GetPreparedBallotCommitmentAsync(request.PreparedBallotId.Value);
         if (preparedBallotCommitment is null ||
-            preparedBallotCommitment.ElectionId != request.ElectionId ||
-            !string.Equals(preparedBallotCommitment.OrganizationVoterId, rosterEntry.OrganizationVoterId, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(preparedBallotCommitment.LinkedActorPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
+            preparedBallotCommitment.ElectionId != request.ElectionId)
         {
             return Sp04CastValidationOutcome.Fail(ElectionCastAcceptanceResult.Failure(
                 ElectionCastAcceptanceFailureReason.PreparedBallotMissing,
-                "The referenced prepared ballot commitment was not found for this election and voter."));
+                "The referenced prepared ballot commitment was not found for this election."));
         }
 
         if (!string.Equals(preparedBallotCommitment.CeremonyProfileId, ElectionSp04ProfileIds.ChallengeSpoilV1, StringComparison.Ordinal))

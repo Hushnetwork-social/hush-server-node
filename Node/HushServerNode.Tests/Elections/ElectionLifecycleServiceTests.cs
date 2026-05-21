@@ -779,11 +779,11 @@ public class ElectionLifecycleServiceTests
         result.PreparedBallotCommitment.State.Should().Be(ElectionPreparedBallotState.Prepared);
         result.PreparedBallotCommitment.BallotDefinitionHash.Should().Equal(scenario.Election.BallotDefinitionHash);
         result.PreparedBallotCommitment.ExpiresAt.Should().Be(precommittedAt.AddMinutes(15));
-        result.CeremonyRecord.Should().NotBeNull();
-        result.CeremonyRecord!.PreparedPackageCount.Should().Be(1);
-        result.CeremonyRecord.SpoiledPackageCount.Should().Be(0);
         store.PreparedBallotCommitments.Should().ContainSingle();
-        store.VoterCeremonyRecords.Should().ContainSingle();
+        store.VoterCeremonyRecords.Should().ContainSingle()
+            .Which.Should().Match<ElectionVoterCeremonyRecord>(x =>
+                x.PreparedPackageCount == 1 &&
+                x.SpoiledPackageCount == 0);
         store.CheckoffConsumptions.Should().BeEmpty();
         store.ParticipationRecords.Should().BeEmpty();
     }
@@ -857,9 +857,10 @@ public class ElectionLifecycleServiceTests
         result.PreparedBallotCommitment.SpoiledAt.Should().Be(spoiledAt);
         result.SpoiledPreparedBallot.Should().NotBeNull();
         result.SpoiledPreparedBallot!.SpoiledTranscriptHash.Should().Be("spoiled-transcript-hash");
-        result.CeremonyRecord.Should().NotBeNull();
-        result.CeremonyRecord!.PreparedPackageCount.Should().Be(1);
-        result.CeremonyRecord.SpoiledPackageCount.Should().Be(1);
+        store.VoterCeremonyRecords.Should().ContainSingle()
+            .Which.Should().Match<ElectionVoterCeremonyRecord>(x =>
+                x.PreparedPackageCount == 1 &&
+                x.SpoiledPackageCount == 1);
         store.SpoiledPreparedBallots.Should().ContainSingle();
         store.PreparedBallotCommitments.Should().ContainSingle(x =>
             x.PreparedBallotId == preparedBallotId &&
@@ -914,10 +915,6 @@ public class ElectionLifecycleServiceTests
             ballotNullifier: "nullifier-1"));
 
         result.IsSuccess.Should().BeTrue();
-        result.ParticipationRecord.Should().NotBeNull();
-        result.ParticipationRecord!.ParticipationStatus.Should().Be(ElectionParticipationStatus.CountedAsVoted);
-        result.CheckoffConsumption.Should().NotBeNull();
-        result.CheckoffConsumption!.OrganizationVoterId.Should().Be(scenario.RosterEntry.OrganizationVoterId);
         result.AcceptedBallot.Should().NotBeNull();
         result.AcceptedBallot!.BallotNullifier.Should().Be("nullifier-1");
         result.AcceptedBallot.PreparedBallotId.Should().Be(scenario.PreparedBallotCommitment!.PreparedBallotId);
@@ -927,11 +924,13 @@ public class ElectionLifecycleServiceTests
         result.PreparedBallotCommitment.Should().NotBeNull();
         result.PreparedBallotCommitment!.State.Should().Be(ElectionPreparedBallotState.Cast);
         result.PreparedBallotCommitment.AcceptedBallotId.Should().Be(result.AcceptedBallot.Id);
-        result.AcceptedBallot.AcceptedAt.Should().NotBe(result.CheckoffConsumption.ConsumedAt);
+        store.ParticipationRecords.Should().ContainSingle()
+            .Which.ParticipationStatus.Should().Be(ElectionParticipationStatus.CountedAsVoted);
+        store.CheckoffConsumptions.Should().ContainSingle()
+            .Which.OrganizationVoterId.Should().Be(scenario.RosterEntry.OrganizationVoterId);
+        result.AcceptedBallot.AcceptedAt.Should().NotBe(store.CheckoffConsumptions.Single().ConsumedAt);
         result.AcceptedBallot.AcceptedAt.Should().Be(GetProtectedAcceptedBallotTimestamp(scenario.Election));
         result.CastIdempotencyRecord.Should().NotBeNull();
-        store.ParticipationRecords.Should().ContainSingle();
-        store.CheckoffConsumptions.Should().ContainSingle();
         store.AcceptedBallots.Should().ContainSingle();
         store.BallotMemPoolEntries.Should().ContainSingle();
         store.BallotMemPoolEntries[0].QueuedAt.Should().Be(result.AcceptedBallot.AcceptedAt);

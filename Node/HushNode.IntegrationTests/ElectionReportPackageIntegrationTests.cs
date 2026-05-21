@@ -464,28 +464,15 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         voterView.Sp04Required.Should().BeTrue();
         voterView.ChallengeSatisfied.Should().BeTrue();
         voterView.SpoiledPackageCount.Should().BeGreaterThanOrEqualTo(1);
-        voterView.PreparedBallotState.Should().Be(PreparedBallotStateProto.PreparedBallotCast);
-        voterView.PreparedBallotId.Should().NotBeNullOrWhiteSpace();
-        voterView.PreparedBallotHash.Should().NotBeNullOrWhiteSpace();
-        voterView.ReceiptCommitment.Should().NotBeNullOrWhiteSpace();
-        voterView.ReceiptCommitmentScheme.Should().Be(Sp04ReceiptCommitmentScheme);
-        voterView.HasReceiptPublicPackageBinding.Should().BeTrue();
-        voterView.ReceiptPublicPackageId.Should().Be($"HushElectionPackage-{context.ElectionId}");
-        voterView.ReceiptPublicPackageHash.Should().NotBeNullOrWhiteSpace();
-        voterView.ReceiptPublicVerifierProfileId.Should().Be(VerificationProfileIds.PublicAnonymousV1);
+        voterView.PreparedBallotId.Should().BeEmpty();
+        voterView.PreparedBallotHash.Should().BeEmpty();
+        voterView.ReceiptCommitment.Should().BeEmpty();
+        voterView.ReceiptCommitmentScheme.Should().BeEmpty();
+        voterView.HasReceiptPublicPackageBinding.Should().BeFalse();
+        voterView.ReceiptPublicPackageId.Should().BeEmpty();
+        voterView.ReceiptPublicPackageHash.Should().BeEmpty();
+        voterView.ReceiptPublicVerifierProfileId.Should().BeEmpty();
         voterView.ReceiptPublicPackageBindingUnavailableReason.Should().BeEmpty();
-
-        var receiptVerification = await VerifyElectionReceiptAsync(
-            client,
-            context.ElectionId,
-            TestIdentities.Alice,
-            voterView.ReceiptCommitment,
-            voterView.PreparedBallotId);
-        receiptVerification.Success.Should().BeTrue(receiptVerification.ErrorMessage);
-        receiptVerification.HasBoundReceipt.Should().BeTrue();
-        receiptVerification.ReceiptCommitmentInAcceptedSet.Should().BeTrue();
-        receiptVerification.ParticipationCountedAsVoted.Should().BeTrue();
-        receiptVerification.VerifiedPreparedBallotId.Should().Be(voterView.PreparedBallotId);
 
         var ownerStatus = await GetElectionVerificationPackageStatusAsync(
             client,
@@ -504,8 +491,8 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             TestIdentities.Alice,
             ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
         publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
-        publicExport.PackageId.Should().Be(voterView.ReceiptPublicPackageId);
-        publicExport.PackageHash.Should().Be(voterView.ReceiptPublicPackageHash);
+        publicExport.PackageId.Should().Be($"HushElectionPackage-{context.ElectionId}");
+        publicExport.PackageHash.Should().Be(ownerStatus.Status.PublicPackage.PackageHash);
         publicExport.Files.Should().Contain(x => x.RelativePath == VerificationPackageFileNames.Sp04Evidence);
         publicExport.Files.Should().Contain(x => x.RelativePath == VerificationPackageFileNames.Sp04ReceiptCommitments);
         publicExport.Files.Should().NotContain(x =>
@@ -520,15 +507,30 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
 
         var publicReceiptCommitments = ParsePackageJson(publicExport, VerificationPackageFileNames.Sp04ReceiptCommitments);
         publicReceiptCommitments.RootElement.GetArrayLength().Should().Be(2);
-        publicReceiptCommitments.RootElement.EnumerateArray()
-            .Select(x => x.GetProperty("preparedBallotId").GetString())
-            .Should()
-            .Contain(voterView.PreparedBallotId);
-        publicReceiptCommitments.RootElement.EnumerateArray()
-            .Select(x => x.GetProperty("receiptCommitment").GetString())
-            .Should()
-            .Contain(voterView.ReceiptCommitment);
+        var publicReceiptEntries = publicReceiptCommitments.RootElement.EnumerateArray()
+            .Select(x => new
+            {
+                PreparedBallotId = x.GetProperty("preparedBallotId").GetString() ?? string.Empty,
+                ReceiptCommitment = x.GetProperty("receiptCommitment").GetString() ?? string.Empty,
+            })
+            .ToArray();
+        publicReceiptEntries.Should().OnlyContain(x =>
+            !string.IsNullOrWhiteSpace(x.PreparedBallotId) &&
+            !string.IsNullOrWhiteSpace(x.ReceiptCommitment));
+        var receiptEntry = publicReceiptEntries[0];
         publicReceiptCommitments.Dispose();
+
+        var receiptVerification = await VerifyElectionReceiptAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            receiptEntry.ReceiptCommitment,
+            receiptEntry.PreparedBallotId);
+        receiptVerification.Success.Should().BeTrue(receiptVerification.ErrorMessage);
+        receiptVerification.HasBoundReceipt.Should().BeTrue();
+        receiptVerification.ReceiptCommitmentInAcceptedSet.Should().BeTrue();
+        receiptVerification.ParticipationCountedAsVoted.Should().BeTrue();
+        receiptVerification.VerifiedPreparedBallotId.Should().Be(receiptEntry.PreparedBallotId);
 
         var publicPayload = string.Join(
             '\n',
@@ -570,7 +572,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             VerificationPackageFileNames.RestrictedSp04PreparedBallotCommitments);
         restrictedPrepared.Should().Contain("\"state\": \"spoiled\"");
         restrictedPrepared.Should().Contain("\"state\": \"cast\"");
-        restrictedPrepared.Should().Contain(voterView.PreparedBallotId);
+        restrictedPrepared.Should().Contain(receiptEntry.PreparedBallotId);
         restrictedPrepared.Should().NotContain("plaintext-choice");
         restrictedPrepared.Should().NotContain("final-randomness");
     }
@@ -1314,10 +1316,10 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         prepareResponse.Successfull.Should().BeTrue(prepareResponse.Message);
 
         var preparedView = await GetElectionVotingViewAsync(client, electionId, actor);
-        preparedView.PreparedBallotId.Should().Be(challengePreparedBallotId.ToString());
-        preparedView.PreparedBallotHash.Should().Be(challengePreparedHash);
-        preparedView.PreparedBallotState.Should().Be(PreparedBallotStateProto.PreparedBallotPrepared);
-        preparedView.HasPreparedBallotExpiresAt.Should().BeTrue();
+        preparedView.PreparedBallotId.Should().BeEmpty();
+        preparedView.PreparedBallotHash.Should().BeEmpty();
+        preparedView.HasPreparedBallotExpiresAt.Should().BeFalse();
+        preparedView.ChallengeSatisfied.Should().BeFalse();
 
         var spoiledTranscriptHash = ComputeLowerHexSha256(
             $"spoiled-transcript|{electionId}|{challengePreparedBallotId:N}|{challengePreparedHash}|{submissionIdempotencyKey}");
@@ -1386,11 +1388,11 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         prepareResponse.Successfull.Should().BeTrue(prepareResponse.Message);
 
         var preparedView = await GetElectionVotingViewAsync(client, electionId, actor);
-        preparedView.PreparedBallotId.Should().Be(preparedBallotId.ToString());
-        preparedView.PreparedBallotHash.Should().Be(preparedBallotHash);
-        preparedView.PreparedBallotState.Should().Be(PreparedBallotStateProto.PreparedBallotPrepared);
+        preparedView.PreparedBallotId.Should().BeEmpty();
+        preparedView.PreparedBallotHash.Should().BeEmpty();
+        preparedView.ReceiptCommitment.Should().BeEmpty();
         preparedView.ChallengeSatisfied.Should().BeTrue();
-        preparedView.Sp04BlockerCode.Should().BeEmpty();
+        preparedView.Sp04BlockerCode.Should().Be("prepared_package_missing");
 
         return new Sp04CastBinding(
             preparedBallotId,
