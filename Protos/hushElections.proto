@@ -2476,6 +2476,11 @@ message GetElectionVotingViewResponse {
   bool ChallengeSatisfied = 40;
   string Sp04BlockerCode = 41;
   string Sp04BlockerMessage = 42;
+  bool HasReceiptPublicPackageBinding = 43;
+  string ReceiptPublicPackageId = 44;
+  string ReceiptPublicPackageHash = 45;
+  string ReceiptPublicVerifierProfileId = 46;
+  string ReceiptPublicPackageBindingUnavailableReason = 47;
 }
 
 message GetElectionCeremonyActionViewRequest {

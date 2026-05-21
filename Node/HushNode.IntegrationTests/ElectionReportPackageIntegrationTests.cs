@@ -440,6 +440,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "FEAT-114")]
+    [Trait("Category", "HV-INT-FEAT-136")]
     public async Task ChallengeSpoilCeremony_WithBoundReceipt_ExportsPublicAndRestrictedSp04Evidence()
     {
         var client = await StartClientAsync();
@@ -468,6 +469,11 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         voterView.PreparedBallotHash.Should().NotBeNullOrWhiteSpace();
         voterView.ReceiptCommitment.Should().NotBeNullOrWhiteSpace();
         voterView.ReceiptCommitmentScheme.Should().Be(Sp04ReceiptCommitmentScheme);
+        voterView.HasReceiptPublicPackageBinding.Should().BeTrue();
+        voterView.ReceiptPublicPackageId.Should().Be($"HushElectionPackage-{context.ElectionId}");
+        voterView.ReceiptPublicPackageHash.Should().NotBeNullOrWhiteSpace();
+        voterView.ReceiptPublicVerifierProfileId.Should().Be(VerificationProfileIds.PublicAnonymousV1);
+        voterView.ReceiptPublicPackageBindingUnavailableReason.Should().BeEmpty();
 
         var receiptVerification = await VerifyElectionReceiptAsync(
             client,
@@ -498,6 +504,8 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             TestIdentities.Alice,
             ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
         publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
+        publicExport.PackageId.Should().Be(voterView.ReceiptPublicPackageId);
+        publicExport.PackageHash.Should().Be(voterView.ReceiptPublicPackageHash);
         publicExport.Files.Should().Contain(x => x.RelativePath == VerificationPackageFileNames.Sp04Evidence);
         publicExport.Files.Should().Contain(x => x.RelativePath == VerificationPackageFileNames.Sp04ReceiptCommitments);
         publicExport.Files.Should().NotContain(x =>
