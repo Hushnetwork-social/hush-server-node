@@ -161,7 +161,9 @@ public partial class ElectionQueryApplicationService
         bool acceptedTrustee,
         bool isDesignatedAuditor,
         ElectionReportPackageRecord? latestReportPackage,
-        ProtocolPackageBindingRecord? protocolPackageBinding)
+        ProtocolPackageBindingRecord? protocolPackageBinding,
+        ElectionVoidDecisionRecord? voidDecision,
+        ElectionVoidPublicationAttemptRecord? currentVoidPublicationAttempt)
     {
         var context = new VerificationPackageContext(
             election,
@@ -197,8 +199,8 @@ public partial class ElectionQueryApplicationService
             PublicationProofSessions: [],
             PublicationProofTranscripts: [],
             PublicationWitnessDeletionReceipts: [],
-            VoidDecision: null,
-            CurrentVoidPublicationAttempt: null,
+            VoidDecision: voidDecision,
+            CurrentVoidPublicationAttempt: currentVoidPublicationAttempt,
             VoidSupersededArtifacts: [],
             AdminOnlyProtectedTallyEnvelope: null);
 
@@ -2649,9 +2651,10 @@ public partial class ElectionQueryApplicationService
     private static ElectionVoidPublicationStatusView BuildVoidPublicationStatus(VerificationPackageContext context)
     {
         var attempt = context.CurrentVoidPublicationAttempt;
+        var decision = context.VoidDecision;
         var view = new ElectionVoidPublicationStatusView
         {
-            VoidDecisionId = context.VoidDecision?.Id.ToString() ?? string.Empty,
+            VoidDecisionId = decision?.Id.ToString() ?? string.Empty,
             PublicationAttemptId = attempt?.Id.ToString() ?? string.Empty,
             Status = attempt is null
                 ? ElectionVoidPublicationAttemptStatusProto.VoidPublicationPending
@@ -2671,6 +2674,25 @@ public partial class ElectionQueryApplicationService
             CanRetry = context.IsOwner &&
                 (attempt?.Status is ElectionVoidPublicationAttemptStatus.GenerationFailed or null ||
                  context.LatestReportPackage?.Status == ElectionReportPackageStatus.GenerationFailed),
+            PublicJustification = decision?.PublicJustification ?? string.Empty,
+            PublicJustificationHash = decision?.PublicJustificationHash is { Length: > 0 } publicJustificationHash
+                ? Convert.ToHexString(publicJustificationHash).ToLowerInvariant()
+                : string.Empty,
+            PreviousLifecycleState = decision is null
+                ? ElectionLifecycleStateProto.Draft
+                : (ElectionLifecycleStateProto)(int)decision.PreviousLifecycleState,
+            ResultingLifecycleState = decision is null
+                ? ElectionLifecycleStateProto.Voided
+                : (ElectionLifecycleStateProto)(int)decision.ResultingLifecycleState,
+            ActorPublicAddress = decision?.ActorPublicAddress ?? string.Empty,
+            ActorRole = decision?.ActorRole ?? string.Empty,
+            SourceTransactionId = decision?.SourceTransactionId?.ToString() ?? string.Empty,
+            SourceBlockHeight = decision?.SourceBlockHeight ?? 0,
+            SourceBlockId = decision?.SourceBlockId?.ToString() ?? string.Empty,
+            DecidedAt = decision is null
+                ? new Timestamp()
+                : Timestamp.FromDateTime(DateTime.SpecifyKind(decision.DecidedAt, DateTimeKind.Utc)),
+            HasDecidedAt = decision is not null,
         };
 
         return view;

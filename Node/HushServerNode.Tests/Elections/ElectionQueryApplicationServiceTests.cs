@@ -4332,6 +4332,18 @@ public class ElectionQueryApplicationServiceTests
         response.Status.VoidPublicationStatus.Status.Should().Be(
             ElectionVoidPublicationAttemptStatusProto.VoidPublicationSealed);
         response.Status.VoidPublicationStatus.VoidPackageArtifactRef.Should().Be(VerificationPackageFileNames.VoidPackageArchive);
+        response.Status.VoidPublicationStatus.PublicJustification.Should().Be(decision.PublicJustification);
+        response.Status.VoidPublicationStatus.PreviousLifecycleState.Should().Be(ElectionLifecycleStateProto.Open);
+        response.Status.VoidPublicationStatus.ResultingLifecycleState.Should().Be(ElectionLifecycleStateProto.Voided);
+        response.Status.VoidPublicationStatus.SourceTransactionId.Should().Be(decision.SourceTransactionId.ToString());
+
+        var resultView = await sut.GetElectionResultViewAsync(election.ElectionId, "owner-address");
+
+        resultView.Success.Should().BeTrue();
+        resultView.LatestReportPackage.PackageKind.Should().Be(ElectionReportPackageKindProto.ReportPackageVoid);
+        resultView.VerificationPackageStatus.Status.Should().Be(ElectionVerificationPackageStatusProto.VerificationPackageVoided);
+        resultView.VerificationPackageStatus.VoidPublicationStatus.PublicJustification.Should().Be(decision.PublicJustification);
+        resultView.VerificationPackageStatus.VoidPublicationStatus.SourceTransactionId.Should().Be(decision.SourceTransactionId.ToString());
     }
 
     [Fact]

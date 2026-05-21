@@ -1062,6 +1062,17 @@ message ElectionVoidPublicationStatusView {
   bool HasSealedAt = 12;
   string AttemptedByPublicAddress = 13;
   bool CanRetry = 14;
+  string PublicJustification = 15;
+  string PublicJustificationHash = 16;
+  ElectionLifecycleStateProto PreviousLifecycleState = 17;
+  ElectionLifecycleStateProto ResultingLifecycleState = 18;
+  string ActorPublicAddress = 19;
+  string ActorRole = 20;
+  string SourceTransactionId = 21;
+  int64 SourceBlockHeight = 22;
+  string SourceBlockId = 23;
+  google.protobuf.Timestamp DecidedAt = 24;
+  bool HasDecidedAt = 25;
 }
 
 message ElectionVerificationPackageStatusView {
