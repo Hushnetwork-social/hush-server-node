@@ -3140,6 +3140,12 @@ namespace HushNode.Elections.Storage.Migrations
                     b.Property<byte[]>("PackageHash")
                         .HasColumnType("bytea");
 
+                    b.Property<string>("PackageKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(32)")
+                        .HasDefaultValue("FinalResult");
+
                     b.Property<Guid?>("PreviousAttemptId")
                         .HasColumnType("uuid");
 
@@ -3150,18 +3156,34 @@ namespace HushNode.Elections.Storage.Migrations
                         .IsRequired()
                         .HasColumnType("varchar(32)");
 
-                    b.Property<Guid>("TallyReadyArtifactId")
+                    b.Property<DateTime?>("SupersededAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SupersededByVoidDecisionId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("UnofficialResultArtifactId")
+                    b.Property<Guid?>("TallyReadyArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("UnofficialResultArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("VoidDecisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("VoidPublicationAttemptId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("VoidDecisionId");
 
                     b.HasIndex("ElectionId", "AttemptNumber")
                         .IsUnique();
 
                     b.HasIndex("ElectionId", "AttemptedAt");
+
+                    b.HasIndex("ElectionId", "PackageKind");
 
                     b.HasIndex("ElectionId", "Status");
 
@@ -3537,6 +3559,205 @@ namespace HushNode.Elections.Storage.Migrations
                     b.HasIndex("ElectionId", "TrusteeUserAddress");
 
                     b.ToTable("ElectionTrusteeInvitationRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionVoidDecisionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorPublicAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("ActorRole")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<Guid?>("CurrentPublicationAttemptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("EvidenceReferences")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("PreviousLifecycleState")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("PublicJustification")
+                        .IsRequired()
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<byte[]>("PublicJustificationHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("PublicationStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("ResultingLifecycleState")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<long?>("SourceBlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("SourceBlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SourceTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("VoidBoundaryArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ElectionId")
+                        .IsUnique();
+
+                    b.HasIndex("SourceTransactionId")
+                        .IsUnique();
+
+                    b.HasIndex("VoidBoundaryArtifactId")
+                        .IsUnique();
+
+                    b.HasIndex("ElectionId", "DecidedAt");
+
+                    b.ToTable("ElectionVoidDecisionRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionVoidPublicationAttemptRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ArtifactCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("AttemptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AttemptedByPublicAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("FailureCode")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("FailureReason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FrozenEvidenceFingerprint")
+                        .IsRequired()
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<byte[]>("FrozenEvidenceHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("PackageHash")
+                        .HasColumnType("bytea");
+
+                    b.Property<Guid?>("PreviousAttemptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PublicStatusArtifactRef")
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<Guid?>("ReportPackageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("SealedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<Guid>("VoidDecisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("VoidPackageArtifactRef")
+                        .HasColumnType("varchar(512)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportPackageId");
+
+                    b.HasIndex("ElectionId", "AttemptNumber")
+                        .IsUnique();
+
+                    b.HasIndex("ElectionId", "Status");
+
+                    b.HasIndex("VoidDecisionId", "AttemptNumber")
+                        .IsUnique();
+
+                    b.ToTable("ElectionVoidPublicationAttemptRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionVoidSupersededArtifactRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ArtifactHash")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("ArtifactKind")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("ArtifactRef")
+                        .IsRequired()
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<Guid?>("ReportArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ReportPackageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("SupersededAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("VoidDecisionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ElectionId");
+
+                    b.HasIndex("ReportArtifactId");
+
+                    b.HasIndex("ReportPackageId");
+
+                    b.HasIndex("VoidDecisionId", "ArtifactKind");
+
+                    b.ToTable("ElectionVoidSupersededArtifactRecord", "Elections");
                 });
 
             modelBuilder.Entity("HushShared.Elections.Model.ElectionVoterCeremonyRecord", b =>

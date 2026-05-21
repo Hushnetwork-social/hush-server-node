@@ -1258,6 +1258,7 @@ public static partial class ElectionModelFactory
             ElectionBoundaryArtifactType.Close => ElectionLifecycleState.Closed,
             ElectionBoundaryArtifactType.TallyReady => ElectionLifecycleState.Closed,
             ElectionBoundaryArtifactType.Finalize => ElectionLifecycleState.Finalized,
+            ElectionBoundaryArtifactType.Void => ElectionLifecycleState.Voided,
             _ => throw new ArgumentOutOfRangeException(nameof(artifactType), artifactType, "Unsupported boundary artifact type."),
         };
 

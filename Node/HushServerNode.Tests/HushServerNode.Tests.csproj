@@ -46,6 +46,7 @@
     <ProjectReference Include="..\scripts\SecurityDependencySupportReadinessPromoter\SecurityDependencySupportReadinessPromoter.csproj" />
     <ProjectReference Include="..\scripts\VerifierCorpusPromoter\VerifierCorpusPromoter.csproj" />
     <ProjectReference Include="..\scripts\RetentionLogPrivacyProofPromoter\RetentionLogPrivacyProofPromoter.csproj" />
+    <ProjectReference Include="..\scripts\VoidDecisionReadinessPromoter\VoidDecisionReadinessPromoter.csproj" />
   </ItemGroup>
 
   <ItemGroup>

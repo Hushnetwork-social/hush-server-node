@@ -206,9 +206,11 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task<ElectionReportPackageRecord?> GetLatestReportPackageAsync(ElectionId electionId) =>
         await Context.ElectionReportPackages
-            .Where(x => x.ElectionId == electionId)
-            .OrderByDescending(x => x.AttemptNumber)
-            .ThenByDescending(x => x.AttemptedAt)
+            .Where(x =>
+                x.ElectionId == electionId &&
+                x.Status != ElectionReportPackageStatus.SupersededByVoid)
+            .OrderByDescending(x => x.AttemptedAt)
+            .ThenByDescending(x => x.AttemptNumber)
             .FirstOrDefaultAsync();
 
     public async Task<ElectionReportPackageRecord?> GetSealedReportPackageAsync(ElectionId electionId) =>
@@ -272,6 +274,117 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task SaveReportAccessGrantAsync(ElectionReportAccessGrantRecord reportAccessGrant) =>
         await Context.ElectionReportAccessGrants.AddAsync(reportAccessGrant);
+
+    public async Task<ElectionVoidDecisionRecord?> GetVoidDecisionAsync(ElectionId electionId) =>
+        await Context.ElectionVoidDecisions
+            .FirstOrDefaultAsync(x => x.ElectionId == electionId);
+
+    public async Task<ElectionVoidDecisionRecord?> GetVoidDecisionAsync(Guid voidDecisionId) =>
+        await Context.ElectionVoidDecisions
+            .FirstOrDefaultAsync(x => x.Id == voidDecisionId);
+
+    public async Task SaveVoidDecisionAsync(ElectionVoidDecisionRecord voidDecision)
+    {
+        var existing = Context.ElectionVoidDecisions.Local
+            .FirstOrDefault(x => x.ElectionId == voidDecision.ElectionId);
+
+        existing ??= await Context.ElectionVoidDecisions
+            .FirstOrDefaultAsync(x => x.ElectionId == voidDecision.ElectionId);
+
+        if (existing is not null)
+        {
+            throw new InvalidOperationException("A void decision already exists for this election.");
+        }
+
+        await Context.ElectionVoidDecisions.AddAsync(voidDecision);
+    }
+
+    public async Task UpdateVoidDecisionAsync(ElectionVoidDecisionRecord voidDecision)
+    {
+        var existing = await Context.ElectionVoidDecisions
+            .FirstOrDefaultAsync(x => x.Id == voidDecision.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(voidDecision);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionVoidPublicationAttemptRecord>> GetVoidPublicationAttemptsAsync(Guid voidDecisionId) =>
+        await Context.ElectionVoidPublicationAttempts
+            .Where(x => x.VoidDecisionId == voidDecisionId)
+            .OrderBy(x => x.AttemptNumber)
+            .ThenBy(x => x.AttemptedAt)
+            .ToListAsync();
+
+    public async Task<ElectionVoidPublicationAttemptRecord?> GetLatestVoidPublicationAttemptAsync(Guid voidDecisionId) =>
+        await Context.ElectionVoidPublicationAttempts
+            .Where(x => x.VoidDecisionId == voidDecisionId)
+            .OrderByDescending(x => x.AttemptNumber)
+            .ThenByDescending(x => x.AttemptedAt)
+            .FirstOrDefaultAsync();
+
+    public async Task SaveVoidPublicationAttemptAsync(ElectionVoidPublicationAttemptRecord publicationAttempt) =>
+        await Context.ElectionVoidPublicationAttempts.AddAsync(publicationAttempt);
+
+    public async Task UpdateVoidPublicationAttemptAsync(ElectionVoidPublicationAttemptRecord publicationAttempt)
+    {
+        var existing = await Context.ElectionVoidPublicationAttempts
+            .FirstOrDefaultAsync(x => x.Id == publicationAttempt.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(publicationAttempt);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionVoidSupersededArtifactRecord>> GetVoidSupersededArtifactsAsync(Guid voidDecisionId) =>
+        await Context.ElectionVoidSupersededArtifacts
+            .Where(x => x.VoidDecisionId == voidDecisionId)
+            .OrderBy(x => x.SupersededAt)
+            .ThenBy(x => x.ArtifactKind)
+            .ToListAsync();
+
+    public async Task SaveVoidSupersededArtifactAsync(ElectionVoidSupersededArtifactRecord supersededArtifact) =>
+        await Context.ElectionVoidSupersededArtifacts.AddAsync(supersededArtifact);
+
+    public async Task<IReadOnlyList<ElectionReportPackageRecord>> SupersedeReportPackagesByVoidAsync(
+        ElectionId electionId,
+        Guid voidDecisionId,
+        DateTime supersededAt)
+    {
+        var persistedPackages = await Context.ElectionReportPackages
+            .Where(x =>
+                x.ElectionId == electionId &&
+                x.Status != ElectionReportPackageStatus.SupersededByVoid)
+            .OrderBy(x => x.AttemptNumber)
+            .ThenBy(x => x.AttemptedAt)
+            .ToListAsync();
+
+        var currentPackagesById = persistedPackages.ToDictionary(x => x.Id);
+        foreach (var localPackage in Context.ElectionReportPackages.Local.Where(x =>
+                     x.ElectionId == electionId &&
+                     x.Status != ElectionReportPackageStatus.SupersededByVoid))
+        {
+            currentPackagesById[localPackage.Id] = localPackage;
+        }
+
+        var currentPackages = currentPackagesById.Values
+            .OrderBy(x => x.AttemptNumber)
+            .ThenBy(x => x.AttemptedAt)
+            .ToList();
+
+        var superseded = currentPackages
+            .Select(x => x.SupersedeByVoid(voidDecisionId, supersededAt))
+            .ToArray();
+
+        for (var index = 0; index < currentPackages.Count; index++)
+        {
+            Context.Entry(currentPackages[index]).CurrentValues.SetValues(superseded[index]);
+        }
+
+        return superseded;
+    }
 
     public async Task<IReadOnlyList<ApprovedProtocolPackageCatalogEntryRecord>> GetApprovedProtocolPackageCatalogEntriesAsync() =>
         await Context.ApprovedProtocolPackageCatalogEntries

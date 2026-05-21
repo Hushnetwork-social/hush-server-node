@@ -492,6 +492,7 @@ internal static partial class ElectionGrpcMappings
                 ElectionBoundaryArtifactType.Close => ElectionBoundaryArtifactTypeProto.CloseArtifact,
                 ElectionBoundaryArtifactType.TallyReady => ElectionBoundaryArtifactTypeProto.TallyReadyArtifact,
                 ElectionBoundaryArtifactType.Finalize => ElectionBoundaryArtifactTypeProto.FinalizeArtifact,
+                ElectionBoundaryArtifactType.Void => ElectionBoundaryArtifactTypeProto.VoidArtifact,
                 _ => throw new ArgumentOutOfRangeException(nameof(artifact)),
             },
             LifecycleState = (ElectionLifecycleStateProto)(int)artifact.LifecycleState,
@@ -1128,6 +1129,14 @@ internal static partial class ElectionGrpcMappings
                 : new Timestamp(),
             HasSealedAt = reportPackage.SealedAt.HasValue,
             AttemptedByPublicAddress = reportPackage.AttemptedByPublicAddress,
+            PackageKind = (ElectionReportPackageKindProto)(int)reportPackage.PackageKind,
+            VoidDecisionId = reportPackage.VoidDecisionId?.ToString() ?? string.Empty,
+            VoidPublicationAttemptId = reportPackage.VoidPublicationAttemptId?.ToString() ?? string.Empty,
+            SupersededByVoidDecisionId = reportPackage.SupersededByVoidDecisionId?.ToString() ?? string.Empty,
+            SupersededAt = reportPackage.SupersededAt.HasValue
+                ? ToTimestamp(reportPackage.SupersededAt.Value)
+                : new Timestamp(),
+            HasSupersededAt = reportPackage.SupersededAt.HasValue,
         };
 
     public static ElectionReportArtifactView ToProto(this ElectionReportArtifactRecord reportArtifact) =>

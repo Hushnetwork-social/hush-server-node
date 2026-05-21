@@ -6,6 +6,7 @@ public enum ElectionLifecycleState
     Open = 1,
     Closed = 2,
     Finalized = 3,
+    Voided = 4,
 }
 
 public enum ElectionClass
@@ -172,6 +173,7 @@ public enum ElectionBoundaryArtifactType
     Close = 1,
     TallyReady = 2,
     Finalize = 3,
+    Void = 4,
 }
 
 public enum ElectionGovernedActionType
@@ -300,6 +302,43 @@ public enum ElectionReportPackageStatus
 {
     GenerationFailed = 0,
     Sealed = 1,
+    SupersededByVoid = 2,
+}
+
+public enum ElectionReportPackageKind
+{
+    FinalResult = 0,
+    Void = 1,
+}
+
+public enum ElectionVoidEvidenceReferenceKind
+{
+    InternalAnomalyThread = 0,
+    InternalTrusteeContinuity = 1,
+    InternalOperationalIncident = 2,
+    InternalSupportRecord = 3,
+    ExternalGovernance = 4,
+}
+
+public enum ElectionVoidPublicationAttemptStatus
+{
+    Pending = 0,
+    GenerationFailed = 1,
+    Sealed = 2,
+}
+
+public enum ElectionVoidSupersededArtifactKind
+{
+    ReportPackage = 0,
+    ReportArtifact = 1,
+    VerificationPackage = 2,
+    PublicStatus = 3,
+}
+
+public enum ElectionVoidEvidenceVisibility
+{
+    Public = 0,
+    RestrictedOwnerAuditor = 1,
 }
 
 public enum ElectionReportArtifactKind
@@ -318,18 +357,29 @@ public enum ElectionReportArtifactKind
     MachineOutcomeDeterminationProjection = 11,
     MachineDisputeReviewIndexProjection = 12,
     MachineRestrictedAnomalyIntakeManifest = 13,
+    MachineVoidDecision = 14,
+    HumanVoidSummary = 15,
+    MachineVoidPublicStatus = 16,
+    MachineVoidSupersededArtifacts = 17,
+    MachineVoidVerifierResult = 18,
+    HumanRestrictedVoidEvidenceIndex = 19,
+    MachineRestrictedHistoricalUnofficialResult = 20,
+    MachineVoidPackageManifest = 21,
+    MachineVoidPackageArchive = 22,
 }
 
 public enum ElectionReportArtifactFormat
 {
     Markdown = 0,
     Json = 1,
+    Binary = 2,
 }
 
 public enum ElectionReportArtifactAccessScope
 {
     OwnerAuditorOnly = 0,
     OwnerAuditorTrustee = 1,
+    Public = 2,
 }
 
 public enum ElectionReportAccessGrantRole

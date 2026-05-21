@@ -126,6 +126,15 @@ public partial class ElectionQueryApplicationService
             };
         }
 
+        if (context.IsVoidElection)
+        {
+            return BuildVoidExportResponse(
+                context,
+                normalizedActorPublicAddress,
+                packageView,
+                domainPackageView);
+        }
+
         var result = _verificationPackageExportService.Export(BuildExportRequest(context, domainPackageView));
         var response = new ExportElectionVerificationPackageResponse
         {
@@ -152,7 +161,9 @@ public partial class ElectionQueryApplicationService
         bool acceptedTrustee,
         bool isDesignatedAuditor,
         ElectionReportPackageRecord? latestReportPackage,
-        ProtocolPackageBindingRecord? protocolPackageBinding)
+        ProtocolPackageBindingRecord? protocolPackageBinding,
+        ElectionVoidDecisionRecord? voidDecision,
+        ElectionVoidPublicationAttemptRecord? currentVoidPublicationAttempt)
     {
         var context = new VerificationPackageContext(
             election,
@@ -188,6 +199,9 @@ public partial class ElectionQueryApplicationService
             PublicationProofSessions: [],
             PublicationProofTranscripts: [],
             PublicationWitnessDeletionReceipts: [],
+            VoidDecision: voidDecision,
+            CurrentVoidPublicationAttempt: currentVoidPublicationAttempt,
+            VoidSupersededArtifacts: [],
             AdminOnlyProtectedTallyEnvelope: null);
 
         return BuildVerificationPackageStatusView(context, includePackageHashes: false);
@@ -209,6 +223,24 @@ public partial class ElectionQueryApplicationService
             string.Equals(x.TrusteeUserAddress, actorPublicAddress, StringComparison.OrdinalIgnoreCase));
         var isDesignatedAuditor = reportAccessGrant?.GrantRole == ElectionReportAccessGrantRole.DesignatedAuditor;
         var latestReportPackage = await repository.GetLatestReportPackageAsync(election.ElectionId);
+        var voidDecision = election.LifecycleState == ElectionLifecycleState.Voided
+            ? await repository.GetVoidDecisionAsync(election.ElectionId)
+            : null;
+        var voidPublicationAttempts = voidDecision is null
+            ? Array.Empty<ElectionVoidPublicationAttemptRecord>()
+            : await repository.GetVoidPublicationAttemptsAsync(voidDecision.Id);
+        var currentVoidPublicationAttempt = ResolveCurrentVoidPublicationAttempt(
+            voidDecision,
+            voidPublicationAttempts);
+        if (currentVoidPublicationAttempt?.ReportPackageId is Guid voidReportPackageId)
+        {
+            latestReportPackage = await repository.GetReportPackageAsync(voidReportPackageId) ??
+                latestReportPackage;
+        }
+
+        var voidSupersededArtifacts = voidDecision is null
+            ? Array.Empty<ElectionVoidSupersededArtifactRecord>()
+            : await repository.GetVoidSupersededArtifactsAsync(voidDecision.Id);
         var protocolPackageBinding = IsVerificationPackageVisible(isOwner, acceptedTrustee, isDesignatedAuditor)
             ? await repository.GetSealedProtocolPackageBindingAsync(election.ElectionId) ??
               await repository.GetLatestProtocolPackageBindingAsync(election.ElectionId)
@@ -292,13 +324,45 @@ public partial class ElectionQueryApplicationService
             publicationProofSessions,
             publicationProofTranscripts,
             publicationWitnessDeletionReceipts,
+            voidDecision,
+            currentVoidPublicationAttempt,
+            voidSupersededArtifacts,
             adminOnlyProtectedTallyEnvelope);
+    }
+
+    private static ElectionVoidPublicationAttemptRecord? ResolveCurrentVoidPublicationAttempt(
+        ElectionVoidDecisionRecord? voidDecision,
+        IReadOnlyList<ElectionVoidPublicationAttemptRecord> attempts)
+    {
+        if (voidDecision is null || attempts.Count == 0)
+        {
+            return null;
+        }
+
+        if (voidDecision.CurrentPublicationAttemptId is Guid currentAttemptId)
+        {
+            var currentAttempt = attempts.FirstOrDefault(x => x.Id == currentAttemptId);
+            if (currentAttempt is not null)
+            {
+                return currentAttempt;
+            }
+        }
+
+        return attempts
+            .OrderByDescending(x => x.AttemptNumber)
+            .ThenByDescending(x => x.AttemptedAt)
+            .FirstOrDefault();
     }
 
     private ElectionVerificationPackageStatusView BuildVerificationPackageStatusView(
         VerificationPackageContext context,
         bool includePackageHashes)
     {
+        if (context.IsVoidElection)
+        {
+            return BuildVoidVerificationPackageStatusView(context, includePackageHashes);
+        }
+
         var publicPackage = BuildPackageAvailability(
             context,
             VerificationPackageView.PublicAnonymous,
@@ -350,6 +414,34 @@ public partial class ElectionQueryApplicationService
         }
 
         return view;
+    }
+
+    private ElectionVerificationPackageStatusView BuildVoidVerificationPackageStatusView(
+        VerificationPackageContext context,
+        bool includePackageHashes)
+    {
+        var publicPackage = BuildPackageAvailability(
+            context,
+            VerificationPackageView.PublicAnonymous,
+            includePackageHashes);
+        var restrictedPackage = BuildPackageAvailability(
+            context,
+            VerificationPackageView.RestrictedOwnerAuditor,
+            includePackageHashes);
+        var status = ResolvePackageStatus(context);
+
+        return new ElectionVerificationPackageStatusView
+        {
+            ElectionId = context.Election.ElectionId.ToString(),
+            ActorPublicAddress = context.ActorPublicAddress,
+            IsVisible = context.CanViewPackageStatus,
+            Status = status,
+            StatusMessage = ResolvePackageStatusMessage(status, context),
+            PublicPackage = publicPackage,
+            RestrictedPackage = restrictedPackage,
+            LastVerifierResult = BuildVoidVerifierResultSummary(context),
+            VoidPublicationStatus = BuildVoidPublicationStatus(context),
+        };
     }
 
     private static ElectionSp06EvidenceStatusView BuildSp06EvidenceStatus(
@@ -1933,6 +2025,11 @@ public partial class ElectionQueryApplicationService
         VerificationPackageView packageView,
         bool includePackageHash)
     {
+        if (context.IsVoidElection)
+        {
+            return BuildVoidPackageAvailability(context, packageView, includePackageHash);
+        }
+
         var verifierProfileId = ResolveVerifierProfileId(packageView);
         var protoView = packageView.ToProto();
         var blocker = ResolveExportBlocker(context, packageView);
@@ -1987,6 +2084,147 @@ public partial class ElectionQueryApplicationService
             PackageHash = packageHash,
             CanRetry = false,
         };
+    }
+
+    private ElectionVerificationPackageExportAvailabilityView BuildVoidPackageAvailability(
+        VerificationPackageContext context,
+        VerificationPackageView packageView,
+        bool includePackageHash)
+    {
+        var verifierProfileId = ResolveVerifierProfileId(packageView);
+        var protoView = packageView.ToProto();
+        var blocker = ResolveExportBlocker(context, packageView);
+        if (blocker != ElectionVerificationPackageBlockerProto.VerificationPackageBlockerNone)
+        {
+            return new ElectionVerificationPackageExportAvailabilityView
+            {
+                PackageView = protoView,
+                VerifierProfileId = verifierProfileId,
+                IsAvailable = false,
+                Blocker = blocker,
+                BlockerCode = ResolveBlockerCode(blocker, context),
+                Message = ResolveBlockerMessage(blocker, packageView, context),
+                CanRetry = CanRetryPackageExport(blocker, context),
+                PackageKind = ElectionReportPackageKindProto.ReportPackageVoid,
+                VoidDecisionId = context.VoidDecision?.Id.ToString() ?? string.Empty,
+                VoidPublicationAttemptId = context.CurrentVoidPublicationAttempt?.Id.ToString() ?? string.Empty,
+                PublicStatusArtifactRef = context.CurrentVoidPublicationAttempt?.PublicStatusArtifactRef ?? string.Empty,
+                VoidPackageArtifactRef = context.CurrentVoidPublicationAttempt?.VoidPackageArtifactRef ?? string.Empty,
+            };
+        }
+
+        var packageHash = includePackageHash
+            ? ResolveVoidPackageHash(context)
+            : string.Empty;
+
+        return new ElectionVerificationPackageExportAvailabilityView
+        {
+            PackageView = protoView,
+            VerifierProfileId = verifierProfileId,
+            IsAvailable = true,
+            Blocker = ElectionVerificationPackageBlockerProto.VerificationPackageBlockerNone,
+            BlockerCode = string.Empty,
+            Message = packageView == VerificationPackageView.RestrictedOwnerAuditor
+                ? "Restricted owner/auditor VOID verification package export is available."
+                : "Public VOID verification package export is available.",
+            PackageId = context.LatestReportPackage?.Id.ToString() ??
+                context.CurrentVoidPublicationAttempt?.ReportPackageId?.ToString() ??
+                string.Empty,
+            PackageHash = packageHash,
+            CanRetry = false,
+            PackageKind = ElectionReportPackageKindProto.ReportPackageVoid,
+            VoidDecisionId = context.VoidDecision?.Id.ToString() ?? string.Empty,
+            VoidPublicationAttemptId = context.CurrentVoidPublicationAttempt?.Id.ToString() ?? string.Empty,
+            PublicStatusArtifactRef = context.CurrentVoidPublicationAttempt?.PublicStatusArtifactRef ?? string.Empty,
+            VoidPackageArtifactRef = context.CurrentVoidPublicationAttempt?.VoidPackageArtifactRef ?? string.Empty,
+        };
+    }
+
+    private static ExportElectionVerificationPackageResponse BuildVoidExportResponse(
+        VerificationPackageContext context,
+        string actorPublicAddress,
+        ElectionVerificationPackageViewProto packageView,
+        VerificationPackageView domainPackageView)
+    {
+        var files = BuildVoidPackageFiles(context, domainPackageView);
+        var response = new ExportElectionVerificationPackageResponse
+        {
+            Success = files.Count > 0,
+            ErrorMessage = files.Count > 0
+                ? string.Empty
+                : "The VOID publication package has no exportable artifacts.",
+            ElectionId = context.Election.ElectionId.ToString(),
+            ActorPublicAddress = actorPublicAddress,
+            PackageView = packageView,
+            Blocker = files.Count > 0
+                ? ElectionVerificationPackageBlockerProto.VerificationPackageBlockerNone
+                : ElectionVerificationPackageBlockerProto.VerificationPackageBlockerMissingPackage,
+            ResultCode = files.Count > 0
+                ? VerificationResultCodes.ElectionVoided
+                : VerificationResultCodes.PackageManifestMissingArtifact,
+            PackageId = context.LatestReportPackage?.Id.ToString() ??
+                context.CurrentVoidPublicationAttempt?.ReportPackageId?.ToString() ??
+                string.Empty,
+            PackageHash = ResolveVoidPackageHash(context),
+        };
+
+        response.Files.AddRange(files.Select(x => x.ToProto()));
+        return response;
+    }
+
+    private static IReadOnlyList<ElectionVerificationPackageFile> BuildVoidPackageFiles(
+        VerificationPackageContext context,
+        VerificationPackageView packageView)
+    {
+        var includeRestricted = packageView == VerificationPackageView.RestrictedOwnerAuditor &&
+            context.CanExportRestrictedPackage;
+
+        return context.ReportArtifacts
+            .Where(x => IsVoidPackageArtifactExportable(x, includeRestricted))
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.FileName, StringComparer.Ordinal)
+            .Select(x => new ElectionVerificationPackageFile(
+                x.FileName,
+                x.MediaType,
+                ResolveVoidArtifactVisibility(x),
+                DecodeReportArtifactContent(x)))
+            .ToArray();
+    }
+
+    private static bool IsVoidPackageArtifactExportable(
+        ElectionReportArtifactRecord artifact,
+        bool includeRestricted)
+    {
+        if (VerificationPrivacyBoundary.IsRestrictedArtifactPath(artifact.FileName))
+        {
+            return includeRestricted;
+        }
+
+        return artifact.AccessScope == ElectionReportArtifactAccessScope.Public ||
+            includeRestricted && artifact.AccessScope == ElectionReportArtifactAccessScope.OwnerAuditorOnly;
+    }
+
+    private static VerificationArtifactVisibility ResolveVoidArtifactVisibility(ElectionReportArtifactRecord artifact) =>
+        artifact.AccessScope == ElectionReportArtifactAccessScope.Public &&
+        !VerificationPrivacyBoundary.IsRestrictedArtifactPath(artifact.FileName)
+            ? VerificationArtifactVisibility.Public
+            : VerificationArtifactVisibility.Restricted;
+
+    private static byte[] DecodeReportArtifactContent(ElectionReportArtifactRecord artifact)
+    {
+        if (artifact.Format == ElectionReportArtifactFormat.Binary)
+        {
+            try
+            {
+                return Convert.FromBase64String(artifact.Content);
+            }
+            catch (FormatException)
+            {
+                return System.Text.Encoding.UTF8.GetBytes(artifact.Content);
+            }
+        }
+
+        return System.Text.Encoding.UTF8.GetBytes(artifact.Content);
     }
 
     private ElectionVerificationPackageExportRequest BuildExportRequest(
@@ -2133,6 +2371,27 @@ public partial class ElectionQueryApplicationService
             return ElectionVerificationPackageStatusProto.VerificationPackageNotVisible;
         }
 
+        if (context.IsVoidElection)
+        {
+            if (context.CurrentVoidPublicationAttempt?.Status == ElectionVoidPublicationAttemptStatus.GenerationFailed ||
+                context.LatestReportPackage?.Status == ElectionReportPackageStatus.GenerationFailed)
+            {
+                return ElectionVerificationPackageStatusProto.VerificationPackageExportFailed;
+            }
+
+            if (context.CurrentVoidPublicationAttempt?.Status == ElectionVoidPublicationAttemptStatus.Sealed &&
+                context.LatestReportPackage is
+                {
+                    Status: ElectionReportPackageStatus.Sealed,
+                    PackageKind: ElectionReportPackageKind.Void,
+                })
+            {
+                return ElectionVerificationPackageStatusProto.VerificationPackageVoided;
+            }
+
+            return ElectionVerificationPackageStatusProto.VerificationPackageMissing;
+        }
+
         if (context.Election.LifecycleState != ElectionLifecycleState.Finalized)
         {
             return ElectionVerificationPackageStatusProto.VerificationPackageNotFinalized;
@@ -2175,6 +2434,27 @@ public partial class ElectionQueryApplicationService
             !context.CanExportRestrictedPackage)
         {
             return ElectionVerificationPackageBlockerProto.VerificationPackageBlockerUnauthorized;
+        }
+
+        if (context.IsVoidElection)
+        {
+            if (context.CurrentVoidPublicationAttempt?.Status == ElectionVoidPublicationAttemptStatus.GenerationFailed ||
+                context.LatestReportPackage?.Status == ElectionReportPackageStatus.GenerationFailed)
+            {
+                return ElectionVerificationPackageBlockerProto.VerificationPackageBlockerExportFailed;
+            }
+
+            if (context.CurrentVoidPublicationAttempt?.Status != ElectionVoidPublicationAttemptStatus.Sealed ||
+                context.LatestReportPackage is not
+                {
+                    Status: ElectionReportPackageStatus.Sealed,
+                    PackageKind: ElectionReportPackageKind.Void,
+                })
+            {
+                return ElectionVerificationPackageBlockerProto.VerificationPackageBlockerMissingPackage;
+            }
+
+            return ElectionVerificationPackageBlockerProto.VerificationPackageBlockerNone;
         }
 
         if (context.Election.LifecycleState != ElectionLifecycleState.Finalized)
@@ -2241,7 +2521,9 @@ public partial class ElectionQueryApplicationService
             ElectionVerificationPackageBlockerProto.VerificationPackageBlockerUnauthorized =>
                 VerificationResultCodes.RestrictedExportUnauthorized,
             ElectionVerificationPackageBlockerProto.VerificationPackageBlockerExportFailed =>
-                context.LatestReportPackage?.FailureCode ?? VerificationResultCodes.PackageManifestMissingArtifact,
+                context.CurrentVoidPublicationAttempt?.FailureCode ??
+                context.LatestReportPackage?.FailureCode ??
+                VerificationResultCodes.PackageManifestMissingArtifact,
             _ => string.Empty,
         };
 
@@ -2256,7 +2538,9 @@ public partial class ElectionQueryApplicationService
             ElectionVerificationPackageBlockerProto.VerificationPackageBlockerNotFinalized =>
                 "The election must be finalized before a verification package can be exported.",
             ElectionVerificationPackageBlockerProto.VerificationPackageBlockerMissingPackage =>
-                context.LatestReportPackage?.Status == ElectionReportPackageStatus.Sealed
+                context.IsVoidElection
+                    ? "A sealed VOID publication package is required before the VOID verification package can be exported."
+                    : context.LatestReportPackage?.Status == ElectionReportPackageStatus.Sealed
                     ? "A sealed ballot definition is required before verification package export."
                     : "A sealed report package is required before verification package export.",
             ElectionVerificationPackageBlockerProto.VerificationPackageBlockerProtocolRefs =>
@@ -2265,7 +2549,9 @@ public partial class ElectionQueryApplicationService
                 when packageView == VerificationPackageView.RestrictedOwnerAuditor =>
                 "Restricted package export is limited to the owner/admin and designated auditor roles.",
             ElectionVerificationPackageBlockerProto.VerificationPackageBlockerExportFailed =>
-                context.LatestReportPackage?.FailureReason ?? "Verification package export is currently blocked.",
+                context.CurrentVoidPublicationAttempt?.FailureReason ??
+                context.LatestReportPackage?.FailureReason ??
+                "Verification package export is currently blocked.",
             _ => string.Empty,
         };
 
@@ -2284,17 +2570,23 @@ public partial class ElectionQueryApplicationService
             ElectionVerificationPackageStatusProto.VerificationPackageNotFinalized =>
                 "Verification package export becomes available after finalization.",
             ElectionVerificationPackageStatusProto.VerificationPackageMissing =>
-                context.LatestReportPackage?.Status == ElectionReportPackageStatus.Sealed
+                context.IsVoidElection
+                    ? "A sealed VOID publication package is missing for this voided election."
+                    : context.LatestReportPackage?.Status == ElectionReportPackageStatus.Sealed
                     ? "A sealed ballot definition is missing for this finalized election."
                     : "A sealed report package is missing for this finalized election.",
             ElectionVerificationPackageStatusProto.VerificationPackageProtocolRefsBlocked =>
                 "Sealed Protocol Omega package refs are missing or incompatible.",
             ElectionVerificationPackageStatusProto.VerificationPackageExportFailed =>
-                context.LatestReportPackage?.FailureReason ?? "The latest report package attempt failed.",
+                context.CurrentVoidPublicationAttempt?.FailureReason ??
+                context.LatestReportPackage?.FailureReason ??
+                "The latest report package attempt failed.",
             ElectionVerificationPackageStatusProto.VerificationPackageReady =>
                 context.ProtocolPackageBinding?.PackageApprovalStatus == ProtocolPackageApprovalStatus.DraftPrivate
                     ? "Verification package export is available with a DraftPrivate Protocol Omega package reference."
                     : "Verification package export is available.",
+            ElectionVerificationPackageStatusProto.VerificationPackageVoided =>
+                "The election was voided and a public VOID verification package is available.",
             _ => string.Empty,
         };
 
@@ -2312,6 +2604,7 @@ public partial class ElectionQueryApplicationService
         new()
         {
             OverallStatus = ElectionVerifierOverallStatusProto.ElectionVerifierNotAvailable,
+            ResultCode = VerifierResultNotAvailableCode,
             VerifierVersion = string.Empty,
             PackageHash = string.Empty,
             PassedCount = 0,
@@ -2321,6 +2614,99 @@ public partial class ElectionQueryApplicationService
             Message = "No verifier output has been recorded for this package.",
             HasVerifiedAt = false,
         };
+
+    private static ElectionVerifierResultSummaryView BuildVoidVerifierResultSummary(VerificationPackageContext context)
+    {
+        var packageHash = ResolveVoidPackageHash(context);
+        if (ResolvePackageStatus(context) != ElectionVerificationPackageStatusProto.VerificationPackageVoided)
+        {
+            var unavailable = BuildVerifierResultNotAvailable();
+            unavailable.PackageHash = packageHash;
+            unavailable.Message = "VOID verifier output becomes available after the VOID package is sealed.";
+            return unavailable;
+        }
+
+        var verifiedAt = context.CurrentVoidPublicationAttempt?.SealedAt ??
+            context.LatestReportPackage?.SealedAt ??
+            context.CurrentVoidPublicationAttempt?.AttemptedAt ??
+            context.LatestReportPackage?.AttemptedAt ??
+            DateTime.UtcNow;
+
+        return new ElectionVerifierResultSummaryView
+        {
+            OverallStatus = ElectionVerifierOverallStatusProto.ElectionVerifierWarn,
+            ResultCode = VerificationResultCodes.ElectionVoided,
+            VerifierVersion = "hushvoting-void-publication-v1",
+            PackageHash = packageHash,
+            PassedCount = 1,
+            WarningCount = 1,
+            FailedCount = 0,
+            NotApplicableCount = 0,
+            Message = "Election is VOID. Previous final-result packages, if any, are superseded by the VOID package.",
+            VerifiedAt = ToTimestamp(verifiedAt),
+            HasVerifiedAt = true,
+        };
+    }
+
+    private static ElectionVoidPublicationStatusView BuildVoidPublicationStatus(VerificationPackageContext context)
+    {
+        var attempt = context.CurrentVoidPublicationAttempt;
+        var decision = context.VoidDecision;
+        var view = new ElectionVoidPublicationStatusView
+        {
+            VoidDecisionId = decision?.Id.ToString() ?? string.Empty,
+            PublicationAttemptId = attempt?.Id.ToString() ?? string.Empty,
+            Status = attempt is null
+                ? ElectionVoidPublicationAttemptStatusProto.VoidPublicationPending
+                : (ElectionVoidPublicationAttemptStatusProto)(int)attempt.Status,
+            AttemptNumber = attempt?.AttemptNumber ?? 0,
+            PublicStatusArtifactRef = attempt?.PublicStatusArtifactRef ?? string.Empty,
+            VoidPackageArtifactRef = attempt?.VoidPackageArtifactRef ?? string.Empty,
+            PackageHash = ResolveVoidPackageHash(context),
+            FailureCode = attempt?.FailureCode ?? context.LatestReportPackage?.FailureCode ?? string.Empty,
+            FailureReason = attempt?.FailureReason ?? context.LatestReportPackage?.FailureReason ?? string.Empty,
+            AttemptedAt = attempt is null ? new Timestamp() : ToTimestamp(attempt.AttemptedAt),
+            SealedAt = attempt?.SealedAt.HasValue == true
+                ? ToTimestamp(attempt.SealedAt.Value)
+                : new Timestamp(),
+            HasSealedAt = attempt?.SealedAt.HasValue == true,
+            AttemptedByPublicAddress = attempt?.AttemptedByPublicAddress ?? string.Empty,
+            CanRetry = context.IsOwner &&
+                (attempt?.Status is ElectionVoidPublicationAttemptStatus.GenerationFailed or null ||
+                 context.LatestReportPackage?.Status == ElectionReportPackageStatus.GenerationFailed),
+            PublicJustification = decision?.PublicJustification ?? string.Empty,
+            PublicJustificationHash = decision?.PublicJustificationHash is { Length: > 0 } publicJustificationHash
+                ? Convert.ToHexString(publicJustificationHash).ToLowerInvariant()
+                : string.Empty,
+            PreviousLifecycleState = decision is null
+                ? ElectionLifecycleStateProto.Draft
+                : (ElectionLifecycleStateProto)(int)decision.PreviousLifecycleState,
+            ResultingLifecycleState = decision is null
+                ? ElectionLifecycleStateProto.Voided
+                : (ElectionLifecycleStateProto)(int)decision.ResultingLifecycleState,
+            ActorPublicAddress = decision?.ActorPublicAddress ?? string.Empty,
+            ActorRole = decision?.ActorRole ?? string.Empty,
+            SourceTransactionId = decision?.SourceTransactionId?.ToString() ?? string.Empty,
+            SourceBlockHeight = decision?.SourceBlockHeight ?? 0,
+            SourceBlockId = decision?.SourceBlockId?.ToString() ?? string.Empty,
+            DecidedAt = decision is null
+                ? new Timestamp()
+                : Timestamp.FromDateTime(DateTime.SpecifyKind(decision.DecidedAt, DateTimeKind.Utc)),
+            HasDecidedAt = decision is not null,
+        };
+
+        return view;
+    }
+
+    private static string ResolveVoidPackageHash(VerificationPackageContext context)
+    {
+        var hash = context.CurrentVoidPublicationAttempt?.PackageHash ??
+            context.LatestReportPackage?.PackageHash;
+
+        return hash is { Length: > 0 }
+            ? Convert.ToHexString(hash).ToLowerInvariant()
+            : string.Empty;
+    }
 
     private sealed record VerificationPackageContext(
         ElectionRecord Election,
@@ -2356,9 +2742,15 @@ public partial class ElectionQueryApplicationService
         IReadOnlyList<ElectionPublicationProofSessionRecord> PublicationProofSessions,
         IReadOnlyList<ElectionPublicationProofTranscriptRecord> PublicationProofTranscripts,
         IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord> PublicationWitnessDeletionReceipts,
+        ElectionVoidDecisionRecord? VoidDecision,
+        ElectionVoidPublicationAttemptRecord? CurrentVoidPublicationAttempt,
+        IReadOnlyList<ElectionVoidSupersededArtifactRecord> VoidSupersededArtifacts,
         ElectionAdminOnlyProtectedTallyEnvelopeRecord? AdminOnlyProtectedTallyEnvelope)
     {
-        public bool CanViewPackageStatus => IsVerificationPackageVisible(IsOwner, AcceptedTrustee, IsDesignatedAuditor);
+        public bool IsVoidElection => Election.LifecycleState == ElectionLifecycleState.Voided;
+
+        public bool CanViewPackageStatus =>
+            IsVoidElection || IsVerificationPackageVisible(IsOwner, AcceptedTrustee, IsDesignatedAuditor);
 
         public bool CanExportRestrictedPackage => IsOwner || IsDesignatedAuditor;
     }

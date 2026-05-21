@@ -145,6 +145,15 @@ public record FinalizeElectionActionPayload(
     byte[]? AcceptedBallotSetHash,
     byte[]? FinalEncryptedTallyHash);
 
+public record VoidElectionActionPayload(
+    string ActorPublicAddress,
+    string PublicJustification,
+    IReadOnlyList<ElectionVoidEvidenceReferenceRecord>? EvidenceReferences = null);
+
+public record RetryVoidPublicationActionPayload(
+    string ActorPublicAddress,
+    Guid VoidDecisionId);
+
 public record CloseCountingExecutorSubmissionPayload(
     Guid CloseCountingJobId,
     string ElectionId,
@@ -376,6 +385,8 @@ public static class EncryptedElectionEnvelopeActionTypes
     public const string OpenElection = "open_election";
     public const string CloseElection = "close_election";
     public const string FinalizeElection = "finalize_election";
+    public const string VoidElection = "void_election";
+    public const string RetryVoidPublication = "retry_void_publication";
     public const string SubmitFinalizationShare = "submit_finalization_share";
     public const string StartCeremony = "start_ceremony";
     public const string RestartCeremony = "restart_ceremony";

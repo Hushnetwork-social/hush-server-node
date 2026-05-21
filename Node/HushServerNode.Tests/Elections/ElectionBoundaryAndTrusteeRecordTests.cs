@@ -57,6 +57,26 @@ public class ElectionBoundaryAndTrusteeRecordTests
     }
 
     [Fact]
+    public void CreateBoundaryArtifact_WithVoidType_ShouldResolveVoidedLifecycle()
+    {
+        var election = CreateTrusteeThresholdElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = DateTime.UtcNow.AddMinutes(-10),
+        };
+
+        var artifact = ElectionModelFactory.CreateBoundaryArtifact(
+            artifactType: ElectionBoundaryArtifactType.Void,
+            election: election,
+            recordedByPublicAddress: "owner-address");
+
+        artifact.ArtifactType.Should().Be(ElectionBoundaryArtifactType.Void);
+        artifact.LifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        artifact.AcceptedBallotCount.Should().BeNull();
+        artifact.FinalEncryptedTallyHash.Should().BeNull();
+    }
+
+    [Fact]
     public void TrusteeInvitation_AcceptFromDraft_PreservesExplicitState()
     {
         var invitation = ElectionModelFactory.CreateTrusteeInvitation(

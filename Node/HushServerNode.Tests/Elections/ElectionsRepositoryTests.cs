@@ -222,6 +222,147 @@ public class ElectionsRepositoryTests
     }
 
     [Fact]
+    public async Task SaveVoidDecisionPublicationAttemptAndSupersededArtifacts_ShouldRoundTrip()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = DateTime.UtcNow.AddMinutes(-20),
+        };
+        var historicalPackage = ElectionModelFactory.CreateSealedReportPackage(
+            electionId: election.ElectionId,
+            attemptNumber: 1,
+            tallyReadyArtifactId: Guid.NewGuid(),
+            unofficialResultArtifactId: Guid.NewGuid(),
+            officialResultArtifactId: Guid.NewGuid(),
+            finalizeArtifactId: Guid.NewGuid(),
+            frozenEvidenceHash: [1, 2, 3, 4],
+            frozenEvidenceFingerprint: "freeze:abc123",
+            packageHash: [5, 6, 7, 8],
+            artifactCount: 4,
+            attemptedByPublicAddress: "owner-address");
+        var voidBoundaryArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Void,
+            election,
+            recordedByPublicAddress: "owner-address");
+        var decision = ElectionModelFactory.CreateVoidDecision(
+            election,
+            actorPublicAddress: "owner-address",
+            publicJustification: "Trustee threshold could not be satisfied after the close ceremony.",
+            voidBoundaryArtifactId: voidBoundaryArtifact.Id,
+            evidenceReferences:
+            [
+                ElectionModelFactory.CreateVoidEvidenceReference(
+                    ElectionVoidEvidenceReferenceKind.InternalAnomalyThread,
+                    "anomaly-thread-1",
+                    internalRecordId: Guid.NewGuid()),
+            ]);
+        var publicationAttempt = ElectionModelFactory.CreateSealedVoidPublicationAttempt(
+            election.ElectionId,
+            decision.Id,
+            attemptNumber: 1,
+            frozenEvidenceHash: [9, 9, 9, 9],
+            frozenEvidenceFingerprint: "void-freeze:abc123",
+            packageHash: [8, 8, 8, 8],
+            artifactCount: 6,
+            attemptedByPublicAddress: "owner-address",
+            publicStatusArtifactRef: "void-public-status.json",
+            voidPackageArtifactRef: "void-package.zip");
+        var supersededArtifact = ElectionModelFactory.CreateVoidSupersededArtifact(
+            election.ElectionId,
+            decision.Id,
+            ElectionVoidSupersededArtifactKind.ReportPackage,
+            "historical-package.zip",
+            reportPackageId: historicalPackage.Id,
+            artifactHash: new string('a', 64));
+        var supersededAt = DateTime.UtcNow;
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveBoundaryArtifactAsync(voidBoundaryArtifact);
+        await repository.SaveReportPackageAsync(historicalPackage);
+        await repository.SaveVoidDecisionAsync(decision);
+        await repository.SaveVoidPublicationAttemptAsync(publicationAttempt);
+        await repository.SaveVoidSupersededArtifactAsync(supersededArtifact);
+        var supersededPackages = await repository.SupersedeReportPackagesByVoidAsync(
+            election.ElectionId,
+            decision.Id,
+            supersededAt);
+        await context.SaveChangesAsync();
+
+        var storedDecision = await repository.GetVoidDecisionAsync(election.ElectionId);
+        var storedAttempts = await repository.GetVoidPublicationAttemptsAsync(decision.Id);
+        var latestAttempt = await repository.GetLatestVoidPublicationAttemptAsync(decision.Id);
+        var storedSupersededArtifacts = await repository.GetVoidSupersededArtifactsAsync(decision.Id);
+        var storedHistoricalPackage = await repository.GetReportPackageAsync(historicalPackage.Id);
+
+        storedDecision.Should().NotBeNull();
+        storedDecision!.EvidenceReferences.Should().ContainSingle();
+        storedDecision.PublicJustification.Should().Be("Trustee threshold could not be satisfied after the close ceremony.");
+        storedAttempts.Should().ContainSingle();
+        latestAttempt.Should().NotBeNull();
+        latestAttempt!.VoidPackageArtifactRef.Should().Be("void-package.zip");
+        storedSupersededArtifacts.Should().ContainSingle();
+        storedSupersededArtifacts[0].ReportPackageId.Should().Be(historicalPackage.Id);
+        supersededPackages.Should().ContainSingle();
+        storedHistoricalPackage.Should().NotBeNull();
+        storedHistoricalPackage!.Status.Should().Be(ElectionReportPackageStatus.SupersededByVoid);
+        storedHistoricalPackage.SupersededByVoidDecisionId.Should().Be(decision.Id);
+    }
+
+    [Fact]
+    public async Task SaveVoidDecisionAsync_WithExistingDecision_ShouldThrow()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection();
+        var decision = ElectionModelFactory.CreateVoidDecision(
+            election,
+            actorPublicAddress: "owner-address",
+            publicJustification: "Trustee threshold could not be satisfied after the close ceremony.",
+            voidBoundaryArtifactId: Guid.NewGuid());
+        var duplicate = decision with
+        {
+            Id = Guid.NewGuid(),
+        };
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveVoidDecisionAsync(decision);
+        await context.SaveChangesAsync();
+
+        var act = async () => await repository.SaveVoidDecisionAsync(duplicate);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*void decision already exists*");
+    }
+
+    [Fact]
+    public async Task SaveVoidDecisionAsync_WithTrackedExistingDecision_ShouldThrowBeforeSaveChanges()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection();
+        var decision = ElectionModelFactory.CreateVoidDecision(
+            election,
+            actorPublicAddress: "owner-address",
+            publicJustification: "Trustee threshold could not be satisfied after the close ceremony.",
+            voidBoundaryArtifactId: Guid.NewGuid());
+        var duplicate = decision with
+        {
+            Id = Guid.NewGuid(),
+        };
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveVoidDecisionAsync(decision);
+
+        var act = async () => await repository.SaveVoidDecisionAsync(duplicate);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*void decision already exists*");
+    }
+
+    [Fact]
     public async Task SavePublicationProofRecords_ShouldRoundTrip()
     {
         using var context = CreateContext();

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FEAT-138 Void Public Artifact Scan",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "scanId",
+    "generatedAt",
+    "status",
+    "scannedArtifacts",
+    "forbiddenMaterialFindings"
+  ]
+}

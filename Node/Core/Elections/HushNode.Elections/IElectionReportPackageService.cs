@@ -6,6 +6,8 @@ namespace HushNode.Elections;
 public interface IElectionReportPackageService
 {
     ElectionReportPackageBuildResult Build(ElectionReportPackageBuildRequest request);
+
+    ElectionVoidReportPackageBuildResult BuildVoid(ElectionVoidReportPackageBuildRequest request);
 }
 
 public sealed record ElectionReportPackageBuildRequest(
@@ -56,4 +58,49 @@ public sealed record ElectionReportPackageBuildResult(
             package,
             Array.Empty<ElectionReportArtifactRecord>(),
             Array.Empty<ElectionReportAccessGrantRecord>());
+}
+
+public sealed record ElectionVoidReportPackageBuildRequest(
+    ElectionRecord Election,
+    ElectionVoidDecisionRecord Decision,
+    ElectionVoidPublicationAttemptRecord PublicationAttempt,
+    IReadOnlyList<ElectionVoidSupersededArtifactRecord> SupersededArtifacts,
+    ElectionResultArtifactRecord? HistoricalUnofficialResult,
+    int AttemptNumber,
+    Guid? PreviousReportPackageId,
+    string AttemptedByPublicAddress,
+    DateTime AttemptedAt);
+
+public sealed record ElectionVoidReportPackageBuildResult(
+    bool IsSuccess,
+    ElectionReportPackageRecord Package,
+    ElectionVoidPublicationAttemptRecord PublicationAttempt,
+    ElectionVoidPublicStatusRecord? PublicStatus,
+    ElectionVoidRestrictedEvidenceIndexRecord? RestrictedEvidenceIndex,
+    IReadOnlyList<ElectionReportArtifactRecord> Artifacts)
+{
+    public static ElectionVoidReportPackageBuildResult Success(
+        ElectionReportPackageRecord package,
+        ElectionVoidPublicationAttemptRecord publicationAttempt,
+        ElectionVoidPublicStatusRecord publicStatus,
+        ElectionVoidRestrictedEvidenceIndexRecord restrictedEvidenceIndex,
+        IReadOnlyList<ElectionReportArtifactRecord> artifacts) =>
+        new(
+            true,
+            package,
+            publicationAttempt,
+            publicStatus,
+            restrictedEvidenceIndex,
+            artifacts);
+
+    public static ElectionVoidReportPackageBuildResult Failure(
+        ElectionReportPackageRecord package,
+        ElectionVoidPublicationAttemptRecord publicationAttempt) =>
+        new(
+            false,
+            package,
+            publicationAttempt,
+            PublicStatus: null,
+            RestrictedEvidenceIndex: null,
+            Array.Empty<ElectionReportArtifactRecord>());
 }

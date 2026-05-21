@@ -28,6 +28,7 @@ public static class VerificationResultCodes
     public const string VerifierProfilePackageMismatch = "verifier_profile_package_mismatch";
     public const string ElectionIdMismatch = "election_id_mismatch";
     public const string ElectionNotFinalized = "election_not_finalized";
+    public const string ElectionVoided = "election_voided";
     public const string ProtocolPackageDraftPrivate = "protocol_package_draft_private";
     public const string AcceptedBallotInventoryHashMismatch = "accepted_ballot_inventory_hash_mismatch";
     public const string AcceptedBallotDuplicateNullifier = "accepted_ballot_duplicate_nullifier";

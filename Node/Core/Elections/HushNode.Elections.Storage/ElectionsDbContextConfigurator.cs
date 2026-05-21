@@ -21,6 +21,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionReportPackage(modelBuilder);
         ConfigureElectionReportArtifact(modelBuilder);
         ConfigureElectionReportAccessGrant(modelBuilder);
+        ConfigureElectionVoidRecords(modelBuilder);
         ConfigureApprovedProtocolPackageCatalogEntry(modelBuilder);
         ConfigureProtocolPackageBinding(modelBuilder);
         ConfigureElectionRosterEntry(modelBuilder);
@@ -267,6 +268,14 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.Property(x => x.CloseEligibilitySnapshotId).HasColumnType("uuid");
             entity.Property(x => x.FinalizationReleaseEvidenceId).HasColumnType("uuid");
             entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.PackageKind)
+                .HasConversion<string>()
+                .HasColumnType("varchar(32)")
+                .HasDefaultValue(ElectionReportPackageKind.FinalResult);
+            entity.Property(x => x.VoidDecisionId).HasColumnType("uuid");
+            entity.Property(x => x.VoidPublicationAttemptId).HasColumnType("uuid");
+            entity.Property(x => x.SupersededByVoidDecisionId).HasColumnType("uuid");
+            entity.Property(x => x.SupersededAt).HasColumnType("timestamp with time zone");
             entity.Property(x => x.FrozenEvidenceHash).HasColumnType("bytea");
             entity.Property(x => x.FrozenEvidenceFingerprint).HasColumnType("varchar(256)");
             entity.Property(x => x.PackageHash).HasColumnType("bytea");
@@ -280,6 +289,103 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.HasIndex(x => new { x.ElectionId, x.AttemptNumber }).IsUnique();
             entity.HasIndex(x => new { x.ElectionId, x.AttemptedAt });
             entity.HasIndex(x => new { x.ElectionId, x.Status });
+            entity.HasIndex(x => new { x.ElectionId, x.PackageKind });
+            entity.HasIndex(x => x.VoidDecisionId);
+        });
+    }
+
+    private static void ConfigureElectionVoidRecords(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionVoidDecisionRecord>(entity =>
+        {
+            entity.ToTable("ElectionVoidDecisionRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.ActorPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.ActorRole).HasColumnType("varchar(32)");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+            entity.Property(x => x.DecidedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.PreviousLifecycleState).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.ResultingLifecycleState).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.PublicJustification).HasColumnType("varchar(1000)");
+            entity.Property(x => x.PublicJustificationHash).HasColumnType("bytea");
+            entity.Property(x => x.VoidBoundaryArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.CurrentPublicationAttemptId).HasColumnType("uuid");
+            entity.Property(x => x.PublicationStatus).HasConversion<string>().HasColumnType("varchar(32)");
+
+            ConfigureJsonProperty(entity.Property(x => x.EvidenceReferences));
+
+            entity.HasIndex(x => x.ElectionId).IsUnique();
+            entity.HasIndex(x => x.SourceTransactionId).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.DecidedAt });
+            entity.HasIndex(x => x.VoidBoundaryArtifactId).IsUnique();
+        });
+
+        modelBuilder.Entity<ElectionVoidPublicationAttemptRecord>(entity =>
+        {
+            entity.ToTable("ElectionVoidPublicationAttemptRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.VoidDecisionId).HasColumnType("uuid");
+            entity.Property(x => x.AttemptNumber).HasColumnType("integer");
+            entity.Property(x => x.PreviousAttemptId).HasColumnType("uuid");
+            entity.Property(x => x.ReportPackageId).HasColumnType("uuid");
+            entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.FrozenEvidenceHash).HasColumnType("bytea");
+            entity.Property(x => x.FrozenEvidenceFingerprint).HasColumnType("varchar(256)");
+            entity.Property(x => x.PackageHash).HasColumnType("bytea");
+            entity.Property(x => x.ArtifactCount).HasColumnType("integer");
+            entity.Property(x => x.FailureCode).HasColumnType("varchar(128)");
+            entity.Property(x => x.FailureReason).HasColumnType("text");
+            entity.Property(x => x.PublicStatusArtifactRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.VoidPackageArtifactRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.AttemptedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SealedAt).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.AttemptedByPublicAddress).HasColumnType("varchar(160)");
+
+            entity.HasIndex(x => new { x.ElectionId, x.AttemptNumber }).IsUnique();
+            entity.HasIndex(x => new { x.VoidDecisionId, x.AttemptNumber }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.Status });
+            entity.HasIndex(x => x.ReportPackageId);
+        });
+
+        modelBuilder.Entity<ElectionVoidSupersededArtifactRecord>(entity =>
+        {
+            entity.ToTable("ElectionVoidSupersededArtifactRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.VoidDecisionId).HasColumnType("uuid");
+            entity.Property(x => x.ArtifactKind).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.ReportPackageId).HasColumnType("uuid");
+            entity.Property(x => x.ReportArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.ArtifactRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.ArtifactHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.SupersededAt).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => x.ElectionId);
+            entity.HasIndex(x => new { x.VoidDecisionId, x.ArtifactKind });
+            entity.HasIndex(x => x.ReportPackageId);
+            entity.HasIndex(x => x.ReportArtifactId);
         });
     }
 

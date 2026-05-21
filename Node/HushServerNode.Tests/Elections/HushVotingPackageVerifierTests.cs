@@ -64,6 +64,32 @@ public class HushVotingPackageVerifierTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task Verify_VoidPackage_ShouldReturnElectionVoidedWarning()
+    {
+        using var package = new TemporaryPackageDirectory();
+        var buildResult = CreateVoidPackageBuildResult();
+        await WriteVoidPackageArtifactsAsync(
+            package.PackagePath,
+            buildResult.Artifacts
+                .Where(x => x.AccessScope == ElectionReportArtifactAccessScope.Public)
+                .ToArray());
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1));
+
+        result.ExitCode.Should().Be(0);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        result.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.PackageManifestValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        result.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.ElectionVoided &&
+            x.Status == VerificationCheckStatus.Warn);
+    }
+
+    [Fact]
     public async Task Verify_Sp09ReviewedClaimWithoutReviewerEvidence_ShouldFail()
     {
         using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
@@ -2258,6 +2284,119 @@ public class HushVotingPackageVerifierTests
                 CanonicalProofByteLength = request.CanonicalProofByteLength,
                 CanonicalProofBytesHex = request.CanonicalProofBytesHex,
             };
+    }
+
+    private static ElectionVoidReportPackageBuildResult CreateVoidPackageBuildResult()
+    {
+        var electionId = ElectionId.NewElectionId;
+        var draftElection = ElectionModelFactory.CreateDraftRecord(
+            electionId,
+            title: "VOID verifier election",
+            shortDescription: "FEAT-138 verifier package",
+            ownerPublicAddress: "owner-address",
+            externalReferenceCode: "VOID-VERIFY",
+            electionClass: ElectionClass.OrganizationalRemoteVoting,
+            bindingStatus: ElectionBindingStatus.Binding,
+            selectedProfileId: ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId,
+            selectedProfileDevOnly: false,
+            governanceMode: ElectionGovernanceMode.AdminOnly,
+            disclosureMode: ElectionDisclosureMode.FinalResultsOnly,
+            participationPrivacyMode: ParticipationPrivacyMode.PublicCheckoffAnonymousBallotPrivateChoice,
+            voteUpdatePolicy: VoteUpdatePolicy.SingleSubmissionOnly,
+            eligibilitySourceType: EligibilitySourceType.OrganizationImportedRoster,
+            eligibilityMutationPolicy: EligibilityMutationPolicy.FrozenAtOpen,
+            outcomeRule: CreateVoidPassFailRule(),
+            approvedClientApplications:
+            [
+                new ApprovedClientApplicationRecord("hushsocial", "1.0.0"),
+            ],
+            protocolOmegaVersion: "omega-v1.0.0",
+            reportingPolicy: ReportingPolicy.DefaultPhaseOnePackage,
+            reviewWindowPolicy: ReviewWindowPolicy.NoReviewWindow,
+            ownerOptions:
+            [
+                new ElectionOptionDefinition("yes", "Yes", "Approve the proposal", 1, false),
+                new ElectionOptionDefinition("no", "No", "Reject the proposal", 2, false),
+            ],
+            officialResultVisibilityPolicy: OfficialResultVisibilityPolicy.PublicPlaintext);
+        var openElection = draftElection with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = new DateTime(2026, 5, 4, 10, 0, 0, DateTimeKind.Utc),
+            OpenArtifactId = Guid.Parse("cccccccc-0000-0000-0000-000000000001"),
+        };
+        var decision = ElectionModelFactory.CreateVoidDecision(
+            openElection,
+            "owner-address",
+            "Trustee key quorum was lost and the election cannot continue.",
+            Guid.Parse("cccccccc-0000-0000-0000-000000000002"),
+            evidenceReferences: null,
+            sourceTransactionId: Guid.Parse("cccccccc-0000-0000-0000-000000000003"),
+            sourceBlockHeight: 88,
+            sourceBlockId: Guid.Parse("cccccccc-0000-0000-0000-000000000004"),
+            decidedAt: new DateTime(2026, 5, 4, 12, 0, 0, DateTimeKind.Utc));
+        var attempt = ElectionModelFactory.CreatePendingVoidPublicationAttempt(
+            electionId,
+            decision.Id,
+            attemptNumber: 1,
+            frozenEvidenceHash: new byte[] { 1, 2, 3, 4 },
+            frozenEvidenceFingerprint: "sha256:01020304",
+            attemptedByPublicAddress: "owner-address",
+            attemptedAt: new DateTime(2026, 5, 4, 12, 1, 0, DateTimeKind.Utc));
+        decision = decision with
+        {
+            CurrentPublicationAttemptId = attempt.Id,
+        };
+        var voidedElection = openElection with
+        {
+            LifecycleState = ElectionLifecycleState.Voided,
+            VoteAcceptanceLockedAt = new DateTime(2026, 5, 4, 12, 0, 0, DateTimeKind.Utc),
+        };
+
+        var result = new ElectionReportPackageService().BuildVoid(new ElectionVoidReportPackageBuildRequest(
+            voidedElection,
+            decision,
+            attempt,
+            SupersededArtifacts: Array.Empty<ElectionVoidSupersededArtifactRecord>(),
+            HistoricalUnofficialResult: null,
+            AttemptNumber: 1,
+            PreviousReportPackageId: null,
+            AttemptedByPublicAddress: "owner-address",
+            AttemptedAt: new DateTime(2026, 5, 4, 12, 1, 0, DateTimeKind.Utc)));
+        result.IsSuccess.Should().BeTrue();
+        return result;
+    }
+
+    private static OutcomeRuleDefinition CreateVoidPassFailRule() =>
+        new(
+            OutcomeRuleKind.PassFail,
+            "pass_fail_yes_no",
+            SeatCount: 1,
+            BlankVoteCountsForTurnout: true,
+            BlankVoteExcludedFromWinnerSelection: true,
+            BlankVoteExcludedFromThresholdDenominator: true,
+            TieResolutionRule: "tie_unresolved",
+            CalculationBasis: "simple_majority_of_non_blank_votes");
+
+    private static async Task WriteVoidPackageArtifactsAsync(
+        string packagePath,
+        IReadOnlyList<ElectionReportArtifactRecord> artifacts)
+    {
+        foreach (var artifact in artifacts)
+        {
+            var filePath = Path.Combine(
+                packagePath,
+                artifact.FileName.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+            if (artifact.Format == ElectionReportArtifactFormat.Binary)
+            {
+                await File.WriteAllBytesAsync(filePath, Convert.FromBase64String(artifact.Content));
+            }
+            else
+            {
+                await File.WriteAllTextAsync(filePath, artifact.Content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            }
+        }
     }
 
     private sealed class FakeSp07PackagePublicProofVerifier(bool passed) : ISp07PackagePublicProofVerifier

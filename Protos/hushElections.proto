@@ -62,6 +62,7 @@ enum ElectionLifecycleStateProto {
   Open = 1;
   Closed = 2;
   Finalized = 3;
+  Voided = 4;
 }
 
 enum ElectionClassProto {
@@ -271,6 +272,12 @@ enum OfficialResultVisibilityPolicyProto {
 enum ElectionReportPackageStatusProto {
   ReportPackageGenerationFailed = 0;
   ReportPackageSealed = 1;
+  ReportPackageSupersededByVoid = 2;
+}
+
+enum ElectionReportPackageKindProto {
+  ReportPackageFinalResult = 0;
+  ReportPackageVoid = 1;
 }
 
 enum ElectionReportArtifactKindProto {
@@ -288,16 +295,27 @@ enum ElectionReportArtifactKindProto {
   ReportArtifactMachineOutcomeDeterminationProjection = 11;
   ReportArtifactMachineDisputeReviewIndexProjection = 12;
   ReportArtifactMachineRestrictedAnomalyIntakeManifest = 13;
+  ReportArtifactMachineVoidDecision = 14;
+  ReportArtifactHumanVoidSummary = 15;
+  ReportArtifactMachineVoidPublicStatus = 16;
+  ReportArtifactMachineVoidSupersededArtifacts = 17;
+  ReportArtifactMachineVoidVerifierResult = 18;
+  ReportArtifactHumanRestrictedVoidEvidenceIndex = 19;
+  ReportArtifactMachineRestrictedHistoricalUnofficialResult = 20;
+  ReportArtifactMachineVoidPackageManifest = 21;
+  ReportArtifactMachineVoidPackageArchive = 22;
 }
 
 enum ElectionReportArtifactFormatProto {
   ReportArtifactMarkdown = 0;
   ReportArtifactJson = 1;
+  ReportArtifactBinary = 2;
 }
 
 enum ElectionReportArtifactAccessScopeProto {
   ReportArtifactOwnerAuditorOnly = 0;
   ReportArtifactOwnerAuditorTrustee = 1;
+  ReportArtifactPublic = 2;
 }
 
 enum ElectionReportAccessGrantRoleProto {
@@ -359,6 +377,7 @@ enum ElectionVerificationPackageStatusProto {
   VerificationPackageProtocolRefsBlocked = 3;
   VerificationPackageExportFailed = 4;
   VerificationPackageReady = 5;
+  VerificationPackageVoided = 6;
 }
 
 enum ElectionVerificationPackageBlockerProto {
@@ -370,6 +389,7 @@ enum ElectionVerificationPackageBlockerProto {
   VerificationPackageBlockerUnauthorized = 5;
   VerificationPackageBlockerProfileMismatch = 6;
   VerificationPackageBlockerExportFailed = 7;
+  VerificationPackageBlockerElectionVoided = 8;
 }
 
 enum ElectionVerifierOverallStatusProto {
@@ -377,6 +397,12 @@ enum ElectionVerifierOverallStatusProto {
   ElectionVerifierWarn = 1;
   ElectionVerifierFail = 2;
   ElectionVerifierNotAvailable = 3;
+}
+
+enum ElectionVoidPublicationAttemptStatusProto {
+  VoidPublicationPending = 0;
+  VoidPublicationGenerationFailed = 1;
+  VoidPublicationSealed = 2;
 }
 
 enum ElectionTrusteeControlDomainEvidenceStatusProto {
@@ -409,6 +435,7 @@ enum ElectionBoundaryArtifactTypeProto {
   CloseArtifact = 1;
   TallyReadyArtifact = 2;
   FinalizeArtifact = 3;
+  VoidArtifact = 4;
 }
 
 enum ElectionWarningCodeProto {
@@ -875,6 +902,12 @@ message ElectionReportPackageSummaryView {
   google.protobuf.Timestamp SealedAt = 20;
   bool HasSealedAt = 21;
   string AttemptedByPublicAddress = 22;
+  ElectionReportPackageKindProto PackageKind = 23;
+  string VoidDecisionId = 24;
+  string VoidPublicationAttemptId = 25;
+  string SupersededByVoidDecisionId = 26;
+  google.protobuf.Timestamp SupersededAt = 27;
+  bool HasSupersededAt = 28;
 }
 
 message ElectionReportArtifactView {
@@ -993,6 +1026,11 @@ message ElectionVerificationPackageExportAvailabilityView {
   string PackageId = 7;
   string PackageHash = 8;
   bool CanRetry = 9;
+  ElectionReportPackageKindProto PackageKind = 10;
+  string VoidDecisionId = 11;
+  string VoidPublicationAttemptId = 12;
+  string PublicStatusArtifactRef = 13;
+  string VoidPackageArtifactRef = 14;
 }
 
 message ElectionVerifierResultSummaryView {
@@ -1006,6 +1044,35 @@ message ElectionVerifierResultSummaryView {
   string Message = 8;
   google.protobuf.Timestamp VerifiedAt = 9;
   bool HasVerifiedAt = 10;
+  string ResultCode = 11;
+}
+
+message ElectionVoidPublicationStatusView {
+  string VoidDecisionId = 1;
+  string PublicationAttemptId = 2;
+  ElectionVoidPublicationAttemptStatusProto Status = 3;
+  int32 AttemptNumber = 4;
+  string PublicStatusArtifactRef = 5;
+  string VoidPackageArtifactRef = 6;
+  string PackageHash = 7;
+  string FailureCode = 8;
+  string FailureReason = 9;
+  google.protobuf.Timestamp AttemptedAt = 10;
+  google.protobuf.Timestamp SealedAt = 11;
+  bool HasSealedAt = 12;
+  string AttemptedByPublicAddress = 13;
+  bool CanRetry = 14;
+  string PublicJustification = 15;
+  string PublicJustificationHash = 16;
+  ElectionLifecycleStateProto PreviousLifecycleState = 17;
+  ElectionLifecycleStateProto ResultingLifecycleState = 18;
+  string ActorPublicAddress = 19;
+  string ActorRole = 20;
+  string SourceTransactionId = 21;
+  int64 SourceBlockHeight = 22;
+  string SourceBlockId = 23;
+  google.protobuf.Timestamp DecidedAt = 24;
+  bool HasDecidedAt = 25;
 }
 
 message ElectionVerificationPackageStatusView {
@@ -1026,6 +1093,7 @@ message ElectionVerificationPackageStatusView {
   ElectionSp09ExternalReviewStatusView Sp09ExternalReview = 15;
   ElectionSp10OperationalSecurityStatusView Sp10OperationalSecurity = 16;
   ElectionSp11RegulatoryClaimStatusView Sp11RegulatoryClaim = 17;
+  ElectionVoidPublicationStatusView VoidPublicationStatus = 18;
 }
 
 message ElectionSp04EvidenceStatusView {

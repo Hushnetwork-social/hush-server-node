@@ -445,6 +445,59 @@ public class ElectionModelFactoryTests
     }
 
     [Fact]
+    public void CreateSealedVoidReportPackage_ShouldNotRequireFinalResultArtifacts()
+    {
+        var electionId = ElectionId.NewElectionId;
+        var decisionId = Guid.NewGuid();
+        var attemptId = Guid.NewGuid();
+
+        var package = ElectionModelFactory.CreateSealedVoidReportPackage(
+            electionId: electionId,
+            attemptNumber: 1,
+            voidDecisionId: decisionId,
+            voidPublicationAttemptId: attemptId,
+            frozenEvidenceHash: [1, 2, 3, 4],
+            frozenEvidenceFingerprint: "void-freeze:abc123",
+            packageHash: [5, 6, 7, 8],
+            artifactCount: 7,
+            attemptedByPublicAddress: "owner-address");
+
+        package.PackageKind.Should().Be(ElectionReportPackageKind.Void);
+        package.Status.Should().Be(ElectionReportPackageStatus.Sealed);
+        package.VoidDecisionId.Should().Be(decisionId);
+        package.VoidPublicationAttemptId.Should().Be(attemptId);
+        package.TallyReadyArtifactId.Should().BeNull();
+        package.UnofficialResultArtifactId.Should().BeNull();
+    }
+
+    [Fact]
+    public void SupersedeByVoid_ShouldMarkHistoricalPackageWithoutChangingPackageIdentity()
+    {
+        var package = ElectionModelFactory.CreateSealedReportPackage(
+            electionId: ElectionId.NewElectionId,
+            attemptNumber: 1,
+            tallyReadyArtifactId: Guid.NewGuid(),
+            unofficialResultArtifactId: Guid.NewGuid(),
+            officialResultArtifactId: Guid.NewGuid(),
+            finalizeArtifactId: Guid.NewGuid(),
+            frozenEvidenceHash: [1, 2, 3, 4],
+            frozenEvidenceFingerprint: "freeze:abc123",
+            packageHash: [5, 6, 7, 8],
+            artifactCount: 13,
+            attemptedByPublicAddress: "owner-address");
+        var decisionId = Guid.NewGuid();
+        var supersededAt = DateTime.UtcNow;
+
+        var superseded = package.SupersedeByVoid(decisionId, supersededAt);
+
+        superseded.Id.Should().Be(package.Id);
+        superseded.Status.Should().Be(ElectionReportPackageStatus.SupersededByVoid);
+        superseded.SupersededByVoidDecisionId.Should().Be(decisionId);
+        superseded.SupersededAt.Should().Be(supersededAt);
+        superseded.PackageKind.Should().Be(ElectionReportPackageKind.FinalResult);
+    }
+
+    [Fact]
     public void CreateReportArtifact_PreservesScopeFormatAndContent()
     {
         var artifact = ElectionModelFactory.CreateReportArtifact(

@@ -1191,6 +1191,22 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
         var unofficialResult = await repository.GetResultArtifactAsync(electionId, ElectionResultArtifactKind.Unofficial);
         var officialResult = await repository.GetResultArtifactAsync(electionId, ElectionResultArtifactKind.Official);
         var latestReportPackage = await repository.GetLatestReportPackageAsync(electionId);
+        var voidDecision = election.LifecycleState == ElectionLifecycleState.Voided
+            ? await repository.GetVoidDecisionAsync(electionId)
+            : null;
+        var currentVoidPublicationAttempt = (ElectionVoidPublicationAttemptRecord?)null;
+        if (voidDecision is not null)
+        {
+            var voidPublicationAttempts = await repository.GetVoidPublicationAttemptsAsync(voidDecision.Id);
+            currentVoidPublicationAttempt = ResolveCurrentVoidPublicationAttempt(
+                voidDecision,
+                voidPublicationAttempts);
+            if (currentVoidPublicationAttempt?.ReportPackageId is Guid voidReportPackageId)
+            {
+                latestReportPackage = await repository.GetReportPackageAsync(voidReportPackageId) ??
+                    latestReportPackage;
+            }
+        }
         var protocolPackageBinding = canViewProtocolPackageBinding
             ? await repository.GetSealedProtocolPackageBindingAsync(electionId) ??
               await repository.GetLatestProtocolPackageBindingAsync(electionId)
@@ -1267,7 +1283,9 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
                 acceptedTrustee,
                 isDesignatedAuditor,
                 latestReportPackage,
-                protocolPackageBinding) is { } verificationPackageStatus)
+                protocolPackageBinding,
+                voidDecision,
+                currentVoidPublicationAttempt) is { } verificationPackageStatus)
         {
             response.VerificationPackageStatus = verificationPackageStatus;
         }

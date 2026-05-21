@@ -79,6 +79,10 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleCloseElectionAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.FinalizeElection =>
                 await HandleFinalizeElectionAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.VoidElection =>
+                await HandleVoidElectionAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RetryVoidPublication =>
+                await HandleRetryVoidPublicationAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.SubmitFinalizationShare =>
                 await HandleSubmitFinalizationShareAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.StartCeremony =>
@@ -720,6 +724,47 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             ActorPublicAddress: finalizeAction.ActorPublicAddress,
             AcceptedBallotSetHash: finalizeAction.AcceptedBallotSetHash,
             FinalEncryptedTallyHash: finalizeAction.FinalEncryptedTallyHash,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleVoidElectionAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var voidAction = decryptedEnvelope.DeserializeAction<VoidElectionActionPayload>();
+        if (voidAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Void election action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.VoidElectionAsync(new VoidElectionRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ActorPublicAddress: voidAction.ActorPublicAddress,
+            PublicJustification: voidAction.PublicJustification,
+            EvidenceReferences: voidAction.EvidenceReferences,
+            SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+            SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+            SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleRetryVoidPublicationAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var retryAction = decryptedEnvelope.DeserializeAction<RetryVoidPublicationActionPayload>();
+        if (retryAction is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Retry void publication action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.RetryVoidPublicationAsync(new RetryVoidPublicationRequest(
+            ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+            ActorPublicAddress: retryAction.ActorPublicAddress,
+            VoidDecisionId: retryAction.VoidDecisionId,
             SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
             SourceBlockId: _blockchainCache.CurrentBlockId.Value));

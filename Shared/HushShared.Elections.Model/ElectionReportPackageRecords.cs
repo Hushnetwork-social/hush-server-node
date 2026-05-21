@@ -6,8 +6,8 @@ public record ElectionReportPackageRecord(
     int AttemptNumber,
     Guid? PreviousAttemptId,
     Guid? FinalizationSessionId,
-    Guid TallyReadyArtifactId,
-    Guid UnofficialResultArtifactId,
+    Guid? TallyReadyArtifactId,
+    Guid? UnofficialResultArtifactId,
     Guid? OfficialResultArtifactId,
     Guid? FinalizeArtifactId,
     Guid? CloseBoundaryArtifactId,
@@ -22,7 +22,12 @@ public record ElectionReportPackageRecord(
     string? FailureReason,
     DateTime AttemptedAt,
     DateTime? SealedAt,
-    string AttemptedByPublicAddress)
+    string AttemptedByPublicAddress,
+    ElectionReportPackageKind PackageKind = ElectionReportPackageKind.FinalResult,
+    Guid? VoidDecisionId = null,
+    Guid? VoidPublicationAttemptId = null,
+    Guid? SupersededByVoidDecisionId = null,
+    DateTime? SupersededAt = null)
 {
     public byte[] FrozenEvidenceHash { get; init; } =
         CloneRequiredBytes(FrozenEvidenceHash, nameof(FrozenEvidenceHash));
@@ -41,6 +46,55 @@ public record ElectionReportPackageRecord(
 
     public string AttemptedByPublicAddress { get; init; } =
         NormalizeRequiredValue(AttemptedByPublicAddress, nameof(AttemptedByPublicAddress));
+
+    public ElectionReportPackageStatus Status { get; init; } =
+        ValidatePackageStatus(
+            Status,
+            PackageKind,
+            TallyReadyArtifactId,
+            UnofficialResultArtifactId,
+            VoidDecisionId,
+            SupersededByVoidDecisionId,
+            SupersededAt);
+
+    public ElectionReportPackageRecord SupersedeByVoid(Guid voidDecisionId, DateTime? supersededAt = null) =>
+        this with
+        {
+            Status = ElectionReportPackageStatus.SupersededByVoid,
+            SupersededByVoidDecisionId = voidDecisionId,
+            SupersededAt = supersededAt ?? DateTime.UtcNow,
+        };
+
+    private static ElectionReportPackageStatus ValidatePackageStatus(
+        ElectionReportPackageStatus status,
+        ElectionReportPackageKind packageKind,
+        Guid? tallyReadyArtifactId,
+        Guid? unofficialResultArtifactId,
+        Guid? voidDecisionId,
+        Guid? supersededByVoidDecisionId,
+        DateTime? supersededAt)
+    {
+        if (packageKind == ElectionReportPackageKind.FinalResult &&
+            (tallyReadyArtifactId is null || unofficialResultArtifactId is null))
+        {
+            throw new ArgumentException(
+                "Final-result report packages require tally-ready and unofficial-result artifact ids.");
+        }
+
+        if (packageKind == ElectionReportPackageKind.Void && voidDecisionId is null)
+        {
+            throw new ArgumentException("Void report packages require a void decision id.", nameof(VoidDecisionId));
+        }
+
+        if (status == ElectionReportPackageStatus.SupersededByVoid &&
+            (supersededByVoidDecisionId is null || supersededAt is null))
+        {
+            throw new ArgumentException(
+                "Superseded packages require the void decision id and superseded timestamp.");
+        }
+
+        return status;
+    }
 
     private static byte[] CloneRequiredBytes(byte[]? value, string paramName)
     {

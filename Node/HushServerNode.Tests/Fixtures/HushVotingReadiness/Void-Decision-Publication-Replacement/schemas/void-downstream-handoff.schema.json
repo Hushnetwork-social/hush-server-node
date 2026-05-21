@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FEAT-138 Void Downstream Handoff",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "handoffId",
+    "producerFeature",
+    "status",
+    "generatedAt",
+    "readinessRegisterHandoff",
+    "feat139Handoff",
+    "feat141Handoff",
+    "pba013Handoff",
+    "voidEvidenceContract",
+    "privacyBoundary",
+    "consumerInstructions"
+  ]
+}

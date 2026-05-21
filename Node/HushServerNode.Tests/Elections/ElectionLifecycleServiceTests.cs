@@ -3689,6 +3689,343 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task VoidElectionAsync_WithOwnerOnOpenElection_PersistsDecisionBoundaryAndSealedAttempt()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateOpenElection();
+        var sourceTransactionId = Guid.NewGuid();
+        var sourceBlockId = Guid.NewGuid();
+        var governedProposal = ElectionModelFactory.CreateGovernedProposal(
+            election,
+            ElectionGovernedActionType.Close,
+            proposedByPublicAddress: "owner-address");
+
+        store.Elections[election.ElectionId] = election;
+        store.GovernedProposals[governedProposal.Id] = governedProposal;
+
+        var result = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "Trustee key quorum was lost and the election cannot continue.",
+            SourceTransactionId: sourceTransactionId,
+            SourceBlockHeight: 88,
+            SourceBlockId: sourceBlockId));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        result.Election.VoteAcceptanceLockedAt.Should().NotBeNull();
+        result.BoundaryArtifact.Should().NotBeNull();
+        result.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.Void);
+        result.BoundaryArtifact.SourceTransactionId.Should().Be(sourceTransactionId);
+        result.VoidDecision.Should().NotBeNull();
+        result.VoidDecision!.PreviousLifecycleState.Should().Be(ElectionLifecycleState.Open);
+        result.VoidDecision.ResultingLifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        result.VoidDecision.ActorRole.Should().Be(ElectionVoidDecisionRecord.ElectionOwnerRole);
+        result.VoidDecision.PublicationStatus.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
+        result.VoidPublicationAttempt.Should().NotBeNull();
+        result.VoidPublicationAttempt!.AttemptNumber.Should().Be(1);
+        result.VoidPublicationAttempt.Status.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
+        result.VoidPublicationAttempt.ReportPackageId.Should().NotBeNull();
+        store.VoidDecisions.Should().ContainSingle();
+        store.VoidPublicationAttempts.Should().ContainSingle();
+        store.ReportPackages.Values.Should().ContainSingle(x => x.PackageKind == ElectionReportPackageKind.Void);
+        store.ReportArtifacts.Should().Contain(x => x.FileName == VerificationPackageFileNames.VoidPublicStatus);
+        store.Elections[election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        store.GovernedProposals[governedProposal.Id].ExecutionStatus.Should()
+            .Be(ElectionGovernedProposalExecutionStatus.ExecutionFailed);
+        store.GovernedProposals[governedProposal.Id].ExecutionFailureReason.Should()
+            .Contain("Superseded by ElectionOwner void decision");
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task VoidElectionAsync_WithPublicCache_WarmsOnlyPublicVoidArtifacts()
+    {
+        var store = new ElectionStore();
+        var cacheService = new FakeElectionVoidPublicCacheService();
+        var service = CreateService(store, voidPublicCacheService: cacheService);
+        var election = CreateOpenElection();
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "Trustee key quorum was lost and the election cannot continue."));
+
+        result.IsSuccess.Should().BeTrue();
+        result.VoidDecision.Should().NotBeNull();
+        result.VoidPublicationAttempt.Should().NotBeNull();
+        cacheService.StatusWrites.Should().ContainSingle(x =>
+            x.ElectionId == election.ElectionId.ToString() &&
+            x.Envelope.PublicationAttemptId == result.VoidPublicationAttempt!.Id &&
+            x.Envelope.PayloadText!.Contains("\"status\": \"VOID\"", StringComparison.Ordinal));
+
+        var cachedArtifactNames = cacheService.ArtifactWrites
+            .Select(x => x.ArtifactName)
+            .ToArray();
+        cachedArtifactNames.Should().Contain(
+        [
+            VerificationPackageFileNames.VoidDecision,
+            VerificationPackageFileNames.PublicVoidSummary,
+            VerificationPackageFileNames.VoidPublicStatus,
+            VerificationPackageFileNames.VoidSupersededArtifacts,
+            VerificationPackageFileNames.VoidVerifierResult,
+            VerificationPackageFileNames.VoidPackageManifest,
+            VerificationPackageFileNames.VoidPackageArchive,
+        ]);
+        cachedArtifactNames.Should().NotContain(VerificationPackageFileNames.RestrictedVoidEvidenceIndex);
+        cachedArtifactNames.Should().NotContain(VerificationPackageFileNames.RestrictedHistoricalUnofficialResult);
+        cacheService.ArtifactWrites.Should().OnlyContain(x =>
+            x.ElectionId == election.ElectionId.ToString() &&
+            x.VoidDecisionId == result.VoidDecision!.Id &&
+            x.PublicationAttemptId == result.VoidPublicationAttempt!.Id);
+        cacheService.ArtifactWrites.Single(x =>
+                x.ArtifactName == VerificationPackageFileNames.VoidPackageArchive)
+            .Envelope.PayloadBase64
+            .Should()
+            .NotBeNullOrWhiteSpace();
+    }
+
+    [Theory]
+    [Trait("Category", "FEAT-138")]
+    [InlineData(ElectionLifecycleState.Draft)]
+    [InlineData(ElectionLifecycleState.Closed)]
+    public async Task VoidElectionAsync_WithAllowedNonOpenLifecycleState_PersistsVoidedState(
+        ElectionLifecycleState lifecycleState)
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = lifecycleState == ElectionLifecycleState.Draft
+            ? CreateAdminElection()
+            : CreateOpenElection() with
+            {
+                LifecycleState = ElectionLifecycleState.Closed,
+                ClosedAt = DateTime.UtcNow.AddMinutes(-5),
+                CloseArtifactId = Guid.NewGuid(),
+                VoteAcceptanceLockedAt = DateTime.UtcNow.AddMinutes(-5),
+            };
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "The election owner accepted a governance dispute and voided the election."));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        result.VoidDecision!.PreviousLifecycleState.Should().Be(lifecycleState);
+        result.VoidDecision.ResultingLifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        result.VoidPublicationAttempt!.Status.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task VoidElectionAsync_WithNonOwner_ReturnsForbiddenAndDoesNotPersistDecision()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateOpenElection();
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "trustee-a",
+            "Trustee key quorum was lost and the election cannot continue."));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.Forbidden);
+        store.VoidDecisions.Should().BeEmpty();
+        store.Elections[election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Open);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task VoidElectionAsync_WithUnsafePublicJustification_ReturnsValidationFailed()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateOpenElection();
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "The support log includes voter identity and private key material."));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        result.ValidationErrors.Should().Contain(ElectionVoidValidationCodes.JustificationContainsRestrictedMaterial);
+        store.VoidDecisions.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task VoidElectionAsync_WithFinalizedElection_ReturnsInvalidState()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateOpenElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            FinalizedAt = DateTime.UtcNow,
+            FinalizeArtifactId = Guid.NewGuid(),
+        };
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "The organization asked to void this election after finalization."));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.InvalidState);
+        store.VoidDecisions.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task VoidElectionAsync_WithDuplicateDecision_ReturnsConflict()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateOpenElection();
+        store.Elections[election.ElectionId] = election;
+
+        var firstResult = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "Trustee key quorum was lost and the election cannot continue."));
+        var duplicateResult = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "A second void decision should never replace the first one."));
+
+        firstResult.IsSuccess.Should().BeTrue();
+        duplicateResult.IsSuccess.Should().BeFalse();
+        duplicateResult.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+        store.VoidDecisions.Should().ContainSingle();
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task VoidElectionAsync_WithClosedElectionAndReportPackage_SupersedesPackageAndPreservesUnofficialResult()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var unofficialResultId = Guid.NewGuid();
+        var tallyReadyArtifactId = Guid.NewGuid();
+        var election = CreateOpenElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedAt = DateTime.UtcNow.AddMinutes(-10),
+            CloseArtifactId = Guid.NewGuid(),
+            TallyReadyAt = DateTime.UtcNow.AddMinutes(-5),
+            TallyReadyArtifactId = tallyReadyArtifactId,
+            UnofficialResultArtifactId = unofficialResultId,
+        };
+        var reportPackage = ElectionModelFactory.CreateFailedReportPackageAttempt(
+            election.ElectionId,
+            attemptNumber: 1,
+            tallyReadyArtifactId,
+            unofficialResultId,
+            frozenEvidenceHash: [1, 2, 3],
+            frozenEvidenceFingerprint: "sha256:010203",
+            attemptedByPublicAddress: "owner-address",
+            failureCode: "PRE_VOID_FAILURE",
+            failureReason: "Existing final-result package attempt before void.");
+        store.Elections[election.ElectionId] = election;
+        store.ReportPackages[reportPackage.Id] = reportPackage;
+
+        var result = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "A dispute was accepted and the closed election must be voided."));
+
+        result.IsSuccess.Should().BeTrue();
+        store.Elections[election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        store.Elections[election.ElectionId].UnofficialResultArtifactId.Should().Be(unofficialResultId);
+        store.ReportPackages[reportPackage.Id].Status.Should().Be(ElectionReportPackageStatus.SupersededByVoid);
+        store.ReportPackages[reportPackage.Id].SupersededByVoidDecisionId.Should().Be(result.VoidDecision!.Id);
+        result.SupersededReportPackages.Should().ContainSingle(x => x.Id == reportPackage.Id);
+        store.VoidSupersededArtifacts.Should().ContainSingle(x =>
+            x.ArtifactKind == ElectionVoidSupersededArtifactKind.ReportPackage &&
+            x.ReportPackageId == reportPackage.Id);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task RetryVoidPublicationAsync_WithOwnerOnVoidedElection_CreatesNextSealedAttempt()
+    {
+        var store = new ElectionStore();
+        var service = CreateService(store);
+        var election = CreateOpenElection();
+        store.Elections[election.ElectionId] = election;
+        var voidResult = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "Trustee key quorum was lost and the election cannot continue."));
+
+        var retryResult = await service.RetryVoidPublicationAsync(new RetryVoidPublicationRequest(
+            election.ElectionId,
+            "owner-address",
+            voidResult.VoidDecision!.Id,
+            SourceTransactionId: Guid.NewGuid(),
+            SourceBlockHeight: 90,
+            SourceBlockId: Guid.NewGuid()));
+
+        retryResult.IsSuccess.Should().BeTrue();
+        retryResult.VoidPublicationAttempt.Should().NotBeNull();
+        retryResult.VoidPublicationAttempt!.AttemptNumber.Should().Be(2);
+        retryResult.VoidPublicationAttempt.PreviousAttemptId.Should().Be(voidResult.VoidPublicationAttempt!.Id);
+        retryResult.VoidPublicationAttempt.Status.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
+        retryResult.VoidDecision!.CurrentPublicationAttemptId.Should().Be(retryResult.VoidPublicationAttempt.Id);
+        store.VoidPublicationAttempts.Should().HaveCount(2);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-138")]
+    public async Task RetryVoidPublicationAsync_AfterFailedVoidPackageGeneration_SealsSameDecisionWithNewAttempt()
+    {
+        var store = new ElectionStore();
+        var reportPackageService = new FakeElectionReportPackageService(failBuildAttempts: 1);
+        var service = CreateService(store, electionReportPackageService: reportPackageService);
+        var election = CreateOpenElection();
+        store.Elections[election.ElectionId] = election;
+
+        var voidResult = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "Trustee key quorum was lost and the election cannot continue."));
+        var retryResult = await service.RetryVoidPublicationAsync(new RetryVoidPublicationRequest(
+            election.ElectionId,
+            "owner-address",
+            voidResult.VoidDecision!.Id));
+
+        voidResult.IsSuccess.Should().BeTrue();
+        voidResult.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        voidResult.VoidDecision!.PublicationStatus.Should().Be(ElectionVoidPublicationAttemptStatus.GenerationFailed);
+        voidResult.VoidPublicationAttempt!.Status.Should().Be(ElectionVoidPublicationAttemptStatus.GenerationFailed);
+        voidResult.VoidPublicationAttempt.FailureCode.Should().Be("FORCED_VOID_PACKAGE_FAILURE");
+
+        retryResult.IsSuccess.Should().BeTrue();
+        retryResult.VoidDecision!.Id.Should().Be(voidResult.VoidDecision.Id);
+        retryResult.VoidDecision.PublicationStatus.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
+        retryResult.VoidPublicationAttempt!.AttemptNumber.Should().Be(2);
+        retryResult.VoidPublicationAttempt.PreviousAttemptId.Should().Be(voidResult.VoidPublicationAttempt.Id);
+        retryResult.VoidPublicationAttempt.Status.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
+
+        store.Elections[election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        store.ReportPackages.Values.Should().HaveCount(2);
+        store.ReportPackages.Values.Should().ContainSingle(x => x.Status == ElectionReportPackageStatus.GenerationFailed);
+        store.ReportPackages.Values.Should().ContainSingle(x =>
+            x.Status == ElectionReportPackageStatus.Sealed &&
+            x.PackageKind == ElectionReportPackageKind.Void);
+        store.VoidPublicationAttempts.Should().HaveCount(2);
+    }
+
+    [Fact]
     public async Task ApproveGovernedProposalAsync_ForFinalizeAtThreshold_CopiesOfficialResultAndFinalizesElection()
     {
         var store = new ElectionStore();
@@ -5370,6 +5707,7 @@ public class ElectionLifecycleServiceTests
         IElectionCastIdempotencyCacheService? castIdempotencyCacheService = null,
         IElectionResultCryptoService? electionResultCryptoService = null,
         IElectionReportPackageService? electionReportPackageService = null,
+        IElectionVoidPublicCacheService? voidPublicCacheService = null,
         ICloseCountingExecutorKeyRegistry? closeCountingExecutorKeyRegistry = null,
         ICredentialsProvider? credentialsProvider = null,
         IIdentityService? identityService = null,
@@ -5390,6 +5728,7 @@ public class ElectionLifecycleServiceTests
             castIdempotencyCacheService,
             electionResultCryptoService,
             electionReportPackageService,
+            voidPublicCacheService,
             credentialsProvider ?? new FakeCredentialsProvider(),
             identityService ?? new FakeIdentityService(),
             closeCountingExecutorKeyRegistry,
@@ -7225,6 +7564,9 @@ public class ElectionLifecycleServiceTests
         public Dictionary<Guid, ElectionReportPackageRecord> ReportPackages { get; } = [];
         public List<ElectionReportArtifactRecord> ReportArtifacts { get; } = [];
         public List<ElectionReportAccessGrantRecord> ReportAccessGrants { get; } = [];
+        public List<ElectionVoidDecisionRecord> VoidDecisions { get; } = [];
+        public List<ElectionVoidPublicationAttemptRecord> VoidPublicationAttempts { get; } = [];
+        public List<ElectionVoidSupersededArtifactRecord> VoidSupersededArtifacts { get; } = [];
         public List<ApprovedProtocolPackageCatalogEntryRecord> ApprovedProtocolPackageCatalogEntries { get; } = [];
         public List<ProtocolPackageBindingRecord> ProtocolPackageBindings { get; } = [];
         public TaskCompletionSource<bool>? GetElectionForUpdateEntered { get; set; }
@@ -7301,6 +7643,9 @@ public class ElectionLifecycleServiceTests
             ReplaceDictionary(ReportPackages, source.ReportPackages);
             ReplaceList(ReportArtifacts, source.ReportArtifacts);
             ReplaceList(ReportAccessGrants, source.ReportAccessGrants);
+            ReplaceList(VoidDecisions, source.VoidDecisions);
+            ReplaceList(VoidPublicationAttempts, source.VoidPublicationAttempts);
+            ReplaceList(VoidSupersededArtifacts, source.VoidSupersededArtifacts);
             ReplaceList(ApprovedProtocolPackageCatalogEntries, source.ApprovedProtocolPackageCatalogEntries);
             ReplaceList(ProtocolPackageBindings, source.ProtocolPackageBindings);
         }
@@ -7476,7 +7821,111 @@ public class ElectionLifecycleServiceTests
                     finalizationReleaseEvidenceId: request.FinalizationReleaseEvidence?.Id,
                     attemptedAt: request.AttemptedAt));
         }
+
+        public ElectionVoidReportPackageBuildResult BuildVoid(ElectionVoidReportPackageBuildRequest request)
+        {
+            var successResult = _inner.BuildVoid(request);
+            if (_remainingFailures <= 0 || !successResult.IsSuccess)
+            {
+                return successResult;
+            }
+
+            _remainingFailures--;
+            var failedAttempt = ElectionModelFactory.CreateFailedVoidPublicationAttempt(
+                request.Election.ElectionId,
+                request.Decision.Id,
+                request.PublicationAttempt.AttemptNumber,
+                request.PublicationAttempt.FrozenEvidenceHash,
+                request.PublicationAttempt.FrozenEvidenceFingerprint,
+                request.AttemptedByPublicAddress,
+                "FORCED_VOID_PACKAGE_FAILURE",
+                "Forced VOID package failure for test coverage.",
+                previousAttemptId: request.PublicationAttempt.PreviousAttemptId,
+                attemptedAt: request.AttemptedAt,
+                preassignedAttemptId: request.PublicationAttempt.Id);
+            var failedPackage = ElectionModelFactory.CreateFailedVoidReportPackageAttempt(
+                request.Election.ElectionId,
+                request.AttemptNumber,
+                request.Decision.Id,
+                request.PublicationAttempt.Id,
+                request.PublicationAttempt.FrozenEvidenceHash,
+                request.PublicationAttempt.FrozenEvidenceFingerprint,
+                request.AttemptedByPublicAddress,
+                "FORCED_VOID_PACKAGE_FAILURE",
+                "Forced VOID package failure for test coverage.",
+                previousAttemptId: request.PreviousReportPackageId,
+                attemptedAt: request.AttemptedAt);
+
+            return ElectionVoidReportPackageBuildResult.Failure(failedPackage, failedAttempt);
+        }
     }
+
+    private sealed class FakeElectionVoidPublicCacheService : IElectionVoidPublicCacheService
+    {
+        private readonly Dictionary<string, ElectionVoidPublicCacheEnvelope> _statuses = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, ElectionVoidPublicCacheEnvelope> _artifacts = new(StringComparer.Ordinal);
+
+        public List<VoidStatusCacheWrite> StatusWrites { get; } = [];
+
+        public List<VoidArtifactCacheWrite> ArtifactWrites { get; } = [];
+
+        public Task<ElectionVoidPublicCacheEnvelope?> GetPublicStatusAsync(string electionId) =>
+            Task.FromResult(_statuses.TryGetValue(electionId, out var envelope) ? envelope : null);
+
+        public Task<ElectionVoidPublicCacheEnvelope?> GetPublicArtifactAsync(
+            string electionId,
+            Guid voidDecisionId,
+            Guid publicationAttemptId,
+            string artifactName)
+        {
+            var key = CreateArtifactKey(electionId, voidDecisionId, publicationAttemptId, artifactName);
+            return Task.FromResult(_artifacts.TryGetValue(key, out var envelope) ? envelope : null);
+        }
+
+        public Task SetPublicStatusAsync(
+            string electionId,
+            ElectionVoidPublicCacheEnvelope envelope)
+        {
+            _statuses[electionId] = envelope;
+            StatusWrites.Add(new VoidStatusCacheWrite(electionId, envelope));
+            return Task.CompletedTask;
+        }
+
+        public Task SetPublicArtifactAsync(
+            string electionId,
+            Guid voidDecisionId,
+            Guid publicationAttemptId,
+            string artifactName,
+            ElectionVoidPublicCacheEnvelope envelope)
+        {
+            _artifacts[CreateArtifactKey(electionId, voidDecisionId, publicationAttemptId, artifactName)] = envelope;
+            ArtifactWrites.Add(new VoidArtifactCacheWrite(
+                electionId,
+                voidDecisionId,
+                publicationAttemptId,
+                artifactName,
+                envelope));
+            return Task.CompletedTask;
+        }
+
+        private static string CreateArtifactKey(
+            string electionId,
+            Guid voidDecisionId,
+            Guid publicationAttemptId,
+            string artifactName) =>
+            $"{electionId}:{voidDecisionId:N}:{publicationAttemptId:N}:{artifactName}";
+    }
+
+    private sealed record VoidStatusCacheWrite(
+        string ElectionId,
+        ElectionVoidPublicCacheEnvelope Envelope);
+
+    private sealed record VoidArtifactCacheWrite(
+        string ElectionId,
+        Guid VoidDecisionId,
+        Guid PublicationAttemptId,
+        string ArtifactName,
+        ElectionVoidPublicCacheEnvelope Envelope);
 
     private sealed class FakeUnitOfWorkProvider(ElectionStore store) : IUnitOfWorkProvider<ElectionsDbContext>
     {
@@ -8553,9 +9002,11 @@ public class ElectionLifecycleServiceTests
         public Task<ElectionReportPackageRecord?> GetLatestReportPackageAsync(ElectionId electionId) =>
             Task.FromResult(
                 store.ReportPackages.Values
-                    .Where(x => x.ElectionId == electionId)
-                    .OrderByDescending(x => x.AttemptNumber)
-                    .ThenByDescending(x => x.AttemptedAt)
+                    .Where(x =>
+                        x.ElectionId == electionId &&
+                        x.Status != ElectionReportPackageStatus.SupersededByVoid)
+                    .OrderByDescending(x => x.AttemptedAt)
+                    .ThenByDescending(x => x.AttemptNumber)
                     .FirstOrDefault());
 
         public Task<ElectionReportPackageRecord?> GetReportPackageAsync(Guid reportPackageId) =>
@@ -8606,6 +9057,97 @@ public class ElectionLifecycleServiceTests
             store.ReportAccessGrants.RemoveAll(x => x.Id == accessGrant.Id);
             store.ReportAccessGrants.Add(accessGrant);
             return Task.CompletedTask;
+        }
+
+        public Task<ElectionVoidDecisionRecord?> GetVoidDecisionAsync(ElectionId electionId) =>
+            Task.FromResult(store.VoidDecisions.FirstOrDefault(x => x.ElectionId == electionId));
+
+        public Task<ElectionVoidDecisionRecord?> GetVoidDecisionAsync(Guid voidDecisionId) =>
+            Task.FromResult(store.VoidDecisions.FirstOrDefault(x => x.Id == voidDecisionId));
+
+        public Task SaveVoidDecisionAsync(ElectionVoidDecisionRecord voidDecision)
+        {
+            if (store.VoidDecisions.Any(x => x.ElectionId == voidDecision.ElectionId))
+            {
+                throw new InvalidOperationException("A void decision already exists for this election.");
+            }
+
+            store.VoidDecisions.Add(voidDecision);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateVoidDecisionAsync(ElectionVoidDecisionRecord voidDecision)
+        {
+            store.VoidDecisions.RemoveAll(x => x.Id == voidDecision.Id);
+            store.VoidDecisions.Add(voidDecision);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionVoidPublicationAttemptRecord>> GetVoidPublicationAttemptsAsync(Guid voidDecisionId) =>
+            Task.FromResult<IReadOnlyList<ElectionVoidPublicationAttemptRecord>>(
+                store.VoidPublicationAttempts
+                    .Where(x => x.VoidDecisionId == voidDecisionId)
+                    .OrderBy(x => x.AttemptNumber)
+                    .ThenBy(x => x.AttemptedAt)
+                    .ToArray());
+
+        public Task<ElectionVoidPublicationAttemptRecord?> GetLatestVoidPublicationAttemptAsync(Guid voidDecisionId) =>
+            Task.FromResult(
+                store.VoidPublicationAttempts
+                    .Where(x => x.VoidDecisionId == voidDecisionId)
+                    .OrderByDescending(x => x.AttemptNumber)
+                    .ThenByDescending(x => x.AttemptedAt)
+                    .FirstOrDefault());
+
+        public Task SaveVoidPublicationAttemptAsync(ElectionVoidPublicationAttemptRecord publicationAttempt)
+        {
+            store.VoidPublicationAttempts.Add(publicationAttempt);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateVoidPublicationAttemptAsync(ElectionVoidPublicationAttemptRecord publicationAttempt)
+        {
+            store.VoidPublicationAttempts.RemoveAll(x => x.Id == publicationAttempt.Id);
+            store.VoidPublicationAttempts.Add(publicationAttempt);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionVoidSupersededArtifactRecord>> GetVoidSupersededArtifactsAsync(Guid voidDecisionId) =>
+            Task.FromResult<IReadOnlyList<ElectionVoidSupersededArtifactRecord>>(
+                store.VoidSupersededArtifacts
+                    .Where(x => x.VoidDecisionId == voidDecisionId)
+                    .OrderBy(x => x.SupersededAt)
+                    .ThenBy(x => x.ArtifactKind)
+                    .ToArray());
+
+        public Task SaveVoidSupersededArtifactAsync(ElectionVoidSupersededArtifactRecord supersededArtifact)
+        {
+            store.VoidSupersededArtifacts.Add(supersededArtifact);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ElectionReportPackageRecord>> SupersedeReportPackagesByVoidAsync(
+            ElectionId electionId,
+            Guid voidDecisionId,
+            DateTime supersededAt)
+        {
+            var packages = store.ReportPackages.Values
+                .Where(x =>
+                    x.ElectionId == electionId &&
+                    x.Status != ElectionReportPackageStatus.SupersededByVoid)
+                .OrderBy(x => x.AttemptNumber)
+                .ThenBy(x => x.AttemptedAt)
+                .ToArray();
+
+            var superseded = packages
+                .Select(x => x.SupersedeByVoid(voidDecisionId, supersededAt))
+                .ToArray();
+            foreach (var package in superseded)
+            {
+                store.ReportPackages[package.Id] = package;
+            }
+
+            return Task.FromResult<IReadOnlyList<ElectionReportPackageRecord>>(superseded);
         }
 
         public Task<IReadOnlyList<ApprovedProtocolPackageCatalogEntryRecord>> GetApprovedProtocolPackageCatalogEntriesAsync() =>

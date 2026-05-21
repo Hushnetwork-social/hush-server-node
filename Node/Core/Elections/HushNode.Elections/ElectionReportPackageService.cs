@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -410,6 +411,248 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 frozenEvidenceFingerprint,
                 "PACKAGE_BUILD_FAILED",
                 ex.Message));
+        }
+    }
+
+    public ElectionVoidReportPackageBuildResult BuildVoid(ElectionVoidReportPackageBuildRequest request)
+    {
+        try
+        {
+            ValidateVoidRequest(request);
+
+            var packageId = Guid.NewGuid();
+            var publicSupersededArtifacts = request.SupersededArtifacts
+                .OrderBy(x => x.ArtifactKind)
+                .ThenBy(x => x.ArtifactRef, StringComparer.Ordinal)
+                .Select(x => new ElectionVoidSupersededPublicArtifactReference(
+                    x.ArtifactKind,
+                    x.ArtifactRef,
+                    x.ArtifactHash))
+                .ToArray();
+            var historicalUnofficialHash = request.HistoricalUnofficialResult is null
+                ? null
+                : CreateSha256Fingerprint(ComputeResultArtifactHash(request.HistoricalUnofficialResult));
+            var packageArtifactRef = BuildVoidArtifactRef(packageId, VerificationPackageFileNames.VoidPackageArchive);
+            var publicStatusArtifactRef = BuildVoidArtifactRef(packageId, VerificationPackageFileNames.VoidPublicStatus);
+            var contentPackageHash = ComputeVoidContentPackageHash(
+                request,
+                publicSupersededArtifacts,
+                historicalUnofficialHash);
+            var contentPackageFingerprint = CreateSha256Fingerprint(contentPackageHash);
+            var publicStatus = new ElectionVoidPublicStatusRecord(
+                request.Election.ElectionId,
+                request.Decision.Id,
+                request.PublicationAttempt.Id,
+                "VOID",
+                request.Decision.PublicJustification,
+                VerificationResultCodes.ElectionVoided,
+                packageArtifactRef,
+                contentPackageFingerprint,
+                request.AttemptedAt,
+                publicSupersededArtifacts);
+            var restrictedEvidenceIndex = new ElectionVoidRestrictedEvidenceIndexRecord(
+                request.Election.ElectionId,
+                request.Decision.Id,
+                request.PublicationAttempt.Id,
+                request.Decision.EvidenceReferences,
+                request.HistoricalUnofficialResult?.Id,
+                historicalUnofficialHash,
+                request.AttemptedAt);
+            var verifierOutput = BuildVoidVerifierOutput(
+                request,
+                packageId,
+                contentPackageFingerprint);
+
+            var artifactIds = Enumerable.Range(0, 9)
+                .Select(_ => Guid.NewGuid())
+                .ToArray();
+            var artifacts = new List<ElectionReportArtifactRecord>
+            {
+                CreateVoidJsonArtifact(
+                    request,
+                    packageId,
+                    artifactIds[0],
+                    ElectionReportArtifactKind.MachineVoidDecision,
+                    ElectionReportArtifactAccessScope.Public,
+                    1,
+                    "VOID decision",
+                    VerificationPackageFileNames.VoidDecision,
+                    BuildPublicVoidDecisionProjection(request.Decision)),
+                CreateVoidMarkdownArtifact(
+                    request,
+                    packageId,
+                    artifactIds[1],
+                    ElectionReportArtifactKind.HumanVoidSummary,
+                    ElectionReportArtifactAccessScope.Public,
+                    2,
+                    "Public VOID summary",
+                    VerificationPackageFileNames.PublicVoidSummary,
+                    BuildPublicVoidSummaryContent(
+                        request,
+                        packageId,
+                        contentPackageFingerprint,
+                        publicSupersededArtifacts,
+                        historicalUnofficialHash)),
+                CreateVoidJsonArtifact(
+                    request,
+                    packageId,
+                    artifactIds[2],
+                    ElectionReportArtifactKind.MachineVoidPublicStatus,
+                    ElectionReportArtifactAccessScope.Public,
+                    3,
+                    "Public VOID status",
+                    VerificationPackageFileNames.VoidPublicStatus,
+                    publicStatus),
+                CreateVoidJsonArtifact(
+                    request,
+                    packageId,
+                    artifactIds[3],
+                    ElectionReportArtifactKind.MachineVoidSupersededArtifacts,
+                    ElectionReportArtifactAccessScope.Public,
+                    4,
+                    "Superseded artifacts",
+                    VerificationPackageFileNames.VoidSupersededArtifacts,
+                    new VoidSupersededArtifactsProjection(
+                        request.Election.ElectionId.ToString(),
+                        request.Decision.Id,
+                        request.PublicationAttempt.Id,
+                        publicSupersededArtifacts)),
+                CreateVoidJsonArtifact(
+                    request,
+                    packageId,
+                    artifactIds[4],
+                    ElectionReportArtifactKind.MachineVoidVerifierResult,
+                    ElectionReportArtifactAccessScope.Public,
+                    5,
+                    "VOID verifier result",
+                    VerificationPackageFileNames.VoidVerifierResult,
+                    verifierOutput),
+                CreateVoidMarkdownArtifact(
+                    request,
+                    packageId,
+                    artifactIds[5],
+                    ElectionReportArtifactKind.HumanRestrictedVoidEvidenceIndex,
+                    ElectionReportArtifactAccessScope.OwnerAuditorOnly,
+                    6,
+                    "Restricted VOID evidence index",
+                    VerificationPackageFileNames.RestrictedVoidEvidenceIndex,
+                    BuildRestrictedVoidEvidenceIndexContent(restrictedEvidenceIndex)),
+            };
+
+            if (request.HistoricalUnofficialResult is not null)
+            {
+                artifacts.Add(CreateVoidJsonArtifact(
+                    request,
+                    packageId,
+                    artifactIds[6],
+                    ElectionReportArtifactKind.MachineRestrictedHistoricalUnofficialResult,
+                    ElectionReportArtifactAccessScope.OwnerAuditorOnly,
+                    7,
+                    "Historical unofficial result",
+                    VerificationPackageFileNames.RestrictedHistoricalUnofficialResult,
+                    BuildHistoricalUnofficialResultProjection(request.HistoricalUnofficialResult)));
+            }
+
+            var manifest = BuildVoidPackageManifest(
+                request,
+                packageId,
+                contentPackageFingerprint,
+                artifacts
+                    .Where(x => x.AccessScope == ElectionReportArtifactAccessScope.Public)
+                    .ToArray());
+            var manifestArtifact = CreateVoidJsonArtifact(
+                request,
+                packageId,
+                artifactIds[7],
+                ElectionReportArtifactKind.MachineVoidPackageManifest,
+                ElectionReportArtifactAccessScope.Public,
+                8,
+                "VOID package manifest",
+                VerificationPackageFileNames.VoidPackageManifest,
+                manifest);
+            artifacts.Add(manifestArtifact);
+            var archiveBytes = BuildVoidPackageArchiveBytes(
+                artifacts
+                    .Where(x => x.AccessScope == ElectionReportArtifactAccessScope.Public)
+                    .ToArray());
+            artifacts.Add(CreateVoidBinaryArtifact(
+                request,
+                packageId,
+                artifactIds[8],
+                ElectionReportArtifactKind.MachineVoidPackageArchive,
+                ElectionReportArtifactAccessScope.Public,
+                9,
+                "VOID package ZIP",
+                VerificationPackageFileNames.VoidPackageArchive,
+                "application/zip",
+                archiveBytes));
+
+            var sealedAttempt = ElectionModelFactory.CreateSealedVoidPublicationAttempt(
+                request.Election.ElectionId,
+                request.Decision.Id,
+                request.PublicationAttempt.AttemptNumber,
+                request.PublicationAttempt.FrozenEvidenceHash,
+                request.PublicationAttempt.FrozenEvidenceFingerprint,
+                contentPackageHash,
+                artifacts.Count,
+                request.AttemptedByPublicAddress,
+                reportPackageId: packageId,
+                previousAttemptId: request.PublicationAttempt.PreviousAttemptId,
+                publicStatusArtifactRef: publicStatusArtifactRef,
+                voidPackageArtifactRef: packageArtifactRef,
+                attemptedAt: request.AttemptedAt,
+                sealedAt: request.AttemptedAt,
+                preassignedAttemptId: request.PublicationAttempt.Id);
+            var package = ElectionModelFactory.CreateSealedVoidReportPackage(
+                request.Election.ElectionId,
+                request.AttemptNumber,
+                request.Decision.Id,
+                request.PublicationAttempt.Id,
+                request.PublicationAttempt.FrozenEvidenceHash,
+                request.PublicationAttempt.FrozenEvidenceFingerprint,
+                contentPackageHash,
+                artifacts.Count,
+                request.AttemptedByPublicAddress,
+                previousAttemptId: request.PreviousReportPackageId,
+                attemptedAt: request.AttemptedAt,
+                sealedAt: request.AttemptedAt,
+                preassignedPackageId: packageId);
+
+            return ElectionVoidReportPackageBuildResult.Success(
+                package,
+                sealedAttempt,
+                publicStatus,
+                restrictedEvidenceIndex,
+                artifacts);
+        }
+        catch (Exception ex)
+        {
+            var failedAttempt = ElectionModelFactory.CreateFailedVoidPublicationAttempt(
+                request.Election.ElectionId,
+                request.Decision.Id,
+                request.PublicationAttempt.AttemptNumber,
+                request.PublicationAttempt.FrozenEvidenceHash,
+                request.PublicationAttempt.FrozenEvidenceFingerprint,
+                request.AttemptedByPublicAddress,
+                "VOID_PACKAGE_BUILD_FAILED",
+                ex.Message,
+                previousAttemptId: request.PublicationAttempt.PreviousAttemptId,
+                attemptedAt: request.AttemptedAt,
+                preassignedAttemptId: request.PublicationAttempt.Id);
+            var package = ElectionModelFactory.CreateFailedVoidReportPackageAttempt(
+                request.Election.ElectionId,
+                request.AttemptNumber,
+                request.Decision.Id,
+                request.PublicationAttempt.Id,
+                request.PublicationAttempt.FrozenEvidenceHash,
+                request.PublicationAttempt.FrozenEvidenceFingerprint,
+                request.AttemptedByPublicAddress,
+                "VOID_PACKAGE_BUILD_FAILED",
+                ex.Message,
+                previousAttemptId: request.PreviousReportPackageId,
+                attemptedAt: request.AttemptedAt);
+
+            return ElectionVoidReportPackageBuildResult.Failure(package, failedAttempt);
         }
     }
 
@@ -1278,6 +1521,387 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             (participationRecord?.ParticipationStatus ?? ElectionParticipationStatus.DidNotVote).ToString(),
             participationRecord?.CountsAsParticipation ?? false);
 
+    private static void ValidateVoidRequest(ElectionVoidReportPackageBuildRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Election.LifecycleState != ElectionLifecycleState.Voided)
+        {
+            throw new InvalidOperationException("VOID packages require a voided election record.");
+        }
+
+        if (request.Decision.ElectionId != request.Election.ElectionId ||
+            request.PublicationAttempt.ElectionId != request.Election.ElectionId ||
+            request.PublicationAttempt.VoidDecisionId != request.Decision.Id)
+        {
+            throw new InvalidOperationException("VOID package inputs must refer to the same election and decision.");
+        }
+
+        if (request.PublicationAttempt.Status != ElectionVoidPublicationAttemptStatus.Pending)
+        {
+            throw new InvalidOperationException("VOID package generation requires a pending publication attempt.");
+        }
+    }
+
+    private static ElectionReportArtifactRecord CreateVoidJsonArtifact(
+        ElectionVoidReportPackageBuildRequest request,
+        Guid packageId,
+        Guid artifactId,
+        ElectionReportArtifactKind artifactKind,
+        ElectionReportArtifactAccessScope accessScope,
+        int sortOrder,
+        string title,
+        string fileName,
+        object payload)
+    {
+        var content = SerializeJson(payload);
+        return ElectionModelFactory.CreateReportArtifact(
+            packageId,
+            request.Election.ElectionId,
+            artifactKind,
+            ElectionReportArtifactFormat.Json,
+            accessScope,
+            sortOrder,
+            title,
+            fileName,
+            "application/json",
+            ComputeHashBytes(content),
+            content,
+            recordedAt: request.AttemptedAt,
+            preassignedArtifactId: artifactId);
+    }
+
+    private static ElectionReportArtifactRecord CreateVoidMarkdownArtifact(
+        ElectionVoidReportPackageBuildRequest request,
+        Guid packageId,
+        Guid artifactId,
+        ElectionReportArtifactKind artifactKind,
+        ElectionReportArtifactAccessScope accessScope,
+        int sortOrder,
+        string title,
+        string fileName,
+        string content) =>
+        ElectionModelFactory.CreateReportArtifact(
+            packageId,
+            request.Election.ElectionId,
+            artifactKind,
+            ElectionReportArtifactFormat.Markdown,
+            accessScope,
+            sortOrder,
+            title,
+            fileName,
+            "text/markdown",
+            ComputeHashBytes(content),
+            content,
+            recordedAt: request.AttemptedAt,
+            preassignedArtifactId: artifactId);
+
+    private static ElectionReportArtifactRecord CreateVoidBinaryArtifact(
+        ElectionVoidReportPackageBuildRequest request,
+        Guid packageId,
+        Guid artifactId,
+        ElectionReportArtifactKind artifactKind,
+        ElectionReportArtifactAccessScope accessScope,
+        int sortOrder,
+        string title,
+        string fileName,
+        string mediaType,
+        byte[] content) =>
+        ElectionModelFactory.CreateReportArtifact(
+            packageId,
+            request.Election.ElectionId,
+            artifactKind,
+            ElectionReportArtifactFormat.Binary,
+            accessScope,
+            sortOrder,
+            title,
+            fileName,
+            mediaType,
+            ComputeHashBytes(content),
+            Convert.ToBase64String(content),
+            recordedAt: request.AttemptedAt,
+            preassignedArtifactId: artifactId);
+
+    private static object BuildPublicVoidDecisionProjection(ElectionVoidDecisionRecord decision) =>
+        new
+        {
+            schemaId = "hushvoting-void-decision-public-v1",
+            voidDecisionId = decision.Id,
+            electionId = decision.ElectionId.ToString(),
+            actorPublicAddress = decision.ActorPublicAddress,
+            actorRole = decision.ActorRole,
+            sourceTransactionId = decision.SourceTransactionId,
+            sourceBlockHeight = decision.SourceBlockHeight,
+            sourceBlockId = decision.SourceBlockId,
+            decidedAt = decision.DecidedAt,
+            previousLifecycleState = decision.PreviousLifecycleState.ToString(),
+            resultingLifecycleState = "Voided",
+            publicStatus = "VOID",
+            publicJustification = decision.PublicJustification,
+            publicJustificationHash = CreateSha256Fingerprint(decision.PublicJustificationHash),
+            evidenceReferences = decision.EvidenceReferences
+                .OrderBy(x => x.ReferenceKind)
+                .ThenBy(x => x.ReferenceId, StringComparer.Ordinal)
+                .Select(x => new
+                {
+                    referenceKind = x.ReferenceKind.ToString(),
+                    x.ReferenceId,
+                    x.ReferenceHash,
+                    visibility = x.Visibility.ToString(),
+                })
+                .ToArray(),
+        };
+
+    private static string BuildPublicVoidSummaryContent(
+        ElectionVoidReportPackageBuildRequest request,
+        Guid packageId,
+        string contentPackageHash,
+        IReadOnlyList<ElectionVoidSupersededPublicArtifactReference> supersededArtifacts,
+        string? historicalUnofficialHash)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("# VOID Election Summary");
+        builder.AppendLine();
+        builder.AppendLine($"Election: `{request.Election.Title}`");
+        builder.AppendLine($"Election id: `{request.Election.ElectionId}`");
+        builder.AppendLine($"Status: `VOID`");
+        builder.AppendLine($"Void decision id: `{request.Decision.Id}`");
+        builder.AppendLine($"VOID package id: `{packageId}`");
+        builder.AppendLine($"VOID package content hash: `{contentPackageHash}`");
+        builder.AppendLine($"Previous lifecycle state: `{request.Decision.PreviousLifecycleState}`");
+        builder.AppendLine("Resulting lifecycle state: `Voided`");
+        builder.AppendLine($"Decided at: `{request.Decision.DecidedAt:O}`");
+        builder.AppendLine($"Published at: `{request.AttemptedAt:O}`");
+        builder.AppendLine();
+        builder.AppendLine("## Public Justification");
+        builder.AppendLine();
+        builder.AppendLine(request.Decision.PublicJustification);
+        builder.AppendLine();
+        builder.AppendLine("## Result Claim Impact");
+        builder.AppendLine();
+        builder.AppendLine("This election is voided. No current final-result claim is available.");
+        builder.AppendLine("Historical packages, reports, verifier summaries, and public status references are superseded by this VOID decision.");
+        builder.AppendLine();
+        builder.AppendLine("## Superseded Artifacts");
+        builder.AppendLine();
+        if (supersededArtifacts.Count == 0)
+        {
+            builder.AppendLine("No previous current publication artifacts were recorded before the VOID decision.");
+        }
+        else
+        {
+            foreach (var artifact in supersededArtifacts)
+            {
+                builder.AppendLine(
+                    $"- `{artifact.ArtifactKind}` `{artifact.ArtifactRef}` hash `{artifact.ArtifactHash ?? "not-recorded"}`");
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Historical Unofficial Result");
+        builder.AppendLine();
+        builder.AppendLine(historicalUnofficialHash is null
+            ? "No unofficial result was available before void."
+            : $"A historical unofficial result existed before void. Restricted hash/id: `{historicalUnofficialHash}`.");
+        builder.AppendLine();
+        builder.AppendLine("No participation counts, vote counts, accepted ballot sets, tally material, voter identities, vote choices, anomaly bodies, or support logs are included in this public summary.");
+        return builder.ToString();
+    }
+
+    private static string BuildRestrictedVoidEvidenceIndexContent(
+        ElectionVoidRestrictedEvidenceIndexRecord restrictedEvidenceIndex)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("# Restricted VOID Evidence Index");
+        builder.AppendLine();
+        builder.AppendLine($"Election id: `{restrictedEvidenceIndex.ElectionId}`");
+        builder.AppendLine($"Void decision id: `{restrictedEvidenceIndex.VoidDecisionId}`");
+        builder.AppendLine($"Publication attempt id: `{restrictedEvidenceIndex.PublicationAttemptId}`");
+        builder.AppendLine($"Recorded at: `{restrictedEvidenceIndex.RecordedAt:O}`");
+        builder.AppendLine();
+        builder.AppendLine("## Evidence References");
+        builder.AppendLine();
+        if (restrictedEvidenceIndex.EvidenceReferences.Count == 0)
+        {
+            builder.AppendLine("No optional evidence references were provided.");
+        }
+        else
+        {
+            foreach (var reference in restrictedEvidenceIndex.EvidenceReferences
+                         .OrderBy(x => x.ReferenceKind)
+                         .ThenBy(x => x.ReferenceId, StringComparer.Ordinal))
+            {
+                builder.AppendLine($"- Kind: `{reference.ReferenceKind}`");
+                builder.AppendLine($"  Reference id: `{reference.ReferenceId}`");
+                builder.AppendLine($"  Internal record id: `{reference.InternalRecordId?.ToString() ?? "not-applicable"}`");
+                builder.AppendLine($"  External reference: `{reference.ExternalReference ?? "not-provided"}`");
+                builder.AppendLine($"  Reference hash: `{reference.ReferenceHash ?? "not-provided"}`");
+                builder.AppendLine($"  Visibility: `{reference.Visibility}`");
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Historical Unofficial Result");
+        builder.AppendLine();
+        builder.AppendLine(restrictedEvidenceIndex.HistoricalUnofficialResultArtifactId.HasValue
+            ? $"Historical unofficial result artifact id: `{restrictedEvidenceIndex.HistoricalUnofficialResultArtifactId}` hash `{restrictedEvidenceIndex.HistoricalUnofficialResultHash}`."
+            : "No historical unofficial result artifact is attached to this VOID package.");
+        return builder.ToString();
+    }
+
+    private static object BuildHistoricalUnofficialResultProjection(ElectionResultArtifactRecord resultArtifact) =>
+        new
+        {
+            schemaId = "hushvoting-restricted-historical-unofficial-result-v1",
+            artifactId = resultArtifact.Id,
+            electionId = resultArtifact.ElectionId.ToString(),
+            resultArtifact.Title,
+            artifactKind = resultArtifact.ArtifactKind.ToString(),
+            visibility = resultArtifact.Visibility.ToString(),
+            resultArtifact.NamedOptionResults,
+            resultArtifact.BlankCount,
+            resultArtifact.TotalVotedCount,
+            resultArtifact.EligibleToVoteCount,
+            resultArtifact.DidNotVoteCount,
+            resultArtifact.DenominatorEvidence,
+            resultArtifact.PublicPayload,
+            contentHash = CreateSha256Fingerprint(ComputeResultArtifactHash(resultArtifact)),
+            resultArtifact.RecordedAt,
+            resultArtifact.RecordedByPublicAddress,
+        };
+
+    private static VerifierOutputRecord BuildVoidVerifierOutput(
+        ElectionVoidReportPackageBuildRequest request,
+        Guid packageId,
+        string contentPackageHash) =>
+        new(
+            OutputVersion: "1.0",
+            PackageId: packageId.ToString(),
+            ElectionId: request.Election.ElectionId.ToString(),
+            VerifierProfileId: VerificationProfileIds.PublicAnonymousV1,
+            OverallStatus: VerificationOverallStatus.Warn,
+            ExitCode: VerificationExitCodes.FromOverallStatus(VerificationOverallStatus.Warn),
+            VerifiedAt: request.AttemptedAt,
+            Results:
+            [
+                new VerifierCheckResultRecord(
+                    "VFY-VOID-000",
+                    VerificationCheckStatus.Pass,
+                    VerificationResultCodes.PackageStructureValid,
+                    "VOID package structure is authentic and internally consistent.",
+                    new Dictionary<string, string>
+                    {
+                        ["package_id"] = packageId.ToString(),
+                        ["content_package_hash"] = contentPackageHash,
+                    }),
+                new VerifierCheckResultRecord(
+                    "VFY-VOID-001",
+                    VerificationCheckStatus.Warn,
+                    VerificationResultCodes.ElectionVoided,
+                    "This election is voided. No current final-result or final-inclusion claim is available.",
+                    new Dictionary<string, string>
+                    {
+                        ["void_decision_id"] = request.Decision.Id.ToString(),
+                        ["previous_lifecycle_state"] = request.Decision.PreviousLifecycleState.ToString(),
+                        ["resulting_lifecycle_state"] = request.Decision.ResultingLifecycleState.ToString(),
+                    }),
+            ]);
+
+    private static VoidPackageManifestProjection BuildVoidPackageManifest(
+        ElectionVoidReportPackageBuildRequest request,
+        Guid packageId,
+        string contentPackageHash,
+        IReadOnlyList<ElectionReportArtifactRecord> artifacts) =>
+        new(
+            SchemaId: "hushvoting-void-package-manifest-v1",
+            PackageId: packageId,
+            ElectionId: request.Election.ElectionId.ToString(),
+            VoidDecisionId: request.Decision.Id,
+            PublicationAttemptId: request.PublicationAttempt.Id,
+            Status: "VOID",
+            VerifierResultCode: VerificationResultCodes.ElectionVoided,
+            PackageHashCanonicalization: "sha256 over immutable void decision/publication inputs, public supersession refs, historical result hash when present, and frozen evidence hash; self-referential status, manifest, and archive files are excluded.",
+            PackageHash: contentPackageHash,
+            CreatedAt: request.AttemptedAt,
+            Entries: artifacts
+                .OrderBy(x => x.SortOrder)
+                .ThenBy(x => x.FileName, StringComparer.Ordinal)
+                .Select(x => new VoidPackageManifestEntryProjection(
+                    x.FileName,
+                    CreateSha256Fingerprint(x.ContentHash),
+                    x.MediaType,
+                    x.AccessScope == ElectionReportArtifactAccessScope.OwnerAuditorOnly
+                        ? "restricted-owner-auditor"
+                        : "public",
+                    x.ArtifactKind.ToString(),
+                    x.Format.ToString()))
+                .ToArray());
+
+    private static byte[] ComputeVoidContentPackageHash(
+        ElectionVoidReportPackageBuildRequest request,
+        IReadOnlyList<ElectionVoidSupersededPublicArtifactReference> supersededArtifacts,
+        string? historicalUnofficialHash)
+    {
+        var payload = SerializeJson(new
+        {
+            schemaId = "hushvoting-void-package-content-hash-v1",
+            electionId = request.Election.ElectionId.ToString(),
+            decisionId = request.Decision.Id,
+            publicationAttemptId = request.PublicationAttempt.Id,
+            request.Decision.PreviousLifecycleState,
+            request.Decision.ResultingLifecycleState,
+            publicJustificationHash = CreateSha256Fingerprint(request.Decision.PublicJustificationHash),
+            supersededArtifacts,
+            historicalUnofficialHash,
+            frozenEvidenceHash = CreateSha256Fingerprint(request.PublicationAttempt.FrozenEvidenceHash),
+        });
+        return ComputeHashBytes(payload);
+    }
+
+    private static byte[] ComputeResultArtifactHash(ElectionResultArtifactRecord artifact) =>
+        ComputeHashBytes(SerializeJson(new
+        {
+            artifact.Id,
+            ElectionId = artifact.ElectionId.ToString(),
+            artifact.ArtifactKind,
+            artifact.Visibility,
+            artifact.Title,
+            artifact.NamedOptionResults,
+            artifact.BlankCount,
+            artifact.TotalVotedCount,
+            artifact.EligibleToVoteCount,
+            artifact.DidNotVoteCount,
+            artifact.DenominatorEvidence,
+            artifact.TallyReadyArtifactId,
+            artifact.SourceResultArtifactId,
+            artifact.PublicPayload,
+            artifact.RecordedAt,
+            artifact.RecordedByPublicAddress,
+        }));
+
+    private static byte[] BuildVoidPackageArchiveBytes(IReadOnlyList<ElectionReportArtifactRecord> artifacts)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var artifact in artifacts
+                         .OrderBy(x => x.SortOrder)
+                         .ThenBy(x => x.FileName, StringComparer.Ordinal))
+            {
+                var entry = archive.CreateEntry(artifact.FileName.Replace('\\', '/'));
+                using var entryStream = entry.Open();
+                var bytes = artifact.Format == ElectionReportArtifactFormat.Binary
+                    ? Convert.FromBase64String(artifact.Content)
+                    : Encoding.UTF8.GetBytes(artifact.Content);
+                entryStream.Write(bytes, 0, bytes.Length);
+            }
+        }
+
+        return stream.ToArray();
+    }
+
+    private static string BuildVoidArtifactRef(Guid packageId, string artifactName) =>
+        $"report-package:{packageId:N}/{artifactName}";
+
     private static ElectionReportArtifactRecord CreateJsonArtifact(
         ElectionReportPackageBuildRequest request,
         Guid packageId,
@@ -1865,6 +2489,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
     private static byte[] ComputeHashBytes(string value) =>
         SHA256.HashData(Encoding.UTF8.GetBytes(value));
 
+    private static byte[] ComputeHashBytes(byte[] value) =>
+        SHA256.HashData(value);
+
     private static string GetModeProfileFamilyLabel(ElectionRecord election) =>
         election.SelectedProfileDevOnly
             ? "dev/open ceremony profiles"
@@ -1895,6 +2522,9 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             ? Convert.ToHexString(value).ToLowerInvariant()
             : string.Empty;
 
+    private static string CreateSha256Fingerprint(byte[] value) =>
+        $"sha256:{BuildHashHex(value)}";
+
     private static bool ByteArrayEquals(byte[]? left, byte[]? right)
     {
         if (ReferenceEquals(left, right))
@@ -1920,6 +2550,33 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
 
     private static bool StartsWithAny(string value, params string[] candidates) =>
         candidates.Any(candidate => value.StartsWith(candidate, StringComparison.OrdinalIgnoreCase));
+
+    private sealed record VoidSupersededArtifactsProjection(
+        string ElectionId,
+        Guid VoidDecisionId,
+        Guid PublicationAttemptId,
+        IReadOnlyList<ElectionVoidSupersededPublicArtifactReference> Artifacts);
+
+    private sealed record VoidPackageManifestProjection(
+        string SchemaId,
+        Guid PackageId,
+        string ElectionId,
+        Guid VoidDecisionId,
+        Guid PublicationAttemptId,
+        string Status,
+        string VerifierResultCode,
+        string PackageHashCanonicalization,
+        string PackageHash,
+        DateTime CreatedAt,
+        IReadOnlyList<VoidPackageManifestEntryProjection> Entries);
+
+    private sealed record VoidPackageManifestEntryProjection(
+        string Path,
+        string Sha256Hash,
+        string MediaType,
+        string AccessScope,
+        string ArtifactKind,
+        string Format);
 
     private sealed record FrozenEvidenceProjection(
         string ElectionId,
