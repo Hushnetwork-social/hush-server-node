@@ -12,6 +12,7 @@ public static class HushNodeElectionsgRPCHostBuild
 {
     public static void RegisterElectionsRPCServices(this IServiceCollection services)
     {
+        services.AddSingleton<IElectionReceiptPackageBindingResolver, ElectionReceiptPackageBindingResolver>();
         services.AddSingleton<IElectionQueryApplicationService>(sp =>
             new ElectionQueryApplicationService(
                 sp.GetRequiredService<IUnitOfWorkProvider<ElectionsDbContext>>(),
@@ -20,7 +21,8 @@ public static class HushNodeElectionsgRPCHostBuild
                 sp.GetRequiredService<IElectionEnvelopeCryptoService>(),
                 sp.GetRequiredService<IElectionCastIdempotencyCacheService>(),
                 sp.GetRequiredService<IElectionBallotPublicationService>(),
-                sp.GetRequiredService<IElectionVerificationPackageExportService>()));
+                sp.GetRequiredService<IElectionVerificationPackageExportService>(),
+                sp.GetRequiredService<IElectionReceiptPackageBindingResolver>()));
         services.AddSingleton<IGrpcDefinition, ElectionsGrpcServiceDefinition>();
         services.AddSingleton<HushElections.HushElectionsBase, ElectionsGrpcService>();
     }

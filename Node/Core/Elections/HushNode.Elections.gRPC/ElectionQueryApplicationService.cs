@@ -24,6 +24,7 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
     private readonly IElectionCastIdempotencyCacheService? _castIdempotencyCacheService;
     private readonly IElectionBallotPublicationService? _electionBallotPublicationService;
     private readonly IElectionVerificationPackageExportService _verificationPackageExportService;
+    private readonly IElectionReceiptPackageBindingResolver _receiptPackageBindingResolver;
 
     public ElectionQueryApplicationService(IUnitOfWorkProvider<ElectionsDbContext> unitOfWorkProvider)
         : this(unitOfWorkProvider, new ElectionCeremonyOptions(), null, null, null, null, null)
@@ -44,7 +45,8 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
         IElectionEnvelopeCryptoService? electionEnvelopeCryptoService,
         IElectionCastIdempotencyCacheService? castIdempotencyCacheService,
         IElectionBallotPublicationService? electionBallotPublicationService,
-        IElectionVerificationPackageExportService? verificationPackageExportService = null)
+        IElectionVerificationPackageExportService? verificationPackageExportService = null,
+        IElectionReceiptPackageBindingResolver? receiptPackageBindingResolver = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _ceremonyOptions = ceremonyOptions;
@@ -53,6 +55,8 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
         _castIdempotencyCacheService = castIdempotencyCacheService;
         _electionBallotPublicationService = electionBallotPublicationService;
         _verificationPackageExportService = verificationPackageExportService ?? new ElectionVerificationPackageExportService();
+        _receiptPackageBindingResolver = receiptPackageBindingResolver ??
+            new ElectionReceiptPackageBindingResolver(_verificationPackageExportService);
     }
 
     private Task TryRepairClosedElectionResultsAsync(ElectionId electionId) =>
@@ -891,7 +895,34 @@ public partial class ElectionQueryApplicationService : IElectionQueryApplication
                 selfRosterEntry);
         }
 
+        if (!string.IsNullOrWhiteSpace(response.ReceiptCommitment) &&
+            !string.IsNullOrWhiteSpace(response.PreparedBallotHash))
+        {
+            await PopulateReceiptPublicPackageBindingAsync(repository, response, election);
+        }
+
         return response;
+    }
+
+    private async Task PopulateReceiptPublicPackageBindingAsync(
+        IElectionsRepository repository,
+        GetElectionVotingViewResponse response,
+        ElectionRecord election)
+    {
+        try
+        {
+            var binding = await _receiptPackageBindingResolver.ResolvePublicPackageBindingAsync(repository, election);
+            response.HasReceiptPublicPackageBinding = binding.IsAvailable;
+            response.ReceiptPublicPackageId = binding.PackageId;
+            response.ReceiptPublicPackageHash = binding.PackageHash;
+            response.ReceiptPublicVerifierProfileId = binding.VerifierProfileId;
+            response.ReceiptPublicPackageBindingUnavailableReason = binding.UnavailableReason;
+        }
+        catch
+        {
+            response.HasReceiptPublicPackageBinding = false;
+            response.ReceiptPublicPackageBindingUnavailableReason = "public_package_binding_resolution_failed";
+        }
     }
 
     private async Task PopulateSp04VotingReadModelAsync(

@@ -2143,7 +2143,129 @@ public class ElectionQueryApplicationServiceTests
         response.HasPreparedBallotExpiresAt.Should().BeTrue();
         response.ReceiptCommitment.Should().Be("receipt-commitment-final");
         response.ReceiptCommitmentScheme.Should().Contain("sha256");
+        response.HasReceiptPublicPackageBinding.Should().BeFalse();
+        response.ReceiptPublicPackageBindingUnavailableReason.Should().Be("election_not_finalized");
         response.Sp04BlockerCode.Should().Be("final_cast_accepted");
+    }
+
+    [Fact]
+    public async Task GetElectionVotingViewAsync_Feat136WithFinalizedSp04Receipt_PopulatesPublicPackageBindingFromResolver()
+    {
+        var mocker = new AutoMocker();
+        var finalizedAt = DateTime.UtcNow.AddMinutes(-5);
+        var election = WithSealedBallotDefinition(CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Finalized,
+            OpenedAt = finalizedAt.AddHours(-1),
+            FinalizedAt = finalizedAt,
+            LastUpdatedAt = finalizedAt,
+        });
+        var rosterEntry = ElectionModelFactory.CreateRosterEntry(
+                election.ElectionId,
+                "1001",
+                ElectionRosterContactType.Email,
+                "voter-1001@example.org")
+            .FreezeAtOpen(finalizedAt.AddHours(-1))
+            .LinkToActor("voter-address", finalizedAt.AddMinutes(-50));
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            election with { OpenArtifactId = Guid.NewGuid() },
+            recordedByPublicAddress: "owner-address",
+            recordedAt: finalizedAt.AddHours(-1),
+            frozenEligibleVoterSetHash: [1, 2, 3, 4]);
+        election = election with
+        {
+            OpenArtifactId = openArtifact.Id,
+        };
+        var finalPreparedId = Guid.NewGuid();
+        var acceptedBallot = ElectionModelFactory.CreateAcceptedBallotRecord(
+            election.ElectionId,
+            "ciphertext-final",
+            "proof-final",
+            "nullifier-final",
+            acceptedAt: finalizedAt.AddMinutes(-15),
+            preparedBallotId: finalPreparedId,
+            preparedBallotHash: "prepared-final",
+            receiptCommitment: "receipt-commitment-final",
+            receiptCommitmentScheme: "hushvoting-sp04-receipt-commitment-sha256-v1",
+            ballotDefinitionVersion: election.BallotDefinitionVersion,
+            ballotDefinitionHash: election.BallotDefinitionHash);
+        var finalPrepared = ElectionModelFactory.CreatePreparedBallotCommitmentRecord(
+            election.ElectionId,
+            rosterEntry.OrganizationVoterId,
+            "voter-address",
+            "prepared-final",
+            election.BallotDefinitionVersion!.Value,
+            election.BallotDefinitionHash!,
+            "sp04-proof-v1",
+            finalizedAt.AddMinutes(-20),
+            preparedBallotId: finalPreparedId) with
+        {
+            State = ElectionPreparedBallotState.Cast,
+            AcceptedBallotId = acceptedBallot.Id,
+            CastAt = acceptedBallot.AcceptedAt,
+        };
+        var ceremonyRecord = ElectionModelFactory.CreateVoterCeremonyRecord(
+            election.ElectionId,
+            rosterEntry.OrganizationVoterId,
+            "voter-address",
+            election.BallotDefinitionVersion!.Value,
+            election.BallotDefinitionHash!,
+            createdAt: finalizedAt.AddMinutes(-30)) with
+        {
+            PreparedPackageCount = 1,
+            SpoiledPackageCount = 1,
+            FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
+            FinalAcceptedBallotId = acceptedBallot.Id,
+            LastUpdatedAt = acceptedBallot.AcceptedAt,
+        };
+        var packageBinding = ElectionReceiptPublicPackageBindingResult.Available(
+            $"HushElectionPackage-{election.ElectionId}",
+            new string('a', 64),
+            VerificationProfileIds.PublicAnonymousV1);
+        var receiptPackageBindingResolver = mocker.GetMock<IElectionReceiptPackageBindingResolver>();
+        receiptPackageBindingResolver
+            .Setup(x => x.ResolvePublicPackageBindingAsync(
+                It.IsAny<IElectionsRepository>(),
+                It.Is<ElectionRecord>(record => record.ElectionId == election.ElectionId)))
+            .ReturnsAsync(packageBinding);
+
+        ConfigureReadOnlyRepository(mocker, repo =>
+        {
+            repo.Setup(x => x.GetElectionAsync(election.ElectionId)).ReturnsAsync(election);
+            repo.Setup(x => x.GetRosterEntryByLinkedActorAsync(election.ElectionId, "voter-address"))
+                .ReturnsAsync(rosterEntry);
+            repo.Setup(x => x.GetBoundaryArtifactsAsync(election.ElectionId)).ReturnsAsync([openArtifact]);
+            repo.Setup(x => x.GetVoterCeremonyRecordAsync(election.ElectionId, rosterEntry.OrganizationVoterId))
+                .ReturnsAsync(ceremonyRecord);
+            repo.Setup(x => x.GetPreparedBallotCommitmentsAsync(election.ElectionId))
+                .ReturnsAsync([finalPrepared]);
+            repo.Setup(x => x.GetAcceptedBallotsAsync(election.ElectionId))
+                .ReturnsAsync([acceptedBallot]);
+        });
+
+        var sut = CreateQueryService(
+            mocker,
+            receiptPackageBindingResolver: receiptPackageBindingResolver.Object);
+
+        var response = await sut.GetElectionVotingViewAsync(
+            election.ElectionId,
+            "voter-address",
+            submissionIdempotencyKey: null);
+
+        response.Success.Should().BeTrue();
+        response.ReceiptCommitment.Should().Be(acceptedBallot.ReceiptCommitment);
+        response.PreparedBallotHash.Should().Be(acceptedBallot.PreparedBallotHash);
+        response.HasReceiptPublicPackageBinding.Should().BeTrue();
+        response.ReceiptPublicPackageId.Should().Be(packageBinding.PackageId);
+        response.ReceiptPublicPackageHash.Should().Be(packageBinding.PackageHash);
+        response.ReceiptPublicVerifierProfileId.Should().Be(VerificationProfileIds.PublicAnonymousV1);
+        response.ReceiptPublicPackageBindingUnavailableReason.Should().BeEmpty();
+        receiptPackageBindingResolver.Verify(
+            x => x.ResolvePublicPackageBindingAsync(
+                It.IsAny<IElectionsRepository>(),
+                It.Is<ElectionRecord>(record => record.ElectionId == election.ElectionId)),
+            Times.Once);
     }
 
     [Fact]
@@ -4471,14 +4593,16 @@ public class ElectionQueryApplicationServiceTests
         IMemPoolService? memPoolService = null,
         IElectionEnvelopeCryptoService? electionEnvelopeCryptoService = null,
         IElectionCastIdempotencyCacheService? castIdempotencyCacheService = null,
-        IElectionBallotPublicationService? electionBallotPublicationService = null) =>
+        IElectionBallotPublicationService? electionBallotPublicationService = null,
+        IElectionReceiptPackageBindingResolver? receiptPackageBindingResolver = null) =>
         new(
             mocker.GetMock<IUnitOfWorkProvider<ElectionsDbContext>>().Object,
             options ?? new ElectionCeremonyOptions(),
             memPoolService,
             electionEnvelopeCryptoService,
             castIdempotencyCacheService,
-            electionBallotPublicationService);
+            electionBallotPublicationService,
+            receiptPackageBindingResolver: receiptPackageBindingResolver);
 
     private static ElectionRecord CreateAdminElection(
         string title = "Board Election",
