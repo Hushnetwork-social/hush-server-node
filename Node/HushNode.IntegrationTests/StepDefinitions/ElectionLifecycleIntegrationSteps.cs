@@ -49,6 +49,7 @@ public sealed class ElectionLifecycleIntegrationSteps
     private readonly List<ElectionLifecycleStateProto> _observedStates = [];
     private readonly Dictionary<string, string> _trusteeInvitationIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _registeredIdentityAddresses = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _acceptedBallotCastTransactions = new(StringComparer.OrdinalIgnoreCase);
 
     private HushElections.HushElectionsClient? _client;
     private TestIdentity? _owner;
@@ -84,6 +85,7 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastResultViewResponse = null;
         _trusteeInvitationIds.Clear();
         _registeredIdentityAddresses.Clear();
+        _acceptedBallotCastTransactions.Clear();
     }
 
     [When(@"the owner creates an admin-only election draft through blockchain submission")]
@@ -2280,6 +2282,7 @@ public sealed class ElectionLifecycleIntegrationSteps
         string submissionIdempotencyKey)
     {
         var signedTransaction = await BuildAcceptedBallotCastTransactionAsync(actor, submissionIdempotencyKey);
+        _acceptedBallotCastTransactions[BuildCastTransactionCacheKey(actor, submissionIdempotencyKey)] = signedTransaction;
         using var waiter = GetNode().StartListeningForTransactions(minTransactions: 1, timeout: TimeSpan.FromSeconds(10));
 
         var submitResponse = await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
@@ -2296,7 +2299,12 @@ public sealed class ElectionLifecycleIntegrationSteps
         TestIdentity actor,
         string submissionIdempotencyKey)
     {
-        var signedTransaction = await BuildAcceptedBallotCastTransactionAsync(actor, submissionIdempotencyKey);
+        var cacheKey = BuildCastTransactionCacheKey(actor, submissionIdempotencyKey);
+        if (!_acceptedBallotCastTransactions.TryGetValue(cacheKey, out var signedTransaction))
+        {
+            signedTransaction = await BuildAcceptedBallotCastTransactionAsync(actor, submissionIdempotencyKey);
+            _acceptedBallotCastTransactions[cacheKey] = signedTransaction;
+        }
 
         return await GetBlockchainClient().SubmitSignedTransactionAsync(new SubmitSignedTransactionRequest
         {
@@ -2352,6 +2360,11 @@ public sealed class ElectionLifecycleIntegrationSteps
         _lastElectionResponse = await ReloadElectionAsync();
         return submitResponse;
     }
+
+    private string BuildCastTransactionCacheKey(
+        TestIdentity actor,
+        string submissionIdempotencyKey) =>
+        $"{GetElectionId()}|{actor.PublicSigningAddress}|{submissionIdempotencyKey.Trim()}";
 
     private async Task<string> BuildAcceptedBallotCastTransactionAsync(
         TestIdentity actor,
