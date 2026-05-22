@@ -4321,12 +4321,12 @@ public class ElectionLifecycleServiceTests
                 requiredApprovalCount: 1,
                 closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry));
         SeedSealedProtocolPackageBinding(store, scenario.Election);
-        var proofSessionRunner = new FakeSp07PublicationProofSessionRunner(store, scenario);
+        var proofSessionRunner = new FakeSp07PublicationProofSessionRunner(scenario);
         var service = CreateService(
             store,
             electionResultCryptoService: new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash),
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry,
-            publicationWitnessDeletionService: new FakePublicationWitnessDeletionService(store),
+            publicationWitnessDeletionService: new FakePublicationWitnessDeletionService(),
             publicationProofSessionRunner: proofSessionRunner);
 
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
@@ -4387,14 +4387,14 @@ public class ElectionLifecycleServiceTests
         scenario.Election.SelectedProfileId.Should().Be(expectedProfileId);
         scenario.Election.SelectedProfileDevOnly.Should().Be(!expectsSp07);
 
-        var proofSessionRunner = new FakeSp07PublicationProofSessionRunner(store, scenario);
+        var proofSessionRunner = new FakeSp07PublicationProofSessionRunner(scenario);
         var service = CreateService(
             store,
             electionResultCryptoService: expectsSp07
                 ? new FakeElectionResultCryptoService([2, 1, 0], scenario.FinalEncryptedTallyHash)
                 : new DevModeFallbackElectionResultCryptoService(),
             closeCountingExecutorKeyRegistry: closeCountingExecutorKeyRegistry,
-            publicationWitnessDeletionService: new FakePublicationWitnessDeletionService(store),
+            publicationWitnessDeletionService: new FakePublicationWitnessDeletionService(),
             publicationProofSessionRunner: proofSessionRunner);
 
         var submitResult = await service.SubmitFinalizationShareAsync(CreateExecutorBoundFinalizationShareRequest(
@@ -5784,33 +5784,27 @@ public class ElectionLifecycleServiceTests
     }
 
     private sealed class FakeSp07PublicationProofSessionRunner(
-        ElectionStore store,
         TrusteeCloseCountingScenario scenario) : IElectionSp07PublicationProofSessionRunner
     {
         public int RunCount { get; private set; }
         public ProtocolPackageBindingRecord? LastProtocolPackageBinding { get; private set; }
 
-        public Task<ElectionSp07PublicationProofSessionRunnerResult> RunAsync(
+        public async Task<ElectionSp07PublicationProofSessionRunnerResult> RunAsync(
             ElectionSp07PublicationProofSessionRunnerRequest request,
             CancellationToken cancellationToken = default)
         {
             RunCount++;
             LastProtocolPackageBinding = request.ProtocolPackageBinding;
-            AddVerifiedSp07Evidence(
-                store,
+            var records = CreateVerifiedSp07EvidenceRecords(
                 scenario,
                 sessionStatus: ElectionPublicationProofSessionStatus.Verified,
                 includeDeletionReceipt: false);
+            await request.Repository.SavePublicationProofSessionAsync(records.Session);
+            await request.Repository.SavePublicationProofTranscriptAsync(records.Transcript);
 
-            var session = store.PublicationProofSessions
-                .Where(x => x.ElectionId == scenario.Election.ElectionId)
-                .OrderByDescending(x => x.StartedAt)
-                .First();
-            var transcript = store.PublicationProofTranscripts
-                .Single(x => x.ProofSessionId == session.Id);
             var workerResult = new Sp07PublicationProofSessionRunResult(
                 scenario.Election.ElectionId.ToString(),
-                session.Id.ToString("N"),
+                records.Session.Id.ToString("N"),
                 "sp07-test-plan",
                 Passed: true,
                 ChunkCount: 1,
@@ -5819,28 +5813,28 @@ public class ElectionLifecycleServiceTests
                 SlowestChunkMilliseconds: 1,
                 Chunks: Array.Empty<Sp07PublicationProofChunkRunResult>());
 
-            return Task.FromResult(ElectionSp07PublicationProofSessionRunnerResult.Success(
-                session,
-                transcript,
-                workerResult));
+            return ElectionSp07PublicationProofSessionRunnerResult.Success(
+                records.Session,
+                records.Transcript,
+                workerResult);
         }
     }
 
-    private sealed class FakePublicationWitnessDeletionService(ElectionStore store) : IElectionPublicationWitnessDeletionService
+    private sealed class FakePublicationWitnessDeletionService : IElectionPublicationWitnessDeletionService
     {
-        public Task<ElectionPublicationWitnessDeletionResult> TryDeleteVerifiedWitnessesAsync(
+        public async Task<ElectionPublicationWitnessDeletionResult> TryDeleteVerifiedWitnessesAsync(
             IElectionsRepository repository,
             ElectionId electionId,
             DateTime deletedAt)
         {
-            var latestSession = store.PublicationProofSessions
+            var latestSession = (await repository.GetPublicationProofSessionsAsync(electionId))
                 .Where(x => x.ElectionId == electionId)
                 .OrderByDescending(x => x.StartedAt)
                 .ThenByDescending(x => x.Id)
                 .First();
-            var latestTranscript = store.PublicationProofTranscripts
+            var latestTranscript = (await repository.GetPublicationProofTranscriptsAsync(electionId))
                 .Single(x => x.ProofSessionId == latestSession.Id);
-            var existingReceipt = store.PublicationWitnessDeletionReceipts
+            var existingReceipt = (await repository.GetPublicationWitnessDeletionReceiptsAsync(electionId))
                 .FirstOrDefault(x => x.ProofSessionId == latestSession.Id);
             var receipt = existingReceipt ?? new ElectionPublicationWitnessDeletionReceiptRecord(
                 Guid.NewGuid(),
@@ -5858,18 +5852,17 @@ public class ElectionLifecycleServiceTests
                 FailureReason: null);
             if (existingReceipt is null)
             {
-                store.PublicationWitnessDeletionReceipts.Add(receipt);
+                await repository.SavePublicationWitnessDeletionReceiptAsync(receipt);
             }
 
-            var index = store.PublicationProofSessions.FindIndex(x => x.Id == latestSession.Id);
-            store.PublicationProofSessions[index] = latestSession with
+            await repository.UpdatePublicationProofSessionAsync(latestSession with
             {
                 Status = ElectionPublicationProofSessionStatus.WitnessDeleted,
                 CompletedAt = deletedAt,
                 DeletionReceiptId = receipt.Id,
-            };
+            });
 
-            return Task.FromResult(ElectionPublicationWitnessDeletionResult.Completed(receipt));
+            return ElectionPublicationWitnessDeletionResult.Completed(receipt);
         }
     }
 
@@ -6967,6 +6960,20 @@ public class ElectionLifecycleServiceTests
         ElectionPublicationProofSessionStatus sessionStatus = ElectionPublicationProofSessionStatus.WitnessDeleted,
         bool includeDeletionReceipt = true)
     {
+        var records = CreateVerifiedSp07EvidenceRecords(scenario, sessionStatus, includeDeletionReceipt);
+        store.PublicationProofSessions.Add(records.Session);
+        store.PublicationProofTranscripts.Add(records.Transcript);
+        if (records.DeletionReceipt is not null)
+        {
+            store.PublicationWitnessDeletionReceipts.Add(records.DeletionReceipt);
+        }
+    }
+
+    private static Sp07EvidenceRecords CreateVerifiedSp07EvidenceRecords(
+        TrusteeCloseCountingScenario scenario,
+        ElectionPublicationProofSessionStatus sessionStatus,
+        bool includeDeletionReceipt)
+    {
         var proofSessionId = Guid.NewGuid();
         var witnessSetId = Guid.NewGuid();
         var generatedAt = DateTime.UtcNow.AddMinutes(-2);
@@ -6978,7 +6985,7 @@ public class ElectionLifecycleServiceTests
         var transcriptHash = VerificationCanonicalHash.ComputeSha256LowerHex(
             $"{scenario.Election.ElectionId}|{acceptedHash}|{publishedHash}|{proofHash}");
 
-        store.PublicationProofSessions.Add(new ElectionPublicationProofSessionRecord(
+        var session = new ElectionPublicationProofSessionRecord(
             proofSessionId,
             scenario.Election.ElectionId,
             witnessSetId,
@@ -6999,9 +7006,9 @@ public class ElectionLifecycleServiceTests
             TranscriptHash: transcriptHash,
             ProofHash: proofHash,
             ServerVerifierOutputHash: VerificationCanonicalHash.ComputeSha256LowerHex("sp07-verifier-output"),
-            DeletionReceiptId: null));
+            DeletionReceiptId: null);
 
-        store.PublicationProofTranscripts.Add(new ElectionPublicationProofTranscriptRecord(
+        var transcript = new ElectionPublicationProofTranscriptRecord(
             Guid.NewGuid(),
             scenario.Election.ElectionId,
             proofSessionId,
@@ -7033,11 +7040,10 @@ public class ElectionLifecycleServiceTests
                 "no_shuffle_map",
                 "no_rerandomization_randomness",
                 "no_raw_witness",
-            ]));
+            ]);
 
-        if (includeDeletionReceipt)
-        {
-            store.PublicationWitnessDeletionReceipts.Add(new ElectionPublicationWitnessDeletionReceiptRecord(
+        var deletionReceipt = includeDeletionReceipt
+            ? new ElectionPublicationWitnessDeletionReceiptRecord(
                 Guid.NewGuid(),
                 scenario.Election.ElectionId,
                 proofSessionId,
@@ -7050,9 +7056,16 @@ public class ElectionLifecycleServiceTests
                 DeletedAt: generatedAt.AddSeconds(30),
                 DeletionActorRef: "tally-executor:test-node",
                 FailureCode: null,
-                FailureReason: null));
-        }
+                FailureReason: null)
+            : null;
+
+        return new Sp07EvidenceRecords(session, transcript, deletionReceipt);
     }
+
+    private sealed record Sp07EvidenceRecords(
+        ElectionPublicationProofSessionRecord Session,
+        ElectionPublicationProofTranscriptRecord Transcript,
+        ElectionPublicationWitnessDeletionReceiptRecord? DeletionReceipt);
 
     private static void AddFailedSp07Evidence(
         ElectionStore store,
@@ -8975,6 +8988,27 @@ public class ElectionLifecycleServiceTests
                     .ThenBy(x => x.Id)
                     .ToArray());
 
+        public Task<ElectionPublicationProofSessionRecord?> GetLatestPublicationProofSessionAsync(ElectionId electionId) =>
+            Task.FromResult(
+                store.PublicationProofSessions
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderByDescending(x => x.CompletedAt ?? x.StartedAt)
+                    .ThenByDescending(x => x.Id)
+                    .FirstOrDefault());
+
+        public Task SavePublicationProofSessionAsync(ElectionPublicationProofSessionRecord proofSession)
+        {
+            store.PublicationProofSessions.Add(proofSession);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdatePublicationProofSessionAsync(ElectionPublicationProofSessionRecord proofSession)
+        {
+            store.PublicationProofSessions.RemoveAll(x => x.Id == proofSession.Id);
+            store.PublicationProofSessions.Add(proofSession);
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<ElectionPublicationProofTranscriptRecord>> GetPublicationProofTranscriptsAsync(ElectionId electionId) =>
             Task.FromResult<IReadOnlyList<ElectionPublicationProofTranscriptRecord>>(
                 store.PublicationProofTranscripts
@@ -8983,6 +9017,20 @@ public class ElectionLifecycleServiceTests
                     .ThenBy(x => x.Id)
                     .ToArray());
 
+        public Task<ElectionPublicationProofTranscriptRecord?> GetLatestPublicationProofTranscriptAsync(ElectionId electionId) =>
+            Task.FromResult(
+                store.PublicationProofTranscripts
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderByDescending(x => x.GeneratedAt)
+                    .ThenByDescending(x => x.Id)
+                    .FirstOrDefault());
+
+        public Task SavePublicationProofTranscriptAsync(ElectionPublicationProofTranscriptRecord proofTranscript)
+        {
+            store.PublicationProofTranscripts.Add(proofTranscript);
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord>> GetPublicationWitnessDeletionReceiptsAsync(ElectionId electionId) =>
             Task.FromResult<IReadOnlyList<ElectionPublicationWitnessDeletionReceiptRecord>>(
                 store.PublicationWitnessDeletionReceipts
@@ -8990,6 +9038,20 @@ public class ElectionLifecycleServiceTests
                     .OrderBy(x => x.DeletedAt)
                     .ThenBy(x => x.Id)
                     .ToArray());
+
+        public Task<ElectionPublicationWitnessDeletionReceiptRecord?> GetLatestPublicationWitnessDeletionReceiptAsync(ElectionId electionId) =>
+            Task.FromResult(
+                store.PublicationWitnessDeletionReceipts
+                    .Where(x => x.ElectionId == electionId)
+                    .OrderByDescending(x => x.DeletedAt)
+                    .ThenByDescending(x => x.Id)
+                    .FirstOrDefault());
+
+        public Task SavePublicationWitnessDeletionReceiptAsync(ElectionPublicationWitnessDeletionReceiptRecord deletionReceipt)
+        {
+            store.PublicationWitnessDeletionReceipts.Add(deletionReceipt);
+            return Task.CompletedTask;
+        }
 
         public Task<IReadOnlyList<ElectionReportPackageRecord>> GetReportPackagesAsync(ElectionId electionId) =>
             Task.FromResult<IReadOnlyList<ElectionReportPackageRecord>>(

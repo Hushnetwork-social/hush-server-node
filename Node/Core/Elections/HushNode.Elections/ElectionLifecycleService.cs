@@ -2566,7 +2566,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             request.SourceBlockHeight,
             request.SourceBlockId);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess || result.ShouldCommitSideEffects)
         {
             await unitOfWork.CommitAsync();
         }
@@ -2611,7 +2611,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 request.SourceBlockHeight,
                 request.SourceBlockId);
 
-            if (result.IsSuccess)
+            if (result.IsSuccess || result.ShouldCommitSideEffects)
             {
                 await unitOfWork.CommitAsync();
             }
@@ -3907,7 +3907,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
                         ? "Election cannot open without a valid ceremony binding snapshot."
                         : openCeremonyError),
                 BuildCustodySafeValidationErrors(openCustodyEvidence),
-                adminOnlyProtectedTallyCustodyReadinessFragment: openCustodyEvidence);
+                adminOnlyProtectedTallyCustodyReadinessFragment: openCustodyEvidence,
+                shouldCommitSideEffects: openCustodyEvidence is not null);
         }
 
         var sealedProtocolPackageBinding = await _protocolPackageBindingService.SealLatestBindingForOpenAsync(
@@ -6242,7 +6243,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
 
             return ElectionCommandResult.Failure(
                 ElectionCommandErrorCode.ValidationFailed,
-                $"Finalization package generation failed: {reportBuildResult.Package.FailureReason ?? reportBuildResult.Package.FailureCode ?? "unknown error"}");
+                $"Finalization package generation failed: {reportBuildResult.Package.FailureReason ?? reportBuildResult.Package.FailureCode ?? "unknown error"}",
+                shouldCommitSideEffects: true);
         }
 
         await repository.SaveResultArtifactAsync(officialResult);

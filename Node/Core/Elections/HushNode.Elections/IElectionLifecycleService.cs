@@ -469,6 +469,7 @@ public enum ElectionSpoilPreparedBallotFailureReason
 public record ElectionCommandResult
 {
     public bool IsSuccess { get; init; }
+    public bool ShouldCommitSideEffects { get; init; }
     public ElectionCommandErrorCode ErrorCode { get; init; }
     public string? ErrorMessage { get; init; }
     public IReadOnlyList<string> ValidationErrors { get; init; } = Array.Empty<string>();
@@ -566,10 +567,12 @@ public record ElectionCommandResult
         string errorMessage,
         IReadOnlyList<string>? validationErrors = null,
         ElectionRosterImportEvidenceRecord? rosterImportEvidence = null,
-        ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? adminOnlyProtectedTallyCustodyReadinessFragment = null) =>
+        ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? adminOnlyProtectedTallyCustodyReadinessFragment = null,
+        bool shouldCommitSideEffects = false) =>
         new()
         {
             IsSuccess = false,
+            ShouldCommitSideEffects = shouldCommitSideEffects,
             ErrorCode = errorCode,
             ErrorMessage = errorMessage,
             ValidationErrors = validationErrors ?? Array.Empty<string>(),
