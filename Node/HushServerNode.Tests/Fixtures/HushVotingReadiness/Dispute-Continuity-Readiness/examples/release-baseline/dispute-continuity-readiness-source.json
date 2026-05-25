@@ -1,0 +1,275 @@
+{
+  "schemaVersion": "dispute-continuity-readiness-source.v1",
+  "sourceId": "DISPUTE-CONTINUITY-SOURCE-FEAT-139-RELEASE-BASELINE",
+  "featureId": "FEAT-139",
+  "acceptanceGate": "AT-RDY-011",
+  "sourceGap": "Dispute/continuity readiness",
+  "status": "blocked",
+  "generatedAt": "2026-05-25T00:00:00Z",
+  "currentReadinessRegister": {
+    "path": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Readiness-Register/v0.1.2/readiness-register.json",
+    "dimensionId": "RDY-DIM-009",
+    "currentScore": 4,
+    "candidateScoreWhenAccepted": 6,
+    "targetScoreBeforeReviewPilot": 7,
+    "evidenceId": "RDY-EVID-AT-RDY-011-FEAT-139-001",
+    "blockerIds": [
+      "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-005"
+    ]
+  },
+  "evidenceRefs": [
+    {
+      "evidenceId": "FEAT139-ANOMALY-READINESS-PROJECTION",
+      "path": "hush-server-node/Shared/HushShared.Elections.Model/ElectionAnomalyReportReadiness.cs",
+      "sha256Hash": "source-controlled",
+      "visibility": "source",
+      "description": "FEAT-129 anomaly report readiness projection contract consumed by FEAT-139."
+    },
+    {
+      "evidenceId": "FEAT139-VOID-FRAGMENT",
+      "path": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/release-baseline/void-readiness-fragment.json",
+      "sha256Hash": "841181811e9490c4247582d98dc7b803edc6e573e11dbc444acf4cd64c8e2384",
+      "visibility": "restricted_reviewer",
+      "description": "FEAT-138 void readiness fragment. Current status remains blocked."
+    },
+    {
+      "evidenceId": "FEAT139-VOID-HANDOFF",
+      "path": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/release-baseline/void-downstream-handoff.json",
+      "sha256Hash": "827165b187d85df9f1e2aa57981c8696c4c410d9e7e2abdaa7cc6cdf49db6b3e",
+      "visibility": "restricted_reviewer",
+      "description": "FEAT-138 downstream handoff consumed when voided-election scenarios are in scope."
+    }
+  ],
+  "anomalyEvidence": {
+    "publicSummary": {
+      "state": "present",
+      "path": "report-package/public-anomaly-summary.json",
+      "sha256Hash": "sample-public-anomaly-summary-hash",
+      "threadCount": 2,
+      "openCaseCount": 0,
+      "escalatedCaseCount": 0,
+      "blockingCaseCount": 0
+    },
+    "restrictedManifest": {
+      "state": "present",
+      "artifactId": "MachineRestrictedAnomalyIntakeManifest",
+      "path": "restricted/anomaly-intake-manifest.json",
+      "sha256Hash": "sample-restricted-anomaly-manifest-hash",
+      "packageReadinessStatus": "blocked",
+      "packageReadinessBlockerIds": [
+        "FEAT138-INT",
+        "FEAT138-E2E"
+      ]
+    },
+    "counts": {
+      "totalThreads": 2,
+      "resolvedNonBlocking": 2,
+      "unresolvedBlocking": 0,
+      "openCases": 0,
+      "escalatedCases": 0,
+      "authorityResponses": 2,
+      "governedDecisionRefs": 1
+    },
+    "authorityResponseStatus": "present",
+    "retentionEvidenceStatus": "present",
+    "reportGenerationStatus": "read_only_validated"
+  },
+  "voidEvidence": {
+    "state": "blocked",
+    "requiredWhen": "voided_election",
+    "fragmentPath": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/release-baseline/void-readiness-fragment.json",
+    "fragmentHash": "841181811e9490c4247582d98dc7b803edc6e573e11dbc444acf4cd64c8e2384",
+    "handoffPath": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/release-baseline/void-downstream-handoff.json",
+    "handoffHash": "827165b187d85df9f1e2aa57981c8696c4c410d9e7e2abdaa7cc6cdf49db6b3e",
+    "publicScanPath": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/release-baseline/void-public-artifact-scan.json",
+    "publicScanHash": "b43ff1a5b4e10453b6715b44470564edf6e1d50d1504f3f4bae6902309ed69e3",
+    "appliedScore": 4,
+    "candidateScore": 6,
+    "blockerIds": [
+      "FEAT138-INT",
+      "FEAT138-E2E"
+    ]
+  },
+  "governedOutcomeEvidence": [
+    {
+      "outcome": "failed_to_finalize",
+      "state": "missing_required",
+      "requiredForScenarios": [
+        "failed_to_finalize"
+      ],
+      "blockerIds": [
+        "FEAT139-GOVERNED-FAILED-FINALIZE-MISSING"
+      ],
+      "residualRisk": "No accepted governed outcome producer exists for failed-to-finalize claims yet."
+    },
+    {
+      "outcome": "finalized_with_anomaly",
+      "state": "missing_required",
+      "requiredForScenarios": [
+        "finalized_with_anomaly"
+      ],
+      "blockerIds": [
+        "FEAT139-GOVERNED-FINALIZED-WITH-ANOMALY-MISSING"
+      ],
+      "residualRisk": "No accepted governed outcome producer exists for finalized-with-anomaly limitation wording yet."
+    },
+    {
+      "outcome": "retention_hold",
+      "state": "accepted_with_limitations",
+      "requiredForScenarios": [
+        "retention_hold_policy_review"
+      ],
+      "blockerIds": [],
+      "residualRisk": "Retention hold evidence can support limited wording only when policy review is explicit."
+    }
+  ],
+  "scenarioDecisions": [
+    {
+      "scenarioId": "clean_finalized_zero_anomalies",
+      "label": "Clean finalized election with zero anomalies",
+      "evidenceStates": [
+        "not_required_zero_anomalies"
+      ],
+      "decision": "allow",
+      "affectedClaims": [
+        "zero-anomaly continuity claim"
+      ],
+      "blockerIds": [],
+      "publicWordingKey": "zero_anomaly_allowed",
+      "residualRisk": "Allowed only when explicit current zero-anomaly summary evidence exists."
+    },
+    {
+      "scenarioId": "resolved_non_blocking_anomalies",
+      "label": "Finalized election with resolved non-blocking anomalies",
+      "evidenceStates": [
+        "present",
+        "accepted_with_limitations"
+      ],
+      "decision": "allow_with_limitations",
+      "affectedClaims": [
+        "resolved anomaly handling claim"
+      ],
+      "blockerIds": [],
+      "publicWordingKey": "resolved_anomalies_limited",
+      "residualRisk": "Public wording must not expose anomaly bodies or submitter identity."
+    },
+    {
+      "scenarioId": "unresolved_blocking_anomaly",
+      "label": "Election with unresolved blocking anomaly",
+      "evidenceStates": [
+        "blocked"
+      ],
+      "decision": "block",
+      "affectedClaims": [
+        "pilot readiness claim",
+        "continuity claim"
+      ],
+      "blockerIds": [
+        "FEAT139-UNRESOLVED-BLOCKING-ANOMALY"
+      ],
+      "publicWordingKey": "blocking_anomaly_blocks",
+      "residualRisk": "A blocking anomaly must remain visible until governed resolution exists."
+    },
+    {
+      "scenarioId": "retention_hold_policy_review",
+      "label": "Open case or retention hold requiring policy review",
+      "evidenceStates": [
+        "accepted_with_limitations"
+      ],
+      "decision": "downgrade",
+      "affectedClaims": [
+        "retention continuity claim"
+      ],
+      "blockerIds": [],
+      "publicWordingKey": "retention_hold_downgraded",
+      "residualRisk": "Policy review remains outside Hush-owned technical evidence."
+    },
+    {
+      "scenarioId": "voided_election",
+      "label": "Voided election",
+      "evidenceStates": [
+        "blocked"
+      ],
+      "decision": "block",
+      "affectedClaims": [
+        "voided-election continuity claim"
+      ],
+      "blockerIds": [
+        "FEAT138-INT",
+        "FEAT138-E2E"
+      ],
+      "publicWordingKey": "voided_election_blocked",
+      "residualRisk": "FEAT-138 fragment is present but blocked until focused TwinTest and E2E coverage exists and passes."
+    },
+    {
+      "scenarioId": "failed_to_finalize",
+      "label": "Failed-to-finalize",
+      "evidenceStates": [
+        "missing_required"
+      ],
+      "decision": "block",
+      "affectedClaims": [
+        "failed-to-finalize recovery claim"
+      ],
+      "blockerIds": [
+        "FEAT139-GOVERNED-FAILED-FINALIZE-MISSING"
+      ],
+      "publicWordingKey": "failed_finalize_missing",
+      "residualRisk": "Governed outcome evidence is required before this claim can be made."
+    },
+    {
+      "scenarioId": "finalized_with_anomaly",
+      "label": "Finalized-with-anomaly",
+      "evidenceStates": [
+        "missing_required"
+      ],
+      "decision": "block",
+      "affectedClaims": [
+        "finalized-with-anomaly limitation claim"
+      ],
+      "blockerIds": [
+        "FEAT139-GOVERNED-FINALIZED-WITH-ANOMALY-MISSING"
+      ],
+      "publicWordingKey": "finalized_anomaly_missing",
+      "residualRisk": "Governed outcome evidence and limitation wording are not accepted yet."
+    },
+    {
+      "scenarioId": "package_artifact_mismatch",
+      "label": "Package or artifact mismatch",
+      "evidenceStates": [
+        "stale_or_superseded"
+      ],
+      "decision": "block",
+      "affectedClaims": [
+        "current package integrity claim"
+      ],
+      "blockerIds": [
+        "FEAT139-PACKAGE-ARTIFACT-MISMATCH"
+      ],
+      "publicWordingKey": "artifact_mismatch_blocks",
+      "residualRisk": "Current-scope evidence must be regenerated before package claims are allowed."
+    }
+  ],
+  "publicSummary": {
+    "title": "Dispute and continuity readiness",
+    "statusWording": "Dispute and continuity readiness is blocked for stronger pilot claims until producer evidence blockers clear.",
+    "allowedClaims": [
+      "Resolved non-blocking anomaly handling can be described with limitation wording.",
+      "Zero-anomaly continuity can be described only when explicit current zero-anomaly evidence is present."
+    ],
+    "blockedClaims": [
+      "Voided-election continuity claims remain blocked while FEAT-138 focused test blockers remain open.",
+      "Failed-to-finalize and finalized-with-anomaly claims remain blocked until governed outcome evidence exists."
+    ],
+    "residualRisks": [
+      "Customer governance may still decide remedies, deadlines, and authority actions.",
+      "Repeated operating evidence is still needed before stronger public claims."
+    ]
+  },
+  "publicArtifactSamples": [
+    {
+      "path": "public/dispute-continuity-summary.md",
+      "content": "Dispute and continuity readiness is blocked for stronger claims until open producer blockers clear. Public output contains only high-level claim status and artifact hashes."
+    }
+  ]
+}

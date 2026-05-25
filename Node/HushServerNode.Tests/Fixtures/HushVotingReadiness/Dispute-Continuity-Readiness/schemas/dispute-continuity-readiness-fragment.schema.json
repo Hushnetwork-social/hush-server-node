@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dispute-continuity-readiness-fragment.schema.json",
+  "title": "Dispute Continuity Readiness Fragment",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "fragmentId",
+    "featureSlice",
+    "acceptanceGate",
+    "dimensionId",
+    "status",
+    "directRegisterMutation",
+    "registerPromotionOwner",
+    "blockers",
+    "artifactRefs"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "dispute-continuity-readiness-fragment.v1" },
+    "featureSlice": { "const": "FEAT-139" },
+    "acceptanceGate": { "const": "AT-RDY-011" },
+    "directRegisterMutation": { "const": false }
+  }
+}

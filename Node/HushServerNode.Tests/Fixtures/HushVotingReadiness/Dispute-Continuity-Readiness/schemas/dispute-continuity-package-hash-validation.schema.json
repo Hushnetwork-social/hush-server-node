@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dispute-continuity-package-hash-validation.schema.json",
+  "title": "Dispute Continuity Package Hash Validation",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "validationId",
+    "generatedAt",
+    "status",
+    "canonicalizationVersion",
+    "sourceEvidenceRefs",
+    "generatedArtifactHashes"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "dispute-continuity-package-hash-validation.v1" },
+    "status": { "enum": [ "passed", "blocked" ] }
+  }
+}
