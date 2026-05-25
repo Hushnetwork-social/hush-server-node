@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "legal-governance-boundary-downstream-handoff.schema.json",
+  "title": "Legal Governance Boundary Downstream Handoff",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "handoffId",
+    "producerFeature",
+    "generatedAt",
+    "feat130Handoff",
+    "feat141Handoff"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "legal-governance-boundary-downstream-handoff.v1" },
+    "producerFeature": { "const": "FEAT-140" }
+  }
+}

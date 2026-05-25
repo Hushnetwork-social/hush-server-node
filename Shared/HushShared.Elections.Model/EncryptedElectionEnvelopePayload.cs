@@ -145,6 +145,37 @@ public record FinalizeElectionActionPayload(
     byte[]? AcceptedBallotSetHash,
     byte[]? FinalEncryptedTallyHash);
 
+public record RecordKeyLostTrusteeContinuityDecisionActionPayload(
+    string ActorPublicAddress,
+    string TrusteePublicAddress,
+    string? TrusteeDisplayName,
+    string AuthorityDecisionRef,
+    string AuthorityDecisionHash,
+    string GovernanceRuleRef,
+    IReadOnlyList<string> ContinuityEvidenceRefs,
+    string AuthorityRole = ElectionGovernedOutcomeConstants.ElectionOwnerAuthorityRole,
+    string AuthoritySource = ElectionGovernedOutcomeConstants.Feat140AuthoritySource);
+
+public record AcceptFixedUnofficialResultWithAnomalyActionPayload(
+    string ActorPublicAddress,
+    Guid ExpectedCloseArtifactId,
+    Guid ExpectedTallyReadyArtifactId,
+    Guid ExpectedUnofficialResultArtifactId,
+    string Feat140HandoffRef,
+    string Feat140HandoffHash,
+    string AuthorityDecisionRef,
+    string AuthorityDecisionHash,
+    string GovernanceRuleRef,
+    string PublicSummary,
+    IReadOnlyList<string>? MissingFinalizeEvidenceRefs = null,
+    IReadOnlyList<string>? ContinuityIncidentEvidenceRefs = null,
+    IReadOnlyList<string>? AvailableTrusteeAcknowledgementRefs = null,
+    IReadOnlyList<Guid>? KeyLostTrusteeDecisionIds = null,
+    string AuthorityRole = ElectionGovernedOutcomeConstants.ElectionOwnerAuthorityRole,
+    string AuthoritySource = ElectionGovernedOutcomeConstants.Feat140AuthoritySource,
+    string? FinalityRuleRef = null,
+    string? RemedyRuleRef = null);
+
 public record VoidElectionActionPayload(
     string ActorPublicAddress,
     string PublicJustification,
@@ -385,6 +416,8 @@ public static class EncryptedElectionEnvelopeActionTypes
     public const string OpenElection = "open_election";
     public const string CloseElection = "close_election";
     public const string FinalizeElection = "finalize_election";
+    public const string RecordKeyLostTrusteeContinuityDecision = "record_key_lost_trustee_continuity_decision";
+    public const string AcceptFixedUnofficialResultWithAnomaly = "accept_fixed_unofficial_result_with_anomaly";
     public const string VoidElection = "void_election";
     public const string RetryVoidPublication = "retry_void_publication";
     public const string SubmitFinalizationShare = "submit_finalization_share";

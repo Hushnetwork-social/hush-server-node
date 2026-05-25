@@ -11,6 +11,7 @@ public sealed partial class ElectionVerificationPackageExportService
         ElectionVerificationPackageExportRequest request)
     {
         var binding = request.ProtocolPackageBinding!;
+        var finalization = ResolveFinalizationClaim(request);
         return new ElectionRecordReferenceRecord(
             request.Election.ElectionId.ToString(),
             request.Election.LifecycleState.ToString(),
@@ -23,7 +24,10 @@ public sealed partial class ElectionVerificationPackageExportService
             binding.SpecAccessLocations
                 .Concat(binding.ProofAccessLocations)
                 .Select(x => new VerificationAccessLocationRecord(x.LocationKind.ToString(), x.Location, x.ContentHash))
-                .ToArray());
+                .ToArray(),
+            finalization.OutcomeStatus,
+            finalization.CleanFinalization,
+            finalization.FinalizationMode);
     }
 
     private static VerifierProfileRecord BuildProfile(string profileId)
@@ -1140,14 +1144,43 @@ public sealed partial class ElectionVerificationPackageExportService
                 .ToArray());
     }
 
-    private static ResultBindingArtifactRecord BuildResultBinding(ElectionVerificationPackageExportRequest request) =>
-        new(
+    private static ResultBindingArtifactRecord BuildResultBinding(ElectionVerificationPackageExportRequest request)
+    {
+        var finalization = ResolveFinalizationClaim(request);
+        var abnormalEvidence = ResolveAbnormalFinalizationEvidence(request);
+        return new ResultBindingArtifactRecord(
             request.Election.ElectionId.ToString(),
             request.ReportPackage!.Id.ToString(),
             VerificationCanonicalHash.ToLowerHex(request.ReportPackage.PackageHash),
             request.Election.FinalizeArtifactId?.ToString(),
             request.Election.OfficialResultArtifactId?.ToString(),
-            request.Election.UnofficialResultArtifactId?.ToString());
+            request.Election.UnofficialResultArtifactId?.ToString(),
+            finalization.OutcomeStatus,
+            finalization.CleanFinalization,
+            finalization.FinalizationMode,
+            ComputeAbnormalFinalizationEvidenceHash(abnormalEvidence));
+    }
+
+    private static FinalizationClaimProjection ResolveFinalizationClaim(
+        ElectionVerificationPackageExportRequest request)
+    {
+        var abnormalEvidence = ResolveAbnormalFinalizationEvidence(request);
+        return abnormalEvidence is null
+            ? new FinalizationClaimProjection(
+                AbnormalFinalizationVerificationIds.OutcomeStatusCleanFinalized,
+                CleanFinalization: true,
+                AbnormalFinalizationVerificationIds.FinalizationModeClean)
+            : new FinalizationClaimProjection(
+                abnormalEvidence.OutcomeStatus,
+                abnormalEvidence.CleanFinalization,
+                abnormalEvidence.FinalizationMode);
+    }
+
+    private static string? ComputeAbnormalFinalizationEvidenceHash(
+        AbnormalFinalizationEvidenceArtifactRecord? evidence) =>
+        evidence is null
+            ? null
+            : VerificationCanonicalHash.ComputeManifestFileSha256(SerializeToBytes(evidence));
 
     private static ElectionSp04EvidenceRecord BuildSp04Evidence(
         ElectionVerificationPackageExportRequest request)
@@ -1898,4 +1931,9 @@ public sealed partial class ElectionVerificationPackageExportService
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"{scope}|{value}".Trim().ToLowerInvariant()));
         return new Guid(bytes[..16]);
     }
+
+    private sealed record FinalizationClaimProjection(
+        string OutcomeStatus,
+        bool CleanFinalization,
+        string FinalizationMode);
 }

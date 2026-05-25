@@ -61,6 +61,12 @@ public interface IElectionLifecycleService
 
     Task<ElectionCommandResult> FinalizeElectionAsync(FinalizeElectionRequest request);
 
+    Task<ElectionCommandResult> RecordKeyLostTrusteeContinuityDecisionAsync(
+        RecordKeyLostTrusteeContinuityDecisionRequest request);
+
+    Task<ElectionCommandResult> AcceptFixedUnofficialResultWithAnomalyAsync(
+        AcceptFixedUnofficialResultWithAnomalyRequest request);
+
     Task<ElectionCommandResult> VoidElectionAsync(VoidElectionRequest request);
 
     Task<ElectionCommandResult> RetryVoidPublicationAsync(RetryVoidPublicationRequest request);
@@ -286,6 +292,45 @@ public record FinalizeElectionRequest(
     long? SourceBlockHeight = null,
     Guid? SourceBlockId = null);
 
+public record RecordKeyLostTrusteeContinuityDecisionRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    string TrusteePublicAddress,
+    string? TrusteeDisplayName,
+    string AuthorityDecisionRef,
+    string AuthorityDecisionHash,
+    string GovernanceRuleRef,
+    IReadOnlyList<string> ContinuityEvidenceRefs,
+    string AuthorityRole = ElectionGovernedOutcomeConstants.ElectionOwnerAuthorityRole,
+    string AuthoritySource = ElectionGovernedOutcomeConstants.Feat140AuthoritySource,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
+public record AcceptFixedUnofficialResultWithAnomalyRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    Guid ExpectedCloseArtifactId,
+    Guid ExpectedTallyReadyArtifactId,
+    Guid ExpectedUnofficialResultArtifactId,
+    string Feat140HandoffRef,
+    string Feat140HandoffHash,
+    string AuthorityDecisionRef,
+    string AuthorityDecisionHash,
+    string GovernanceRuleRef,
+    string PublicSummary,
+    IReadOnlyList<string>? MissingFinalizeEvidenceRefs = null,
+    IReadOnlyList<string>? ContinuityIncidentEvidenceRefs = null,
+    IReadOnlyList<string>? AvailableTrusteeAcknowledgementRefs = null,
+    IReadOnlyList<Guid>? KeyLostTrusteeDecisionIds = null,
+    string AuthorityRole = ElectionGovernedOutcomeConstants.ElectionOwnerAuthorityRole,
+    string AuthoritySource = ElectionGovernedOutcomeConstants.Feat140AuthoritySource,
+    string? FinalityRuleRef = null,
+    string? RemedyRuleRef = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
 public record VoidElectionRequest(
     ElectionId ElectionId,
     string ActorPublicAddress,
@@ -499,6 +544,8 @@ public record ElectionCommandResult
     public ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? AdminOnlyProtectedTallyCustodyReadinessFragment { get; init; }
     public ElectionVoidDecisionRecord? VoidDecision { get; init; }
     public ElectionVoidPublicationAttemptRecord? VoidPublicationAttempt { get; init; }
+    public ElectionGovernedOutcomeDecisionRecord? GovernedOutcomeDecision { get; init; }
+    public ElectionTrusteeContinuityDecisionRecord? TrusteeContinuityDecision { get; init; }
     public IReadOnlyList<ElectionReportPackageRecord> SupersededReportPackages { get; init; } = Array.Empty<ElectionReportPackageRecord>();
 
     public static ElectionCommandResult Success(
@@ -528,6 +575,8 @@ public record ElectionCommandResult
         ElectionAdminOnlyProtectedTallyCustodyReadinessFragment? adminOnlyProtectedTallyCustodyReadinessFragment = null,
         ElectionVoidDecisionRecord? voidDecision = null,
         ElectionVoidPublicationAttemptRecord? voidPublicationAttempt = null,
+        ElectionGovernedOutcomeDecisionRecord? governedOutcomeDecision = null,
+        ElectionTrusteeContinuityDecisionRecord? trusteeContinuityDecision = null,
         IReadOnlyList<ElectionReportPackageRecord>? supersededReportPackages = null) =>
         new()
         {
@@ -559,6 +608,8 @@ public record ElectionCommandResult
             AdminOnlyProtectedTallyCustodyReadinessFragment = adminOnlyProtectedTallyCustodyReadinessFragment,
             VoidDecision = voidDecision,
             VoidPublicationAttempt = voidPublicationAttempt,
+            GovernedOutcomeDecision = governedOutcomeDecision,
+            TrusteeContinuityDecision = trusteeContinuityDecision,
             SupersededReportPackages = supersededReportPackages ?? Array.Empty<ElectionReportPackageRecord>(),
         };
 

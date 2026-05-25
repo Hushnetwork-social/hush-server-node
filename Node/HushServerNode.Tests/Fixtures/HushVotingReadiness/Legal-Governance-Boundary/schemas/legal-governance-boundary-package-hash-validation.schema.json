@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "legal-governance-boundary-package-hash-validation.schema.json",
+  "title": "Legal Governance Boundary Package Hash Validation",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "validationId",
+    "generatedAt",
+    "status",
+    "canonicalizationVersion",
+    "sourceEvidenceRefs",
+    "generatedArtifactHashes"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "legal-governance-boundary-package-hash-validation.v1" },
+    "status": { "enum": [ "passed", "blocked" ] }
+  }
+}

@@ -22,6 +22,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionReportArtifact(modelBuilder);
         ConfigureElectionReportAccessGrant(modelBuilder);
         ConfigureElectionVoidRecords(modelBuilder);
+        ConfigureElectionGovernedOutcomeRecords(modelBuilder);
         ConfigureApprovedProtocolPackageCatalogEntry(modelBuilder);
         ConfigureProtocolPackageBinding(modelBuilder);
         ConfigureElectionRosterEntry(modelBuilder);
@@ -441,6 +442,94 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
 
             entity.HasIndex(x => new { x.ElectionId, x.ActorPublicAddress, x.GrantRole }).IsUnique();
             entity.HasIndex(x => x.ActorPublicAddress);
+        });
+    }
+
+    private static void ConfigureElectionGovernedOutcomeRecords(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionGovernedOutcomeDecisionRecord>(entity =>
+        {
+            entity.ToTable("ElectionGovernedOutcomeDecisionRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.DecisionType).HasConversion<string>().HasColumnType("varchar(64)");
+            entity.Property(x => x.OutcomeStatus).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.CleanFinalization).HasColumnType("boolean");
+            entity.Property(x => x.FinalizationMode).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.PreviousLifecycleState).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.ResultingLifecycleState).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.ActorPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.AuthorityRole).HasColumnType("varchar(64)");
+            entity.Property(x => x.AuthoritySource).HasColumnType("varchar(128)");
+            entity.Property(x => x.Feat140HandoffRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.Feat140HandoffHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.AuthorityDecisionRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.AuthorityDecisionHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.GovernanceRuleRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.FinalityRuleRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.RemedyRuleRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.CloseArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.TallyReadyArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.UnofficialResultArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.OfficialResultArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.OfficialResultSourceArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.FinalizeArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.PublicSummary).HasColumnType("text");
+            entity.Property(x => x.DecidedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.RecordedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            ConfigureJsonProperty(entity.Property(x => x.MissingFinalizeEvidenceRefs));
+            ConfigureJsonProperty(entity.Property(x => x.ContinuityIncidentEvidenceRefs));
+            ConfigureJsonProperty(entity.Property(x => x.AvailableTrusteeAcknowledgementRefs));
+            ConfigureJsonProperty(entity.Property(x => x.KeyLostTrusteeDecisionIds));
+
+            entity.HasIndex(x => x.ElectionId).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.OutcomeStatus });
+            entity.HasIndex(x => new { x.ElectionId, x.DecidedAtUtc });
+            entity.HasIndex(x => x.AuthorityDecisionHash);
+            entity.HasIndex(x => x.SourceTransactionId);
+        });
+
+        modelBuilder.Entity<ElectionTrusteeContinuityDecisionRecord>(entity =>
+        {
+            entity.ToTable("ElectionTrusteeContinuityDecisionRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.TrusteePublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.TrusteeDisplayName).HasColumnType("varchar(160)");
+            entity.Property(x => x.ContinuityStatus).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.AuthorityDecisionRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.AuthorityDecisionHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.GovernanceRuleRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.RecordedByPublicAddress).HasColumnType("varchar(160)");
+            entity.Property(x => x.DecidedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.RecordedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            ConfigureJsonProperty(entity.Property(x => x.ContinuityEvidenceRefs));
+
+            entity.HasIndex(x => x.ElectionId);
+            entity.HasIndex(x => new { x.ElectionId, x.TrusteePublicAddress, x.ContinuityStatus }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.ContinuityStatus });
+            entity.HasIndex(x => x.AuthorityDecisionHash);
+            entity.HasIndex(x => x.SourceTransactionId);
         });
     }
 

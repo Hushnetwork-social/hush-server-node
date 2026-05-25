@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Governed Outcome FEAT-139 Handoff",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "handoffId",
+    "producerFeature",
+    "targetFeature",
+    "status",
+    "generatedAt",
+    "governedOutcome",
+    "blockerEffect",
+    "privacyBoundary"
+  ]
+}

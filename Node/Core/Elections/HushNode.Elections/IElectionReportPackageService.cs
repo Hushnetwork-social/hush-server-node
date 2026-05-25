@@ -34,7 +34,18 @@ public sealed record ElectionReportPackageBuildRequest(
     DateTime AttemptedAt,
     ElectionSp10OperationalSecurityStatusArtifactRecord? Sp10OperationalSecurityStatus = null,
     ElectionSp11RegulatoryClaimStateArtifactRecord? Sp11RegulatoryClaimState = null,
-    AnomalyIntakeManifest? RestrictedAnomalyIntakeManifest = null);
+    AnomalyIntakeManifest? RestrictedAnomalyIntakeManifest = null,
+    AbnormalFinalizationReportPackageEvidenceInput? AbnormalFinalizationEvidence = null);
+
+public sealed record AbnormalFinalizationReportPackageEvidenceInput(
+    string AuthorityDecisionRef,
+    string AuthorityDecisionHash,
+    string GovernanceRuleRef,
+    IReadOnlyList<string> MissingFinalizeEvidence,
+    IReadOnlyList<string> ContinuityIncidentEvidenceRefs,
+    IReadOnlyList<string> AvailableTrusteeAcknowledgementRefs,
+    string PublicSummary,
+    DateTime DecidedAtUtc);
 
 public sealed record ElectionReportPackageBuildResult(
     bool IsSuccess,

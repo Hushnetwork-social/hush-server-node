@@ -311,6 +311,33 @@ public enum ElectionReportPackageKind
     Void = 1,
 }
 
+public enum ElectionOutcomeStatus
+{
+    None = 0,
+    CleanFinalized = 1,
+    FinalizedWithAnomaly = 2,
+    Voided = 3,
+    FailedToFinalize = 4,
+}
+
+public enum ElectionGovernedOutcomeDecisionType
+{
+    AcceptFixedUnofficialResultWithAnomaly = 0,
+}
+
+public enum ElectionGovernedOutcomeFinalizationMode
+{
+    None = 0,
+    CleanFinalization = 1,
+    AbnormalFinalization = 2,
+}
+
+public enum ElectionTrusteeContinuityStatus
+{
+    None = 0,
+    KeyLost = 1,
+}
+
 public enum ElectionVoidEvidenceReferenceKind
 {
     InternalAnomalyThread = 0,
@@ -366,6 +393,7 @@ public enum ElectionReportArtifactKind
     MachineRestrictedHistoricalUnofficialResult = 20,
     MachineVoidPackageManifest = 21,
     MachineVoidPackageArchive = 22,
+    MachineAbnormalFinalizationEvidence = 23,
 }
 
 public enum ElectionReportArtifactFormat

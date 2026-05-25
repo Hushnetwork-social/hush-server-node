@@ -57,7 +57,10 @@ public record ElectionRecordReferenceRecord(
     string ProtocolSpecificationHash,
     string ProtocolProofPackageHash,
     string ProtocolReleaseManifestHash,
-    IReadOnlyList<VerificationAccessLocationRecord> AccessLocations);
+    IReadOnlyList<VerificationAccessLocationRecord> AccessLocations,
+    string OutcomeStatus = AbnormalFinalizationVerificationIds.OutcomeStatusCleanFinalized,
+    bool CleanFinalization = true,
+    string FinalizationMode = AbnormalFinalizationVerificationIds.FinalizationModeClean);
 
 public record AuditPackageManifestRecord(
     string ManifestVersion,

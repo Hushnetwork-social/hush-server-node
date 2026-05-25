@@ -1,0 +1,614 @@
+{
+  "schemaVersion": "legal-governance-boundary-source.v1",
+  "sourceId": "LEGAL-GOVERNANCE-BOUNDARY-SOURCE-FEAT-140-RELEASE-BASELINE",
+  "featureId": "FEAT-140",
+  "acceptanceGate": "AT-RDY-012",
+  "sourceGap": "Legal/governance boundary wrapper",
+  "status": "accepted_with_limitations",
+  "generatedAt": "2026-05-25T13:30:00Z",
+  "currentReadinessRegister": {
+    "path": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Readiness-Register/v0.1.2/readiness-register.json",
+    "dimensionId": "RDY-DIM-010",
+    "currentScore": 4,
+    "candidateScoreWhenAccepted": 6,
+    "targetScoreBeforeReviewPilot": 7,
+    "evidenceId": "RDY-EVID-AT-RDY-012-FEAT-140-001",
+    "blockerIds": [
+      "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006"
+    ]
+  },
+  "customerScope": {
+    "organizationDisplayName": "Friendly Organization Pilot",
+    "organizationVisibility": "public_safe_label_only",
+    "electionScope": "internal_non_binding_rehearsal",
+    "profile": "hushvoting_governed_remote_voting_v1",
+    "publicSafeScopeSummary": "Internal non-binding rehearsal governance boundary for HushVoting pilot readiness."
+  },
+  "authorityBoundary": {
+    "authorityActorRef": "restricted-ref://friendly-org/board-secretary",
+    "authorityRole": "customer_election_authority",
+    "setupSignerRef": "restricted-ref://friendly-org/setup-acknowledgement",
+    "acknowledgementRef": "restricted-ref://friendly-org/governance-boundary-ack",
+    "acknowledgementHash": "source-controlled",
+    "publicSafeSummary": "Customer election authority supplied governance inputs and acknowledged HushVoting does not validate legal sufficiency.",
+    "nonLegalValidationWording": "Customer-supplied governance boundary recorded. HushVoting can serve as the voting subsystem for binding customer decisions when customer-supplied authority and rules support that use. HushVoting has not validated legal sufficiency. Missing or deferred customer-owned inputs may block or downgrade readiness claims."
+  },
+  "evidenceRefs": [
+    {
+      "evidenceId": "FEAT140-GOVERNANCE-SOURCE",
+      "path": "hush-memory-bank/Overview/HushVotingReadiness/Legal-Governance-Boundary/examples/release-baseline/legal-governance-boundary-source.json",
+      "sha256Hash": "source-controlled",
+      "visibility": "restricted_reviewer",
+      "description": "Release-baseline governance-boundary source package."
+    },
+    {
+      "evidenceId": "FEAT140-GOVERNANCE-ACK",
+      "path": "restricted-ref://friendly-org/governance-boundary-ack",
+      "sha256Hash": "source-controlled",
+      "visibility": "restricted_reviewer",
+      "description": "Customer acknowledgement that HushVoting records but does not validate legal sufficiency."
+    }
+  ],
+  "governanceInputs": [
+    {
+      "inputId": "customer_organization",
+      "label": "Customer organization",
+      "status": "provided",
+      "statusReason": "Pilot organization label and visibility policy are recorded.",
+      "owner": "customer",
+      "evidenceRef": "FEAT140-GOVERNANCE-SOURCE",
+      "publicSafeSummary": "Customer organization scope recorded for pilot evidence.",
+      "restrictedEvidenceRefs": [
+        "restricted-ref://friendly-org/customer-profile"
+      ],
+      "hushConfigurationImpact": "Defines package scope only.",
+      "affectedClaims": [
+        "governance-boundary readiness"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "organization changes",
+        "pilot scope changes"
+      ]
+    },
+    {
+      "inputId": "election_authority",
+      "label": "Election authority",
+      "status": "provided",
+      "statusReason": "Customer authority role is recorded by restricted ref.",
+      "owner": "customer",
+      "evidenceRef": "FEAT140-GOVERNANCE-ACK",
+      "publicSafeSummary": "Customer election authority is identified by role.",
+      "restrictedEvidenceRefs": [
+        "restricted-ref://friendly-org/board-secretary"
+      ],
+      "hushConfigurationImpact": "Required before finality, remedy, or abnormal-outcome claims.",
+      "affectedClaims": [
+        "finality claim",
+        "remedy claim",
+        "abnormal outcome claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "authority role changes",
+        "authority actor changes"
+      ]
+    },
+    {
+      "inputId": "setup_signer",
+      "label": "Setup signer",
+      "status": "provided",
+      "statusReason": "Setup signer acknowledgement ref is recorded.",
+      "owner": "customer",
+      "evidenceRef": "FEAT140-GOVERNANCE-ACK",
+      "publicSafeSummary": "Setup acknowledgement recorded.",
+      "restrictedEvidenceRefs": [
+        "restricted-ref://friendly-org/setup-acknowledgement"
+      ],
+      "hushConfigurationImpact": "Supports pilot package governance-boundary claim.",
+      "affectedClaims": [
+        "pilot readiness claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "setup signer changes",
+        "setup acknowledgement superseded"
+      ]
+    },
+    {
+      "inputId": "governing_rule_ref",
+      "label": "Governing-rule reference",
+      "status": "provided",
+      "statusReason": "Customer supplied a restricted governing-rule reference.",
+      "owner": "customer",
+      "evidenceRef": "FEAT140-GOVERNANCE-ACK",
+      "publicSafeSummary": "Customer governing-rule reference is recorded as restricted evidence.",
+      "restrictedEvidenceRefs": [
+        "restricted-ref://friendly-org/governing-rule"
+      ],
+      "hushConfigurationImpact": "Required for strong governance-readiness and finality wording.",
+      "affectedClaims": [
+        "governance-boundary readiness",
+        "finality claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "governing rule changes",
+        "rule ref superseded"
+      ]
+    },
+    {
+      "inputId": "notice_rule",
+      "label": "Notice rule",
+      "status": "provided",
+      "statusReason": "Notice remains customer-owned and is recorded by restricted ref.",
+      "owner": "customer",
+      "evidenceRef": "FEAT140-GOVERNANCE-ACK",
+      "publicSafeSummary": "Notice boundary recorded as customer-owned.",
+      "restrictedEvidenceRefs": [
+        "restricted-ref://friendly-org/notice-rule"
+      ],
+      "hushConfigurationImpact": "No HushVoting notice validation claim is allowed.",
+      "affectedClaims": [
+        "AGM management boundary wording",
+        "pilot readiness claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "notice timeline changes"
+      ]
+    },
+    {
+      "inputId": "eligibility_rule",
+      "label": "Eligibility rule",
+      "status": "provided",
+      "statusReason": "Eligibility source is supplied by customer and HushVoting validates only configured eligibility data.",
+      "owner": "shared_boundary",
+      "evidenceRef": "FEAT140-GOVERNANCE-ACK",
+      "publicSafeSummary": "Eligibility boundary recorded.",
+      "restrictedEvidenceRefs": [
+        "restricted-ref://friendly-org/eligibility-rule"
+      ],
+      "hushConfigurationImpact": "HushVoting can enforce configured eligibility data but not external legal sufficiency.",
+      "affectedClaims": [
+        "eligibility configuration claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "eligibility source changes",
+        "voter list scope changes"
+      ]
+    },
+    {
+      "inputId": "quorum_rule",
+      "label": "Quorum rule",
+      "status": "provided",
+      "statusReason": "Customer records quorum as off-system governance evidence for the rehearsal.",
+      "owner": "customer",
+      "evidenceRef": "FEAT140-GOVERNANCE-ACK",
+      "publicSafeSummary": "Quorum rule is customer-owned and recorded by restricted ref.",
+      "restrictedEvidenceRefs": [
+        "restricted-ref://friendly-org/quorum-rule"
+      ],
+      "hushConfigurationImpact": "No HushVoting quorum-validation claim is allowed.",
+      "affectedClaims": [
+        "governance-boundary readiness",
+        "finality claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "quorum rule changes",
+        "participation threshold changes"
+      ]
+    },
+    {
+      "inputId": "proxy_delegation_rule",
+      "label": "Proxy/delegation rule",
+      "status": "not_applicable",
+      "statusReason": "Pilot profile disables proxy and delegation collection.",
+      "owner": "customer",
+      "evidenceRef": "FEAT140-GOVERNANCE-SOURCE",
+      "publicSafeSummary": "Proxy/delegation is not applicable because the profile disables it.",
+      "restrictedEvidenceRefs": [],
+      "hushConfigurationImpact": "Profile must keep proxy/delegation disabled.",
+      "affectedClaims": [
+        "proxy/delegation exclusion claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "proxy support enabled",
+        "delegation support enabled"
+      ]
+    },
+    {
+      "inputId": "minutes_reporting_rule",
+      "label": "Minutes/reporting rule",
+      "status": "provided",
+      "statusReason": "Customer owns minutes/reporting outside HushVoting.",
+      "owner": "customer",
+      "evidenceRef": "FEAT140-GOVERNANCE-ACK",
+      "publicSafeSummary": "Minutes/reporting boundary recorded as customer-owned.",
+      "restrictedEvidenceRefs": [
+        "restricted-ref://friendly-org/minutes-reporting-rule"
+      ],
+      "hushConfigurationImpact": "HushVoting report artifacts are not meeting minutes.",
+      "affectedClaims": [
+        "AGM management boundary wording"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "minutes process changes"
+      ]
+    },
+    {
+      "inputId": "challenge_window",
+      "label": "Challenge window",
+      "status": "provided",
+      "statusReason": "Challenge window is recorded as customer-owned governance input.",
+      "owner": "customer",
+      "evidenceRef": "FEAT140-GOVERNANCE-ACK",
+      "publicSafeSummary": "Challenge window boundary recorded.",
+      "restrictedEvidenceRefs": [
+        "restricted-ref://friendly-org/challenge-window"
+      ],
+      "hushConfigurationImpact": "Finality wording must mention customer-owned challenge process.",
+      "affectedClaims": [
+        "finality claim",
+        "remedy claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "challenge window changes",
+        "challenge period extended"
+      ]
+    },
+    {
+      "inputId": "challenge_process",
+      "label": "Challenge process",
+      "status": "provided",
+      "statusReason": "Challenge process is recorded as customer-owned governance input.",
+      "owner": "customer",
+      "evidenceRef": "FEAT140-GOVERNANCE-ACK",
+      "publicSafeSummary": "Challenge process boundary recorded.",
+      "restrictedEvidenceRefs": [
+        "restricted-ref://friendly-org/challenge-process"
+      ],
+      "hushConfigurationImpact": "HushVoting anomaly intake is evidence, not legal challenge adjudication.",
+      "affectedClaims": [
+        "dispute boundary claim",
+        "remedy claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "challenge process changes"
+      ]
+    },
+    {
+      "inputId": "remedy_authority",
+      "label": "Remedy authority",
+      "status": "provided",
+      "statusReason": "Customer records remedy authority for abnormal outcome and blocking anomaly decisions.",
+      "owner": "customer",
+      "evidenceRef": "FEAT140-GOVERNANCE-ACK",
+      "publicSafeSummary": "Remedy authority boundary recorded.",
+      "restrictedEvidenceRefs": [
+        "restricted-ref://friendly-org/remedy-authority"
+      ],
+      "hushConfigurationImpact": "Required FEAT-146 input for failed-to-finalize and finalized-with-anomaly decisions.",
+      "affectedClaims": [
+        "failed-to-finalize support input",
+        "finalized-with-anomaly support input",
+        "blocking anomaly remedy claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "remedy authority changes"
+      ]
+    },
+    {
+      "inputId": "finality_rule",
+      "label": "Finality rule",
+      "status": "provided",
+      "statusReason": "Customer records finality rule and public limitation wording.",
+      "owner": "customer",
+      "evidenceRef": "FEAT140-GOVERNANCE-ACK",
+      "publicSafeSummary": "Finality rule boundary recorded.",
+      "restrictedEvidenceRefs": [
+        "restricted-ref://friendly-org/finality-rule"
+      ],
+      "hushConfigurationImpact": "Required before strong final-result or abnormal-finalization wording.",
+      "affectedClaims": [
+        "finality claim",
+        "finalized-with-anomaly support input"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "staleTriggers": [
+        "finality rule changes",
+        "pilot finality wording changes"
+      ]
+    }
+  ],
+  "claimImpactScenarios": [
+    {
+      "scenarioId": "all_required_governance_inputs_provided",
+      "label": "All required governance inputs provided",
+      "decision": "allow_with_limitations",
+      "evidenceStates": [
+        "provided",
+        "non_legal_validation_limitation"
+      ],
+      "affectedClaims": [
+        "AT-RDY-012 governance-boundary claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "publicWordingKey": "governance_boundary_recorded",
+      "residualRisk": "HushVoting records customer inputs but does not validate legal sufficiency."
+    },
+    {
+      "scenarioId": "authority_missing",
+      "label": "Authority missing",
+      "decision": "block",
+      "evidenceStates": [
+        "not_in_scope"
+      ],
+      "affectedClaims": [
+        "finality claim",
+        "remedy claim",
+        "abnormal outcome claim"
+      ],
+      "blockerIds": [
+        "FEAT140-AUTHORITY-MISSING"
+      ],
+      "downgradeIds": [],
+      "publicWordingKey": "authority_missing_blocks",
+      "residualRisk": "A missing authority role blocks governance-readiness and abnormal-outcome input claims."
+    },
+    {
+      "scenarioId": "governing_rule_ref_missing",
+      "label": "Governing-rule reference missing",
+      "decision": "block",
+      "evidenceStates": [
+        "not_in_scope"
+      ],
+      "affectedClaims": [
+        "governance-boundary readiness",
+        "finality claim"
+      ],
+      "blockerIds": [
+        "FEAT140-GOVERNING-RULE-MISSING"
+      ],
+      "downgradeIds": [],
+      "publicWordingKey": "rule_missing_blocks",
+      "residualRisk": "Strong governance and finality wording require a customer-supplied governing-rule reference."
+    },
+    {
+      "scenarioId": "quorum_deferred",
+      "label": "Quorum deferred",
+      "decision": "downgrade",
+      "evidenceStates": [
+        "not_in_scope"
+      ],
+      "affectedClaims": [
+        "governance-boundary readiness",
+        "pilot readiness claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [
+        "FEAT140-QUORUM-DEFERRED"
+      ],
+      "publicWordingKey": "quorum_deferred_downgrades",
+      "residualRisk": "Deferred quorum inputs downgrade strong readiness unless profile marks quorum not applicable with a reason."
+    },
+    {
+      "scenarioId": "proxy_delegation_not_applicable",
+      "label": "Proxy/delegation not applicable",
+      "decision": "allow",
+      "evidenceStates": [
+        "not_applicable_with_reason"
+      ],
+      "affectedClaims": [
+        "proxy/delegation exclusion claim"
+      ],
+      "blockerIds": [],
+      "downgradeIds": [],
+      "publicWordingKey": "proxy_not_applicable_allowed",
+      "residualRisk": "Allowed only while the profile keeps proxy and delegation collection disabled."
+    },
+    {
+      "scenarioId": "challenge_window_missing",
+      "label": "Challenge window missing",
+      "decision": "block",
+      "evidenceStates": [
+        "not_in_scope"
+      ],
+      "affectedClaims": [
+        "finality claim",
+        "remedy claim"
+      ],
+      "blockerIds": [
+        "FEAT140-CHALLENGE-WINDOW-MISSING"
+      ],
+      "downgradeIds": [],
+      "publicWordingKey": "challenge_missing_blocks",
+      "residualRisk": "Finality and remedy claims require challenge-window boundary evidence."
+    },
+    {
+      "scenarioId": "remedy_authority_missing",
+      "label": "Remedy authority missing",
+      "decision": "block",
+      "evidenceStates": [
+        "not_in_scope"
+      ],
+      "affectedClaims": [
+        "failed-to-finalize support input",
+        "finalized-with-anomaly support input"
+      ],
+      "blockerIds": [
+        "FEAT140-REMEDY-AUTHORITY-MISSING"
+      ],
+      "downgradeIds": [],
+      "publicWordingKey": "remedy_missing_blocks",
+      "residualRisk": "Abnormal-outcome support inputs require a customer remedy authority."
+    },
+    {
+      "scenarioId": "finality_rule_missing",
+      "label": "Finality rule missing",
+      "decision": "block",
+      "evidenceStates": [
+        "not_in_scope"
+      ],
+      "affectedClaims": [
+        "finality claim",
+        "finalized-with-anomaly support input"
+      ],
+      "blockerIds": [
+        "FEAT140-FINALITY-RULE-MISSING"
+      ],
+      "downgradeIds": [],
+      "publicWordingKey": "finality_rule_missing_blocks",
+      "residualRisk": "Strong final-result and abnormal-finalization wording require finality-rule boundary evidence."
+    },
+    {
+      "scenarioId": "governance_evidence_stale",
+      "label": "Governance evidence stale",
+      "decision": "block",
+      "evidenceStates": [
+        "not_in_scope"
+      ],
+      "affectedClaims": [
+        "AT-RDY-012 governance-boundary claim",
+        "pilot readiness claim"
+      ],
+      "blockerIds": [
+        "FEAT140-GOVERNANCE-EVIDENCE-STALE"
+      ],
+      "downgradeIds": [],
+      "publicWordingKey": "stale_governance_blocks",
+      "residualRisk": "Governance evidence must be regenerated when authority, rules, scope, timeline, or finality/remedy inputs change."
+    }
+  ],
+  "feat139BlockerMappings": [
+    {
+      "blockerId": "FEAT139-GOVERNED-FAILED-FINALIZE-MISSING",
+      "classification": "runtime_outcome_evidence_required",
+      "governanceInputIds": [
+        "election_authority",
+        "remedy_authority",
+        "finality_rule"
+      ],
+      "evidenceState": "governance_boundary_cleared",
+      "runtimeProducer": "FEAT-146",
+      "publicWordingKey": "failed_finalize_requires_feat146",
+      "residualRisk": "Governance input is available, but FEAT-146 must still produce signed failed-to-finalize outcome evidence."
+    },
+    {
+      "blockerId": "FEAT139-GOVERNED-FINALIZED-WITH-ANOMALY-MISSING",
+      "classification": "runtime_outcome_evidence_required",
+      "governanceInputIds": [
+        "election_authority",
+        "remedy_authority",
+        "finality_rule"
+      ],
+      "evidenceState": "governance_boundary_cleared",
+      "runtimeProducer": "FEAT-146",
+      "publicWordingKey": "finalized_anomaly_requires_feat146",
+      "residualRisk": "Governance input is available, but FEAT-146 must still bind abnormal finalization to package/report artifacts."
+    },
+    {
+      "blockerId": "FEAT139-UNRESOLVED-BLOCKING-ANOMALY",
+      "classification": "runtime_outcome_evidence_required",
+      "governanceInputIds": [
+        "challenge_process",
+        "remedy_authority"
+      ],
+      "evidenceState": "governance_boundary_cleared",
+      "runtimeProducer": "EPIC-014/FEAT-146",
+      "publicWordingKey": "blocking_anomaly_requires_resolution",
+      "residualRisk": "Governance remedy boundary is present, but anomaly resolution or accepted limitation evidence remains producer-owned."
+    },
+    {
+      "blockerId": "FEAT139-PACKAGE-ARTIFACT-MISMATCH",
+      "classification": "package_regeneration_required",
+      "governanceInputIds": [
+        "governing_rule_ref",
+        "finality_rule"
+      ],
+      "evidenceState": "governance_boundary_cleared",
+      "runtimeProducer": "FEAT-139/FEAT-141 package regeneration",
+      "publicWordingKey": "package_regeneration_required",
+      "residualRisk": "Package artifacts must be regenerated after accepted governance and runtime outcome evidence exists."
+    }
+  ],
+  "feat146AuthorityInputs": [
+    {
+      "outcome": "failed_to_finalize",
+      "authorityRole": "customer_election_authority",
+      "authorityActorRef": "restricted-ref://friendly-org/board-secretary",
+      "governingRuleRef": "restricted-ref://friendly-org/governing-rule",
+      "finalityRuleStatus": "provided",
+      "remedyAuthorityStatus": "provided",
+      "challengeProcessStatus": "provided",
+      "publicSafeLimitationWording": "Customer authority and remedy boundary recorded; runtime failed-to-finalize evidence still requires FEAT-146 decision output.",
+      "blockerIds": []
+    },
+    {
+      "outcome": "finalized_with_anomaly",
+      "authorityRole": "customer_election_authority",
+      "authorityActorRef": "restricted-ref://friendly-org/board-secretary",
+      "governingRuleRef": "restricted-ref://friendly-org/governing-rule",
+      "finalityRuleStatus": "provided",
+      "remedyAuthorityStatus": "provided",
+      "challengeProcessStatus": "provided",
+      "publicSafeLimitationWording": "Customer authority and finality boundary recorded; runtime finalized-with-anomaly evidence still requires FEAT-146 decision output.",
+      "blockerIds": []
+    },
+    {
+      "outcome": "unresolved_blocking_anomaly",
+      "authorityRole": "customer_election_authority",
+      "authorityActorRef": "restricted-ref://friendly-org/board-secretary",
+      "governingRuleRef": "restricted-ref://friendly-org/governing-rule",
+      "finalityRuleStatus": "provided",
+      "remedyAuthorityStatus": "provided",
+      "challengeProcessStatus": "provided",
+      "publicSafeLimitationWording": "Customer remedy authority is recorded; anomaly resolution evidence remains EPIC-014/FEAT-146 owned.",
+      "blockerIds": []
+    }
+  ],
+  "publicSummary": {
+    "title": "Legal and governance boundary",
+    "statusWording": "Customer-supplied governance boundary recorded. HushVoting can serve as the voting subsystem for binding customer decisions when customer-supplied authority and rules support that use. HushVoting has not validated legal sufficiency. Missing or deferred customer-owned inputs may block or downgrade readiness claims.",
+    "allowedClaims": [
+      "HushVoting can state that the customer governance boundary was recorded for the pilot scope.",
+      "HushVoting can provide FEAT-146 authority/rule input refs for abnormal outcome decisions.",
+      "HushVoting can state that proxy/delegation is out of scope while the pilot profile keeps it disabled."
+    ],
+    "blockedClaims": [
+      "HushVoting may support the voting part of binding customer decisions, but must not claim AGM management, legal sufficiency validation, share-register validation, proxy collection, or meeting-minutes validation.",
+      "HushVoting must not claim runtime failed-to-finalize or finalized-with-anomaly evidence until FEAT-146 produces it."
+    ],
+    "residualRisks": [
+      "Customer legal consequences, remedies, and meeting governance remain outside Hush-owned validation.",
+      "FEAT-146 is still required for signed runtime governed outcome evidence."
+    ]
+  },
+  "publicArtifactSamples": [
+    {
+      "path": "public/legal-governance-boundary-summary.md",
+      "content": "Customer-supplied governance boundary recorded. HushVoting has not validated legal sufficiency. Missing or deferred customer-owned inputs may block or downgrade readiness claims."
+    }
+  ]
+}

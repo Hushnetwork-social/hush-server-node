@@ -29,6 +29,10 @@ public static class VerificationResultCodes
     public const string ElectionIdMismatch = "election_id_mismatch";
     public const string ElectionNotFinalized = "election_not_finalized";
     public const string ElectionVoided = "election_voided";
+    public const string AbnormalFinalizationEvidenceValid = "abnormal_finalization_evidence_valid";
+    public const string AbnormalFinalizationEvidenceMissing = "abnormal_finalization_evidence_missing";
+    public const string AbnormalFinalizationEvidenceInvalid = "abnormal_finalization_evidence_invalid";
+    public const string AbnormalFinalizationClaimMismatch = "abnormal_finalization_claim_mismatch";
     public const string ProtocolPackageDraftPrivate = "protocol_package_draft_private";
     public const string AcceptedBallotInventoryHashMismatch = "accepted_ballot_inventory_hash_mismatch";
     public const string AcceptedBallotDuplicateNullifier = "accepted_ballot_duplicate_nullifier";

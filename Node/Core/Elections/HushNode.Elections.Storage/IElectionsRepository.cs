@@ -91,6 +91,33 @@ public interface IElectionsRepository : IRepository
 
     Task UpdateVoidDecisionAsync(ElectionVoidDecisionRecord voidDecision) => Task.CompletedTask;
 
+    Task<IReadOnlyList<ElectionGovernedOutcomeDecisionRecord>> GetGovernedOutcomeDecisionsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionGovernedOutcomeDecisionRecord>>(Array.Empty<ElectionGovernedOutcomeDecisionRecord>());
+
+    Task<ElectionGovernedOutcomeDecisionRecord?> GetGovernedOutcomeDecisionAsync(Guid decisionId) =>
+        Task.FromResult<ElectionGovernedOutcomeDecisionRecord?>(null);
+
+    Task<ElectionGovernedOutcomeDecisionRecord?> GetLatestGovernedOutcomeDecisionAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionGovernedOutcomeDecisionRecord?>(null);
+
+    Task SaveGovernedOutcomeDecisionAsync(ElectionGovernedOutcomeDecisionRecord decision) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionTrusteeContinuityDecisionRecord>> GetTrusteeContinuityDecisionsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionTrusteeContinuityDecisionRecord>>(Array.Empty<ElectionTrusteeContinuityDecisionRecord>());
+
+    Task<ElectionTrusteeContinuityDecisionRecord?> GetTrusteeContinuityDecisionAsync(Guid decisionId) =>
+        Task.FromResult<ElectionTrusteeContinuityDecisionRecord?>(null);
+
+    Task<ElectionTrusteeContinuityDecisionRecord?> GetCurrentTrusteeContinuityDecisionAsync(
+        ElectionId electionId,
+        string trusteePublicAddress) =>
+        Task.FromResult<ElectionTrusteeContinuityDecisionRecord?>(null);
+
+    Task<IReadOnlyList<ElectionTrusteeContinuityDecisionRecord>> GetKeyLostTrusteeContinuityDecisionsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionTrusteeContinuityDecisionRecord>>(Array.Empty<ElectionTrusteeContinuityDecisionRecord>());
+
+    Task SaveTrusteeContinuityDecisionAsync(ElectionTrusteeContinuityDecisionRecord decision) => Task.CompletedTask;
+
     Task<IReadOnlyList<ElectionVoidPublicationAttemptRecord>> GetVoidPublicationAttemptsAsync(Guid voidDecisionId) =>
         Task.FromResult<IReadOnlyList<ElectionVoidPublicationAttemptRecord>>(Array.Empty<ElectionVoidPublicationAttemptRecord>());
 

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Governed Outcome Package Hash Validation",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "validationId",
+    "generatedAt",
+    "status",
+    "canonicalizationVersion",
+    "sourceEvidenceRefs",
+    "generatedArtifactHashes"
+  ]
+}

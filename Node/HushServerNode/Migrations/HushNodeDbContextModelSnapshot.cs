@@ -2251,6 +2251,146 @@ namespace HushServerNode.Migrations
                     b.ToTable("ElectionFinalizationShareRecord", "Elections");
                 });
 
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionGovernedOutcomeDecisionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorPublicAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("AuthorityDecisionHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("AuthorityDecisionRef")
+                        .IsRequired()
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("AuthorityRole")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("AuthoritySource")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("AvailableTrusteeAcknowledgementRefs")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<bool>("CleanFinalization")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("CloseArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContinuityIncidentEvidenceRefs")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecisionType")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("Feat140HandoffHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("Feat140HandoffRef")
+                        .IsRequired()
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("FinalityRuleRef")
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("FinalizationMode")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<Guid?>("FinalizeArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GovernanceRuleRef")
+                        .IsRequired()
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("KeyLostTrusteeDecisionIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("MissingFinalizeEvidenceRefs")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("OfficialResultArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OfficialResultSourceArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OutcomeStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("PreviousLifecycleState")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("PublicSummary")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RemedyRuleRef")
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("ResultingLifecycleState")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<long?>("SourceBlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("SourceBlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SourceTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TallyReadyArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UnofficialResultArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorityDecisionHash");
+
+                    b.HasIndex("ElectionId")
+                        .IsUnique();
+
+                    b.HasIndex("SourceTransactionId");
+
+                    b.HasIndex("ElectionId", "DecidedAtUtc");
+
+                    b.HasIndex("ElectionId", "OutcomeStatus");
+
+                    b.ToTable("ElectionGovernedOutcomeDecisionRecord", "Elections");
+                });
+
             modelBuilder.Entity("HushShared.Elections.Model.ElectionGovernedProposalApprovalRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3611,6 +3751,78 @@ namespace HushServerNode.Migrations
                     b.HasKey("CloseCountingJobId");
 
                     b.ToTable("ElectionTallyExecutorLeaseRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionTrusteeContinuityDecisionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthorityDecisionHash")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("AuthorityDecisionRef")
+                        .IsRequired()
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("ContinuityEvidenceRefs")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ContinuityStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<DateTime>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("GovernanceRuleRef")
+                        .IsRequired()
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RecordedByPublicAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<long?>("SourceBlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("SourceBlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SourceTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TrusteeDisplayName")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("TrusteePublicAddress")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorityDecisionHash");
+
+                    b.HasIndex("ElectionId");
+
+                    b.HasIndex("SourceTransactionId");
+
+                    b.HasIndex("ElectionId", "ContinuityStatus");
+
+                    b.HasIndex("ElectionId", "TrusteePublicAddress", "ContinuityStatus")
+                        .IsUnique();
+
+                    b.ToTable("ElectionTrusteeContinuityDecisionRecord", "Elections");
                 });
 
             modelBuilder.Entity("HushShared.Elections.Model.ElectionTrusteeInvitationRecord", b =>

@@ -522,6 +522,55 @@ public class ElectionReportPackageServiceTests
         disputeIndex.Content.Should().Contain("MachineRestrictedAnomalyIntakeManifest");
     }
 
+    [Fact]
+    [Trait("Category", "FEAT-139")]
+    public void Build_WithAbnormalFinalizationEvidence_AddsVerifierReadyEvidenceArtifact()
+    {
+        var service = new ElectionReportPackageService();
+        var election = CreateFinalizedElectionForReportPackage();
+        var request = CreateReportBuildRequest(election, protocolPackageBinding: null) with
+        {
+            AbnormalFinalizationEvidence = new AbnormalFinalizationReportPackageEvidenceInput(
+                AuthorityDecisionRef: "governance-decision:abnormal-finalization-0001",
+                AuthorityDecisionHash: Hash('d'),
+                GovernanceRuleRef: "customer-rule:finality-policy-v1",
+                MissingFinalizeEvidence:
+                [
+                    "trustee-approval:missing:keylost-trustee",
+                ],
+                ContinuityIncidentEvidenceRefs:
+                [
+                    "continuity-incident:keylost-trustee",
+                ],
+                AvailableTrusteeAcknowledgementRefs:
+                [
+                    "trustee-ack:available-trustee-1",
+                ],
+                PublicSummary: "The fixed unofficial result was accepted by the configured authority after normal finalization could not complete cleanly.",
+                DecidedAtUtc: new DateTime(2026, 5, 4, 12, 12, 0, DateTimeKind.Utc)),
+        };
+
+        var buildResult = service.Build(request);
+
+        buildResult.IsSuccess.Should().BeTrue();
+        var artifact = buildResult.Artifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKind.MachineAbnormalFinalizationEvidence);
+        artifact.AccessScope.Should().Be(ElectionReportArtifactAccessScope.OwnerAuditorTrustee);
+        artifact.FileName.Should().Be("abnormal-finalization-evidence.json");
+
+        var evidence = JsonSerializer.Deserialize<AbnormalFinalizationEvidenceArtifactRecord>(
+            artifact.Content,
+            VerificationJson.Options)!;
+        evidence.ArtifactSchemaId.Should().Be(AbnormalFinalizationVerificationIds.ArtifactSchemaId);
+        evidence.ReportPackageId.Should().Be(buildResult.Package.Id.ToString());
+        evidence.OutcomeStatus.Should().Be(AbnormalFinalizationVerificationIds.OutcomeStatusFinalizedWithAnomaly);
+        evidence.CleanFinalization.Should().BeFalse();
+        evidence.OfficialResultSource.Should().Be(
+            AbnormalFinalizationVerificationIds.OfficialResultSourceCopiedFromFixedUnofficial);
+        evidence.OfficialResultSourceArtifactId.Should().Be(request.UnofficialResult.Id.ToString());
+        evidence.MissingFinalizeEvidence.Should().Contain("trustee-approval:missing:keylost-trustee");
+    }
+
     [Theory]
     [InlineData(ElectionAnomalyPackageReadinessStatusIds.Ready)]
     [InlineData(ElectionAnomalyPackageReadinessStatusIds.Warning)]

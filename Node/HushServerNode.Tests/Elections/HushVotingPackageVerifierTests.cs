@@ -90,6 +90,99 @@ public class HushVotingPackageVerifierTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-139")]
+    public async Task Verify_AbnormalFinalizationPackage_ShouldWarnWithoutClaimingCleanFinalization()
+    {
+        using var package = CreateAbnormalFinalizationPackage();
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(0);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == AbnormalFinalizationVerificationIds.EvidenceValidCheckCode &&
+            x.ResultCode == VerificationResultCodes.AbnormalFinalizationEvidenceValid &&
+            x.Status == VerificationCheckStatus.Warn);
+
+        var electionRecord = await ReadPackageArtifactAsync<ElectionRecordReferenceRecord>(
+            package.PackagePath,
+            VerificationPackageFileNames.ElectionRecord);
+        electionRecord.OutcomeStatus.Should().Be(AbnormalFinalizationVerificationIds.OutcomeStatusFinalizedWithAnomaly);
+        electionRecord.CleanFinalization.Should().BeFalse();
+        electionRecord.FinalizationMode.Should().Be(AbnormalFinalizationVerificationIds.FinalizationModeAbnormal);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-146")]
+    public async Task Verify_AbnormalFinalizationPackage_WithContinuityOnlyEvidence_ShouldWarn()
+    {
+        using var package = CreateAbnormalFinalizationPackage(evidence => evidence with
+        {
+            MissingFinalizeEvidence = [],
+            ContinuityIncidentEvidenceRefs =
+            [
+                "trustee-continuity-decision:00000000-0000-0000-0000-000000000146",
+            ],
+        });
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(0);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == AbnormalFinalizationVerificationIds.EvidenceValidCheckCode &&
+            x.ResultCode == VerificationResultCodes.AbnormalFinalizationEvidenceValid &&
+            x.Status == VerificationCheckStatus.Warn);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-139")]
+    public async Task Verify_AbnormalFinalizationClaimWithoutEvidence_ShouldFail()
+    {
+        using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
+        var electionRecord = await ReadPackageArtifactAsync<ElectionRecordReferenceRecord>(
+            package.PackagePath,
+            VerificationPackageFileNames.ElectionRecord);
+        await WritePackageArtifactAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.ElectionRecord,
+            electionRecord with
+            {
+                OutcomeStatus = AbnormalFinalizationVerificationIds.OutcomeStatusFinalizedWithAnomaly,
+                CleanFinalization = false,
+                FinalizationMode = AbnormalFinalizationVerificationIds.FinalizationModeAbnormal,
+            });
+        var resultBinding = await ReadPackageArtifactAsync<ResultBindingArtifactRecord>(
+            package.PackagePath,
+            VerificationPackageFileNames.ResultBinding);
+        await WritePackageArtifactAsync(
+            package.PackagePath,
+            VerificationPackageFileNames.ResultBinding,
+            resultBinding with
+            {
+                OutcomeStatus = AbnormalFinalizationVerificationIds.OutcomeStatusFinalizedWithAnomaly,
+                CleanFinalization = false,
+                FinalizationMode = AbnormalFinalizationVerificationIds.FinalizationModeAbnormal,
+            });
+        await RefreshAuditManifestAsync(package.PackagePath);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.DevelopmentCurrentV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Fail);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == AbnormalFinalizationVerificationIds.EvidenceMissingCheckCode &&
+            x.ResultCode == VerificationResultCodes.AbnormalFinalizationEvidenceMissing &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
     public async Task Verify_Sp09ReviewedClaimWithoutReviewerEvidence_ShouldFail()
     {
         using var package = CreatePackage(VerificationProfileIds.DevelopmentCurrentV1);
@@ -989,6 +1082,58 @@ public class HushVotingPackageVerifierTests
         ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
         return directory;
     }
+
+    private static TemporaryPackageDirectory CreateAbnormalFinalizationPackage(
+        Func<AbnormalFinalizationEvidenceArtifactRecord, AbnormalFinalizationEvidenceArtifactRecord>? configureEvidence = null)
+    {
+        var directory = new TemporaryPackageDirectory();
+        var request = ElectionVerificationPackageExportServiceTests.CreateRequest(
+            VerificationPackageView.PublicAnonymous,
+            profileId: VerificationProfileIds.DevelopmentCurrentV1);
+        var evidence = CreateAbnormalFinalizationEvidence(request);
+        request = request with
+        {
+            AbnormalFinalizationEvidence = configureEvidence?.Invoke(evidence) ?? evidence,
+        };
+        var export = new ElectionVerificationPackageExportService().Export(request);
+        export.Success.Should().BeTrue();
+        ElectionVerificationPackageExportService.WritePackageToDirectory(export, directory.PackagePath);
+        return directory;
+    }
+
+    private static AbnormalFinalizationEvidenceArtifactRecord CreateAbnormalFinalizationEvidence(
+        ElectionVerificationPackageExportRequest request) =>
+        new(
+            AbnormalFinalizationVerificationIds.ArtifactSchemaId,
+            request.Election.ElectionId.ToString(),
+            request.ReportPackage!.Id.ToString(),
+            AbnormalFinalizationVerificationIds.OutcomeStatusFinalizedWithAnomaly,
+            CleanFinalization: false,
+            AbnormalFinalizationVerificationIds.FinalizationModeAbnormal,
+            AuthorityDecisionRef: "governance-decision:abnormal-finalization-0001",
+            AuthorityDecisionHash: VerificationCanonicalHash.ComputeSha256LowerHex("abnormal-finalization-decision"),
+            GovernanceRuleRef: "customer-rule:finality-policy-v1",
+            AbnormalFinalizationVerificationIds.OfficialResultSourceCopiedFromFixedUnofficial,
+            request.Election.CloseArtifactId!.Value.ToString(),
+            request.Election.TallyReadyArtifactId!.Value.ToString(),
+            request.Election.UnofficialResultArtifactId!.Value.ToString(),
+            request.Election.OfficialResultArtifactId!.Value.ToString(),
+            request.Election.UnofficialResultArtifactId!.Value.ToString(),
+            request.Election.FinalizeArtifactId?.ToString(),
+            MissingFinalizeEvidence:
+            [
+                "trustee-approval:missing:keylost-trustee",
+            ],
+            ContinuityIncidentEvidenceRefs:
+            [
+                "continuity-incident:keylost-trustee",
+            ],
+            AvailableTrusteeAcknowledgementRefs:
+            [
+                "trustee-ack:available-trustee-1",
+            ],
+            PublicSummary: "The fixed unofficial result was accepted by the configured authority after normal finalization could not complete cleanly.",
+            DecidedAtUtc: DateTime.UnixEpoch.AddHours(1));
 
     private static TemporaryPackageDirectory CreatePackageWithRegulatoryClaim(
         ElectionSp11RegulatoryClaimStateArtifactRecord claim)

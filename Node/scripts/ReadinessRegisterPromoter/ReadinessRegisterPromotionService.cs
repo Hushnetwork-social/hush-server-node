@@ -1253,7 +1253,7 @@ public sealed class ReadinessRegisterPromotionService
         sb.AppendLine("## Known Limitations");
         sb.AppendLine();
         sb.AppendLine("- Internal rehearsal use must be labelled non-binding.");
-        sb.AppendLine("- Pilot readiness remains blocked until custody, deployment, receipt verification, retention, void-publication, and pilot evidence work is accepted.");
+        sb.AppendLine("- Pilot readiness remains blocked until the minimum confidence band and remaining pilot-critical evidence gates are satisfied.");
         sb.AppendLine("- Production and public/state election readiness are not claimed in this version.");
         sb.AppendLine();
         sb.AppendLine("## Non-Claims");
