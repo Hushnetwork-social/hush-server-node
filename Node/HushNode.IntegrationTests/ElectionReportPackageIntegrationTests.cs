@@ -204,6 +204,101 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "FEAT-138")]
+    [Trait("Category", "HV-INT-FEAT-138")]
+    [Trait("Category", "TwinTest")]
+    [Trait("Category", "NON_E2E")]
+    public async Task VoidElection_WithClosedTallyReadyElection_PublishesVoidPackageWithoutCurrentResultClaim()
+    {
+        var client = await StartClientAsync();
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "FEAT-138 VOID Publication Replacement",
+            castSubmissionIdempotencyKey: "feat138-void-cast-001");
+        var electionId = new ElectionId(Guid.Parse(context.ElectionId));
+        var ownerResultBeforeVoid = await GetElectionResultViewAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice);
+
+        ownerResultBeforeVoid.UnofficialResult.Should().NotBeNull();
+        ownerResultBeforeVoid.VerificationPackageStatus.Should().NotBeNull();
+        ownerResultBeforeVoid.VerificationPackageStatus!.Status.Should().Be(
+            ElectionVerificationPackageStatusProto.VerificationPackageNotFinalized);
+
+        var voidSubmitResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.VoidElection(
+                TestIdentities.Alice,
+                electionId,
+                "ElectionOwner accepted a dispute and voided this election before final publication."));
+        voidSubmitResponse.Successfull.Should().BeTrue(voidSubmitResponse.Message);
+
+        var voidedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        voidedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Voided);
+
+        var ownerResult = await GetElectionResultViewAsync(client, context.ElectionId, TestIdentities.Alice);
+        ownerResult.Success.Should().BeTrue(ownerResult.ErrorMessage);
+        ownerResult.LatestReportPackage.Should().NotBeNull();
+        ownerResult.LatestReportPackage!.Status.Should().Be(ElectionReportPackageStatusProto.ReportPackageSealed);
+        ownerResult.LatestReportPackage.PackageKind.Should().Be(ElectionReportPackageKindProto.ReportPackageVoid);
+        ownerResult.VisibleReportArtifacts.Should().Contain(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactMachineVoidPublicStatus);
+        ownerResult.VisibleReportArtifacts.Should().Contain(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanVoidSummary);
+        ownerResult.VisibleReportArtifacts.Should().NotContain(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanResultReport);
+
+        ownerResult.VerificationPackageStatus.Should().NotBeNull();
+        ownerResult.VerificationPackageStatus!.Status.Should().Be(
+            ElectionVerificationPackageStatusProto.VerificationPackageVoided);
+        ownerResult.VerificationPackageStatus.LastVerifierResult.Should().NotBeNull();
+        ownerResult.VerificationPackageStatus.LastVerifierResult!.ResultCode.Should().Be(
+            VerificationResultCodes.ElectionVoided);
+        ownerResult.VerificationPackageStatus.VoidPublicationStatus.Should().NotBeNull();
+        ownerResult.VerificationPackageStatus.VoidPublicationStatus!.Status.Should().Be(
+            ElectionVoidPublicationAttemptStatusProto.VoidPublicationSealed);
+        ownerResult.VerificationPackageStatus.VoidPublicationStatus.PublicJustification
+            .Should().Contain("accepted a dispute");
+        ownerResult.VerificationPackageStatus.VoidPublicationStatus.ResultingLifecycleState.Should().Be(
+            ElectionLifecycleStateProto.Voided);
+        ownerResult.VerificationPackageStatus.VoidPublicationStatus.VoidPackageArtifactRef.Should()
+            .NotBeNullOrWhiteSpace();
+        ownerResult.VerificationPackageStatus.VoidPublicationStatus.PublicStatusArtifactRef.Should()
+            .NotBeNullOrWhiteSpace();
+
+        var publicExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+        publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
+        publicExport.Files.Select(x => x.RelativePath).Should().Contain([
+            VerificationPackageFileNames.VoidDecision,
+            VerificationPackageFileNames.PublicVoidSummary,
+            VerificationPackageFileNames.VoidPublicStatus,
+            VerificationPackageFileNames.VoidPackageManifest,
+        ]);
+        publicExport.Files.Select(x => x.RelativePath).Should().NotContain([
+            VerificationPackageFileNames.AcceptedBallotSet,
+            VerificationPackageFileNames.PublishedBallotStream,
+            VerificationPackageFileNames.RestrictedHistoricalUnofficialResult,
+        ]);
+
+        using var packageDirectory = new TemporaryPackageDirectory();
+        WriteVerificationPackageToDirectory(publicExport, packageDirectory.PackagePath);
+        var verifierOutputPath = Path.Combine(packageDirectory.PackagePath, "verifier-output-local");
+        var verification = await new HushVotingPackageVerifier().VerifyAsync(new(
+            packageDirectory.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1,
+            verifierOutputPath));
+
+        verification.ExitCode.Should().Be(VerificationExitCodes.Pass);
+        verification.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.ElectionVoided &&
+            x.Status == VerificationCheckStatus.Warn);
+    }
+
+    [Fact]
     [Trait("Category", "FEAT-128")]
     [Trait("Category", "TwinTest")]
     [Trait("Category", "NON_E2E")]

@@ -15,7 +15,7 @@ namespace HushNode.IntegrationTests.Features.E2E
     using TechTalk.SpecFlow;
     using System;
     using System.Linq;
-    
+
     
     [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
     [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
@@ -206,6 +206,56 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Voided election shows public VOID package status without current result exposure")]
+        [Xunit.TraitAttribute("FeatureTitle", "HushVoting Initial Empty States")]
+        [Xunit.TraitAttribute("Description", "Voided election shows public VOID package status without current result exposure")]
+        [Xunit.TraitAttribute("Category", "HV-E2E-FEAT-138")]
+        [Xunit.TraitAttribute("Category", "FEAT-138")]
+        [Xunit.TraitAttribute("Category", "PR")]
+        public void VoidedElectionShowsPublicVOIDPackageStatusWithoutCurrentResultExposure()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "HV-E2E-FEAT-138",
+                    "FEAT-138",
+                    "PR"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Voided election shows public VOID package status without current result exposure", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 34
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 35
+        testRunner.Given("the FEAT-138 voided election query responses are seeded for the browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 36
+        testRunner.When("the user opens the FEAT-138 voided election", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 37
+        testRunner.Then("the FEAT-138 VOID package status should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 38
+        testRunner.And("the FEAT-138 VOID report package notice should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 39
+        testRunner.And("the FEAT-138 voided election screen should not expose current result or restricte" +
+                        "d evidence", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 40
+        testRunner.And("the HushVoting screen should not show an election query proxy error", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable

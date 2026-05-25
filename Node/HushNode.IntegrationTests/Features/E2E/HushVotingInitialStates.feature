@@ -29,3 +29,12 @@ Feature: HushVoting Initial Empty States
         And the FEAT-129 restricted anomaly artifact row should be visible
         And the FEAT-129 report package UI should not leak restricted anomaly payload references
         And the HushVoting screen should not show an election query proxy error
+
+    @HV-E2E-FEAT-138 @FEAT-138 @PR
+    Scenario: Voided election shows public VOID package status without current result exposure
+        Given the FEAT-138 voided election query responses are seeded for the browser
+        When the user opens the FEAT-138 voided election
+        Then the FEAT-138 VOID package status should be visible
+        And the FEAT-138 VOID report package notice should be visible
+        And the FEAT-138 voided election screen should not expose current result or restricted evidence
+        And the HushVoting screen should not show an election query proxy error

@@ -4,8 +4,8 @@
   "featureId": "FEAT-138",
   "acceptanceGate": "AT-RDY-015",
   "sourceGap": "ElectionOwner void decision and publication replacement",
-  "status": "blocked",
-  "generatedAt": "2026-05-22T00:00:00Z",
+  "status": "accepted",
+  "generatedAt": "2026-05-25T00:00:00Z",
   "evidenceRefs": [
     {
       "evidenceId": "FEAT138-SERVER-VOID-CONTRACTS",
@@ -21,9 +21,15 @@
     },
     {
       "evidenceId": "FEAT138-PHASE-DOCS",
-      "path": "hush-memory-bank/Features/03_IN_PROGRESS/FEAT-138-electionowner-void-decision-voided-publication-replacement",
-      "sha256Hash": "0db0c4093297d4cc32d59d37510c3f04a2bc2ead98a72ec4af91ed43f1cfcda5",
-      "description": "Feature, phase, design, traceability, and code review records."
+      "path": "hush-memory-bank/Features/04_COMPLETED/FEAT-138-electionowner-void-decision-voided-publication-replacement",
+      "sha256Hash": "source-controlled",
+      "description": "Completed feature, phase, design, traceability, and code review records."
+    },
+    {
+      "evidenceId": "FEAT138-INT-E2E-FOCUSED",
+      "path": "hush-server-node/Node/HushNode.IntegrationTests",
+      "sha256Hash": "source-controlled",
+      "description": "Focused FEAT-138 TwinTest and Playwright E2E blocks proving sealed VOID publication replacement and public-safe browser status."
     }
   ],
   "focusedVerification": [
@@ -47,15 +53,15 @@
     },
     {
       "checkId": "FEAT138-INT",
-      "status": "blocked",
-      "command": "dotnet test Node/HushNode.IntegrationTests/HushNode.IntegrationTests.csproj --filter HV-INT-FEAT-138",
-      "blocker": "Focused TwinTest block is not implemented yet."
+      "status": "passed",
+      "command": "dotnet test Node/HushNode.IntegrationTests/HushNode.IntegrationTests.csproj --filter \"Category=HV-INT-FEAT-138\"",
+      "evidenceRef": "FEAT138-INT-E2E-FOCUSED"
     },
     {
       "checkId": "FEAT138-E2E",
-      "status": "blocked",
-      "command": "dotnet test Node/HushNode.IntegrationTests/HushNode.IntegrationTests.csproj --filter HV-E2E-FEAT-138",
-      "blocker": "Focused Playwright E2E block is not implemented yet."
+      "status": "passed",
+      "command": "dotnet test Node/HushNode.IntegrationTests/HushNode.IntegrationTests.csproj --filter \"Category=HV-E2E-FEAT-138\"",
+      "evidenceRef": "FEAT138-INT-E2E-FOCUSED"
     }
   ],
   "publicArtifactSamples": [
@@ -86,7 +92,6 @@
   "residualRisk": {
     "gapTarget": 1,
     "remainingAfterAcceptance": [
-      "Focused TwinTest and E2E blocks must exist and pass before this fragment can become accepted.",
       "FEAT-139 still owns the broader dispute and continuity readiness workflow.",
       "FEAT-143 and FEAT-144 runtime binding evidence must be consumed when those features exist.",
       "Gap zero still requires repeated operating evidence and final readiness-register promotion."

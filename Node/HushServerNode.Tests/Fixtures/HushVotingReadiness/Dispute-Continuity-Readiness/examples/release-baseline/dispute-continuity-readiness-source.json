@@ -28,16 +28,16 @@
     {
       "evidenceId": "FEAT139-VOID-FRAGMENT",
       "path": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/release-baseline/void-readiness-fragment.json",
-      "sha256Hash": "841181811e9490c4247582d98dc7b803edc6e573e11dbc444acf4cd64c8e2384",
+      "sha256Hash": "ec4000765257c8973b2ff21f0a41a3ec4eded1427eba2696017e7eff2b4fe9ba",
       "visibility": "restricted_reviewer",
-      "description": "FEAT-138 void readiness fragment. Current status remains blocked."
+      "description": "Accepted FEAT-138 void readiness fragment consumed for voided-election continuity limitations."
     },
     {
       "evidenceId": "FEAT139-VOID-HANDOFF",
       "path": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/release-baseline/void-downstream-handoff.json",
-      "sha256Hash": "827165b187d85df9f1e2aa57981c8696c4c410d9e7e2abdaa7cc6cdf49db6b3e",
+      "sha256Hash": "f501cf09ccec7cbb18f5857b9dd97c432844bd5515efae67e3fa5c0e82d4eb14",
       "visibility": "restricted_reviewer",
-      "description": "FEAT-138 downstream handoff consumed when voided-election scenarios are in scope."
+      "description": "Accepted FEAT-138 downstream handoff consumed when voided-election scenarios are in scope."
     }
   ],
   "anomalyEvidence": {
@@ -55,11 +55,8 @@
       "artifactId": "MachineRestrictedAnomalyIntakeManifest",
       "path": "restricted/anomaly-intake-manifest.json",
       "sha256Hash": "sample-restricted-anomaly-manifest-hash",
-      "packageReadinessStatus": "blocked",
-      "packageReadinessBlockerIds": [
-        "FEAT138-INT",
-        "FEAT138-E2E"
-      ]
+      "packageReadinessStatus": "ready",
+      "packageReadinessBlockerIds": []
     },
     "counts": {
       "totalThreads": 2,
@@ -75,20 +72,17 @@
     "reportGenerationStatus": "read_only_validated"
   },
   "voidEvidence": {
-    "state": "blocked",
+    "state": "accepted",
     "requiredWhen": "voided_election",
     "fragmentPath": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/release-baseline/void-readiness-fragment.json",
-    "fragmentHash": "841181811e9490c4247582d98dc7b803edc6e573e11dbc444acf4cd64c8e2384",
+    "fragmentHash": "ec4000765257c8973b2ff21f0a41a3ec4eded1427eba2696017e7eff2b4fe9ba",
     "handoffPath": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/release-baseline/void-downstream-handoff.json",
-    "handoffHash": "827165b187d85df9f1e2aa57981c8696c4c410d9e7e2abdaa7cc6cdf49db6b3e",
+    "handoffHash": "f501cf09ccec7cbb18f5857b9dd97c432844bd5515efae67e3fa5c0e82d4eb14",
     "publicScanPath": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/release-baseline/void-public-artifact-scan.json",
-    "publicScanHash": "b43ff1a5b4e10453b6715b44470564edf6e1d50d1504f3f4bae6902309ed69e3",
-    "appliedScore": 4,
+    "publicScanHash": "3542aa184ae55f2d0c9dac0b054d6f7aeb32a1356b18a02609edb6005ba6dc9b",
+    "appliedScore": 6,
     "candidateScore": 6,
-    "blockerIds": [
-      "FEAT138-INT",
-      "FEAT138-E2E"
-    ]
+    "blockerIds": []
   },
   "governedOutcomeEvidence": [
     {
@@ -188,18 +182,15 @@
       "scenarioId": "voided_election",
       "label": "Voided election",
       "evidenceStates": [
-        "blocked"
+        "accepted"
       ],
-      "decision": "block",
+      "decision": "allow_with_limitations",
       "affectedClaims": [
         "voided-election continuity claim"
       ],
-      "blockerIds": [
-        "FEAT138-INT",
-        "FEAT138-E2E"
-      ],
-      "publicWordingKey": "voided_election_blocked",
-      "residualRisk": "FEAT-138 fragment is present but blocked until focused TwinTest and E2E coverage exists and passes."
+      "blockerIds": [],
+      "publicWordingKey": "voided_election_limited",
+      "residualRisk": "Allowed only as VOID continuity evidence; no final result or final-inclusion claim is allowed."
     },
     {
       "scenarioId": "failed_to_finalize",
@@ -252,14 +243,14 @@
   ],
   "publicSummary": {
     "title": "Dispute and continuity readiness",
-    "statusWording": "Dispute and continuity readiness is blocked for stronger pilot claims until producer evidence blockers clear.",
+    "statusWording": "Dispute and continuity readiness is blocked for stronger pilot claims until remaining governed-outcome and package-integrity blockers clear.",
     "allowedClaims": [
+      "Voided-election continuity can be described with limitation wording when the accepted FEAT-138 VOID package evidence is referenced.",
       "Resolved non-blocking anomaly handling can be described with limitation wording.",
       "Zero-anomaly continuity can be described only when explicit current zero-anomaly evidence is present."
     ],
     "blockedClaims": [
-      "Voided-election continuity claims remain blocked while FEAT-138 focused test blockers remain open.",
-      "Failed-to-finalize and finalized-with-anomaly claims remain blocked until governed outcome evidence exists."
+      "Failed-to-finalize, finalized-with-anomaly, unresolved blocking anomaly, and package mismatch claims remain blocked until their specific producer evidence exists."
     ],
     "residualRisks": [
       "Customer governance may still decide remedies, deadlines, and authority actions.",
@@ -269,7 +260,7 @@
   "publicArtifactSamples": [
     {
       "path": "public/dispute-continuity-summary.md",
-      "content": "Dispute and continuity readiness is blocked for stronger claims until open producer blockers clear. Public output contains only high-level claim status and artifact hashes."
+      "content": "Dispute and continuity readiness is blocked for stronger claims until remaining governed-outcome and package-integrity blockers clear. Public output contains only high-level claim status and artifact hashes."
     }
   ]
 }

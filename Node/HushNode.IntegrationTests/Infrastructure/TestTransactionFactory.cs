@@ -905,6 +905,36 @@ internal static class TestTransactionFactory
         return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
     }
 
+    public static string VoidElection(
+        TestIdentity owner,
+        ElectionId electionId,
+        string publicJustification,
+        IReadOnlyList<ElectionVoidEvidenceReferenceRecord>? evidenceReferences = null)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.VoidElection,
+            JsonSerializer.SerializeToElement(new VoidElectionActionPayload(
+                owner.PublicSigningAddress,
+                publicJustification,
+                evidenceReferences)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    public static string RetryVoidPublication(
+        TestIdentity owner,
+        ElectionId electionId,
+        Guid voidDecisionId)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RetryVoidPublication,
+            JsonSerializer.SerializeToElement(new RetryVoidPublicationActionPayload(
+                owner.PublicSigningAddress,
+                voidDecisionId)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
     /// <summary>
     /// Creates a signed finalization share submission transaction.
     /// </summary>

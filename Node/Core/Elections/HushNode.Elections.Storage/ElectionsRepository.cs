@@ -301,7 +301,10 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task UpdateVoidDecisionAsync(ElectionVoidDecisionRecord voidDecision)
     {
-        var existing = await Context.ElectionVoidDecisions
+        var existing = Context.ElectionVoidDecisions.Local
+            .FirstOrDefault(x => x.Id == voidDecision.Id);
+
+        existing ??= await Context.ElectionVoidDecisions
             .FirstOrDefaultAsync(x => x.Id == voidDecision.Id);
 
         if (existing is not null)
@@ -329,7 +332,10 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task UpdateVoidPublicationAttemptAsync(ElectionVoidPublicationAttemptRecord publicationAttempt)
     {
-        var existing = await Context.ElectionVoidPublicationAttempts
+        var existing = Context.ElectionVoidPublicationAttempts.Local
+            .FirstOrDefault(x => x.Id == publicationAttempt.Id);
+
+        existing ??= await Context.ElectionVoidPublicationAttempts
             .FirstOrDefaultAsync(x => x.Id == publicationAttempt.Id);
 
         if (existing is not null)

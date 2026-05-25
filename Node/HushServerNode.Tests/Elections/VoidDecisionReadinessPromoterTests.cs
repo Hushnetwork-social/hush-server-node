@@ -9,7 +9,7 @@ namespace HushServerNode.Tests.Elections;
 public sealed class VoidDecisionReadinessPromoterTests
 {
     private static readonly DateTimeOffset FixedGeneratedAt =
-        new(2026, 5, 22, 0, 0, 0, TimeSpan.Zero);
+        new(2026, 5, 25, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public void SchemaSet_RequiredSchemas_ArePresentAndLoadable()
@@ -26,7 +26,7 @@ public sealed class VoidDecisionReadinessPromoterTests
     }
 
     [Fact]
-    public void SourceFixture_ReleaseBaseline_IsBlockedUntilTwinTestAndE2EExist()
+    public void SourceFixture_ReleaseBaseline_IsAcceptedAfterFocusedTwinTestAndE2E()
     {
         var paths = CreatePaths();
 
@@ -37,17 +37,17 @@ public sealed class VoidDecisionReadinessPromoterTests
             generatedAt: FixedGeneratedAt);
 
         sourceErrors.Should().BeEmpty();
-        generated.Status.Should().Be("blocked");
-        generated.Blockers.Should().Contain(["FEAT138-INT", "FEAT138-E2E"]);
+        generated.Status.Should().Be("accepted");
+        generated.Blockers.Should().BeEmpty();
         generated.PublicForbiddenFindings.Should().BeEmpty();
 
         var readiness = ParseArtifact(generated, VoidDecisionReadinessArtifactGenerator.ReadinessFragmentPath);
         readiness["acceptanceGate"]!.GetValue<string>().Should().Be(VoidDecisionReadinessContracts.AcceptanceGate);
-        readiness["status"]!.GetValue<string>().Should().Be("blocked");
+        readiness["status"]!.GetValue<string>().Should().Be("accepted");
         readiness["doesNotMutateRegister"]!.GetValue<bool>().Should().BeTrue();
         readiness["registerPromotionOwner"]!.GetValue<string>().Should().Be("FEAT-130");
         readiness["dimensionScoreChange"]!.AsObject()["acceptedScore"]!.GetValue<int>().Should().Be(6);
-        readiness["dimensionScoreChange"]!.AsObject()["appliedScore"]!.GetValue<int>().Should().Be(4);
+        readiness["dimensionScoreChange"]!.AsObject()["appliedScore"]!.GetValue<int>().Should().Be(6);
     }
 
     [Fact]
@@ -207,7 +207,7 @@ public sealed class VoidDecisionReadinessPromoterTests
         var first = service.Promote(options);
         var second = service.Promote(options);
 
-        first.Status.Should().Be("blocked");
+        first.Status.Should().Be("accepted");
         first.WrittenFiles.Should().HaveCount(VoidDecisionReadinessContracts.RequiredOutputFiles.Length);
         foreach (var relativePath in VoidDecisionReadinessContracts.RequiredOutputFiles)
         {

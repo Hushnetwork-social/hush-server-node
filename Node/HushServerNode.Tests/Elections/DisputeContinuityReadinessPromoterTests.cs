@@ -26,7 +26,7 @@ public sealed class DisputeContinuityReadinessPromoterTests
     }
 
     [Fact]
-    public void SourceFixture_ReleaseBaseline_IsBlockedAndPreservesFeat138Blockers()
+    public void SourceFixture_ReleaseBaseline_IsBlockedOnlyByFeat139ContinuityGaps()
     {
         var paths = CreatePaths();
 
@@ -38,7 +38,13 @@ public sealed class DisputeContinuityReadinessPromoterTests
 
         sourceErrors.Should().BeEmpty();
         generated.Status.Should().Be("blocked");
-        generated.Blockers.Should().Contain(["FEAT138-INT", "FEAT138-E2E"]);
+        generated.Blockers.Should().NotContain(["FEAT138-INT", "FEAT138-E2E"]);
+        generated.Blockers.Should().Contain([
+            "FEAT139-GOVERNED-FAILED-FINALIZE-MISSING",
+            "FEAT139-GOVERNED-FINALIZED-WITH-ANOMALY-MISSING",
+            "FEAT139-PACKAGE-ARTIFACT-MISMATCH",
+            "FEAT139-UNRESOLVED-BLOCKING-ANOMALY",
+        ]);
         generated.PublicForbiddenFindings.Should().BeEmpty();
 
         var readiness = ParseArtifact(generated, DisputeContinuityReadinessArtifactGenerator.ReadinessFragmentPath);
@@ -48,6 +54,12 @@ public sealed class DisputeContinuityReadinessPromoterTests
         readiness["directRegisterMutation"]!.GetValue<bool>().Should().BeFalse();
         readiness["registerPromotionOwner"]!.GetValue<string>().Should().Be("FEAT-130");
         readiness["scoreEffect"]!.AsObject()["appliedScore"]!.GetValue<int>().Should().Be(4);
+
+        var matrix = ParseArtifact(generated, DisputeContinuityReadinessArtifactGenerator.ClaimDecisionMatrixPath);
+        var voidedElection = matrix["scenarioDecisions"]!.AsArray().OfType<JsonObject>()
+            .Single(scenario => scenario["scenarioId"]!.GetValue<string>() == "voided_election");
+        voidedElection["effectiveDecision"]!.GetValue<string>().Should().Be("allow_with_limitations");
+        voidedElection["blockerIds"]!.AsArray().Should().BeEmpty();
     }
 
     [Fact]

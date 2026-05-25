@@ -312,6 +312,83 @@ public class ElectionsRepositoryTests
     }
 
     [Fact]
+    public async Task UpdateVoidDecisionAndPublicationAttemptAsync_WithTrackedUnsavedRows_ShouldPersistSealedStatus()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var election = CreateAdminElection() with
+        {
+            LifecycleState = ElectionLifecycleState.Voided,
+            OpenedAt = DateTime.UtcNow.AddMinutes(-20),
+        };
+        var voidBoundaryArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Void,
+            election,
+            recordedByPublicAddress: "owner-address");
+        var decision = ElectionModelFactory.CreateVoidDecision(
+            election with { LifecycleState = ElectionLifecycleState.Open },
+            actorPublicAddress: "owner-address",
+            publicJustification: "Trustee threshold could not be satisfied after the close ceremony.",
+            voidBoundaryArtifactId: voidBoundaryArtifact.Id);
+        var pendingAttempt = ElectionModelFactory.CreatePendingVoidPublicationAttempt(
+            election.ElectionId,
+            decision.Id,
+            attemptNumber: 1,
+            frozenEvidenceHash: [9, 9, 9, 9],
+            frozenEvidenceFingerprint: "void-freeze:abc123",
+            attemptedByPublicAddress: "owner-address");
+        var pendingDecision = decision with
+        {
+            CurrentPublicationAttemptId = pendingAttempt.Id,
+            PublicationStatus = pendingAttempt.Status,
+        };
+        var sealedAttempt = ElectionModelFactory.CreateSealedVoidPublicationAttempt(
+            election.ElectionId,
+            decision.Id,
+            attemptNumber: pendingAttempt.AttemptNumber,
+            frozenEvidenceHash: pendingAttempt.FrozenEvidenceHash,
+            frozenEvidenceFingerprint: pendingAttempt.FrozenEvidenceFingerprint,
+            packageHash: [8, 8, 8, 8],
+            artifactCount: 6,
+            attemptedByPublicAddress: pendingAttempt.AttemptedByPublicAddress,
+            reportPackageId: Guid.NewGuid(),
+            publicStatusArtifactRef: "void-public-status.json",
+            voidPackageArtifactRef: "void-package.zip",
+            attemptedAt: pendingAttempt.AttemptedAt,
+            sealedAt: pendingAttempt.AttemptedAt.AddSeconds(5),
+            preassignedAttemptId: pendingAttempt.Id);
+        var sealedDecision = pendingDecision with
+        {
+            CurrentPublicationAttemptId = sealedAttempt.Id,
+            PublicationStatus = sealedAttempt.Status,
+        };
+
+        await repository.SaveElectionAsync(election);
+        await repository.SaveBoundaryArtifactAsync(voidBoundaryArtifact);
+        await repository.SaveVoidDecisionAsync(pendingDecision);
+        await repository.SaveVoidPublicationAttemptAsync(pendingAttempt);
+        await repository.UpdateVoidPublicationAttemptAsync(sealedAttempt);
+        await repository.UpdateVoidDecisionAsync(sealedDecision);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var storedDecision = await repository.GetVoidDecisionAsync(election.ElectionId);
+        var storedAttempt = await repository.GetLatestVoidPublicationAttemptAsync(decision.Id);
+
+        storedDecision.Should().NotBeNull();
+        storedDecision!.CurrentPublicationAttemptId.Should().Be(sealedAttempt.Id);
+        storedDecision.PublicationStatus.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
+        storedAttempt.Should().NotBeNull();
+        storedAttempt!.Status.Should().Be(ElectionVoidPublicationAttemptStatus.Sealed);
+        storedAttempt.ReportPackageId.Should().Be(sealedAttempt.ReportPackageId);
+        storedAttempt.PackageHash.Should().Equal([8, 8, 8, 8]);
+        storedAttempt.ArtifactCount.Should().Be(6);
+        storedAttempt.PublicStatusArtifactRef.Should().Be("void-public-status.json");
+        storedAttempt.VoidPackageArtifactRef.Should().Be("void-package.zip");
+        storedAttempt.SealedAt.Should().Be(sealedAttempt.SealedAt);
+    }
+
+    [Fact]
     public async Task SaveVoidDecisionAsync_WithExistingDecision_ShouldThrow()
     {
         using var context = CreateContext();
