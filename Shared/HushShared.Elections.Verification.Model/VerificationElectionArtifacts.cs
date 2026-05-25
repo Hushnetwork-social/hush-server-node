@@ -65,7 +65,34 @@ public record ResultBindingArtifactRecord(
     string ReportPackageHash,
     string? FinalizeArtifactId,
     string? OfficialResultArtifactId,
-    string? UnofficialResultArtifactId);
+    string? UnofficialResultArtifactId,
+    string OutcomeStatus = AbnormalFinalizationVerificationIds.OutcomeStatusCleanFinalized,
+    bool CleanFinalization = true,
+    string FinalizationMode = AbnormalFinalizationVerificationIds.FinalizationModeClean,
+    string? AbnormalFinalizationEvidenceHash = null);
+
+public record AbnormalFinalizationEvidenceArtifactRecord(
+    string ArtifactSchemaId,
+    string ElectionId,
+    string ReportPackageId,
+    string OutcomeStatus,
+    bool CleanFinalization,
+    string FinalizationMode,
+    string AuthorityDecisionRef,
+    string AuthorityDecisionHash,
+    string GovernanceRuleRef,
+    string OfficialResultSource,
+    string CloseArtifactId,
+    string TallyReadyArtifactId,
+    string UnofficialResultArtifactId,
+    string OfficialResultArtifactId,
+    string OfficialResultSourceArtifactId,
+    string? FinalizeArtifactId,
+    IReadOnlyList<string> MissingFinalizeEvidence,
+    IReadOnlyList<string> ContinuityIncidentEvidenceRefs,
+    IReadOnlyList<string> AvailableTrusteeAcknowledgementRefs,
+    string PublicSummary,
+    DateTime DecidedAtUtc);
 
 public record RestrictedRosterCheckoffArtifactRecord(
     string ElectionId,

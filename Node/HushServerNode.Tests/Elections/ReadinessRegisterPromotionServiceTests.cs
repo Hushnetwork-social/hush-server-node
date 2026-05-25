@@ -8,10 +8,10 @@ namespace HushServerNode.Tests.Elections;
 
 public sealed class ReadinessRegisterPromotionServiceTests
 {
-    private static readonly DateTimeOffset FixedGeneratedAt = new(2026, 5, 19, 0, 0, 0, TimeSpan.Zero);
-    private const string CurrentRegisterVersion = "v0.1.1";
-    private const string CurrentRegisterVersionId = "RDY-REG-v0.1.1";
-    private const int CurrentTotalScore = 55;
+    private static readonly DateTimeOffset FixedGeneratedAt = new(2026, 5, 25, 15, 45, 0, TimeSpan.Zero);
+    private const string CurrentRegisterVersion = "v0.1.3";
+    private const string CurrentRegisterVersionId = "RDY-REG-v0.1.3";
+    private const int CurrentTotalScore = 60;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -181,6 +181,8 @@ public sealed class ReadinessRegisterPromotionServiceTests
         scorecard.Should().Contain("friendly_organization_pilot");
         scorecard.Should().Contain("blocked");
         scorecard.Should().Contain("RDY-SCORE-20260519-001");
+        scorecard.Should().Contain("RDY-SCORE-20260525-001");
+        scorecard.Should().Contain("RDY-EVID-AT-RDY-012-FEAT-140-001");
         scorecard.Should().Contain("RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001");
         scorecard.Should().Contain("green | resolved | FEAT-131");
     }

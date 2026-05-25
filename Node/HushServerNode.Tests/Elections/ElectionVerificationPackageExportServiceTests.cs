@@ -102,6 +102,51 @@ public class ElectionVerificationPackageExportServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-139")]
+    public void Export_ReportPackageAbnormalFinalizationArtifact_ShouldDeclareNonCleanOutcome()
+    {
+        var request = CreateRequest(VerificationPackageView.PublicAnonymous);
+        var evidence = CreateAbnormalFinalizationEvidence(request);
+        var content = JsonSerializer.Serialize(evidence, VerificationJson.Options);
+        var artifact = ElectionModelFactory.CreateReportArtifact(
+            request.ReportPackage!.Id,
+            request.Election.ElectionId,
+            ElectionReportArtifactKind.MachineAbnormalFinalizationEvidence,
+            ElectionReportArtifactFormat.Json,
+            ElectionReportArtifactAccessScope.OwnerAuditorTrustee,
+            sortOrder: 15,
+            title: "Abnormal finalization evidence",
+            fileName: "abnormal-finalization-evidence.json",
+            mediaType: "application/json",
+            contentHash: SHA256.HashData(Encoding.UTF8.GetBytes(content)),
+            content: content);
+
+        var result = Export(request with
+        {
+            ReportArtifacts = [.. request.ReportArtifacts, artifact],
+        });
+
+        result.Success.Should().BeTrue();
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.ReportPackageAbnormalFinalizationEvidence &&
+            x.Visibility == VerificationArtifactVisibility.Public);
+        var electionRecord = ReadFile<ElectionRecordReferenceRecord>(
+            result,
+            VerificationPackageFileNames.ElectionRecord);
+        electionRecord.OutcomeStatus.Should().Be(AbnormalFinalizationVerificationIds.OutcomeStatusFinalizedWithAnomaly);
+        electionRecord.CleanFinalization.Should().BeFalse();
+        electionRecord.FinalizationMode.Should().Be(AbnormalFinalizationVerificationIds.FinalizationModeAbnormal);
+
+        var resultBinding = ReadFile<ResultBindingArtifactRecord>(
+            result,
+            VerificationPackageFileNames.ResultBinding);
+        resultBinding.OutcomeStatus.Should().Be(AbnormalFinalizationVerificationIds.OutcomeStatusFinalizedWithAnomaly);
+        resultBinding.CleanFinalization.Should().BeFalse();
+        resultBinding.AbnormalFinalizationEvidenceHash.Should().Be(
+            VerificationCanonicalHash.ComputeManifestFileSha256(Encoding.UTF8.GetBytes(content)));
+    }
+
+    [Fact]
     public void Export_PublicPackage_ShouldIncludePlannedSp09ExternalReviewArtifacts()
     {
         var result = Export(CreateRequest(VerificationPackageView.PublicAnonymous));
@@ -1060,6 +1105,40 @@ public class ElectionVerificationPackageExportServiceTests
             TrusteeControlDomainRecords = controlDomains,
         };
     }
+
+    private static AbnormalFinalizationEvidenceArtifactRecord CreateAbnormalFinalizationEvidence(
+        ElectionVerificationPackageExportRequest request) =>
+        new(
+            AbnormalFinalizationVerificationIds.ArtifactSchemaId,
+            request.Election.ElectionId.ToString(),
+            request.ReportPackage!.Id.ToString(),
+            AbnormalFinalizationVerificationIds.OutcomeStatusFinalizedWithAnomaly,
+            CleanFinalization: false,
+            AbnormalFinalizationVerificationIds.FinalizationModeAbnormal,
+            AuthorityDecisionRef: "governance-decision:abnormal-finalization-0001",
+            AuthorityDecisionHash: HashHex("abnormal-finalization-decision"),
+            GovernanceRuleRef: "customer-rule:finality-policy-v1",
+            AbnormalFinalizationVerificationIds.OfficialResultSourceCopiedFromFixedUnofficial,
+            request.Election.CloseArtifactId!.Value.ToString(),
+            request.Election.TallyReadyArtifactId!.Value.ToString(),
+            request.Election.UnofficialResultArtifactId!.Value.ToString(),
+            request.Election.OfficialResultArtifactId!.Value.ToString(),
+            request.Election.UnofficialResultArtifactId!.Value.ToString(),
+            request.Election.FinalizeArtifactId?.ToString(),
+            MissingFinalizeEvidence:
+            [
+                "trustee-approval:missing:keylost-trustee",
+            ],
+            ContinuityIncidentEvidenceRefs:
+            [
+                "continuity-incident:keylost-trustee",
+            ],
+            AvailableTrusteeAcknowledgementRefs:
+            [
+                "trustee-ack:available-trustee-1",
+            ],
+            PublicSummary: "The fixed unofficial result was accepted by the configured authority after normal finalization could not complete cleanly.",
+            DecidedAtUtc: DateTime.UnixEpoch.AddHours(1));
 
     internal static ElectionVerificationPackageExportRequest WithOfficialSp08ReleaseManifest(
         ElectionVerificationPackageExportRequest request) =>

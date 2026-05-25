@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "legal-governance-boundary-feat146-handoff.schema.json",
+  "title": "Legal Governance Boundary FEAT-146 Handoff",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "handoffId",
+    "producerFeature",
+    "targetFeature",
+    "generatedAt",
+    "authorityInputs"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "legal-governance-boundary-feat146-handoff.v1" },
+    "producerFeature": { "const": "FEAT-140" },
+    "targetFeature": { "const": "FEAT-146" }
+  }
+}

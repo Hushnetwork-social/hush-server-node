@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "legal-governance-boundary-claim-impact-matrix.schema.json",
+  "title": "Legal Governance Boundary Claim Impact Matrix",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "matrixId",
+    "featureSlice",
+    "generatedAt",
+    "governanceInputs",
+    "claimImpactScenarios"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "legal-governance-boundary-claim-impact-matrix.v1" },
+    "featureSlice": { "const": "FEAT-140" }
+  }
+}

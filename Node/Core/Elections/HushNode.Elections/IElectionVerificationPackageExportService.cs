@@ -42,7 +42,8 @@ public record ElectionVerificationPackageExportRequest(
     ElectionSp08ReleaseManifestArtifactRecord? Sp08ReleaseManifest = null,
     ElectionSp10OperationalSecurityStatusArtifactRecord? Sp10OperationalSecurityStatus = null,
     ElectionSp11RegulatoryClaimStateArtifactRecord? Sp11RegulatoryClaimState = null,
-    ElectionAdminOnlyProtectedTallyEnvelopeRecord? AdminOnlyProtectedTallyEnvelope = null);
+    ElectionAdminOnlyProtectedTallyEnvelopeRecord? AdminOnlyProtectedTallyEnvelope = null,
+    AbnormalFinalizationEvidenceArtifactRecord? AbnormalFinalizationEvidence = null);
 
 public record ElectionVerificationPackageExportResult(
     bool Success,

@@ -1,14 +1,14 @@
 {
   "schemaVersion": "1.0",
   "registerId": "hushvoting-readiness-register",
-  "registerVersion": "v0.1.1",
-  "registerVersionId": "RDY-REG-v0.1.1",
+  "registerVersion": "v0.1.3",
+  "registerVersionId": "RDY-REG-v0.1.3",
   "status": "AcceptedInternal",
   "parentEpic": "EPIC-015",
   "sourceGapRegister": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Technical-Delivery-Gap-Assessment-2026-05-18.md",
   "createdAt": "2026-05-18T22:00:00Z",
-  "promotedAt": "2026-05-19T12:00:00Z",
-  "sourceCommit": "65c10c8",
+  "promotedAt": "2026-05-25T15:45:00Z",
+  "sourceCommit": "4311e06",
   "claimPolicy": {
     "minimumConfidenceScore": 70,
     "strongerTargetScore": 80,
@@ -24,7 +24,7 @@
     ]
   },
   "score": {
-    "total": 55,
+    "total": 60,
     "baselineTotal": 51,
     "dimensionCount": 10,
     "dimensionIds": [
@@ -188,7 +188,7 @@
       "dimensionId": "RDY-DIM-008",
       "name": "Retention/log privacy proof",
       "weight": 10,
-      "currentScore": 4,
+      "currentScore": 8,
       "targetScoreBeforeReviewPilot": 8,
       "sourceGapRows": [
         "Retention/log privacy proof"
@@ -200,11 +200,9 @@
       "evidenceIds": [
         "RDY-EVID-AT-RDY-009-FEAT-137-001"
       ],
-      "blockerIds": [
-        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-004"
-      ],
+      "blockerIds": [],
       "residualRisk": "New diagnostics or observability tools can reintroduce correlation risk without ongoing scans.",
-      "scoreRationale": "Privacy intent exists, but FEAT-137 must prove retention and log privacy boundaries."
+      "scoreRationale": "FEAT-137 accepted evidence proves the reviewed HushVoting boundary has no durable identity-to-ballot join, guarded in-memory cast behavior, atomic cast proof, and clean log/support/package scan output."
     },
     {
       "dimensionId": "RDY-DIM-009",
@@ -233,7 +231,7 @@
       "dimensionId": "RDY-DIM-010",
       "name": "Pilot/legal/governance delivery wrapper",
       "weight": 10,
-      "currentScore": 5,
+      "currentScore": 6,
       "targetScoreBeforeReviewPilot": 7,
       "sourceGapRows": [
         "Legal/governance boundary wrapper",
@@ -245,6 +243,7 @@
         "AT-RDY-014"
       ],
       "evidenceIds": [
+        "RDY-EVID-AT-RDY-012-FEAT-140-001",
         "RDY-EVID-AT-RDY-013-FEAT-141-001"
       ],
       "blockerIds": [
@@ -252,8 +251,8 @@
         "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
         "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001"
       ],
-      "residualRisk": "Broader confidence depends on more elections, organizations, and operating conditions.",
-      "scoreRationale": "The governance boundary is understood, but pilot evidence and wrapper artifacts remain to be delivered."
+      "residualRisk": "HushVoting can provide the voting subsystem for binding customer decisions when customer-supplied authority and rules support that use, but legal sufficiency, full meeting governance, challenge windows, remedies, and pilot operating evidence remain customer/reviewer owned.",
+      "scoreRationale": "FEAT-140 delivered the accepted legal/governance boundary wrapper with explicit non-legal-validation limits; controlled pilot evidence remains pending."
     }
   ],
   "claimLevels": [
@@ -289,7 +288,6 @@
       "blockerIds": [
         "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-002",
         "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-003",
-        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-004",
         "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-005",
         "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006"
       ],
@@ -390,9 +388,9 @@
     {
       "blockerId": "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-004",
       "claimLevel": "friendly_organization_pilot",
-      "severity": "red",
-      "status": "open",
-      "description": "Retention/log privacy proof missing.",
+      "severity": "green",
+      "status": "resolved",
+      "description": "Retention/log privacy proof accepted for internal readiness evidence.",
       "featureId": "FEAT-137",
       "acceptanceGateIds": [
         "AT-RDY-009",
@@ -402,7 +400,7 @@
         "RDY-DIM-008"
       ],
       "limitationWording": "",
-      "resolutionCriteria": "FEAT-137 delivers accepted retention/log privacy proof and readiness fragment."
+      "resolutionCriteria": "Resolved by FEAT-137 accepted retention/log privacy proof package and readiness fragment."
     },
     {
       "blockerId": "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-005",
@@ -978,26 +976,83 @@
       "electionScope": "not_election_specific",
       "releaseScope": "not_release_specific",
       "visibility": "restricted_reviewer",
-      "status": "observed",
-      "producedAt": "2026-05-18T22:00:00Z",
+      "status": "accepted",
+      "producedAt": "2026-05-21T17:00:00Z",
       "owner": "HushVoting readiness owner",
       "artifactRefs": [
         {
-          "artifactId": "ART-RDY-GAP-20260518-RETENTION",
-          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Technical-Delivery-Gap-Assessment-2026-05-18.md",
-          "sha256Hash": "2de7e099895023fe4d4ef481fa4ff77c84bda6c2be2150e4bed297479f5257e0",
+          "artifactId": "ART-RDY-FEAT137-PACKAGE",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Retention-Log-Privacy-Proof/package/retention-log-privacy-proof-package.json",
+          "sha256Hash": "974a462ff80c84716f0945103a624bc30d0fe7b201d5d3224fd274c42ce4bbfe",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 6415,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT137-READINESS-FRAGMENT",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Retention-Log-Privacy-Proof/package/readiness-fragment.json",
+          "sha256Hash": "c45a3b15bf470a67e4ff85519c610b618d80f15f4dd35da244d7db94349bef63",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 695,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT137-SEPARATION-SCAN",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Retention-Log-Privacy-Proof/package/schema-service-separation-scan.json",
+          "sha256Hash": "ac4950d043e7a202b4d1f1b1701274d99e3e5f64054c8e45d6d6799a2347ae65",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 813,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT137-LOG-SUPPORT-SCAN",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Retention-Log-Privacy-Proof/package/log-trace-support-scan-results.json",
+          "sha256Hash": "3de9baee39ea97224327995d5c9ef025678d96fdefefe7ea30a247c779539818",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 979,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT137-ATOMIC-CAST",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Retention-Log-Privacy-Proof/package/atomic-cast-proof.json",
+          "sha256Hash": "62f90bb11478749f47031adf3caad9c2889a52c3305fce50134ce3cd6db61ce4",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 797,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT137-PUBLIC-SUMMARY",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Retention-Log-Privacy-Proof/package/public-safe-retention-log-privacy-summary.md",
+          "sha256Hash": "2f175fde331ff1b96a7072a2acd5cffa799b1c1d4932f9cdfec45577222a95b3",
           "hashAlgorithm": "SHA-256",
           "mediaType": "text/markdown",
-          "sizeBytes": 36244,
+          "sizeBytes": 1027,
           "visibility": "restricted_reviewer"
         }
       ],
       "checkResults": [
         {
-          "checkId": "CHK-RDY-009-BASELINE",
-          "status": "warn",
-          "summary": "Retention/log privacy proof is identified but not delivered.",
-          "detailsRef": "FEAT-137"
+          "checkId": "CHK-RDY-009-RETENTION-BOUNDARY",
+          "status": "pass",
+          "summary": "Accepted package records no durable identity-to-ballot join, bounded in-memory cast guard, and atomic cast proof.",
+          "detailsRef": "retention-log-privacy-proof-package.json"
+        },
+        {
+          "checkId": "CHK-RDY-010-LOG-SUPPORT-SCAN",
+          "status": "pass",
+          "summary": "Log, trace, support, package, and restricted evidence scans passed with deliberate forbidden fixture detection.",
+          "detailsRef": "log-trace-support-scan-results.json"
+        },
+        {
+          "checkId": "CHK-RDY-009-PACKAGE-VALIDATION",
+          "status": "pass",
+          "summary": "Package validation status is accepted with no blockers, no unresolved exceptions, and clean generated material scans.",
+          "detailsRef": "readiness-fragment.json"
         }
       ],
       "freshness": {
@@ -1006,30 +1061,28 @@
         "staleReason": "",
         "timeSensitive": false
       },
-      "residualRisk": "Retention/log privacy proof is missing.",
-      "claimEffect": "block",
+      "residualRisk": "Future diagnostics, observability tooling, support exports, and runtime proof-binding integrations must keep using the same no-durable-join separation rule.",
+      "claimEffect": "score_increase",
       "signoffs": {
         "engineering": {
           "role": "engineering",
           "signerId": "andre-boim",
           "signerName": "Andre Boim",
-          "signedAt": "2026-05-18T22:00:00Z",
-          "basis": "Observed privacy proof gap.",
+          "signedAt": "2026-05-21T17:08:00Z",
+          "basis": "Accepted FEAT-137 build, focused tests, package validation, redaction scan, and code review evidence.",
           "samePersonTwoHat": true
         },
         "operationsProduct": {
           "role": "operations_product",
           "signerId": "andre-boim",
           "signerName": "Andre Boim",
-          "signedAt": "2026-05-18T22:00:00Z",
-          "basis": "Observed pilot blocker.",
+          "signedAt": "2026-05-21T17:08:00Z",
+          "basis": "Accepted FEAT-137 retention/log privacy package for internal readiness scoring; runtime binding remains tracked separately.",
           "samePersonTwoHat": true
         }
       },
       "relatedExceptionIds": [],
-      "relatedBlockerIds": [
-        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-004"
-      ]
+      "relatedBlockerIds": []
     },
     {
       "evidenceId": "RDY-EVID-AT-RDY-011-FEAT-139-001",
@@ -1100,12 +1153,164 @@
       ]
     },
     {
+      "evidenceId": "RDY-EVID-AT-RDY-012-FEAT-140-001",
+      "parentEpic": "EPIC-015",
+      "featureId": "FEAT-140",
+      "sourceGapRow": "Legal/governance boundary wrapper",
+      "acceptanceGateIds": [
+        "AT-RDY-012"
+      ],
+      "dimensionIds": [
+        "RDY-DIM-010"
+      ],
+      "electionScope": "not_election_specific",
+      "releaseScope": "legal-governance-boundary-release-baseline",
+      "visibility": "restricted_reviewer",
+      "status": "accepted",
+      "producedAt": "2026-05-25T13:30:00Z",
+      "owner": "HushVoting readiness owner",
+      "artifactRefs": [
+        {
+          "artifactId": "ART-RDY-FEAT140-PACKAGE",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-package.json",
+          "sha256Hash": "f807da78da06b34477e409150a0c6f978692c50ce8044a661a4e558aa78e59cb",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 2502,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT140-READINESS-FRAGMENT",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-readiness-fragment.json",
+          "sha256Hash": "930374d77c58be16ce646b3db9db1777a54745c25479433a29fd4875a4b7dc07",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 2376,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT140-CLAIM-IMPACT",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-claim-impact-matrix.json",
+          "sha256Hash": "0ba75aa8c7ba3204bc6c585f7c8242f727e375c32516424c66d847786cb0e108",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 16041,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT140-RESTRICTED-INDEX",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-restricted-index.json",
+          "sha256Hash": "ffb02e5b7b15fb3068b4ba935f399023f6c1c71afbbb3ecb359d8d5d8ca1819a",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 6001,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT140-HASH-VALIDATION",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-package-hash-validation.json",
+          "sha256Hash": "8df6ef1f392310dfe061879868e88abfbd942c741cf564a0cb19ce4a08584f46",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 2486,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT140-FEAT139-HANDOFF",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-feat139-handoff.json",
+          "sha256Hash": "ebc32ebfd93a99cbd64bfce4631a6f1d7917492be82a13c6efa064baebd54e8d",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 2635,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT140-FEAT146-HANDOFF",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-feat146-handoff.json",
+          "sha256Hash": "3802773c78d2a0d49822c3823dad65c65be88747f6270c1e4ce68a849328cd78",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 2122,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT140-DOWNSTREAM-HANDOFF",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-downstream-handoff.json",
+          "sha256Hash": "3612933b3b6bb2a9226fbf2758b9e6b24406a16d6bc326baca3316fd7ac630bb",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "application/json",
+          "sizeBytes": 2598,
+          "visibility": "restricted_reviewer"
+        },
+        {
+          "artifactId": "ART-RDY-FEAT140-PUBLIC-SUMMARY",
+          "relativePath": "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-public-safe-summary.md",
+          "sha256Hash": "6ab8c18ee7d4c3e6d27d295092f2cbbe7e79c15b02f678481a65899ded5b4419",
+          "hashAlgorithm": "SHA-256",
+          "mediaType": "text/markdown",
+          "sizeBytes": 1814,
+          "visibility": "restricted_reviewer"
+        }
+      ],
+      "checkResults": [
+        {
+          "checkId": "CHK-RDY-012-FEAT140-PACKAGE",
+          "status": "pass",
+          "summary": "FEAT-140 legal/governance boundary package generated with accepted-with-limitations status, no package blockers, and stable hash validation.",
+          "detailsRef": "legal-governance-boundary-package.json"
+        },
+        {
+          "checkId": "CHK-RDY-012-FEAT140-CLAIM-LIMIT",
+          "status": "pass",
+          "summary": "Claim wording records that HushVoting can serve as the voting subsystem for binding customer decisions when customer-supplied authority and rules support that use; HushVoting does not validate legal sufficiency.",
+          "detailsRef": "legal-governance-boundary-claim-impact-matrix.json"
+        },
+        {
+          "checkId": "CHK-RDY-012-FEAT140-HANDOFFS",
+          "status": "pass",
+          "summary": "FEAT-139, FEAT-146, and downstream handoffs are generated without mutating runtime governed-outcome evidence.",
+          "detailsRef": "legal-governance-boundary-feat139-handoff.json; legal-governance-boundary-feat146-handoff.json"
+        }
+      ],
+      "freshness": {
+        "state": "current",
+        "invalidationRule": "Event-based invalidation when authority source, governance rules, notice language, finality rules, remedy rules, challenge windows, pilot scope, or profile wording changes.",
+        "staleReason": "",
+        "timeSensitive": false
+      },
+      "residualRisk": "FEAT-140 records the boundary and customer-owned prerequisites, but it is not legal sufficiency validation or a full meeting-governance validation package. Binding use still depends on customer-supplied authority, rules, notices, remedies, challenge windows, and later pilot/runtime evidence.",
+      "claimEffect": "score_increase",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-25T15:45:00Z",
+          "basis": "Accepted FEAT-140 package generation, hash validation, public-safe wording scan, and readiness handoffs.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-25T15:45:00Z",
+          "basis": "Accepted FEAT-140 governance-boundary wrapper for internal readiness scoring; legal sufficiency and pilot evidence remain separate limitations.",
+          "samePersonTwoHat": true
+        }
+      },
+      "relatedExceptionIds": [],
+      "relatedBlockerIds": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006",
+        "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001"
+      ]
+    },
+    {
       "evidenceId": "RDY-EVID-AT-RDY-013-FEAT-141-001",
       "parentEpic": "EPIC-015",
       "featureId": "FEAT-141",
       "sourceGapRow": "Controlled pilot evidence",
       "acceptanceGateIds": [
-        "AT-RDY-012",
         "AT-RDY-013",
         "AT-RDY-014"
       ],
@@ -1133,17 +1338,17 @@
         {
           "checkId": "CHK-RDY-013-BASELINE",
           "status": "warn",
-          "summary": "Pilot package and legal/governance wrapper are planned but not delivered.",
-          "detailsRef": "FEAT-140; FEAT-141"
+          "summary": "Controlled pilot package/rehearsal evidence remains planned but not delivered.",
+          "detailsRef": "FEAT-141"
         }
       ],
       "freshness": {
         "state": "current",
-        "invalidationRule": "Event-based invalidation when pilot scope, governance wrapper, or support readiness changes.",
+        "invalidationRule": "Event-based invalidation when pilot scope, pilot rehearsal evidence, or support readiness changes.",
         "staleReason": "",
         "timeSensitive": false
       },
-      "residualRisk": "Controlled pilot package and governance wrapper remain incomplete.",
+      "residualRisk": "Controlled pilot package/rehearsal evidence remains incomplete.",
       "claimEffect": "block",
       "signoffs": {
         "engineering": {
@@ -1151,7 +1356,7 @@
           "signerId": "andre-boim",
           "signerName": "Andre Boim",
           "signedAt": "2026-05-18T22:00:00Z",
-          "basis": "Observed pilot/governance readiness gap.",
+          "basis": "Observed pilot readiness gap.",
           "samePersonTwoHat": true
         },
         "operationsProduct": {
@@ -1165,9 +1370,7 @@
       },
       "relatedExceptionIds": [],
       "relatedBlockerIds": [
-        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006",
-        "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
-        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001"
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006"
       ]
     }
   ],
@@ -1209,6 +1412,93 @@
           "signerName": "Andre Boim",
           "signedAt": "2026-05-19T12:00:00Z",
           "basis": "Accepted FEAT-131 custody evidence for internal readiness scoring; downstream ceremony, operational, and pilot blockers remain separate.",
+          "samePersonTwoHat": true
+        }
+      }
+    },
+    {
+      "scoreChangeId": "RDY-SCORE-20260521-001",
+      "dimensionId": "RDY-DIM-008",
+      "direction": "increase",
+      "previousScore": 4,
+      "proposedScore": 8,
+      "acceptedScore": 8,
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-009-FEAT-137-001"
+      ],
+      "sourceGapRow": "Retention/log privacy proof",
+      "acceptanceGateIds": [
+        "AT-RDY-009",
+        "AT-RDY-010"
+      ],
+      "blockerImpactBefore": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-004"
+      ],
+      "blockerImpactAfter": [],
+      "claimImpact": "Retention/log privacy blocker resolved for the reviewed HushVoting software boundary. Friendly organization pilot remains blocked by total score below the minimum confidence band and by other EPIC-015 pilot-critical blockers.",
+      "reason": "FEAT-137 delivered accepted no-durable-join proof, bounded in-memory guard proof, atomic cast proof, log/support/package scan evidence, readiness fragment, and clean generated package validation.",
+      "generatedDiff": "RDY-DIM-008 currentScore 4 -> 8; total score 55 -> 59; RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-004 open/red -> resolved/green.",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-21T17:08:00Z",
+          "basis": "Accepted FEAT-137 focused build, tests, package validation, redaction scan, and code review evidence.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-21T17:08:00Z",
+          "basis": "Accepted FEAT-137 retention/log privacy evidence for internal readiness scoring; deployment, receipt, dispute, and pilot evidence blockers remain separate.",
+          "samePersonTwoHat": true
+        }
+      }
+    },
+    {
+      "scoreChangeId": "RDY-SCORE-20260525-001",
+      "dimensionId": "RDY-DIM-010",
+      "direction": "increase",
+      "previousScore": 5,
+      "proposedScore": 6,
+      "acceptedScore": 6,
+      "evidenceIds": [
+        "RDY-EVID-AT-RDY-012-FEAT-140-001"
+      ],
+      "sourceGapRow": "Legal/governance boundary wrapper",
+      "acceptanceGateIds": [
+        "AT-RDY-012"
+      ],
+      "blockerImpactBefore": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006",
+        "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001"
+      ],
+      "blockerImpactAfter": [
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006",
+        "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001"
+      ],
+      "claimImpact": "Legal/governance boundary wrapper is accepted with explicit limitations. Internal non-binding rehearsal remains the strongest allowed claim; friendly organization pilot remains blocked by the score below the minimum confidence band and by unresolved pilot-critical blockers.",
+      "reason": "FEAT-140 delivered accepted legal/governance boundary package evidence, public-safe wording, claim-impact matrix, and handoffs while preserving the non-legal-validation limitation.",
+      "generatedDiff": "RDY-DIM-010 currentScore 5 -> 6; total score 59 -> 60; no claim level unblocked.",
+      "signoffs": {
+        "engineering": {
+          "role": "engineering",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-25T15:45:00Z",
+          "basis": "Accepted FEAT-140 package generation, hash validation, public-safe wording scan, and readiness handoffs.",
+          "samePersonTwoHat": true
+        },
+        "operationsProduct": {
+          "role": "operations_product",
+          "signerId": "andre-boim",
+          "signerName": "Andre Boim",
+          "signedAt": "2026-05-25T15:45:00Z",
+          "basis": "Accepted FEAT-140 governance-boundary wrapper for internal readiness scoring; legal sufficiency and pilot evidence remain separate limitations.",
           "samePersonTwoHat": true
         }
       }

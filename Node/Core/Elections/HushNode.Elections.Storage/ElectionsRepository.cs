@@ -313,6 +313,105 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         }
     }
 
+    public async Task<IReadOnlyList<ElectionGovernedOutcomeDecisionRecord>> GetGovernedOutcomeDecisionsAsync(
+        ElectionId electionId) =>
+        await Context.ElectionGovernedOutcomeDecisions
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.DecidedAtUtc)
+            .ThenBy(x => x.RecordedAtUtc)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<ElectionGovernedOutcomeDecisionRecord?> GetGovernedOutcomeDecisionAsync(Guid decisionId) =>
+        await Context.ElectionGovernedOutcomeDecisions
+            .FirstOrDefaultAsync(x => x.Id == decisionId);
+
+    public async Task<ElectionGovernedOutcomeDecisionRecord?> GetLatestGovernedOutcomeDecisionAsync(
+        ElectionId electionId) =>
+        await Context.ElectionGovernedOutcomeDecisions
+            .Where(x => x.ElectionId == electionId)
+            .OrderByDescending(x => x.RecordedAtUtc)
+            .ThenByDescending(x => x.DecidedAtUtc)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+
+    public async Task SaveGovernedOutcomeDecisionAsync(ElectionGovernedOutcomeDecisionRecord decision)
+    {
+        var existing = Context.ElectionGovernedOutcomeDecisions.Local
+            .FirstOrDefault(x => x.ElectionId == decision.ElectionId);
+
+        existing ??= await Context.ElectionGovernedOutcomeDecisions
+            .FirstOrDefaultAsync(x => x.ElectionId == decision.ElectionId);
+
+        if (existing is not null)
+        {
+            throw new InvalidOperationException("A governed outcome decision already exists for this election.");
+        }
+
+        await Context.ElectionGovernedOutcomeDecisions.AddAsync(decision);
+    }
+
+    public async Task<IReadOnlyList<ElectionTrusteeContinuityDecisionRecord>> GetTrusteeContinuityDecisionsAsync(
+        ElectionId electionId) =>
+        await Context.ElectionTrusteeContinuityDecisions
+            .Where(x => x.ElectionId == electionId)
+            .OrderBy(x => x.DecidedAtUtc)
+            .ThenBy(x => x.TrusteePublicAddress)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task<ElectionTrusteeContinuityDecisionRecord?> GetTrusteeContinuityDecisionAsync(Guid decisionId) =>
+        await Context.ElectionTrusteeContinuityDecisions
+            .FirstOrDefaultAsync(x => x.Id == decisionId);
+
+    public async Task<ElectionTrusteeContinuityDecisionRecord?> GetCurrentTrusteeContinuityDecisionAsync(
+        ElectionId electionId,
+        string trusteePublicAddress)
+    {
+        var normalizedTrusteeAddress = trusteePublicAddress.Trim();
+        return await Context.ElectionTrusteeContinuityDecisions
+            .Where(x =>
+                x.ElectionId == electionId &&
+                x.TrusteePublicAddress == normalizedTrusteeAddress)
+            .OrderByDescending(x => x.RecordedAtUtc)
+            .ThenByDescending(x => x.DecidedAtUtc)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<IReadOnlyList<ElectionTrusteeContinuityDecisionRecord>> GetKeyLostTrusteeContinuityDecisionsAsync(
+        ElectionId electionId) =>
+        await Context.ElectionTrusteeContinuityDecisions
+            .Where(x =>
+                x.ElectionId == electionId &&
+                x.ContinuityStatus == ElectionTrusteeContinuityStatus.KeyLost)
+            .OrderBy(x => x.DecidedAtUtc)
+            .ThenBy(x => x.TrusteePublicAddress)
+            .ThenBy(x => x.Id)
+            .ToListAsync();
+
+    public async Task SaveTrusteeContinuityDecisionAsync(ElectionTrusteeContinuityDecisionRecord decision)
+    {
+        var existing = Context.ElectionTrusteeContinuityDecisions.Local
+            .FirstOrDefault(x =>
+                x.ElectionId == decision.ElectionId &&
+                x.TrusteePublicAddress == decision.TrusteePublicAddress &&
+                x.ContinuityStatus == decision.ContinuityStatus);
+
+        existing ??= await Context.ElectionTrusteeContinuityDecisions
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == decision.ElectionId &&
+                x.TrusteePublicAddress == decision.TrusteePublicAddress &&
+                x.ContinuityStatus == decision.ContinuityStatus);
+
+        if (existing is not null)
+        {
+            throw new InvalidOperationException("A trustee continuity decision already exists for this election, trustee, and status.");
+        }
+
+        await Context.ElectionTrusteeContinuityDecisions.AddAsync(decision);
+    }
+
     public async Task<IReadOnlyList<ElectionVoidPublicationAttemptRecord>> GetVoidPublicationAttemptsAsync(Guid voidDecisionId) =>
         await Context.ElectionVoidPublicationAttempts
             .Where(x => x.VoidDecisionId == voidDecisionId)

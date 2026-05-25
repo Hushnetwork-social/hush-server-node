@@ -935,6 +935,71 @@ internal static class TestTransactionFactory
         return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
     }
 
+    public static string RecordKeyLostTrusteeContinuityDecision(
+        TestIdentity owner,
+        ElectionId electionId,
+        TestIdentity trustee,
+        string authorityDecisionRef,
+        string authorityDecisionHash,
+        string governanceRuleRef,
+        IReadOnlyList<string> continuityEvidenceRefs)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RecordKeyLostTrusteeContinuityDecision,
+            JsonSerializer.SerializeToElement(new RecordKeyLostTrusteeContinuityDecisionActionPayload(
+                owner.PublicSigningAddress,
+                trustee.PublicSigningAddress,
+                trustee.DisplayName,
+                authorityDecisionRef,
+                authorityDecisionHash,
+                governanceRuleRef,
+                continuityEvidenceRefs)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
+    public static string AcceptFixedUnofficialResultWithAnomaly(
+        TestIdentity owner,
+        ElectionId electionId,
+        Guid expectedCloseArtifactId,
+        Guid expectedTallyReadyArtifactId,
+        Guid expectedUnofficialResultArtifactId,
+        string feat140HandoffRef,
+        string feat140HandoffHash,
+        string authorityDecisionRef,
+        string authorityDecisionHash,
+        string governanceRuleRef,
+        string publicSummary,
+        IReadOnlyList<string>? missingFinalizeEvidenceRefs = null,
+        IReadOnlyList<string>? continuityIncidentEvidenceRefs = null,
+        IReadOnlyList<string>? availableTrusteeAcknowledgementRefs = null,
+        IReadOnlyList<Guid>? keyLostTrusteeDecisionIds = null,
+        string? finalityRuleRef = null,
+        string? remedyRuleRef = null)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.AcceptFixedUnofficialResultWithAnomaly,
+            JsonSerializer.SerializeToElement(new AcceptFixedUnofficialResultWithAnomalyActionPayload(
+                owner.PublicSigningAddress,
+                expectedCloseArtifactId,
+                expectedTallyReadyArtifactId,
+                expectedUnofficialResultArtifactId,
+                feat140HandoffRef,
+                feat140HandoffHash,
+                authorityDecisionRef,
+                authorityDecisionHash,
+                governanceRuleRef,
+                publicSummary,
+                missingFinalizeEvidenceRefs,
+                continuityIncidentEvidenceRefs,
+                availableTrusteeAcknowledgementRefs,
+                keyLostTrusteeDecisionIds,
+                FinalityRuleRef: finalityRuleRef,
+                RemedyRuleRef: remedyRuleRef)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
     /// <summary>
     /// Creates a signed finalization share submission transaction.
     /// </summary>

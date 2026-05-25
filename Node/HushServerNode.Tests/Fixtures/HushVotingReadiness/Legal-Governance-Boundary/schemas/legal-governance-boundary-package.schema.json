@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "legal-governance-boundary-package.schema.json",
+  "title": "Legal Governance Boundary Package",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "packageId",
+    "featureSlice",
+    "acceptanceGate",
+    "generatedAt",
+    "status",
+    "artifactRefs"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "legal-governance-boundary-package.v1" },
+    "featureSlice": { "const": "FEAT-140" },
+    "acceptanceGate": { "const": "AT-RDY-012" }
+  }
+}

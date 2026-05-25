@@ -1,0 +1,131 @@
+{
+  "schemaVersion": "governed-outcome-producer-source.v1",
+  "sourceId": "GOVERNED-OUTCOME-SOURCE-FEAT-146-RELEASE-BASELINE",
+  "featureId": "FEAT-146",
+  "status": "accepted",
+  "generatedAt": "2026-05-25T00:00:00Z",
+  "evidenceRefs": [
+    {
+      "evidenceId": "FEAT146-RUNTIME-COMMAND",
+      "path": "hush-server-node/Node/Core/Elections/HushNode.Elections/ElectionLifecycleService.cs",
+      "sha256Hash": "source-controlled"
+    },
+    {
+      "evidenceId": "FEAT146-RUNTIME-EXPORT-ASSERTION",
+      "path": "hush-server-node/Node/HushServerNode.Tests/Elections/ElectionLifecycleServiceTests.cs",
+      "sha256Hash": "source-controlled"
+    },
+    {
+      "evidenceId": "FEAT146-REPORT-EVIDENCE",
+      "path": "report-package/abnormal-finalization-evidence.json",
+      "sha256Hash": "b111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "evidenceId": "FEAT146-VERIFIER-OUTPUT",
+      "path": "verification-package/verifier-output.json",
+      "sha256Hash": "c222222222222222222222222222222222222222222222222222222222222222"
+    }
+  ],
+  "governedOutcomeEvidence": {
+    "decisionId": "GOVERNED-OUTCOME-DECISION-FEAT146-001",
+    "decisionHash": "a111111111111111111111111111111111111111111111111111111111111111",
+    "outcomeStatus": "finalized_with_anomaly",
+    "cleanFinalization": false,
+    "finalizationMode": "abnormal_finalization",
+    "authorityRole": "ElectionOwner",
+    "authoritySource": "FEAT-140",
+    "feat140HandoffRef": "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-feat146-handoff.json",
+    "feat140HandoffHash": "3802773c78d2a0d49822c3823dad65c65be88747f6270c1e4ce68a849328cd78",
+    "authorityDecisionRef": "governance-authority-decision:feat146-release-baseline",
+    "authorityDecisionHash": "d333333333333333333333333333333333333333333333333333333333333333",
+    "governanceRuleRef": "governance-rule:abnormal-finalization-v1",
+    "finalityRuleRef": "governance-rule:finality-abnormal-v1",
+    "remedyRuleRef": "governance-rule:remedy-disclosure-v1",
+    "exactCopyStatus": "passed",
+    "closeBoundaryRef": "election-boundary:close:feat146-release-baseline",
+    "tallyReadyBoundaryRef": "election-boundary:tally-ready:feat146-release-baseline",
+    "finalizeBoundaryRef": "election-boundary:finalize:feat146-release-baseline",
+    "fixedUnofficialResultRef": "election-result:fixed-unofficial:feat146-release-baseline",
+    "officialResultRef": "election-result:official-exact-copy:feat146-release-baseline",
+    "sourceDecisionRecordRef": "governed-outcome-decision:feat146-release-baseline",
+    "keyLostEnforcementStatus": "enforced",
+    "keyLostDecisionRefs": [
+      "trustee-continuity-decision:00000000-0000-0000-0000-000000000146"
+    ],
+    "availableTrusteeAcknowledgementRefs": [
+      "trustee-continuity-ack:feat146-release-baseline"
+    ],
+    "continuityEvidenceRefs": [
+      "continuity-evidence:keylost:feat146-release-baseline"
+    ],
+    "publicSummary": "The election owner accepted a fixed tally-ready unofficial result as the final outcome with an abnormal-finalization warning. The package does not claim clean finalization."
+  },
+  "reportPackageEvidence": {
+    "reportPackageRef": "report-package:feat146-release-baseline",
+    "reportPackageHash": "e444444444444444444444444444444444444444444444444444444444444444",
+    "abnormalEvidenceArtifactRef": "report-package/abnormal-finalization-evidence.json",
+    "abnormalEvidenceArtifactHash": "b111111111111111111111111111111111111111111111111111111111111111",
+    "reportPackageStatus": "sealed"
+  },
+  "verificationEvidence": {
+    "verifierResultRef": "verification-package/verifier-output.json",
+    "verifierResultHash": "c222222222222222222222222222222222222222222222222222222222222222",
+    "verifierStatus": "warn_valid_abnormal_finalization",
+    "verifierResultCode": "abnormal_finalization_evidence_valid",
+    "cleanFinalizationClaim": false
+  },
+  "handoffPolicy": {
+    "feat139BlockersCleared": [
+      "FEAT139-GOVERNED-FINALIZED-WITH-ANOMALY-MISSING"
+    ],
+    "feat139BlockersStillOpen": [
+      "FEAT139-GOVERNED-FAILED-FINALIZE-MISSING"
+    ],
+    "feat141ClaimStates": [
+      {
+        "claimId": "abnormal_outcome_runtime_producer",
+        "state": "accepted",
+        "publicWordingKey": "abnormal_finalization_runtime_evidence_present",
+        "residualRisk": "Outcome is final but explicitly abnormal."
+      },
+      {
+        "claimId": "legal_validation_scope",
+        "state": "accepted_with_limitations",
+        "publicWordingKey": "not_legal_validation_software",
+        "residualRisk": "Governance authority is evidenced; legal sufficiency remains outside runtime proof scope."
+      },
+      {
+        "claimId": "failed_finalize_runtime_evidence",
+        "state": "blocked",
+        "publicWordingKey": "failed_finalize_not_produced_by_feat146",
+        "residualRisk": "A separate producer is required for failed finalization evidence."
+      },
+      {
+        "claimId": "operator_rehearsal_readiness",
+        "state": "downgraded",
+        "publicWordingKey": "pilot_rehearsal_required",
+        "residualRisk": "Controlled pilot evidence is still required before public operational claims."
+      }
+    ],
+    "publicWordingKeys": [
+      "abnormal_finalization_runtime_evidence_present",
+      "not_legal_validation_software",
+      "pilot_rehearsal_required"
+    ],
+    "residualRisks": [
+      "Pilot rehearsal remains required before broad operational readiness claims.",
+      "Failed-finalize outcome evidence is not produced by this feature."
+    ],
+    "restrictedEvidenceAvailability": {
+      "anomalyDetailRefsAvailable": true,
+      "trusteeContinuityRefsAvailable": true,
+      "publicPayloadContainsRestrictedDetails": false
+    }
+  },
+  "publicArtifactSamples": [
+    {
+      "path": "public/governed-outcome-summary.md",
+      "content": "Public summary: finalized_with_anomaly was accepted from a fixed tally-ready result with clean finalization set to false."
+    }
+  ]
+}

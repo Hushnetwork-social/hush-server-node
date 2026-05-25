@@ -534,6 +534,131 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "FEAT-146")]
+    [Trait("Category", "HV-INT-FEAT-146")]
+    [Trait("Category", "TwinTest")]
+    [Trait("Category", "NON_E2E")]
+    public async Task AcceptFixedUnofficialResultWithAnomaly_WithClosedTallyReadyElection_ExportsAbnormalVerificationPackage()
+    {
+        var client = await StartClientAsync();
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "FEAT-146 Governed Abnormal Finalization",
+            castSubmissionIdempotencyKey: "feat146-abnormal-cast-001");
+        var electionId = new ElectionId(Guid.Parse(context.ElectionId));
+
+        var keyLostSubmitResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.RecordKeyLostTrusteeContinuityDecision(
+                TestIdentities.Alice,
+                electionId,
+                Foxtrot,
+                "governance:decision:key-lost:feat146-integration",
+                "f146000000000000000000000000000000000000000000000000000000000001",
+                "governance-rule:trustee-continuity-v1",
+                ["continuity:feat146-integration:key-lost"]));
+        keyLostSubmitResponse.Successfull.Should().BeTrue(keyLostSubmitResponse.Message);
+
+        Guid keyLostDecisionId;
+        await using (var scope = _node!.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+            keyLostDecisionId = await dbContext.Set<ElectionTrusteeContinuityDecisionRecord>()
+                .Where(x =>
+                    x.ElectionId == electionId &&
+                    x.TrusteePublicAddress == Foxtrot.PublicSigningAddress &&
+                    x.ContinuityStatus == ElectionTrusteeContinuityStatus.KeyLost)
+                .Select(x => x.Id)
+                .SingleAsync();
+        }
+
+        var tallyReadyElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        var acceptSubmitResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.AcceptFixedUnofficialResultWithAnomaly(
+                TestIdentities.Alice,
+                electionId,
+                Guid.Parse(tallyReadyElection.Election.CloseArtifactId),
+                Guid.Parse(tallyReadyElection.Election.TallyReadyArtifactId),
+                Guid.Parse(tallyReadyElection.Election.UnofficialResultArtifactId),
+                "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-feat146-handoff.json",
+                ElectionGovernedOutcomeConstants.Feat146AcceptedFeat140HandoffHash,
+                "governance:decision:feat146-integration",
+                "f146000000000000000000000000000000000000000000000000000000000002",
+                "governance-rule:abnormal-finalization-v1",
+                "The owner accepted the fixed tally-ready result with abnormal finalization evidence.",
+                continuityIncidentEvidenceRefs: ["continuity:feat146-integration:key-lost"],
+                availableTrusteeAcknowledgementRefs: ["trustee-ack:feat146-integration:available"],
+                keyLostTrusteeDecisionIds: [keyLostDecisionId],
+                finalityRuleRef: "governance-rule:finality-abnormal-v1",
+                remedyRuleRef: "governance-rule:remedy-disclosure-v1"));
+        acceptSubmitResponse.Successfull.Should().BeTrue(acceptSubmitResponse.Message);
+
+        var finalizedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        finalizedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Finalized);
+        finalizedElection.Election.OfficialResultArtifactId.Should().NotBeNullOrWhiteSpace();
+
+        await using (var scope = _node!.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+            var governedDecision = await dbContext.Set<ElectionGovernedOutcomeDecisionRecord>()
+                .SingleAsync(x => x.ElectionId == electionId);
+            governedDecision.OutcomeStatus.Should().Be(ElectionOutcomeStatus.FinalizedWithAnomaly);
+            governedDecision.CleanFinalization.Should().BeFalse();
+            governedDecision.FinalizationMode.Should().Be(ElectionGovernedOutcomeFinalizationMode.AbnormalFinalization);
+            governedDecision.KeyLostTrusteeDecisionIds.Should().Contain(keyLostDecisionId);
+        }
+
+        var publicExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+        publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
+        publicExport.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.ReportPackageAbnormalFinalizationEvidence &&
+            x.Visibility == ElectionVerificationArtifactVisibilityProto.VerificationArtifactPublic);
+
+        using var electionRecord = ParsePackageJson(publicExport, VerificationPackageFileNames.ElectionRecord);
+        electionRecord.RootElement.GetProperty("outcomeStatus").GetString()
+            .Should()
+            .Be(AbnormalFinalizationVerificationIds.OutcomeStatusFinalizedWithAnomaly);
+        electionRecord.RootElement.GetProperty("cleanFinalization").GetBoolean().Should().BeFalse();
+        electionRecord.RootElement.GetProperty("finalizationMode").GetString()
+            .Should()
+            .Be(AbnormalFinalizationVerificationIds.FinalizationModeAbnormal);
+
+        using var resultBinding = ParsePackageJson(publicExport, VerificationPackageFileNames.ResultBinding);
+        resultBinding.RootElement.GetProperty("outcomeStatus").GetString()
+            .Should()
+            .Be(AbnormalFinalizationVerificationIds.OutcomeStatusFinalizedWithAnomaly);
+        resultBinding.RootElement.GetProperty("cleanFinalization").GetBoolean().Should().BeFalse();
+        resultBinding.RootElement.GetProperty("abnormalFinalizationEvidenceHash").GetString()
+            .Should()
+            .NotBeNullOrWhiteSpace();
+
+        using var packageDirectory = new TemporaryPackageDirectory();
+        WriteVerificationPackageToDirectory(publicExport, packageDirectory.PackagePath);
+        var verifierOutputPath = Path.Combine(packageDirectory.PackagePath, "verifier-output-local");
+        var verification = await new HushVotingPackageVerifier().VerifyAsync(new(
+            packageDirectory.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1,
+            verifierOutputPath));
+        verification.ExitCode.Should().Be(VerificationExitCodes.Pass, DescribeFailures(verification));
+        verification.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        verification.Output.Results.Should().Contain(x =>
+            x.CheckCode == AbnormalFinalizationVerificationIds.EvidenceValidCheckCode &&
+            x.ResultCode == VerificationResultCodes.AbnormalFinalizationEvidenceValid &&
+            x.Status == VerificationCheckStatus.Warn);
+    }
+
+    private static string DescribeFailures(HushVotingPackageVerificationResult result) =>
+        string.Join(
+            " | ",
+            result.Output.Results
+                .Where(x => x.Status != VerificationCheckStatus.Pass)
+                .Select(x =>
+                    $"{x.ResultCode}:{x.Status}:{x.Message}:{string.Join(",", x.Evidence.Select(pair => $"{pair.Key}={pair.Value}"))}"));
+
+    [Fact]
     [Trait("Category", "FEAT-114")]
     [Trait("Category", "HV-INT-FEAT-136")]
     public async Task ChallengeSpoilCeremony_WithBoundReceipt_ExportsPublicAndRestrictedSp04Evidence()

@@ -79,6 +79,10 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleCloseElectionAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.FinalizeElection =>
                 await HandleFinalizeElectionAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RecordKeyLostTrusteeContinuityDecision =>
+                await HandleRecordKeyLostTrusteeContinuityDecisionAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.AcceptFixedUnofficialResultWithAnomaly =>
+                await HandleAcceptFixedUnofficialResultWithAnomalyAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.VoidElection =>
                 await HandleVoidElectionAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.RetryVoidPublication =>
@@ -727,6 +731,71 @@ public class EncryptedElectionEnvelopeIndexStrategy(
             SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
             SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
             SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleAcceptFixedUnofficialResultWithAnomalyAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var action = decryptedEnvelope.DeserializeAction<AcceptFixedUnofficialResultWithAnomalyActionPayload>();
+        if (action is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Accept fixed unofficial result with anomaly action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.AcceptFixedUnofficialResultWithAnomalyAsync(
+            new AcceptFixedUnofficialResultWithAnomalyRequest(
+                ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+                ActorPublicAddress: action.ActorPublicAddress,
+                ExpectedCloseArtifactId: action.ExpectedCloseArtifactId,
+                ExpectedTallyReadyArtifactId: action.ExpectedTallyReadyArtifactId,
+                ExpectedUnofficialResultArtifactId: action.ExpectedUnofficialResultArtifactId,
+                Feat140HandoffRef: action.Feat140HandoffRef,
+                Feat140HandoffHash: action.Feat140HandoffHash,
+                AuthorityDecisionRef: action.AuthorityDecisionRef,
+                AuthorityDecisionHash: action.AuthorityDecisionHash,
+                GovernanceRuleRef: action.GovernanceRuleRef,
+                PublicSummary: action.PublicSummary,
+                MissingFinalizeEvidenceRefs: action.MissingFinalizeEvidenceRefs,
+                ContinuityIncidentEvidenceRefs: action.ContinuityIncidentEvidenceRefs,
+                AvailableTrusteeAcknowledgementRefs: action.AvailableTrusteeAcknowledgementRefs,
+                KeyLostTrusteeDecisionIds: action.KeyLostTrusteeDecisionIds,
+                AuthorityRole: action.AuthorityRole,
+                AuthoritySource: action.AuthoritySource,
+                FinalityRuleRef: action.FinalityRuleRef,
+                RemedyRuleRef: action.RemedyRuleRef,
+                SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+                SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+                SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleRecordKeyLostTrusteeContinuityDecisionAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var action = decryptedEnvelope.DeserializeAction<RecordKeyLostTrusteeContinuityDecisionActionPayload>();
+        if (action is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Record KeyLost trustee continuity decision action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.RecordKeyLostTrusteeContinuityDecisionAsync(
+            new RecordKeyLostTrusteeContinuityDecisionRequest(
+                ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+                ActorPublicAddress: action.ActorPublicAddress,
+                TrusteePublicAddress: action.TrusteePublicAddress,
+                TrusteeDisplayName: action.TrusteeDisplayName,
+                AuthorityDecisionRef: action.AuthorityDecisionRef,
+                AuthorityDecisionHash: action.AuthorityDecisionHash,
+                GovernanceRuleRef: action.GovernanceRuleRef,
+                ContinuityEvidenceRefs: action.ContinuityEvidenceRefs,
+                AuthorityRole: action.AuthorityRole,
+                AuthoritySource: action.AuthoritySource,
+                SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+                SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+                SourceBlockId: _blockchainCache.CurrentBlockId.Value));
     }
 
     private async Task<ElectionCommandResult> HandleVoidElectionAsync(

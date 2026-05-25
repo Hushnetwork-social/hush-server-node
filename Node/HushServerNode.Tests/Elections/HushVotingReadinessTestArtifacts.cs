@@ -1,5 +1,7 @@
 using DeploymentProofPackagePromoter;
 using DisputeContinuityReadinessPromoter;
+using GovernedOutcomeProducer;
+using LegalGovernanceBoundaryPromoter;
 using OperationalEvidencePromoter;
 using ReadinessRegisterPromoter;
 using SecurityDependencySupportReadinessPromoter;
@@ -33,6 +35,12 @@ internal static class HushVotingReadinessTestArtifacts
     public static DisputeContinuityReadinessPromotionPaths CreateDisputeContinuityReadinessPaths() =>
         DisputeContinuityReadinessPromotionPaths.FromWorkspaceRoot(SharedWorkspaceRoot.Value);
 
+    public static LegalGovernanceBoundaryPromotionPaths CreateLegalGovernanceBoundaryPaths() =>
+        LegalGovernanceBoundaryPromotionPaths.FromWorkspaceRoot(SharedWorkspaceRoot.Value);
+
+    public static GovernedOutcomeProducerPaths CreateGovernedOutcomeProducerPaths() =>
+        GovernedOutcomeProducerPaths.FromWorkspaceRoot(SharedWorkspaceRoot.Value);
+
     public static string CreateVerifierCorpusWorkspace()
     {
         var root = CreateEmptyWorkspace("hush-verifier-corpus-");
@@ -52,9 +60,13 @@ internal static class HushVotingReadinessTestArtifacts
         Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "Security-Dependency-Support-Readiness"));
         Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "Void-Decision-Publication-Replacement"));
         Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "Dispute-Continuity-Readiness"));
+        Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "Legal-Governance-Boundary"));
+        Directory.CreateDirectory(Path.Combine(root, "hush-documents", "PrivateServer_ElectronicVoting", "Governed-Outcome-Producer"));
         Directory.CreateDirectory(Path.Combine(root, "hush-memory-bank", "Overview", "HushVotingReadiness", "Verifier-Corpus"));
         Directory.CreateDirectory(Path.Combine(root, "hush-memory-bank", "Overview", "HushVotingReadiness", "Void-Decision-Publication-Replacement"));
         Directory.CreateDirectory(Path.Combine(root, "hush-memory-bank", "Overview", "HushVotingReadiness", "Dispute-Continuity-Readiness"));
+        Directory.CreateDirectory(Path.Combine(root, "hush-memory-bank", "Overview", "HushVotingReadiness", "Legal-Governance-Boundary"));
+        Directory.CreateDirectory(Path.Combine(root, "hush-memory-bank", "Overview", "HushVotingReadiness", "Governed-Outcome-Producer"));
         Directory.CreateDirectory(Path.Combine(root, "HushVoting-Verifier-Corpus"));
         Directory.CreateDirectory(Path.Combine(root, "hush-server-node"));
         return root;
@@ -74,6 +86,8 @@ internal static class HushVotingReadinessTestArtifacts
         CopyDirectory(Path.Combine(FixtureRoot, "Verifier-Corpus"), Path.Combine(readinessRoot, "Verifier-Corpus"));
         CopyDirectory(Path.Combine(FixtureRoot, "Void-Decision-Publication-Replacement"), Path.Combine(readinessRoot, "Void-Decision-Publication-Replacement"));
         CopyDirectory(Path.Combine(FixtureRoot, "Dispute-Continuity-Readiness"), Path.Combine(readinessRoot, "Dispute-Continuity-Readiness"));
+        CopyDirectory(Path.Combine(FixtureRoot, "Legal-Governance-Boundary"), Path.Combine(readinessRoot, "Legal-Governance-Boundary"));
+        CopyDirectory(Path.Combine(FixtureRoot, "Governed-Outcome-Producer"), Path.Combine(readinessRoot, "Governed-Outcome-Producer"));
         return root;
     }
 

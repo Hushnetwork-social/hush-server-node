@@ -103,6 +103,11 @@ public sealed partial class HushVotingPackageVerifier
             }
 
             results.Add(await CheckElectionRecordAsync(request.PackagePath, manifest, inputManifest, electionRecord, cancellationToken));
+            results.AddRange(await CheckAbnormalFinalizationEvidenceAsync(
+                request.PackagePath,
+                manifest,
+                electionRecord,
+                cancellationToken));
             results.Add(await CheckAcceptedBallotsAsync(request.PackagePath, cancellationToken));
             results.Add(await CheckPublishedBallotsAsync(request.PackagePath, cancellationToken));
             results.AddRange(await CheckSp04EvidenceAsync(

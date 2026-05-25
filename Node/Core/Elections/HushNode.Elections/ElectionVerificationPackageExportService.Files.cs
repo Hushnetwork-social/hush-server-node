@@ -31,6 +31,49 @@ public sealed partial class ElectionVerificationPackageExportService
         }
     }
 
+    private static void AddAbnormalFinalizationEvidence(
+        List<ElectionVerificationPackageFile> files,
+        ElectionVerificationPackageExportRequest request)
+    {
+        var evidence = ResolveAbnormalFinalizationEvidence(request);
+        if (evidence is null)
+        {
+            return;
+        }
+
+        files.RemoveAll(x => string.Equals(
+            x.RelativePath,
+            VerificationPackageFileNames.ReportPackageAbnormalFinalizationEvidence,
+            StringComparison.Ordinal));
+        AddJson(
+            files,
+            VerificationPackageFileNames.ReportPackageAbnormalFinalizationEvidence,
+            evidence,
+            VerificationArtifactVisibility.Public);
+    }
+
+    private static AbnormalFinalizationEvidenceArtifactRecord? ResolveAbnormalFinalizationEvidence(
+        ElectionVerificationPackageExportRequest request)
+    {
+        if (request.AbnormalFinalizationEvidence is not null)
+        {
+            return request.AbnormalFinalizationEvidence;
+        }
+
+        var artifact = request.ReportArtifacts
+            .Where(x =>
+                x.ArtifactKind == ElectionReportArtifactKind.MachineAbnormalFinalizationEvidence ||
+                string.Equals(x.FileName, "abnormal-finalization-evidence.json", StringComparison.Ordinal))
+            .OrderByDescending(x => x.RecordedAt)
+            .FirstOrDefault();
+
+        return artifact is null
+            ? null
+            : JsonSerializer.Deserialize<AbnormalFinalizationEvidenceArtifactRecord>(
+                artifact.Content,
+                VerificationJson.Options);
+    }
+
     private static IReadOnlyList<AuditPackageManifestEntryRecord> BuildManifestEntries(
         IReadOnlyList<ElectionVerificationPackageFile> files,
         string verifierProfileId) =>

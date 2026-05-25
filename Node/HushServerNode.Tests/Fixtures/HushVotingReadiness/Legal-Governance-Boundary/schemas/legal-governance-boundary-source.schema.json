@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "legal-governance-boundary-source.schema.json",
+  "title": "Legal Governance Boundary Source",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "sourceId",
+    "featureId",
+    "acceptanceGate",
+    "sourceGap",
+    "status",
+    "generatedAt",
+    "currentReadinessRegister",
+    "customerScope",
+    "authorityBoundary",
+    "governanceInputs",
+    "claimImpactScenarios",
+    "feat139BlockerMappings",
+    "feat146AuthorityInputs",
+    "publicSummary",
+    "publicArtifactSamples"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "legal-governance-boundary-source.v1" },
+    "featureId": { "const": "FEAT-140" },
+    "acceptanceGate": { "const": "AT-RDY-012" },
+    "governanceInputs": { "type": "array", "minItems": 1 },
+    "claimImpactScenarios": { "type": "array", "minItems": 1 },
+    "feat139BlockerMappings": { "type": "array", "minItems": 1 },
+    "feat146AuthorityInputs": { "type": "array", "minItems": 1 }
+  }
+}

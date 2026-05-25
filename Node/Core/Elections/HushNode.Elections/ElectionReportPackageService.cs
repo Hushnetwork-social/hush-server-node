@@ -34,6 +34,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             }
 
             var packageId = Guid.NewGuid();
+            var abnormalFinalizationEvidence = BuildAbnormalFinalizationEvidence(request, packageId);
             var trustees = request.TrusteeInvitations
                 .Where(x => x.Status == ElectionTrusteeInvitationStatus.Accepted)
                 .OrderBy(x => x.TrusteeDisplayName ?? x.TrusteeUserAddress, StringComparer.OrdinalIgnoreCase)
@@ -320,6 +321,21 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                     "Restricted anomaly intake manifest",
                     "restricted-anomaly-intake-manifest.json",
                     BuildRestrictedAnomalyIntakeManifestArtifact(request.RestrictedAnomalyIntakeManifest)));
+            }
+
+            if (abnormalFinalizationEvidence is not null)
+            {
+                artifacts.Add(CreateJsonArtifact(
+                    request,
+                    packageId,
+                    Guid.NewGuid(),
+                    null,
+                    ElectionReportArtifactKind.MachineAbnormalFinalizationEvidence,
+                    ElectionReportArtifactAccessScope.OwnerAuditorTrustee,
+                    15,
+                    "Abnormal finalization evidence",
+                    "abnormal-finalization-evidence.json",
+                    abnormalFinalizationEvidence));
             }
 
             var disputeCatalogEntries = artifacts
@@ -1506,6 +1522,40 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             TurnoutPercent: turnoutPercent,
             BlankCount: officialResult.BlankCount,
             DidNotVoteCount: officialResult.DidNotVoteCount);
+    }
+
+    private static AbnormalFinalizationEvidenceArtifactRecord? BuildAbnormalFinalizationEvidence(
+        ElectionReportPackageBuildRequest request,
+        Guid packageId)
+    {
+        var input = request.AbnormalFinalizationEvidence;
+        if (input is null)
+        {
+            return null;
+        }
+
+        return new AbnormalFinalizationEvidenceArtifactRecord(
+            AbnormalFinalizationVerificationIds.ArtifactSchemaId,
+            request.Election.ElectionId.ToString(),
+            packageId.ToString(),
+            AbnormalFinalizationVerificationIds.OutcomeStatusFinalizedWithAnomaly,
+            CleanFinalization: false,
+            AbnormalFinalizationVerificationIds.FinalizationModeAbnormal,
+            input.AuthorityDecisionRef,
+            input.AuthorityDecisionHash,
+            input.GovernanceRuleRef,
+            AbnormalFinalizationVerificationIds.OfficialResultSourceCopiedFromFixedUnofficial,
+            request.CloseArtifact.Id.ToString(),
+            request.TallyReadyArtifact.Id.ToString(),
+            request.UnofficialResult.Id.ToString(),
+            request.OfficialResult.Id.ToString(),
+            (request.OfficialResult.SourceResultArtifactId ?? request.UnofficialResult.Id).ToString(),
+            request.FinalizeArtifact.Id.ToString(),
+            input.MissingFinalizeEvidence,
+            input.ContinuityIncidentEvidenceRefs,
+            input.AvailableTrusteeAcknowledgementRefs,
+            input.PublicSummary,
+            input.DecidedAtUtc);
     }
 
     private static RosterEntryProjection BuildRosterEntryProjection(

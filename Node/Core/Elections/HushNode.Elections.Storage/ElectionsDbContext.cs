@@ -19,6 +19,8 @@ public class ElectionsDbContext(
     public DbSet<ElectionVoidDecisionRecord> ElectionVoidDecisions { get; set; }
     public DbSet<ElectionVoidPublicationAttemptRecord> ElectionVoidPublicationAttempts { get; set; }
     public DbSet<ElectionVoidSupersededArtifactRecord> ElectionVoidSupersededArtifacts { get; set; }
+    public DbSet<ElectionGovernedOutcomeDecisionRecord> ElectionGovernedOutcomeDecisions { get; set; }
+    public DbSet<ElectionTrusteeContinuityDecisionRecord> ElectionTrusteeContinuityDecisions { get; set; }
     public DbSet<ApprovedProtocolPackageCatalogEntryRecord> ApprovedProtocolPackageCatalogEntries { get; set; }
     public DbSet<ProtocolPackageBindingRecord> ProtocolPackageBindings { get; set; }
     public DbSet<ElectionRosterEntryRecord> ElectionRosterEntries { get; set; }

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Governed Outcome Producer Source",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "sourceId",
+    "featureId",
+    "status",
+    "generatedAt",
+    "evidenceRefs",
+    "governedOutcomeEvidence",
+    "reportPackageEvidence",
+    "verificationEvidence",
+    "handoffPolicy",
+    "publicArtifactSamples"
+  ]
+}
