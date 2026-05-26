@@ -1390,7 +1390,7 @@ namespace HushNode.IntegrationTests.Features
 #line hidden
 #line 298
     testRunner.Then("the election result view for actor \"Alice\" should expose a sealed report package " +
-                        "with 13 downloadable artifacts", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+                        "with 14 downloadable artifacts", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
 #line hidden
 #line 299
     testRunner.And("the visible report artifacts should include the named participation roster artifa" +
@@ -1404,7 +1404,7 @@ namespace HushNode.IntegrationTests.Features
 #line hidden
 #line 302
     testRunner.And("the election result view for actor \"Guest\" should expose a sealed report package " +
-                        "with 13 downloadable artifacts", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+                        "with 14 downloadable artifacts", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
 #line hidden
 #line 303
     testRunner.And("the visible report artifacts should include the named participation roster artifa" +

@@ -295,11 +295,11 @@ Feature: FEAT-094 election lifecycle integration
     Then the governed proposal should execute and transition the election to "Finalized"
     And the official result should copy the unofficial result for actor "Alice"
     When the owner grants designated auditor access to actor "Guest" through blockchain submission
-    Then the election result view for actor "Alice" should expose a sealed report package with 13 downloadable artifacts
+    Then the election result view for actor "Alice" should expose a sealed report package with 14 downloadable artifacts
     And the visible report artifacts should include the named participation roster artifacts
     And the visible report artifacts should include the audit provenance artifact
     And the visible report artifacts should all include downloadable content
-    And the election result view for actor "Guest" should expose a sealed report package with 13 downloadable artifacts
+    And the election result view for actor "Guest" should expose a sealed report package with 14 downloadable artifacts
     And the visible report artifacts should include the named participation roster artifacts
     And the visible report artifacts should include the audit provenance artifact
     And the visible report artifacts should all include downloadable content
