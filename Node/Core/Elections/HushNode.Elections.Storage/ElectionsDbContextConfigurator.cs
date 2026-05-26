@@ -650,6 +650,34 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.HasIndex(x => x.DeploymentProofId);
         });
 
+        modelBuilder.Entity<ElectionWebClientDeploymentProofObservationRecord>(entity =>
+        {
+            entity.ToTable("ElectionWebClientDeploymentProofObservationRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId).HasColumnType("varchar(40)");
+            entity.Property(x => x.ObservationScope).HasColumnType("varchar(96)");
+            entity.Property(x => x.SchemaVersion).HasColumnType("varchar(128)");
+            entity.Property(x => x.ComponentId).HasColumnType("varchar(64)");
+            entity.Property(x => x.DeploymentProofId).HasColumnType("varchar(256)");
+            entity.Property(x => x.DeploymentTarget).HasColumnType("varchar(128)");
+            entity.Property(x => x.SourceRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.WebArtifactHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.ClientBundleHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.PackageHash).HasColumnType("varchar(128)");
+            entity.Property(x => x.PublicPackageRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.DeploymentProtocolVersion).HasColumnType("varchar(128)");
+            entity.Property(x => x.EvidenceStatus).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.MismatchCode).HasColumnType("varchar(128)");
+            entity.Property(x => x.ObservedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.GeneratedAtUtc).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => new { x.ElectionId, x.ObservedAtUtc });
+            entity.HasIndex(x => new { x.DeploymentProofId, x.ClientBundleHash });
+            entity.HasIndex(x => x.MismatchCode);
+        });
+
         modelBuilder.Entity<ElectionDeploymentProofEventRecord>(entity =>
         {
             entity.ToTable("ElectionDeploymentProofEventRecord", "Elections");

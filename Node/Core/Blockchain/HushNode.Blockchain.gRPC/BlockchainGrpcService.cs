@@ -25,7 +25,9 @@ public class BlockchainGrpcService(
     IIdempotencyService idempotencyService,
     IAttachmentTempStorageService attachmentTempStorageService,
     ICredentialsProvider credentialsProvider,
-    ILogger<BlockchainGrpcService> logger) : HushBlockchain.HushBlockchainBase
+    ILogger<BlockchainGrpcService> logger,
+    IElectionWebClientDeploymentProofObservationService? webClientProofObservationService = null)
+    : HushBlockchain.HushBlockchainBase
 {
     private readonly IBlockchainStorageService _blockchainStorageService = blockchainStorageService;
     private readonly IEnumerable<ITransactionContentHandler> _transactionContentHandlers = transactionContentHandlers;
@@ -35,6 +37,8 @@ public class BlockchainGrpcService(
     private readonly IAttachmentTempStorageService _attachmentTempStorageService = attachmentTempStorageService;
     private readonly ICredentialsProvider _credentialsProvider = credentialsProvider;
     private readonly ILogger<BlockchainGrpcService> _logger = logger;
+    private readonly IElectionWebClientDeploymentProofObservationService? _webClientProofObservationService =
+        webClientProofObservationService;
 
     /// <summary>FEAT-066: Maximum number of attachments per message.</summary>
     private const int MaxAttachmentsPerMessage = 5;
@@ -78,6 +82,7 @@ public class BlockchainGrpcService(
 
         var transaction = JsonSerializer.Deserialize<AbstractTransaction>(request.SignedTransaction)
             ?? throw new InvalidDataException("Transaction invalid or without handler");
+        await RecordWebClientProofObservationAsync(transaction, request.WebClientDeploymentProof, context);
 
         if (this.ValidateUserSignature(transaction))
         {
@@ -222,6 +227,62 @@ public class BlockchainGrpcService(
         };
     }
 
+    private async Task RecordWebClientProofObservationAsync(
+        AbstractTransaction transaction,
+        WebClientDeploymentProofObservation? observation,
+        ServerCallContext context)
+    {
+        if (_webClientProofObservationService is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _webClientProofObservationService.RecordAsync(
+                CreateWebClientProofObservationRequest(TryResolveElectionId(transaction), observation),
+                context.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "[BlockchainGrpcService] Failed to record FEAT-144 WebClient proof observation for signed transaction submit.");
+        }
+    }
+
+    private static WebClientDeploymentProofObservationRequest CreateWebClientProofObservationRequest(
+        string? electionId,
+        WebClientDeploymentProofObservation? observation)
+    {
+        if (observation is null ||
+            string.IsNullOrWhiteSpace(observation.EvidenceStatus) &&
+            string.IsNullOrWhiteSpace(observation.DeploymentProofId))
+        {
+            return WebClientDeploymentProofObservationRequest.Missing(electionId, "submit_transaction");
+        }
+
+        var observationScope = string.IsNullOrWhiteSpace(observation.ObservationScope)
+            ? "submit_transaction"
+            : observation.ObservationScope.Trim();
+
+        return new WebClientDeploymentProofObservationRequest(
+            electionId,
+            observationScope,
+            observation.SchemaVersion,
+            observation.ComponentId,
+            observation.DeploymentProofId,
+            observation.DeploymentTarget,
+            observation.SourceRef,
+            observation.WebArtifactHash,
+            observation.ClientBundleHash,
+            observation.PackageHash,
+            observation.PublicPackageRef,
+            observation.DeploymentProtocolVersion,
+            observation.EvidenceStatus,
+            observation.GeneratedAtUtc);
+    }
+
     /// <summary>
     /// FEAT-057: Extracts message ID from FeedMessage transaction payloads.
     /// Returns null for non-FeedMessage transactions.
@@ -238,6 +299,13 @@ public class BlockchainGrpcService(
 
         // Not a FeedMessage transaction - no idempotency check needed
         return null;
+    }
+
+    private static string? TryResolveElectionId(AbstractTransaction transaction)
+    {
+        var payload = transaction.GetType().GetProperty("Payload")?.GetValue(transaction);
+        var value = payload?.GetType().GetProperty("ElectionId")?.GetValue(payload)?.ToString();
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     /// <summary>

@@ -4475,6 +4475,73 @@ namespace HushNode.Elections.Storage.Migrations
                     b.ToTable("ElectionWarningAcknowledgementRecord", "Elections");
                 });
 
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionWebClientDeploymentProofObservationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClientBundleHash")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("ComponentId")
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("DeploymentProofId")
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<string>("DeploymentProtocolVersion")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("DeploymentTarget")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("ElectionId")
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("EvidenceStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTime?>("GeneratedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MismatchCode")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("ObservationScope")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<DateTime>("ObservedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PackageHash")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("PublicPackageRef")
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("SchemaVersion")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("SourceRef")
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("WebArtifactHash")
+                        .HasColumnType("varchar(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MismatchCode");
+
+                    b.HasIndex("DeploymentProofId", "ClientBundleHash");
+
+                    b.HasIndex("ElectionId", "ObservedAtUtc");
+
+                    b.ToTable("ElectionWebClientDeploymentProofObservationRecord", "Elections");
+                });
+
             modelBuilder.Entity("HushShared.Elections.Model.ProtocolPackageBindingRecord", b =>
                 {
                     b.Property<Guid>("Id")

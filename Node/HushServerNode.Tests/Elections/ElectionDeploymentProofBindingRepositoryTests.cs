@@ -43,6 +43,7 @@ public class ElectionDeploymentProofBindingRepositoryTests
             mismatchCode: ElectionDeploymentProofConstants.Feat144WebClientProofNotSupportedCode);
         var deploymentEvent = CreateDeploymentEvent(checkpoint.Id, electionId, now.AddSeconds(4));
         var proofFamily = CreateProofFamilyStatus(checkpoint.Id, electionId, now.AddSeconds(8));
+        var browserObservation = CreateWebClientObservation(electionId, now.AddSeconds(9));
 
         await repository.SaveDeploymentProofLedgerAsync(ledger);
         await repository.SaveDeploymentProofCheckpointAsync(checkpoint);
@@ -50,6 +51,7 @@ public class ElectionDeploymentProofBindingRepositoryTests
         await repository.SaveDeploymentProofComponentObservationAsync(webObservation);
         await repository.SaveDeploymentProofEventAsync(deploymentEvent);
         await repository.SaveProofFamilyBindingStatusAsync(proofFamily);
+        await repository.SaveWebClientDeploymentProofObservationAsync(browserObservation);
         await context.SaveChangesAsync();
 
         await repository.UpdateDeploymentProofLedgerAsync(ledger with
@@ -74,6 +76,9 @@ public class ElectionDeploymentProofBindingRepositoryTests
         var events = await repository.GetDeploymentProofEventsAsync(checkpoint.Id);
         var proofFamilies = await repository.GetProofFamilyBindingStatusesAsync(checkpoint.Id);
         var electionProofFamilies = await repository.GetProofFamilyBindingStatusesForElectionAsync(electionId);
+        var latestBrowserObservation = await repository.GetLatestWebClientDeploymentProofObservationAsync(
+            electionId,
+            now.AddSeconds(10));
 
         storedLedger.Should().NotBeNull();
         storedLedger!.LedgerPublicId.Should().Be("deployment-ledger-test");
@@ -105,6 +110,11 @@ public class ElectionDeploymentProofBindingRepositoryTests
         proofFamilies.Should().ContainSingle();
         proofFamilies[0].ProofFamilyId.Should().Be(ElectionDeploymentProofConstants.RetentionLogPrivacyProofFamilyId);
         electionProofFamilies.Should().BeEquivalentTo(proofFamilies);
+
+        latestBrowserObservation.Should().NotBeNull();
+        latestBrowserObservation!.DeploymentProofId.Should().Be("webclient-proof-v1");
+        latestBrowserObservation.EvidenceStatus.Should().Be(ElectionDeploymentProofEvidenceStatus.Accepted);
+        latestBrowserObservation.MismatchCode.Should().BeNull();
     }
 
     [Fact]
@@ -299,6 +309,28 @@ public class ElectionDeploymentProofBindingRepositoryTests
             "release-manager-approved",
             occurredAt,
             ElectionDeploymentProofEvidenceStatus.Accepted);
+
+    private static ElectionWebClientDeploymentProofObservationRecord CreateWebClientObservation(
+        ElectionId electionId,
+        DateTime observedAt) =>
+        new(
+            Guid.NewGuid(),
+            electionId.ToString(),
+            "submit_transaction",
+            ElectionDeploymentProofConstants.WebClientDeploymentProofHandshakeSchemaVersion,
+            ElectionDeploymentProofConstants.WebClientComponentId,
+            "webclient-proof-v1",
+            "hush-prod-test",
+            "git:refs/tags/deployment-proof-v1",
+            "sha256:" + Hash('c'),
+            "sha256:" + Hash('c'),
+            Hash('b'),
+            "https://github.com/HushNetworkOrg/hush-deployment-proofs/tree/v1",
+            ElectionDeploymentProofConstants.DeploymentProtocolVersion,
+            ElectionDeploymentProofEvidenceStatus.Accepted,
+            MismatchCode: null,
+            observedAt,
+            observedAt.AddMinutes(-1));
 
     private static ElectionProofFamilyBindingStatusRecord CreateProofFamilyStatus(
         Guid checkpointId,

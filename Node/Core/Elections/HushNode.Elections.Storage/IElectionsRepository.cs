@@ -157,6 +157,14 @@ public interface IElectionsRepository : IRepository
     Task SaveDeploymentProofComponentObservationAsync(ElectionDeploymentProofComponentObservationRecord observation) =>
         Task.CompletedTask;
 
+    Task<ElectionWebClientDeploymentProofObservationRecord?> GetLatestWebClientDeploymentProofObservationAsync(
+        ElectionId electionId,
+        DateTime observedAtUtc) =>
+        Task.FromResult<ElectionWebClientDeploymentProofObservationRecord?>(null);
+
+    Task SaveWebClientDeploymentProofObservationAsync(ElectionWebClientDeploymentProofObservationRecord observation) =>
+        Task.CompletedTask;
+
     Task<IReadOnlyList<ElectionDeploymentProofEventRecord>> GetDeploymentProofEventsAsync(Guid checkpointId) =>
         Task.FromResult<IReadOnlyList<ElectionDeploymentProofEventRecord>>(Array.Empty<ElectionDeploymentProofEventRecord>());
 

@@ -4,6 +4,7 @@ using HushNode.Identity.Storage;
 using HushNode.Elections.Storage;
 using HushNode.Indexing.Interfaces;
 using HushShared.Blockchain.TransactionModel;
+using HushShared.Elections.Model;
 using HushShared.Elections.PublicationProof;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -114,6 +115,7 @@ public static class ElectionsHostBuild
         services.AddSingleton<IElectionSp07PublicationProofSessionRunner, ElectionSp07PublicationProofSessionRunner>();
         services.AddSingleton<IElectionSp08ReleaseEvidenceProvider, ElectionSp08ReleaseEvidenceProvider>();
         services.AddSingleton<IElectionPublicationWitnessDeletionService, ElectionPublicationWitnessDeletionService>();
+        services.AddSingleton<IElectionWebClientDeploymentProofObservationService, ElectionWebClientDeploymentProofObservationService>();
         services.AddSingleton<IElectionDeploymentProofProfilePolicy, ElectionDeploymentProofProfilePolicy>();
         services.AddSingleton<IActiveDeploymentProofProvider, LocalDevelopmentActiveDeploymentProofProvider>();
         services.AddSingleton<IElectionDeploymentProofBindingService, ElectionDeploymentProofBindingService>();

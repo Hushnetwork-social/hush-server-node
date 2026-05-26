@@ -583,6 +583,25 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         await Context.ElectionDeploymentProofComponentObservations.AddAsync(observation);
     }
 
+    public async Task<ElectionWebClientDeploymentProofObservationRecord?> GetLatestWebClientDeploymentProofObservationAsync(
+        ElectionId electionId,
+        DateTime observedAtUtc)
+    {
+        var electionIdValue = electionId.ToString();
+
+        return await Context.ElectionWebClientDeploymentProofObservations
+            .Where(x =>
+                x.ElectionId == electionIdValue &&
+                x.ObservedAtUtc <= observedAtUtc)
+            .OrderByDescending(x => x.ObservedAtUtc)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task SaveWebClientDeploymentProofObservationAsync(
+        ElectionWebClientDeploymentProofObservationRecord observation) =>
+        await Context.ElectionWebClientDeploymentProofObservations.AddAsync(observation);
+
     public async Task<IReadOnlyList<ElectionDeploymentProofEventRecord>> GetDeploymentProofEventsAsync(
         Guid checkpointId)
     {

@@ -303,7 +303,9 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "FEAT-143")]
+    [Trait("Category", "FEAT-144")]
     [Trait("Category", "HV-INT-FEAT-143")]
+    [Trait("Category", "HV-INT-FEAT-144")]
     [Trait("Category", "TwinTest")]
     [Trait("Category", "NON_E2E")]
     public async Task RuntimeDeploymentProofBinding_WithProductionLikeProfile_PersistsAndExportsPublicLedger()
@@ -348,9 +350,9 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
                 .FirstAsync();
             webClientObservation.ExpectedDeploymentProofId.Should().Be("webclient-proof-feat143-v1");
             webClientObservation.ObservedDeploymentProofId.Should().BeNull();
-            webClientObservation.EvidenceStatus.Should().Be(ElectionDeploymentProofEvidenceStatus.NotYetSupported);
+            webClientObservation.EvidenceStatus.Should().Be(ElectionDeploymentProofEvidenceStatus.Missing);
             webClientObservation.MismatchCode.Should()
-                .Be(ElectionDeploymentProofConstants.Feat144WebClientProofNotSupportedCode);
+                .Be(ElectionDeploymentProofConstants.Feat144WebClientProofMissingCode);
 
             var proofFamily = await dbContext.Set<ElectionProofFamilyBindingStatusRecord>()
                 .Where(x => checkpointIds.Contains(x.CheckpointId))
@@ -389,7 +391,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             ledgerArtifact.FileName.Should().Be(ElectionDeploymentProofConstants.PublicLedgerArtifactFileName);
             ledgerArtifact.Content.Should().Contain("\"claimLimitations\"");
             ledgerArtifact.Content.Should()
-                .Contain(ElectionDeploymentProofConstants.Feat144WebClientProofNotSupportedCode);
+                .Contain(ElectionDeploymentProofConstants.Feat144WebClientProofMissingCode);
         }
 
         var publicExport = await ExportElectionVerificationPackageAsync(
@@ -400,11 +402,11 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
         publicExport.Files.Select(x => x.RelativePath).Should()
             .Contain(VerificationPackageFileNames.ReportPackageDeploymentProofBindingLedger);
-        GetPackageFileText(
+            GetPackageFileText(
                 publicExport,
                 VerificationPackageFileNames.ReportPackageDeploymentProofBindingLedger)
             .Should()
-            .Contain("complete WebClient proof binding remains downgraded");
+            .Contain("WebClient proof metadata was not observed");
     }
 
     [Fact]

@@ -546,7 +546,7 @@ public class ElectionReportPackageServiceTests
         ledgerArtifact.Content.Should().Contain("\"finalStatus\": \"AcceptedWithLimitations\"");
         ledgerArtifact.Content.Should().Contain("\"claimEffect\": \"AcceptedWithLimitations\"");
         ledgerArtifact.Content.Should().Contain("\"claimLimitations\"");
-        ledgerArtifact.Content.Should().Contain(ElectionDeploymentProofConstants.Feat144WebClientProofNotSupportedCode);
+        ledgerArtifact.Content.Should().Contain(ElectionDeploymentProofConstants.Feat144WebClientProofMissingCode);
         ledgerArtifact.Content.Should().NotContain("private key");
         ledgerArtifact.Content.Should().NotContain("raw log");
         ledgerArtifact.Content.Should().NotContain("support log");
@@ -564,9 +564,9 @@ public class ElectionReportPackageServiceTests
         var humanAudit = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport);
         humanAudit.Content.Should().Contain("## Deployment Proof Binding");
         humanAudit.Content.Should().Contain("Deployment proof status: `AcceptedWithLimitations`");
-        humanAudit.Content.Should().Contain("WebClient proof status: `NotYetSupported`");
+        humanAudit.Content.Should().Contain("WebClient proof status: `Missing`");
         humanAudit.Content.Should().Contain("FEAT-137 retention/log privacy claim effect: `Accepted`");
-        humanAudit.Content.Should().Contain("complete WebClient proof binding remains downgraded");
+        humanAudit.Content.Should().Contain("WebClient proof metadata was not observed");
         humanAudit.Content.Should().Contain("Deployment proof status is separate from election outcome authority");
 
         var disputeIndex = buildResult.Artifacts.Single(x =>
@@ -1262,7 +1262,7 @@ public class ElectionReportPackageServiceTests
             LastReconciledAtUtc: observedAt,
             ClaimLimitations:
             [
-                "FEAT-144 WebClient proof handshake is not yet supported; complete WebClient proof binding remains downgraded for pilot handoff claims.",
+                "FEAT-144 WebClient proof metadata was not observed from the browser bundle; complete client-observed proof claims remain blocked or downgraded.",
             ],
             Checkpoints:
             [
@@ -1314,13 +1314,13 @@ public class ElectionReportPackageServiceTests
                     ObservedDeploymentProofId: null,
                     ExpectedArtifactHash: "sha256:" + Hash('c'),
                     ObservedArtifactHash: null,
-                    EvidenceStatus: ElectionDeploymentProofEvidenceStatus.NotYetSupported.ToString(),
+                    EvidenceStatus: ElectionDeploymentProofEvidenceStatus.Missing.ToString(),
                     ObservationSource: ElectionDeploymentProofObservationSource.NotAvailable.ToString(),
                     SourceRef: "git:refs/tags/deployment-proof-v1",
                     ArtifactHash: "sha256:" + Hash('c'),
                     PackageHash: Hash('d'),
                     PublicPackageRef: "https://github.com/HushNetworkOrg/hush-deployment-proofs/tree/v1",
-                    MismatchCode: ElectionDeploymentProofConstants.Feat144WebClientProofNotSupportedCode,
+                    MismatchCode: ElectionDeploymentProofConstants.Feat144WebClientProofMissingCode,
                     SupersedesProofIds: [],
                     ObservedAtUtc: observedAt),
             ],

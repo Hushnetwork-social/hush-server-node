@@ -63,7 +63,7 @@ public class ElectionDeploymentProofBindingServiceTests
             .Equal(ElectionDeploymentProofComponentId.HushServerNode, ElectionDeploymentProofComponentId.HushWebClient);
         observations.Single(x => x.ComponentId == ElectionDeploymentProofComponentId.HushWebClient)
             .MismatchCode.Should()
-            .Be(ElectionDeploymentProofConstants.Feat144WebClientProofNotSupportedCode);
+            .Be(ElectionDeploymentProofConstants.Feat144WebClientProofMissingCode);
 
         var events = await repository.GetDeploymentProofEventsAsync(checkpoint.Id);
         events.Should().ContainSingle().Which.EventPublicId.Should().Be(deploymentEvent.EventPublicId);
@@ -113,10 +113,72 @@ public class ElectionDeploymentProofBindingServiceTests
         webClientObservation.ObservedDeploymentProofId.Should().BeNull();
         webClientObservation.ExpectedArtifactHash.Should().Be("sha256:" + Hash('d'));
         webClientObservation.ObservedArtifactHash.Should().BeNull();
-        webClientObservation.EvidenceStatus.Should().Be(ElectionDeploymentProofEvidenceStatus.NotYetSupported);
+        webClientObservation.EvidenceStatus.Should().Be(ElectionDeploymentProofEvidenceStatus.Missing);
         webClientObservation.ObservationSource.Should().Be(ElectionDeploymentProofObservationSource.NotAvailable);
         webClientObservation.MismatchCode.Should()
-            .Be(ElectionDeploymentProofConstants.Feat144WebClientProofNotSupportedCode);
+            .Be(ElectionDeploymentProofConstants.Feat144WebClientProofMissingCode);
+    }
+
+    [Fact]
+    public async Task BindForOpenAsync_WithLatestFeat144Observation_RecordsObservedWebClientProof()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+        var observedAt = new DateTime(2026, 5, 26, 15, 15, 0, DateTimeKind.Utc);
+        var election = CreateElection(ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId) with
+        {
+            LifecycleState = ElectionLifecycleState.Open,
+            OpenedAt = observedAt,
+            LastUpdatedAt = observedAt,
+        };
+        var openArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Open,
+            election,
+            election.OwnerPublicAddress,
+            recordedAt: observedAt);
+        await repository.SaveWebClientDeploymentProofObservationAsync(new ElectionWebClientDeploymentProofObservationRecord(
+            Guid.NewGuid(),
+            election.ElectionId.ToString(),
+            "submit_transaction",
+            ElectionDeploymentProofConstants.WebClientDeploymentProofHandshakeSchemaVersion,
+            ElectionDeploymentProofConstants.WebClientComponentId,
+            "webclient-proof-v1",
+            "hush-prod-test",
+            "git:refs/tags/deployment-proof-v1",
+            "sha256:" + Hash('d'),
+            "sha256:" + Hash('d'),
+            Hash('f'),
+            "https://github.com/HushNetworkOrg/hush-deployment-proofs/tree/v1",
+            ElectionDeploymentProofConstants.DeploymentProtocolVersion,
+            ElectionDeploymentProofEvidenceStatus.Accepted,
+            MismatchCode: null,
+            observedAt.AddSeconds(-1),
+            observedAt.AddMinutes(-1)));
+        await context.SaveChangesAsync();
+        var service = CreateService(
+            CreateActiveContext(ElectionDeploymentProofEvidenceStatus.Accepted, observedAt) with
+            {
+                ExpectedWebClientProof = CreateWebClientProof(
+                    "webclient-proof-v1",
+                    Hash('d'),
+                    ElectionDeploymentProofObservationSource.Catalog),
+            },
+            proofFamilies: [CreateProofFamilyStatus(observedAt)]);
+
+        var result = await service.BindForOpenAsync(repository, election, openArtifact);
+        await context.SaveChangesAsync();
+
+        result.IsAllowed.Should().BeTrue();
+
+        var observations = await repository.GetDeploymentProofComponentObservationsAsync(result.CheckpointId!.Value);
+        var webClientObservation = observations.Single(x =>
+            x.ComponentId == ElectionDeploymentProofComponentId.HushWebClient);
+        webClientObservation.ExpectedDeploymentProofId.Should().Be("webclient-proof-v1");
+        webClientObservation.ObservedDeploymentProofId.Should().Be("webclient-proof-v1");
+        webClientObservation.EvidenceStatus.Should().Be(ElectionDeploymentProofEvidenceStatus.Accepted);
+        webClientObservation.ObservationSource.Should()
+            .Be(ElectionDeploymentProofObservationSource.Feat144Handshake);
+        webClientObservation.MismatchCode.Should().BeNull();
     }
 
     [Fact]

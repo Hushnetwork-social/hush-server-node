@@ -24,6 +24,7 @@ public class ElectionsDbContext(
     public DbSet<ElectionDeploymentProofLedgerRecord> ElectionDeploymentProofLedgers { get; set; }
     public DbSet<ElectionDeploymentProofCheckpointRecord> ElectionDeploymentProofCheckpoints { get; set; }
     public DbSet<ElectionDeploymentProofComponentObservationRecord> ElectionDeploymentProofComponentObservations { get; set; }
+    public DbSet<ElectionWebClientDeploymentProofObservationRecord> ElectionWebClientDeploymentProofObservations { get; set; }
     public DbSet<ElectionDeploymentProofEventRecord> ElectionDeploymentProofEvents { get; set; }
     public DbSet<ElectionProofFamilyBindingStatusRecord> ElectionProofFamilyBindingStatuses { get; set; }
     public DbSet<ApprovedProtocolPackageCatalogEntryRecord> ApprovedProtocolPackageCatalogEntries { get; set; }

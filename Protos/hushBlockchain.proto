@@ -28,6 +28,23 @@ message GetElectionEnvelopeContextReply {
 message SubmitSignedTransactionRequest {
   string SignedTransaction = 1;
   repeated AttachmentBlob Attachments = 2;  // FEAT-066: Encrypted attachment blobs (side-channel, not part of signed payload)
+  WebClientDeploymentProofObservation WebClientDeploymentProof = 3; // FEAT-144: Browser-bundle proof metadata side-channel
+}
+
+message WebClientDeploymentProofObservation {
+  string SchemaVersion = 1;
+  string ComponentId = 2;
+  string DeploymentProofId = 3;
+  string DeploymentTarget = 4;
+  string SourceRef = 5;
+  string WebArtifactHash = 6;
+  string ClientBundleHash = 7;
+  string PackageHash = 8;
+  string PublicPackageRef = 9;
+  string DeploymentProtocolVersion = 10;
+  string EvidenceStatus = 11;
+  string ObservationScope = 12;
+  string GeneratedAtUtc = 13;
 }
 
 // FEAT-066: Encrypted attachment binary data sent alongside transaction

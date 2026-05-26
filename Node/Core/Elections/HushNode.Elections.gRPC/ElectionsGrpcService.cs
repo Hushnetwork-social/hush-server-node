@@ -1,5 +1,6 @@
 using Grpc.Core;
 using HushNetwork.proto;
+using HushShared.Elections.Model;
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using Domain = HushNode.Elections;
@@ -11,12 +12,14 @@ public class ElectionsGrpcService(
     Domain.IElectionLifecycleService lifecycleService,
     IElectionQueryApplicationService queryApplicationService,
     Domain.IElectionAnomalyRestrictedPayloadStorageService restrictedPayloadStorageService,
+    IElectionWebClientDeploymentProofObservationService webClientProofObservationService,
     ILogger<ElectionsGrpcService> logger)
     : Proto.HushElections.HushElectionsBase
 {
     private readonly Domain.IElectionLifecycleService _lifecycleService = lifecycleService;
     private readonly IElectionQueryApplicationService _queryApplicationService = queryApplicationService;
     private readonly Domain.IElectionAnomalyRestrictedPayloadStorageService _restrictedPayloadStorageService = restrictedPayloadStorageService;
+    private readonly IElectionWebClientDeploymentProofObservationService _webClientProofObservationService = webClientProofObservationService;
     private readonly ILogger<ElectionsGrpcService> _logger = logger;
 
     public override Task<ElectionCommandResponse> CreateElectionDraft(Proto.CreateElectionDraftRequest request, ServerCallContext context) =>
@@ -106,6 +109,8 @@ public class ElectionsGrpcService(
 
     public override async Task<GetElectionOpenReadinessResponse> GetElectionOpenReadiness(GetElectionOpenReadinessRequest request, ServerCallContext context)
     {
+        await RecordWebClientProofObservationAsync(request, "election_query", context);
+
         try
         {
             var result = await _lifecycleService.EvaluateOpenReadinessAsync(new HushNode.Elections.EvaluateElectionOpenReadinessRequest(
@@ -185,6 +190,8 @@ public class ElectionsGrpcService(
 
     public override async Task<GetElectionResponse> GetElection(GetElectionRequest request, ServerCallContext context)
     {
+        await RecordWebClientProofObservationAsync(request, "election_query", context);
+
         try
         {
             var actorPublicAddress = ElectionQueryRequestAuthValidator.ValidateOptionalOrResolveActor(
@@ -224,6 +231,7 @@ public class ElectionsGrpcService(
                 ["ActorPublicAddress"] = request.ActorPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "election_query", context);
 
         try
         {
@@ -251,6 +259,7 @@ public class ElectionsGrpcService(
                 ["ActorPublicAddress"] = request.ActorPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "election_query", context);
 
         try
         {
@@ -280,6 +289,7 @@ public class ElectionsGrpcService(
                 ["ActorPublicAddress"] = request.ActorPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "election_query", context);
 
         try
         {
@@ -312,6 +322,7 @@ public class ElectionsGrpcService(
                 ["SubmissionIdempotencyKey"] = request.SubmissionIdempotencyKey,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "election_query", context);
 
         try
         {
@@ -349,6 +360,7 @@ public class ElectionsGrpcService(
                 ["PreparedBallotId"] = request.PreparedBallotId,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "election_query", context);
 
         try
         {
@@ -383,6 +395,7 @@ public class ElectionsGrpcService(
                 ["ActorPublicAddress"] = request.ActorPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "envelope_access", context);
 
         try
         {
@@ -414,6 +427,7 @@ public class ElectionsGrpcService(
                 ["ActorPublicAddress"] = request.ActorPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "anomaly_evidence", context);
 
         try
         {
@@ -459,6 +473,7 @@ public class ElectionsGrpcService(
                 ["ActorPublicAddress"] = request.ActorPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "anomaly_evidence", context);
 
         try
         {
@@ -507,6 +522,7 @@ public class ElectionsGrpcService(
                 ["ActorPublicAddress"] = request.ActorPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "anomaly_evidence", context);
 
         try
         {
@@ -555,6 +571,7 @@ public class ElectionsGrpcService(
                 ["ActorPublicAddress"] = request.ActorPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "anomaly_evidence", context);
 
         try
         {
@@ -604,6 +621,7 @@ public class ElectionsGrpcService(
                 ["ScopeId"] = request.ScopeId,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "election_query", context);
 
         try
         {
@@ -661,6 +679,7 @@ public class ElectionsGrpcService(
                 ["ClarificationRequestId"] = request.ClarificationRequestId,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "election_query", context);
 
         try
         {
@@ -728,6 +747,7 @@ public class ElectionsGrpcService(
                 ["PayloadReference"] = request.PayloadReference,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "election_query", context);
 
         try
         {
@@ -783,6 +803,7 @@ public class ElectionsGrpcService(
                 ["ActorPublicAddress"] = request.ActorPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "voting_view", context);
 
         try
         {
@@ -814,6 +835,7 @@ public class ElectionsGrpcService(
                 ["ActorPublicAddress"] = request.ActorPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "report_package", context);
 
         try
         {
@@ -846,6 +868,7 @@ public class ElectionsGrpcService(
                 ["PackageView"] = request.PackageView,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "report_export", context);
 
         try
         {
@@ -878,6 +901,7 @@ public class ElectionsGrpcService(
                 ["ActorPublicAddress"] = request.ActorPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "report_package", context);
 
         try
         {
@@ -907,6 +931,7 @@ public class ElectionsGrpcService(
                 ["ActorPublicAddress"] = request.ActorPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "ceremony_action", context);
 
         try
         {
@@ -935,6 +960,7 @@ public class ElectionsGrpcService(
                 ["OwnerPublicAddress"] = request.OwnerPublicAddress,
             },
             context);
+        await RecordWebClientProofObservationAsync(request, "election_directory", context);
 
         try
         {
@@ -945,6 +971,73 @@ public class ElectionsGrpcService(
             _logger.LogError(ex, "[ElectionsGrpcService] Error in {Operation}", nameof(GetElectionsByOwner));
             throw new RpcException(new Status(StatusCode.Internal, "Failed to fetch elections by owner."));
         }
+    }
+
+    private async Task RecordWebClientProofObservationAsync(
+        object request,
+        string observationScope,
+        ServerCallContext context)
+    {
+        try
+        {
+            await _webClientProofObservationService.RecordAsync(
+                CreateWebClientProofObservationRequest(
+                    TryResolveElectionId(request),
+                    observationScope,
+                    context),
+                context.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "[ElectionsGrpcService] Failed to record FEAT-144 WebClient proof observation for {Scope}",
+                observationScope);
+        }
+    }
+
+    private static WebClientDeploymentProofObservationRequest CreateWebClientProofObservationRequest(
+        string? electionId,
+        string observationScope,
+        ServerCallContext context)
+    {
+        var status = GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.EvidenceStatus);
+        var proofId = GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.DeploymentProofId);
+        var effectiveScope = GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.ObservationScope)
+            ?? observationScope;
+
+        if (string.IsNullOrWhiteSpace(status) && string.IsNullOrWhiteSpace(proofId))
+        {
+            return WebClientDeploymentProofObservationRequest.Missing(electionId, effectiveScope);
+        }
+
+        return new WebClientDeploymentProofObservationRequest(
+            electionId,
+            effectiveScope,
+            GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.SchemaVersion),
+            GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.ComponentId),
+            proofId,
+            GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.DeploymentTarget),
+            GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.SourceRef),
+            GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.WebArtifactHash),
+            GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.ClientBundleHash),
+            GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.PackageHash),
+            GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.PublicPackageRef),
+            GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.DeploymentProtocolVersion),
+            status,
+            GetHeaderValue(context, WebClientDeploymentProofObservationHeaders.GeneratedAtUtc));
+    }
+
+    private static string? GetHeaderValue(ServerCallContext context, string headerName) =>
+        context.RequestHeaders
+            .FirstOrDefault(x => string.Equals(x.Key, headerName, StringComparison.OrdinalIgnoreCase))
+            ?.Value
+            ?.Trim();
+
+    private static string? TryResolveElectionId(object request)
+    {
+        var value = request.GetType().GetProperty("ElectionId")?.GetValue(request) as string;
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     private static void ValidateSignedQuery(

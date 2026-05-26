@@ -203,6 +203,14 @@ public sealed class ElectionDeploymentProofBindingService(
             latestCheckpoint?.ObservedAtUtc ?? DateTime.MinValue,
             request.ObservedAtUtc,
             cancellationToken);
+        capture = capture with
+        {
+            ActiveContext = await ApplyLatestWebClientObservationAsync(
+                repository,
+                request,
+                capture.ActiveContext,
+                cancellationToken),
+        };
         var policyResult = profilePolicy.EvaluateOpen(request.Election, capture.ActiveContext);
         var failureCodes = MergeFailureCodes(policyResult.FailureCodes, capture.ProviderErrorCodes);
         var effectiveEvidenceStatus = policyResult.EvidenceStatus;
@@ -346,6 +354,50 @@ public sealed class ElectionDeploymentProofBindingService(
                 .Select(x => x.Trim())
                 .Distinct(StringComparer.Ordinal)
                 .ToArray());
+    }
+
+    private static async Task<ActiveDeploymentProofContext> ApplyLatestWebClientObservationAsync(
+        IElectionsRepository repository,
+        ElectionDeploymentProofReconciliationRequest request,
+        ActiveDeploymentProofContext activeContext,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (activeContext.ObservedWebClientProof is not null)
+        {
+            return activeContext;
+        }
+
+        var latestObservation = await repository.GetLatestWebClientDeploymentProofObservationAsync(
+            request.Election.ElectionId,
+            request.ObservedAtUtc);
+
+        if (latestObservation is null ||
+            latestObservation.EvidenceStatus == ElectionDeploymentProofEvidenceStatus.Missing)
+        {
+            return activeContext;
+        }
+
+        var artifactHash = latestObservation.ClientBundleHash ??
+            latestObservation.WebArtifactHash ??
+            "webclient-artifact-unavailable";
+        var deploymentProofId = latestObservation.DeploymentProofId ?? "webclient-proof-unavailable";
+
+        return activeContext with
+        {
+            ObservedWebClientProof = new ActiveDeploymentProofComponent(
+                ElectionDeploymentProofComponentId.HushWebClient,
+                deploymentProofId,
+                latestObservation.EvidenceStatus,
+                latestObservation.SourceRef ?? latestObservation.PublicPackageRef ?? latestObservation.ObservationScope,
+                artifactHash,
+                latestObservation.PackageHash,
+                latestObservation.PublicPackageRef,
+                PreviousProofId: null,
+                SupersedesProofIds: Array.Empty<string>(),
+                ElectionDeploymentProofObservationSource.Feat144Handshake),
+        };
     }
 
     private async Task<ActiveProofFamilyStatus> ResolveProofFamilyStatusAsync(
@@ -729,8 +781,22 @@ public sealed class ElectionDeploymentProofBindingService(
         if (observed is null)
         {
             return new WebClientComparison(
-                ElectionDeploymentProofEvidenceStatus.NotYetSupported,
-                ElectionDeploymentProofConstants.Feat144WebClientProofNotSupportedCode);
+                ElectionDeploymentProofEvidenceStatus.Missing,
+                ElectionDeploymentProofConstants.Feat144WebClientProofMissingCode);
+        }
+
+        if (observed.EvidenceStatus == ElectionDeploymentProofEvidenceStatus.Missing)
+        {
+            return new WebClientComparison(
+                ElectionDeploymentProofEvidenceStatus.Missing,
+                ElectionDeploymentProofConstants.Feat144WebClientProofMissingCode);
+        }
+
+        if (observed.EvidenceStatus.BlocksDeploymentProofClaims())
+        {
+            return new WebClientComparison(
+                observed.EvidenceStatus,
+                ResolveWebClientMismatchCode(observed.EvidenceStatus));
         }
 
         if (expected is null)
@@ -748,15 +814,26 @@ public sealed class ElectionDeploymentProofBindingService(
                 ElectionDeploymentProofConstants.Feat144WebClientProofMismatchCode);
         }
 
-        if (observed.EvidenceStatus.BlocksDeploymentProofClaims())
-        {
-            return new WebClientComparison(
-                observed.EvidenceStatus,
-                ResolveMismatchCode(observed.EvidenceStatus));
-        }
-
         return new WebClientComparison(observed.EvidenceStatus, MismatchCode: null);
     }
+
+    private static string? ResolveWebClientMismatchCode(ElectionDeploymentProofEvidenceStatus status) =>
+        status switch
+        {
+            ElectionDeploymentProofEvidenceStatus.Missing =>
+                ElectionDeploymentProofConstants.Feat144WebClientProofMissingCode,
+            ElectionDeploymentProofEvidenceStatus.Stale =>
+                ElectionDeploymentProofConstants.Feat144WebClientProofStaleCode,
+            ElectionDeploymentProofEvidenceStatus.Superseded =>
+                ElectionDeploymentProofConstants.Feat144WebClientProofSupersededCode,
+            ElectionDeploymentProofEvidenceStatus.Unknown =>
+                ElectionDeploymentProofConstants.Feat144WebClientProofUnknownCode,
+            ElectionDeploymentProofEvidenceStatus.Blocked =>
+                ElectionDeploymentProofConstants.Feat144WebClientProofPrivateOnlyCode,
+            ElectionDeploymentProofEvidenceStatus.Mismatch =>
+                ElectionDeploymentProofConstants.Feat144WebClientProofMismatchCode,
+            _ => null,
+        };
 
     private static ElectionDeploymentProofClaimEffect ResolveProofFamilyClaimEffect(
         ElectionDeploymentProofEvidenceStatus status) =>
@@ -812,6 +889,11 @@ public sealed class ElectionDeploymentProofBindingService(
         {
             limitations.Add(
                 "FEAT-144 WebClient proof handshake is not yet supported; complete WebClient proof binding remains downgraded for pilot handoff claims.");
+        }
+        else if (latestWebClientObservation?.EvidenceStatus == ElectionDeploymentProofEvidenceStatus.Missing)
+        {
+            limitations.Add(
+                "FEAT-144 WebClient proof metadata was not observed from the browser bundle; complete client-observed proof claims remain blocked or downgraded.");
         }
         else if (latestWebClientObservation?.EvidenceStatus == ElectionDeploymentProofEvidenceStatus.Mismatch)
         {

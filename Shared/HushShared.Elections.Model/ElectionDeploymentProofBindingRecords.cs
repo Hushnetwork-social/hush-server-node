@@ -4,18 +4,156 @@ public static class ElectionDeploymentProofConstants
 {
     public const string SchemaVersion = "hushvoting-deployment-proof-binding-v1";
     public const string DeploymentProtocolVersion = "hushvoting-deployment-protocol-v1";
+    public const string WebClientDeploymentProofHandshakeSchemaVersion = "hush-webclient-deployment-proof-handshake-v1";
+    public const string WebClientComponentId = "hush-web-client";
     public const string PublicLedgerArtifactSchemaId = "hushvoting-deployment-proof-public-ledger-v1";
     public const string PublicLedgerArtifactFileName = "deployment-proof-binding-ledger.json";
     public const string RetentionLogPrivacyProofFamilyId = "retention_log_privacy_no_durable_join";
     public const string Feat137SourceFeature = "FEAT-137";
     public const string Feat144WebClientProofNotSupportedCode = "webclient_proof_not_yet_supported";
+    public const string Feat144WebClientProofMissingCode = "webclient_proof_missing";
     public const string Feat144WebClientProofMismatchCode = "webclient_proof_mismatch";
+    public const string Feat144WebClientProofStaleCode = "webclient_proof_stale";
+    public const string Feat144WebClientProofSupersededCode = "webclient_proof_superseded";
+    public const string Feat144WebClientProofUnknownCode = "webclient_proof_unknown";
+    public const string Feat144WebClientProofPrivateOnlyCode = "webclient_proof_private_only";
+    public const string Feat144WebClientProxySubstitutionBlockedCode = "webclient_proxy_substitution_blocked";
     public const string Feat144WebClientExpectedProofMissingCode = "webclient_expected_proof_missing";
     public const string PrivacyProofMissingCode = "privacy_proof_missing";
     public const string PrivacyProofStaleCode = "privacy_proof_stale";
     public const string PrivacyProofPrivateOnlyCode = "privacy_proof_private_only";
     public const string PrivacyProofMismatchCode = "privacy_proof_mismatch";
     public const string PrivacyProofUnknownCode = "privacy_proof_unknown";
+}
+
+public static class WebClientDeploymentProofObservationHeaders
+{
+    public const string SchemaVersion = "x-hush-webclient-proof-schema";
+    public const string ComponentId = "x-hush-webclient-component-id";
+    public const string DeploymentProofId = "x-hush-webclient-proof-id";
+    public const string SourceRef = "x-hush-webclient-source-ref";
+    public const string WebArtifactHash = "x-hush-webclient-web-artifact-hash";
+    public const string ClientBundleHash = "x-hush-webclient-bundle-hash";
+    public const string PackageHash = "x-hush-webclient-package-hash";
+    public const string PublicPackageRef = "x-hush-webclient-package-ref";
+    public const string DeploymentTarget = "x-hush-webclient-deployment-target";
+    public const string EvidenceStatus = "x-hush-webclient-proof-status";
+    public const string DeploymentProtocolVersion = "x-hush-webclient-deployment-protocol";
+    public const string GeneratedAtUtc = "x-hush-webclient-generated-at-utc";
+    public const string ObservationScope = "x-hush-webclient-observation-scope";
+}
+
+public interface IElectionWebClientDeploymentProofObservationService
+{
+    Task<WebClientDeploymentProofObservationResult> RecordAsync(
+        WebClientDeploymentProofObservationRequest request,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record WebClientDeploymentProofObservationRequest(
+    string? ElectionId,
+    string ObservationScope,
+    string? SchemaVersion,
+    string? ComponentId,
+    string? DeploymentProofId,
+    string? DeploymentTarget,
+    string? SourceRef,
+    string? WebArtifactHash,
+    string? ClientBundleHash,
+    string? PackageHash,
+    string? PublicPackageRef,
+    string? DeploymentProtocolVersion,
+    string? EvidenceStatus,
+    string? GeneratedAtUtc)
+{
+    public static WebClientDeploymentProofObservationRequest Missing(
+        string? electionId,
+        string observationScope) =>
+        new(
+            electionId,
+            observationScope,
+            ElectionDeploymentProofConstants.WebClientDeploymentProofHandshakeSchemaVersion,
+            ElectionDeploymentProofConstants.WebClientComponentId,
+            DeploymentProofId: null,
+            DeploymentTarget: null,
+            SourceRef: null,
+            WebArtifactHash: null,
+            ClientBundleHash: null,
+            PackageHash: null,
+            PublicPackageRef: null,
+            ElectionDeploymentProofConstants.DeploymentProtocolVersion,
+            EvidenceStatus: "missing",
+            GeneratedAtUtc: null);
+}
+
+public sealed record WebClientDeploymentProofObservationResult(
+    bool WasRecorded,
+    ElectionDeploymentProofEvidenceStatus EvidenceStatus,
+    string? MismatchCode,
+    string PublicSummary);
+
+public record ElectionWebClientDeploymentProofObservationRecord(
+    Guid Id,
+    string? ElectionId,
+    string ObservationScope,
+    string? SchemaVersion,
+    string? ComponentId,
+    string? DeploymentProofId,
+    string? DeploymentTarget,
+    string? SourceRef,
+    string? WebArtifactHash,
+    string? ClientBundleHash,
+    string? PackageHash,
+    string? PublicPackageRef,
+    string? DeploymentProtocolVersion,
+    ElectionDeploymentProofEvidenceStatus EvidenceStatus,
+    string? MismatchCode,
+    DateTime ObservedAtUtc,
+    DateTime? GeneratedAtUtc)
+{
+    public Guid Id { get; init; } =
+        DeploymentProofBindingRecordValidation.RequireGuid(Id, nameof(Id));
+
+    public string? ElectionId { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeOptionalPublicSafeValue(ElectionId);
+
+    public string ObservationScope { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeRequiredPublicSafeValue(
+            ObservationScope,
+            nameof(ObservationScope));
+
+    public string? SchemaVersion { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeOptionalPublicSafeValue(SchemaVersion);
+
+    public string? ComponentId { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeOptionalPublicSafeValue(ComponentId);
+
+    public string? DeploymentProofId { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeOptionalPublicSafeValue(DeploymentProofId);
+
+    public string? DeploymentTarget { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeOptionalPublicSafeValue(DeploymentTarget);
+
+    public string? SourceRef { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeOptionalPublicSafeValue(SourceRef);
+
+    public string? WebArtifactHash { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeOptionalPublicSafeValue(WebArtifactHash);
+
+    public string? ClientBundleHash { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeOptionalPublicSafeValue(ClientBundleHash);
+
+    public string? PackageHash { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeOptionalSha256Hash(PackageHash, nameof(PackageHash));
+
+    public string? PublicPackageRef { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeOptionalPublicSafeValue(PublicPackageRef);
+
+    public string? DeploymentProtocolVersion { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeOptionalPublicSafeValue(DeploymentProtocolVersion);
+
+    public string? MismatchCode { get; init; } =
+        DeploymentProofBindingRecordValidation.NormalizeOptionalPublicSafeValue(MismatchCode);
 }
 
 public record ElectionDeploymentProofLedgerRecord(
