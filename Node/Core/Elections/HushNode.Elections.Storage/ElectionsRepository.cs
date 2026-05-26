@@ -412,6 +412,255 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
         await Context.ElectionTrusteeContinuityDecisions.AddAsync(decision);
     }
 
+    public async Task<ElectionDeploymentProofLedgerRecord?> GetDeploymentProofLedgerAsync(ElectionId electionId)
+    {
+        var local = Context.ElectionDeploymentProofLedgers.Local
+            .FirstOrDefault(x => x.ElectionId == electionId);
+
+        return local ?? await Context.ElectionDeploymentProofLedgers
+            .FirstOrDefaultAsync(x => x.ElectionId == electionId);
+    }
+
+    public async Task<ElectionDeploymentProofLedgerRecord?> GetDeploymentProofLedgerAsync(Guid ledgerId)
+    {
+        var local = Context.ElectionDeploymentProofLedgers.Local
+            .FirstOrDefault(x => x.Id == ledgerId);
+
+        return local ?? await Context.ElectionDeploymentProofLedgers
+            .FirstOrDefaultAsync(x => x.Id == ledgerId);
+    }
+
+    public async Task SaveDeploymentProofLedgerAsync(ElectionDeploymentProofLedgerRecord ledger)
+    {
+        var existing = Context.ElectionDeploymentProofLedgers.Local
+            .FirstOrDefault(x => x.ElectionId == ledger.ElectionId || x.LedgerPublicId == ledger.LedgerPublicId);
+
+        existing ??= await Context.ElectionDeploymentProofLedgers
+            .FirstOrDefaultAsync(x => x.ElectionId == ledger.ElectionId || x.LedgerPublicId == ledger.LedgerPublicId);
+
+        if (existing is not null)
+        {
+            throw new InvalidOperationException("A deployment proof ledger already exists for this election or public ledger id.");
+        }
+
+        await Context.ElectionDeploymentProofLedgers.AddAsync(ledger);
+    }
+
+    public async Task UpdateDeploymentProofLedgerAsync(ElectionDeploymentProofLedgerRecord ledger)
+    {
+        var existing = Context.ElectionDeploymentProofLedgers.Local
+            .FirstOrDefault(x => x.Id == ledger.Id);
+
+        existing ??= await Context.ElectionDeploymentProofLedgers
+            .FirstOrDefaultAsync(x => x.Id == ledger.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(ledger);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionDeploymentProofCheckpointRecord>> GetDeploymentProofCheckpointsAsync(
+        ElectionId electionId)
+    {
+        var persisted = await Context.ElectionDeploymentProofCheckpoints
+            .Where(x => x.ElectionId == electionId)
+            .ToListAsync();
+
+        return MergeDeploymentProofCheckpoints(
+            persisted,
+            Context.ElectionDeploymentProofCheckpoints.Local.Where(x => x.ElectionId == electionId));
+    }
+
+    public async Task<IReadOnlyList<ElectionDeploymentProofCheckpointRecord>> GetDeploymentProofCheckpointsAsync(
+        Guid ledgerId)
+    {
+        var persisted = await Context.ElectionDeploymentProofCheckpoints
+            .Where(x => x.LedgerId == ledgerId)
+            .ToListAsync();
+
+        return MergeDeploymentProofCheckpoints(
+            persisted,
+            Context.ElectionDeploymentProofCheckpoints.Local.Where(x => x.LedgerId == ledgerId));
+    }
+
+    public async Task<ElectionDeploymentProofCheckpointRecord?> GetDeploymentProofCheckpointAsync(Guid checkpointId)
+    {
+        var local = Context.ElectionDeploymentProofCheckpoints.Local
+            .FirstOrDefault(x => x.Id == checkpointId);
+
+        return local ?? await Context.ElectionDeploymentProofCheckpoints
+            .FirstOrDefaultAsync(x => x.Id == checkpointId);
+    }
+
+    public async Task<ElectionDeploymentProofCheckpointRecord?> GetLatestDeploymentProofCheckpointAsync(
+        ElectionId electionId)
+    {
+        var checkpoints = await GetDeploymentProofCheckpointsAsync(electionId);
+        return checkpoints
+            .OrderByDescending(x => x.ObservedAtUtc)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+    }
+
+    public async Task<ElectionDeploymentProofCheckpointRecord?> GetLatestDeploymentProofCheckpointAsync(
+        ElectionId electionId,
+        ElectionDeploymentProofCheckpointType checkpointType)
+    {
+        var checkpoints = await GetDeploymentProofCheckpointsAsync(electionId);
+        return checkpoints
+            .Where(x => x.CheckpointType == checkpointType)
+            .OrderByDescending(x => x.ObservedAtUtc)
+            .ThenByDescending(x => x.Id)
+            .FirstOrDefault();
+    }
+
+    public async Task SaveDeploymentProofCheckpointAsync(ElectionDeploymentProofCheckpointRecord checkpoint)
+    {
+        var existing = Context.ElectionDeploymentProofCheckpoints.Local
+            .FirstOrDefault(x => DeploymentProofCheckpointConflicts(x, checkpoint));
+
+        existing ??= await Context.ElectionDeploymentProofCheckpoints
+            .FirstOrDefaultAsync(x =>
+                x.ElectionId == checkpoint.ElectionId &&
+                x.CheckpointType == checkpoint.CheckpointType &&
+                x.TransitionArtifactId == checkpoint.TransitionArtifactId &&
+                x.ReportPackageId == checkpoint.ReportPackageId &&
+                x.SupersedesCheckpointId == checkpoint.SupersedesCheckpointId);
+
+        if (existing is not null)
+        {
+            throw new InvalidOperationException("A deployment proof checkpoint already exists for this election transition.");
+        }
+
+        await Context.ElectionDeploymentProofCheckpoints.AddAsync(checkpoint);
+    }
+
+    public async Task UpdateDeploymentProofCheckpointAsync(ElectionDeploymentProofCheckpointRecord checkpoint)
+    {
+        var existing = Context.ElectionDeploymentProofCheckpoints.Local
+            .FirstOrDefault(x => x.Id == checkpoint.Id);
+
+        existing ??= await Context.ElectionDeploymentProofCheckpoints
+            .FirstOrDefaultAsync(x => x.Id == checkpoint.Id);
+
+        if (existing is not null)
+        {
+            Context.Entry(existing).CurrentValues.SetValues(checkpoint);
+        }
+    }
+
+    public async Task<IReadOnlyList<ElectionDeploymentProofComponentObservationRecord>>
+        GetDeploymentProofComponentObservationsAsync(Guid checkpointId)
+    {
+        var persisted = await Context.ElectionDeploymentProofComponentObservations
+            .Where(x => x.CheckpointId == checkpointId)
+            .ToListAsync();
+
+        return MergeDeploymentProofComponentObservations(
+            persisted,
+            Context.ElectionDeploymentProofComponentObservations.Local.Where(x => x.CheckpointId == checkpointId));
+    }
+
+    public async Task SaveDeploymentProofComponentObservationAsync(
+        ElectionDeploymentProofComponentObservationRecord observation)
+    {
+        var existing = Context.ElectionDeploymentProofComponentObservations.Local
+            .FirstOrDefault(x =>
+                x.CheckpointId == observation.CheckpointId &&
+                x.ComponentId == observation.ComponentId);
+
+        existing ??= await Context.ElectionDeploymentProofComponentObservations
+            .FirstOrDefaultAsync(x =>
+                x.CheckpointId == observation.CheckpointId &&
+                x.ComponentId == observation.ComponentId);
+
+        if (existing is not null)
+        {
+            throw new InvalidOperationException("A deployment proof component observation already exists for this checkpoint and component.");
+        }
+
+        await Context.ElectionDeploymentProofComponentObservations.AddAsync(observation);
+    }
+
+    public async Task<IReadOnlyList<ElectionDeploymentProofEventRecord>> GetDeploymentProofEventsAsync(
+        Guid checkpointId)
+    {
+        var persisted = await Context.ElectionDeploymentProofEvents
+            .Where(x => x.CheckpointId == checkpointId)
+            .ToListAsync();
+
+        return MergeDeploymentProofEvents(
+            persisted,
+            Context.ElectionDeploymentProofEvents.Local.Where(x => x.CheckpointId == checkpointId));
+    }
+
+    public async Task SaveDeploymentProofEventAsync(ElectionDeploymentProofEventRecord deploymentEvent)
+    {
+        var existing = Context.ElectionDeploymentProofEvents.Local
+            .FirstOrDefault(x =>
+                x.CheckpointId == deploymentEvent.CheckpointId &&
+                x.EventPublicId == deploymentEvent.EventPublicId);
+
+        existing ??= await Context.ElectionDeploymentProofEvents
+            .FirstOrDefaultAsync(x =>
+                x.CheckpointId == deploymentEvent.CheckpointId &&
+                x.EventPublicId == deploymentEvent.EventPublicId);
+
+        if (existing is not null)
+        {
+            throw new InvalidOperationException("A deployment proof event already exists for this checkpoint and event id.");
+        }
+
+        await Context.ElectionDeploymentProofEvents.AddAsync(deploymentEvent);
+    }
+
+    public async Task<IReadOnlyList<ElectionProofFamilyBindingStatusRecord>> GetProofFamilyBindingStatusesAsync(
+        Guid checkpointId)
+    {
+        var persisted = await Context.ElectionProofFamilyBindingStatuses
+            .Where(x => x.CheckpointId == checkpointId)
+            .ToListAsync();
+
+        return MergeProofFamilyBindingStatuses(
+            persisted,
+            Context.ElectionProofFamilyBindingStatuses.Local.Where(x => x.CheckpointId == checkpointId));
+    }
+
+    public async Task<IReadOnlyList<ElectionProofFamilyBindingStatusRecord>>
+        GetProofFamilyBindingStatusesForElectionAsync(ElectionId electionId)
+    {
+        var persisted = await Context.ElectionProofFamilyBindingStatuses
+            .Where(x => x.ElectionId == electionId)
+            .ToListAsync();
+
+        return MergeProofFamilyBindingStatuses(
+            persisted,
+            Context.ElectionProofFamilyBindingStatuses.Local.Where(x => x.ElectionId == electionId));
+    }
+
+    public async Task SaveProofFamilyBindingStatusAsync(ElectionProofFamilyBindingStatusRecord bindingStatus)
+    {
+        var existing = Context.ElectionProofFamilyBindingStatuses.Local
+            .FirstOrDefault(x =>
+                x.CheckpointId == bindingStatus.CheckpointId &&
+                x.ProofFamilyId == bindingStatus.ProofFamilyId &&
+                x.ProofFamilyVersion == bindingStatus.ProofFamilyVersion);
+
+        existing ??= await Context.ElectionProofFamilyBindingStatuses
+            .FirstOrDefaultAsync(x =>
+                x.CheckpointId == bindingStatus.CheckpointId &&
+                x.ProofFamilyId == bindingStatus.ProofFamilyId &&
+                x.ProofFamilyVersion == bindingStatus.ProofFamilyVersion);
+
+        if (existing is not null)
+        {
+            throw new InvalidOperationException("A proof-family binding status already exists for this checkpoint and proof family.");
+        }
+
+        await Context.ElectionProofFamilyBindingStatuses.AddAsync(bindingStatus);
+    }
+
     public async Task<IReadOnlyList<ElectionVoidPublicationAttemptRecord>> GetVoidPublicationAttemptsAsync(Guid voidDecisionId) =>
         await Context.ElectionVoidPublicationAttempts
             .Where(x => x.VoidDecisionId == voidDecisionId)
@@ -1844,6 +2093,85 @@ public class ElectionsRepository : RepositoryBase<ElectionsDbContext>, IElection
 
     public async Task SaveAnomalyActionRecordAsync(ElectionAnomalyActionRecord actionRecord) =>
         await Context.ElectionAnomalyActions.AddAsync(actionRecord);
+
+    private static bool DeploymentProofCheckpointConflicts(
+        ElectionDeploymentProofCheckpointRecord existing,
+        ElectionDeploymentProofCheckpointRecord candidate) =>
+        existing.ElectionId == candidate.ElectionId &&
+        existing.CheckpointType == candidate.CheckpointType &&
+        existing.TransitionArtifactId == candidate.TransitionArtifactId &&
+        existing.ReportPackageId == candidate.ReportPackageId &&
+        existing.SupersedesCheckpointId == candidate.SupersedesCheckpointId;
+
+    private static IReadOnlyList<ElectionDeploymentProofCheckpointRecord> MergeDeploymentProofCheckpoints(
+        IReadOnlyList<ElectionDeploymentProofCheckpointRecord> persisted,
+        IEnumerable<ElectionDeploymentProofCheckpointRecord> local)
+    {
+        var byId = persisted.ToDictionary(x => x.Id);
+        foreach (var localRecord in local)
+        {
+            byId[localRecord.Id] = localRecord;
+        }
+
+        return byId.Values
+            .OrderBy(x => x.ObservedAtUtc)
+            .ThenBy(x => x.CheckpointType)
+            .ThenBy(x => x.Id)
+            .ToList();
+    }
+
+    private static IReadOnlyList<ElectionDeploymentProofComponentObservationRecord>
+        MergeDeploymentProofComponentObservations(
+            IReadOnlyList<ElectionDeploymentProofComponentObservationRecord> persisted,
+            IEnumerable<ElectionDeploymentProofComponentObservationRecord> local)
+    {
+        var byId = persisted.ToDictionary(x => x.Id);
+        foreach (var localRecord in local)
+        {
+            byId[localRecord.Id] = localRecord;
+        }
+
+        return byId.Values
+            .OrderBy(x => x.ComponentId)
+            .ThenBy(x => x.ObservedAtUtc)
+            .ThenBy(x => x.Id)
+            .ToList();
+    }
+
+    private static IReadOnlyList<ElectionDeploymentProofEventRecord> MergeDeploymentProofEvents(
+        IReadOnlyList<ElectionDeploymentProofEventRecord> persisted,
+        IEnumerable<ElectionDeploymentProofEventRecord> local)
+    {
+        var byId = persisted.ToDictionary(x => x.Id);
+        foreach (var localRecord in local)
+        {
+            byId[localRecord.Id] = localRecord;
+        }
+
+        return byId.Values
+            .OrderBy(x => x.OccurredAtUtc)
+            .ThenBy(x => x.EventPublicId)
+            .ThenBy(x => x.Id)
+            .ToList();
+    }
+
+    private static IReadOnlyList<ElectionProofFamilyBindingStatusRecord> MergeProofFamilyBindingStatuses(
+        IReadOnlyList<ElectionProofFamilyBindingStatusRecord> persisted,
+        IEnumerable<ElectionProofFamilyBindingStatusRecord> local)
+    {
+        var byId = persisted.ToDictionary(x => x.Id);
+        foreach (var localRecord in local)
+        {
+            byId[localRecord.Id] = localRecord;
+        }
+
+        return byId.Values
+            .OrderBy(x => x.ObservedAtUtc)
+            .ThenBy(x => x.ProofFamilyId)
+            .ThenBy(x => x.ProofFamilyVersion)
+            .ThenBy(x => x.Id)
+            .ToList();
+    }
 
     private IReadOnlyList<ElectionPublicationProofSessionRecord> MergeLocalPublicationProofSessions(
         ElectionId electionId,

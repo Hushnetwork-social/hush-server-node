@@ -523,6 +523,58 @@ public class ElectionReportPackageServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-143")]
+    public void Build_WithDeploymentProofBindingLedger_AddsPublicLedgerArtifactAndReportRefs()
+    {
+        var service = new ElectionReportPackageService();
+        var election = CreateFinalizedElectionForReportPackage();
+        var request = CreateReportBuildRequest(election, protocolPackageBinding: null) with
+        {
+            DeploymentProofBindingLedger = CreateDeploymentProofPublicLedger(election.ElectionId),
+        };
+
+        var buildResult = service.Build(request);
+
+        buildResult.IsSuccess.Should().BeTrue();
+        buildResult.Package.ArtifactCount.Should().Be(14);
+
+        var ledgerArtifact = buildResult.Artifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKind.MachineDeploymentProofBindingLedger);
+        ledgerArtifact.AccessScope.Should().Be(ElectionReportArtifactAccessScope.Public);
+        ledgerArtifact.FileName.Should().Be(ElectionDeploymentProofConstants.PublicLedgerArtifactFileName);
+        ledgerArtifact.Content.Should().Contain("\"schemaId\": \"hushvoting-deployment-proof-public-ledger-v1\"");
+        ledgerArtifact.Content.Should().Contain("\"finalStatus\": \"AcceptedWithLimitations\"");
+        ledgerArtifact.Content.Should().Contain("\"claimEffect\": \"AcceptedWithLimitations\"");
+        ledgerArtifact.Content.Should().Contain("\"claimLimitations\"");
+        ledgerArtifact.Content.Should().Contain(ElectionDeploymentProofConstants.Feat144WebClientProofNotSupportedCode);
+        ledgerArtifact.Content.Should().NotContain("private key");
+        ledgerArtifact.Content.Should().NotContain("raw log");
+        ledgerArtifact.Content.Should().NotContain("support log");
+        ledgerArtifact.Content.Should().NotContain("voter identity");
+
+        var machineManifest = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineManifest);
+        machineManifest.Content.Should().Contain("\"deploymentProofBinding\"");
+        machineManifest.Content.Should().Contain($"\"ledgerArtifactId\": \"{ledgerArtifact.Id}\"");
+        machineManifest.Content.Should().Contain($"\"ledgerArtifactHash\": \"{HashBytesAsHex(ledgerArtifact.ContentHash)}\"");
+
+        var evidenceGraph = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.MachineEvidenceGraph);
+        evidenceGraph.Content.Should().Contain("\"deploymentProofBinding\"");
+        evidenceGraph.Content.Should().Contain("\"blocksDeploymentProofClaims\": false");
+
+        var humanAudit = buildResult.Artifacts.Single(x => x.ArtifactKind == ElectionReportArtifactKind.HumanAuditProvenanceReport);
+        humanAudit.Content.Should().Contain("## Deployment Proof Binding");
+        humanAudit.Content.Should().Contain("Deployment proof status: `AcceptedWithLimitations`");
+        humanAudit.Content.Should().Contain("WebClient proof status: `NotYetSupported`");
+        humanAudit.Content.Should().Contain("FEAT-137 retention/log privacy claim effect: `Accepted`");
+        humanAudit.Content.Should().Contain("complete WebClient proof binding remains downgraded");
+        humanAudit.Content.Should().Contain("Deployment proof status is separate from election outcome authority");
+
+        var disputeIndex = buildResult.Artifacts.Single(x =>
+            x.ArtifactKind == ElectionReportArtifactKind.MachineDisputeReviewIndexProjection);
+        disputeIndex.Content.Should().Contain("MachineDeploymentProofBindingLedger");
+    }
+
+    [Fact]
     [Trait("Category", "FEAT-139")]
     public void Build_WithAbnormalFinalizationEvidence_AddsVerifierReadyEvidenceArtifact()
     {
@@ -1176,6 +1228,130 @@ public class ElectionReportPackageServiceTests
                     ]),
             ]);
     }
+
+    private static ElectionDeploymentProofPublicLedgerArtifactRecord CreateDeploymentProofPublicLedger(
+        ElectionId electionId)
+    {
+        var ledgerId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
+        var checkpointId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002");
+        var observedAt = new DateTime(2026, 5, 4, 12, 10, 30, DateTimeKind.Utc);
+
+        return new ElectionDeploymentProofPublicLedgerArtifactRecord(
+            ElectionDeploymentProofConstants.PublicLedgerArtifactSchemaId,
+            electionId.ToString(),
+            ledgerId,
+            $"deployment-ledger-{electionId}",
+            Status: ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations.ToString(),
+            FinalStatus: ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations.ToString(),
+            ClaimEffect: ElectionDeploymentProofClaimEffect.AcceptedWithLimitations.ToString(),
+            BlocksDeploymentProofClaims: false,
+            ClaimSummary: "Deployment proof evidence is accepted with explicit limitations; the limitation is visible but does not by itself determine the election outcome.",
+            DeploymentProfile: ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId,
+            DeploymentProtocolVersion: ElectionDeploymentProofConstants.DeploymentProtocolVersion,
+            PublicCatalogRepository: null,
+            PublicCatalogRef: "refs/tags/deployment-proof-v1",
+            PublicCatalogCommit: null,
+            PlatformCeremonyId: "ceremony-public-1",
+            ActiveProofSetIdAtOpen: "server-proof-v1",
+            OpenedAtUtc: observedAt.AddMinutes(-10),
+            ClosedAtUtc: observedAt.AddMinutes(-5),
+            FinalizedAtUtc: observedAt,
+            VoidedAtUtc: null,
+            LatestCheckpointId: checkpointId,
+            CreatedAtUtc: observedAt.AddMinutes(-10),
+            LastReconciledAtUtc: observedAt,
+            ClaimLimitations:
+            [
+                "FEAT-144 WebClient proof handshake is not yet supported; complete WebClient proof binding remains downgraded for pilot handoff claims.",
+            ],
+            Checkpoints:
+            [
+                new ElectionDeploymentProofPublicCheckpointArtifactRecord(
+                    checkpointId,
+                    ElectionDeploymentProofCheckpointType.FinalPackageExport.ToString(),
+                    ElectionLifecycleState.Finalized.ToString(),
+                    ElectionLifecycleState.Finalized.ToString(),
+                    TransitionArtifactId: Guid.Parse("aaaaaaaa-0000-0000-0000-000000000003"),
+                    ReportPackageId: Guid.Parse("aaaaaaaa-0000-0000-0000-000000000004"),
+                    ProofSetId: "server-proof-v1",
+                    EvidenceStatus: ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations.ToString(),
+                    ProviderStatus: ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations.ToString(),
+                    ClaimEffect: ElectionDeploymentProofClaimEffect.AcceptedWithLimitations.ToString(),
+                    ProviderErrorCodes: [],
+                    SupersedesCheckpointId: null,
+                    PublicSummary: "Deployment proof reconciled for final package export.",
+                    SourceTransactionId: null,
+                    SourceBlockHeight: null,
+                    SourceBlockId: null,
+                    ObservedAtUtc: observedAt),
+            ],
+            ComponentObservations:
+            [
+                new ElectionDeploymentProofPublicComponentObservationArtifactRecord(
+                    Guid.Parse("aaaaaaaa-0000-0000-0000-000000000005"),
+                    checkpointId,
+                    ElectionDeploymentProofComponentId.HushServerNode.ToString(),
+                    DeploymentProofId: "server-proof-v1",
+                    ExpectedDeploymentProofId: "server-proof-v1",
+                    ObservedDeploymentProofId: "server-proof-v1",
+                    ExpectedArtifactHash: "sha256:" + Hash('a'),
+                    ObservedArtifactHash: "sha256:" + Hash('a'),
+                    EvidenceStatus: ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations.ToString(),
+                    ObservationSource: ElectionDeploymentProofObservationSource.Fixture.ToString(),
+                    SourceRef: "git:refs/tags/deployment-proof-v1",
+                    ArtifactHash: "sha256:" + Hash('a'),
+                    PackageHash: Hash('b'),
+                    PublicPackageRef: "https://github.com/HushNetworkOrg/hush-deployment-proofs/tree/v1",
+                    MismatchCode: null,
+                    SupersedesProofIds: [],
+                    ObservedAtUtc: observedAt),
+                new ElectionDeploymentProofPublicComponentObservationArtifactRecord(
+                    Guid.Parse("aaaaaaaa-0000-0000-0000-000000000006"),
+                    checkpointId,
+                    ElectionDeploymentProofComponentId.HushWebClient.ToString(),
+                    DeploymentProofId: "webclient-proof-v1",
+                    ExpectedDeploymentProofId: "webclient-proof-v1",
+                    ObservedDeploymentProofId: null,
+                    ExpectedArtifactHash: "sha256:" + Hash('c'),
+                    ObservedArtifactHash: null,
+                    EvidenceStatus: ElectionDeploymentProofEvidenceStatus.NotYetSupported.ToString(),
+                    ObservationSource: ElectionDeploymentProofObservationSource.NotAvailable.ToString(),
+                    SourceRef: "git:refs/tags/deployment-proof-v1",
+                    ArtifactHash: "sha256:" + Hash('c'),
+                    PackageHash: Hash('d'),
+                    PublicPackageRef: "https://github.com/HushNetworkOrg/hush-deployment-proofs/tree/v1",
+                    MismatchCode: ElectionDeploymentProofConstants.Feat144WebClientProofNotSupportedCode,
+                    SupersedesProofIds: [],
+                    ObservedAtUtc: observedAt),
+            ],
+            DeploymentEvents: [],
+            ProofFamilies:
+            [
+                new ElectionDeploymentProofPublicProofFamilyArtifactRecord(
+                    Guid.Parse("aaaaaaaa-0000-0000-0000-000000000007"),
+                    checkpointId,
+                    ElectionDeploymentProofConstants.RetentionLogPrivacyProofFamilyId,
+                    "v1",
+                    PackageId: "feat137-retention-log-privacy",
+                    PackageHash: Hash('e'),
+                    PromotedRegisterRef: "RDY-REG-v0.1.2",
+                    ElectionDeploymentProofConstants.Feat137SourceFeature,
+                    EvidenceStatus: ElectionDeploymentProofEvidenceStatus.Accepted.ToString(),
+                    ClaimEffect: ElectionDeploymentProofClaimEffect.Accepted.ToString(),
+                    MismatchCode: null,
+                    PublicSummary: "Retention/log privacy proof-family remains accepted.",
+                    ObservedAtUtc: observedAt),
+            ],
+            PublicPrivacyBoundary:
+            [
+                "no_private_key",
+                "no_raw_runtime_log",
+                "restricted_evidence_refs_are_ids_or_hashes_only",
+            ]);
+    }
+
+    private static string HashBytesAsHex(byte[] value) =>
+        Convert.ToHexString(value).ToLowerInvariant();
 
     private static string Hash(char value) =>
         new(char.ToLowerInvariant(value), 64);

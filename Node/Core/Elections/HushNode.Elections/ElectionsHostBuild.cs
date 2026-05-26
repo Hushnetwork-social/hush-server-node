@@ -24,6 +24,7 @@ public static class ElectionsHostBuild
             services.AddSingleton(CreateProtocolPackageCatalogOptions(hostContext.Configuration));
             services.AddSingleton(CreateBallotPublicationOptions(hostContext.Configuration));
             services.AddSingleton(CreateEnvelopeOptions(hostContext.Configuration));
+            services.AddSingleton(CreateDeploymentProofOptions(hostContext.Configuration));
             services.AddSingleton(CreateAdminOnlyProtectedTallyEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreateCloseCountingExecutorEnvelopeOptions(hostContext.Configuration));
             services.AddSingleton(CreatePublicationWitnessEnvelopeOptions(hostContext.Configuration));
@@ -113,6 +114,9 @@ public static class ElectionsHostBuild
         services.AddSingleton<IElectionSp07PublicationProofSessionRunner, ElectionSp07PublicationProofSessionRunner>();
         services.AddSingleton<IElectionSp08ReleaseEvidenceProvider, ElectionSp08ReleaseEvidenceProvider>();
         services.AddSingleton<IElectionPublicationWitnessDeletionService, ElectionPublicationWitnessDeletionService>();
+        services.AddSingleton<IElectionDeploymentProofProfilePolicy, ElectionDeploymentProofProfilePolicy>();
+        services.AddSingleton<IActiveDeploymentProofProvider, LocalDevelopmentActiveDeploymentProofProvider>();
+        services.AddSingleton<IElectionDeploymentProofBindingService, ElectionDeploymentProofBindingService>();
         services.AddSingleton<ElectionBallotPublicationService>();
         services.AddSingleton<IElectionBallotPublicationService>(sp => sp.GetRequiredService<ElectionBallotPublicationService>());
         services.AddSingleton<IElectionLifecycleService>(sp =>
@@ -134,7 +138,8 @@ public static class ElectionsHostBuild
                 publicationProofSessionRunner: sp.GetRequiredService<IElectionSp07PublicationProofSessionRunner>(),
                 sp08ReleaseEvidenceProvider: sp.GetRequiredService<IElectionSp08ReleaseEvidenceProvider>(),
                 adminOnlyProtectedTallyCustodyLifecycleAuthority:
-                    sp.GetRequiredService<IAdminOnlyProtectedTallyCustodyLifecycleAuthority>()));
+                    sp.GetRequiredService<IAdminOnlyProtectedTallyCustodyLifecycleAuthority>(),
+                deploymentProofBindingService: sp.GetRequiredService<IElectionDeploymentProofBindingService>()));
         services.AddHostedService<TallyExecutorBackgroundService>();
     }
 
@@ -173,6 +178,28 @@ public static class ElectionsHostBuild
             AllowLegacyNodeEncryptedParticipantResultMaterial: configuration.GetValue(
                 "Elections:Envelope:AllowLegacyNodeEncryptedParticipantResultMaterial",
                 defaultValue: true));
+
+    private static ElectionDeploymentProofOptions CreateDeploymentProofOptions(IConfiguration configuration)
+    {
+        var defaults = ElectionDeploymentProofOptions.Default;
+
+        return new ElectionDeploymentProofOptions(
+            GetConfigList(
+                configuration,
+                "Elections:DeploymentProof:ProductionLikeProfileIds",
+                "HUSH_ELECTIONS_DEPLOYMENT_PROOF_PRODUCTION_PROFILES")
+                ?? defaults.ProductionLikeProfileIds,
+            GetConfigList(
+                configuration,
+                "Elections:DeploymentProof:ControlledPilotProfileIds",
+                "HUSH_ELECTIONS_DEPLOYMENT_PROOF_CONTROLLED_PILOT_PROFILES")
+                ?? defaults.ControlledPilotProfileIds,
+            GetConfigList(
+                configuration,
+                "Elections:DeploymentProof:LocalDevelopmentProfileIds",
+                "HUSH_ELECTIONS_DEPLOYMENT_PROOF_LOCAL_DEV_PROFILES")
+                ?? defaults.LocalDevelopmentProfileIds);
+    }
 
     private static AdminOnlyProtectedTallyEnvelopeCryptoOptions CreateAdminOnlyProtectedTallyEnvelopeOptions(
         IConfiguration configuration) =>
@@ -376,6 +403,36 @@ public static class ElectionsHostBuild
 
         return null;
     }
+
+    private static IReadOnlyList<string>? GetConfigList(
+        IConfiguration configuration,
+        string key,
+        params string[] environmentVariableNames)
+    {
+        var configured = configuration.GetValue<string>(key);
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return SplitConfigList(configured);
+        }
+
+        foreach (var variableName in environmentVariableNames)
+        {
+            var value = Environment.GetEnvironmentVariable(variableName);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return SplitConfigList(value);
+            }
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<string> SplitConfigList(string value) =>
+        value
+            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     private static int? GetConfigIntValue(
         IConfiguration configuration,

@@ -101,14 +101,16 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         string connectionString,
         string? redisConnectionString = null,
         ILoggerProvider? diagnosticLoggerProvider = null,
-        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null,
+        Action<IServiceCollection>? configureTestServices = null)
     {
         var testConfig = new TestConfiguration(
             blockProductionControl,
             connectionString,
             redisConnectionString,
             diagnosticLoggerProvider,
-            ConfigurationOverrides: configurationOverrides);
+            ConfigurationOverrides: configurationOverrides,
+            ConfigureTestServices: configureTestServices);
         var app = BuildApplication(Array.Empty<string>(), testConfig);
         return new HushServerNodeCore(app, blockProductionControl, isTestMode: true);
     }
@@ -131,7 +133,8 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         string connectionString,
         string? redisConnectionString = null,
         ILoggerProvider? diagnosticLoggerProvider = null,
-        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null,
+        Action<IServiceCollection>? configureTestServices = null)
     {
         var testConfig = new TestConfiguration(
             blockProductionControl,
@@ -139,6 +142,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             redisConnectionString,
             diagnosticLoggerProvider,
             ConfigurationOverrides: configurationOverrides,
+            ConfigureTestServices: configureTestServices,
             FixedGrpcPort: 14665,
             FixedGrpcWebPort: E2EGrpcWebPort);
         var app = BuildApplication(Array.Empty<string>(), testConfig);
@@ -727,6 +731,8 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
             {
                 builder.Logging.AddProvider(testConfig.DiagnosticLoggerProvider);
             }
+
+            testConfig.ConfigureTestServices?.Invoke(builder.Services);
         }
     }
 
@@ -778,6 +784,7 @@ internal sealed class HushServerNodeCore : IAsyncDisposable
         string? RedisConnectionString,
         ILoggerProvider? DiagnosticLoggerProvider,
         IReadOnlyDictionary<string, string?>? ConfigurationOverrides = null,
+        Action<IServiceCollection>? ConfigureTestServices = null,
         int? FixedGrpcPort = null,
         int? FixedGrpcWebPort = null);
 }

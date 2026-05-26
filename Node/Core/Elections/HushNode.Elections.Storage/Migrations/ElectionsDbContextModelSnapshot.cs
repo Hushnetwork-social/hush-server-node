@@ -1553,6 +1553,340 @@ namespace HushNode.Elections.Storage.Migrations
                     b.ToTable("ElectionCommitmentSchemeEvidenceRecord", "Elections");
                 });
 
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionDeploymentProofCheckpointRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CheckpointType")
+                        .IsRequired()
+                        .HasColumnType("varchar(48)");
+
+                    b.Property<string>("ClaimEffect")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("EvidenceStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<Guid>("LedgerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ObservedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProofSetId")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("ProviderErrorCodes")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ProviderStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("PublicSummary")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ReportPackageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("SourceBlockHeight")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("SourceBlockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceLifecycleState")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<Guid?>("SourceTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SupersedesCheckpointId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TargetLifecycleState")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<Guid?>("TransitionArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LedgerId");
+
+                    b.HasIndex("ReportPackageId");
+
+                    b.HasIndex("SourceTransactionId");
+
+                    b.HasIndex("SupersedesCheckpointId");
+
+                    b.HasIndex("TransitionArtifactId");
+
+                    b.HasIndex("ElectionId", "ObservedAtUtc");
+
+                    b.HasIndex("ElectionId", "CheckpointType", "ObservedAtUtc");
+
+                    b.ToTable("ElectionDeploymentProofCheckpointRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionDeploymentProofComponentObservationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ArtifactHash")
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<Guid>("CheckpointId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ComponentId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("DeploymentProofId")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("EvidenceStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("ExpectedArtifactHash")
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<string>("ExpectedDeploymentProofId")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("MismatchCode")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("ObservationSource")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("ObservedArtifactHash")
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<DateTime>("ObservedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ObservedDeploymentProofId")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("PackageHash")
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("PublicPackageRef")
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("SourceRef")
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("SupersedesProofIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CheckpointId");
+
+                    b.HasIndex("DeploymentProofId");
+
+                    b.HasIndex("CheckpointId", "ComponentId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ElectionDeploymentProofComponentObservationRecord_Checkpoi~1");
+
+                    b.HasIndex("ElectionId", "ComponentId", "ObservedAtUtc");
+
+                    b.ToTable("ElectionDeploymentProofComponentObservationRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionDeploymentProofEventRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccountabilityMarker")
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<string>("AfterProofId")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("BeforeProofId")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("CheckResult")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<Guid>("CheckpointId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChecksRerun")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("ComponentId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("DeploymentRunId")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("EventPublicId")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("EvidenceStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("varchar(512)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CheckpointId");
+
+                    b.HasIndex("CheckpointId", "EventPublicId")
+                        .IsUnique();
+
+                    b.HasIndex("ElectionId", "Classification");
+
+                    b.HasIndex("ElectionId", "OccurredAtUtc");
+
+                    b.ToTable("ElectionDeploymentProofEventRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionDeploymentProofLedgerRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActiveProofSetIdAtOpen")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeploymentProfile")
+                        .IsRequired()
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("DeploymentProtocolVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("FinalStatus")
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTime?>("FinalizedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastReconciledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LatestCheckpointId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LedgerPublicId")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<DateTime?>("OpenedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PlatformCeremonyId")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("PublicCatalogCommit")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("PublicCatalogRef")
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("PublicCatalogRepository")
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("PublicLedgerArtifactHash")
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("PublicLedgerArtifactRef")
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("RestrictedEvidenceIndexRef")
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("SchemaVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(96)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("Visibility")
+                        .IsRequired()
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<DateTime?>("VoidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ElectionId")
+                        .IsUnique();
+
+                    b.HasIndex("LatestCheckpointId");
+
+                    b.HasIndex("LedgerPublicId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "LastReconciledAtUtc");
+
+                    b.ToTable("ElectionDeploymentProofLedgerRecord", "Elections");
+                });
+
             modelBuilder.Entity("HushShared.Elections.Model.ElectionDraftSnapshotRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2498,6 +2832,68 @@ namespace HushNode.Elections.Storage.Migrations
                     b.HasIndex("ElectionId", "State");
 
                     b.ToTable("ElectionPreparedBallotCommitmentRecord", "Elections");
+                });
+
+            modelBuilder.Entity("HushShared.Elections.Model.ElectionProofFamilyBindingStatusRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CheckpointId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ElectionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("EvidenceStatus")
+                        .IsRequired()
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<string>("MismatchCode")
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTime>("ObservedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PackageHash")
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("PackageId")
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("PromotedRegisterRef")
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("ProofFamilyId")
+                        .IsRequired()
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("ProofFamilyVersion")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("PublicSummary")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SourceFeature")
+                        .IsRequired()
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CheckpointId");
+
+                    b.HasIndex("PackageHash");
+
+                    b.HasIndex("CheckpointId", "ProofFamilyId", "ProofFamilyVersion")
+                        .IsUnique();
+
+                    b.HasIndex("ElectionId", "ProofFamilyId", "ObservedAtUtc");
+
+                    b.ToTable("ElectionProofFamilyBindingStatusRecord", "Elections");
                 });
 
             modelBuilder.Entity("HushShared.Elections.Model.ElectionPublicationIssueRecord", b =>

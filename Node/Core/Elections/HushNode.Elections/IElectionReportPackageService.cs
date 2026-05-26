@@ -35,7 +35,9 @@ public sealed record ElectionReportPackageBuildRequest(
     ElectionSp10OperationalSecurityStatusArtifactRecord? Sp10OperationalSecurityStatus = null,
     ElectionSp11RegulatoryClaimStateArtifactRecord? Sp11RegulatoryClaimState = null,
     AnomalyIntakeManifest? RestrictedAnomalyIntakeManifest = null,
-    AbnormalFinalizationReportPackageEvidenceInput? AbnormalFinalizationEvidence = null);
+    AbnormalFinalizationReportPackageEvidenceInput? AbnormalFinalizationEvidence = null,
+    ElectionDeploymentProofPublicLedgerArtifactRecord? DeploymentProofBindingLedger = null,
+    Guid? PreassignedPackageId = null);
 
 public sealed record AbnormalFinalizationReportPackageEvidenceInput(
     string AuthorityDecisionRef,

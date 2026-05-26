@@ -39,6 +39,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
     private readonly IElectionPublicationWitnessDeletionService _publicationWitnessDeletionService;
     private readonly IElectionSp07PublicationProofSessionRunner? _publicationProofSessionRunner;
     private readonly IElectionSp08ReleaseEvidenceProvider _sp08ReleaseEvidenceProvider;
+    private readonly IElectionDeploymentProofBindingService _deploymentProofBindingService;
     private readonly IBabyJubJub _curve;
     private readonly ProtocolPackageBindingService _protocolPackageBindingService = new();
     private readonly ConcurrentDictionary<string, bool> _pendingCastTracking = new();
@@ -76,7 +77,8 @@ public class ElectionLifecycleService : IElectionLifecycleService
         IElectionPublicationWitnessDeletionService? publicationWitnessDeletionService = null,
         IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null,
         IElectionSp08ReleaseEvidenceProvider? sp08ReleaseEvidenceProvider = null,
-        IAdminOnlyProtectedTallyCustodyLifecycleAuthority? adminOnlyProtectedTallyCustodyLifecycleAuthority = null)
+        IAdminOnlyProtectedTallyCustodyLifecycleAuthority? adminOnlyProtectedTallyCustodyLifecycleAuthority = null,
+        IElectionDeploymentProofBindingService? deploymentProofBindingService = null)
     {
         _unitOfWorkProvider = unitOfWorkProvider;
         _logger = logger;
@@ -98,6 +100,7 @@ public class ElectionLifecycleService : IElectionLifecycleService
             publicationWitnessDeletionService ?? new ElectionPublicationWitnessDeletionService();
         _publicationProofSessionRunner = publicationProofSessionRunner;
         _sp08ReleaseEvidenceProvider = sp08ReleaseEvidenceProvider ?? new ElectionSp08ReleaseEvidenceProvider();
+        _deploymentProofBindingService = deploymentProofBindingService ?? NoopElectionDeploymentProofBindingService.Instance;
         _curve = curve ?? new BabyJubJubCurve();
     }
 
@@ -2866,6 +2869,24 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 : election.VoteAcceptanceLockedAt,
         };
 
+        if (election.LifecycleState is ElectionLifecycleState.Open or ElectionLifecycleState.Closed)
+        {
+            await ReconcileDeploymentProofCheckpointAsync(
+                repository,
+                updatedElection,
+                election.LifecycleState == ElectionLifecycleState.Open
+                    ? ElectionDeploymentProofCheckpointType.OpenToVoid
+                    : ElectionDeploymentProofCheckpointType.CloseToVoid,
+                election.LifecycleState,
+                ElectionLifecycleState.Voided,
+                voidedAt,
+                artifact.Id,
+                reportPackageId: null,
+                request.SourceTransactionId,
+                request.SourceBlockHeight,
+                request.SourceBlockId);
+        }
+
         await repository.SaveBoundaryArtifactAsync(artifact);
         await repository.SaveVoidDecisionAsync(decisionWithAttempt);
         await repository.SaveVoidPublicationAttemptAsync(publicationAttempt);
@@ -3545,6 +3566,117 @@ public class ElectionLifecycleService : IElectionLifecycleService
             _ => throw new ArgumentOutOfRangeException(nameof(artifact), artifact.ArtifactType, "Unsupported lifecycle transition artifact."),
         };
 
+    private async Task ReconcileDeploymentProofCheckpointAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionDeploymentProofCheckpointType checkpointType,
+        ElectionLifecycleState sourceLifecycleState,
+        ElectionLifecycleState targetLifecycleState,
+        DateTime observedAtUtc,
+        Guid? transitionArtifactId,
+        Guid? reportPackageId,
+        Guid? sourceTransactionId,
+        long? sourceBlockHeight,
+        Guid? sourceBlockId)
+    {
+        try
+        {
+            await _deploymentProofBindingService.ReconcileCheckpointAsync(
+                repository,
+                new ElectionDeploymentProofReconciliationRequest(
+                    election,
+                    checkpointType,
+                    sourceLifecycleState,
+                    targetLifecycleState,
+                    observedAtUtc,
+                    transitionArtifactId,
+                    reportPackageId,
+                    sourceTransactionId,
+                    sourceBlockHeight,
+                    sourceBlockId));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Deployment proof reconciliation failed for election {ElectionId} at checkpoint {CheckpointType}.",
+                election.ElectionId,
+                checkpointType);
+        }
+    }
+
+    private async Task<ElectionDeploymentProofPublicLedgerArtifactRecord?> BuildDeploymentProofPublicLedgerForReportPackageAsync(
+        IElectionsRepository repository,
+        ElectionRecord election,
+        ElectionLifecycleState sourceLifecycleState,
+        DateTime observedAtUtc,
+        Guid? transitionArtifactId,
+        Guid reportPackageId,
+        Guid? sourceTransactionId,
+        long? sourceBlockHeight,
+        Guid? sourceBlockId)
+    {
+        try
+        {
+            await _deploymentProofBindingService.ReconcileCheckpointAsync(
+                repository,
+                new ElectionDeploymentProofReconciliationRequest(
+                    election,
+                    ElectionDeploymentProofCheckpointType.FinalPackageExport,
+                    sourceLifecycleState,
+                    ElectionLifecycleState.Finalized,
+                    observedAtUtc,
+                    transitionArtifactId,
+                    reportPackageId,
+                    sourceTransactionId,
+                    sourceBlockHeight,
+                    sourceBlockId));
+
+            return await _deploymentProofBindingService.BuildPublicLedgerArtifactAsync(
+                repository,
+                election.ElectionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Deployment proof public ledger export failed for election {ElectionId}.",
+                election.ElectionId);
+            return null;
+        }
+    }
+
+    private async Task PersistDeploymentProofPublicLedgerArtifactReferenceAsync(
+        IElectionsRepository repository,
+        ElectionId electionId,
+        ElectionReportPackageRecord reportPackage,
+        IReadOnlyList<ElectionReportArtifactRecord> reportArtifacts)
+    {
+        var ledgerArtifact = reportArtifacts.FirstOrDefault(x =>
+            x.ArtifactKind == ElectionReportArtifactKind.MachineDeploymentProofBindingLedger);
+        if (ledgerArtifact is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _deploymentProofBindingService.UpdatePublicLedgerArtifactReferenceAsync(
+                repository,
+                electionId,
+                $"report-package:{reportPackage.Id:N}/{ledgerArtifact.FileName}",
+                Convert.ToHexString(ledgerArtifact.ContentHash).ToLowerInvariant(),
+                ledgerArtifact.RecordedAt);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Deployment proof public ledger artifact reference update failed for election {ElectionId}.",
+                electionId);
+        }
+    }
+
     private static ElectionRecord ApplyGovernedProposalStartEffects(
         ElectionRecord election,
         ElectionGovernedActionType actionType,
@@ -4159,6 +4291,18 @@ public class ElectionLifecycleService : IElectionLifecycleService
             BallotDefinitionSealedAt = ballotDefinitionSeal.SealedAt,
             BallotDefinitionMutationPolicy = ballotDefinitionSeal.MutationPolicy,
         };
+
+        var deploymentProofBinding = await _deploymentProofBindingService.BindForOpenAsync(
+            repository,
+            openedElection,
+            artifact);
+        if (!deploymentProofBinding.IsAllowed)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                deploymentProofBinding.PublicSummary,
+                deploymentProofBinding.FailureCodes);
+        }
 
         foreach (var rosterEntry in frozenRosterEntries)
         {
@@ -6149,6 +6293,19 @@ public class ElectionLifecycleService : IElectionLifecycleService
             {
                 ClosedProgressStatus = ElectionClosedProgressStatus.TallyCalculationInProgress,
             };
+
+            await ReconcileDeploymentProofCheckpointAsync(
+                repository,
+                updatedElection,
+                ElectionDeploymentProofCheckpointType.OpenToClose,
+                ElectionLifecycleState.Open,
+                ElectionLifecycleState.Closed,
+                transitionTime,
+                artifact.Id,
+                reportPackageId: null,
+                sourceTransactionId,
+                sourceBlockHeight,
+                sourceBlockId);
         }
 
         await repository.SaveBoundaryArtifactAsync(artifact);
@@ -6339,6 +6496,20 @@ public class ElectionLifecycleService : IElectionLifecycleService
             ClosedProgressStatus = ElectionClosedProgressStatus.None,
             OfficialResultArtifactId = officialResult.Id,
         };
+
+        await ReconcileDeploymentProofCheckpointAsync(
+            repository,
+            finalizedElection,
+            ElectionDeploymentProofCheckpointType.CloseToFinalize,
+            ElectionLifecycleState.Closed,
+            ElectionLifecycleState.Finalized,
+            officialRecordedAt,
+            finalizeArtifact.Id,
+            reportPackageId: null,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
+
         var finalizationContext = await ResolveReportPackageFinalizationContextAsync(
             repository,
             election.ElectionId,
@@ -6366,6 +6537,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
         var restrictedAnomalyIntakeManifest = await BuildRestrictedAnomalyIntakeManifestAsync(
             repository,
             election.ElectionId);
+        var reportPackageId = Guid.NewGuid();
+        var deploymentProofBindingLedger = await BuildDeploymentProofPublicLedgerForReportPackageAsync(
+            repository,
+            finalizedElection,
+            ElectionLifecycleState.Finalized,
+            officialRecordedAt,
+            finalizeArtifact.Id,
+            reportPackageId,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
         var reportBuildResult = _electionReportPackageService.Build(new ElectionReportPackageBuildRequest(
             finalizedElection,
             closeArtifact,
@@ -6388,7 +6570,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
             priorReportAttempt?.Id,
             actorPublicAddress,
             officialRecordedAt,
-            RestrictedAnomalyIntakeManifest: restrictedAnomalyIntakeManifest));
+            RestrictedAnomalyIntakeManifest: restrictedAnomalyIntakeManifest,
+            DeploymentProofBindingLedger: deploymentProofBindingLedger,
+            PreassignedPackageId: reportPackageId));
 
         if (priorReportAttempt is not null &&
             priorReportAttempt.Status == ElectionReportPackageStatus.GenerationFailed &&
@@ -6420,6 +6604,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
         {
             await repository.SaveReportArtifactAsync(reportArtifact);
         }
+        await PersistDeploymentProofPublicLedgerArtifactReferenceAsync(
+            repository,
+            finalizedElection.ElectionId,
+            reportBuildResult.Package,
+            reportBuildResult.Artifacts);
         foreach (var accessGrant in reportBuildResult.AccessGrants)
         {
             await repository.SaveReportAccessGrantAsync(accessGrant);
@@ -6704,6 +6893,19 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 "Abnormal fixed-result acceptance requires missing-finalize or continuity evidence.");
         }
 
+        await ReconcileDeploymentProofCheckpointAsync(
+            repository,
+            finalizedElection,
+            ElectionDeploymentProofCheckpointType.ClosedToFinalizedWithAnomaly,
+            ElectionLifecycleState.Closed,
+            ElectionLifecycleState.Finalized,
+            officialRecordedAt,
+            finalizeArtifact.Id,
+            reportPackageId: null,
+            request.SourceTransactionId,
+            request.SourceBlockHeight,
+            request.SourceBlockId);
+
         var finalizationContext = await ResolveReportPackageFinalizationContextAsync(
             repository,
             election.ElectionId,
@@ -6732,6 +6934,17 @@ public class ElectionLifecycleService : IElectionLifecycleService
             repository,
             election.ElectionId);
         var reportAttemptNumber = (priorReportAttempt?.AttemptNumber ?? 0) + 1;
+        var reportPackageId = Guid.NewGuid();
+        var deploymentProofBindingLedger = await BuildDeploymentProofPublicLedgerForReportPackageAsync(
+            repository,
+            finalizedElection,
+            ElectionLifecycleState.Finalized,
+            officialRecordedAt,
+            finalizeArtifact.Id,
+            reportPackageId,
+            request.SourceTransactionId,
+            request.SourceBlockHeight,
+            request.SourceBlockId);
         var reportBuildResult = _electionReportPackageService.Build(new ElectionReportPackageBuildRequest(
             finalizedElection,
             closeArtifact,
@@ -6755,7 +6968,9 @@ public class ElectionLifecycleService : IElectionLifecycleService
             request.ActorPublicAddress,
             officialRecordedAt,
             RestrictedAnomalyIntakeManifest: restrictedAnomalyIntakeManifest,
-            AbnormalFinalizationEvidence: BuildAbnormalFinalizationEvidenceInput(governedOutcomeDecision)));
+            AbnormalFinalizationEvidence: BuildAbnormalFinalizationEvidenceInput(governedOutcomeDecision),
+            DeploymentProofBindingLedger: deploymentProofBindingLedger,
+            PreassignedPackageId: reportPackageId));
 
         if (priorReportAttempt is not null &&
             priorReportAttempt.Status == ElectionReportPackageStatus.GenerationFailed &&
@@ -6788,6 +7003,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
         {
             await repository.SaveReportArtifactAsync(reportArtifact);
         }
+        await PersistDeploymentProofPublicLedgerArtifactReferenceAsync(
+            repository,
+            finalizedElection.ElectionId,
+            reportBuildResult.Package,
+            reportBuildResult.Artifacts);
         foreach (var accessGrant in reportBuildResult.AccessGrants)
         {
             await repository.SaveReportAccessGrantAsync(accessGrant);

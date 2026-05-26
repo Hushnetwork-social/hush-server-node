@@ -304,6 +304,8 @@ enum ElectionReportArtifactKindProto {
   ReportArtifactMachineRestrictedHistoricalUnofficialResult = 20;
   ReportArtifactMachineVoidPackageManifest = 21;
   ReportArtifactMachineVoidPackageArchive = 22;
+  ReportArtifactMachineAbnormalFinalizationEvidence = 23;
+  ReportArtifactMachineDeploymentProofBindingLedger = 24;
 }
 
 enum ElectionReportArtifactFormatProto {
