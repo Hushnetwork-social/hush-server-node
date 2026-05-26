@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pilot-evidence-exception-records.schema.json",
+  "title": "Pilot Evidence Exception Records",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "packageId",
+    "generatedAt",
+    "exceptions"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "pilot-evidence-exception-records.v1" },
+    "exceptions": { "type": "array" }
+  },
+  "additionalProperties": true
+}

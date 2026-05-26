@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pilot-evidence-source.schema.json",
+  "title": "Pilot Evidence Source",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "sourceId",
+    "packageId",
+    "featureId",
+    "acceptanceGate",
+    "sourceGap",
+    "status",
+    "profile",
+    "generatedAt",
+    "scenario",
+    "organizationScope",
+    "participantModel",
+    "timeline",
+    "rehearsalDecision",
+    "beforeRegister",
+    "afterRegister",
+    "upstreamEvidence",
+    "observedRunEvidence",
+    "runtimeEvidence",
+    "claimDecisions",
+    "exceptions",
+    "redactionPolicy",
+    "signoff",
+    "promotionPolicy",
+    "publicSummary",
+    "publicArtifactSamples"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "pilot-evidence-source.v1" },
+    "featureId": { "const": "FEAT-141" },
+    "acceptanceGate": { "const": "AT-RDY-013" },
+    "sourceGap": { "const": "Controlled pilot evidence" },
+    "status": {
+      "enum": [
+        "accepted",
+        "accepted_with_limitations",
+        "blocked"
+      ]
+    },
+    "profile": {
+      "enum": [
+        "internal_non_binding_rehearsal",
+        "friendly_organization_pilot",
+        "exception_only"
+      ]
+    },
+    "scenario": { "type": "object" },
+    "organizationScope": { "type": "object" },
+    "participantModel": { "type": "object" },
+    "timeline": { "type": "object" },
+    "rehearsalDecision": { "type": "object" },
+    "beforeRegister": { "type": "object" },
+    "afterRegister": { "type": "object" },
+    "upstreamEvidence": { "type": "array", "minItems": 1 },
+    "observedRunEvidence": { "type": "object" },
+    "runtimeEvidence": { "type": "object" },
+    "claimDecisions": { "type": "array", "minItems": 1 },
+    "exceptions": { "type": "array" },
+    "redactionPolicy": { "type": "object" },
+    "signoff": { "type": "object" },
+    "promotionPolicy": { "type": "object" },
+    "publicSummary": { "type": "object" },
+    "publicArtifactSamples": { "type": "array" }
+  },
+  "additionalProperties": true
+}
