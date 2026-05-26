@@ -338,6 +338,77 @@ public enum ElectionTrusteeContinuityStatus
     KeyLost = 1,
 }
 
+public enum ElectionDeploymentProofEvidenceStatus
+{
+    Accepted = 0,
+    AcceptedWithLimitations = 1,
+    Degraded = 2,
+    Blocked = 3,
+    Missing = 4,
+    Stale = 5,
+    Superseded = 6,
+    Unknown = 7,
+    NotRequired = 8,
+    Mismatch = 9,
+    NotYetSupported = 10,
+}
+
+public enum ElectionDeploymentProofLedgerVisibility
+{
+    Public = 0,
+    Restricted = 1,
+    Internal = 2,
+}
+
+public enum ElectionDeploymentProofCheckpointType
+{
+    DraftToOpen = 0,
+    OpenToClose = 1,
+    CloseToFinalize = 2,
+    ClosedToFinalizedWithAnomaly = 3,
+    OpenToVoid = 4,
+    CloseToVoid = 5,
+    FinalPackageExport = 6,
+}
+
+public enum ElectionDeploymentProofComponentId
+{
+    HushServerNode = 0,
+    HushWebClient = 1,
+}
+
+public enum ElectionDeploymentProofObservationSource
+{
+    Provider = 0,
+    Fixture = 1,
+    Catalog = 2,
+    Feat144Handshake = 3,
+    NotAvailable = 4,
+}
+
+public enum ElectionDeploymentProofImpactClassification
+{
+    NoChange = 0,
+    WebsiteOnlyNoProtocolChange = 1,
+    NonVotingServiceNoProtocolChange = 2,
+    VotingProtocolNoChange = 3,
+    VotingProtocolChange = 4,
+    OperationalConfigChange = 5,
+    EmergencyChange = 6,
+    Rollback = 7,
+    UnknownPendingClassification = 8,
+}
+
+public enum ElectionDeploymentProofClaimEffect
+{
+    Accepted = 0,
+    AcceptedWithLimitations = 1,
+    Downgraded = 2,
+    Blocked = 3,
+    NoClaim = 4,
+    NotApplicable = 5,
+}
+
 public enum ElectionVoidEvidenceReferenceKind
 {
     InternalAnomalyThread = 0,
@@ -394,6 +465,7 @@ public enum ElectionReportArtifactKind
     MachineVoidPackageManifest = 21,
     MachineVoidPackageArchive = 22,
     MachineAbnormalFinalizationEvidence = 23,
+    MachineDeploymentProofBindingLedger = 24,
 }
 
 public enum ElectionReportArtifactFormat

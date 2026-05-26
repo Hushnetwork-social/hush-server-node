@@ -23,6 +23,7 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
         ConfigureElectionReportAccessGrant(modelBuilder);
         ConfigureElectionVoidRecords(modelBuilder);
         ConfigureElectionGovernedOutcomeRecords(modelBuilder);
+        ConfigureElectionDeploymentProofBindingRecords(modelBuilder);
         ConfigureApprovedProtocolPackageCatalogEntry(modelBuilder);
         ConfigureProtocolPackageBinding(modelBuilder);
         ConfigureElectionRosterEntry(modelBuilder);
@@ -530,6 +531,185 @@ public class ElectionsDbContextConfigurator : IDbContextConfigurator
             entity.HasIndex(x => new { x.ElectionId, x.ContinuityStatus });
             entity.HasIndex(x => x.AuthorityDecisionHash);
             entity.HasIndex(x => x.SourceTransactionId);
+        });
+    }
+
+    private static void ConfigureElectionDeploymentProofBindingRecords(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ElectionDeploymentProofLedgerRecord>(entity =>
+        {
+            entity.ToTable("ElectionDeploymentProofLedgerRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.LedgerPublicId).HasColumnType("varchar(160)");
+            entity.Property(x => x.SchemaVersion).HasColumnType("varchar(96)");
+            entity.Property(x => x.Status).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.Visibility).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.DeploymentProfile).HasColumnType("varchar(128)");
+            entity.Property(x => x.DeploymentProtocolVersion).HasColumnType("varchar(96)");
+            entity.Property(x => x.PublicCatalogRepository).HasColumnType("varchar(512)");
+            entity.Property(x => x.PublicCatalogRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.PublicCatalogCommit).HasColumnType("varchar(128)");
+            entity.Property(x => x.PlatformCeremonyId).HasColumnType("varchar(160)");
+            entity.Property(x => x.ActiveProofSetIdAtOpen).HasColumnType("varchar(160)");
+            entity.Property(x => x.OpenedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ClosedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.FinalizedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.VoidedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LatestCheckpointId).HasColumnType("uuid");
+            entity.Property(x => x.FinalStatus).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.PublicLedgerArtifactRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.PublicLedgerArtifactHash).HasColumnType("varchar(64)");
+            entity.Property(x => x.RestrictedEvidenceIndexRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.CreatedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.LastReconciledAtUtc).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => x.ElectionId).IsUnique();
+            entity.HasIndex(x => x.LedgerPublicId).IsUnique();
+            entity.HasIndex(x => new { x.Status, x.LastReconciledAtUtc });
+            entity.HasIndex(x => x.LatestCheckpointId);
+        });
+
+        modelBuilder.Entity<ElectionDeploymentProofCheckpointRecord>(entity =>
+        {
+            entity.ToTable("ElectionDeploymentProofCheckpointRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.LedgerId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.CheckpointType).HasConversion<string>().HasColumnType("varchar(48)");
+            entity.Property(x => x.SourceLifecycleState).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.TargetLifecycleState).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(x => x.TransitionArtifactId).HasColumnType("uuid");
+            entity.Property(x => x.ReportPackageId).HasColumnType("uuid");
+            entity.Property(x => x.ProofSetId).HasColumnType("varchar(160)");
+            entity.Property(x => x.EvidenceStatus).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.ClaimEffect).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.ObservedAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.ProviderStatus).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.SupersedesCheckpointId).HasColumnType("uuid");
+            entity.Property(x => x.PublicSummary).HasColumnType("text");
+            entity.Property(x => x.SourceTransactionId).HasColumnType("uuid");
+            entity.Property(x => x.SourceBlockHeight).HasColumnType("bigint");
+            entity.Property(x => x.SourceBlockId).HasColumnType("uuid");
+
+            ConfigureJsonProperty(entity.Property(x => x.ProviderErrorCodes));
+
+            entity.HasIndex(x => x.LedgerId);
+            entity.HasIndex(x => new { x.ElectionId, x.ObservedAtUtc });
+            entity.HasIndex(x => new { x.ElectionId, x.CheckpointType, x.ObservedAtUtc });
+            entity.HasIndex(x => x.TransitionArtifactId);
+            entity.HasIndex(x => x.ReportPackageId);
+            entity.HasIndex(x => x.SupersedesCheckpointId);
+            entity.HasIndex(x => x.SourceTransactionId);
+        });
+
+        modelBuilder.Entity<ElectionDeploymentProofComponentObservationRecord>(entity =>
+        {
+            entity.ToTable("ElectionDeploymentProofComponentObservationRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.CheckpointId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.ComponentId).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.DeploymentProofId).HasColumnType("varchar(160)");
+            entity.Property(x => x.ExpectedDeploymentProofId).HasColumnType("varchar(160)");
+            entity.Property(x => x.ObservedDeploymentProofId).HasColumnType("varchar(160)");
+            entity.Property(x => x.ExpectedArtifactHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.ObservedArtifactHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.EvidenceStatus).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.ObservationSource).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.SourceRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.ArtifactHash).HasColumnType("varchar(256)");
+            entity.Property(x => x.PackageHash).HasColumnType("varchar(64)");
+            entity.Property(x => x.PublicPackageRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.MismatchCode).HasColumnType("varchar(128)");
+            entity.Property(x => x.ObservedAtUtc).HasColumnType("timestamp with time zone");
+
+            ConfigureJsonProperty(entity.Property(x => x.SupersedesProofIds));
+
+            entity.HasIndex(x => x.CheckpointId);
+            entity.HasIndex(x => new { x.CheckpointId, x.ComponentId }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.ComponentId, x.ObservedAtUtc });
+            entity.HasIndex(x => x.DeploymentProofId);
+        });
+
+        modelBuilder.Entity<ElectionDeploymentProofEventRecord>(entity =>
+        {
+            entity.ToTable("ElectionDeploymentProofEventRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.CheckpointId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.EventPublicId).HasColumnType("varchar(160)");
+            entity.Property(x => x.EventType).HasColumnType("varchar(96)");
+            entity.Property(x => x.DeploymentRunId).HasColumnType("varchar(160)");
+            entity.Property(x => x.ComponentId).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.BeforeProofId).HasColumnType("varchar(160)");
+            entity.Property(x => x.AfterProofId).HasColumnType("varchar(160)");
+            entity.Property(x => x.Classification).HasConversion<string>().HasColumnType("varchar(64)");
+            entity.Property(x => x.Reason).HasColumnType("varchar(512)");
+            entity.Property(x => x.CheckResult).HasColumnType("varchar(128)");
+            entity.Property(x => x.AccountabilityMarker).HasColumnType("varchar(256)");
+            entity.Property(x => x.OccurredAtUtc).HasColumnType("timestamp with time zone");
+            entity.Property(x => x.EvidenceStatus).HasConversion<string>().HasColumnType("varchar(40)");
+
+            ConfigureJsonProperty(entity.Property(x => x.ChecksRerun));
+
+            entity.HasIndex(x => x.CheckpointId);
+            entity.HasIndex(x => new { x.CheckpointId, x.EventPublicId }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.OccurredAtUtc });
+            entity.HasIndex(x => new { x.ElectionId, x.Classification });
+        });
+
+        modelBuilder.Entity<ElectionProofFamilyBindingStatusRecord>(entity =>
+        {
+            entity.ToTable("ElectionProofFamilyBindingStatusRecord", "Elections");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnType("uuid");
+            entity.Property(x => x.CheckpointId).HasColumnType("uuid");
+            entity.Property(x => x.ElectionId)
+                .HasConversion(
+                    x => x.ToString(),
+                    x => ElectionIdHandler.CreateFromString(x))
+                .HasColumnType("varchar(40)");
+            entity.Property(x => x.ProofFamilyId).HasColumnType("varchar(160)");
+            entity.Property(x => x.ProofFamilyVersion).HasColumnType("varchar(64)");
+            entity.Property(x => x.PackageId).HasColumnType("varchar(160)");
+            entity.Property(x => x.PackageHash).HasColumnType("varchar(64)");
+            entity.Property(x => x.PromotedRegisterRef).HasColumnType("varchar(512)");
+            entity.Property(x => x.SourceFeature).HasColumnType("varchar(64)");
+            entity.Property(x => x.EvidenceStatus).HasConversion<string>().HasColumnType("varchar(40)");
+            entity.Property(x => x.MismatchCode).HasColumnType("varchar(128)");
+            entity.Property(x => x.PublicSummary).HasColumnType("text");
+            entity.Property(x => x.ObservedAtUtc).HasColumnType("timestamp with time zone");
+
+            entity.HasIndex(x => x.CheckpointId);
+            entity.HasIndex(x => new { x.CheckpointId, x.ProofFamilyId, x.ProofFamilyVersion }).IsUnique();
+            entity.HasIndex(x => new { x.ElectionId, x.ProofFamilyId, x.ObservedAtUtc });
+            entity.HasIndex(x => x.PackageHash);
         });
     }
 

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using StackExchange.Redis;
 using System.Text.Json;
@@ -145,7 +146,8 @@ internal sealed class HushTestFixture : IAsyncLifetime
     /// <returns>A running HushServerNodeCore instance</returns>
     public async Task<(HushServerNodeCore Node, BlockProductionControl BlockControl, GrpcClientFactory GrpcFactory)> StartNodeAsync(
         DiagnosticCapture? diagnosticCapture = null,
-        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null,
+        Action<IServiceCollection>? configureTestServices = null)
     {
         var blockControl = new BlockProductionControl();
         var node = HushServerNodeCore.CreateForTesting(
@@ -153,7 +155,8 @@ internal sealed class HushTestFixture : IAsyncLifetime
             PostgresConnectionString,
             RedisConnectionString,  // FEAT-046: Pass Redis connection for cache testing
             diagnosticCapture,
-            MergeDefaultConfigurationOverrides(configurationOverrides));
+            MergeDefaultConfigurationOverrides(configurationOverrides),
+            configureTestServices);
 
         await node.StartAsync();
 
@@ -170,7 +173,8 @@ internal sealed class HushTestFixture : IAsyncLifetime
     /// <returns>A running HushServerNodeCore instance</returns>
     public async Task<(HushServerNodeCore Node, BlockProductionControl BlockControl, GrpcClientFactory GrpcFactory)> StartNodeForE2EAsync(
         DiagnosticCapture? diagnosticCapture = null,
-        IReadOnlyDictionary<string, string?>? configurationOverrides = null)
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null,
+        Action<IServiceCollection>? configureTestServices = null)
     {
         var blockControl = new BlockProductionControl();
         var node = HushServerNodeCore.CreateForE2ETesting(
@@ -178,7 +182,8 @@ internal sealed class HushTestFixture : IAsyncLifetime
             PostgresConnectionString,
             RedisConnectionString,
             diagnosticCapture,
-            MergeDefaultConfigurationOverrides(configurationOverrides));
+            MergeDefaultConfigurationOverrides(configurationOverrides),
+            configureTestServices);
 
         await node.StartAsync();
 
@@ -321,6 +326,18 @@ internal sealed class HushTestFixture : IAsyncLifetime
         {
             merged["Elections:ProtocolPackages:ApprovedCatalogRelativePath"] = _protocolPackageCatalogPath
                 ?? throw new InvalidOperationException("Test protocol package catalog has not been initialized.");
+        }
+
+        if (!merged.ContainsKey("Elections:DeploymentProof:LocalDevelopmentProfileIds"))
+        {
+            merged["Elections:DeploymentProof:LocalDevelopmentProfileIds"] = string.Join(
+                ';',
+                [
+                    ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+                    ElectionSelectableProfileCatalog.AdminOnlyProductionProfileId,
+                    ElectionSelectableProfileCatalog.TrusteeDevProfileId,
+                    ElectionSelectableProfileCatalog.AdminOnlyDevProfileId,
+                ]);
         }
 
         return merged;

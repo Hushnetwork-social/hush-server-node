@@ -23,6 +23,7 @@ public static class VerificationPackageFileNames
     public const string ElectionRecordDirectory = "artifacts/election-record";
     public const string RestrictedDirectory = "artifacts/restricted";
     public const string ReportPackageAbnormalFinalizationEvidence = ReportPackageDirectory + "/abnormal-finalization-evidence.json";
+    public const string ReportPackageDeploymentProofBindingLedger = ReportPackageDirectory + "/deployment-proof-binding-ledger.json";
     public const string ReportPackageEvidenceGraph = ReportPackageDirectory + "/evidence-graph.json";
     public const string ReportPackageRestrictedAnomalyIntakeManifest = ReportPackageDirectory + "/restricted-anomaly-intake-manifest.json";
 

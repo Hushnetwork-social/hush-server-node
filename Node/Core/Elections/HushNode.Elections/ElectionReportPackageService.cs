@@ -33,7 +33,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                     consistencyFailure.Value.Reason));
             }
 
-            var packageId = Guid.NewGuid();
+            var packageId = request.PreassignedPackageId ?? Guid.NewGuid();
             var abnormalFinalizationEvidence = BuildAbnormalFinalizationEvidence(request, packageId);
             var trustees = request.TrusteeInvitations
                 .Where(x => x.Status == ElectionTrusteeInvitationStatus.Accepted)
@@ -66,6 +66,16 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             var officialResultProjection = BuildResultArtifactProjection(request.OfficialResult);
             var officialResultHash = ComputeHashBytes(SerializeJson(officialResultProjection));
             var ceremonyPublicKey = ResolveCeremonyPublicKeyProjection(request);
+            var deploymentProofLedgerArtifactId = request.DeploymentProofBindingLedger is null
+                ? (Guid?)null
+                : Guid.NewGuid();
+            var deploymentProofLedgerHash = request.DeploymentProofBindingLedger is null
+                ? null
+                : ComputeHashBytes(SerializeJson(request.DeploymentProofBindingLedger));
+            var deploymentProofBindingProjection = BuildDeploymentProofBindingProjection(
+                request.DeploymentProofBindingLedger,
+                deploymentProofLedgerArtifactId,
+                deploymentProofLedgerHash);
             var machineRestrictedAnomalyIntakeManifestId = request.RestrictedAnomalyIntakeManifest is null
                 ? (Guid?)null
                 : Guid.NewGuid();
@@ -97,6 +107,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 protocolPackageBindingProjection,
                 operationalSecurityProjection,
                 regulatoryClaimProjection,
+                deploymentProofBindingProjection,
                 frozenEvidenceFingerprint,
                 trustees,
                 warningEvidence,
@@ -112,6 +123,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 protocolPackageBindingProjection,
                 operationalSecurityProjection,
                 regulatoryClaimProjection,
+                deploymentProofBindingProjection,
                 outcomeProjection,
                 warningEvidence,
                 governedApprovalProjections,
@@ -126,7 +138,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                 finalizationShareProjections.Length,
                 protocolPackageBindingProjection,
                 operationalSecurityProjection,
-                regulatoryClaimProjection);
+                regulatoryClaimProjection,
+                deploymentProofBindingProjection);
 
             var machineManifestId = Guid.NewGuid();
             var humanManifestId = Guid.NewGuid();
@@ -336,6 +349,23 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
                     "Abnormal finalization evidence",
                     "abnormal-finalization-evidence.json",
                     abnormalFinalizationEvidence));
+            }
+
+            if (request.DeploymentProofBindingLedger is not null && deploymentProofLedgerArtifactId.HasValue)
+            {
+                var deploymentProofLedgerContent = SerializeJson(request.DeploymentProofBindingLedger);
+                ValidateDeploymentProofPublicLedgerContent(deploymentProofLedgerContent);
+                artifacts.Add(CreateJsonArtifact(
+                    request,
+                    packageId,
+                    deploymentProofLedgerArtifactId.Value,
+                    null,
+                    ElectionReportArtifactKind.MachineDeploymentProofBindingLedger,
+                    ElectionReportArtifactAccessScope.Public,
+                    16,
+                    "Deployment proof binding ledger",
+                    ElectionDeploymentProofConstants.PublicLedgerArtifactFileName,
+                    request.DeploymentProofBindingLedger));
             }
 
             var disputeCatalogEntries = artifacts
@@ -693,7 +723,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             closeBoundaryArtifactId: request.CloseArtifact.Id,
             closeEligibilitySnapshotId: request.CloseEligibilitySnapshot?.Id,
             finalizationReleaseEvidenceId: request.FinalizationReleaseEvidence?.Id,
-            attemptedAt: request.AttemptedAt);
+            attemptedAt: request.AttemptedAt,
+            preassignedPackageId: request.PreassignedPackageId);
 
     private static (string Code, string Reason)? ValidateConsistency(ElectionReportPackageBuildRequest request)
     {
@@ -1198,6 +1229,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         ProtocolPackageBindingProjection? protocolPackageBinding,
         OperationalSecurityProjection operationalSecurity,
         RegulatoryClaimProjection? regulatoryClaim,
+        DeploymentProofBindingProjection? deploymentProofBinding,
         OutcomeDeterminationProjection outcomeProjection,
         IReadOnlyList<WarningEvidenceProjection> warningEvidence,
         IReadOnlyList<GovernedApprovalProjection> governedApprovals,
@@ -1231,6 +1263,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             ProtocolPackageBinding: protocolPackageBinding,
             OperationalSecurity: operationalSecurity,
             RegulatoryClaim: regulatoryClaim,
+            DeploymentProofBinding: deploymentProofBinding,
             FinalizeArtifactId: request.FinalizeArtifact.Id,
             OfficialResultArtifactId: request.OfficialResult.Id,
             OfficialResultHash: officialResultHash,
@@ -1249,7 +1282,8 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         int finalizationShareCount,
         ProtocolPackageBindingProjection? protocolPackageBinding,
         OperationalSecurityProjection operationalSecurity,
-        RegulatoryClaimProjection? regulatoryClaim) =>
+        RegulatoryClaimProjection? regulatoryClaim,
+        DeploymentProofBindingProjection? deploymentProofBinding) =>
         new(
             ArtifactId: Guid.Empty,
             ManifestArtifactId: Guid.Empty,
@@ -1279,6 +1313,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             ProtocolPackageBinding: protocolPackageBinding,
             OperationalSecurity: operationalSecurity,
             RegulatoryClaim: regulatoryClaim,
+            DeploymentProofBinding: deploymentProofBinding,
             RestrictedAnomalyIntakeManifest: null,
             Trustees: trustees);
 
@@ -1340,6 +1375,58 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             RedactionCount: manifest.Threads.Sum(x => x.Redactions.Count),
             RecipientStatusCount: manifest.Threads.Sum(x => x.RecipientStatuses.Count),
             Manifest: manifest);
+
+    private static DeploymentProofBindingProjection? BuildDeploymentProofBindingProjection(
+        ElectionDeploymentProofPublicLedgerArtifactRecord? ledger,
+        Guid? artifactId,
+        byte[]? artifactHash)
+    {
+        if (ledger is null)
+        {
+            return null;
+        }
+
+        var latestWebClientObservation = ledger.ComponentObservations
+            .Where(x => x.ComponentId == ElectionDeploymentProofComponentId.HushWebClient.ToString())
+            .OrderByDescending(x => x.ObservedAtUtc)
+            .ThenByDescending(x => x.ObservationId)
+            .FirstOrDefault();
+        var latestPrivacyProof = ledger.ProofFamilies
+            .Where(x => string.Equals(
+                x.ProofFamilyId,
+                ElectionDeploymentProofConstants.RetentionLogPrivacyProofFamilyId,
+                StringComparison.Ordinal))
+            .OrderByDescending(x => x.ObservedAtUtc)
+            .ThenByDescending(x => x.ProofFamilyBindingStatusId)
+            .FirstOrDefault();
+
+        return new DeploymentProofBindingProjection(
+            ledger.LedgerId,
+            ledger.LedgerPublicId,
+            ledger.Status,
+            ledger.FinalStatus,
+            ledger.ClaimEffect,
+            ledger.BlocksDeploymentProofClaims,
+            ledger.ClaimSummary,
+            ledger.DeploymentProfile,
+            ledger.DeploymentProtocolVersion,
+            ledger.LatestCheckpointId,
+            artifactId,
+            artifactId.HasValue
+                ? ElectionDeploymentProofConstants.PublicLedgerArtifactFileName
+                : null,
+            artifactHash is null ? null : BuildHashHex(artifactHash),
+            ledger.Checkpoints.Count,
+            ledger.ComponentObservations.Count,
+            ledger.DeploymentEvents.Count,
+            ledger.ProofFamilies.Count,
+            latestWebClientObservation?.EvidenceStatus,
+            latestWebClientObservation?.MismatchCode,
+            latestPrivacyProof?.EvidenceStatus,
+            latestPrivacyProof?.ClaimEffect,
+            latestPrivacyProof?.MismatchCode,
+            ledger.ClaimLimitations);
+    }
 
     private static ResultReportProjection BuildResultReportProjection(
         ElectionRecord election,
@@ -1409,6 +1496,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         ProtocolPackageBindingProjection? protocolPackageBinding,
         OperationalSecurityProjection operationalSecurity,
         RegulatoryClaimProjection? regulatoryClaim,
+        DeploymentProofBindingProjection? deploymentProofBinding,
         string frozenEvidenceFingerprint,
         IReadOnlyList<TrusteeProjection> trustees,
         IReadOnlyList<WarningEvidenceProjection> warningEvidence,
@@ -1441,6 +1529,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             ProtocolPackageBinding: protocolPackageBinding,
             OperationalSecurity: operationalSecurity,
             RegulatoryClaim: regulatoryClaim,
+            DeploymentProofBinding: deploymentProofBinding,
             FinalizationGovernedProposal: request.FinalizationGovernedProposal is null
                 ? null
                 : BuildGovernedProposalProjection(request.FinalizationGovernedProposal),
@@ -1982,6 +2071,32 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
             artifactId);
     }
 
+    private static void ValidateDeploymentProofPublicLedgerContent(string content)
+    {
+        string[] forbiddenFragments =
+        [
+            "private key",
+            "begin private key",
+            "kms:",
+            "aws:kms",
+            "kms alias",
+            "password",
+            "secret access key",
+            "connection string",
+            "raw log",
+            "support log",
+            "voter identity",
+            "vote choice",
+            "trustee share",
+            "receipt secret",
+        ];
+
+        if (forbiddenFragments.Any(fragment => content.Contains(fragment, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException("Deployment proof public ledger artifact contains restricted material.");
+        }
+    }
+
     private static ElectionReportArtifactRecord CreateMarkdownArtifact(
         ElectionReportPackageBuildRequest request,
         Guid packageId,
@@ -2040,6 +2155,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         - Custody boundary: {manifest.CustodyBoundarySummary}
         {BuildHumanProtocolPackageBindingContent(manifest.ProtocolPackageBinding)}
         {BuildHumanOperationalRegulatoryContent(manifest.OperationalSecurity, manifest.RegulatoryClaim)}
+        {BuildHumanDeploymentProofBindingContent(manifest.DeploymentProofBinding)}
         - Accepted trustee count: `{manifest.AcceptedTrusteeCount}`
         - Roster entry count: `{manifest.RosterEntryCount}`
         - Warning count: `{manifest.WarningCount}`
@@ -2239,6 +2355,10 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         builder.AppendLine("## Operational Security And Regulatory Boundaries");
         builder.AppendLine();
         AppendHumanOperationalRegulatoryContent(builder, projection.OperationalSecurity, projection.RegulatoryClaim);
+        builder.AppendLine();
+        builder.AppendLine("## Deployment Proof Binding");
+        builder.AppendLine();
+        AppendHumanDeploymentProofBindingContent(builder, projection.DeploymentProofBinding);
         builder.AppendLine();
         builder.AppendLine("### Approved Clients");
         builder.AppendLine();
@@ -2461,6 +2581,66 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         {
             throw new InvalidOperationException("Generated operational/regulatory report wording contains a forbidden claim phrase.");
         }
+    }
+
+    private static string BuildHumanDeploymentProofBindingContent(
+        DeploymentProofBindingProjection? deploymentProofBinding)
+    {
+        var builder = new StringBuilder();
+        AppendHumanDeploymentProofBindingContent(builder, deploymentProofBinding);
+        return builder.ToString().TrimEnd();
+    }
+
+    private static void AppendHumanDeploymentProofBindingContent(
+        StringBuilder builder,
+        DeploymentProofBindingProjection? deploymentProofBinding)
+    {
+        if (deploymentProofBinding is null)
+        {
+            builder.AppendLine("- Deployment proof binding ledger: `not exported`");
+            builder.AppendLine("- Deployment proof boundary: no deployment-readiness claim is made in this report package.");
+            return;
+        }
+
+        builder.AppendLine($"- Deployment proof ledger id: `{deploymentProofBinding.LedgerPublicId}`");
+        builder.AppendLine($"- Deployment proof status: `{deploymentProofBinding.FinalStatus}`");
+        builder.AppendLine($"- Deployment proof claim effect: `{deploymentProofBinding.ClaimEffect}`");
+        builder.AppendLine($"- Deployment proof blocks validation claims: `{(deploymentProofBinding.BlocksDeploymentProofClaims ? "yes" : "no")}`");
+        builder.AppendLine($"- Deployment proof summary: {deploymentProofBinding.ClaimSummary}");
+        builder.AppendLine($"- Deployment profile: `{deploymentProofBinding.DeploymentProfile}`");
+        builder.AppendLine($"- Deployment protocol version: `{deploymentProofBinding.DeploymentProtocolVersion}`");
+        builder.AppendLine($"- Latest checkpoint id: `{deploymentProofBinding.LatestCheckpointId?.ToString() ?? "not recorded"}`");
+        builder.AppendLine($"- Public ledger artifact id: `{deploymentProofBinding.LedgerArtifactId?.ToString() ?? "not exported"}`");
+        builder.AppendLine($"- Public ledger file: `{deploymentProofBinding.LedgerArtifactFileName ?? "not exported"}`");
+        builder.AppendLine($"- Public ledger hash: `{deploymentProofBinding.LedgerArtifactHash ?? "not exported"}`");
+        builder.AppendLine($"- Deployment proof checkpoints: `{deploymentProofBinding.CheckpointCount}`");
+        builder.AppendLine($"- Component observations: `{deploymentProofBinding.ComponentObservationCount}`");
+        builder.AppendLine($"- Deployment events: `{deploymentProofBinding.EventCount}`");
+        builder.AppendLine($"- Proof-family status records: `{deploymentProofBinding.ProofFamilyCount}`");
+        builder.AppendLine(
+            $"- WebClient proof status: `{deploymentProofBinding.WebClientProofStatus ?? "not recorded"}`");
+        builder.AppendLine(
+            $"- FEAT-137 retention/log privacy proof status: `{deploymentProofBinding.RetentionLogPrivacyProofStatus ?? "not recorded"}`");
+        builder.AppendLine(
+            $"- FEAT-137 retention/log privacy claim effect: `{deploymentProofBinding.RetentionLogPrivacyClaimEffect ?? "not recorded"}`");
+        if (!string.IsNullOrWhiteSpace(deploymentProofBinding.WebClientProofMismatchCode))
+        {
+            builder.AppendLine(
+                $"- WebClient proof mismatch code: `{deploymentProofBinding.WebClientProofMismatchCode}`");
+        }
+
+        if (!string.IsNullOrWhiteSpace(deploymentProofBinding.RetentionLogPrivacyMismatchCode))
+        {
+            builder.AppendLine(
+                $"- FEAT-137 retention/log privacy mismatch code: `{deploymentProofBinding.RetentionLogPrivacyMismatchCode}`");
+        }
+
+        foreach (var limitation in deploymentProofBinding.ClaimLimitations)
+        {
+            builder.AppendLine($"- Deployment proof claim limitation: {limitation}");
+        }
+
+        builder.AppendLine("- Deployment proof status is separate from election outcome authority and does not decide the vote outcome.");
     }
 
     private static void AppendProtocolPackageAccessLocations(
@@ -2855,6 +3035,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         ProtocolPackageBindingProjection? ProtocolPackageBinding,
         OperationalSecurityProjection OperationalSecurity,
         RegulatoryClaimProjection? RegulatoryClaim,
+        DeploymentProofBindingProjection? DeploymentProofBinding,
         Guid FinalizeArtifactId,
         Guid OfficialResultArtifactId,
         string OfficialResultHash,
@@ -2893,6 +3074,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         ProtocolPackageBindingProjection? ProtocolPackageBinding,
         OperationalSecurityProjection OperationalSecurity,
         RegulatoryClaimProjection? RegulatoryClaim,
+        DeploymentProofBindingProjection? DeploymentProofBinding,
         EvidenceGraphAnomalyIntakeManifestProjection? RestrictedAnomalyIntakeManifest,
         IReadOnlyList<TrusteeProjection> Trustees);
 
@@ -3012,6 +3194,7 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         ProtocolPackageBindingProjection? ProtocolPackageBinding,
         OperationalSecurityProjection OperationalSecurity,
         RegulatoryClaimProjection? RegulatoryClaim,
+        DeploymentProofBindingProjection? DeploymentProofBinding,
         GovernedProposalProjection? FinalizationGovernedProposal,
         IReadOnlyList<GovernedApprovalProjection> FinalizationApprovals,
         IReadOnlyList<FinalizationShareProjection> FinalizationShares,
@@ -3109,6 +3292,31 @@ public sealed class ElectionReportPackageService : IElectionReportPackageService
         string AllowedWording,
         IReadOnlyList<string> PublicEvidenceFiles,
         IReadOnlyList<string> RestrictedEvidenceFiles);
+
+    private sealed record DeploymentProofBindingProjection(
+        Guid LedgerId,
+        string LedgerPublicId,
+        string Status,
+        string FinalStatus,
+        string ClaimEffect,
+        bool BlocksDeploymentProofClaims,
+        string ClaimSummary,
+        string DeploymentProfile,
+        string DeploymentProtocolVersion,
+        Guid? LatestCheckpointId,
+        Guid? LedgerArtifactId,
+        string? LedgerArtifactFileName,
+        string? LedgerArtifactHash,
+        int CheckpointCount,
+        int ComponentObservationCount,
+        int EventCount,
+        int ProofFamilyCount,
+        string? WebClientProofStatus,
+        string? WebClientProofMismatchCode,
+        string? RetentionLogPrivacyProofStatus,
+        string? RetentionLogPrivacyClaimEffect,
+        string? RetentionLogPrivacyMismatchCode,
+        IReadOnlyList<string> ClaimLimitations);
 
     private sealed record DisputeReviewIndexProjection(
         Guid MachineArtifactId,

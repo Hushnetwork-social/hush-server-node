@@ -3168,6 +3168,51 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    public async Task OpenElectionAsync_WhenDeploymentProofBindingBlocks_ReturnsDependencyBlockedBeforeOpenPersist()
+    {
+        var store = new ElectionStore();
+        var deploymentProofBindingService = new Mock<IElectionDeploymentProofBindingService>(MockBehavior.Strict);
+        deploymentProofBindingService
+            .Setup(x => x.BindForOpenAsync(
+                It.IsAny<IElectionsRepository>(),
+                It.Is<ElectionRecord>(e => e.LifecycleState == ElectionLifecycleState.Open),
+                It.Is<ElectionBoundaryArtifactRecord>(a => a.ArtifactType == ElectionBoundaryArtifactType.Open),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ElectionDeploymentProofBindingResult.Blocked(
+                ElectionDeploymentProofEvidenceStatus.Missing,
+                ElectionDeploymentProofClaimEffect.Blocked,
+                ["deployment_proof_missing"],
+                "Claim-bearing elections require an active HushServerNode deployment proof before opening."));
+        var service = CreateService(
+            store,
+            deploymentProofBindingService: deploymentProofBindingService.Object);
+        var election = CreateAdminElection(
+            acknowledgedWarningCodes: [ElectionWarningCode.LowAnonymitySet]);
+        var warning = ElectionModelFactory.CreateWarningAcknowledgement(
+            election.ElectionId,
+            ElectionWarningCode.LowAnonymitySet,
+            election.CurrentDraftRevision,
+            acknowledgedByPublicAddress: "owner-address");
+
+        store.Elections[election.ElectionId] = election;
+        store.WarningAcknowledgements.Add(warning);
+        SeedLatestProtocolPackageBinding(store, election);
+        AddRosterEntries(store, CreateRosterEntry(election, "4001"));
+
+        var result = await service.OpenElectionAsync(new OpenElectionRequest(
+            ElectionId: election.ElectionId,
+            ActorPublicAddress: "owner-address",
+            RequiredWarningCodes: [ElectionWarningCode.LowAnonymitySet]));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.DependencyBlocked);
+        result.ValidationErrors.Should().Contain("deployment_proof_missing");
+        store.BoundaryArtifacts.Should().BeEmpty();
+        store.Elections[election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Draft);
+        deploymentProofBindingService.VerifyAll();
+    }
+
+    [Fact]
     public async Task OpenElectionAsync_WithMissingProtocolPackageBinding_ReturnsValidationFailed()
     {
         var store = new ElectionStore();
@@ -3387,6 +3432,37 @@ public class ElectionLifecycleServiceTests
         closeResult.BoundaryArtifact.CeremonySnapshot.CeremonyVersionId
             .Should()
             .Be(openResult.BoundaryArtifact.CeremonySnapshot.CeremonyVersionId);
+    }
+
+    [Fact]
+    public async Task CloseElectionAsync_ReconcilesDeploymentProofCheckpoint()
+    {
+        var store = new ElectionStore();
+        var deploymentProofBindingService = new Mock<IElectionDeploymentProofBindingService>(MockBehavior.Strict);
+        deploymentProofBindingService
+            .Setup(x => x.ReconcileCheckpointAsync(
+                It.IsAny<IElectionsRepository>(),
+                It.Is<ElectionDeploymentProofReconciliationRequest>(request =>
+                    request.CheckpointType == ElectionDeploymentProofCheckpointType.OpenToClose &&
+                    request.SourceLifecycleState == ElectionLifecycleState.Open &&
+                    request.TargetLifecycleState == ElectionLifecycleState.Closed &&
+                    request.TransitionArtifactId.HasValue),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ElectionDeploymentProofBindingResult.NotCaptured());
+        var service = CreateService(
+            store,
+            deploymentProofBindingService: deploymentProofBindingService.Object);
+        var election = CreateOpenElection();
+        store.Elections[election.ElectionId] = election;
+        AddRosterEntries(store, CreateRosterEntry(election, "4001").FreezeAtOpen(election.OpenedAt!.Value));
+
+        var result = await service.CloseElectionAsync(new CloseElectionRequest(
+            election.ElectionId,
+            "owner-address"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.Close);
+        deploymentProofBindingService.VerifyAll();
     }
 
     [Fact]
@@ -3855,6 +3931,39 @@ public class ElectionLifecycleServiceTests
             .Be(ElectionGovernedProposalExecutionStatus.ExecutionFailed);
         store.GovernedProposals[governedProposal.Id].ExecutionFailureReason.Should()
             .Contain("Superseded by ElectionOwner void decision");
+    }
+
+    [Fact]
+    public async Task VoidElectionAsync_WhenDeploymentProofReconciliationFails_StillPersistsOwnerVoid()
+    {
+        var store = new ElectionStore();
+        var deploymentProofBindingService = new Mock<IElectionDeploymentProofBindingService>(MockBehavior.Strict);
+        deploymentProofBindingService
+            .Setup(x => x.ReconcileCheckpointAsync(
+                It.IsAny<IElectionsRepository>(),
+                It.Is<ElectionDeploymentProofReconciliationRequest>(request =>
+                    request.CheckpointType == ElectionDeploymentProofCheckpointType.OpenToVoid &&
+                    request.SourceLifecycleState == ElectionLifecycleState.Open &&
+                    request.TargetLifecycleState == ElectionLifecycleState.Voided),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Forced deployment proof reconciliation failure."));
+        var service = CreateService(
+            store,
+            deploymentProofBindingService: deploymentProofBindingService.Object);
+        var election = CreateOpenElection();
+        store.Elections[election.ElectionId] = election;
+
+        var result = await service.VoidElectionAsync(new VoidElectionRequest(
+            election.ElectionId,
+            "owner-address",
+            "Trustee key quorum was lost and the election cannot continue."));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        result.BoundaryArtifact!.ArtifactType.Should().Be(ElectionBoundaryArtifactType.Void);
+        store.Elections[election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Voided);
+        store.VoidDecisions.Should().ContainSingle();
+        deploymentProofBindingService.VerifyAll();
     }
 
     [Fact]
@@ -6030,7 +6139,8 @@ public class ElectionLifecycleServiceTests
         IElectionPublicationWitnessDeletionService? publicationWitnessDeletionService = null,
         IElectionSp07PublicationProofSessionRunner? publicationProofSessionRunner = null,
         IElectionSp08ReleaseEvidenceProvider? sp08ReleaseEvidenceProvider = null,
-        IAdminOnlyProtectedTallyCustodyLifecycleAuthority? adminOnlyProtectedTallyCustodyLifecycleAuthority = null)
+        IAdminOnlyProtectedTallyCustodyLifecycleAuthority? adminOnlyProtectedTallyCustodyLifecycleAuthority = null,
+        IElectionDeploymentProofBindingService? deploymentProofBindingService = null)
     {
         SeedStandardCeremonyProfiles(store);
 
@@ -6051,7 +6161,8 @@ public class ElectionLifecycleServiceTests
             publicationWitnessDeletionService: publicationWitnessDeletionService,
             publicationProofSessionRunner: publicationProofSessionRunner,
             sp08ReleaseEvidenceProvider: sp08ReleaseEvidenceProvider,
-            adminOnlyProtectedTallyCustodyLifecycleAuthority: adminOnlyProtectedTallyCustodyLifecycleAuthority);
+            adminOnlyProtectedTallyCustodyLifecycleAuthority: adminOnlyProtectedTallyCustodyLifecycleAuthority,
+            deploymentProofBindingService: deploymentProofBindingService);
     }
 
     private sealed record OpenReadyHighAssuranceSetup(

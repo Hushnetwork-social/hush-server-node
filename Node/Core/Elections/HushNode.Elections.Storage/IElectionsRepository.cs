@@ -118,6 +118,59 @@ public interface IElectionsRepository : IRepository
 
     Task SaveTrusteeContinuityDecisionAsync(ElectionTrusteeContinuityDecisionRecord decision) => Task.CompletedTask;
 
+    Task<ElectionDeploymentProofLedgerRecord?> GetDeploymentProofLedgerAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionDeploymentProofLedgerRecord?>(null);
+
+    Task<ElectionDeploymentProofLedgerRecord?> GetDeploymentProofLedgerAsync(Guid ledgerId) =>
+        Task.FromResult<ElectionDeploymentProofLedgerRecord?>(null);
+
+    Task SaveDeploymentProofLedgerAsync(ElectionDeploymentProofLedgerRecord ledger) => Task.CompletedTask;
+
+    Task UpdateDeploymentProofLedgerAsync(ElectionDeploymentProofLedgerRecord ledger) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionDeploymentProofCheckpointRecord>> GetDeploymentProofCheckpointsAsync(ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionDeploymentProofCheckpointRecord>>(Array.Empty<ElectionDeploymentProofCheckpointRecord>());
+
+    Task<IReadOnlyList<ElectionDeploymentProofCheckpointRecord>> GetDeploymentProofCheckpointsAsync(Guid ledgerId) =>
+        Task.FromResult<IReadOnlyList<ElectionDeploymentProofCheckpointRecord>>(Array.Empty<ElectionDeploymentProofCheckpointRecord>());
+
+    Task<ElectionDeploymentProofCheckpointRecord?> GetDeploymentProofCheckpointAsync(Guid checkpointId) =>
+        Task.FromResult<ElectionDeploymentProofCheckpointRecord?>(null);
+
+    Task<ElectionDeploymentProofCheckpointRecord?> GetLatestDeploymentProofCheckpointAsync(ElectionId electionId) =>
+        Task.FromResult<ElectionDeploymentProofCheckpointRecord?>(null);
+
+    Task<ElectionDeploymentProofCheckpointRecord?> GetLatestDeploymentProofCheckpointAsync(
+        ElectionId electionId,
+        ElectionDeploymentProofCheckpointType checkpointType) =>
+        Task.FromResult<ElectionDeploymentProofCheckpointRecord?>(null);
+
+    Task SaveDeploymentProofCheckpointAsync(ElectionDeploymentProofCheckpointRecord checkpoint) => Task.CompletedTask;
+
+    Task UpdateDeploymentProofCheckpointAsync(ElectionDeploymentProofCheckpointRecord checkpoint) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionDeploymentProofComponentObservationRecord>> GetDeploymentProofComponentObservationsAsync(
+        Guid checkpointId) =>
+        Task.FromResult<IReadOnlyList<ElectionDeploymentProofComponentObservationRecord>>(
+            Array.Empty<ElectionDeploymentProofComponentObservationRecord>());
+
+    Task SaveDeploymentProofComponentObservationAsync(ElectionDeploymentProofComponentObservationRecord observation) =>
+        Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionDeploymentProofEventRecord>> GetDeploymentProofEventsAsync(Guid checkpointId) =>
+        Task.FromResult<IReadOnlyList<ElectionDeploymentProofEventRecord>>(Array.Empty<ElectionDeploymentProofEventRecord>());
+
+    Task SaveDeploymentProofEventAsync(ElectionDeploymentProofEventRecord deploymentEvent) => Task.CompletedTask;
+
+    Task<IReadOnlyList<ElectionProofFamilyBindingStatusRecord>> GetProofFamilyBindingStatusesAsync(Guid checkpointId) =>
+        Task.FromResult<IReadOnlyList<ElectionProofFamilyBindingStatusRecord>>(Array.Empty<ElectionProofFamilyBindingStatusRecord>());
+
+    Task<IReadOnlyList<ElectionProofFamilyBindingStatusRecord>> GetProofFamilyBindingStatusesForElectionAsync(
+        ElectionId electionId) =>
+        Task.FromResult<IReadOnlyList<ElectionProofFamilyBindingStatusRecord>>(Array.Empty<ElectionProofFamilyBindingStatusRecord>());
+
+    Task SaveProofFamilyBindingStatusAsync(ElectionProofFamilyBindingStatusRecord bindingStatus) => Task.CompletedTask;
+
     Task<IReadOnlyList<ElectionVoidPublicationAttemptRecord>> GetVoidPublicationAttemptsAsync(Guid voidDecisionId) =>
         Task.FromResult<IReadOnlyList<ElectionVoidPublicationAttemptRecord>>(Array.Empty<ElectionVoidPublicationAttemptRecord>());
 

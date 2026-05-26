@@ -7,6 +7,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Grpc.Core;
 using HushNetwork.proto;
+using HushNode.Elections;
 using HushNode.IntegrationTests.Infrastructure;
 using HushNode.Reactions.Crypto;
 using HushServerNode;
@@ -16,6 +17,7 @@ using HushShared.Elections.Model;
 using HushShared.Elections.Verification.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Olimpo;
 using ReactionECPoint = HushShared.Reactions.Model.ECPoint;
 using Xunit;
@@ -107,8 +109,8 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         ownerResult.CanRetryFailedPackageFinalization.Should().BeFalse();
         ownerResult.LatestReportPackage.Should().NotBeNull();
         ownerResult.LatestReportPackage!.Status.Should().Be(ElectionReportPackageStatusProto.ReportPackageSealed);
-        ownerResult.LatestReportPackage.ArtifactCount.Should().Be(13);
-        ownerResult.VisibleReportArtifacts.Should().HaveCount(13);
+        ownerResult.LatestReportPackage.ArtifactCount.Should().Be(14);
+        ownerResult.VisibleReportArtifacts.Should().HaveCount(14);
         ownerResult.VisibleReportArtifacts.Should().Contain(x =>
             x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanNamedParticipationRoster);
         ownerResult.VisibleReportArtifacts.Should().Contain(x =>
@@ -191,15 +193,16 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             .ToListAsync();
         packages.Should().ContainSingle();
         packages.Single().Status.Should().Be(ElectionReportPackageStatus.Sealed);
-        packages.Single().ArtifactCount.Should().Be(13);
+        packages.Single().ArtifactCount.Should().Be(14);
 
         var artifacts = await dbContext.Set<ElectionReportArtifactRecord>()
             .Where(x => x.ReportPackageId == packages.Single().Id)
             .OrderBy(x => x.SortOrder)
             .ToListAsync();
-        artifacts.Should().HaveCount(13);
+        artifacts.Should().HaveCount(14);
         artifacts.Should().Contain(x => x.ArtifactKind == ElectionReportArtifactKind.HumanManifest);
         artifacts.Should().Contain(x => x.ArtifactKind == ElectionReportArtifactKind.MachineEvidenceGraph);
+        artifacts.Should().Contain(x => x.ArtifactKind == ElectionReportArtifactKind.MachineDeploymentProofBindingLedger);
         artifacts.Should().Contain(x => x.ArtifactKind == ElectionReportArtifactKind.HumanNamedParticipationRoster);
     }
 
@@ -299,6 +302,112 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "FEAT-143")]
+    [Trait("Category", "HV-INT-FEAT-143")]
+    [Trait("Category", "TwinTest")]
+    [Trait("Category", "NON_E2E")]
+    public async Task RuntimeDeploymentProofBinding_WithProductionLikeProfile_PersistsAndExportsPublicLedger()
+    {
+        var client = await StartClientAsync(
+            configurationOverrides: CreateFeat143DeploymentProofConfiguration(),
+            configureTestServices: services =>
+                services.Replace(ServiceDescriptor.Singleton<IActiveDeploymentProofProvider>(
+                    _ => CreateFeat143DeploymentProofProvider())));
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "FEAT-143 Runtime Deployment Proof Binding",
+            castSubmissionIdempotencyKey: "feat143-cast-001");
+        var electionId = new ElectionId(Guid.Parse(context.ElectionId));
+
+        await using (var scope = _node!.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+            var ledger = await dbContext.Set<ElectionDeploymentProofLedgerRecord>()
+                .SingleAsync(x => x.ElectionId == electionId);
+            ledger.Status.Should().Be(ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations);
+            ledger.ActiveProofSetIdAtOpen.Should().Be("server-proof-feat143-v1");
+
+            var checkpoints = await dbContext.Set<ElectionDeploymentProofCheckpointRecord>()
+                .Where(x => x.ElectionId == electionId)
+                .OrderBy(x => x.CheckpointType)
+                .ToListAsync();
+            checkpoints.Select(x => x.CheckpointType).Should().Contain([
+                ElectionDeploymentProofCheckpointType.DraftToOpen,
+                ElectionDeploymentProofCheckpointType.OpenToClose,
+            ]);
+            checkpoints.Should().OnlyContain(x =>
+                x.EvidenceStatus == ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations &&
+                x.ClaimEffect == ElectionDeploymentProofClaimEffect.AcceptedWithLimitations);
+
+            var checkpointIds = checkpoints.Select(x => x.Id).ToArray();
+            var webClientObservation = await dbContext.Set<ElectionDeploymentProofComponentObservationRecord>()
+                .Where(x =>
+                    checkpointIds.Contains(x.CheckpointId) &&
+                    x.ComponentId == ElectionDeploymentProofComponentId.HushWebClient)
+                .OrderBy(x => x.ObservedAtUtc)
+                .FirstAsync();
+            webClientObservation.ExpectedDeploymentProofId.Should().Be("webclient-proof-feat143-v1");
+            webClientObservation.ObservedDeploymentProofId.Should().BeNull();
+            webClientObservation.EvidenceStatus.Should().Be(ElectionDeploymentProofEvidenceStatus.NotYetSupported);
+            webClientObservation.MismatchCode.Should()
+                .Be(ElectionDeploymentProofConstants.Feat144WebClientProofNotSupportedCode);
+
+            var proofFamily = await dbContext.Set<ElectionProofFamilyBindingStatusRecord>()
+                .Where(x => checkpointIds.Contains(x.CheckpointId))
+                .OrderBy(x => x.ObservedAtUtc)
+                .FirstAsync(x =>
+                    x.ProofFamilyId == ElectionDeploymentProofConstants.RetentionLogPrivacyProofFamilyId);
+            proofFamily.EvidenceStatus.Should().Be(ElectionDeploymentProofEvidenceStatus.Accepted);
+            proofFamily.PackageId.Should().Be("feat137-retention-log-privacy-feat143");
+        }
+
+        var finalizeProposalId = await StartGovernedProposalAsync(
+            client,
+            context.ElectionId,
+            ElectionGovernedActionType.Finalize);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Bob);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, TestIdentities.Charlie);
+        await ApproveProposalAsync(context.ElectionId, finalizeProposalId, Delta);
+
+        var ownerResult = await GetElectionResultViewAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            waitForOfficialResult: true);
+        ownerResult.LatestReportPackage.Should().NotBeNull();
+        ownerResult.LatestReportPackage!.Status.Should().Be(ElectionReportPackageStatusProto.ReportPackageSealed);
+
+        await using (var scope = _node!.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+            var reportPackageId = Guid.Parse(ownerResult.LatestReportPackage.Id);
+            var ledgerArtifact = await dbContext.Set<ElectionReportArtifactRecord>()
+                .SingleAsync(x =>
+                    x.ReportPackageId == reportPackageId &&
+                    x.ArtifactKind == ElectionReportArtifactKind.MachineDeploymentProofBindingLedger);
+            ledgerArtifact.AccessScope.Should().Be(ElectionReportArtifactAccessScope.Public);
+            ledgerArtifact.FileName.Should().Be(ElectionDeploymentProofConstants.PublicLedgerArtifactFileName);
+            ledgerArtifact.Content.Should().Contain("\"claimLimitations\"");
+            ledgerArtifact.Content.Should()
+                .Contain(ElectionDeploymentProofConstants.Feat144WebClientProofNotSupportedCode);
+        }
+
+        var publicExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+        publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
+        publicExport.Files.Select(x => x.RelativePath).Should()
+            .Contain(VerificationPackageFileNames.ReportPackageDeploymentProofBindingLedger);
+        GetPackageFileText(
+                publicExport,
+                VerificationPackageFileNames.ReportPackageDeploymentProofBindingLedger)
+            .Should()
+            .Contain("complete WebClient proof binding remains downgraded");
+    }
+
+    [Fact]
     [Trait("Category", "FEAT-128")]
     [Trait("Category", "TwinTest")]
     [Trait("Category", "NON_E2E")]
@@ -330,7 +439,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
             waitForOfficialResult: true);
         ownerResult.LatestReportPackage.Should().NotBeNull();
         ownerResult.LatestReportPackage!.Status.Should().Be(ElectionReportPackageStatusProto.ReportPackageSealed);
-        ownerResult.LatestReportPackage.ArtifactCount.Should().Be(14);
+        ownerResult.LatestReportPackage.ArtifactCount.Should().Be(15);
 
         var anomalyArtifact = ownerResult.VisibleReportArtifacts.Single(x =>
             x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactMachineRestrictedAnomalyIntakeManifest);
@@ -993,7 +1102,7 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
         retriedOwnerResult.LatestReportPackage.Should().NotBeNull();
         retriedOwnerResult.LatestReportPackage!.Status.Should().Be(
             ElectionReportPackageStatusProto.ReportPackageSealed);
-        retriedOwnerResult.VisibleReportArtifacts.Should().HaveCount(13);
+        retriedOwnerResult.VisibleReportArtifacts.Should().HaveCount(14);
 
         await using (var scope = _node!.Services.CreateAsyncScope())
         {
@@ -1062,13 +1171,104 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
     }
 
     private async Task<HushElections.HushElectionsClient> StartClientAsync(
-        DiagnosticCapture? diagnosticCapture = null)
+        DiagnosticCapture? diagnosticCapture = null,
+        IReadOnlyDictionary<string, string?>? configurationOverrides = null,
+        Action<IServiceCollection>? configureTestServices = null)
     {
         await DisposeNodeAsync();
         await _fixture!.ResetAllAsync();
-        (_node, _blockControl, _grpcFactory) = await _fixture.StartNodeAsync(diagnosticCapture);
+        (_node, _blockControl, _grpcFactory) = await _fixture.StartNodeAsync(
+            diagnosticCapture,
+            configurationOverrides,
+            configureTestServices);
         return _grpcFactory.CreateClient<HushElections.HushElectionsClient>();
     }
+
+    private static IReadOnlyDictionary<string, string?> CreateFeat143DeploymentProofConfiguration() =>
+        new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Elections:DeploymentProof:LocalDevelopmentProfileIds"] = string.Join(
+                ';',
+                [
+                    ElectionSelectableProfileCatalog.TrusteeDevProfileId,
+                    ElectionSelectableProfileCatalog.AdminOnlyDevProfileId,
+                ]),
+        };
+
+    private static IActiveDeploymentProofProvider CreateFeat143DeploymentProofProvider()
+    {
+        var deploymentEventObservedAt = DateTime.UtcNow.AddMinutes(-5);
+        var activeContext = new ActiveDeploymentProofContext(
+            ElectionDeploymentProofEvidenceStatus.AcceptedWithLimitations,
+            deploymentEventObservedAt,
+            DeploymentTarget: "hush-prod-like-integration",
+            DeploymentProtocolVersion: ElectionDeploymentProofConstants.DeploymentProtocolVersion,
+            PublicCatalogRef: "refs/tags/feat143-runtime-proof-set",
+            PlatformCeremonyId: "platform-ceremony-feat143",
+            ServerProof: new ActiveDeploymentProofComponent(
+                ElectionDeploymentProofComponentId.HushServerNode,
+                "server-proof-feat143-v1",
+                ElectionDeploymentProofEvidenceStatus.Accepted,
+                "git:refs/tags/feat143-runtime-proof-set",
+                "sha256:" + RepeatedHash('a'),
+                RepeatedHash('b'),
+                "https://github.com/HushNetworkOrg/hush-deployment-proofs/tree/feat143-runtime-proof-set",
+                PreviousProofId: null,
+                SupersedesProofIds: Array.Empty<string>(),
+                ElectionDeploymentProofObservationSource.Fixture),
+            ExpectedWebClientProof: new ActiveDeploymentProofComponent(
+                ElectionDeploymentProofComponentId.HushWebClient,
+                "webclient-proof-feat143-v1",
+                ElectionDeploymentProofEvidenceStatus.Accepted,
+                "git:refs/tags/feat143-runtime-proof-set",
+                "sha256:" + RepeatedHash('c'),
+                RepeatedHash('d'),
+                "https://github.com/HushNetworkOrg/hush-web-client/tree/feat143-runtime-proof-set",
+                PreviousProofId: null,
+                SupersedesProofIds: Array.Empty<string>(),
+                ElectionDeploymentProofObservationSource.Catalog),
+            ProviderErrors: Array.Empty<ActiveDeploymentProofProviderError>());
+
+        var deploymentEvents = new[]
+        {
+            new ActiveDeploymentProofEvent(
+                "deployment-event-feat143-website-refresh",
+                "website-content-refresh",
+                "deployment-run-feat143-001",
+                ElectionDeploymentProofComponentId.HushWebClient,
+                "webclient-proof-feat143-v0",
+                "webclient-proof-feat143-v1",
+                ElectionDeploymentProofImpactClassification.WebsiteOnlyNoProtocolChange,
+                "Static web client assets refreshed with no voting protocol change.",
+                ["client-package-hash", "server-smoke-check"],
+                "passed",
+                "ops-ticket-feat143-001",
+                deploymentEventObservedAt,
+                ElectionDeploymentProofEvidenceStatus.Accepted),
+        };
+
+        var proofFamilies = new[]
+        {
+            new ActiveProofFamilyStatus(
+                ElectionDeploymentProofConstants.RetentionLogPrivacyProofFamilyId,
+                "v1",
+                "feat137-retention-log-privacy-feat143",
+                RepeatedHash('e'),
+                "readiness-register/feat137/feat143",
+                ElectionDeploymentProofConstants.Feat137SourceFeature,
+                ElectionDeploymentProofEvidenceStatus.Accepted,
+                MismatchCode: null,
+                "Retention/log privacy proof-family remains accepted for FEAT-143 integration.",
+                deploymentEventObservedAt),
+        };
+
+        return new FixtureActiveDeploymentProofProvider(
+            activeContext,
+            deploymentEvents,
+            proofFamilies);
+    }
+
+    private static string RepeatedHash(char seed) => new(seed, 64);
 
     private async Task DisposeNodeAsync()
     {

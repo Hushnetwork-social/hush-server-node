@@ -102,6 +102,51 @@ public class ElectionVerificationPackageExportServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-143")]
+    public void Export_PublicPackageWithDeploymentProofLedgerArtifact_ShouldIncludePublicLedger()
+    {
+        var request = CreateRequest(VerificationPackageView.PublicAnonymous);
+        var content = """
+            {
+              "schemaId": "hushvoting-deployment-proof-public-ledger-v1",
+              "finalStatus": "AcceptedWithLimitations",
+              "claimEffect": "AcceptedWithLimitations",
+              "claimSummary": "Deployment proof evidence is accepted with explicit limitations."
+            }
+            """;
+        var artifact = ElectionModelFactory.CreateReportArtifact(
+            request.ReportPackage!.Id,
+            request.Election.ElectionId,
+            ElectionReportArtifactKind.MachineDeploymentProofBindingLedger,
+            ElectionReportArtifactFormat.Json,
+            ElectionReportArtifactAccessScope.Public,
+            sortOrder: 16,
+            title: "Deployment proof binding ledger",
+            fileName: ElectionDeploymentProofConstants.PublicLedgerArtifactFileName,
+            mediaType: "application/json",
+            contentHash: SHA256.HashData(Encoding.UTF8.GetBytes(content)),
+            content: content);
+
+        var result = Export(request with
+        {
+            ReportArtifacts = [.. request.ReportArtifacts, artifact],
+        });
+
+        result.Success.Should().BeTrue();
+        result.Files.Should().Contain(x =>
+            x.RelativePath == VerificationPackageFileNames.ReportPackageDeploymentProofBindingLedger &&
+            x.Visibility == VerificationArtifactVisibility.Public);
+
+        var manifest = ReadFile<AuditPackageManifestRecord>(result, VerificationPackageFileNames.AuditPackageManifest);
+        manifest.Entries.Should().Contain(x =>
+            x.Path == VerificationPackageFileNames.ReportPackageDeploymentProofBindingLedger &&
+            x.Visibility == VerificationArtifactVisibility.Public);
+        result.Files.Single(x => x.RelativePath == VerificationPackageFileNames.ReportPackageDeploymentProofBindingLedger)
+            .ContentText.Should()
+            .Contain("\"finalStatus\": \"AcceptedWithLimitations\"");
+    }
+
+    [Fact]
     [Trait("Category", "FEAT-139")]
     public void Export_ReportPackageAbnormalFinalizationArtifact_ShouldDeclareNonCleanOutcome()
     {
