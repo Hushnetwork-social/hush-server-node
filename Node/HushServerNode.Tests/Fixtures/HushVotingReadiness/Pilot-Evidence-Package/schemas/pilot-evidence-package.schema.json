@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pilot-evidence-package.schema.json",
+  "title": "Pilot Evidence Package",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "packageId",
+    "featureSlice",
+    "acceptanceGate",
+    "status",
+    "identity",
+    "profile",
+    "registerBinding",
+    "upstreamEvidence",
+    "observedRunEvidence",
+    "runtimeProofEvidence",
+    "claimDecisions",
+    "exceptions",
+    "publicSafety",
+    "signoff"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "pilot-evidence-package.v1" },
+    "featureSlice": { "const": "FEAT-141" },
+    "acceptanceGate": { "const": "AT-RDY-013" }
+  },
+  "additionalProperties": true
+}

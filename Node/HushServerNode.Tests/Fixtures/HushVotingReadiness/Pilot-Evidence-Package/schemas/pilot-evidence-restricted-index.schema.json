@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pilot-evidence-restricted-index.schema.json",
+  "title": "Pilot Evidence Restricted Index",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "indexId",
+    "packageId",
+    "generatedAt",
+    "restrictedRefs",
+    "redactionPolicy"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "pilot-evidence-restricted-index.v1" },
+    "restrictedRefs": { "type": "array" }
+  },
+  "additionalProperties": true
+}

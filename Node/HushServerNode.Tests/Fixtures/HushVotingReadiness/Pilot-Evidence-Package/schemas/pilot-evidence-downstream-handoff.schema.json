@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pilot-evidence-downstream-handoff.schema.json",
+  "title": "Pilot Evidence Downstream Handoff",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "handoffId",
+    "producerFeature",
+    "status",
+    "packageRef",
+    "readinessFragmentRef",
+    "claimStateSummary",
+    "promotionInstructions"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "pilot-evidence-downstream-handoff.v1" },
+    "producerFeature": { "const": "FEAT-141" }
+  },
+  "additionalProperties": true
+}

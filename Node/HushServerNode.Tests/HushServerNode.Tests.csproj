@@ -50,6 +50,7 @@
     <ProjectReference Include="..\scripts\DisputeContinuityReadinessPromoter\DisputeContinuityReadinessPromoter.csproj" />
     <ProjectReference Include="..\scripts\LegalGovernanceBoundaryPromoter\LegalGovernanceBoundaryPromoter.csproj" />
     <ProjectReference Include="..\scripts\GovernedOutcomeProducer\GovernedOutcomeProducer.csproj" />
+    <ProjectReference Include="..\scripts\PilotEvidencePackagePromoter\PilotEvidencePackagePromoter.csproj" />
   </ItemGroup>
 
   <ItemGroup>

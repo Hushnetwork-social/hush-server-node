@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pilot-evidence-readiness-fragment.schema.json",
+  "title": "Pilot Evidence Readiness Fragment",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "fragmentId",
+    "featureSlice",
+    "sourceGap",
+    "acceptanceGate",
+    "dimensionId",
+    "status",
+    "directRegisterMutation",
+    "registerPromotionOwner",
+    "scoreEffect",
+    "artifactRefs"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "pilot-evidence-readiness-fragment.v1" },
+    "featureSlice": { "const": "FEAT-141" },
+    "acceptanceGate": { "const": "AT-RDY-013" },
+    "directRegisterMutation": { "const": false },
+    "registerPromotionOwner": { "const": "FEAT-130" }
+  },
+  "additionalProperties": true
+}

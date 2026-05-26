@@ -1,0 +1,586 @@
+{
+  "schemaVersion": "pilot-evidence-source.v1",
+  "sourceId": "PILOT-EVIDENCE-SOURCE-FEAT-141-RELEASE-BASELINE",
+  "packageId": "PILOT-EVIDENCE-PACKAGE-FEAT-141-001",
+  "featureId": "FEAT-141",
+  "acceptanceGate": "AT-RDY-013",
+  "sourceGap": "Controlled pilot evidence",
+  "status": "accepted_with_limitations",
+  "profile": "internal_non_binding_rehearsal",
+  "generatedAt": "2026-05-26T12:00:00Z",
+  "scenario": {
+    "scenarioId": "internal-non-binding-rehearsal-release-baseline",
+    "title": "Internal non-binding HushVoting rehearsal",
+    "purpose": "Package a completed internal rehearsal as controlled delivery evidence without making customer pilot, legal approval, production rollout, or public election claims.",
+    "nonBinding": true,
+    "electionClass": "synthetic_internal_rehearsal"
+  },
+  "organizationScope": {
+    "scopeType": "internal_hush_rehearsal",
+    "organizationDisplayName": "Hush internal rehearsal",
+    "organizationVisibility": "public_safe_label_only",
+    "governanceBoundary": "Customer legal sufficiency, AGM management, notice, quorum, minutes, and challenge remedies remain outside Hush-owned validation.",
+    "publicSafeScopeSummary": "Internal non-binding rehearsal used to prove package generation and reviewer handoff shape."
+  },
+  "participantModel": {
+    "participantType": "synthetic_or_internal_consented",
+    "participantCount": 8,
+    "roles": [
+      "ElectionOwner",
+      "observer",
+      "synthetic voter",
+      "reviewer"
+    ],
+    "identityBoundary": "No public output includes voter identity, vote choice, receipt secret, nullifier, credential, support log body, or private contact data."
+  },
+  "timeline": {
+    "setupAt": "2026-05-26T08:00:00Z",
+    "openedAt": "2026-05-26T08:30:00Z",
+    "closedAt": "2026-05-26T09:00:00Z",
+    "outcomeAt": "2026-05-26T09:10:00Z",
+    "exportedAt": "2026-05-26T09:20:00Z",
+    "reviewedAt": "2026-05-26T10:00:00Z",
+    "postmortemAt": "2026-05-26T11:00:00Z"
+  },
+  "rehearsalDecision": {
+    "status": "completed",
+    "decidedBy": "hush-readiness-owner",
+    "decisionRef": "restricted-ref://pilot-evidence/internal-rehearsal-decision",
+    "readinessImpact": "Counts only toward internal non-binding rehearsal evidence. Friendly organization pilot remains blocked."
+  },
+  "beforeRegister": {
+    "registerId": "RDY-REG-v0.1.3",
+    "version": "v0.1.3",
+    "path": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Readiness-Register/v0.1.3/readiness-register.json",
+    "manifestHash": "e0a62370459c875602820e728fd6bb0dd006d302b8855d077a8205033677b055",
+    "archiveHash": "a8a4eb01c496620c598ea3c97c92033098c43ecb6245797382625f26d2dc2ae0",
+    "totalScore": 60,
+    "status": "AcceptedInternal",
+    "strongestAllowedClaim": "internal_non_binding_rehearsal",
+    "publicationStatus": "not_for_publication",
+    "claimStates": {
+      "internal_non_binding_rehearsal": "allowed_with_limitations",
+      "friendly_organization_pilot": "blocked",
+      "production_organizational_rollout": "blocked",
+      "public_or_state_election": "not_in_scope"
+    },
+    "blockerIds": [
+      "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006",
+      "RDY-BLOCK-PUBLICATION-NOT-FOR-PUBLICATION",
+      "RDY-BLOCK-CONTROLLED-PILOT-EVIDENCE-MISSING"
+    ]
+  },
+  "afterRegister": {
+    "registerId": "RDY-REG-v0.1.3",
+    "version": "v0.1.3",
+    "path": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Readiness-Register/v0.1.3/readiness-register.json",
+    "manifestHash": "e0a62370459c875602820e728fd6bb0dd006d302b8855d077a8205033677b055",
+    "archiveHash": "a8a4eb01c496620c598ea3c97c92033098c43ecb6245797382625f26d2dc2ae0",
+    "totalScore": 60,
+    "status": "AcceptedInternal",
+    "strongestAllowedClaim": "internal_non_binding_rehearsal",
+    "publicationStatus": "not_for_publication",
+    "claimStates": {
+      "internal_non_binding_rehearsal": "allowed_with_limitations",
+      "friendly_organization_pilot": "blocked",
+      "production_organizational_rollout": "blocked",
+      "public_or_state_election": "not_in_scope"
+    },
+    "blockerIds": [
+      "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-006",
+      "RDY-BLOCK-PUBLICATION-NOT-FOR-PUBLICATION"
+    ]
+  },
+  "upstreamEvidence": [
+    {
+      "featureSlice": "FEAT-130",
+      "acceptanceGate": "AT-RDY-001",
+      "status": "accepted_with_limitations",
+      "publicRef": "RDY-REG-v0.1.3",
+      "restrictedRef": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Readiness-Register/v0.1.3/readiness-register.json",
+      "sha256Hash": "e0a62370459c875602820e728fd6bb0dd006d302b8855d077a8205033677b055",
+      "freshness": "current",
+      "claimEffect": "Source of truth for score, claim states, blockers, and publication status.",
+      "requiredForClaims": [
+        "internal_non_binding_rehearsal",
+        "friendly_organization_pilot"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-131",
+      "acceptanceGate": "AT-RDY-002",
+      "status": "accepted",
+      "publicRef": "RDY-EVID-AT-RDY-002-FEAT-131-001",
+      "restrictedRef": "hush-documents/PrivateServer_ElectronicVoting/Operational-Security/FEAT-131-Custody-Evidence-Handoff.md",
+      "sha256Hash": "source-controlled",
+      "freshness": "current",
+      "claimEffect": "KMS custody evidence available by id and restricted ref only.",
+      "requiredForClaims": [
+        "internal_non_binding_rehearsal"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-132",
+      "acceptanceGate": "AT-RDY-005",
+      "status": "accepted_with_limitations",
+      "publicRef": "Deployment-Proof-Packages public proof set",
+      "restrictedRef": "hush-documents/PrivateServer_ElectronicVoting/Deployment-Ceremonies",
+      "sha256Hash": "source-controlled",
+      "freshness": "current",
+      "claimEffect": "Deployment proof packages exist; runtime binding is consumed through FEAT-143 and FEAT-144.",
+      "requiredForClaims": [
+        "internal_non_binding_rehearsal",
+        "deployment proof claim"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-133",
+      "acceptanceGate": "AT-RDY-006",
+      "status": "accepted_with_limitations",
+      "publicRef": "FEAT-133 operational evidence package",
+      "restrictedRef": "hush-documents/PrivateServer_ElectronicVoting/Operational-Security/FEAT-133-Operational-Evidence",
+      "sha256Hash": "source-controlled",
+      "freshness": "current",
+      "claimEffect": "Operational evidence supports internal rehearsal but does not prove broad operating history.",
+      "requiredForClaims": [
+        "internal_non_binding_rehearsal"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-134",
+      "acceptanceGate": "AT-RDY-014",
+      "status": "accepted_with_limitations",
+      "publicRef": "FEAT-134 security dependency support package",
+      "restrictedRef": "hush-documents/PrivateServer_ElectronicVoting/Security-Dependency-Support-Readiness",
+      "sha256Hash": "source-controlled",
+      "freshness": "current",
+      "claimEffect": "Security/support evidence carries high-review dependency, vulnerability freshness, and support limitations.",
+      "requiredForClaims": [
+        "internal_non_binding_rehearsal",
+        "friendly_organization_pilot"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-135",
+      "acceptanceGate": "AT-RDY-007",
+      "status": "accepted",
+      "publicRef": "HushVoting-Verifier-Corpus",
+      "restrictedRef": "HushVoting-Verifier-Corpus",
+      "sha256Hash": "source-controlled",
+      "freshness": "current",
+      "claimEffect": "Verifier corpus supports replay evidence but does not replace the actual rehearsal verifier output.",
+      "requiredForClaims": [
+        "internal_non_binding_rehearsal"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-136",
+      "acceptanceGate": "AT-PROC-I11",
+      "status": "accepted_with_limitations",
+      "publicRef": "FEAT-136 cross-device receipt verification handoff",
+      "restrictedRef": "Features/04_COMPLETED/FEAT-136-cross-device-receipt-inclusion-verification",
+      "sha256Hash": "source-controlled",
+      "freshness": "current",
+      "claimEffect": "Cross-device receipt verification is implemented; open-election consumed-status proof remains future PBA-011 limitation.",
+      "requiredForClaims": [
+        "internal_non_binding_rehearsal"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-137",
+      "acceptanceGate": "AT-RDY-009",
+      "status": "accepted",
+      "publicRef": "Retention-Log-Privacy-Proof package",
+      "restrictedRef": "hush-documents/PrivateServer_ElectronicVoting/Retention-Log-Privacy-Proof/package/readiness-fragment.json",
+      "sha256Hash": "c45a3b15bf470a67e4ff85519c610b618d80f15f4dd35da244d7db94349bef63",
+      "freshness": "current",
+      "claimEffect": "Retention/log privacy proof is accepted and must be matched to runtime proof-family status when claiming active deployment evidence.",
+      "requiredForClaims": [
+        "internal_non_binding_rehearsal",
+        "privacy proof claim"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-138",
+      "acceptanceGate": "AT-RDY-015",
+      "status": "accepted",
+      "publicRef": "Void-Decision-Publication-Replacement release baseline",
+      "restrictedRef": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/release-baseline",
+      "sha256Hash": "source-controlled",
+      "freshness": "current",
+      "claimEffect": "Voided election evidence is accepted when a voided election is in scope.",
+      "requiredForClaims": [
+        "void evidence claim"
+      ],
+      "artifacts": [
+        {
+          "path": "void-readiness-fragment.json",
+          "sha256Hash": "ec4000765257c8973b2ff21f0a41a3ec4eded1427eba2696017e7eff2b4fe9ba"
+        },
+        {
+          "path": "void-downstream-handoff.json",
+          "sha256Hash": "f501cf09ccec7cbb18f5857b9dd97c432844bd5515efae67e3fa5c0e82d4eb14"
+        },
+        {
+          "path": "void-public-artifact-scan.json",
+          "sha256Hash": "3542aa184ae55f2d0c9dac0b054d6f7aeb32a1356b18a02609edb6005ba6dc9b"
+        },
+        {
+          "path": "void-package-hash-validation.json",
+          "sha256Hash": "4e01c3927b2b8dbdf9500ff754af6155d33253fdfa15da4e245b9085597ea117"
+        }
+      ]
+    },
+    {
+      "featureSlice": "FEAT-139",
+      "acceptanceGate": "AT-RDY-011",
+      "status": "blocked",
+      "publicRef": "Dispute-Continuity-Readiness package",
+      "restrictedRef": "hush-documents/PrivateServer_ElectronicVoting/Dispute-Continuity-Readiness/package/dispute-continuity-readiness-fragment.json",
+      "sha256Hash": "76367710a3df2b61241d0af64558a75f316d6919ebd1c862b8ec4f5ef3c46217",
+      "freshness": "current_blocked_until_rerun",
+      "claimEffect": "Dispute/continuity readiness remains blocked unless rerun after FEAT-146; FEAT-141 carries this state visibly.",
+      "requiredForClaims": [
+        "abnormal outcome readiness",
+        "friendly_organization_pilot"
+      ],
+      "blockerIds": [
+        "FEAT139-GOVERNED-FAILED-FINALIZE-MISSING",
+        "FEAT139-GOVERNED-FINALIZED-WITH-ANOMALY-MISSING",
+        "FEAT139-PACKAGE-ARTIFACT-MISMATCH",
+        "FEAT139-UNRESOLVED-BLOCKING-ANOMALY"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-140",
+      "acceptanceGate": "AT-RDY-012",
+      "status": "accepted_with_limitations",
+      "publicRef": "Legal-Governance-Boundary downstream handoff",
+      "restrictedRef": "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-downstream-handoff.json",
+      "sha256Hash": "3612933b3b6bb2a9226fbf2758b9e6b24406a16d6bc326baca3316fd7ac630bb",
+      "freshness": "current_static",
+      "claimEffect": "Governance boundary is static unless run-specific attachment evidence is present.",
+      "requiredForClaims": [
+        "internal_non_binding_rehearsal",
+        "friendly_organization_pilot"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-142",
+      "acceptanceGate": "review-navigation",
+      "status": "accepted_with_limitations",
+      "publicRef": "Internal readiness dashboard",
+      "restrictedRef": "Features/04_COMPLETED/FEAT-142-internal-readiness-dashboard",
+      "sha256Hash": "source-controlled",
+      "freshness": "current",
+      "claimEffect": "Dashboard is review navigation only and not readiness proof.",
+      "requiredForClaims": [
+        "review navigation"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-143",
+      "acceptanceGate": "AT-RDY-017",
+      "status": "accepted_with_limitations",
+      "publicRef": "Runtime deployment proof binding ledger handoff",
+      "restrictedRef": "Features/04_COMPLETED/FEAT-143-runtime-deployment-proof-binding-ledger/readiness-handoff-20260526.md",
+      "sha256Hash": "source-controlled",
+      "freshness": "current",
+      "claimEffect": "Server-side runtime deployment proof binding is available with limitation wording.",
+      "requiredForClaims": [
+        "runtime deployment proof claim",
+        "internal_non_binding_rehearsal"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-144",
+      "acceptanceGate": "AT-RDY-018",
+      "status": "accepted_with_limitations",
+      "publicRef": "WebClient proof handshake handoff",
+      "restrictedRef": "Features/04_COMPLETED/FEAT-144-hushwebclient-deployment-proof-exposure-handshake",
+      "sha256Hash": "source-controlled",
+      "freshness": "current",
+      "claimEffect": "Observed browser-bundle proof exists but does not prove every voter saw the same bundle under cache/CDN/offline/user-device variance.",
+      "requiredForClaims": [
+        "client observed deployment proof claim",
+        "internal_non_binding_rehearsal"
+      ],
+      "limitationIds": [
+        "browser_cache_variance",
+        "cdn_propagation_variance",
+        "offline_tab_variance",
+        "user_device_variance"
+      ]
+    },
+    {
+      "featureSlice": "FEAT-146",
+      "acceptanceGate": "AT-PROC-I26",
+      "status": "accepted_with_limitations",
+      "publicRef": "Governed-Outcome-Producer FEAT-141 handoff",
+      "restrictedRef": "hush-documents/PrivateServer_ElectronicVoting/Governed-Outcome-Producer/package/governed-outcome-feat141-handoff.json",
+      "sha256Hash": "c47d13938640e10024a87e15940c4f875b1173ba53bff4277feadf2f8ca26550",
+      "freshness": "current",
+      "claimEffect": "finalized_with_anomaly runtime evidence is accepted when in scope; failed_to_finalize remains blocked without later evidence.",
+      "requiredForClaims": [
+        "finalized_with_anomaly",
+        "abnormal outcome readiness"
+      ]
+    }
+  ],
+  "observedRunEvidence": {
+    "status": "completed",
+    "exportPackage": {
+      "evidenceId": "FEAT141-OBS-EXPORT-PACKAGE",
+      "publicRef": "public-ref://pilot-evidence/internal-rehearsal/export-package",
+      "restrictedRef": "restricted-ref://pilot-evidence/internal-rehearsal/export-package",
+      "sha256Hash": "source-controlled",
+      "resultCode": "export_generated"
+    },
+    "verifierOutput": {
+      "evidenceId": "FEAT141-OBS-VERIFIER-OUTPUT",
+      "publicRef": "public-ref://pilot-evidence/internal-rehearsal/verifier-output",
+      "restrictedRef": "restricted-ref://pilot-evidence/internal-rehearsal/verifier-output",
+      "sha256Hash": "source-controlled",
+      "resultCode": "verified_with_limitations"
+    },
+    "supportOrNoIncidentStatement": {
+      "evidenceId": "FEAT141-OBS-NO-INCIDENT",
+      "status": "no_incident",
+      "publicRef": "public-ref://pilot-evidence/internal-rehearsal/no-incident",
+      "restrictedRef": "restricted-ref://pilot-evidence/internal-rehearsal/no-incident-statement",
+      "sha256Hash": "source-controlled"
+    },
+    "acceptanceNotes": {
+      "evidenceId": "FEAT141-OBS-ACCEPTANCE-NOTES",
+      "publicRef": "public-ref://pilot-evidence/internal-rehearsal/acceptance-notes",
+      "restrictedRef": "restricted-ref://pilot-evidence/internal-rehearsal/acceptance-notes",
+      "sha256Hash": "source-controlled"
+    },
+    "postmortem": {
+      "evidenceId": "FEAT141-OBS-POSTMORTEM",
+      "publicRef": "public-ref://pilot-evidence/internal-rehearsal/postmortem-summary",
+      "restrictedRef": "restricted-ref://pilot-evidence/internal-rehearsal/postmortem",
+      "sha256Hash": "source-controlled"
+    },
+    "unresolvedIssues": [
+      {
+        "issueId": "FEAT141-UNRESOLVED-FRIENDLY-PILOT-BLOCKED",
+        "severity": "claim_blocker",
+        "summary": "Friendly organization pilot remains blocked until FEAT-130 promotes eligible evidence and pilot-critical blockers clear."
+      },
+      {
+        "issueId": "FEAT141-UNRESOLVED-FEAT139-RERUN",
+        "severity": "claim_limitation",
+        "summary": "FEAT-139 generated fragment remains blocked until rerun with accepted FEAT-146 evidence or carried as blocked."
+      }
+    ]
+  },
+  "runtimeEvidence": {
+    "deploymentProofBinding": {
+      "status": "accepted_with_limitations",
+      "sourceFeature": "FEAT-143",
+      "ledgerRef": "deployment-proof-binding-ledger.json",
+      "reportRef": "runtime-deployment-proof-binding-readiness-handoff",
+      "claimEffect": "Consumed evidence; FEAT-141 adds no runtime authority."
+    },
+    "webClientObservedProof": {
+      "status": "accepted_with_limitations",
+      "sourceFeature": "FEAT-144",
+      "proofState": "observed_browser_bundle",
+      "limitationIds": [
+        "browser_cache_variance",
+        "cdn_propagation_variance",
+        "offline_tab_variance",
+        "user_device_variance"
+      ]
+    },
+    "governedOutcome": {
+      "status": "accepted_with_limitations",
+      "sourceFeature": "FEAT-146",
+      "handoffRef": "governed-outcome-feat141-handoff.json",
+      "handoffHash": "c47d13938640e10024a87e15940c4f875b1173ba53bff4277feadf2f8ca26550",
+      "finalizedWithAnomalyStatus": "accepted",
+      "failedToFinalizeStatus": "blocked",
+      "claimEffect": "finalized_with_anomaly can be referenced when in scope; failed_to_finalize remains blocked."
+    }
+  },
+  "claimDecisions": [
+    {
+      "claimId": "internal_non_binding_rehearsal",
+      "state": "allowed_with_limitations",
+      "wordingKey": "internal_non_binding_rehearsal_only",
+      "residualRisk": "Internal rehearsal evidence does not equal customer pilot or production rollout evidence.",
+      "blockerIds": [],
+      "downgradeIds": [
+        "FEAT141-INTERNAL-ONLY-LIMITATION",
+        "FEAT141-NOT-INDEPENDENT-VALIDATION"
+      ]
+    },
+    {
+      "claimId": "friendly_organization_pilot",
+      "state": "blocked",
+      "wordingKey": "friendly_pilot_blocked",
+      "residualRisk": "Current register score is below the friendly pilot threshold and pilot-critical blockers remain open.",
+      "blockerIds": [
+        "FEAT141-FRIENDLY-PILOT-BLOCKED-BY-RDY-REG-v0.1.3",
+        "FEAT141-FEAT139-BLOCKED-STATE-CARRIED"
+      ],
+      "downgradeIds": []
+    },
+    {
+      "claimId": "production_organizational_rollout",
+      "state": "blocked",
+      "wordingKey": "production_rollout_blocked",
+      "residualRisk": "Production rollout requires stronger operating history, customer-specific governance decisions, and FEAT-130 promotion.",
+      "blockerIds": [
+        "FEAT141-PRODUCTION-ROLLOUT-BLOCKED"
+      ],
+      "downgradeIds": []
+    },
+    {
+      "claimId": "public_or_state_election",
+      "state": "not_in_scope",
+      "wordingKey": "public_state_election_out_of_scope",
+      "residualRisk": "Public or state election authorization is outside EPIC-015.",
+      "blockerIds": [],
+      "downgradeIds": []
+    }
+  ],
+  "exceptions": [
+    {
+      "exceptionId": "FEAT141-FEAT139-BLOCKED-STATE-CARRIED",
+      "sourceGap": "Dispute/continuity readiness dependency",
+      "acceptanceGate": "AT-RDY-011",
+      "featureSlice": "FEAT-139",
+      "affectedClaim": "friendly_organization_pilot",
+      "reason": "Current FEAT-139 generated readiness fragment remains blocked unless rerun after FEAT-146.",
+      "compensatingEvidence": "FEAT-146 handoff supports finalized_with_anomaly only when directly in scope.",
+      "scoreImpact": "no_score_increase",
+      "claimImpact": "Friendly pilot and broad abnormal-outcome readiness remain blocked or downgraded.",
+      "reviewDue": "When FEAT-139 promoter is rerun with accepted FEAT-146 evidence.",
+      "packageBlocking": false,
+      "signoff": "hush-readiness-owner"
+    },
+    {
+      "exceptionId": "FEAT141-FRIENDLY-PILOT-BLOCKED-BY-RDY-REG-v0.1.3",
+      "sourceGap": "Controlled pilot evidence",
+      "acceptanceGate": "AT-RDY-013",
+      "featureSlice": "FEAT-141",
+      "affectedClaim": "friendly_organization_pilot",
+      "reason": "Promoted register is score 60/100 and blocks friendly organization pilot.",
+      "compensatingEvidence": "Internal non-binding rehearsal package is available with limitations.",
+      "scoreImpact": "no_score_increase",
+      "claimImpact": "Friendly organization pilot claim is blocked.",
+      "reviewDue": "After FEAT-130 promotion clears pilot-critical blockers.",
+      "packageBlocking": false,
+      "signoff": "hush-readiness-owner"
+    },
+    {
+      "exceptionId": "FEAT141-FEAT144-CLIENT-VARIANCE-LIMITATION",
+      "sourceGap": "Trusted deployment ceremony",
+      "acceptanceGate": "AT-RDY-018",
+      "featureSlice": "FEAT-144",
+      "affectedClaim": "client observed deployment proof claim",
+      "reason": "Observed browser-bundle proof does not prove every voter saw the same bundle under cache, CDN, offline-tab, or user-device variance.",
+      "compensatingEvidence": "FEAT-144 proxy and server observation tests passed for representative client metadata.",
+      "scoreImpact": "limited_claim_only",
+      "claimImpact": "Deployment proof claim remains accepted with limitations.",
+      "reviewDue": "When deployment proof observation is broadened across client variance conditions.",
+      "packageBlocking": false,
+      "signoff": "hush-readiness-owner"
+    },
+    {
+      "exceptionId": "FEAT141-FEAT140-STATIC-GOVERNANCE-LIMITATION",
+      "sourceGap": "Legal/governance boundary wrapper",
+      "acceptanceGate": "AT-RDY-012",
+      "featureSlice": "FEAT-140",
+      "affectedClaim": "governance wrapper attached to run",
+      "reason": "FEAT-140 is static package evidence unless this source records run-specific attachment.",
+      "compensatingEvidence": "Governance-boundary downstream handoff is included by hash.",
+      "scoreImpact": "limited_claim_only",
+      "claimImpact": "The package may reference the governance boundary as setup evidence but not claim live legal validation.",
+      "reviewDue": "When a live rehearsal setup records wrapper attachment.",
+      "packageBlocking": false,
+      "signoff": "hush-readiness-owner"
+    }
+  ],
+  "redactionPolicy": {
+    "publicAllowed": [
+      "package id",
+      "profile",
+      "non-binding status",
+      "public refs",
+      "hashes",
+      "claim states",
+      "blocker ids",
+      "residual risk wording"
+    ],
+    "restrictedIndexOnly": [
+      "support/no-incident refs",
+      "acceptance notes refs",
+      "postmortem refs",
+      "governance attachment refs",
+      "anomaly/dispute refs",
+      "custody/deployment restricted refs"
+    ],
+    "forbiddenMaterialClasses": [
+      "support log body",
+      "anomaly body",
+      "voter identity",
+      "vote choice",
+      "receipt secret",
+      "ballot id",
+      "nullifier",
+      "credential",
+      "kms provider internals",
+      "trustee share",
+      "private legal payload",
+      "private contact",
+      "ci secret",
+      "deployment secret",
+      "database credential"
+    ]
+  },
+  "signoff": {
+    "engineeringOwner": "Paulo Aboim Pinto / Forge",
+    "operationsOwner": "Paulo Aboim Pinto / Forge",
+    "samePersonTwoHat": true,
+    "signedAt": "2026-05-26T12:00:00Z",
+    "signoffRef": "restricted-ref://pilot-evidence/internal-signoff"
+  },
+  "promotionPolicy": {
+    "dimensionId": "RDY-DIM-010",
+    "directRegisterMutation": false,
+    "registerPromotionOwner": "FEAT-130",
+    "currentTotalScore": 60,
+    "candidateTotalScoreWhenAccepted": 63,
+    "scoreIncreaseRequiresFeat130Promotion": true
+  },
+  "publicSummary": {
+    "title": "Pilot evidence package",
+    "statusWording": "This package supports an internal non-binding rehearsal only. It is not certification, legal approval, production rollout approval, public election authorization, or independent validation. Friendly organization pilot claims remain blocked until FEAT-130 promotes the required evidence and all pilot-critical blockers are resolved.",
+    "approvedClaims": [
+      "Internal non-binding rehearsal package generated with observed export and verifier evidence.",
+      "Missing, blocked, stale, or limited upstream evidence is visible as exceptions and claim effects.",
+      "FEAT-143, FEAT-144, and FEAT-146 runtime evidence is consumed without creating new FEAT-141 runtime authority."
+    ],
+    "blockedClaims": [
+      "Friendly organization pilot readiness",
+      "Production organizational rollout readiness",
+      "Public or state election authorization",
+      "Independent certification or legal approval"
+    ],
+    "residualRisks": [
+      "FEAT-139 generated fragment remains blocked until rerun with accepted FEAT-146 evidence.",
+      "Browser-bundle proof still carries cache/CDN/offline-tab/user-device variance limits.",
+      "Broader confidence depends on repeated runs across organizations and operating conditions."
+    ],
+    "contactPath": "Hush readiness owner review"
+  },
+  "publicArtifactSamples": [
+    {
+      "path": "public/pilot-evidence-public-safe-summary.md",
+      "content": "This package supports an internal non-binding rehearsal only. It is not certification, legal approval, production rollout approval, public election authorization, or independent validation. Friendly organization pilot claims remain blocked until FEAT-130 promotes the required evidence and all pilot-critical blockers are resolved."
+    }
+  ]
+}

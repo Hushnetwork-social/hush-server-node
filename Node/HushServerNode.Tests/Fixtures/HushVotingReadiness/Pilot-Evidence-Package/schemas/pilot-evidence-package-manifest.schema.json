@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pilot-evidence-package-manifest.schema.json",
+  "title": "Pilot Evidence Package Manifest",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "manifestId",
+    "packageId",
+    "generatedAt",
+    "artifactHashes"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "pilot-evidence-package-manifest.v1" },
+    "artifactHashes": { "type": "array", "minItems": 1 }
+  },
+  "additionalProperties": true
+}
