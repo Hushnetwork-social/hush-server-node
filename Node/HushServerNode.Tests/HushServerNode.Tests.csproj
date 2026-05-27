@@ -51,6 +51,7 @@
     <ProjectReference Include="..\scripts\LegalGovernanceBoundaryPromoter\LegalGovernanceBoundaryPromoter.csproj" />
     <ProjectReference Include="..\scripts\GovernedOutcomeProducer\GovernedOutcomeProducer.csproj" />
     <ProjectReference Include="..\scripts\PilotEvidencePackagePromoter\PilotEvidencePackagePromoter.csproj" />
+    <ProjectReference Include="..\scripts\ProductionRolloutReadinessPromoter\ProductionRolloutReadinessPromoter.csproj" />
   </ItemGroup>
 
   <ItemGroup>

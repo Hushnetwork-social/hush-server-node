@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "production-rollout-negative-fixtures.v1",
+  "featureId": "FEAT-148",
+  "purpose": "Negative fixture catalog for production rollout evidence checks. These cases are intentionally not full source fixtures; Phase 3 maps each case into source mutations for focused gate tests.",
+  "cases": [
+    {
+      "caseId": "FEAT148-NEG-STALE-EVIDENCE-001",
+      "category": "stale",
+      "mutationPath": "upstreamEvidence[FEAT-143].freshness",
+      "invalidValue": "stale",
+      "expectedBlocker": "FEAT148-STALE-EVIDENCE-BLOCKS-PRODUCTION",
+      "claimImpact": "Stale deployment proof evidence cannot raise score or unblock production rollout."
+    },
+    {
+      "caseId": "FEAT148-NEG-PLACEHOLDER-EVIDENCE-001",
+      "category": "placeholder",
+      "mutationPath": "runEvidence.status",
+      "invalidValue": "placeholder",
+      "expectedBlocker": "FEAT148-PLACEHOLDER-EVIDENCE-BLOCKS-PRODUCTION",
+      "claimImpact": "Placeholder run evidence cannot be counted as accepted production-like evidence."
+    },
+    {
+      "caseId": "FEAT148-NEG-PRIVATE-ONLY-EVIDENCE-001",
+      "category": "private_only",
+      "mutationPath": "publicArtifactSamples[0].content",
+      "invalidValue": "restricted payload body copied into public output",
+      "expectedBlocker": "FEAT148-PRIVATE-ONLY-EVIDENCE-BLOCKS-PUBLIC-OUTPUT",
+      "claimImpact": "Private-only evidence may be referenced by restricted ref and hash, but public artifacts cannot copy the restricted body."
+    },
+    {
+      "caseId": "FEAT148-NEG-MISMATCHED-HASH-001",
+      "category": "mismatched",
+      "mutationPath": "restrictedEvidenceRefs[FEAT148-PRODUCTION-LIKE-RUN-ACCEPTED-001].sha256Hash",
+      "invalidValue": "0000000000000000000000000000000000000000000000000000000000000000",
+      "expectedBlocker": "FEAT148-ARTIFACT-HASH-MISMATCH-BLOCKS-PRODUCTION",
+      "claimImpact": "Hash mismatches prevent blocker resolution."
+    },
+    {
+      "caseId": "FEAT148-NEG-MISSING-EVIDENCE-001",
+      "category": "missing",
+      "mutationPath": "runEvidence.evidenceRefs",
+      "invalidValue": [],
+      "expectedBlocker": "FEAT148-PRODUCTION-LIKE-RUN-MISSING",
+      "claimImpact": "Missing production-like run evidence keeps production rollout red."
+    },
+    {
+      "caseId": "FEAT148-NEG-PUBLIC-STATE-OVERCLAIM-001",
+      "category": "public_state_overclaim",
+      "mutationPath": "claimPolicy.publicStateClaimState",
+      "invalidValue": "allowed_with_limitations_candidate",
+      "expectedBlocker": "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+      "claimImpact": "FEAT-148 cannot move public or state election readiness."
+    }
+  ],
+  "forbiddenPublicMaterialNeedles": [
+    "voter identity",
+    "vote choice",
+    "receipt secret",
+    "trustee share",
+    "private key",
+    "deployment secret",
+    "database password"
+  ]
+}
