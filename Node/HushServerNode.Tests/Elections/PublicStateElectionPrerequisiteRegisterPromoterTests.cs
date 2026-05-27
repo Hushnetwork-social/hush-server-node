@@ -7,6 +7,9 @@ namespace HushServerNode.Tests.Elections;
 
 public sealed class PublicStateElectionPrerequisiteRegisterPromoterTests
 {
+    private static readonly DateTimeOffset FixedGeneratedAt =
+        DateTimeOffset.Parse("2026-05-27T12:00:00Z");
+
     [Fact]
     public void SchemaSet_RequiredSchemas_ArePresentAndLoadable()
     {
@@ -176,6 +179,85 @@ public sealed class PublicStateElectionPrerequisiteRegisterPromoterTests
     }
 
     [Fact]
+    public void PackageGeneration_ReleaseBaseline_CreatesRequiredBlockedArtifacts()
+    {
+        var package = PublicStateElectionPrerequisiteArtifactGenerator.Generate(
+            CreatePaths(),
+            generatedAt: FixedGeneratedAt);
+
+        package.Status.Should().Be("blocked");
+        package.Artifacts
+            .Select(artifact => artifact.RelativePath)
+            .Should()
+            .BeEquivalentTo(PublicStateElectionPrerequisiteArtifactGenerator.RequiredArtifactPaths);
+
+        var ledger = ArtifactJson(package, PublicStateElectionPrerequisiteArtifactGenerator.DecisionLedgerPath);
+        ledger["packageStatus"]!.GetValue<string>().Should().Be("blocked");
+        ledger["blockers"]!.AsArray()
+            .Select(item => item!.GetValue<string>())
+            .Should()
+            .Contain(PublicStateElectionPrerequisiteContracts.PublicStateBlockerId);
+
+        var publicDecision = ledger["decisions"]!.AsArray()
+            .OfType<JsonObject>()
+            .Single(item => item["decisionType"]!.GetValue<string>() == "public_state_blocker");
+        publicDecision["blockerDecision"]!.AsObject()["severity"]!.GetValue<string>().Should().Be("red");
+        publicDecision["blockerDecision"]!.AsObject()["status"]!.GetValue<string>().Should().Be("open");
+
+        var hashValidation = ArtifactJson(package, PublicStateElectionPrerequisiteArtifactGenerator.PackageHashValidationPath);
+        hashValidation["generatedArtifactHashes"]!.AsArray().Count.Should().Be(package.Artifacts.Count - 1);
+    }
+
+    [Fact]
+    public void PackageGeneration_SameSourceAndTimestamp_IsDeterministic()
+    {
+        var first = PublicStateElectionPrerequisiteArtifactGenerator.Generate(
+            CreatePaths(),
+            generatedAt: FixedGeneratedAt);
+        var second = PublicStateElectionPrerequisiteArtifactGenerator.Generate(
+            CreatePaths(),
+            generatedAt: FixedGeneratedAt);
+
+        first.Artifacts
+            .Select(artifact => (artifact.RelativePath, artifact.Sha256Hash))
+            .Should()
+            .Equal(second.Artifacts.Select(artifact => (artifact.RelativePath, artifact.Sha256Hash)));
+    }
+
+    [Fact]
+    public void ReadinessFragment_DisablesScoreMovementAndRegisterMutation()
+    {
+        var package = PublicStateElectionPrerequisiteArtifactGenerator.Generate(
+            CreatePaths(),
+            generatedAt: FixedGeneratedAt);
+
+        var fragment = ArtifactJson(package, PublicStateElectionPrerequisiteArtifactGenerator.ReadinessFragmentPath);
+
+        fragment["scoreChangeAllowed"]!.GetValue<bool>().Should().BeFalse();
+        fragment["directRegisterMutation"]!.GetValue<bool>().Should().BeFalse();
+        fragment["currentTotalScore"]!.GetValue<int>().Should().Be(71);
+        fragment["proposedTotalScore"]!.GetValue<int>().Should().Be(71);
+    }
+
+    [Fact]
+    public void GeneratedPackage_DoesNotChangeProductionOrPublicStateClaims()
+    {
+        var package = PublicStateElectionPrerequisiteArtifactGenerator.Generate(
+            CreatePaths(),
+            generatedAt: FixedGeneratedAt);
+
+        var fragment = ArtifactJson(package, PublicStateElectionPrerequisiteArtifactGenerator.ReadinessFragmentPath);
+        var policy = ArtifactJson(package, PublicStateElectionPrerequisiteArtifactGenerator.BlockerPolicyPath);
+
+        fragment["strongestAllowedClaimBefore"]!.GetValue<string>().Should().Be("friendly_organization_pilot");
+        fragment["strongestAllowedClaimAfter"]!.GetValue<string>().Should().Be("friendly_organization_pilot");
+        fragment["productionOrganizationalRolloutClaimChanged"]!.GetValue<bool>().Should().BeFalse();
+        fragment["publicStateClaimChanged"]!.GetValue<bool>().Should().BeFalse();
+        policy["currentSeverity"]!.GetValue<string>().Should().Be("red");
+        policy["currentStatus"]!.GetValue<string>().Should().Be("open");
+    }
+
+    [Fact]
     public void NegativeFixtureCatalog_CoversRequiredFailureModes()
     {
         var paths = CreatePaths();
@@ -211,6 +293,13 @@ public sealed class PublicStateElectionPrerequisiteRegisterPromoterTests
         var path = Path.Combine(paths.ExamplesRoot, exampleFolder, PublicStateElectionPrerequisitePromotionPaths.SourceFileName);
         return JsonNode.Parse(File.ReadAllText(path))?.AsObject() ??
             throw new InvalidOperationException($"Example fixture {exampleFolder} is not a JSON object.");
+    }
+
+    private static JsonObject ArtifactJson(PublicStateGeneratedPackage package, string relativePath)
+    {
+        var artifact = package.Artifacts.Single(item => item.RelativePath == relativePath);
+        return JsonNode.Parse(artifact.Content)?.AsObject() ??
+            throw new InvalidOperationException($"Artifact {relativePath} is not a JSON object.");
     }
 
     private static JsonObject FindGroup(JsonObject source, string groupId) =>
