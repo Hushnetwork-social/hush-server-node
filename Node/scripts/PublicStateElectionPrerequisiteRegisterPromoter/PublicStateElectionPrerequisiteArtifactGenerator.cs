@@ -42,13 +42,17 @@ public static class PublicStateElectionPrerequisiteArtifactGenerator
 
         var effectiveGeneratedAt = generatedAt ?? DateTimeOffset.UtcNow;
         var gate = PublicStateElectionPrerequisiteGateChecker.Evaluate(source);
+        var publicSafeSummary = BuildPublicSafeSummary(source, gate, effectiveGeneratedAt);
+        PublicStateElectionPrerequisitePublicOutputScanner.EnsurePublicOutputsSafe(
+            [(PublicSafeSummaryPath, publicSafeSummary)]);
+
         var artifactsBeforeHash = new[]
         {
             JsonArtifact(RegisterPath, BuildRegister(source, gate, effectiveGeneratedAt)),
             JsonArtifact(DecisionLedgerPath, BuildDecisionLedger(source, gate, effectiveGeneratedAt)),
             JsonArtifact(BlockerPolicyPath, BuildBlockerPolicy(source, gate, effectiveGeneratedAt)),
             JsonArtifact(ReadinessFragmentPath, BuildReadinessFragment(source, gate, effectiveGeneratedAt)),
-            TextArtifact(PublicSafeSummaryPath, BuildPublicSafeSummary(source, gate, effectiveGeneratedAt)),
+            TextArtifact(PublicSafeSummaryPath, publicSafeSummary),
             JsonArtifact(RestrictedReferenceIndexPath, BuildRestrictedReferenceIndex(source, effectiveGeneratedAt)),
         };
         var hashValidation = JsonArtifact(
@@ -168,7 +172,12 @@ public static class PublicStateElectionPrerequisiteArtifactGenerator
         builder.AppendLine($"Generated: {FormatTimestamp(generatedAt)}");
         builder.AppendLine($"Source: {PublicStateElectionPrerequisiteContracts.GetString(source, "sourceId")}");
         builder.AppendLine($"Status: {gate.Status}");
-        builder.AppendLine($"Public/state blocker: {gate.PublicStateDecision.Severity}/{gate.PublicStateDecision.Status}");
+        builder.Append("Public/state blocker: ");
+        builder.Append(gate.PublicStateDecision.BlockerId);
+        builder.Append(' ');
+        builder.Append(gate.PublicStateDecision.Severity);
+        builder.Append('/');
+        builder.AppendLine(gate.PublicStateDecision.Status);
         builder.AppendLine();
         builder.AppendLine(PublicStateElectionPrerequisiteContracts.GetString(wording, "blockedWording"));
         builder.AppendLine();

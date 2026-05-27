@@ -258,6 +258,73 @@ public sealed class PublicStateElectionPrerequisiteRegisterPromoterTests
     }
 
     [Fact]
+    public void PublicSafeSummary_NamesBlockerAndAvoidsForbiddenClaims()
+    {
+        var package = PublicStateElectionPrerequisiteArtifactGenerator.Generate(
+            CreatePaths(),
+            generatedAt: FixedGeneratedAt);
+        var summary = package.Artifacts
+            .Single(artifact => artifact.RelativePath == PublicStateElectionPrerequisiteArtifactGenerator.PublicSafeSummaryPath)
+            .Content;
+
+        summary.Should().Contain(PublicStateElectionPrerequisiteContracts.PublicStateBlockerId);
+        summary.Should().Contain("does not claim public or state election readiness");
+        PublicStateElectionPrerequisitePublicOutputScanner.Scan(
+            [(PublicStateElectionPrerequisiteArtifactGenerator.PublicSafeSummaryPath, summary)])
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public void RestrictedReviewerIndex_RecordsRefsAndHashesOnly()
+    {
+        var package = PublicStateElectionPrerequisiteArtifactGenerator.Generate(
+            CreatePaths(),
+            generatedAt: FixedGeneratedAt);
+        var index = ArtifactJson(package, PublicStateElectionPrerequisiteArtifactGenerator.RestrictedReferenceIndexPath);
+        var references = index["references"]!.AsArray().OfType<JsonObject>().ToArray();
+
+        references.Should().NotBeEmpty();
+        references.Should().OnlyContain(item => item.ContainsKey("restrictedRef"));
+        references.Should().OnlyContain(item => item.ContainsKey("sha256Hash"));
+        references.Should().OnlyContain(item => !item.ContainsKey("body"));
+        references.Should().OnlyContain(item => !item.ContainsKey("content"));
+        references.Should().OnlyContain(item => !item.ContainsKey("payload"));
+    }
+
+    [Theory]
+    [InlineData("public election ready")]
+    [InlineData("state election certified")]
+    [InlineData("government authorized")]
+    [InlineData("independently approved for public elections")]
+    [InlineData("public-sector equivalent voting system")]
+    public void PublicOutputScanner_RejectsForbiddenPublicClaims(string forbiddenClaim)
+    {
+        var action = () => PublicStateElectionPrerequisitePublicOutputScanner.EnsurePublicOutputsSafe(
+            [(PublicStateElectionPrerequisiteArtifactGenerator.PublicSafeSummaryPath, forbiddenClaim)]);
+
+        var exception = action.Should()
+            .Throw<PublicStateElectionPrerequisitePromotionException>()
+            .Which;
+        exception.Details.Should().Contain(item => item.Contains("forbidden_public_claim", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("receipt secret")]
+    [InlineData("trustee share")]
+    [InlineData("authority private memorandum")]
+    public void PublicOutputScanner_RejectsRestrictedEvidenceBodyText(string restrictedText)
+    {
+        var action = () => PublicStateElectionPrerequisitePublicOutputScanner.EnsurePublicOutputsSafe(
+            [(PublicStateElectionPrerequisiteArtifactGenerator.PublicSafeSummaryPath, restrictedText)]);
+
+        var exception = action.Should()
+            .Throw<PublicStateElectionPrerequisitePromotionException>()
+            .Which;
+        exception.Details.Should().Contain(item => item.Contains("restricted_material", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void NegativeFixtureCatalog_CoversRequiredFailureModes()
     {
         var paths = CreatePaths();
