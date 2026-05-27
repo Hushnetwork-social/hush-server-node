@@ -34,7 +34,7 @@ public sealed class PublicationCountingHardeningPromotionService
         return mode switch
         {
             ModeValidateOnly => CreateResult(mode, generated, [], []),
-            ModeCheckOnly => CreateResult(mode, generated, [], generated.Artifacts.Select(artifact => artifact.RelativePath).ToArray()),
+            ModeCheckOnly => CheckPackage(mode, generated),
             ModePackage => WritePackage(mode, generated),
             _ => throw new PublicationCountingHardeningPromotionException(
                 "Unsupported FEAT-153 publication/counting promotion mode.",
@@ -64,6 +64,43 @@ public sealed class PublicationCountingHardeningPromotionService
         return CreateResult(mode, generated, writtenFiles, []);
     }
 
+    private static PublicationCountingHardeningPromotionResult CheckPackage(
+        string mode,
+        PublicationCountingHardeningGeneratedPackage generated)
+    {
+        if (!Directory.Exists(generated.PackageRoot))
+        {
+            return CreateResult(mode, generated, [], generated.Artifacts.Select(artifact => artifact.RelativePath).ToArray());
+        }
+
+        var drift = new List<string>();
+        foreach (var artifact in generated.Artifacts)
+        {
+            var path = ResolveArtifactPath(generated.PackageRoot, artifact.RelativePath);
+            if (!File.Exists(path))
+            {
+                drift.Add($"Missing generated artifact: {artifact.RelativePath}");
+                continue;
+            }
+
+            var observed = PublicationCountingHardeningContracts.NormalizeLineEndings(File.ReadAllText(path));
+            var expected = PublicationCountingHardeningContracts.NormalizeLineEndings(artifact.Content);
+            if (!string.Equals(observed, expected, StringComparison.Ordinal))
+            {
+                drift.Add($"Generated artifact drift: {artifact.RelativePath}");
+            }
+        }
+
+        if (drift.Count > 0)
+        {
+            throw new PublicationCountingHardeningPromotionException(
+                "FEAT-153 publication/counting generated package drift detected.",
+                drift);
+        }
+
+        return CreateResult(mode, generated, [], generated.Artifacts.Select(artifact => artifact.RelativePath).ToArray());
+    }
+
     private static string ResolveArtifactPath(string packageRoot, string relativePath)
     {
         var path = Path.GetFullPath(Path.Combine(packageRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
@@ -78,4 +115,3 @@ public sealed class PublicationCountingHardeningPromotionService
         IReadOnlyList<string> checkedFiles) =>
         new(mode, generated.Status, generated.PackageRoot, writtenFiles, checkedFiles, generated);
 }
-

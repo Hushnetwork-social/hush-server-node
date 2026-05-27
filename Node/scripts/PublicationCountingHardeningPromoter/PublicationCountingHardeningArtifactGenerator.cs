@@ -54,7 +54,7 @@ public static class PublicationCountingHardeningArtifactGenerator
         var acceptedBinding = PublicationCountingBindingChecks.CheckAcceptedToPublished(paths, source);
         var tallyBinding = PublicationCountingBindingChecks.CheckTallyReplay(paths, source);
         var tamperStaleMatrix = PublicationCountingTamperStaleMatrix.Evaluate(source, acceptedBinding, tallyBinding);
-        var status = acceptedBinding.Passed && tallyBinding.Passed && tamperStaleMatrix.Passed ? "accepted" : "blocked";
+        var readme = new PublicationCountingHardeningArtifact(ReadmePath, BuildReadme(source));
         var artifacts = new List<PublicationCountingHardeningArtifact>
         {
             JsonArtifact(PackageVerifierReplaySummaryPath, BuildPackageVerifierReplaySummary(paths, source, generatedAtText)),
@@ -62,13 +62,17 @@ public static class PublicationCountingHardeningArtifactGenerator
             JsonArtifact(TallyReplayBindingSummaryPath, BuildBindingSummary(source, "publication-counting-tally-replay-binding-summary.v1", "tallyReplayChecks", generatedAtText, tallyBinding)),
             JsonArtifact(TamperStaleReplaySummaryPath, BuildTamperStaleReplaySummary(source, generatedAtText, tamperStaleMatrix)),
             JsonArtifact(PackageHashCurrentnessSummaryPath, BuildPackageHashCurrentnessSummary(source, generatedAtText)),
-            JsonArtifact(NoSecretScanResultPath, BuildNoSecretScanResult(source, generatedAtText)),
             JsonArtifact(ReadinessFragmentPath, BuildReadinessFragment(source, generatedAtText)),
             JsonArtifact(ScoreProposalPath, BuildScoreProposal(source, generatedAtText)),
             JsonArtifact(DownstreamHandoffPath, BuildDownstreamHandoff(source, generatedAtText)),
         };
+        var publicSafetyScan = PublicationCountingPublicSafetyScan.Scan([readme, .. artifacts]);
+        artifacts.Insert(5, JsonArtifact(NoSecretScanResultPath, BuildNoSecretScanResult(source, generatedAtText, publicSafetyScan)));
+        var status = acceptedBinding.Passed && tallyBinding.Passed && tamperStaleMatrix.Passed && publicSafetyScan.Passed
+            ? "accepted"
+            : "blocked";
 
-        artifacts.Insert(0, new PublicationCountingHardeningArtifact(ReadmePath, BuildReadme(source)));
+        artifacts.Insert(0, readme);
         artifacts.Insert(1, JsonArtifact(ManifestPath, BuildManifest(source, generatedAtText, artifacts)));
 
         return new PublicationCountingHardeningGeneratedPackage(status, packageRoot, source, artifacts);
@@ -231,18 +235,22 @@ public static class PublicationCountingHardeningArtifactGenerator
             ["blocksScoreMovementWhenStale"] = true,
         };
 
-    private static JsonObject BuildNoSecretScanResult(JsonObject source, string generatedAt)
+    private static JsonObject BuildNoSecretScanResult(
+        JsonObject source,
+        string generatedAt,
+        PublicationCountingPublicSafetyScanResult scanResult)
     {
         var publicSafety = PublicationCountingHardeningContracts.RequireObject(source, "publicSafety");
         return new JsonObject
         {
             ["schemaVersion"] = "publication-counting-no-secret-scan-result.v1",
             ["generatedAt"] = generatedAt,
-            ["status"] = "pass",
-            ["unexpectedFindingCount"] = 0,
+            ["status"] = scanResult.Status,
+            ["unexpectedFindingCount"] = scanResult.Findings.Count,
             ["expectedFindingCountInGeneratedPackage"] = PublicationCountingHardeningContracts.GetInt(publicSafety, "expectedFindingCountInGeneratedPackage"),
             ["forbiddenMaterialCategories"] = PublicationCountingHardeningContracts.Clone(publicSafety["forbiddenMaterialCategories"]),
             ["publicBoundaryStatement"] = PublicationCountingHardeningContracts.GetString(publicSafety, "publicBoundaryStatement"),
+            ["scan"] = PublicationCountingPublicSafetyScan.ToJson(scanResult),
         };
     }
 

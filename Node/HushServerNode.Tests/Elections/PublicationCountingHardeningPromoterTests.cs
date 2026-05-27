@@ -85,6 +85,54 @@ public sealed class PublicationCountingHardeningPromoterTests
                 .Should()
                 .BeTrue(relativePath);
         }
+
+        var noSecretScan = JsonNode.Parse(File.ReadAllText(Path.Combine(
+            workspace.Paths.DefaultPackageRoot,
+            PublicationCountingHardeningArtifactGenerator.NoSecretScanResultPath.Replace('/', Path.DirectorySeparatorChar))))!.AsObject();
+        noSecretScan["status"]!.GetValue<string>().Should().Be("pass");
+        noSecretScan["unexpectedFindingCount"]!.GetValue<int>().Should().Be(0);
+    }
+
+    [Fact]
+    public void Promotion_CheckOnly_DetectsExistingPackageDrift()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        var service = new PublicationCountingHardeningPromotionService();
+        service.Promote(new(
+            workspace.Paths,
+            PublicationCountingHardeningPromotionService.ModePackage,
+            null,
+            null,
+            FixedGeneratedAt,
+            ValidateOnly: false));
+        File.WriteAllText(
+            Path.Combine(workspace.Paths.DefaultPackageRoot, PublicationCountingHardeningArtifactGenerator.ReadmePath),
+            "drifted package");
+
+        var act = () => service.Promote(new(
+            workspace.Paths,
+            PublicationCountingHardeningPromotionService.ModeCheckOnly,
+            null,
+            null,
+            FixedGeneratedAt,
+            ValidateOnly: false));
+
+        act.Should().Throw<PublicationCountingHardeningPromotionException>()
+            .Which.Details.Should().Contain(error => error.Contains(PublicationCountingHardeningArtifactGenerator.ReadmePath, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void PublicSafetyScan_ForbiddenPrivateField_Fails()
+    {
+        var artifacts = new[]
+        {
+            new PublicationCountingHardeningArtifact("validation/bad.json", "{\"shuffleMap\": [1,2,3]}"),
+        };
+
+        var result = PublicationCountingPublicSafetyScan.Scan(artifacts);
+
+        result.Status.Should().Be("fail");
+        result.Findings.Should().Contain(finding => finding.SignalId == "shuffle_map_field");
     }
 
     [Fact]
