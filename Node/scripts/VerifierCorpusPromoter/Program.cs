@@ -8,7 +8,7 @@ try
     if (args.Contains("--help", StringComparer.OrdinalIgnoreCase))
     {
         Console.WriteLine("VerifierCorpusPromoter validates and generates the HushVoting public verifier corpus.");
-        Console.WriteLine("Options: --workspace-root, --public-output-root, --corpus-version, --generated-at, --public-repository-ref, --verifier-source-ref, --verifier-hash, --windows-reviewer-replay-validated, --linux-reviewer-replay-validated, --validate-only.");
+        Console.WriteLine("Options: --workspace-root, --public-output-root, --corpus-version, --generated-at, --public-repository-ref, --verifier-source-ref, --verifier-hash, --windows-reviewer-replay-validated, --linux-reviewer-replay-validated, --validate-only, --check-only.");
         Console.WriteLine("The promoter writes no commits and performs no git push.");
         return 0;
     }
@@ -33,6 +33,7 @@ try
             ? DateTimeOffset.Parse(generatedAt, null, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal)
             : DateTimeOffset.UtcNow,
         arguments.ContainsKey("validate-only"),
+        arguments.ContainsKey("check-only"),
         CommandLineArguments.TryGetValue(arguments, "public-repository-ref", out var publicRepositoryRef)
             ? publicRepositoryRef
             : "local-generated",
@@ -48,9 +49,12 @@ try
             RuntimeInformation.IsOSPlatform(OSPlatform.Linux));
 
     var result = await new VerifierCorpusPromotionService().PromoteAsync(options);
-    Console.WriteLine(result.Mode == VerifierCorpusPromotionService.ModeValidateOnly
-        ? $"Validated HushVoting verifier corpus {result.CorpusVersion}"
-        : $"Generated HushVoting verifier corpus {result.CorpusVersion}");
+    Console.WriteLine(result.Mode switch
+    {
+        VerifierCorpusPromotionService.ModeValidateOnly => $"Validated HushVoting verifier corpus {result.CorpusVersion}",
+        VerifierCorpusPromotionService.ModeCheckOnly => $"Checked HushVoting verifier corpus {result.CorpusVersion}",
+        _ => $"Generated HushVoting verifier corpus {result.CorpusVersion}",
+    });
     Console.WriteLine($"Output root: {result.OutputRoot}");
     Console.WriteLine($"Generated at: {result.GeneratedAt:O}");
     Console.WriteLine($"Manifest hash: {result.ManifestHash}");

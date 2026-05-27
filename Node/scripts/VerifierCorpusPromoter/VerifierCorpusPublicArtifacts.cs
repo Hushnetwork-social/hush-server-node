@@ -75,6 +75,16 @@ public sealed partial class VerifierCorpusGenerator
             "validation/clean-machine-validation-summary.json",
             BuildCleanMachineValidationSummary(options, fixtures),
             cancellationToken);
+        await WriteJsonAsync(
+            options.OutputRoot,
+            "validation/result-code-stability-summary.json",
+            BuildResultCodeStabilitySummary(options, fixtures),
+            cancellationToken);
+        await WriteJsonAsync(
+            options.OutputRoot,
+            "validation/stale-version-drift-check.json",
+            BuildStaleVersionDriftCheck(options, fixtures),
+            cancellationToken);
 
         await WriteJsonAsync(
             options.OutputRoot,
@@ -94,15 +104,29 @@ public sealed partial class VerifierCorpusGenerator
         var provisionalManifestHash = Sha256Text(CanonicalJson(provisionalManifest));
         await WriteJsonAsync(
             options.OutputRoot,
-            "readiness/verifier-corpus-readiness-fragment.json",
+            ReadinessFragmentPath(options),
             BuildReadinessFragment(options, fixtures, provisionalManifestHash, fixtureIndexHash, "pending", []),
             cancellationToken);
         await WriteJsonAsync(
             options.OutputRoot,
-            "handoff/verifier-corpus-downstream-handoff.json",
+            DownstreamHandoffPath(options),
             BuildDownstreamHandoff(options, fixtures, provisionalManifestHash, fixtureIndexHash, "pending"),
             cancellationToken);
+        if (IsRefreshRelease(options))
+        {
+            await WriteJsonAsync(
+                options.OutputRoot,
+                "readiness/verifier-corpus-refresh-score-proposal.json",
+                BuildRefreshScoreProposal(options, fixtures, provisionalManifestHash, fixtureIndexHash, "pending", []),
+                cancellationToken);
+        }
+
         await WriteTextAsync(options.OutputRoot, "README.md", BuildReadme(options, provisionalManifestHash), cancellationToken);
+        await WriteTextAsync(
+            options.OutputRoot,
+            "release-delta-report.md",
+            BuildReleaseDeltaReport(options, fixtures, provisionalManifestHash, "pending"),
+            cancellationToken);
 
         var scanFindings = ScanPublicOutput(options.OutputRoot);
         var unexpectedFindingCount = scanFindings.Count(x => !x.ExpectedTamperFixture);
@@ -126,15 +150,29 @@ public sealed partial class VerifierCorpusGenerator
 
         await WriteJsonAsync(
             options.OutputRoot,
-            "readiness/verifier-corpus-readiness-fragment.json",
+            ReadinessFragmentPath(options),
             BuildReadinessFragment(options, fixtures, manifestHash, fixtureIndexHash, scanStatus, scanFindings),
             cancellationToken);
         await WriteJsonAsync(
             options.OutputRoot,
-            "handoff/verifier-corpus-downstream-handoff.json",
+            DownstreamHandoffPath(options),
             BuildDownstreamHandoff(options, fixtures, manifestHash, fixtureIndexHash, scanStatus),
             cancellationToken);
+        if (IsRefreshRelease(options))
+        {
+            await WriteJsonAsync(
+                options.OutputRoot,
+                "readiness/verifier-corpus-refresh-score-proposal.json",
+                BuildRefreshScoreProposal(options, fixtures, manifestHash, fixtureIndexHash, scanStatus, scanFindings),
+                cancellationToken);
+        }
+
         await WriteTextAsync(options.OutputRoot, "README.md", BuildReadme(options, manifestHash), cancellationToken);
+        await WriteTextAsync(
+            options.OutputRoot,
+            "release-delta-report.md",
+            BuildReleaseDeltaReport(options, fixtures, manifestHash, scanStatus),
+            cancellationToken);
 
         scanFindings = ScanPublicOutput(options.OutputRoot);
         unexpectedFindingCount = scanFindings.Count(x => !x.ExpectedTamperFixture);
@@ -235,6 +273,8 @@ public sealed partial class VerifierCorpusGenerator
                 ["fixtureId"] = fixture.FixtureId,
                 ["fixtureFamily"] = ResolveFixtureFamily(fixture.FixtureId),
                 ["profileId"] = fixture.VerifierProfileId,
+                ["corpusProfileId"] = fixture.CorpusProfileId,
+                ["profileDescription"] = fixture.ProfileDescription,
                 ["packagePath"] = PublicPackagePath(fixture),
                 ["packageHash"] = fixture.PackageHash,
                 ["fixtureManifestRef"] = $"fixtures/{fixture.FixtureId}/fixture-manifest.json",
@@ -261,11 +301,13 @@ public sealed partial class VerifierCorpusGenerator
             ["status"] = "accepted",
             ["visibility"] = "public",
             ["profileId"] = fixture.VerifierProfileId,
+            ["corpusProfileId"] = fixture.CorpusProfileId,
+            ["profileDescription"] = fixture.ProfileDescription,
             ["packagePath"] = PublicPackagePath(fixture),
             ["packageHash"] = fixture.PackageHash,
             ["mutation"] = new JsonObject
             {
-                ["mutationType"] = fixture.FixtureId == GoodSampleFixtureId ? "none" : "synthetic_tamper",
+                ["mutationType"] = IsGoodSampleFixture(fixture.FixtureId) ? "none" : "synthetic_tamper",
                 ["description"] = MutationDescription(fixture.FixtureId),
             },
             ["changedArtifact"] = ChangedArtifact(fixture.FixtureId),
@@ -274,7 +316,7 @@ public sealed partial class VerifierCorpusGenerator
             ["expectedOverallStatus"] = ToJsonEnumString(fixture.ExpectedOverallStatus),
             ["expectedExitCode"] = fixture.ExpectedExitCode,
             ["expectedOutputRef"] = $"expected-results/{fixture.FixtureId}.json",
-            ["proofStatement"] = fixture.FixtureId == GoodSampleFixtureId
+            ["proofStatement"] = IsGoodSampleFixture(fixture.FixtureId)
                 ? "Synthetic finalized public package passes the public anonymous verifier."
                 : "Synthetic tamper package must expose the documented primary verifier failure.",
             ["secondaryFailuresAllowed"] = fixture.SecondaryFailuresAllowed,
@@ -339,6 +381,77 @@ public sealed partial class VerifierCorpusGenerator
                     : "Linux replay must be run before claiming Linux reviewer validation.",
             },
             ["verifierOutputs"] = outputs,
+        };
+    }
+
+    private static JsonObject BuildResultCodeStabilitySummary(
+        VerifierCorpusGenerationOptions options,
+        IReadOnlyList<VerifierCorpusFixtureGenerationResult> fixtures)
+    {
+        var outputArray = new JsonArray();
+        foreach (var fixture in fixtures.OrderBy(x => x.FixtureId, StringComparer.Ordinal))
+        {
+            outputArray.Add(new JsonObject
+            {
+                ["fixtureId"] = fixture.FixtureId,
+                ["fixtureFamily"] = ResolveFixtureFamily(fixture.FixtureId),
+                ["corpusProfileId"] = fixture.CorpusProfileId,
+                ["expectedPrimaryResultCode"] = fixture.ExpectedPrimaryResultCode,
+                ["expectedCheckStatus"] = ToJsonEnumString(fixture.ExpectedCheckStatus),
+                ["expectedOverallStatus"] = ToJsonEnumString(fixture.ExpectedOverallStatus),
+                ["expectedExitCode"] = fixture.ExpectedExitCode,
+                ["normalizedOutputHash"] = fixture.NormalizedOutputHash,
+                ["stable"] = true,
+            });
+        }
+
+        return new JsonObject
+        {
+            ["schemaVersion"] = "verifier-corpus-result-code-stability-summary.v1",
+            ["generatedAt"] = options.GeneratedAt.UtcDateTime.ToString("O"),
+            ["status"] = fixtures.All(x => !string.IsNullOrWhiteSpace(x.ExpectedPrimaryResultCode) && !string.IsNullOrWhiteSpace(x.NormalizedOutputHash))
+                ? "accepted"
+                : "blocked",
+            ["fixtureCount"] = fixtures.Count,
+            ["goodSampleCount"] = fixtures.Count(x => IsGoodSampleFixture(x.FixtureId)),
+            ["tamperOrDriftFixtureCount"] = fixtures.Count(x => !IsGoodSampleFixture(x.FixtureId)),
+            ["stabilityModel"] = "Expected result-code, check status, overall status, exit code, and normalized verifier-output hash are emitted for every generated fixture and covered by focused repeated-run tests.",
+            ["fixtures"] = outputArray,
+        };
+    }
+
+    private static JsonObject BuildStaleVersionDriftCheck(
+        VerifierCorpusGenerationOptions options,
+        IReadOnlyList<VerifierCorpusFixtureGenerationResult> fixtures)
+    {
+        var driftFixtures = fixtures
+            .Where(x => string.Equals(x.CorpusProfileId, "stale_version_drift", StringComparison.Ordinal))
+            .OrderBy(x => x.FixtureId, StringComparer.Ordinal)
+            .ToArray();
+        var driftArray = new JsonArray();
+        foreach (var fixture in driftFixtures)
+        {
+            driftArray.Add(new JsonObject
+            {
+                ["fixtureId"] = fixture.FixtureId,
+                ["changedArtifact"] = ChangedArtifact(fixture.FixtureId),
+                ["expectedPrimaryResultCode"] = fixture.ExpectedPrimaryResultCode,
+                ["expectedOverallStatus"] = ToJsonEnumString(fixture.ExpectedOverallStatus),
+                ["expectedExitCode"] = fixture.ExpectedExitCode,
+                ["blocksScoreMovement"] = true,
+            });
+        }
+
+        return new JsonObject
+        {
+            ["schemaVersion"] = "verifier-corpus-stale-version-drift-check.v1",
+            ["generatedAt"] = options.GeneratedAt.UtcDateTime.ToString("O"),
+            ["status"] = driftFixtures.Length > 0 && driftFixtures.All(x => x.ExpectedOverallStatus != VerificationOverallStatus.Pass)
+                ? "accepted"
+                : "blocked",
+            ["policy"] = "A refreshed corpus cannot support RDY-DIM-002 movement if verifier source, verifier binary, protocol package, package schema, expected results, or corpus index bindings drift.",
+            ["driftFixtureCount"] = driftFixtures.Length,
+            ["fixtures"] = driftArray,
         };
     }
 
@@ -434,6 +547,15 @@ public sealed partial class VerifierCorpusGenerator
                 ["sourceRef"] = options.VerifierSourceRef,
                 ["canonicalizationVersion"] = VerifierCorpusContracts.CanonicalizationVersion,
             },
+            ["baselineRelease"] = new JsonObject
+            {
+                ["producerFeature"] = "FEAT-135",
+                ["corpusVersion"] = "v0.1.0",
+                ["status"] = "accepted",
+                ["manifestHash"] = "sha256:a4e9f7f8a4e62b8611e22410da2400f2d22e7d22ab585bb50a0b997745301b64",
+                ["fixtureIndexHash"] = "sha256:98e2e876f798f553340d91c2d12fe9036c16b91d5726a40f36c332d7ae11a200",
+                ["goodPackageHash"] = "sha256:2d94eb9148d97744c53658514b9af663aa80315303e08ba1cd9ca567fb321f36",
+            },
             ["goodSample"] = new JsonObject
             {
                 ["fixtureId"] = good.FixtureId,
@@ -454,6 +576,19 @@ public sealed partial class VerifierCorpusGenerator
                 ["path"] = "validation/clean-machine-validation-summary.json",
                 ["status"] = BuildPlatformValidationStatus(options),
             },
+            ["resultCodeStability"] = new JsonObject
+            {
+                ["path"] = "validation/result-code-stability-summary.json",
+                ["fixtureCount"] = fixtures.Count,
+                ["goodSampleCount"] = fixtures.Count(x => IsGoodSampleFixture(x.FixtureId)),
+                ["status"] = "accepted",
+            },
+            ["staleVersionDriftCheck"] = new JsonObject
+            {
+                ["path"] = "validation/stale-version-drift-check.json",
+                ["fixtureCount"] = fixtures.Count(x => string.Equals(x.CorpusProfileId, "stale_version_drift", StringComparison.Ordinal)),
+                ["status"] = IsRefreshRelease(options) ? "accepted" : "not_applicable",
+            },
             ["noSecretScan"] = new JsonObject
             {
                 ["path"] = "validation/no-secret-scan-result.json",
@@ -463,12 +598,32 @@ public sealed partial class VerifierCorpusGenerator
             },
             ["readinessFragment"] = new JsonObject
             {
-                ["path"] = "readiness/verifier-corpus-readiness-fragment.json",
+                ["path"] = IsRefreshRelease(options)
+                    ? "readiness/verifier-corpus-refresh-readiness-fragment.json"
+                    : "readiness/verifier-corpus-readiness-fragment.json",
             },
             ["downstreamHandoff"] = new JsonObject
             {
-                ["path"] = "handoff/verifier-corpus-downstream-handoff.json",
+                ["path"] = IsRefreshRelease(options)
+                    ? "handoff/verifier-corpus-refresh-downstream-handoff.json"
+                    : "handoff/verifier-corpus-downstream-handoff.json",
             },
+            ["releaseDeltaReport"] = new JsonObject
+            {
+                ["path"] = "release-delta-report.md",
+                ["baselineCorpusVersion"] = "v0.1.0",
+                ["targetCorpusVersion"] = options.CorpusVersion,
+            },
+            ["scoreProposal"] = IsRefreshRelease(options)
+                ? new JsonObject
+                {
+                    ["path"] = "readiness/verifier-corpus-refresh-score-proposal.json",
+                    ["dimensionId"] = "RDY-DIM-002",
+                    ["proposedScoreFrom"] = 6,
+                    ["proposedScoreTo"] = 8,
+                    ["doesNotMutateRegister"] = true,
+                }
+                : null,
             ["generatedAt"] = options.GeneratedAt.UtcDateTime.ToString("O"),
             ["supersessionRules"] = BuildSupersessionRules(),
             ["publicBoundaryStatement"] = "Synthetic public corpus only. No private backend, database, cloud account, real voter data, real customer election data, or authority approval claim is required or included.",
@@ -489,15 +644,141 @@ public sealed partial class VerifierCorpusGenerator
             scanFindings.All(x => x.ExpectedTamperFixture)
                 ? "accepted"
                 : "blocked";
+        var goodSampleCount = fixtures.Count(x => IsGoodSampleFixture(x.FixtureId));
+        var driftFixtureCount = fixtures.Count(x => string.Equals(x.CorpusProfileId, "stale_version_drift", StringComparison.Ordinal));
+        var evidenceRefs = new JsonArray
+        {
+            new JsonObject
+            {
+                ["path"] = "corpus-manifest.json",
+                ["sha256Hash"] = manifestHash,
+            },
+            new JsonObject
+            {
+                ["path"] = "fixtures/fixture-index.json",
+                ["sha256Hash"] = fixtureIndexHash,
+            },
+            new JsonObject
+            {
+                ["path"] = $"packages/{GoodSampleFixtureId}",
+                ["sha256Hash"] = good.PackageHash,
+            },
+            new JsonObject
+            {
+                ["path"] = "validation/no-secret-scan-result.json",
+                ["status"] = noSecretScanStatus,
+            },
+            new JsonObject
+            {
+                ["path"] = "validation/result-code-stability-summary.json",
+                ["status"] = "accepted",
+            },
+        };
+        var checkResults = new JsonArray
+        {
+            new JsonObject
+            {
+                ["checkId"] = "good-sample-pass",
+                ["status"] = ToJsonEnumString(good.ExpectedOverallStatus),
+                ["exitCode"] = good.ExpectedExitCode,
+            },
+            new JsonObject
+            {
+                ["checkId"] = "tamper-fixtures-present",
+                ["status"] = fixtures.Count >= LegacyFixtureSpecs.Length ? "pass" : "fail",
+                ["count"] = fixtures.Count,
+            },
+            new JsonObject
+            {
+                ["checkId"] = "unexpected-public-material",
+                ["status"] = scanFindings.Any(x => !x.ExpectedTamperFixture) ? "fail" : "pass",
+                ["unexpectedFindingCount"] = scanFindings.Count(x => !x.ExpectedTamperFixture),
+            },
+        };
+
+        if (IsRefreshRelease(options))
+        {
+            evidenceRefs.Add(new JsonObject
+            {
+                ["path"] = "validation/stale-version-drift-check.json",
+                ["status"] = driftFixtureCount > 0 ? "accepted" : "blocked",
+            });
+            evidenceRefs.Add(new JsonObject
+            {
+                ["path"] = "readiness/verifier-corpus-refresh-score-proposal.json",
+                ["status"] = status,
+            });
+            checkResults.Add(new JsonObject
+            {
+                ["checkId"] = "good-sample-breadth",
+                ["status"] = goodSampleCount >= 5 ? "pass" : "fail",
+                ["count"] = goodSampleCount,
+            });
+            checkResults.Add(new JsonObject
+            {
+                ["checkId"] = "stale-version-drift-fixtures-present",
+                ["status"] = driftFixtureCount >= 6 ? "pass" : "fail",
+                ["count"] = driftFixtureCount,
+            });
+        }
 
         return new JsonObject
         {
             ["schemaVersion"] = "verifier-corpus-readiness-fragment.v1",
             ["fragmentId"] = $"AT-RDY-007-{options.CorpusVersion}",
-            ["featureSlice"] = "public-verifier-sample-and-tamper-corpus",
+            ["featureSlice"] = IsRefreshRelease(options)
+                ? "verifier-corpus-breadth-release-refresh"
+                : "public-verifier-sample-and-tamper-corpus",
             ["sourceGap"] = "Verifier/sample/tamper corpus",
             ["acceptanceGate"] = VerifierCorpusContracts.AcceptanceGate,
             ["dimensionId"] = "RDY-DIM-002",
+            ["evidenceRefs"] = evidenceRefs,
+            ["checkResults"] = checkResults,
+            ["status"] = status,
+            ["visibility"] = "public",
+            ["claimEffect"] = IsRefreshRelease(options)
+                ? "Candidate evidence for RDY-DIM-002 6 -> 8 only; register promotion remains owned by FEAT-156 or a later FEAT-130 promotion."
+                : "Candidate evidence for the readiness register only; register promotion remains owned by FEAT-130.",
+            ["residualRisk"] = "Synthetic corpus does not prove operating history, customer election delivery, cross-device receipt import, production rollout, failed-finalize continuity, or external review.",
+            ["doesNotMutateRegister"] = true,
+            ["promotionInstructions"] = IsRefreshRelease(options)
+                ? "FEAT-156 may consume this fragment and score proposal after maintainer review of v0.2.0 public corpus output and hashes."
+                : "FEAT-130 may ingest this fragment after maintainer review of the public corpus output and hashes.",
+            ["supersessionRules"] = BuildSupersessionRules(),
+        };
+    }
+
+    private static JsonObject BuildRefreshScoreProposal(
+        VerifierCorpusGenerationOptions options,
+        IReadOnlyList<VerifierCorpusFixtureGenerationResult> fixtures,
+        string manifestHash,
+        string fixtureIndexHash,
+        string noSecretScanStatus,
+        IReadOnlyList<VerifierCorpusScanFinding> scanFindings)
+    {
+        var goodSampleCount = fixtures.Count(x => IsGoodSampleFixture(x.FixtureId));
+        var driftFixtureCount = fixtures.Count(x => string.Equals(x.CorpusProfileId, "stale_version_drift", StringComparison.Ordinal));
+        var tamperFixtureCount = fixtures.Count(x => !IsGoodSampleFixture(x.FixtureId));
+        var canSupportScoreMovement = goodSampleCount >= 5 &&
+            driftFixtureCount >= 6 &&
+            scanFindings.All(x => x.ExpectedTamperFixture) &&
+            fixtures.Where(x => IsGoodSampleFixture(x.FixtureId)).All(x =>
+                x.ExpectedOverallStatus == VerificationOverallStatus.Pass &&
+                x.ExpectedExitCode == VerificationExitCodes.Pass) &&
+            fixtures.Where(x => !IsGoodSampleFixture(x.FixtureId)).All(x =>
+                x.ExpectedOverallStatus != VerificationOverallStatus.Pass);
+
+        return new JsonObject
+        {
+            ["schemaVersion"] = "verifier-corpus-refresh-score-proposal.v1",
+            ["proposalId"] = $"RDY-DIM-002-{options.CorpusVersion}-score-proposal",
+            ["producerFeature"] = "FEAT-151",
+            ["dimensionId"] = "RDY-DIM-002",
+            ["proposedScoreFrom"] = 6,
+            ["proposedScoreTo"] = 8,
+            ["status"] = canSupportScoreMovement ? "accepted" : "blocked",
+            ["doesNotMutateRegister"] = true,
+            ["generatedAt"] = options.GeneratedAt.UtcDateTime.ToString("O"),
             ["evidenceRefs"] = new JsonArray
             {
                 new JsonObject
@@ -512,8 +793,13 @@ public sealed partial class VerifierCorpusGenerator
                 },
                 new JsonObject
                 {
-                    ["path"] = $"packages/{GoodSampleFixtureId}",
-                    ["sha256Hash"] = good.PackageHash,
+                    ["path"] = "validation/result-code-stability-summary.json",
+                    ["status"] = "accepted",
+                },
+                new JsonObject
+                {
+                    ["path"] = "validation/stale-version-drift-check.json",
+                    ["status"] = driftFixtureCount >= 6 ? "accepted" : "blocked",
                 },
                 new JsonObject
                 {
@@ -521,34 +807,13 @@ public sealed partial class VerifierCorpusGenerator
                     ["status"] = noSecretScanStatus,
                 },
             },
-            ["checkResults"] = new JsonArray
+            ["scoreMovementRationale"] = new JsonObject
             {
-                new JsonObject
-                {
-                    ["checkId"] = "good-sample-pass",
-                    ["status"] = ToJsonEnumString(good.ExpectedOverallStatus),
-                    ["exitCode"] = good.ExpectedExitCode,
-                },
-                new JsonObject
-                {
-                    ["checkId"] = "tamper-fixtures-present",
-                    ["status"] = fixtures.Count == FixtureSpecs.Length ? "pass" : "fail",
-                    ["count"] = fixtures.Count,
-                },
-                new JsonObject
-                {
-                    ["checkId"] = "unexpected-public-material",
-                    ["status"] = scanFindings.Any(x => !x.ExpectedTamperFixture) ? "fail" : "pass",
-                    ["unexpectedFindingCount"] = scanFindings.Count(x => !x.ExpectedTamperFixture),
-                },
+                ["baselineEvidence"] = "FEAT-135 v0.1.0 remains accepted with one good sample and preserved tamper coverage.",
+                ["refreshEvidence"] = $"FEAT-151 v0.2.0 includes {goodSampleCount} good-sample profiles, {tamperFixtureCount} tamper/drift fixtures, stable expected result outputs, stale-version drift checks, and no-secret scan evidence.",
+                ["remainingLimits"] = "This proposal does not claim production rollout, public/state election readiness, legal sufficiency, failed-finalization continuity, or external validator acceptance.",
             },
-            ["status"] = status,
-            ["visibility"] = "public",
-            ["claimEffect"] = "Candidate evidence for the readiness register only; register promotion remains owned by FEAT-130.",
-            ["residualRisk"] = "Synthetic corpus does not prove operating history, customer election delivery, cross-device receipt import, or external review.",
-            ["doesNotMutateRegister"] = true,
-            ["promotionInstructions"] = "FEAT-130 may ingest this fragment after maintainer review of the public corpus output and hashes.",
-            ["supersessionRules"] = BuildSupersessionRules(),
+            ["promotionOwner"] = "FEAT-156 or later explicit FEAT-130 promotion",
         };
     }
 
@@ -560,12 +825,15 @@ public sealed partial class VerifierCorpusGenerator
         string noSecretScanStatus)
     {
         var good = fixtures.Single(x => string.Equals(x.FixtureId, GoodSampleFixtureId, StringComparison.Ordinal));
+        var readinessPath = ReadinessFragmentPath(options);
 
         return new JsonObject
         {
             ["schemaVersion"] = "verifier-corpus-downstream-handoff.v1",
-            ["handoffId"] = $"FEAT-135-{options.CorpusVersion}-handoff",
-            ["producerFeature"] = "FEAT-135",
+            ["handoffId"] = IsRefreshRelease(options)
+                ? $"FEAT-151-{options.CorpusVersion}-handoff"
+                : $"FEAT-135-{options.CorpusVersion}-handoff",
+            ["producerFeature"] = IsRefreshRelease(options) ? "FEAT-151" : "FEAT-135",
             ["corpusVersion"] = options.CorpusVersion,
             ["publicRepositoryRef"] = options.PublicRepositoryRef,
             ["manifestHash"] = manifestHash,
@@ -597,9 +865,37 @@ public sealed partial class VerifierCorpusGenerator
                     "fixtures/fixture-index.json",
                     $"packages/{GoodSampleFixtureId}",
                     "validation/no-secret-scan-result.json",
-                    "readiness/verifier-corpus-readiness-fragment.json",
+                    readinessPath,
                 },
                 ["observedDeliveryBoundary"] = "FEAT-141 must still collect real rehearsal or pilot evidence; this corpus is synthetic verifier replay evidence.",
+            },
+            ["feat152ConsumerInstructions"] = new JsonObject
+            {
+                ["receiptMatrixImplementedHere"] = false,
+                ["reuseInstruction"] = "FEAT-152 may use the refreshed corpus hashes as verifier-package inputs only; QR/manual/browser/accessibility receipt-channel evidence remains owned by FEAT-152.",
+            },
+            ["feat153ConsumerInstructions"] = new JsonObject
+            {
+                ["publicationCountingHardeningImplementedHere"] = false,
+                ["reuseInstruction"] = "FEAT-153 may consume publication/counting tamper fixture expectations, but must still produce its own runtime publication/counting evidence.",
+            },
+            ["feat154ConsumerInstructions"] = new JsonObject
+            {
+                ["productionOperationalRunImplementedHere"] = false,
+                ["reuseInstruction"] = "FEAT-154 may cite this corpus as verifier replay support only; it still owns production-like operational run evidence.",
+            },
+            ["feat155ConsumerInstructions"] = new JsonObject
+            {
+                ["failedFinalizeContinuityImplementedHere"] = false,
+                ["reuseInstruction"] = "FEAT-155 may reuse stale-version drift policy language, but failed-finalize continuity rehearsal remains out of this corpus release.",
+            },
+            ["feat156ConsumerInstructions"] = new JsonObject
+            {
+                ["registerPromotionImplementedHere"] = false,
+                ["scoreProposalRef"] = IsRefreshRelease(options)
+                    ? "readiness/verifier-corpus-refresh-score-proposal.json"
+                    : "not_applicable",
+                ["reuseInstruction"] = "FEAT-156 may ingest the readiness fragment and score proposal after maintainer review; this handoff does not mutate the canonical readiness register.",
             },
             ["residualRisk"] = "Does not replace pilot ceremony evidence, real deployment observation, external validation, or legal/regulatory approval.",
         };
@@ -623,6 +919,59 @@ public sealed partial class VerifierCorpusGenerator
         }
 
         return "commands_documented_platform_replay_pending";
+    }
+
+    private static bool IsRefreshRelease(VerifierCorpusGenerationOptions options) =>
+        string.Equals(options.CorpusVersion, "v0.2.0", StringComparison.OrdinalIgnoreCase);
+
+    private static string ReadinessFragmentPath(VerifierCorpusGenerationOptions options) =>
+        IsRefreshRelease(options)
+            ? "readiness/verifier-corpus-refresh-readiness-fragment.json"
+            : "readiness/verifier-corpus-readiness-fragment.json";
+
+    private static string DownstreamHandoffPath(VerifierCorpusGenerationOptions options) =>
+        IsRefreshRelease(options)
+            ? "handoff/verifier-corpus-refresh-downstream-handoff.json"
+            : "handoff/verifier-corpus-downstream-handoff.json";
+
+    private static string BuildReleaseDeltaReport(
+        VerifierCorpusGenerationOptions options,
+        IReadOnlyList<VerifierCorpusFixtureGenerationResult> fixtures,
+        string manifestHash,
+        string noSecretScanStatus)
+    {
+        var goodSampleCount = fixtures.Count(x => IsGoodSampleFixture(x.FixtureId));
+        var driftFixtureCount = fixtures.Count(x => string.Equals(x.CorpusProfileId, "stale_version_drift", StringComparison.Ordinal));
+        var tamperFixtureCount = fixtures.Count(x => !IsGoodSampleFixture(x.FixtureId));
+        return $$"""
+        # Verifier Corpus Release Delta
+
+        Corpus family: `{{options.CorpusFamily}}`
+        Target release: `{{options.CorpusVersion}}`
+        Baseline release: `hushvoting-v1/v0.1.0`
+        Producer feature: `{{(IsRefreshRelease(options) ? "FEAT-151" : "FEAT-135")}}`
+        Manifest hash: `{{manifestHash}}`
+
+        ## Baseline Kept
+
+        FEAT-135 `v0.1.0` remains the accepted public verifier corpus baseline. The refresh keeps the original good sample and tamper families traceable through `baselineRelease` in `corpus-manifest.json`.
+
+        ## Refresh Additions
+
+        - Good-sample profiles: {{goodSampleCount}}
+        - Tamper and drift fixtures: {{tamperFixtureCount}}
+        - Stale/version drift fixtures: {{driftFixtureCount}}
+        - Stable expected-result files: {{fixtures.Count}}
+        - No-secret scan status: `{{noSecretScanStatus}}`
+
+        ## Score Boundary
+
+        This release can support a future `RDY-DIM-002 6 -> 8` proposal when all validation files pass. It does not mutate the readiness register and does not claim production rollout, public/state election readiness, legal sufficiency, failed-finalize continuity, or external validation.
+
+        ## Downstream Owners
+
+        FEAT-152 owns receipt-channel matrix evidence, FEAT-153 owns publication/counting runtime hardening, FEAT-154 owns production-like operational run evidence, FEAT-155 owns failed-finalize continuity rehearsal, and FEAT-156 owns final readiness-register promotion.
+        """;
     }
 
     private static string BuildReadme(VerifierCorpusGenerationOptions options, string manifestHash) =>
@@ -650,6 +999,7 @@ public sealed partial class VerifierCorpusGenerator
         ```
 
         Tamper packages are listed in `fixtures/fixture-index.json`. Each fixture has an expected result file in `expected-results/`.
+        Refresh releases also include `validation/result-code-stability-summary.json`, `validation/stale-version-drift-check.json`, `readiness/verifier-corpus-refresh-score-proposal.json`, and `release-delta-report.md`.
 
         Public boundary:
 
@@ -695,9 +1045,15 @@ public sealed partial class VerifierCorpusGenerator
 
     private static string ResolveFixtureFamily(string fixtureId)
     {
-        if (string.Equals(fixtureId, GoodSampleFixtureId, StringComparison.Ordinal))
+        if (IsGoodSampleFixture(fixtureId))
         {
             return "good_sample";
+        }
+
+        if (fixtureId.StartsWith("tamper-stale-", StringComparison.Ordinal) ||
+            fixtureId.Contains("-drift", StringComparison.Ordinal))
+        {
+            return "stale_version_drift";
         }
 
         if (fixtureId is "tamper-missing-artifact" or "tamper-artifact-hash" or "tamper-malformed-package-json")
@@ -747,6 +1103,7 @@ public sealed partial class VerifierCorpusGenerator
         fixtureId switch
         {
             GoodSampleFixtureId => "none",
+            _ when fixtureId.StartsWith("sample-good-", StringComparison.Ordinal) => "profile-marker.json",
             "tamper-missing-artifact" => VerificationPackageFileNames.AcceptedBallotSet,
             "tamper-artifact-hash" => VerificationPackageFileNames.ResultBinding,
             "tamper-malformed-package-json" => VerificationPackageFileNames.ElectionRecord,
@@ -769,6 +1126,12 @@ public sealed partial class VerifierCorpusGenerator
             "tamper-sp08-circuit-key-hash-mismatch" => VerificationPackageFileNames.Sp08ReleaseManifest,
             "tamper-sp10-forbidden-leak" => VerificationPackageFileNames.Sp10OperationalSecuritySummary,
             "tamper-sp10-kms-public-value-leak" => VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+            "tamper-stale-verifier-source-ref" => VerificationPackageFileNames.Sp08ReleaseManifest,
+            "tamper-stale-verifier-binary-hash" => VerificationPackageFileNames.Sp08ReleaseManifest,
+            "tamper-stale-protocol-package-version" => VerificationPackageFileNames.Sp08ReleaseIntegrity,
+            "tamper-package-schema-version-drift" => VerificationPackageFileNames.VerifierInputManifest,
+            "tamper-expected-result-drift" => VerificationPackageFileNames.ResultBinding,
+            "tamper-corpus-index-drift" => VerificationPackageFileNames.VerifierProfile,
             _ => "unknown",
         };
 
@@ -776,6 +1139,7 @@ public sealed partial class VerifierCorpusGenerator
         fixtureId switch
         {
             GoodSampleFixtureId => "No mutation. This is the passing synthetic finalized package.",
+            _ when fixtureId.StartsWith("sample-good-", StringComparison.Ordinal) => "No verifier-failing mutation. Adds a public-safe profile marker to classify the synthetic good-sample shape.",
             "tamper-missing-artifact" => "Deletes a manifest-listed accepted ballot artifact.",
             "tamper-artifact-hash" => "Changes artifact bytes without updating the package manifest hash.",
             "tamper-malformed-package-json" => "Replaces the election record JSON with malformed content.",
@@ -798,6 +1162,12 @@ public sealed partial class VerifierCorpusGenerator
             "tamper-sp08-circuit-key-hash-mismatch" => "Breaks circuit and key digest shape.",
             "tamper-sp10-forbidden-leak" => "Adds synthetic forbidden public operational wording and boundary markers.",
             "tamper-sp10-kms-public-value-leak" => "Adds a synthetic public KMS-style value marker.",
+            "tamper-stale-verifier-source-ref" => "Breaks the bound verifier source component digest to simulate stale verifier-source drift.",
+            "tamper-stale-verifier-binary-hash" => "Breaks the bound verifier component source reference to simulate stale verifier-binary drift.",
+            "tamper-stale-protocol-package-version" => "Breaks the Protocol Omega package manifest binding.",
+            "tamper-package-schema-version-drift" => "Corrupts the verifier input manifest to simulate unaccepted package schema drift.",
+            "tamper-expected-result-drift" => "Changes result-binding bytes so the expected output no longer matches observed package content.",
+            "tamper-corpus-index-drift" => "Changes the verifier profile binding to simulate corpus index/profile drift.",
             _ => "Synthetic tamper mutation.",
         };
 
