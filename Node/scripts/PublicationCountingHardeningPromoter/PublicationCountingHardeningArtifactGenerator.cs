@@ -53,13 +53,14 @@ public static class PublicationCountingHardeningArtifactGenerator
         var generatedAtText = ResolveGeneratedAt(source, generatedAt);
         var acceptedBinding = PublicationCountingBindingChecks.CheckAcceptedToPublished(paths, source);
         var tallyBinding = PublicationCountingBindingChecks.CheckTallyReplay(paths, source);
-        var status = acceptedBinding.Passed && tallyBinding.Passed ? "accepted" : "blocked";
+        var tamperStaleMatrix = PublicationCountingTamperStaleMatrix.Evaluate(source, acceptedBinding, tallyBinding);
+        var status = acceptedBinding.Passed && tallyBinding.Passed && tamperStaleMatrix.Passed ? "accepted" : "blocked";
         var artifacts = new List<PublicationCountingHardeningArtifact>
         {
             JsonArtifact(PackageVerifierReplaySummaryPath, BuildPackageVerifierReplaySummary(paths, source, generatedAtText)),
             JsonArtifact(AcceptedToPublishedBindingSummaryPath, BuildBindingSummary(source, "publication-counting-accepted-to-published-binding-summary.v1", "acceptedToPublishedChecks", generatedAtText, acceptedBinding)),
             JsonArtifact(TallyReplayBindingSummaryPath, BuildBindingSummary(source, "publication-counting-tally-replay-binding-summary.v1", "tallyReplayChecks", generatedAtText, tallyBinding)),
-            JsonArtifact(TamperStaleReplaySummaryPath, BuildTamperStaleReplaySummary(source, generatedAtText)),
+            JsonArtifact(TamperStaleReplaySummaryPath, BuildTamperStaleReplaySummary(source, generatedAtText, tamperStaleMatrix)),
             JsonArtifact(PackageHashCurrentnessSummaryPath, BuildPackageHashCurrentnessSummary(source, generatedAtText)),
             JsonArtifact(NoSecretScanResultPath, BuildNoSecretScanResult(source, generatedAtText)),
             JsonArtifact(ReadinessFragmentPath, BuildReadinessFragment(source, generatedAtText)),
@@ -201,13 +202,19 @@ public static class PublicationCountingHardeningArtifactGenerator
                 .ToArray<JsonNode?>()),
         };
 
-    private static JsonObject BuildTamperStaleReplaySummary(JsonObject source, string generatedAt) =>
+    private static JsonObject BuildTamperStaleReplaySummary(
+        JsonObject source,
+        string generatedAt,
+        PublicationCountingTamperStaleMatrixResult result) =>
         new()
         {
             ["schemaVersion"] = "publication-counting-tamper-stale-replay-summary.v1",
             ["generatedAt"] = generatedAt,
-            ["status"] = "accepted",
+            ["status"] = result.Status,
+            ["errorCount"] = result.Errors.Count,
+            ["errors"] = new JsonArray(result.Errors.Select(error => JsonValue.Create(error)).ToArray<JsonNode?>()),
             ["policy"] = "Every stale or tampered publication/counting case must fail deterministically before RDY-DIM-004 can move.",
+            ["diagnostics"] = PublicationCountingHardeningContracts.Clone(result.Diagnostics),
             ["cases"] = PublicationCountingHardeningContracts.Clone(source["tamperAndStaleMatrix"]),
         };
 

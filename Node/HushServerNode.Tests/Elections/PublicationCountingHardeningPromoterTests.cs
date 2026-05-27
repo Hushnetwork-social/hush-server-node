@@ -152,6 +152,86 @@ public sealed class PublicationCountingHardeningPromoterTests
     }
 
     [Fact]
+    public async Task CurrentnessValidation_StaleManifestHash_BlocksPromotion()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        var source = workspace.LoadSource();
+        source["sourceRelease"]!.AsObject()["manifestHash"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+        var sourceInput = await workspace.WriteSourceAsync(source, "stale-manifest-source.json");
+
+        var act = () => new PublicationCountingHardeningPromotionService().Promote(new(
+            workspace.Paths,
+            PublicationCountingHardeningPromotionService.ModeCheckOnly,
+            sourceInput,
+            null,
+            FixedGeneratedAt,
+            ValidateOnly: false));
+
+        act.Should().Throw<PublicationCountingHardeningPromotionException>()
+            .Which.Details.Should().Contain(error => error.Contains("sourceRelease.manifestHash", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CurrentnessValidation_StaleVerifierSourceRef_BlocksPromotion()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        var source = workspace.LoadSource();
+        source["verifierRefs"]!.AsObject()["sourceRef"] = "stale-source-ref";
+        var sourceInput = await workspace.WriteSourceAsync(source, "stale-source-ref.json");
+
+        var act = () => new PublicationCountingHardeningPromotionService().Promote(new(
+            workspace.Paths,
+            PublicationCountingHardeningPromotionService.ModeCheckOnly,
+            sourceInput,
+            null,
+            FixedGeneratedAt,
+            ValidateOnly: false));
+
+        act.Should().Throw<PublicationCountingHardeningPromotionException>()
+            .Which.Details.Should().Contain(error => error.Contains("verifierRefs.sourceRef", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CurrentnessValidation_StalePackageHash_BlocksPromotion()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        var source = workspace.LoadSource();
+        source["packageRefs"]!.AsObject()["packageHash"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+        var sourceInput = await workspace.WriteSourceAsync(source, "stale-package-hash.json");
+
+        var act = () => new PublicationCountingHardeningPromotionService().Promote(new(
+            workspace.Paths,
+            PublicationCountingHardeningPromotionService.ModeCheckOnly,
+            sourceInput,
+            null,
+            FixedGeneratedAt,
+            ValidateOnly: false));
+
+        act.Should().Throw<PublicationCountingHardeningPromotionException>()
+            .Which.Details.Should().Contain(error => error.Contains("sourceRelease.goodPackageHash", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CurrentnessValidation_ExpectedResultDrift_BlocksPromotion()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        var source = workspace.LoadSource();
+        source["packageRefs"]!.AsObject()["expectedResultHash"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+        var sourceInput = await workspace.WriteSourceAsync(source, "expected-result-drift.json");
+
+        var act = () => new PublicationCountingHardeningPromotionService().Promote(new(
+            workspace.Paths,
+            PublicationCountingHardeningPromotionService.ModeCheckOnly,
+            sourceInput,
+            null,
+            FixedGeneratedAt,
+            ValidateOnly: false));
+
+        act.Should().Throw<PublicationCountingHardeningPromotionException>()
+            .Which.Details.Should().Contain(error => error.Contains("packageRefs.expectedResultHash", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Promotion_MissingInputPath_FailsDeterministically()
     {
         using var workspace = TempPublicationCountingWorkspace.Create();
@@ -318,6 +398,68 @@ public sealed class PublicationCountingHardeningPromoterTests
 
         result.Status.Should().Be("blocked");
         result.Errors.Should().Contain(error => error.Contains("tally replay electionId must match result binding", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AcceptedToPublishedBinding_MissingPublicationProof_Fails()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        workspace.DeletePackageArtifact(TempPublicationCountingWorkspace.PublicationProofTranscriptPath);
+
+        var result = PublicationCountingBindingChecks.CheckAcceptedToPublished(workspace.Paths, workspace.LoadSource());
+
+        result.Status.Should().Be("blocked");
+        result.Errors.Should().Contain(error => error.Contains(TempPublicationCountingWorkspace.PublicationProofTranscriptPath, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AcceptedToPublishedBinding_WrongElection_Fails()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        workspace.MutatePackageArtifact(TempPublicationCountingWorkspace.PublishedBallotStreamPath, published =>
+        {
+            published["electionId"] = "different-election";
+        });
+
+        var result = PublicationCountingBindingChecks.CheckAcceptedToPublished(workspace.Paths, workspace.LoadSource());
+
+        result.Status.Should().Be("blocked");
+        result.Errors.Should().Contain(error => error.Contains("accepted ballot set electionId must match published stream", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TamperStaleMatrix_SourceCoverage_IsComplete()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        var source = workspace.LoadSource();
+        var accepted = PublicationCountingBindingChecks.CheckAcceptedToPublished(workspace.Paths, source);
+        var tally = PublicationCountingBindingChecks.CheckTallyReplay(workspace.Paths, source);
+
+        var result = PublicationCountingTamperStaleMatrix.Evaluate(source, accepted, tally);
+
+        result.Status.Should().Be("accepted");
+        result.Errors.Should().BeEmpty();
+        result.Diagnostics["requiredCaseCount"]!.GetValue<int>()
+            .Should()
+            .Be(PublicationCountingTamperStaleMatrix.RequiredCases.Length);
+    }
+
+    [Fact]
+    public void TamperStaleMatrix_MissingRequiredCase_BlocksPackage()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        var source = workspace.LoadSource();
+        var matrix = source["tamperAndStaleMatrix"]!.AsArray();
+        var staleManifestCase = matrix
+            .Single(item => item!.AsObject()["caseId"]!.GetValue<string>() == "TM-STALE-MANIFEST-HASH");
+        matrix.Remove(staleManifestCase);
+        var accepted = PublicationCountingBindingChecks.CheckAcceptedToPublished(workspace.Paths, source);
+        var tally = PublicationCountingBindingChecks.CheckTallyReplay(workspace.Paths, source);
+
+        var result = PublicationCountingTamperStaleMatrix.Evaluate(source, accepted, tally);
+
+        result.Status.Should().Be("blocked");
+        result.Errors.Should().Contain(error => error.Contains("TM-STALE-MANIFEST-HASH", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -705,17 +847,7 @@ public sealed class PublicationCountingHardeningPromoterTests
                 },
                 ["acceptedToPublishedChecks"] = new JsonArray(BuildBindingCheck("AT-PUB-001-accepted-set-current")),
                 ["tallyReplayChecks"] = new JsonArray(BuildBindingCheck("AT-TALLY-001-count-reconciliation")),
-                ["tamperAndStaleMatrix"] = new JsonArray(new JsonObject
-                {
-                    ["caseId"] = "TM-PUBLISHED-STREAM-HASH",
-                    ["fixtureId"] = "tamper-published-stream-hash",
-                    ["category"] = "accepted_to_published",
-                    ["changedArtifact"] = "artifacts/election-record/published-ballot-stream.json",
-                    ["expectedPrimaryResultCode"] = "published_ballot_stream_hash_mismatch",
-                    ["expectedOverallStatus"] = "fail",
-                    ["expectedExitCode"] = 1,
-                    ["blocksScoreMovement"] = true,
-                }),
+                ["tamperAndStaleMatrix"] = BuildTamperAndStaleMatrix(),
                 ["publicSafety"] = new JsonObject
                 {
                     ["visibility"] = "public_safe",
@@ -775,6 +907,21 @@ public sealed class PublicationCountingHardeningPromoterTests
                 ["expectedFailureResultCodes"] = Strings("published_ballot_stream_hash_mismatch"),
                 ["blocksScoreMovementWhenFailing"] = true,
             };
+
+        private static JsonArray BuildTamperAndStaleMatrix() =>
+            new(PublicationCountingTamperStaleMatrix.RequiredCases
+                .Select(required => new JsonObject
+                {
+                    ["caseId"] = required.CaseId,
+                    ["fixtureId"] = required.CaseId.ToLowerInvariant().Replace("tm-", "tamper-", StringComparison.Ordinal),
+                    ["category"] = required.Category,
+                    ["changedArtifact"] = required.ChangedArtifact,
+                    ["expectedPrimaryResultCode"] = required.ExpectedPrimaryResultCode,
+                    ["expectedOverallStatus"] = "fail",
+                    ["expectedExitCode"] = 1,
+                    ["blocksScoreMovement"] = true,
+                })
+                .ToArray<JsonNode?>());
 
         private static JsonArray Strings(params string[] values) =>
             new(values.Select(value => JsonValue.Create(value)).ToArray<JsonNode?>());
