@@ -1,0 +1,479 @@
+{
+  "schemaVersion": "public-state-prerequisite-register.v1",
+  "sourceId": "FEAT149-PUBLIC-STATE-FUTURE-CANDIDATE-EXTERNAL-AUTHORITY-001",
+  "featureId": "FEAT-149",
+  "fixtureOnly": true,
+  "acceptanceGates": [
+    "AT-RDY-001",
+    "AT-RDY-012",
+    "AT-RDY-013",
+    "AT-RDY-014"
+  ],
+  "status": "future_candidate_external_authority_required",
+  "baselineRegister": {
+    "registerVersionId": "RDY-REG-v0.1.4",
+    "registerStatus": "AcceptedInternal",
+    "totalScore": 71,
+    "strongestAllowedClaim": "friendly_organization_pilot",
+    "productionBlocker": {
+      "blockerId": "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+      "severity": "red",
+      "status": "open"
+    },
+    "publicStateBlocker": {
+      "blockerId": "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+      "severity": "red",
+      "status": "open"
+    }
+  },
+  "claimBoundary": {
+    "claimLevel": "public_or_state_election",
+    "publicSafeStatus": "public_claim_blocked",
+    "targetJurisdiction": {
+      "status": "accepted",
+      "value": "future-test-jurisdiction",
+      "evidenceRefs": [
+        "EXT-FUTURE-JURISDICTION-001"
+      ]
+    },
+    "electionType": {
+      "status": "accepted",
+      "value": "future-test-election-type",
+      "evidenceRefs": [
+        "EXT-FUTURE-ELECTION-TYPE-001"
+      ]
+    },
+    "competentAuthority": {
+      "status": "accepted",
+      "value": "future-test-competent-authority",
+      "evidenceRefs": [
+        "EXT-FUTURE-AUTHORITY-001"
+      ]
+    },
+    "boundaryStatement": "Fixture-only future candidate showing the external evidence shape a later public/state feature would need. This fixture does not change RDY-REG-v0.1.4."
+  },
+  "excludedMeanings": [
+    {
+      "excludedId": "private-organization-binding-decision",
+      "meaning": "Private organizational binding decisions",
+      "reason": "Private organizational decisions remain outside public/state readiness."
+    },
+    {
+      "excludedId": "production-organizational-rollout",
+      "meaning": "Private production organizational rollout",
+      "reason": "Production rollout is necessary but not sufficient for public/state readiness."
+    }
+  ],
+  "feat148Dependency": {
+    "featureId": "FEAT-148",
+    "dependencyType": "necessary_but_not_sufficient",
+    "currentStatus": "allowed_with_limitations_candidate",
+    "requiredMinimumStatus": "allowed_with_limitations_candidate",
+    "sufficiency": "not_sufficient",
+    "claimImpact": "This fixture assumes the production prerequisite is candidate-ready for test coverage, but public/state readiness still depends on external authority evidence and future FEAT-130 promotion."
+  },
+  "scorePolicy": {
+    "currentTotalScore": 71,
+    "proposedTotalScore": 71,
+    "scoreChangeAllowed": false,
+    "directRegisterMutation": false,
+    "registerPromotionOwner": "FEAT-130"
+  },
+  "prerequisiteGroups": [
+    {
+      "groupId": "target_jurisdiction_and_election_type",
+      "label": "Target jurisdiction and election type",
+      "ownerCategory": "external_authority",
+      "evidenceType": "authority_decision",
+      "mandatory": true,
+      "status": "accepted",
+      "validationSource": "future competent external election authority",
+      "blockerImpact": "supports_future_review_only",
+      "claimImpact": "Accepted in fixture only; future feature must verify real authority evidence.",
+      "evidenceRefs": [
+        "EXT-FUTURE-JURISDICTION-001",
+        "EXT-FUTURE-ELECTION-TYPE-001"
+      ],
+      "blockerIds": [],
+      "publicSafeWording": "Future fixture only; no current public/state readiness claim.",
+      "futureResolutionCriteria": "Real jurisdiction and election type evidence must be accepted by competent authority."
+    },
+    {
+      "groupId": "competent_election_authority",
+      "label": "Competent election authority",
+      "ownerCategory": "external_authority",
+      "evidenceType": "authority_decision",
+      "mandatory": true,
+      "status": "accepted",
+      "validationSource": "future competent external election authority",
+      "blockerImpact": "supports_future_review_only",
+      "claimImpact": "Accepted in fixture only; future feature must verify authority scope.",
+      "evidenceRefs": [
+        "EXT-FUTURE-AUTHORITY-001"
+      ],
+      "blockerIds": [],
+      "publicSafeWording": "Future fixture only; no current authority acceptance claim.",
+      "futureResolutionCriteria": "Real competent authority evidence must define role, scope, and accountability."
+    },
+    {
+      "groupId": "applicable_law_and_legal_interpretation",
+      "label": "Applicable law, regulation, and legal interpretation",
+      "ownerCategory": "external_legal_regulatory",
+      "evidenceType": "legal_interpretation",
+      "mandatory": true,
+      "status": "accepted",
+      "validationSource": "future external legal/regulatory evidence",
+      "blockerImpact": "supports_future_review_only",
+      "claimImpact": "Accepted in fixture only; Hush is not the legal authority.",
+      "evidenceRefs": [
+        "EXT-FUTURE-LEGAL-001"
+      ],
+      "blockerIds": [],
+      "publicSafeWording": "Future fixture only; no current legal sufficiency claim.",
+      "futureResolutionCriteria": "External legal/regulatory evidence must define legal basis and HushVoting role."
+    },
+    {
+      "groupId": "certification_testing_or_not_applicable",
+      "label": "Certification, testing path, or formal not-applicable ruling",
+      "ownerCategory": "external_certification_authority",
+      "evidenceType": "certification_path",
+      "mandatory": true,
+      "status": "accepted",
+      "validationSource": "future external certification authority",
+      "blockerImpact": "supports_future_review_only",
+      "claimImpact": "Accepted in fixture only; certification evidence remains external.",
+      "evidenceRefs": [
+        "EXT-FUTURE-CERTIFICATION-001"
+      ],
+      "blockerIds": [],
+      "publicSafeWording": "Future fixture only; no current certification claim.",
+      "futureResolutionCriteria": "External certification path or formal not-applicable ruling must be accepted."
+    },
+    {
+      "groupId": "independent_audit_examination",
+      "label": "Independent audit and examination requirements",
+      "ownerCategory": "external_audit_certification",
+      "evidenceType": "independent_audit",
+      "mandatory": true,
+      "status": "accepted",
+      "validationSource": "future independent audit evidence",
+      "blockerImpact": "supports_future_review_only",
+      "claimImpact": "Accepted in fixture only; independent approval remains external.",
+      "evidenceRefs": [
+        "EXT-FUTURE-AUDIT-001"
+      ],
+      "blockerIds": [],
+      "publicSafeWording": "Future fixture only; no current independent audit claim.",
+      "futureResolutionCriteria": "External independent audit evidence must be accepted for the defined scope."
+    },
+    {
+      "groupId": "accessibility_usability_language_assistance",
+      "label": "Accessibility, usability, language, and voter assistance",
+      "ownerCategory": "shared_external_and_hush",
+      "evidenceType": "accessibility_assessment",
+      "mandatory": true,
+      "status": "accepted",
+      "validationSource": "future external accessibility requirements plus Hush evidence",
+      "blockerImpact": "supports_future_review_only",
+      "claimImpact": "Accepted in fixture only.",
+      "evidenceRefs": [
+        "EXT-FUTURE-ACCESSIBILITY-001"
+      ],
+      "blockerIds": [],
+      "publicSafeWording": "Future fixture only; no current accessibility compliance claim.",
+      "futureResolutionCriteria": "External accessibility and assistance requirements plus Hush evidence must be accepted."
+    },
+    {
+      "groupId": "transparency_observer_chain_of_custody",
+      "label": "Public transparency, observer, chain of custody, and audit publication",
+      "ownerCategory": "shared_external_and_hush",
+      "evidenceType": "transparency_rule",
+      "mandatory": true,
+      "status": "accepted",
+      "validationSource": "future external transparency rules plus Hush evidence",
+      "blockerImpact": "supports_future_review_only",
+      "claimImpact": "Accepted in fixture only.",
+      "evidenceRefs": [
+        "EXT-FUTURE-TRANSPARENCY-001"
+      ],
+      "blockerIds": [],
+      "publicSafeWording": "Future fixture only; no current observer or transparency claim.",
+      "futureResolutionCriteria": "External transparency and observer rules plus Hush evidence must be accepted."
+    },
+    {
+      "groupId": "voter_eligibility_registration_identity_roll_custody",
+      "label": "Voter eligibility, registration, identity proofing, and voter-roll custody",
+      "ownerCategory": "shared_external_and_hush",
+      "evidenceType": "voter_roll_custody",
+      "mandatory": true,
+      "status": "accepted",
+      "validationSource": "future external voter-roll authority plus Hush integration evidence",
+      "blockerImpact": "supports_future_review_only",
+      "claimImpact": "Accepted in fixture only.",
+      "evidenceRefs": [
+        "EXT-FUTURE-VOTER-ROLL-001"
+      ],
+      "blockerIds": [],
+      "publicSafeWording": "Future fixture only; no current voter-roll validation claim.",
+      "futureResolutionCriteria": "External voter-roll and identity-proofing authority path must be accepted with Hush boundary evidence."
+    },
+    {
+      "groupId": "ballot_secrecy_coercion_remote_device_policy",
+      "label": "Ballot secrecy, coercion, remote-voting risk, and voter-device policy",
+      "ownerCategory": "shared_external_and_hush",
+      "evidenceType": "remote_voting_risk_policy",
+      "mandatory": true,
+      "status": "accepted",
+      "validationSource": "future external policy plus Hush technical evidence",
+      "blockerImpact": "supports_future_review_only",
+      "claimImpact": "Accepted in fixture only.",
+      "evidenceRefs": [
+        "EXT-FUTURE-REMOTE-RISK-001"
+      ],
+      "blockerIds": [],
+      "publicSafeWording": "Future fixture only; no current remote-voting risk acceptance claim.",
+      "futureResolutionCriteria": "External policy authority must accept ballot secrecy, coercion, and voter-device risk model."
+    },
+    {
+      "groupId": "dispute_recount_challenge_remedy_finality",
+      "label": "Dispute, recount, challenge, remedy, regulator/court, and finality process",
+      "ownerCategory": "external_authority",
+      "evidenceType": "dispute_remedy_process",
+      "mandatory": true,
+      "status": "accepted",
+      "validationSource": "future external dispute/remedy authority",
+      "blockerImpact": "supports_future_review_only",
+      "claimImpact": "Accepted in fixture only.",
+      "evidenceRefs": [
+        "EXT-FUTURE-DISPUTE-001"
+      ],
+      "blockerIds": [],
+      "publicSafeWording": "Future fixture only; no current public finality or remedy claim.",
+      "futureResolutionCriteria": "External dispute, recount, challenge, remedy, regulator/court, and finality process must be accepted."
+    },
+    {
+      "groupId": "records_retention_public_records_privacy_residency_archival",
+      "label": "Records retention, public records, privacy, data residency, and archival rules",
+      "ownerCategory": "shared_external_and_hush",
+      "evidenceType": "retention_privacy_archival",
+      "mandatory": true,
+      "status": "accepted",
+      "validationSource": "future external records/privacy requirements plus Hush evidence",
+      "blockerImpact": "supports_future_review_only",
+      "claimImpact": "Accepted in fixture only.",
+      "evidenceRefs": [
+        "EXT-FUTURE-RETENTION-001"
+      ],
+      "blockerIds": [],
+      "publicSafeWording": "Future fixture only; no current public-records or archival claim.",
+      "futureResolutionCriteria": "External records, privacy, residency, and archival requirements plus Hush evidence must be accepted."
+    },
+    {
+      "groupId": "procurement_vendor_sla_insurance_accountability",
+      "label": "Procurement, vendor qualification, SLA, insurance, and operational accountability",
+      "ownerCategory": "external_procurement_authority",
+      "evidenceType": "procurement_vendor_qualification",
+      "mandatory": true,
+      "status": "externally_not_applicable",
+      "validationSource": "future external procurement authority",
+      "blockerImpact": "not_applicable_by_external_authority_only",
+      "claimImpact": "Externally not applicable in fixture only.",
+      "evidenceRefs": [
+        "EXT-FUTURE-PROCUREMENT-NOT-APPLICABLE-001"
+      ],
+      "blockerIds": [],
+      "publicSafeWording": "Future fixture only; no current procurement qualification claim.",
+      "futureResolutionCriteria": "External authority must accept procurement/vendor qualification evidence or formal non-applicability."
+    }
+  ],
+  "externalReferences": [
+    {
+      "evidenceId": "EXT-FUTURE-JURISDICTION-001",
+      "ownerCategory": "external_authority",
+      "status": "accepted",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/jurisdiction",
+      "sha256Hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "claimEffect": "Fixture-only jurisdiction evidence placeholder."
+    },
+    {
+      "evidenceId": "EXT-FUTURE-ELECTION-TYPE-001",
+      "ownerCategory": "external_authority",
+      "status": "accepted",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/election-type",
+      "sha256Hash": "abababababababababababababababababababababababababababababababab",
+      "claimEffect": "Fixture-only election type evidence placeholder."
+    },
+    {
+      "evidenceId": "EXT-FUTURE-AUTHORITY-001",
+      "ownerCategory": "external_authority",
+      "status": "accepted",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/competent-authority",
+      "sha256Hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "claimEffect": "Fixture-only competent authority evidence placeholder."
+    },
+    {
+      "evidenceId": "EXT-FUTURE-LEGAL-001",
+      "ownerCategory": "external_legal_regulatory",
+      "status": "accepted",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/legal",
+      "sha256Hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "claimEffect": "Fixture-only legal/regulatory evidence placeholder."
+    },
+    {
+      "evidenceId": "EXT-FUTURE-CERTIFICATION-001",
+      "ownerCategory": "external_certification_authority",
+      "status": "accepted",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/certification",
+      "sha256Hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "claimEffect": "Fixture-only certification evidence placeholder."
+    },
+    {
+      "evidenceId": "EXT-FUTURE-AUDIT-001",
+      "ownerCategory": "external_audit_certification",
+      "status": "accepted",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/audit",
+      "sha256Hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "claimEffect": "Fixture-only audit evidence placeholder."
+    },
+    {
+      "evidenceId": "EXT-FUTURE-ACCESSIBILITY-001",
+      "ownerCategory": "shared_external_and_hush",
+      "status": "accepted",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/accessibility",
+      "sha256Hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "claimEffect": "Fixture-only accessibility evidence placeholder."
+    },
+    {
+      "evidenceId": "EXT-FUTURE-TRANSPARENCY-001",
+      "ownerCategory": "shared_external_and_hush",
+      "status": "accepted",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/transparency",
+      "sha256Hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "claimEffect": "Fixture-only transparency evidence placeholder."
+    },
+    {
+      "evidenceId": "EXT-FUTURE-VOTER-ROLL-001",
+      "ownerCategory": "shared_external_and_hush",
+      "status": "accepted",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/voter-roll",
+      "sha256Hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "claimEffect": "Fixture-only voter-roll evidence placeholder."
+    },
+    {
+      "evidenceId": "EXT-FUTURE-REMOTE-RISK-001",
+      "ownerCategory": "shared_external_and_hush",
+      "status": "accepted",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/remote-risk",
+      "sha256Hash": "4444444444444444444444444444444444444444444444444444444444444444",
+      "claimEffect": "Fixture-only remote-voting risk evidence placeholder."
+    },
+    {
+      "evidenceId": "EXT-FUTURE-DISPUTE-001",
+      "ownerCategory": "external_authority",
+      "status": "accepted",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/dispute",
+      "sha256Hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "claimEffect": "Fixture-only dispute/remedy evidence placeholder."
+    },
+    {
+      "evidenceId": "EXT-FUTURE-RETENTION-001",
+      "ownerCategory": "shared_external_and_hush",
+      "status": "accepted",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/retention",
+      "sha256Hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "claimEffect": "Fixture-only retention/privacy evidence placeholder."
+    },
+    {
+      "evidenceId": "EXT-FUTURE-PROCUREMENT-NOT-APPLICABLE-001",
+      "ownerCategory": "external_procurement_authority",
+      "status": "externally_not_applicable",
+      "visibility": "external_placeholder",
+      "publicRef": "",
+      "restrictedRef": "restricted-ref://future-public-state/procurement-not-applicable",
+      "sha256Hash": "9999999999999999999999999999999999999999999999999999999999999999",
+      "claimEffect": "Fixture-only procurement non-applicability evidence placeholder."
+    }
+  ],
+  "blockerPolicy": {
+    "publicStateBlockerId": "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+    "currentSeverity": "red",
+    "currentStatus": "open",
+    "v1Decision": "keep_policy_blocked",
+    "requiredFutureResolution": [
+      "all mandatory external authority evidence accepted",
+      "FEAT-148 accepted at least as allowed_with_limitations_candidate",
+      "future FEAT-130 promotion supersedes v1 policy"
+    ],
+    "forbiddenTransitions": [
+      "direct_register_mutation_from_fixture",
+      "score_increase_from_fixture",
+      "public_state_claim_from_fixture"
+    ]
+  },
+  "publicSafeWording": {
+    "blockedWording": "This is a fixture-only future candidate. It is not a current public/state readiness claim.",
+    "allowedNonClaims": [
+      "Fixture-only external evidence shape.",
+      "No current score movement.",
+      "No current public/state claim."
+    ],
+    "forbiddenPublicClaims": [
+      "public election ready",
+      "state election certified",
+      "government authorized",
+      "legally sufficient public voting system",
+      "independently approved for public elections",
+      "public-sector equivalent voting system"
+    ],
+    "restrictedMaterialNeedles": [
+      "voter identity",
+      "vote choice",
+      "receipt secret",
+      "trustee share",
+      "private key",
+      "legal opinion body",
+      "authority private memorandum"
+    ]
+  },
+  "readinessFragmentPolicy": {
+    "scoreChangeAllowed": false,
+    "directRegisterMutation": false,
+    "claimEffect": "Fixture-only candidate remains score-disabled until future FEAT-130 promotion.",
+    "fragmentConsumer": "future FEAT-130 promotion only"
+  },
+  "publicArtifactSamples": [
+    {
+      "path": "future-candidate-public-safe-summary.md",
+      "content": "Fixture-only future candidate. HushVoting does not currently claim public or state election readiness."
+    }
+  ],
+  "signoff": {
+    "engineeringRole": "hush-readiness-engineering",
+    "operationsProductRole": "hush-readiness-operations-product",
+    "status": "future_candidate"
+  }
+}

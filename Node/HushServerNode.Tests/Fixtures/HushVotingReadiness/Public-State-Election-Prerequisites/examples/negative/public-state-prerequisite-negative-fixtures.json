@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "public-state-prerequisite-negative-fixtures.v1",
+  "featureId": "FEAT-149",
+  "purpose": "Negative fixture catalog for public/state prerequisite register checks. These cases are intentionally mutation descriptors so Phase 3 can apply them to the release-baseline source and assert the gate checker rejects the result.",
+  "baselineSource": "Overview/HushVotingReadiness/Public-State-Election-Prerequisites/examples/release-baseline/public-state-prerequisite-register.json",
+  "cases": [
+    {
+      "caseId": "FEAT149-NEG-MISSING-OWNER-CATEGORY-001",
+      "category": "missing_owner_category",
+      "mutationPath": "prerequisiteGroups[target_jurisdiction_and_election_type].ownerCategory",
+      "invalidValue": null,
+      "expectedBlocker": "FEAT149-PREREQUISITE-OWNER-CATEGORY-MISSING",
+      "claimImpact": "Every prerequisite group must identify who owns acceptance; missing owner category blocks the source."
+    },
+    {
+      "caseId": "FEAT149-NEG-MISSING-EVIDENCE-TYPE-001",
+      "category": "missing_evidence_type",
+      "mutationPath": "prerequisiteGroups[competent_election_authority].evidenceType",
+      "invalidValue": null,
+      "expectedBlocker": "FEAT149-PREREQUISITE-EVIDENCE-TYPE-MISSING",
+      "claimImpact": "Every prerequisite group must identify the evidence type required for future resolution."
+    },
+    {
+      "caseId": "FEAT149-NEG-FORBIDDEN-SCORE-MOVEMENT-001",
+      "category": "forbidden_score_movement",
+      "mutationPath": "scorePolicy.scoreChangeAllowed",
+      "invalidValue": true,
+      "expectedBlocker": "FEAT149-SCORE-MOVEMENT-FORBIDDEN",
+      "claimImpact": "FEAT-149 v1 cannot raise score or bypass FEAT-130 promotion."
+    },
+    {
+      "caseId": "FEAT149-NEG-DIRECT-REGISTER-MUTATION-001",
+      "category": "direct_register_mutation",
+      "mutationPath": "scorePolicy.directRegisterMutation",
+      "invalidValue": true,
+      "expectedBlocker": "FEAT149-DIRECT-REGISTER-MUTATION-FORBIDDEN",
+      "claimImpact": "FEAT-149 can generate a future-consumable fragment but cannot directly mutate RDY-REG-v0.1.4."
+    },
+    {
+      "caseId": "FEAT149-NEG-ATTEMPTED-BLOCKER-RESOLUTION-001",
+      "category": "attempted_blocker_resolution",
+      "mutationPath": "blockerPolicy.currentStatus",
+      "invalidValue": "resolved",
+      "expectedBlocker": "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+      "claimImpact": "The public/state blocker must remain red/open in the v1 baseline."
+    },
+    {
+      "caseId": "FEAT149-NEG-MISSING-JURISDICTION-001",
+      "category": "missing_jurisdiction",
+      "mutationPath": "claimBoundary.targetJurisdiction.status",
+      "invalidValue": "missing",
+      "expectedBlocker": "FEAT149-JURISDICTION-ELECTION-TYPE-MISSING",
+      "claimImpact": "A public/state claim cannot be evaluated without a target jurisdiction."
+    },
+    {
+      "caseId": "FEAT149-NEG-MISSING-AUTHORITY-001",
+      "category": "missing_authority",
+      "mutationPath": "claimBoundary.competentAuthority.status",
+      "invalidValue": "missing",
+      "expectedBlocker": "FEAT149-COMPETENT-AUTHORITY-MISSING",
+      "claimImpact": "Competent external authority evidence is mandatory."
+    },
+    {
+      "caseId": "FEAT149-NEG-MISSING-CERTIFICATION-PATH-001",
+      "category": "missing_certification",
+      "mutationPath": "prerequisiteGroups[certification_testing_or_not_applicable].status",
+      "invalidValue": "missing",
+      "expectedBlocker": "FEAT149-CERTIFICATION-PATH-MISSING",
+      "claimImpact": "Certification or a formal external not-applicable ruling is mandatory before any future public/state movement."
+    },
+    {
+      "caseId": "FEAT149-NEG-FEAT148-BYPASS-001",
+      "category": "feat148_bypass",
+      "mutationPath": "feat148Dependency.currentStatus",
+      "invalidValue": "blocked",
+      "expectedBlocker": "FEAT149-FEAT148-DEPENDENCY-NOT-SATISFIED",
+      "claimImpact": "Public/state readiness cannot move while production organizational rollout is blocked."
+    },
+    {
+      "caseId": "FEAT149-NEG-FORBIDDEN-PUBLIC-WORDING-001",
+      "category": "forbidden_public_wording",
+      "mutationPath": "publicArtifactSamples[0].content",
+      "invalidValue": "HushVoting is government authorized and public election ready.",
+      "expectedBlocker": "FEAT149-PUBLIC-SAFE-WORDING-OVERCLAIM",
+      "claimImpact": "Public output must not claim public election readiness, certification, government authorization, independent approval, or public-sector equivalence."
+    }
+  ],
+  "futureCandidateFixtureRules": [
+    "Future candidate fixtures must be marked fixtureOnly=true.",
+    "Future candidate fixtures must include external authority evidence refs for jurisdiction, election type, competent authority, legal interpretation, certification or external non-applicability, and dispute/remedy process.",
+    "Future candidate fixtures must keep scoreChangeAllowed=false until a future FEAT-130 promotion explicitly supersedes the v1 policy."
+  ]
+}

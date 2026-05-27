@@ -1,0 +1,393 @@
+{
+  "schemaVersion": "public-state-prerequisite-register.v1",
+  "sourceId": "FEAT149-PUBLIC-STATE-BASELINE-BLOCKED-001",
+  "featureId": "FEAT-149",
+  "acceptanceGates": [
+    "AT-RDY-001",
+    "AT-RDY-012",
+    "AT-RDY-013",
+    "AT-RDY-014"
+  ],
+  "status": "blocked",
+  "baselineRegister": {
+    "registerVersionId": "RDY-REG-v0.1.4",
+    "registerStatus": "AcceptedInternal",
+    "totalScore": 71,
+    "strongestAllowedClaim": "friendly_organization_pilot",
+    "productionBlocker": {
+      "blockerId": "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+      "severity": "red",
+      "status": "open"
+    },
+    "publicStateBlocker": {
+      "blockerId": "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+      "severity": "red",
+      "status": "open"
+    }
+  },
+  "claimBoundary": {
+    "claimLevel": "public_or_state_election",
+    "publicSafeStatus": "public_claim_blocked",
+    "targetJurisdiction": {
+      "status": "missing",
+      "value": "",
+      "evidenceRefs": []
+    },
+    "electionType": {
+      "status": "missing",
+      "value": "",
+      "evidenceRefs": []
+    },
+    "competentAuthority": {
+      "status": "missing",
+      "value": "",
+      "evidenceRefs": []
+    },
+    "boundaryStatement": "Public or state election readiness requires a defined jurisdiction, election type, competent external authority, and accepted external validation path. No such path exists in the v1 baseline."
+  },
+  "excludedMeanings": [
+    {
+      "excludedId": "private-organization-binding-decision",
+      "meaning": "Private organizational binding decisions",
+      "reason": "Handled by FEAT-140 and future FEAT-148 production rollout, not by public/state readiness."
+    },
+    {
+      "excludedId": "private-agm-voting-subsystem",
+      "meaning": "Private AGM voting subsystem use",
+      "reason": "HushVoting may replace the voting part only when customer authority and rules support it; this is not public/state election readiness."
+    },
+    {
+      "excludedId": "friendly-organization-pilot",
+      "meaning": "Controlled friendly organization pilot",
+      "reason": "Current strongest allowed claim is pilot-only with limitations."
+    },
+    {
+      "excludedId": "production-organizational-rollout",
+      "meaning": "Private production organizational rollout",
+      "reason": "FEAT-148 is necessary but not sufficient for public/state readiness."
+    }
+  ],
+  "feat148Dependency": {
+    "featureId": "FEAT-148",
+    "dependencyType": "necessary_but_not_sufficient",
+    "currentStatus": "blocked",
+    "requiredMinimumStatus": "allowed_with_limitations_candidate",
+    "sufficiency": "not_sufficient",
+    "claimImpact": "Public/state readiness cannot move while production organizational rollout is blocked, but accepting production rollout would still not satisfy public/state legal, authority, certification, accessibility, transparency, dispute, retention, procurement, or voter-roll prerequisites."
+  },
+  "scorePolicy": {
+    "currentTotalScore": 71,
+    "proposedTotalScore": 71,
+    "scoreChangeAllowed": false,
+    "directRegisterMutation": false,
+    "registerPromotionOwner": "FEAT-130"
+  },
+  "prerequisiteGroups": [
+    {
+      "groupId": "target_jurisdiction_and_election_type",
+      "label": "Target jurisdiction and election type",
+      "ownerCategory": "external_authority",
+      "evidenceType": "authority_decision",
+      "mandatory": true,
+      "status": "missing",
+      "validationSource": "competent external election authority",
+      "blockerImpact": "blocks_public_state_claim",
+      "claimImpact": "No public/state claim can be evaluated without a defined jurisdiction and election type.",
+      "evidenceRefs": [],
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+        "FEAT149-JURISDICTION-ELECTION-TYPE-MISSING"
+      ],
+      "publicSafeWording": "No public/state jurisdiction or election type has been accepted.",
+      "futureResolutionCriteria": "A competent authority defines the jurisdiction and election type for the requested public/state use."
+    },
+    {
+      "groupId": "competent_election_authority",
+      "label": "Competent election authority",
+      "ownerCategory": "external_authority",
+      "evidenceType": "authority_decision",
+      "mandatory": true,
+      "status": "missing",
+      "validationSource": "competent external election authority",
+      "blockerImpact": "blocks_public_state_claim",
+      "claimImpact": "No public/state claim can be made without an accountable authority that is competent for the defined election.",
+      "evidenceRefs": [],
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+        "FEAT149-COMPETENT-AUTHORITY-MISSING"
+      ],
+      "publicSafeWording": "No competent public/state election authority has accepted HushVoting for this scope.",
+      "futureResolutionCriteria": "The competent authority is identified with accepted evidence and scope boundaries."
+    },
+    {
+      "groupId": "applicable_law_and_legal_interpretation",
+      "label": "Applicable law, regulation, and legal interpretation",
+      "ownerCategory": "external_legal_regulatory",
+      "evidenceType": "legal_interpretation",
+      "mandatory": true,
+      "status": "missing",
+      "validationSource": "external legal or regulatory authority",
+      "blockerImpact": "blocks_public_state_claim",
+      "claimImpact": "Hush cannot validate legal sufficiency for public/state elections.",
+      "evidenceRefs": [],
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+        "FEAT149-LEGAL-PATH-MISSING"
+      ],
+      "publicSafeWording": "No legal sufficiency or regulatory acceptance claim is made.",
+      "futureResolutionCriteria": "External legal/regulatory evidence defines applicable law and permitted voting-system role."
+    },
+    {
+      "groupId": "certification_testing_or_not_applicable",
+      "label": "Certification, testing path, or formal not-applicable ruling",
+      "ownerCategory": "external_certification_authority",
+      "evidenceType": "certification_path",
+      "mandatory": true,
+      "status": "missing",
+      "validationSource": "external certification or competent authority",
+      "blockerImpact": "blocks_public_state_claim",
+      "claimImpact": "No certification, testing, or formal not-applicable path exists.",
+      "evidenceRefs": [],
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+        "FEAT149-CERTIFICATION-PATH-MISSING"
+      ],
+      "publicSafeWording": "HushVoting is not certified for public or state elections.",
+      "futureResolutionCriteria": "External authority accepts a certification/testing path or marks it externally not applicable."
+    },
+    {
+      "groupId": "independent_audit_examination",
+      "label": "Independent audit and examination requirements",
+      "ownerCategory": "external_audit_certification",
+      "evidenceType": "independent_audit",
+      "mandatory": true,
+      "status": "missing",
+      "validationSource": "external auditor or certification authority",
+      "blockerImpact": "blocks_public_state_claim",
+      "claimImpact": "No independent public/state audit approval exists.",
+      "evidenceRefs": [],
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+        "FEAT149-INDEPENDENT-AUDIT-MISSING"
+      ],
+      "publicSafeWording": "No independent public/state audit approval is claimed.",
+      "futureResolutionCriteria": "Required independent examination evidence is accepted for the defined jurisdiction and election type."
+    },
+    {
+      "groupId": "accessibility_usability_language_assistance",
+      "label": "Accessibility, usability, language, and voter assistance",
+      "ownerCategory": "shared_external_and_hush",
+      "evidenceType": "accessibility_assessment",
+      "mandatory": true,
+      "status": "missing",
+      "validationSource": "external accessibility requirements plus Hush evidence",
+      "blockerImpact": "blocks_public_state_claim",
+      "claimImpact": "No public/state accessibility or voter-assistance baseline has been accepted.",
+      "evidenceRefs": [],
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+        "FEAT149-ACCESSIBILITY-PATH-MISSING"
+      ],
+      "publicSafeWording": "No public/state accessibility compliance claim is made.",
+      "futureResolutionCriteria": "External requirements and Hush evidence are accepted for accessibility, language, usability, and assistance."
+    },
+    {
+      "groupId": "transparency_observer_chain_of_custody",
+      "label": "Public transparency, observer, chain of custody, and audit publication",
+      "ownerCategory": "shared_external_and_hush",
+      "evidenceType": "transparency_rule",
+      "mandatory": true,
+      "status": "missing",
+      "validationSource": "external authority plus Hush technical evidence",
+      "blockerImpact": "blocks_public_state_claim",
+      "claimImpact": "No public observer, transparency, or audit-publication rule has been accepted.",
+      "evidenceRefs": [],
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+        "FEAT149-TRANSPARENCY-PATH-MISSING"
+      ],
+      "publicSafeWording": "No public/state observer or transparency process is claimed.",
+      "futureResolutionCriteria": "External transparency and publication rules are accepted and Hush evidence satisfies the technical role."
+    },
+    {
+      "groupId": "voter_eligibility_registration_identity_roll_custody",
+      "label": "Voter eligibility, registration, identity proofing, and voter-roll custody",
+      "ownerCategory": "shared_external_and_hush",
+      "evidenceType": "voter_roll_custody",
+      "mandatory": true,
+      "status": "missing",
+      "validationSource": "external voter-roll authority plus Hush integration boundary",
+      "blockerImpact": "blocks_public_state_claim",
+      "claimImpact": "No voter-roll custody, eligibility, or identity-proofing authority path exists.",
+      "evidenceRefs": [],
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+        "FEAT149-VOTER-ROLL-PATH-MISSING"
+      ],
+      "publicSafeWording": "No public/state voter-roll or eligibility validation claim is made.",
+      "futureResolutionCriteria": "External voter eligibility source, registration authority, identity-proofing path, and Hush integration boundaries are accepted."
+    },
+    {
+      "groupId": "ballot_secrecy_coercion_remote_device_policy",
+      "label": "Ballot secrecy, coercion, remote-voting risk, and voter-device policy",
+      "ownerCategory": "shared_external_and_hush",
+      "evidenceType": "remote_voting_risk_policy",
+      "mandatory": true,
+      "status": "missing",
+      "validationSource": "external policy authority plus Hush technical evidence",
+      "blockerImpact": "blocks_public_state_claim",
+      "claimImpact": "No public/state remote-voting risk or voter-device policy has been accepted.",
+      "evidenceRefs": [],
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+        "FEAT149-REMOTE-VOTING-RISK-POLICY-MISSING"
+      ],
+      "publicSafeWording": "No public/state remote-voting risk acceptance is claimed.",
+      "futureResolutionCriteria": "External policy authority accepts the ballot secrecy, coercion, and voter-device model with Hush evidence."
+    },
+    {
+      "groupId": "dispute_recount_challenge_remedy_finality",
+      "label": "Dispute, recount, challenge, remedy, regulator/court, and finality process",
+      "ownerCategory": "external_authority",
+      "evidenceType": "dispute_remedy_process",
+      "mandatory": true,
+      "status": "missing",
+      "validationSource": "external dispute or competent authority",
+      "blockerImpact": "blocks_public_state_claim",
+      "claimImpact": "No public/state dispute, recount, remedy, or finality authority process exists.",
+      "evidenceRefs": [],
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+        "FEAT149-DISPUTE-REMEDY-PATH-MISSING"
+      ],
+      "publicSafeWording": "No public/state finality, recount, or remedy claim is made.",
+      "futureResolutionCriteria": "External authority accepts the dispute, recount, challenge, remedy, and finality process."
+    },
+    {
+      "groupId": "records_retention_public_records_privacy_residency_archival",
+      "label": "Records retention, public records, privacy, data residency, and archival rules",
+      "ownerCategory": "shared_external_and_hush",
+      "evidenceType": "retention_privacy_archival",
+      "mandatory": true,
+      "status": "missing",
+      "validationSource": "external legal/regulatory requirements plus Hush evidence",
+      "blockerImpact": "blocks_public_state_claim",
+      "claimImpact": "No public/state records, privacy, residency, or archival rule has been accepted.",
+      "evidenceRefs": [],
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+        "FEAT149-RETENTION-ARCHIVAL-PATH-MISSING"
+      ],
+      "publicSafeWording": "No public/state public-records, retention, residency, or archival compliance claim is made.",
+      "futureResolutionCriteria": "External legal/regulatory retention and archival requirements are accepted with matching Hush evidence."
+    },
+    {
+      "groupId": "procurement_vendor_sla_insurance_accountability",
+      "label": "Procurement, vendor qualification, SLA, insurance, and operational accountability",
+      "ownerCategory": "external_procurement_authority",
+      "evidenceType": "procurement_vendor_qualification",
+      "mandatory": true,
+      "status": "unknown",
+      "validationSource": "external procurement or competent authority",
+      "blockerImpact": "blocks_public_state_claim",
+      "claimImpact": "Public-sector vendor qualification requirements are unknown for any target scope.",
+      "evidenceRefs": [],
+      "blockerIds": [
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+        "FEAT149-PROCUREMENT-QUALIFICATION-UNKNOWN"
+      ],
+      "publicSafeWording": "No public-sector procurement or vendor qualification claim is made.",
+      "futureResolutionCriteria": "Competent authority defines whether procurement/vendor qualification applies and accepts the required evidence or formal non-applicability."
+    }
+  ],
+  "externalReferences": [
+    {
+      "evidenceId": "FEAT147-RDY-REG-V014-BASELINE",
+      "ownerCategory": "hush_technical",
+      "status": "accepted",
+      "visibility": "internal",
+      "publicRef": "hush-documents/PrivateServer_ElectronicVoting/HushVoting-Readiness-Register/v0.1.4/readiness-register.json",
+      "restrictedRef": "restricted-ref://feat147/readiness-register-v0.1.4",
+      "sha256Hash": "7777777777777777777777777777777777777777777777777777777777777777",
+      "claimEffect": "Current readiness baseline; does not move public/state readiness."
+    },
+    {
+      "evidenceId": "FEAT148-PRODUCTION-ROLLOUT-BASELINE-BLOCKED",
+      "ownerCategory": "hush_technical",
+      "status": "blocked",
+      "visibility": "internal",
+      "publicRef": "hush-documents/PrivateServer_ElectronicVoting/Production-Organizational-Rollout-Readiness/package/production-rollout-readiness-fragment.json",
+      "restrictedRef": "restricted-ref://feat148/production-rollout-readiness-package",
+      "sha256Hash": "8888888888888888888888888888888888888888888888888888888888888888",
+      "claimEffect": "Production rollout is a prerequisite path and is currently blocked; even acceptance would not be sufficient for public/state readiness."
+    }
+  ],
+  "blockerPolicy": {
+    "publicStateBlockerId": "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+    "currentSeverity": "red",
+    "currentStatus": "open",
+    "v1Decision": "keep_policy_blocked",
+    "requiredFutureResolution": [
+      "target_jurisdiction_and_election_type",
+      "competent_election_authority",
+      "applicable_law_and_legal_interpretation",
+      "certification_testing_or_not_applicable",
+      "independent_audit_examination",
+      "accessibility_usability_language_assistance",
+      "transparency_observer_chain_of_custody",
+      "voter_eligibility_registration_identity_roll_custody",
+      "ballot_secrecy_coercion_remote_device_policy",
+      "dispute_recount_challenge_remedy_finality",
+      "records_retention_public_records_privacy_residency_archival",
+      "procurement_vendor_sla_insurance_accountability"
+    ],
+    "forbiddenTransitions": [
+      "red_open_to_green_resolved_without_external_authority",
+      "red_open_to_amber_allowed_with_limitations_without_defined_jurisdiction",
+      "score_increase_without_future_feat130_promotion",
+      "direct_register_mutation_from_feat149"
+    ]
+  },
+  "publicSafeWording": {
+    "blockedWording": "HushVoting does not claim public or state election readiness. Public/state use remains blocked until a future jurisdiction-specific authority path, external validation, and accepted prerequisite evidence supersede the v1 policy.",
+    "allowedNonClaims": [
+      "HushVoting has an internal prerequisite register for future public/state readiness analysis.",
+      "The current package documents missing external prerequisites and keeps the public/state blocker open.",
+      "Private organization pilot and production-readiness work do not equal public/state election readiness."
+    ],
+    "forbiddenPublicClaims": [
+      "public election ready",
+      "state election certified",
+      "government authorized",
+      "legally sufficient public voting system",
+      "independently approved for public elections",
+      "public-sector equivalent voting system"
+    ],
+    "restrictedMaterialNeedles": [
+      "voter identity",
+      "vote choice",
+      "receipt secret",
+      "trustee share",
+      "private key",
+      "legal opinion body",
+      "authority private memorandum"
+    ]
+  },
+  "readinessFragmentPolicy": {
+    "scoreChangeAllowed": false,
+    "directRegisterMutation": false,
+    "claimEffect": "A FEAT-149 v1 fragment may document public/state prerequisite state only; it must not change score or resolve the public/state blocker.",
+    "fragmentConsumer": "future FEAT-130 promotion only"
+  },
+  "publicArtifactSamples": [
+    {
+      "path": "public-state-public-safe-summary.md",
+      "content": "HushVoting does not claim public or state election readiness. This package records missing external prerequisites and keeps RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001 red/open."
+    }
+  ],
+  "signoff": {
+    "engineeringRole": "hush-readiness-engineering",
+    "operationsProductRole": "hush-readiness-operations-product",
+    "status": "blocked"
+  }
+}

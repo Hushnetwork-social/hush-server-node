@@ -1,0 +1,628 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hush.network/schemas/hushvoting/public-state-prerequisite-register.schema.json",
+  "title": "HushVoting Public Or State Election Prerequisite Register",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceId",
+    "featureId",
+    "acceptanceGates",
+    "status",
+    "baselineRegister",
+    "claimBoundary",
+    "excludedMeanings",
+    "feat148Dependency",
+    "scorePolicy",
+    "prerequisiteGroups",
+    "externalReferences",
+    "blockerPolicy",
+    "publicSafeWording",
+    "readinessFragmentPolicy",
+    "publicArtifactSamples",
+    "signoff"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "public-state-prerequisite-register.v1"
+    },
+    "sourceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "featureId": {
+      "const": "FEAT-149"
+    },
+    "fixtureOnly": {
+      "type": "boolean"
+    },
+    "acceptanceGates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^AT-RDY-[0-9]{3}$"
+      }
+    },
+    "status": {
+      "enum": [
+        "blocked",
+        "future_candidate_external_authority_required"
+      ]
+    },
+    "baselineRegister": {
+      "$ref": "#/$defs/baselineRegister"
+    },
+    "claimBoundary": {
+      "$ref": "#/$defs/claimBoundary"
+    },
+    "excludedMeanings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/excludedMeaning"
+      }
+    },
+    "feat148Dependency": {
+      "$ref": "#/$defs/feat148Dependency"
+    },
+    "scorePolicy": {
+      "$ref": "#/$defs/scorePolicy"
+    },
+    "prerequisiteGroups": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/prerequisiteGroup"
+      }
+    },
+    "externalReferences": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidenceRef"
+      }
+    },
+    "blockerPolicy": {
+      "$ref": "#/$defs/blockerPolicy"
+    },
+    "publicSafeWording": {
+      "$ref": "#/$defs/publicSafeWording"
+    },
+    "readinessFragmentPolicy": {
+      "$ref": "#/$defs/readinessFragmentPolicy"
+    },
+    "publicArtifactSamples": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/publicArtifactSample"
+      }
+    },
+    "signoff": {
+      "$ref": "#/$defs/signoff"
+    }
+  },
+  "$defs": {
+    "baselineRegister": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registerVersionId",
+        "registerStatus",
+        "totalScore",
+        "strongestAllowedClaim",
+        "productionBlocker",
+        "publicStateBlocker"
+      ],
+      "properties": {
+        "registerVersionId": {
+          "const": "RDY-REG-v0.1.4"
+        },
+        "registerStatus": {
+          "const": "AcceptedInternal"
+        },
+        "totalScore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "strongestAllowedClaim": {
+          "const": "friendly_organization_pilot"
+        },
+        "productionBlocker": {
+          "$ref": "#/$defs/blockerState"
+        },
+        "publicStateBlocker": {
+          "$ref": "#/$defs/blockerState"
+        }
+      }
+    },
+    "blockerState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blockerId",
+        "severity",
+        "status"
+      ],
+      "properties": {
+        "blockerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "enum": [
+            "red",
+            "amber",
+            "green"
+          ]
+        },
+        "status": {
+          "enum": [
+            "open",
+            "allowed_with_limitations",
+            "resolved"
+          ]
+        }
+      }
+    },
+    "claimBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claimLevel",
+        "publicSafeStatus",
+        "targetJurisdiction",
+        "electionType",
+        "competentAuthority",
+        "boundaryStatement"
+      ],
+      "properties": {
+        "claimLevel": {
+          "const": "public_or_state_election"
+        },
+        "publicSafeStatus": {
+          "const": "public_claim_blocked"
+        },
+        "targetJurisdiction": {
+          "$ref": "#/$defs/boundaryItem"
+        },
+        "electionType": {
+          "$ref": "#/$defs/boundaryItem"
+        },
+        "competentAuthority": {
+          "$ref": "#/$defs/boundaryItem"
+        },
+        "boundaryStatement": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "boundaryItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "value",
+        "evidenceRefs"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/prerequisiteStatus"
+        },
+        "value": {
+          "type": "string"
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "excludedMeaning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "excludedId",
+        "meaning",
+        "reason"
+      ],
+      "properties": {
+        "excludedId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "meaning": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "feat148Dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "featureId",
+        "dependencyType",
+        "currentStatus",
+        "requiredMinimumStatus",
+        "sufficiency",
+        "claimImpact"
+      ],
+      "properties": {
+        "featureId": {
+          "const": "FEAT-148"
+        },
+        "dependencyType": {
+          "const": "necessary_but_not_sufficient"
+        },
+        "currentStatus": {
+          "enum": [
+            "blocked",
+            "allowed_with_limitations_candidate",
+            "accepted_with_limitations"
+          ]
+        },
+        "requiredMinimumStatus": {
+          "enum": [
+            "allowed_with_limitations_candidate",
+            "accepted_with_limitations"
+          ]
+        },
+        "sufficiency": {
+          "const": "not_sufficient"
+        },
+        "claimImpact": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "scorePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "currentTotalScore",
+        "proposedTotalScore",
+        "scoreChangeAllowed",
+        "directRegisterMutation",
+        "registerPromotionOwner"
+      ],
+      "properties": {
+        "currentTotalScore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "proposedTotalScore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "scoreChangeAllowed": {
+          "const": false
+        },
+        "directRegisterMutation": {
+          "const": false
+        },
+        "registerPromotionOwner": {
+          "const": "FEAT-130"
+        }
+      }
+    },
+    "prerequisiteGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "groupId",
+        "label",
+        "ownerCategory",
+        "evidenceType",
+        "mandatory",
+        "status",
+        "validationSource",
+        "blockerImpact",
+        "claimImpact",
+        "evidenceRefs",
+        "blockerIds",
+        "publicSafeWording",
+        "futureResolutionCriteria"
+      ],
+      "properties": {
+        "groupId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ownerCategory": {
+          "$ref": "#/$defs/ownerCategory"
+        },
+        "evidenceType": {
+          "$ref": "#/$defs/evidenceType"
+        },
+        "mandatory": {
+          "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/$defs/prerequisiteStatus"
+        },
+        "validationSource": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blockerImpact": {
+          "enum": [
+            "blocks_public_state_claim",
+            "supports_future_review_only",
+            "not_applicable_by_external_authority_only"
+          ]
+        },
+        "claimImpact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "blockerIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "publicSafeWording": {
+          "type": "string",
+          "minLength": 1
+        },
+        "futureResolutionCriteria": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ownerCategory": {
+      "enum": [
+        "external_authority",
+        "external_legal_regulatory",
+        "external_certification_authority",
+        "external_audit_certification",
+        "shared_external_and_hush",
+        "external_procurement_authority",
+        "hush_technical",
+        "customer",
+        "future_feature"
+      ]
+    },
+    "evidenceType": {
+      "enum": [
+        "authority_decision",
+        "legal_interpretation",
+        "certification_path",
+        "independent_audit",
+        "accessibility_assessment",
+        "transparency_rule",
+        "voter_roll_custody",
+        "remote_voting_risk_policy",
+        "dispute_remedy_process",
+        "retention_privacy_archival",
+        "procurement_vendor_qualification",
+        "production_rollout_evidence",
+        "technical_package",
+        "public_safe_wording"
+      ]
+    },
+    "prerequisiteStatus": {
+      "enum": [
+        "missing",
+        "unknown",
+        "blocked",
+        "accepted",
+        "rejected",
+        "superseded",
+        "externally_not_applicable"
+      ]
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceId",
+        "ownerCategory",
+        "status",
+        "visibility",
+        "publicRef",
+        "restrictedRef",
+        "sha256Hash",
+        "claimEffect"
+      ],
+      "properties": {
+        "evidenceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ownerCategory": {
+          "$ref": "#/$defs/ownerCategory"
+        },
+        "status": {
+          "$ref": "#/$defs/prerequisiteStatus"
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "restricted",
+            "internal",
+            "external_placeholder"
+          ]
+        },
+        "publicRef": {
+          "type": "string"
+        },
+        "restrictedRef": {
+          "type": "string"
+        },
+        "sha256Hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "claimEffect": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "blockerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publicStateBlockerId",
+        "currentSeverity",
+        "currentStatus",
+        "v1Decision",
+        "requiredFutureResolution",
+        "forbiddenTransitions"
+      ],
+      "properties": {
+        "publicStateBlockerId": {
+          "const": "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001"
+        },
+        "currentSeverity": {
+          "const": "red"
+        },
+        "currentStatus": {
+          "const": "open"
+        },
+        "v1Decision": {
+          "const": "keep_policy_blocked"
+        },
+        "requiredFutureResolution": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbiddenTransitions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "publicSafeWording": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blockedWording",
+        "allowedNonClaims",
+        "forbiddenPublicClaims",
+        "restrictedMaterialNeedles"
+      ],
+      "properties": {
+        "blockedWording": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allowedNonClaims": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbiddenPublicClaims": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "restrictedMaterialNeedles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "readinessFragmentPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scoreChangeAllowed",
+        "directRegisterMutation",
+        "claimEffect",
+        "fragmentConsumer"
+      ],
+      "properties": {
+        "scoreChangeAllowed": {
+          "const": false
+        },
+        "directRegisterMutation": {
+          "const": false
+        },
+        "claimEffect": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fragmentConsumer": {
+          "const": "future FEAT-130 promotion only"
+        }
+      }
+    },
+    "publicArtifactSample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "content"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "content": {
+          "type": "string"
+        }
+      }
+    },
+    "signoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engineeringRole",
+        "operationsProductRole",
+        "status"
+      ],
+      "properties": {
+        "engineeringRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operationsProductRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "blocked",
+            "future_candidate"
+          ]
+        }
+      }
+    }
+  }
+}
