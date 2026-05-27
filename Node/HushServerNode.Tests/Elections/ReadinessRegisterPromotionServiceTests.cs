@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
@@ -57,6 +58,69 @@ public sealed class ReadinessRegisterPromotionServiceTests
         result.RegisterVersionId.Should().Be(CurrentRegisterVersionId);
         Directory.Exists(result.VersionOutputRoot).Should().BeFalse();
         File.Exists(paths.CatalogPath).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Promote_WithNoPublicationStatusOverride_PreservesRegisterPublicationStatus()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        MutateRegister(paths, register =>
+        {
+            register["generatedViews"]!.AsObject()["publicSafePublicationStatus"] = "pilot_only_with_limitations";
+        });
+
+        var result = new ReadinessRegisterPromotionService().Promote(CreateOptions(
+            paths,
+            publicationStatus: null));
+
+        result.PublicationStatus.Should().Be("pilot_only_with_limitations");
+    }
+
+    [Fact]
+    public void Promote_WithFeat147Source_WritesAuditPackageAndCheckOnlyVerifies()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        WriteFeat147PromotionSource(paths);
+        var service = new ReadinessRegisterPromotionService();
+
+        service.Promote(CreateOptions(paths));
+
+        var auditRoot = GetFeat147AuditPackageRoot(paths);
+        File.Exists(Path.Combine(auditRoot, "feat147-blocker-resolution-decision-ledger.json")).Should().BeTrue();
+        File.Exists(Path.Combine(auditRoot, "feat147-artifact-hash-audit.json")).Should().BeTrue();
+        File.Exists(Path.Combine(auditRoot, "feat147-promotion-hash-validation.json")).Should().BeTrue();
+        var audit = JsonNode.Parse(File.ReadAllText(Path.Combine(auditRoot, "feat147-artifact-hash-audit.json")))!.AsObject();
+        audit["status"]!.GetValue<string>().Should().Be("passed");
+
+        var checkOnly = service.Promote(CreateOptions(paths, checkOnly: true));
+        checkOnly.RegisterVersionId.Should().Be(CurrentRegisterVersionId);
+
+        File.AppendAllText(
+            Path.Combine(auditRoot, "feat147-promotion-decision-summary.md"),
+            "tampered");
+
+        var act = () => service.Promote(CreateOptions(paths, checkOnly: true));
+
+        act.Should().Throw<ReadinessRegisterPromotionException>()
+            .Where(x => x.Details.Any(detail => detail.Contains("FEAT-147 audit artifact mismatch", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Promote_WithFeat147ResolvingDecisionAndFailedArtifactAudit_FailsClosed()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        WriteFeat147PromotionSource(paths, forceBadArtifactHash: true);
+
+        var act = () => new ReadinessRegisterPromotionService().Promote(CreateOptions(paths));
+
+        act.Should().Throw<ReadinessRegisterPromotionException>()
+            .Where(x => x.Message.Contains("artifact audit failed", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -220,15 +284,147 @@ public sealed class ReadinessRegisterPromotionServiceTests
 
     private static ReadinessRegisterPromotionOptions CreateOptions(
         ReadinessRegisterPromotionPaths paths,
-        bool validateOnly = false) =>
+        bool validateOnly = false,
+        bool checkOnly = false,
+        string? publicationStatus = "not_for_publication") =>
         new(
             paths,
             "hushvoting-readiness-register",
             CurrentRegisterVersion,
-            "not_for_publication",
+            publicationStatus,
             validateOnly,
             Scaffold: false,
-            FixedGeneratedAt);
+            FixedGeneratedAt,
+            checkOnly);
+
+    private static void WriteFeat147PromotionSource(
+        ReadinessRegisterPromotionPaths paths,
+        bool forceBadArtifactHash = false)
+    {
+        var register = JsonNode.Parse(File.ReadAllText(paths.RegisterPath))!.AsObject();
+        var evidencePath = Path.Combine(
+            paths.WorkspaceRoot,
+            "hush-documents",
+            "PrivateServer_ElectronicVoting",
+            "Friendly-Pilot-Readiness-Promotion",
+            "unit-test-evidence.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(evidencePath)!);
+        File.WriteAllText(evidencePath, "FEAT-147 unit test evidence\n");
+        var evidenceHash = forceBadArtifactHash
+            ? new string('0', 64)
+            : ComputeSha256Hex(File.ReadAllBytes(evidencePath));
+        var evidenceRelativePath = Path.GetRelativePath(paths.WorkspaceRoot, evidencePath).Replace('\\', '/');
+
+        var decisions = new JsonArray();
+        foreach (var blocker in register["blockers"]!.AsArray().Select(node => node!.AsObject()))
+        {
+            var blockerId = blocker["blockerId"]!.GetValue<string>();
+            var severity = blocker["severity"]!.GetValue<string>();
+            var status = blocker["status"]!.GetValue<string>();
+            var evidenceRefs = new JsonArray();
+            if (blockerId == "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001")
+            {
+                evidenceRefs.Add(new JsonObject
+                {
+                    ["artifactId"] = "FEAT147-UNIT-TEST-EVIDENCE-001",
+                    ["evidenceId"] = "RDY-EVID-FEAT147-UNIT-TEST-001",
+                    ["featureSlice"] = "FEAT-147",
+                    ["relativePath"] = evidenceRelativePath,
+                    ["sha256Hash"] = evidenceHash,
+                    ["hashAlgorithm"] = "sha256",
+                    ["mediaType"] = "text/plain",
+                    ["visibility"] = "restricted_reviewer",
+                    ["freshness"] = "current",
+                });
+            }
+
+            decisions.Add(new JsonObject
+            {
+                ["blockerId"] = blockerId,
+                ["currentSeverity"] = severity,
+                ["currentStatus"] = status,
+                ["proposedSeverity"] = severity,
+                ["proposedStatus"] = status,
+                ["featureSlice"] = "FEAT-147",
+                ["acceptanceGateIds"] = new JsonArray("AT-RDY-TEST"),
+                ["dimensionIds"] = new JsonArray("RDY-DIM-010"),
+                ["decision"] = GetFeat147Decision(blockerId, severity, status),
+                ["decisionReason"] = "Unit-test FEAT-147 decision source matches the promoted register blocker state.",
+                ["evidenceRefs"] = evidenceRefs,
+                ["scoreImpact"] = new JsonObject
+                {
+                    ["previousScore"] = register["score"]!["total"]!.GetValue<int>(),
+                    ["acceptedScore"] = register["score"]!["total"]!.GetValue<int>(),
+                    ["dimensionId"] = "RDY-DIM-010",
+                },
+                ["claimImpact"] = "Unit-test claim impact keeps the source and promoted register aligned.",
+                ["residualRisk"] = "Unit-test residual risk remains explicit.",
+                ["signoffs"] = CreateTwoHatSignoffs(),
+            });
+        }
+
+        var source = new JsonObject
+        {
+            ["schemaVersion"] = "feat147-promotion-source.v1",
+            ["sourceId"] = "FEAT147-UNIT-TEST-SOURCE",
+            ["generatedAt"] = FixedGeneratedAt.ToString("O"),
+            ["baselineRegister"] = new JsonObject
+            {
+                ["registerVersion"] = CurrentRegisterVersion,
+                ["registerVersionId"] = CurrentRegisterVersionId,
+            },
+            ["targetRegister"] = new JsonObject
+            {
+                ["registerVersion"] = register["registerVersion"]!.GetValue<string>(),
+                ["registerVersionId"] = register["registerVersionId"]!.GetValue<string>(),
+                ["targetTotalScore"] = register["score"]!["total"]!.GetValue<int>(),
+                ["strongestAllowedClaim"] = "internal_non_binding_rehearsal",
+                ["publicationStatus"] = register["generatedViews"]!["publicSafePublicationStatus"]!.GetValue<string>(),
+            },
+            ["blockerDecisions"] = decisions,
+        };
+
+        var sourcePath = Path.Combine(
+            paths.WorkspaceRoot,
+            "hush-memory-bank",
+            "Overview",
+            "HushVotingReadiness",
+            "Friendly-Pilot-Readiness-Promotion",
+            "examples",
+            "release-baseline",
+            "feat147-promotion-source.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+        File.WriteAllText(sourcePath, source.ToJsonString(JsonOptions));
+    }
+
+    private static string GetFeat147Decision(string blockerId, string severity, string status)
+    {
+        if (status == "resolved")
+        {
+            return "resolve";
+        }
+
+        if (severity == "amber")
+        {
+            return "keep_limited";
+        }
+
+        return blockerId.Contains("PRODUCTION", StringComparison.Ordinal) ||
+            blockerId.Contains("PUBLIC", StringComparison.Ordinal)
+            ? "keep_policy_blocked"
+            : "keep_open";
+    }
+
+    private static string GetFeat147AuditPackageRoot(ReadinessRegisterPromotionPaths paths) =>
+        Path.Combine(
+            paths.WorkspaceRoot,
+            "hush-documents",
+            "PrivateServer_ElectronicVoting",
+            "Friendly-Pilot-Readiness-Promotion",
+            "package");
+
+    private static string ComputeSha256Hex(byte[] bytes) =>
+        Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
     private static void MutateRegister(ReadinessRegisterPromotionPaths paths, Action<JsonObject> mutate)
     {

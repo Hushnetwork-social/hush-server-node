@@ -20,7 +20,7 @@ var options = new ReadinessRegisterPromotionOptions(
     paths,
     CommandLineArguments.TryGetValue(arguments, "register-id", out var registerId) ? registerId : "hushvoting-readiness-register",
     CommandLineArguments.TryGetValue(arguments, "version", out var version) ? version : null,
-    CommandLineArguments.TryGetValue(arguments, "publication-status", out var publicationStatus) ? publicationStatus : "not_for_publication",
+    CommandLineArguments.TryGetValue(arguments, "publication-status", out var publicationStatus) ? publicationStatus : null,
     arguments.ContainsKey("validate-only"),
     arguments.ContainsKey("scaffold"),
     CommandLineArguments.TryGetValue(arguments, "generated-at", out var generatedAt)
@@ -28,15 +28,18 @@ var options = new ReadinessRegisterPromotionOptions(
             generatedAt,
             null,
             System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal)
-        : null);
+        : null,
+    arguments.ContainsKey("check-only"));
 
 try
 {
     var result = new ReadinessRegisterPromotionService().Promote(options);
 
-    Console.WriteLine(options.ValidateOnly
-        ? $"Validated readiness register {result.RegisterVersionId}"
-        : $"Promoted readiness register {result.RegisterVersionId}");
+    Console.WriteLine(options.CheckOnly
+        ? $"Checked readiness register {result.RegisterVersionId}"
+        : options.ValidateOnly
+            ? $"Validated readiness register {result.RegisterVersionId}"
+            : $"Promoted readiness register {result.RegisterVersionId}");
     Console.WriteLine($"Status: {result.Status}");
     Console.WriteLine($"Generated at: {result.GeneratedAt:O}");
     Console.WriteLine($"Total score: {result.TotalScore}/100");
