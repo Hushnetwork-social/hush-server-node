@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using ProductionRolloutReadinessPromoter;
+using static HushServerNode.Tests.Elections.ProductionRolloutReadinessTestHelpers;
 using Xunit;
 
 namespace HushServerNode.Tests.Elections;
@@ -261,33 +262,4 @@ public sealed class ProductionRolloutReadinessPromoterTests
                 item["auditResult"]!.GetValue<string>() == "failed");
     }
 
-    private static ProductionRolloutReadinessPromotionPaths CreatePaths() =>
-        HushVotingReadinessTestArtifacts.CreateProductionRolloutReadinessPaths();
-
-    private static JsonObject LoadExample(string exampleFolder)
-    {
-        var paths = CreatePaths();
-        var path = Path.Combine(paths.ExamplesRoot, exampleFolder, ProductionRolloutReadinessPromotionPaths.SourceFileName);
-        return JsonNode.Parse(File.ReadAllText(path))?.AsObject() ??
-            throw new InvalidOperationException($"Example fixture {exampleFolder} is not a JSON object.");
-    }
-
-    private static JsonObject ReadArtifactJson(ProductionRolloutGeneratedPackage package, string relativePath)
-    {
-        var artifact = package.Artifacts.Single(item => item.RelativePath == relativePath);
-        return JsonNode.Parse(artifact.Content)?.AsObject() ??
-            throw new InvalidOperationException($"Artifact {relativePath} is not a JSON object.");
-    }
-
-    private static string WriteSourceExample(
-        ProductionRolloutReadinessPromotionPaths paths,
-        JsonObject source,
-        string exampleName)
-    {
-        var folder = Path.Combine(paths.ExamplesRoot, $"{exampleName}-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(folder);
-        var path = Path.Combine(folder, ProductionRolloutReadinessPromotionPaths.SourceFileName);
-        File.WriteAllText(path, ProductionRolloutReadinessContracts.CanonicalJson(source));
-        return folder;
-    }
 }

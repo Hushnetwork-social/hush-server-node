@@ -8,8 +8,9 @@ public static partial class ProductionRolloutReadinessArtifactGenerator
     private static JsonObject BuildCheckResults(
         JsonObject source,
         ProductionRolloutGateEvaluation gate,
-        IReadOnlyList<string> auditFailures,
+        IReadOnlyList<string> packageFailures,
         string packageStatus,
+        IReadOnlyList<ProductionRolloutPublicOutputFinding> publicFindings,
         DateTimeOffset generatedAt) =>
         new()
         {
@@ -22,16 +23,24 @@ public static partial class ProductionRolloutReadinessArtifactGenerator
             ["greenAllowed"] = gate.GreenAllowed,
             ["productionDecision"] = DecisionToJson(gate.ProductionDecision),
             ["publicStateDecision"] = DecisionToJson(gate.PublicStateDecision),
-            ["blockers"] = ProductionRolloutReadinessContracts.ToJsonArray(MergeBlockers(gate, auditFailures)),
+            ["blockers"] = ProductionRolloutReadinessContracts.ToJsonArray(MergeBlockers(gate, packageFailures)),
             ["limitations"] = ProductionRolloutReadinessContracts.ToJsonArray(gate.Limitations),
             ["diagnostics"] = ProductionRolloutReadinessContracts.ToJsonArray(gate.Diagnostics),
-            ["artifactAuditFailures"] = ProductionRolloutReadinessContracts.ToJsonArray(auditFailures),
+            ["packageFailures"] = ProductionRolloutReadinessContracts.ToJsonArray(packageFailures),
+            ["publicOutputFindings"] = new JsonArray(publicFindings
+                .Select(finding => new JsonObject
+                {
+                    ["path"] = finding.RelativePath,
+                    ["category"] = finding.Category,
+                    ["evidence"] = finding.Evidence,
+                })
+                .ToArray<JsonNode?>()),
         };
 
     private static JsonObject BuildDecisionLedger(
         JsonObject source,
         ProductionRolloutGateEvaluation gate,
-        IReadOnlyList<string> auditFailures,
+        IReadOnlyList<string> packageFailures,
         string packageStatus,
         DateTimeOffset generatedAt)
     {
@@ -58,7 +67,7 @@ public static partial class ProductionRolloutReadinessArtifactGenerator
                 ["claimImpact"] = ProductionRolloutReadinessContracts.GetString(decision, "claimImpact"),
                 ["residualRisk"] = ProductionRolloutReadinessContracts.GetString(decision, "residualRisk"),
                 ["packageBlockers"] = blockerId == gate.ProductionDecision.BlockerId
-                    ? ProductionRolloutReadinessContracts.ToJsonArray(MergeBlockers(gate, auditFailures))
+                    ? ProductionRolloutReadinessContracts.ToJsonArray(MergeBlockers(gate, packageFailures))
                     : new JsonArray(),
             });
         }
@@ -78,7 +87,7 @@ public static partial class ProductionRolloutReadinessArtifactGenerator
     private static JsonObject BuildReadinessFragment(
         JsonObject source,
         ProductionRolloutGateEvaluation gate,
-        IReadOnlyList<string> auditFailures,
+        IReadOnlyList<string> packageFailures,
         string packageStatus,
         DateTimeOffset generatedAt)
     {
@@ -103,7 +112,7 @@ public static partial class ProductionRolloutReadinessArtifactGenerator
                 ["candidateTotalScoreWhenAccepted"] = candidateScore,
                 ["appliedTotalScore"] = scoreMovementAllowed ? candidateScore : currentScore,
                 ["scoreChangeAllowed"] = scoreMovementAllowed,
-                ["scoreChangeBlockedBy"] = ProductionRolloutReadinessContracts.ToJsonArray(MergeBlockers(gate, auditFailures)),
+                ["scoreChangeBlockedBy"] = ProductionRolloutReadinessContracts.ToJsonArray(MergeBlockers(gate, packageFailures)),
             },
             ["claimEffect"] = new JsonObject
             {
@@ -121,8 +130,9 @@ public static partial class ProductionRolloutReadinessArtifactGenerator
     private static JsonObject BuildEvidencePackage(
         JsonObject source,
         ProductionRolloutGateEvaluation gate,
-        IReadOnlyList<string> auditFailures,
+        IReadOnlyList<string> packageFailures,
         string packageStatus,
+        IReadOnlyList<ProductionRolloutPublicOutputFinding> publicFindings,
         IReadOnlyCollection<ProductionRolloutGeneratedArtifact> artifacts,
         DateTimeOffset generatedAt) =>
         new()
@@ -137,7 +147,7 @@ public static partial class ProductionRolloutReadinessArtifactGenerator
             ["baselineRegister"] = ProductionRolloutReadinessContracts.Clone(source["baselineRegister"]),
             ["rolloutProfile"] = ProductionRolloutReadinessContracts.Clone(source["rolloutProfile"]),
             ["scorePolicy"] = ProductionRolloutReadinessContracts.Clone(source["scorePolicy"]),
-            ["gateResult"] = BuildCheckResults(source, gate, auditFailures, packageStatus, generatedAt),
+            ["gateResult"] = BuildCheckResults(source, gate, packageFailures, packageStatus, publicFindings, generatedAt),
             ["evidence"] = new JsonObject
             {
                 ["runEvidence"] = ProductionRolloutReadinessContracts.Clone(source["runEvidence"]),
@@ -209,7 +219,7 @@ public static partial class ProductionRolloutReadinessArtifactGenerator
     private static string BuildPublicSafeSummary(
         JsonObject source,
         ProductionRolloutGateEvaluation gate,
-        IReadOnlyList<string> auditFailures,
+        IReadOnlyList<string> packageFailures,
         string packageStatus,
         DateTimeOffset generatedAt)
     {
@@ -234,7 +244,7 @@ public static partial class ProductionRolloutReadinessArtifactGenerator
 
         builder.AppendLine();
         builder.AppendLine("## Active Blockers");
-        foreach (var blocker in MergeBlockers(gate, auditFailures))
+        foreach (var blocker in MergeBlockers(gate, packageFailures))
         {
             builder.Append("- ");
             builder.AppendLine(blocker);

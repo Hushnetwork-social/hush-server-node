@@ -222,6 +222,30 @@ public static partial class ProductionRolloutReadinessContracts
     public static JsonArray ToJsonArray(IEnumerable<string> values) =>
         new(values.Select(value => JsonValue.Create(value)).ToArray<JsonNode?>());
 
+    public static IReadOnlyList<ProductionRolloutPublicOutputFinding> ScanPublicOutput(
+        JsonObject source,
+        IEnumerable<(string RelativePath, string Content)> generatedPublicOutputs)
+    {
+        var findings = new List<ProductionRolloutPublicOutputFinding>();
+        var claimPolicy = RequireObject(source, "claimPolicy");
+        var forbiddenClaims = GetStringArray(claimPolicy, "forbiddenPublicClaims");
+        foreach (var sample in RequireArray(source, "publicArtifactSamples").OfType<JsonObject>())
+        {
+            ScanText(
+                GetString(sample, "path", "publicArtifactSamples"),
+                GetString(sample, "content"),
+                forbiddenClaims,
+                findings);
+        }
+
+        foreach (var output in generatedPublicOutputs)
+        {
+            ScanText(output.RelativePath, output.Content, forbiddenClaims, findings);
+        }
+
+        return findings;
+    }
+
     public static string FormatTimestamp(DateTimeOffset value) =>
         value.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
 
@@ -237,4 +261,27 @@ public static partial class ProductionRolloutReadinessContracts
 
     public static string NormalizeLineEndings(string value) =>
         value.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
+
+    private static void ScanText(
+        string relativePath,
+        string content,
+        IReadOnlyList<string> forbiddenClaims,
+        List<ProductionRolloutPublicOutputFinding> findings)
+    {
+        foreach (var forbiddenClaim in forbiddenClaims)
+        {
+            if (content.Contains(forbiddenClaim, StringComparison.OrdinalIgnoreCase))
+            {
+                findings.Add(new ProductionRolloutPublicOutputFinding(relativePath, "overclaim", forbiddenClaim));
+            }
+        }
+
+        foreach (var forbiddenMaterial in ProductionRolloutReadinessGateChecker.ForbiddenPublicMaterialNeedles)
+        {
+            if (content.Contains(forbiddenMaterial, StringComparison.OrdinalIgnoreCase))
+            {
+                findings.Add(new ProductionRolloutPublicOutputFinding(relativePath, "restricted_material", forbiddenMaterial));
+            }
+        }
+    }
 }

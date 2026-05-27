@@ -46,24 +46,41 @@ public static partial class ProductionRolloutReadinessArtifactGenerator
         var gate = ProductionRolloutReadinessGateChecker.Evaluate(source);
         var artifactAudit = BuildArtifactHashAudit(source, paths.WorkspaceRoot, effectiveGeneratedAt);
         var auditFailures = CollectAuditFailures(artifactAudit);
-        var packageStatus = gate.Status == "allowed_with_limitations_candidate" && auditFailures.Count == 0
+        var packageFailures = auditFailures.ToList();
+        var packageStatus = gate.Status == "allowed_with_limitations_candidate" && packageFailures.Count == 0
             ? gate.Status
             : "blocked";
+        var publicSummary = BuildPublicSafeSummary(source, gate, packageFailures, packageStatus, effectiveGeneratedAt);
+        var publicFindings = ProductionRolloutReadinessContracts.ScanPublicOutput(
+            source,
+            [(PublicSafeSummaryPath, publicSummary)]);
+        var publicFailures = publicFindings
+            .Select(finding => $"FEAT148-PUBLIC-OUTPUT-{finding.Category.ToUpperInvariant()}-{finding.RelativePath}")
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+        if (publicFailures.Length > 0)
+        {
+            packageFailures.AddRange(publicFailures);
+            packageFailures.Sort(StringComparer.Ordinal);
+            packageStatus = "blocked";
+            publicSummary = BuildPublicSafeSummary(source, gate, packageFailures, packageStatus, effectiveGeneratedAt);
+        }
 
         var sourceArtifact = JsonArtifact(SourceEchoPath, source);
         var auditArtifact = JsonArtifact(ArtifactHashAuditPath, artifactAudit);
-        var checkResultsArtifact = JsonArtifact(CheckResultsPath, BuildCheckResults(source, gate, auditFailures, packageStatus, effectiveGeneratedAt));
-        var decisionLedgerArtifact = JsonArtifact(DecisionLedgerPath, BuildDecisionLedger(source, gate, auditFailures, packageStatus, effectiveGeneratedAt));
-        var readinessArtifact = JsonArtifact(ReadinessFragmentPath, BuildReadinessFragment(source, gate, auditFailures, packageStatus, effectiveGeneratedAt));
-        var publicSummaryArtifact = TextArtifact(PublicSafeSummaryPath, BuildPublicSafeSummary(source, gate, auditFailures, packageStatus, effectiveGeneratedAt));
+        var checkResultsArtifact = JsonArtifact(CheckResultsPath, BuildCheckResults(source, gate, packageFailures, packageStatus, publicFindings, effectiveGeneratedAt));
+        var decisionLedgerArtifact = JsonArtifact(DecisionLedgerPath, BuildDecisionLedger(source, gate, packageFailures, packageStatus, effectiveGeneratedAt));
+        var readinessArtifact = JsonArtifact(ReadinessFragmentPath, BuildReadinessFragment(source, gate, packageFailures, packageStatus, effectiveGeneratedAt));
+        var publicSummaryArtifact = TextArtifact(PublicSafeSummaryPath, publicSummary);
         var restrictedIndexArtifact = JsonArtifact(RestrictedReviewerIndexPath, BuildRestrictedReviewerIndex(source, artifactAudit, effectiveGeneratedAt));
         var evidencePackageArtifact = JsonArtifact(
             EvidencePackagePath,
             BuildEvidencePackage(
                 source,
                 gate,
-                auditFailures,
+                packageFailures,
                 packageStatus,
+                publicFindings,
                 [
                     sourceArtifact,
                     auditArtifact,
@@ -106,7 +123,13 @@ public static partial class ProductionRolloutReadinessArtifactGenerator
             .OrderBy(artifact => artifact.RelativePath, StringComparer.Ordinal)
             .ToArray();
 
-        return new ProductionRolloutGeneratedPackage(packageStatus, artifacts, gate, auditFailures);
+        return new ProductionRolloutGeneratedPackage(
+            packageStatus,
+            artifacts,
+            gate,
+            auditFailures,
+            publicFailures,
+            publicFindings);
     }
 
     private static JsonObject BuildArtifactHashAudit(
