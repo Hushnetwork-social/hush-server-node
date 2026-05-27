@@ -169,11 +169,208 @@ public sealed class PublicationCountingHardeningPromoterTests
             .Which.Details.Should().Contain(error => error.Contains("Source input was not found", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void AcceptedToPublishedBinding_ValidPackage_Passes()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+
+        var result = PublicationCountingBindingChecks.CheckAcceptedToPublished(workspace.Paths, workspace.LoadSource());
+
+        result.Status.Should().Be("accepted");
+        result.Errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AcceptedToPublishedBinding_InsertedPublishedItem_Fails()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        workspace.MutatePackageArtifact(TempPublicationCountingWorkspace.PublishedBallotStreamPath, published =>
+        {
+            published["publishedBallotCount"] = 3;
+            published["publishedBallots"]!.AsArray().Add(new JsonObject
+            {
+                ["publicationSequence"] = 3,
+                ["proofBundleHash"] = TempPublicationCountingWorkspace.ProofHashC,
+            });
+        });
+
+        var result = PublicationCountingBindingChecks.CheckAcceptedToPublished(workspace.Paths, workspace.LoadSource());
+
+        result.Status.Should().Be("blocked");
+        result.Errors.Should().Contain(error => error.Contains("Accepted/published count mismatch", StringComparison.Ordinal));
+        result.Errors.Should().Contain(error => error.Contains("Published proof hash set", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AcceptedToPublishedBinding_RemovedPublishedItem_Fails()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        workspace.MutatePackageArtifact(TempPublicationCountingWorkspace.PublishedBallotStreamPath, published =>
+        {
+            published["publishedBallotCount"] = 1;
+            published["publishedBallots"]!.AsArray().RemoveAt(1);
+        });
+
+        var result = PublicationCountingBindingChecks.CheckAcceptedToPublished(workspace.Paths, workspace.LoadSource());
+
+        result.Status.Should().Be("blocked");
+        result.Errors.Should().Contain(error => error.Contains("Accepted/published count mismatch", StringComparison.Ordinal));
+        result.Errors.Should().Contain(error => error.Contains("Published proof hash set", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AcceptedToPublishedBinding_DuplicatedPublishedItem_Fails()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        workspace.MutatePackageArtifact(TempPublicationCountingWorkspace.PublishedBallotStreamPath, published =>
+        {
+            var ballots = published["publishedBallots"]!.AsArray();
+            ballots[1]!.AsObject()["proofBundleHash"] = TempPublicationCountingWorkspace.ProofHashA;
+        });
+
+        var result = PublicationCountingBindingChecks.CheckAcceptedToPublished(workspace.Paths, workspace.LoadSource());
+
+        result.Status.Should().Be("blocked");
+        result.Errors.Should().Contain(error => error.Contains("Published ballot proof hashes contain duplicates", StringComparison.Ordinal));
+        result.Errors.Should().Contain(error => error.Contains("Published proof hash set", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AcceptedToPublishedBinding_ReplacedPublishedItem_Fails()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        workspace.MutatePackageArtifact(TempPublicationCountingWorkspace.PublishedBallotStreamPath, published =>
+        {
+            var ballots = published["publishedBallots"]!.AsArray();
+            ballots[1]!.AsObject()["proofBundleHash"] = TempPublicationCountingWorkspace.ProofHashC;
+        });
+
+        var result = PublicationCountingBindingChecks.CheckAcceptedToPublished(workspace.Paths, workspace.LoadSource());
+
+        result.Status.Should().Be("blocked");
+        result.Errors.Should().Contain(error => error.Contains("Published proof hash set", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AcceptedToPublishedBinding_MismatchedStreamRoot_Fails()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        workspace.MutatePackageArtifact(TempPublicationCountingWorkspace.PublishedBallotStreamPath, published =>
+        {
+            published["publishedBallotStreamHash"] = "bad-stream-root";
+        });
+
+        var result = PublicationCountingBindingChecks.CheckAcceptedToPublished(workspace.Paths, workspace.LoadSource());
+
+        result.Status.Should().Be("blocked");
+        result.Errors.Should().Contain(error => error.Contains("publication proof transcript", StringComparison.Ordinal));
+        result.Errors.Should().Contain(error => error.Contains("tally replay publishedBallotStreamHash", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TallyReplayBinding_ValidPackage_Passes()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+
+        var result = PublicationCountingBindingChecks.CheckTallyReplay(workspace.Paths, workspace.LoadSource());
+
+        result.Status.Should().Be("accepted");
+        result.Errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void TallyReplayBinding_WrongTallyTarget_Fails()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        workspace.MutatePackageArtifact(TempPublicationCountingWorkspace.TallyReplayPath, tally =>
+        {
+            tally["publishedBallotStreamHash"] = "wrong-stream-root";
+        });
+
+        var result = PublicationCountingBindingChecks.CheckTallyReplay(workspace.Paths, workspace.LoadSource());
+
+        result.Status.Should().Be("blocked");
+        result.Errors.Should().Contain(error => error.Contains("published stream hash must match tally replay", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TallyReplayBinding_MissingTrusteeRelease_Fails()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        workspace.DeletePackageArtifact(TempPublicationCountingWorkspace.TrusteeReleaseEvidencePath);
+
+        var result = PublicationCountingBindingChecks.CheckTallyReplay(workspace.Paths, workspace.LoadSource());
+
+        result.Status.Should().Be("blocked");
+        result.Errors.Should().Contain(error => error.Contains(TempPublicationCountingWorkspace.TrusteeReleaseEvidencePath, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TallyReplayBinding_FinalResultMismatch_Fails()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        workspace.MutatePackageArtifact(TempPublicationCountingWorkspace.ResultBindingPath, resultBinding =>
+        {
+            resultBinding["electionId"] = "different-election";
+        });
+
+        var result = PublicationCountingBindingChecks.CheckTallyReplay(workspace.Paths, workspace.LoadSource());
+
+        result.Status.Should().Be("blocked");
+        result.Errors.Should().Contain(error => error.Contains("tally replay electionId must match result binding", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Promotion_CheckOnly_BindingFailure_ReturnsBlockedPackage()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        workspace.MutatePackageArtifact(TempPublicationCountingWorkspace.PublishedBallotStreamPath, published =>
+        {
+            var ballots = published["publishedBallots"]!.AsArray();
+            ballots[1]!.AsObject()["proofBundleHash"] = TempPublicationCountingWorkspace.ProofHashC;
+        });
+
+        var result = new PublicationCountingHardeningPromotionService().Promote(new(
+            workspace.Paths,
+            PublicationCountingHardeningPromotionService.ModeCheckOnly,
+            null,
+            null,
+            FixedGeneratedAt,
+            ValidateOnly: false));
+
+        result.Status.Should().Be("blocked");
+        var acceptedToPublishedSummary = result.GeneratedPackage.Artifacts
+            .Single(artifact => artifact.RelativePath == PublicationCountingHardeningArtifactGenerator.AcceptedToPublishedBindingSummaryPath);
+        JsonNode.Parse(acceptedToPublishedSummary.Content)!.AsObject()
+            ["status"]!
+            .GetValue<string>()
+            .Should()
+            .Be("blocked");
+    }
+
     private sealed class TempPublicationCountingWorkspace : IDisposable
     {
+        public const string AcceptedBallotSetPath = "artifacts/election-record/accepted-ballot-set.json";
+        public const string PublishedBallotStreamPath = "artifacts/election-record/published-ballot-stream.json";
+        public const string PublicationProofTranscriptPath = "artifacts/election-record/publication-proof-transcript.json";
+        public const string PublicationProofVerifierOutputPath = "artifacts/election-record/publication-proof-verifier-output.json";
+        public const string TallyReplayPath = "artifacts/election-record/tally-replay.json";
+        public const string TrusteeReleaseEvidencePath = "artifacts/election-record/trustee-release-evidence.json";
+        public const string TrusteeVerifierOutputPath = "artifacts/election-record/trustee-verifier-output.json";
+        public const string ResultBindingPath = "artifacts/election-record/result-binding.json";
+
+        public const string ProofHashA = "731CDE0C1EA51BE60D219636C7D517452F25D093375D5B175800A9B1DF941BEF";
+        public const string ProofHashB = "B98A3D85F868C3175F492B3D75FBB79216610CF132A7D99CEF28DD4BF1CAE0E8";
+        public const string ProofHashC = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
         private const string VerifierSourceRef = "88e7d8f4f35e21a341d9ad1b92ecc73bdba0ab15";
         private const string VerifierBinaryHash = "sha256:7048677ba0c66c69c123ab7d046eb03a0d3c7642103f3dd6a2645873c928d6a4";
         private const string GoodPackageHash = "sha256:9014846bcf4fb7b7369e8fcb53e379d7ec3cfa6829478fb657af681e678942cc";
+        private const string ElectionId = "13e6fa69-1d53-4968-8b1c-397333458253";
+        private const string AcceptedBallotInventoryHash = "280650b39b0f2eb11709f7c84f3fd8f44c9b032e26aad948e1b4d5021b97f1a2";
+        private const string PublishedBallotStreamHash = "193eaa3488b6c95c1c7dbd75162b9b788af608bc0b300b4d6280131dc6c8606a";
+        private const string PublicationProofTranscriptHash = "sp07-transcript-hash";
+        private const string PublicationProofHash = "0ceda866dc34824ab7b18efd0d6ff4770394e088c7f0fa0582d3b496811067e4";
 
         private TempPublicationCountingWorkspace(string root, PublicationCountingHardeningPromotionPaths paths)
         {
@@ -198,6 +395,7 @@ public sealed class PublicationCountingHardeningPromoterTests
             var workspace = new TempPublicationCountingWorkspace(root, paths);
             workspace.WriteSchema();
             workspace.WriteCorpusInputs();
+            workspace.WritePackageArtifacts();
             workspace.WriteSourceAsync(workspace.BuildSource(), PublicationCountingHardeningPromotionPaths.SourceFileName)
                 .GetAwaiter()
                 .GetResult();
@@ -211,6 +409,27 @@ public sealed class PublicationCountingHardeningPromoterTests
             var path = Path.Combine(Paths.ExamplesRoot, "release-baseline", fileName);
             await File.WriteAllTextAsync(path, PublicationCountingHardeningContracts.CanonicalJson(source));
             return path;
+        }
+
+        public void MutatePackageArtifact(string relativePath, Action<JsonObject> mutate, bool rewriteManifest = true)
+        {
+            var path = PackageArtifactPath(relativePath);
+            var artifact = PublicationCountingHardeningContracts.ReadJsonObject(path, relativePath);
+            mutate(artifact);
+            File.WriteAllText(path, PublicationCountingHardeningContracts.CanonicalJson(artifact));
+            if (rewriteManifest)
+            {
+                RewriteAuditPackageManifest();
+            }
+        }
+
+        public void DeletePackageArtifact(string relativePath)
+        {
+            var path = PackageArtifactPath(relativePath);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
         }
 
         public void Dispose()
@@ -270,6 +489,147 @@ public sealed class PublicationCountingHardeningPromoterTests
             File.WriteAllText(
                 Path.Combine(releaseRoot, "expected-results", "sample-good-finalized-election.json"),
                 PublicationCountingHardeningContracts.CanonicalJson(expectedResult));
+        }
+
+        private void WritePackageArtifacts()
+        {
+            Directory.CreateDirectory(Path.Combine(PackageRoot, "artifacts", "election-record"));
+            WritePackageJson("VerifierProfile.json", new JsonObject
+            {
+                ["profileId"] = "public_anonymous_v1",
+                ["displayName"] = "public_anonymous_v1",
+            });
+            WritePackageJson(AcceptedBallotSetPath, new JsonObject
+            {
+                ["electionId"] = ElectionId,
+                ["acceptedBallotCount"] = 2,
+                ["acceptedBallotInventoryHash"] = AcceptedBallotInventoryHash,
+                ["acceptedBallots"] = new JsonArray(
+                    new JsonObject
+                    {
+                        ["proofBundleHash"] = ProofHashA,
+                    },
+                    new JsonObject
+                    {
+                        ["proofBundleHash"] = ProofHashB,
+                    }),
+            });
+            WritePackageJson(PublishedBallotStreamPath, new JsonObject
+            {
+                ["electionId"] = ElectionId,
+                ["publishedBallotCount"] = 2,
+                ["publishedBallotStreamHash"] = PublishedBallotStreamHash,
+                ["publishedBallots"] = new JsonArray(
+                    new JsonObject
+                    {
+                        ["publicationSequence"] = 1,
+                        ["proofBundleHash"] = ProofHashA,
+                    },
+                    new JsonObject
+                    {
+                        ["publicationSequence"] = 2,
+                        ["proofBundleHash"] = ProofHashB,
+                    }),
+            });
+            WritePackageJson(PublicationProofTranscriptPath, new JsonObject
+            {
+                ["electionId"] = ElectionId,
+                ["acceptedBallotCount"] = 2,
+                ["publishedBallotCount"] = 2,
+                ["acceptedBallotSetHash"] = AcceptedBallotInventoryHash,
+                ["publishedBallotStreamHash"] = PublishedBallotStreamHash,
+                ["transcriptHash"] = PublicationProofTranscriptHash,
+                ["proofHash"] = PublicationProofHash,
+            });
+            WritePackageJson(PublicationProofVerifierOutputPath, new JsonObject
+            {
+                ["electionId"] = ElectionId,
+                ["results"] = new JsonArray(new JsonObject
+                {
+                    ["status"] = "pass",
+                    ["resultCode"] = "publication_proof_evidence_valid",
+                    ["evidence"] = new JsonObject
+                    {
+                        ["accepted_ballot_count"] = "2",
+                        ["published_ballot_count"] = "2",
+                    },
+                }),
+            });
+            WritePackageJson(TallyReplayPath, new JsonObject
+            {
+                ["electionId"] = ElectionId,
+                ["evidenceStatus"] = "pass",
+                ["resultCode"] = "publication_proof_evidence_valid",
+                ["acceptedBallotSetHash"] = AcceptedBallotInventoryHash,
+                ["publishedBallotStreamHash"] = PublishedBallotStreamHash,
+                ["publicationProofTranscriptHash"] = PublicationProofTranscriptHash,
+                ["publicationProofHash"] = PublicationProofHash,
+            });
+            WritePackageJson(TrusteeReleaseEvidencePath, new JsonObject
+            {
+                ["electionId"] = ElectionId,
+                ["finalizationSessionCount"] = 0,
+                ["acceptedShareCount"] = 0,
+                ["acceptedShares"] = new JsonArray(),
+            });
+            WritePackageJson(TrusteeVerifierOutputPath, new JsonObject
+            {
+                ["electionId"] = ElectionId,
+                ["results"] = new JsonArray(new JsonObject
+                {
+                    ["status"] = "pass",
+                    ["resultCode"] = "trustee_control_domain_evidence_valid",
+                }),
+            });
+            WritePackageJson(ResultBindingPath, new JsonObject
+            {
+                ["electionId"] = ElectionId,
+                ["reportPackageHash"] = "report-package-hash",
+                ["officialResultArtifactId"] = "official-result",
+                ["unofficialResultArtifactId"] = "unofficial-result",
+                ["outcomeStatus"] = "clean_finalized",
+                ["cleanFinalization"] = true,
+                ["finalizationMode"] = "clean_finalization",
+            });
+            RewriteAuditPackageManifest();
+        }
+
+        private void RewriteAuditPackageManifest()
+        {
+            var entries = new JsonArray(RequiredPackageArtifactPaths
+                .Where(relativePath => File.Exists(PackageArtifactPath(relativePath)))
+                .Select(relativePath => new JsonObject
+                {
+                    ["path"] = relativePath,
+                    ["sha256Hash"] = PublicationCountingHardeningContracts.Sha256File(PackageArtifactPath(relativePath))
+                        .Replace("sha256:", "", StringComparison.Ordinal),
+                })
+                .ToArray<JsonNode?>());
+            WritePackageJson("AuditPackageManifest.json", new JsonObject
+            {
+                ["manifestVersion"] = "1.0",
+                ["packageId"] = "HushElectionPackage-" + ElectionId,
+                ["electionId"] = ElectionId,
+                ["verifierProfileId"] = "public_anonymous_v1",
+                ["entries"] = entries,
+            });
+        }
+
+        private string PackageRoot => Path.Combine(
+            Paths.PublicCorpusRoot,
+            "hushvoting-v1",
+            "v0.2.0",
+            "packages",
+            "sample-good-finalized-election");
+
+        private string PackageArtifactPath(string relativePath) =>
+            Path.Combine(PackageRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+
+        private void WritePackageJson(string relativePath, JsonObject json)
+        {
+            var path = PackageArtifactPath(relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, PublicationCountingHardeningContracts.CanonicalJson(json));
         }
 
         private JsonObject BuildSource()
@@ -418,5 +778,18 @@ public sealed class PublicationCountingHardeningPromoterTests
 
         private static JsonArray Strings(params string[] values) =>
             new(values.Select(value => JsonValue.Create(value)).ToArray<JsonNode?>());
+
+        private static readonly string[] RequiredPackageArtifactPaths =
+        [
+            "VerifierProfile.json",
+            AcceptedBallotSetPath,
+            PublishedBallotStreamPath,
+            PublicationProofTranscriptPath,
+            PublicationProofVerifierOutputPath,
+            TallyReplayPath,
+            TrusteeReleaseEvidencePath,
+            TrusteeVerifierOutputPath,
+            ResultBindingPath,
+        ];
     }
 }

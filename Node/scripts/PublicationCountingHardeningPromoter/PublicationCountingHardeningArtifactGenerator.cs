@@ -51,11 +51,14 @@ public static class PublicationCountingHardeningArtifactGenerator
         var source = PublicationCountingHardeningContracts.ValidateForPromotion(paths, sourceInput);
         var packageRoot = ResolvePackageRoot(paths, source, outputRoot);
         var generatedAtText = ResolveGeneratedAt(source, generatedAt);
+        var acceptedBinding = PublicationCountingBindingChecks.CheckAcceptedToPublished(paths, source);
+        var tallyBinding = PublicationCountingBindingChecks.CheckTallyReplay(paths, source);
+        var status = acceptedBinding.Passed && tallyBinding.Passed ? "accepted" : "blocked";
         var artifacts = new List<PublicationCountingHardeningArtifact>
         {
             JsonArtifact(PackageVerifierReplaySummaryPath, BuildPackageVerifierReplaySummary(paths, source, generatedAtText)),
-            JsonArtifact(AcceptedToPublishedBindingSummaryPath, BuildBindingSummary(source, "publication-counting-accepted-to-published-binding-summary.v1", "acceptedToPublishedChecks", generatedAtText)),
-            JsonArtifact(TallyReplayBindingSummaryPath, BuildBindingSummary(source, "publication-counting-tally-replay-binding-summary.v1", "tallyReplayChecks", generatedAtText)),
+            JsonArtifact(AcceptedToPublishedBindingSummaryPath, BuildBindingSummary(source, "publication-counting-accepted-to-published-binding-summary.v1", "acceptedToPublishedChecks", generatedAtText, acceptedBinding)),
+            JsonArtifact(TallyReplayBindingSummaryPath, BuildBindingSummary(source, "publication-counting-tally-replay-binding-summary.v1", "tallyReplayChecks", generatedAtText, tallyBinding)),
             JsonArtifact(TamperStaleReplaySummaryPath, BuildTamperStaleReplaySummary(source, generatedAtText)),
             JsonArtifact(PackageHashCurrentnessSummaryPath, BuildPackageHashCurrentnessSummary(source, generatedAtText)),
             JsonArtifact(NoSecretScanResultPath, BuildNoSecretScanResult(source, generatedAtText)),
@@ -67,7 +70,7 @@ public static class PublicationCountingHardeningArtifactGenerator
         artifacts.Insert(0, new PublicationCountingHardeningArtifact(ReadmePath, BuildReadme(source)));
         artifacts.Insert(1, JsonArtifact(ManifestPath, BuildManifest(source, generatedAtText, artifacts)));
 
-        return new PublicationCountingHardeningGeneratedPackage("accepted", packageRoot, source, artifacts);
+        return new PublicationCountingHardeningGeneratedPackage(status, packageRoot, source, artifacts);
     }
 
     public static string ResolvePackageRoot(
@@ -171,18 +174,22 @@ public static class PublicationCountingHardeningArtifactGenerator
         JsonObject source,
         string schemaVersion,
         string sourceProperty,
-        string generatedAt) =>
+        string generatedAt,
+        PublicationCountingBindingCheckResult result) =>
         new()
         {
             ["schemaVersion"] = schemaVersion,
             ["generatedAt"] = generatedAt,
-            ["status"] = "accepted",
+            ["status"] = result.Status,
+            ["errorCount"] = result.Errors.Count,
+            ["errors"] = new JsonArray(result.Errors.Select(error => JsonValue.Create(error)).ToArray<JsonNode?>()),
+            ["diagnostics"] = PublicationCountingHardeningContracts.Clone(result.Diagnostics),
             ["checks"] = new JsonArray(PublicationCountingHardeningContracts.RequireArray(source, sourceProperty)
                 .OfType<JsonObject>()
                 .Select(check => new JsonObject
                 {
                     ["checkId"] = PublicationCountingHardeningContracts.GetString(check, "checkId"),
-                    ["status"] = "pass",
+                    ["status"] = result.Passed ? "pass" : "blocked",
                     ["purpose"] = PublicationCountingHardeningContracts.GetString(check, "purpose"),
                     ["requiredArtifactIds"] = PublicationCountingHardeningContracts.Clone(check["requiredArtifactIds"]),
                     ["mustBind"] = PublicationCountingHardeningContracts.Clone(check["mustBind"]),
@@ -300,4 +307,3 @@ public static class PublicationCountingHardeningArtifactGenerator
         ]);
     }
 }
-
