@@ -58,6 +58,13 @@ internal static class Feat147PromotionAudit
         }
 
         var source = ReadJsonObject(sourcePath, "FEAT-147 promotion source");
+        var targetRegister = ObjectOrEmpty(source, "targetRegister");
+        if (GetString(targetRegister, "registerVersion") != GetString(promotedRegister, "registerVersion") ||
+            GetString(targetRegister, "registerVersionId") != GetString(promotedRegister, "registerVersionId"))
+        {
+            return null;
+        }
+
         var errors = ValidateSource(source, promotedRegister);
         if (errors.Count > 0)
         {
