@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace ProductionRolloutReadinessPromoter;
@@ -9,8 +12,14 @@ public static partial class ProductionRolloutReadinessContracts
     public const string CurrentRegisterId = "RDY-REG-v0.1.4";
     public const string ProductionBlockerId = "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001";
     public const string PublicStateBlockerId = "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001";
+    public const string CanonicalizationVersion = "production-rollout-canonical-json.v1";
     public const int AmberMinimumScore = 80;
     public const int FullAllowedRecommendedScore = 85;
+
+    private static readonly JsonSerializerOptions CanonicalJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true,
+    };
 
     public static readonly string[] RequiredSchemaFiles =
     [
@@ -208,4 +217,24 @@ public static partial class ProductionRolloutReadinessContracts
             : fullPath;
     }
 
+    public static JsonNode? Clone(JsonNode? node) => node?.DeepClone();
+
+    public static JsonArray ToJsonArray(IEnumerable<string> values) =>
+        new(values.Select(value => JsonValue.Create(value)).ToArray<JsonNode?>());
+
+    public static string FormatTimestamp(DateTimeOffset value) =>
+        value.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+
+    public static string CanonicalJson(JsonNode node) =>
+        NormalizeLineEndings(node.ToJsonString(CanonicalJsonOptions)) + "\n";
+
+    public static string Sha256Hex(string content) =>
+        Convert.ToHexString(SHA256.HashData(new UTF8Encoding(false).GetBytes(NormalizeLineEndings(content))))
+            .ToLowerInvariant();
+
+    public static string Sha256Hex(byte[] content) =>
+        Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+
+    public static string NormalizeLineEndings(string value) =>
+        value.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
 }

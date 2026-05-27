@@ -160,6 +160,107 @@ public sealed class ProductionRolloutReadinessPromoterTests
         });
     }
 
+    [Fact]
+    public void PackageGeneration_WithBlockedSource_GeneratesAllArtifactsAndBlockedResults()
+    {
+        // Arrange
+        var paths = CreatePaths();
+        var generatedAt = DateTimeOffset.Parse("2026-05-27T12:00:00Z");
+
+        // Act
+        var package = ProductionRolloutReadinessArtifactGenerator.Generate(paths, generatedAt: generatedAt);
+        var checkResults = ReadArtifactJson(package, ProductionRolloutReadinessArtifactGenerator.CheckResultsPath);
+        var readinessFragment = ReadArtifactJson(package, ProductionRolloutReadinessArtifactGenerator.ReadinessFragmentPath);
+        var hashValidation = ReadArtifactJson(package, ProductionRolloutReadinessArtifactGenerator.PackageHashValidationPath);
+
+        // Assert
+        package.Status.Should().Be("blocked");
+        package.Artifacts.Select(artifact => artifact.RelativePath)
+            .Should().BeEquivalentTo(ProductionRolloutReadinessArtifactGenerator.RequiredArtifactPaths);
+        checkResults["status"]!.GetValue<string>().Should().Be("blocked");
+        readinessFragment["scoreEffect"]!.AsObject()["scoreChangeAllowed"]!.GetValue<bool>().Should().BeFalse();
+        hashValidation["generatedArtifactHashes"]!.AsArray()
+            .OfType<JsonObject>()
+            .Select(item => item["path"]!.GetValue<string>())
+            .Should()
+            .BeEquivalentTo(ProductionRolloutReadinessArtifactGenerator.RequiredArtifactPaths
+                .Except([ProductionRolloutReadinessArtifactGenerator.PackageHashValidationPath]));
+    }
+
+    [Fact]
+    public void PackageGeneration_WithFixedTimestamp_IsDeterministic()
+    {
+        // Arrange
+        var paths = CreatePaths();
+        var generatedAt = DateTimeOffset.Parse("2026-05-27T12:00:00Z");
+
+        // Act
+        var first = ProductionRolloutReadinessArtifactGenerator.Generate(paths, generatedAt: generatedAt);
+        var second = ProductionRolloutReadinessArtifactGenerator.Generate(paths, generatedAt: generatedAt);
+
+        // Assert
+        first.Artifacts.Select(artifact => (artifact.RelativePath, artifact.Sha256Hash, artifact.Content))
+            .Should().Equal(second.Artifacts.Select(artifact => (artifact.RelativePath, artifact.Sha256Hash, artifact.Content)));
+    }
+
+    [Fact]
+    public void PackageGeneration_WithAmberReadyEvidence_ProposesAllowedWithLimitationsCandidate()
+    {
+        // Arrange
+        var paths = CreatePaths();
+        var generatedAt = DateTimeOffset.Parse("2026-05-27T12:00:00Z");
+
+        // Act
+        var package = ProductionRolloutReadinessArtifactGenerator.Generate(
+            paths,
+            Path.Combine(paths.ExamplesRoot, "amber-ready"),
+            generatedAt);
+        var readinessFragment = ReadArtifactJson(package, ProductionRolloutReadinessArtifactGenerator.ReadinessFragmentPath);
+
+        // Assert
+        package.Status.Should().Be("allowed_with_limitations_candidate");
+        readinessFragment["scoreEffect"]!.AsObject()["scoreChangeAllowed"]!.GetValue<bool>().Should().BeTrue();
+        readinessFragment["claimEffect"]!.AsObject()["publicOrStateElection"]!.GetValue<string>().Should().Be("blocked");
+    }
+
+    [Fact]
+    public void PackageGeneration_WithLocalHashMismatch_BlocksPackageAndRecordsAuditFailure()
+    {
+        // Arrange
+        var paths = CreatePaths();
+        var source = LoadExample("amber-ready");
+        var evidencePath = Path.Combine(
+            paths.WorkspaceRoot,
+            "hush-documents",
+            "PrivateServer_ElectronicVoting",
+            "Production-Organizational-Rollout-Readiness",
+            "mismatched-local-evidence.txt");
+        File.WriteAllText(evidencePath, "actual evidence");
+        var relativeEvidencePath = Path.GetRelativePath(paths.WorkspaceRoot, evidencePath);
+        var evidence = source["runEvidence"]!.AsObject()["evidenceRefs"]!.AsArray()[0]!.AsObject();
+        evidence["publicRef"] = relativeEvidencePath;
+        evidence["restrictedRef"] = "";
+        evidence["sha256Hash"] = new string('0', 64);
+        var sourceInput = WriteSourceExample(paths, source, "local-hash-mismatch");
+
+        // Act
+        var package = ProductionRolloutReadinessArtifactGenerator.Generate(
+            paths,
+            sourceInput,
+            DateTimeOffset.Parse("2026-05-27T12:00:00Z"));
+        var audit = ReadArtifactJson(package, ProductionRolloutReadinessArtifactGenerator.ArtifactHashAuditPath);
+
+        // Assert
+        package.Status.Should().Be("blocked");
+        package.AuditFailures.Should().Contain(item => item.Contains("FEAT148-PRODUCTION-LIKE-RUN-ACCEPTED-001", StringComparison.Ordinal));
+        audit["status"]!.GetValue<string>().Should().Be("blocked");
+        audit["artifacts"]!.AsArray()
+            .OfType<JsonObject>()
+            .Should().Contain(item =>
+                item["evidenceId"]!.GetValue<string>() == "FEAT148-PRODUCTION-LIKE-RUN-ACCEPTED-001" &&
+                item["auditResult"]!.GetValue<string>() == "failed");
+    }
+
     private static ProductionRolloutReadinessPromotionPaths CreatePaths() =>
         HushVotingReadinessTestArtifacts.CreateProductionRolloutReadinessPaths();
 
@@ -169,5 +270,24 @@ public sealed class ProductionRolloutReadinessPromoterTests
         var path = Path.Combine(paths.ExamplesRoot, exampleFolder, ProductionRolloutReadinessPromotionPaths.SourceFileName);
         return JsonNode.Parse(File.ReadAllText(path))?.AsObject() ??
             throw new InvalidOperationException($"Example fixture {exampleFolder} is not a JSON object.");
+    }
+
+    private static JsonObject ReadArtifactJson(ProductionRolloutGeneratedPackage package, string relativePath)
+    {
+        var artifact = package.Artifacts.Single(item => item.RelativePath == relativePath);
+        return JsonNode.Parse(artifact.Content)?.AsObject() ??
+            throw new InvalidOperationException($"Artifact {relativePath} is not a JSON object.");
+    }
+
+    private static string WriteSourceExample(
+        ProductionRolloutReadinessPromotionPaths paths,
+        JsonObject source,
+        string exampleName)
+    {
+        var folder = Path.Combine(paths.ExamplesRoot, $"{exampleName}-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, ProductionRolloutReadinessPromotionPaths.SourceFileName);
+        File.WriteAllText(path, ProductionRolloutReadinessContracts.CanonicalJson(source));
+        return folder;
     }
 }
