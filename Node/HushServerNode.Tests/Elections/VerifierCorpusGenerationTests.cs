@@ -95,6 +95,64 @@ public sealed class VerifierCorpusGenerationTests
     }
 
     [Fact]
+    public async Task Generate_RefreshRelease_ShouldAddBreadthDriftAndScoreArtifacts()
+    {
+        using var workspace = TempCorpusWorkspace.Create();
+
+        var result = await GenerateRefreshAsync(workspace.Root);
+
+        result.Fixtures.Select(x => x.FixtureId)
+            .Should()
+            .BeEquivalentTo(VerifierCorpusGenerator.RefreshFixtureIds());
+        var goodSamples = result.Fixtures
+            .Where(x => x.FixtureId.StartsWith("sample-good-", StringComparison.Ordinal))
+            .ToArray();
+        goodSamples
+            .Should()
+            .HaveCount(5)
+            .And.OnlyContain(x =>
+                x.ExpectedOverallStatus == VerificationOverallStatus.Pass &&
+                x.ExpectedExitCode == VerificationExitCodes.Pass);
+        goodSamples.Select(x => x.PackageHash)
+            .Should()
+            .OnlyHaveUniqueItems("refresh good samples must be separately exported package shapes, not marker-only clones");
+
+        ReadPackageArtifact("sample-good-finalized-election", VerificationPackageFileNames.AcceptedBallotSet)
+            ["acceptedBallotCount"]!.GetValue<int>().Should().Be(2);
+        ReadPackageArtifact("sample-good-larger-electorate", VerificationPackageFileNames.AcceptedBallotSet)
+            ["acceptedBallotCount"]!.GetValue<int>().Should().Be(4);
+        ReadPackageArtifact("sample-good-low-turnout", VerificationPackageFileNames.Sp05EligibilitySummary)
+            ["didNotVoteCount"]!.GetValue<int>().Should().Be(5);
+        ReadPackageArtifact("sample-good-trustee-threshold", VerificationPackageFileNames.Sp06TrusteeControlSummary)
+            ["acceptedReleaseArtifactCount"]!.GetValue<int>().Should().Be(3);
+
+        result.Fixtures.Where(x => x.CorpusProfileId == "stale_version_drift")
+            .Should()
+            .HaveCount(6)
+            .And.OnlyContain(x => x.ExpectedOverallStatus != VerificationOverallStatus.Pass);
+
+        File.Exists(Path.Combine(workspace.Root, "validation", "result-code-stability-summary.json")).Should().BeTrue();
+        File.Exists(Path.Combine(workspace.Root, "validation", "stale-version-drift-check.json")).Should().BeTrue();
+        File.Exists(Path.Combine(workspace.Root, "readiness", "verifier-corpus-refresh-score-proposal.json")).Should().BeTrue();
+        File.Exists(Path.Combine(workspace.Root, "release-delta-report.md")).Should().BeTrue();
+
+        var scoreProposal = ReadJson("readiness/verifier-corpus-refresh-score-proposal.json", workspace.Root);
+        scoreProposal["dimensionId"]!.GetValue<string>().Should().Be("RDY-DIM-002");
+        scoreProposal["proposedScoreFrom"]!.GetValue<int>().Should().Be(6);
+        scoreProposal["proposedScoreTo"]!.GetValue<int>().Should().Be(8);
+        scoreProposal["doesNotMutateRegister"]!.GetValue<bool>().Should().BeTrue();
+
+        var handoff = ReadJson("handoff/verifier-corpus-refresh-downstream-handoff.json", workspace.Root);
+        handoff["producerFeature"]!.GetValue<string>().Should().Be("FEAT-151");
+        handoff["feat154ConsumerInstructions"].Should().NotBeNull();
+        handoff["feat155ConsumerInstructions"].Should().NotBeNull();
+        handoff["feat156ConsumerInstructions"].Should().NotBeNull();
+
+        JsonObject ReadPackageArtifact(string fixtureId, string artifactPath) =>
+            ReadJson($"packages/{fixtureId}/{artifactPath}", workspace.Root);
+    }
+
+    [Fact]
     public async Task Generate_PlatformReplayFlags_ShouldFlowToValidationSummaryAndHandoff()
     {
         using var workspace = TempCorpusWorkspace.Create();
@@ -142,6 +200,8 @@ public sealed class VerifierCorpusGenerationTests
             VerifierCorpusGenerator.GoodSampleFixtureId,
             "packages/sample-good-finalized-election",
             VerificationProfileIds.PublicAnonymousV1,
+            "baseline_finalized",
+            "Baseline finalized organizational election from FEAT-135.",
             VerificationResultCodes.ExternalReviewNotComplete,
             VerificationCheckStatus.Warn,
             VerificationOverallStatus.Warn,
@@ -185,6 +245,7 @@ public sealed class VerifierCorpusGenerationTests
             "v0.1.0",
             FixedGeneratedAt,
             ValidateOnly: true,
+            CheckOnly: false,
             PublicRepositoryRef: "test-ref",
             VerifierSourceRef: "test-source-ref",
             VerifierHash: "sha256:test-verifier-hash"));
@@ -216,6 +277,7 @@ public sealed class VerifierCorpusGenerationTests
             "v0.1.0",
             FixedGeneratedAt,
             ValidateOnly: false,
+            CheckOnly: false,
             PublicRepositoryRef: "test-ref",
             VerifierSourceRef: "test-source-ref",
             VerifierHash: "sha256:test-verifier-hash",
@@ -249,6 +311,7 @@ public sealed class VerifierCorpusGenerationTests
             "v0.1.0",
             FixedGeneratedAt,
             ValidateOnly: false,
+            CheckOnly: false,
             PublicRepositoryRef: "test-ref",
             VerifierSourceRef: "test-source-ref",
             VerifierHash: "sha256:test-verifier-hash"));
@@ -261,6 +324,12 @@ public sealed class VerifierCorpusGenerationTests
         new VerifierCorpusGenerator().GenerateAsync(new VerifierCorpusGenerationOptions(
             root,
             "v0.1.0",
+            FixedGeneratedAt));
+
+    private static Task<VerifierCorpusGenerationResult> GenerateRefreshAsync(string root) =>
+        new VerifierCorpusGenerator().GenerateAsync(new VerifierCorpusGenerationOptions(
+            root,
+            "v0.2.0",
             FixedGeneratedAt));
 
     private static JsonObject ReadJson(string relativePath, string root) =>

@@ -10,6 +10,7 @@ public sealed record VerifierCorpusPromotionOptions(
     string CorpusVersion,
     DateTimeOffset GeneratedAt,
     bool ValidateOnly,
+    bool CheckOnly,
     string PublicRepositoryRef,
     string VerifierSourceRef,
     string VerifierHash,
@@ -43,6 +44,7 @@ public sealed class VerifierCorpusPromotionException : Exception
 public sealed class VerifierCorpusPromotionService
 {
     public const string ModeValidateOnly = "validate_only";
+    public const string ModeCheckOnly = "check_only";
     public const string ModeGenerate = "generate";
     public const string CorpusIndexFileName = "corpus-index.json";
 
@@ -50,6 +52,11 @@ public sealed class VerifierCorpusPromotionService
         VerifierCorpusPromotionOptions options,
         CancellationToken cancellationToken = default)
     {
+        if (options.ValidateOnly && options.CheckOnly)
+        {
+            throw new VerifierCorpusPromotionException("--validate-only and --check-only cannot be combined.");
+        }
+
         var schemaErrors = VerifierCorpusContracts.ValidateSchemaSet(options.Paths.SchemasRoot);
         if (schemaErrors.Count > 0)
         {
@@ -63,7 +70,8 @@ public sealed class VerifierCorpusPromotionService
         }
 
         var publicOutputRoot = ValidatePublicOutputRoot(options.Paths.WorkspaceRoot, options.PublicOutputRoot);
-        var repositoryRoot = options.ValidateOnly
+        var readOnlyMode = options.ValidateOnly || options.CheckOnly;
+        var repositoryRoot = readOnlyMode
             ? Path.Combine(Path.GetTempPath(), $"hush-verifier-corpus-validate-{Guid.NewGuid():N}")
             : publicOutputRoot;
         var corpusRepositoryRelativePath = BuildCorpusRepositoryRelativePath(options.CorpusVersion);
@@ -71,13 +79,18 @@ public sealed class VerifierCorpusPromotionService
             repositoryRoot,
             corpusRepositoryRelativePath.Replace('/', Path.DirectorySeparatorChar));
 
-        var beforeWriteSnapshot = options.ValidateOnly && Directory.Exists(publicOutputRoot)
+        var beforeWriteSnapshot = readOnlyMode && Directory.Exists(publicOutputRoot)
             ? SnapshotFileWriteTimes(publicOutputRoot)
             : new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
-            if (!options.ValidateOnly)
+            if (options.CheckOnly)
+            {
+                CopyPublicOutputSnapshot(publicOutputRoot, repositoryRoot);
+            }
+
+            if (!readOnlyMode)
             {
                 PreparePublicRepositoryRoot(publicOutputRoot, outputRoot);
             }
@@ -104,14 +117,35 @@ public sealed class VerifierCorpusPromotionService
                         .Select(x => $"{x.RelativePath}:{x.Category}"));
             }
 
-            if (options.ValidateOnly)
+            if (options.CheckOnly)
+            {
+                await WriteRepositoryRootFilesAsync(
+                    repositoryRoot,
+                    corpusRepositoryRelativePath,
+                    options,
+                    generation,
+                    cancellationToken);
+
+                var differences = CompareGeneratedOutput(repositoryRoot, publicOutputRoot);
+                if (differences.Count > 0)
+                {
+                    throw new VerifierCorpusPromotionException(
+                        "FEAT-151 check-only output does not match the public corpus checkout.",
+                        differences);
+                }
+            }
+
+            if (readOnlyMode)
             {
                 var afterSnapshot = Directory.Exists(publicOutputRoot)
                     ? SnapshotFileWriteTimes(publicOutputRoot)
                     : new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
                 if (!SnapshotsEqual(beforeWriteSnapshot, afterSnapshot))
                 {
-                    throw new VerifierCorpusPromotionException("Validate-only mode changed the public output root.");
+                    throw new VerifierCorpusPromotionException(
+                        options.CheckOnly
+                            ? "Check-only mode changed the public output root."
+                            : "Validate-only mode changed the public output root.");
                 }
             }
             else
@@ -124,9 +158,14 @@ public sealed class VerifierCorpusPromotionService
                     cancellationToken);
             }
 
+            var mode = options.CheckOnly
+                ? ModeCheckOnly
+                : options.ValidateOnly
+                    ? ModeValidateOnly
+                    : ModeGenerate;
             return new VerifierCorpusPromotionResult(
-                options.ValidateOnly ? ModeValidateOnly : ModeGenerate,
-                options.ValidateOnly ? publicOutputRoot : outputRoot,
+                mode,
+                readOnlyMode ? publicOutputRoot : outputRoot,
                 options.CorpusVersion,
                 options.GeneratedAt,
                 generation.ManifestHash,
@@ -135,11 +174,11 @@ public sealed class VerifierCorpusPromotionService
                 generation.Fixtures.Count,
                 generation.ScanFindings.Count,
                 generation.ScanFindings.Count(x => !x.ExpectedTamperFixture),
-                options.ValidateOnly ? [] : EnumerateGeneratedFiles(publicOutputRoot));
+                readOnlyMode ? [] : EnumerateGeneratedFiles(publicOutputRoot));
         }
         finally
         {
-            if (options.ValidateOnly && Directory.Exists(repositoryRoot))
+            if (readOnlyMode && Directory.Exists(repositoryRoot))
             {
                 Directory.Delete(repositoryRoot, recursive: true);
             }
@@ -204,6 +243,28 @@ public sealed class VerifierCorpusPromotionService
         }
     }
 
+    private static void CopyPublicOutputSnapshot(string sourceRoot, string destinationRoot)
+    {
+        if (!Directory.Exists(sourceRoot))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(destinationRoot);
+        foreach (var file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(sourceRoot, file).Replace('\\', '/');
+            if (relativePath.StartsWith(".git/", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var destinationPath = Path.Combine(destinationRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            File.Copy(file, destinationPath, overwrite: true);
+        }
+    }
+
     private static async Task WriteRepositoryRootFilesAsync(
         string publicOutputRoot,
         string corpusRepositoryRelativePath,
@@ -213,15 +274,13 @@ public sealed class VerifierCorpusPromotionService
     {
         Directory.CreateDirectory(publicOutputRoot);
         var index = BuildCorpusIndex(publicOutputRoot, corpusRepositoryRelativePath, options, generation);
-        await File.WriteAllTextAsync(
+        await WriteTextLfAsync(
             Path.Combine(publicOutputRoot, CorpusIndexFileName),
             VerifierCorpusGenerator.CanonicalJson(index),
-            Encoding.UTF8,
             cancellationToken);
-        await File.WriteAllTextAsync(
+        await WriteTextLfAsync(
             Path.Combine(publicOutputRoot, "README.md"),
             BuildRepositoryReadme(corpusRepositoryRelativePath, generation),
-            Encoding.UTF8,
             cancellationToken);
     }
 
@@ -330,6 +389,77 @@ public sealed class VerifierCorpusPromotionService
             .Where(path => !Path.GetRelativePath(outputRoot, path).Replace('\\', '/').StartsWith(".git/", StringComparison.Ordinal))
             .OrderBy(path => Path.GetRelativePath(outputRoot, path), StringComparer.Ordinal)
             .ToArray();
+
+    private static IReadOnlyList<string> CompareGeneratedOutput(string generatedRoot, string publicOutputRoot)
+    {
+        if (!Directory.Exists(publicOutputRoot))
+        {
+            return [$"Public output root is missing: {publicOutputRoot}"];
+        }
+
+        var generatedFiles = EnumerateComparableFiles(generatedRoot);
+        var existingFiles = EnumerateComparableFiles(publicOutputRoot);
+        var differences = new List<string>();
+
+        foreach (var relativePath in generatedFiles.Keys.OrderBy(x => x, StringComparer.Ordinal))
+        {
+            if (!existingFiles.TryGetValue(relativePath, out var existingPath))
+            {
+                differences.Add($"Missing public file: {relativePath}");
+                continue;
+            }
+
+            var generatedHash = ComparableFileHash(relativePath, generatedFiles[relativePath]);
+            var existingHash = ComparableFileHash(relativePath, existingPath);
+            if (!string.Equals(generatedHash, existingHash, StringComparison.Ordinal))
+            {
+                differences.Add($"Changed public file: {relativePath}");
+            }
+        }
+
+        foreach (var relativePath in existingFiles.Keys.OrderBy(x => x, StringComparer.Ordinal))
+        {
+            if (!generatedFiles.ContainsKey(relativePath))
+            {
+                differences.Add($"Extra public file: {relativePath}");
+            }
+        }
+
+        return differences;
+    }
+
+    private static Dictionary<string, string> EnumerateComparableFiles(string root) =>
+        Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Where(path => !Path.GetRelativePath(root, path).Replace('\\', '/').StartsWith(".git/", StringComparison.Ordinal))
+            .ToDictionary(
+                path => Path.GetRelativePath(root, path).Replace('\\', '/'),
+                path => path,
+                StringComparer.OrdinalIgnoreCase);
+
+    private static string Sha256File(string path) =>
+        $"sha256:{Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant()}";
+
+    private static string ComparableFileHash(string relativePath, string path)
+    {
+        if (!relativePath.EndsWith("/VerifierOutput.json", StringComparison.Ordinal))
+        {
+            return Sha256File(path);
+        }
+
+        var json = JsonNode.Parse(File.ReadAllText(path))?.AsObject()
+            ?? throw new VerifierCorpusPromotionException($"Verifier output is not a JSON object: {relativePath}");
+        json.Remove("verifiedAt");
+        json.Remove("outputPath");
+        json.Remove("absolutePackagePath");
+        return $"sha256:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(VerifierCorpusGenerator.CanonicalJson(json)))).ToLowerInvariant()}";
+    }
+
+    private static async Task WriteTextLfAsync(string path, string content, CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
+        await File.WriteAllTextAsync(path, normalized, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), cancellationToken);
+    }
 
     private static Dictionary<string, DateTime> SnapshotFileWriteTimes(string root) =>
         Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)

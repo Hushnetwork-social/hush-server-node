@@ -27,6 +27,8 @@ public sealed record VerifierCorpusFixtureGenerationResult(
     string FixtureId,
     string PackagePath,
     string VerifierProfileId,
+    string CorpusProfileId,
+    string ProfileDescription,
     string ExpectedPrimaryResultCode,
     VerificationCheckStatus ExpectedCheckStatus,
     VerificationOverallStatus ExpectedOverallStatus,
@@ -66,9 +68,9 @@ public sealed partial class VerifierCorpusGenerator
 
     private static readonly JsonSerializerOptions JsonOptions = VerificationJson.Options;
 
-    private static readonly FixtureSpec[] FixtureSpecs =
+    private static readonly FixtureSpec[] LegacyFixtureSpecs =
     [
-        new(GoodSampleFixtureId, VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageStructureValid, VerificationCheckStatus.Pass, VerificationOverallStatus.Pass, VerificationExitCodes.Pass, SecondaryFailuresAllowed: false),
+        new(GoodSampleFixtureId, "baseline_finalized", "Baseline finalized organizational election from FEAT-135.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageStructureValid, VerificationCheckStatus.Pass, VerificationOverallStatus.Pass, VerificationExitCodes.Pass, SecondaryFailuresAllowed: false),
         new("tamper-missing-artifact", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageManifestMissingArtifact, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
         new("tamper-artifact-hash", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageManifestArtifactHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
         new("tamper-malformed-package-json", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageUnparseable, VerificationCheckStatus.Fail, VerificationOverallStatus.NotAvailable, VerificationExitCodes.UnreadableOrUnparseable),
@@ -93,6 +95,20 @@ public sealed partial class VerifierCorpusGenerator
         new("tamper-sp10-kms-public-value-leak", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.OperationalSecurityForbiddenMaterial, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
     ];
 
+    private static readonly FixtureSpec[] RefreshOnlyFixtureSpecs =
+    [
+        new("sample-good-larger-electorate", "larger_electorate", "Synthetic good sample with a larger roster, larger accepted-ballot set, and reconciled low non-voter count.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageStructureValid, VerificationCheckStatus.Pass, VerificationOverallStatus.Pass, VerificationExitCodes.Pass, SecondaryFailuresAllowed: false),
+        new("sample-good-multi-option-single-winner", "multi_option_single_winner", "Synthetic good sample with a three-option single-winner package shape and reconciled verification artifacts.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageStructureValid, VerificationCheckStatus.Pass, VerificationOverallStatus.Pass, VerificationExitCodes.Pass, SecondaryFailuresAllowed: false),
+        new("sample-good-trustee-threshold", "trustee_threshold", "Synthetic good sample with trustee-threshold finalization, accepted control-domain evidence, and release artifacts.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageStructureValid, VerificationCheckStatus.Pass, VerificationOverallStatus.Pass, VerificationExitCodes.Pass, SecondaryFailuresAllowed: false),
+        new("sample-good-low-turnout", "low_turnout", "Synthetic good sample with a larger active denominator than counted participation.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageStructureValid, VerificationCheckStatus.Pass, VerificationOverallStatus.Pass, VerificationExitCodes.Pass, SecondaryFailuresAllowed: false),
+        new("tamper-stale-verifier-source-ref", "stale_version_drift", "Stale verifier source reference must block score movement.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.ReleaseIntegrityComponentHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
+        new("tamper-stale-verifier-binary-hash", "stale_version_drift", "Stale verifier binary hash must block score movement.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.ReleaseIntegrityComponentHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
+        new("tamper-stale-protocol-package-version", "stale_version_drift", "Stale Protocol Omega package binding must block score movement.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.ReleaseIntegrityCircuitOrPackageHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
+        new("tamper-package-schema-version-drift", "stale_version_drift", "Verification package schema drift must block score movement.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageUnparseable, VerificationCheckStatus.Fail, VerificationOverallStatus.NotAvailable, VerificationExitCodes.UnreadableOrUnparseable),
+        new("tamper-expected-result-drift", "stale_version_drift", "Expected-result drift is represented as package manifest hash drift.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageManifestArtifactHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
+        new("tamper-corpus-index-drift", "stale_version_drift", "Corpus index drift is represented as profile/package mismatch.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.VerifierProfilePackageMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
+    ];
+
     public async Task<VerifierCorpusGenerationResult> GenerateAsync(
         VerifierCorpusGenerationOptions options,
         CancellationToken cancellationToken = default)
@@ -108,21 +124,37 @@ public sealed partial class VerifierCorpusGenerator
         Directory.CreateDirectory(expectedResultsRoot);
         Directory.CreateDirectory(verifierOutputRoot);
 
+        var fixtureSpecs = ResolveFixtureSpecs(options.CorpusVersion);
         var goodPackagePath = Path.Combine(packagesRoot, GoodSampleFixtureId);
-        await CreateGoodSamplePackageAsync(goodPackagePath, options.GeneratedAt, cancellationToken);
+        await CreateGoodSamplePackageAsync(goodPackagePath, options.GeneratedAt, "baseline_finalized", cancellationToken);
+        NormalizeTextFiles(goodPackagePath);
+        await RefreshPackageRootManifestsAsync(goodPackagePath, cancellationToken);
 
         var results = new List<VerifierCorpusFixtureGenerationResult>();
-        foreach (var spec in FixtureSpecs)
+        foreach (var spec in fixtureSpecs)
         {
             var packagePath = string.Equals(spec.FixtureId, GoodSampleFixtureId, StringComparison.Ordinal)
                 ? goodPackagePath
                 : Path.Combine(packagesRoot, spec.FixtureId);
 
-            if (!string.Equals(spec.FixtureId, GoodSampleFixtureId, StringComparison.Ordinal) &&
+            if (IsGoodSampleFixture(spec.FixtureId) &&
+                !string.Equals(spec.FixtureId, GoodSampleFixtureId, StringComparison.Ordinal))
+            {
+                await CreateGoodSamplePackageAsync(packagePath, options.GeneratedAt, spec.CorpusProfileId, cancellationToken);
+                NormalizeTextFiles(packagePath);
+                await RefreshPackageRootManifestsAsync(packagePath, cancellationToken);
+                await WriteProfileMarkerAsync(packagePath, spec, options.GeneratedAt, cancellationToken);
+            }
+            else if (!string.Equals(spec.FixtureId, GoodSampleFixtureId, StringComparison.Ordinal) &&
                 !string.Equals(spec.FixtureId, "tamper-unsupported-live-dependency", StringComparison.Ordinal))
             {
                 CopyDirectory(goodPackagePath, packagePath);
                 await ApplyTamperAsync(packagePath, spec.FixtureId, cancellationToken);
+            }
+
+            if (Directory.Exists(packagePath))
+            {
+                NormalizeTextFiles(packagePath);
             }
 
             var verificationPackagePath = string.Equals(spec.FixtureId, "tamper-unsupported-live-dependency", StringComparison.Ordinal)
@@ -135,6 +167,7 @@ public sealed partial class VerifierCorpusGenerator
                     spec.ProfileId,
                     verifierOutputPath),
                 cancellationToken);
+            NormalizeTextFiles(verifierOutputPath);
 
             ValidateVerifierResult(spec, verification);
             var packageHash = Directory.Exists(packagePath)
@@ -142,12 +175,14 @@ public sealed partial class VerifierCorpusGenerator
                 : "sha256:0000000000000000000000000000000000000000000000000000000000000000";
             var expectedResult = BuildExpectedResult(spec, verification, packageHash);
             var expectedResultPath = Path.Combine(expectedResultsRoot, $"{spec.FixtureId}.json");
-            await File.WriteAllTextAsync(expectedResultPath, CanonicalJson(expectedResult), cancellationToken);
+            await WriteTextLfAsync(expectedResultPath, CanonicalJson(expectedResult), cancellationToken);
 
             results.Add(new VerifierCorpusFixtureGenerationResult(
                 spec.FixtureId,
                 verificationPackagePath,
                 spec.ProfileId,
+                spec.CorpusProfileId,
+                spec.ProfileDescription,
                 spec.ExpectedResultCode,
                 spec.ExpectedCheckStatus,
                 verification.Output.OverallStatus,
@@ -168,7 +203,19 @@ public sealed partial class VerifierCorpusGenerator
     }
 
     public static IReadOnlyList<string> RequiredFixtureIds() =>
-        FixtureSpecs.Select(x => x.FixtureId).ToArray();
+        LegacyFixtureSpecs.Select(x => x.FixtureId).ToArray();
+
+    public static IReadOnlyList<string> RefreshFixtureIds() =>
+        ResolveFixtureSpecs("v0.2.0").Select(x => x.FixtureId).ToArray();
+
+    private static FixtureSpec[] ResolveFixtureSpecs(string corpusVersion) =>
+        string.Equals(corpusVersion, "v0.2.0", StringComparison.OrdinalIgnoreCase)
+            ? LegacyFixtureSpecs.Concat(RefreshOnlyFixtureSpecs).ToArray()
+            : LegacyFixtureSpecs;
+
+    private static bool IsGoodSampleFixture(string fixtureId) =>
+        string.Equals(fixtureId, GoodSampleFixtureId, StringComparison.Ordinal) ||
+        fixtureId.StartsWith("sample-good-", StringComparison.Ordinal);
 
     private static void ResetGeneratedOutputTree(string outputRoot)
     {
@@ -207,9 +254,10 @@ public sealed partial class VerifierCorpusGenerator
     private static Task CreateGoodSamplePackageAsync(
         string packagePath,
         DateTimeOffset generatedAt,
+        string corpusProfileId,
         CancellationToken cancellationToken)
     {
-        var request = SyntheticElectionRequestFactory.CreatePublicAnonymousRequest(generatedAt);
+        var request = SyntheticElectionRequestFactory.CreatePublicAnonymousRequest(generatedAt, corpusProfileId);
         var export = new ElectionVerificationPackageExportService().Export(request);
         if (!export.Success)
         {
@@ -328,7 +376,7 @@ public sealed partial class VerifierCorpusGenerator
                 return;
 
             case "tamper-malformed-package-json":
-                await File.WriteAllTextAsync(
+                await WriteTextLfAsync(
                     ResolvePackagePath(packagePath, VerificationPackageFileNames.ElectionRecord),
                     "{",
                     cancellationToken);
@@ -444,9 +492,67 @@ public sealed partial class VerifierCorpusGenerator
                 await RefreshPackageRootManifestsAsync(packagePath, cancellationToken);
                 return;
 
+            case "tamper-stale-verifier-source-ref":
+                await MutateJsonArtifactAsync(packagePath, VerificationPackageFileNames.Sp08ReleaseManifest, root =>
+                    root["components"]!.AsArray()[2]!.AsObject()["artifactDigest"] = "missing-sha256-prefix", cancellationToken);
+                await RefreshSp08ReleaseIntegrityHashAsync(packagePath, cancellationToken);
+                return;
+
+            case "tamper-stale-verifier-binary-hash":
+                await MutateJsonArtifactAsync(packagePath, VerificationPackageFileNames.Sp08ReleaseManifest, root =>
+                    root["components"]!.AsArray()[2]!.AsObject()["isPlaceholder"] = true, cancellationToken);
+                await RefreshSp08ReleaseIntegrityHashAsync(packagePath, cancellationToken);
+                return;
+
+            case "tamper-stale-protocol-package-version":
+                await MutateJsonArtifactAsync(packagePath, VerificationPackageFileNames.Sp08ReleaseIntegrity, root =>
+                    root["protocolPackageManifestHash"] = new string('f', 64), cancellationToken);
+                await RefreshPackageRootManifestsAsync(packagePath, cancellationToken);
+                return;
+
+            case "tamper-package-schema-version-drift":
+                await WriteTextLfAsync(
+                    ResolvePackagePath(packagePath, VerificationPackageFileNames.VerifierInputManifest),
+                    "{",
+                    cancellationToken);
+                return;
+
+            case "tamper-expected-result-drift":
+                await MutateJsonArtifactAsync(packagePath, VerificationPackageFileNames.ResultBinding, root =>
+                    root["expectedResultDriftMarker"] = "expected output hash no longer matches observed verifier output", cancellationToken);
+                return;
+
+            case "tamper-corpus-index-drift":
+                await MutateJsonArtifactAsync(packagePath, VerificationPackageFileNames.VerifierProfile, root =>
+                    root["profileId"] = VerificationProfileIds.RestrictedOwnerAuditorV1, cancellationToken);
+                await RefreshPackageRootManifestsAsync(packagePath, cancellationToken);
+                return;
+
             default:
                 throw new InvalidOperationException($"Unknown verifier corpus tamper fixture '{fixtureId}'.");
         }
+    }
+
+    private static async Task WriteProfileMarkerAsync(
+        string packagePath,
+        FixtureSpec spec,
+        DateTimeOffset generatedAt,
+        CancellationToken cancellationToken)
+    {
+        var marker = new JsonObject
+        {
+            ["schemaVersion"] = "verifier-corpus-good-sample-profile-marker.v1",
+            ["fixtureId"] = spec.FixtureId,
+            ["corpusProfileId"] = spec.CorpusProfileId,
+            ["description"] = spec.ProfileDescription,
+            ["generatedAt"] = generatedAt.UtcDateTime.ToString("O"),
+            ["publicBoundary"] = "Synthetic profile marker only; this file is not restricted election evidence.",
+        };
+
+        await WriteTextLfAsync(
+            Path.Combine(packagePath, "profile-marker.json"),
+            CanonicalJson(marker),
+            cancellationToken);
     }
 
     private static async Task RefreshSp08ReleaseIntegrityHashAsync(string packagePath, CancellationToken cancellationToken)
@@ -470,7 +576,7 @@ public sealed partial class VerifierCorpusGenerator
         var root = JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken))?.AsObject() ??
             throw new InvalidOperationException($"Package artifact '{relativePath}' is not a JSON object.");
         mutate(root);
-        await File.WriteAllTextAsync(path, root.ToJsonString(JsonOptions), cancellationToken);
+        await WriteTextLfAsync(path, root.ToJsonString(JsonOptions), cancellationToken);
     }
 
     private static async Task<T> ReadJsonArtifactAsync<T>(
@@ -486,7 +592,7 @@ public sealed partial class VerifierCorpusGenerator
         string relativePath,
         T value,
         CancellationToken cancellationToken) =>
-        await File.WriteAllTextAsync(
+        await WriteTextLfAsync(
             ResolvePackagePath(packagePath, relativePath),
             JsonSerializer.Serialize(value, JsonOptions),
             cancellationToken);
@@ -552,6 +658,41 @@ public sealed partial class VerifierCorpusGenerator
     public static string CanonicalJson(JsonNode node) =>
         node.ToJsonString(JsonOptions).Replace("\r\n", "\n", StringComparison.Ordinal) + "\n";
 
+    private static async Task WriteTextLfAsync(string path, string content, CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, NormalizeLineEndings(content), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), cancellationToken);
+    }
+
+    private static void NormalizeTextFiles(string root)
+    {
+        if (!Directory.Exists(root))
+        {
+            return;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        {
+            var extension = Path.GetExtension(file);
+            if (!string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(extension, ".md", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(extension, ".txt", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var content = File.ReadAllText(file, Encoding.UTF8);
+            var normalized = NormalizeLineEndings(content);
+            if (!string.Equals(content, normalized, StringComparison.Ordinal))
+            {
+                File.WriteAllText(file, normalized, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            }
+        }
+    }
+
+    private static string NormalizeLineEndings(string content) =>
+        content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
+
     private static string Sha256Text(string content) =>
         Sha256Bytes(Encoding.UTF8.GetBytes(content));
 
@@ -590,10 +731,45 @@ public sealed partial class VerifierCorpusGenerator
 
     private sealed record FixtureSpec(
         string FixtureId,
+        string CorpusProfileId,
+        string ProfileDescription,
         string ProfileId,
         string ExpectedResultCode,
         VerificationCheckStatus ExpectedCheckStatus,
         VerificationOverallStatus ExpectedOverallStatus,
         int ExpectedExitCode,
-        bool SecondaryFailuresAllowed = true);
+        bool SecondaryFailuresAllowed = true)
+    {
+        public FixtureSpec(
+            string fixtureId,
+            string profileId,
+            string expectedResultCode,
+            VerificationCheckStatus expectedCheckStatus,
+            VerificationOverallStatus expectedOverallStatus,
+            int expectedExitCode,
+            bool SecondaryFailuresAllowed = true)
+            : this(
+                fixtureId,
+                ResolveDefaultCorpusProfileId(fixtureId),
+                ResolveDefaultProfileDescription(fixtureId),
+                profileId,
+                expectedResultCode,
+                expectedCheckStatus,
+                expectedOverallStatus,
+                expectedExitCode,
+                SecondaryFailuresAllowed)
+        {
+        }
+    }
+
+    private static string ResolveDefaultCorpusProfileId(string fixtureId) =>
+        fixtureId.StartsWith("tamper-stale-", StringComparison.Ordinal) ||
+        fixtureId.Contains("-drift", StringComparison.Ordinal)
+            ? "stale_version_drift"
+            : "baseline_finalized";
+
+    private static string ResolveDefaultProfileDescription(string fixtureId) =>
+        fixtureId.StartsWith("tamper-", StringComparison.Ordinal)
+            ? "Synthetic tamper fixture derived from the FEAT-135 baseline good sample."
+            : "Baseline finalized organizational election from FEAT-135.";
 }

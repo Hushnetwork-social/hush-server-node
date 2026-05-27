@@ -426,6 +426,443 @@ internal static class SyntheticElectionRequestFactory
         return request;
     }
 
+    public static ElectionVerificationPackageExportRequest CreatePublicAnonymousRequest(
+        DateTimeOffset generatedAt,
+        string corpusProfileId)
+    {
+        var profile = ResolveProfile(corpusProfileId);
+        var request = CreatePublicAnonymousRequest(generatedAt);
+        var shapedRequest = profile.CorpusProfileId switch
+        {
+            "baseline_finalized" => request,
+            "larger_electorate" => WithVotingShape(request, profile, RosteredVoterCount: 6, CountedVoterCount: 4),
+            "low_turnout" => WithVotingShape(request, profile, RosteredVoterCount: 6, CountedVoterCount: 1),
+            "multi_option_single_winner" => WithVotingShape(
+                request with
+                {
+                    Election = request.Election with
+                    {
+                        OutcomeRule = CreateSingleWinnerRule(),
+                        Options = CreateSingleWinnerOptions(),
+                    },
+                },
+                profile,
+                RosteredVoterCount: 4,
+                CountedVoterCount: 3),
+            "trustee_threshold" => WithTrusteeThresholdEvidence(
+                WithVotingShape(
+                    request with
+                    {
+                        Election = request.Election with
+                        {
+                            GovernanceMode = ElectionGovernanceMode.TrusteeThreshold,
+                            SelectedProfileId = ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+                            RequiredApprovalCount = 3,
+                            OutcomeRule = CreateSingleWinnerRule(),
+                            Options = CreateSingleWinnerOptions(),
+                            ControlDomainProfileId = ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+                            ControlDomainProfileVersion = ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1Version,
+                            ThresholdProfileId = ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+                        },
+                    },
+                    profile,
+                    RosteredVoterCount: 5,
+                    CountedVoterCount: 3),
+                profile),
+            _ => throw new InvalidOperationException($"Unsupported synthetic verifier corpus profile '{profile.CorpusProfileId}'."),
+        };
+
+        return WithCompleteSp10OperationalSecurityStatus(
+            WithOfficialSp08ReleaseManifest(
+                WithSyntheticSp07Evidence(shapedRequest, generatedAt.UtcDateTime)));
+    }
+
+    private static ElectionVerificationPackageExportRequest WithVotingShape(
+        ElectionVerificationPackageExportRequest request,
+        SyntheticElectionProfile profile,
+        int RosteredVoterCount,
+        int CountedVoterCount)
+    {
+        var election = request.Election with
+        {
+            Title = profile.Title,
+            ShortDescription = profile.ShortDescription,
+            ExternalReferenceCode = profile.ExternalReferenceCode,
+        };
+        var openedAt = election.OpenedAt ?? request.ExportedAt!.Value.AddMinutes(-30);
+        var acceptedBallots = new List<ElectionAcceptedBallotRecord>();
+        var publishedBallots = new List<ElectionPublishedBallotRecord>();
+        var preparedBallots = new List<ElectionPreparedBallotCommitmentRecord>();
+        var spoiledPreparedBallots = new List<ElectionSpoiledPreparedBallotRecord>();
+        var ceremonies = new List<ElectionVoterCeremonyRecord>();
+
+        for (var voterIndex = 1; voterIndex <= CountedVoterCount; voterIndex++)
+        {
+            var voterId = $"voter-{voterIndex}";
+            var actorAddress = $"actor-voter-{voterIndex}";
+            var finalPreparedId = StableGuid($"{profile.CorpusProfileId}-voter-{voterIndex}-final-prepared");
+            var spoiledPreparedId = StableGuid($"{profile.CorpusProfileId}-voter-{voterIndex}-spoiled-prepared");
+            var acceptedBallot = ElectionModelFactory.CreateAcceptedBallotRecord(
+                election.ElectionId,
+                $"{profile.CorpusProfileId}-ballot-{voterIndex}",
+                $"{profile.CorpusProfileId}-proof-{voterIndex}",
+                $"{profile.CorpusProfileId}-nullifier-{voterIndex}",
+                acceptedAt: openedAt.AddMinutes(4).AddSeconds(voterIndex),
+                preparedBallotId: finalPreparedId,
+                preparedBallotHash: $"{profile.CorpusProfileId}-prepared-final-{voterIndex}",
+                receiptCommitment: $"{profile.CorpusProfileId}-receipt-{voterIndex}",
+                receiptCommitmentScheme: "sha256(receipt_secret|prepared_ballot_hash|accepted_ballot_id)",
+                ballotDefinitionVersion: election.BallotDefinitionVersion,
+                ballotDefinitionHash: election.BallotDefinitionHash) with
+            {
+                Id = StableGuid($"{profile.CorpusProfileId}-accepted-ballot-{voterIndex}"),
+            };
+            acceptedBallots.Add(acceptedBallot);
+            publishedBallots.Add(ElectionModelFactory.CreatePublishedBallotRecord(
+                    election.ElectionId,
+                    voterIndex,
+                    acceptedBallot.EncryptedBallotPackage,
+                    acceptedBallot.ProofBundle,
+                    publishedAt: openedAt.AddMinutes(5).AddSeconds(voterIndex)) with
+            {
+                Id = StableGuid($"{profile.CorpusProfileId}-published-ballot-{voterIndex}"),
+            });
+
+            var spoiledPreparedBallot = ElectionModelFactory.CreateSpoiledPreparedBallotRecord(
+                election.ElectionId,
+                spoiledPreparedId,
+                $"{profile.CorpusProfileId}-prepared-spoiled-{voterIndex}",
+                $"{profile.CorpusProfileId}-spoiled-transcript-{voterIndex}",
+                $"{profile.CorpusProfileId}-spoil-record-{voterIndex}",
+                "local-verifier-v1",
+                openedAt.AddMinutes(2).AddSeconds(voterIndex)) with
+            {
+                Id = StableGuid($"{profile.CorpusProfileId}-spoiled-prepared-marker-{voterIndex}"),
+            };
+            spoiledPreparedBallots.Add(spoiledPreparedBallot);
+            preparedBallots.Add(ElectionModelFactory.CreatePreparedBallotCommitmentRecord(
+                election.ElectionId,
+                voterId,
+                actorAddress,
+                spoiledPreparedBallot.PreparedBallotHash,
+                election.BallotDefinitionVersion!.Value,
+                election.BallotDefinitionHash!,
+                "sp04-proof",
+                openedAt.AddMinutes(1).AddSeconds(voterIndex),
+                preparedBallotId: spoiledPreparedId) with
+            {
+                State = ElectionPreparedBallotState.Spoiled,
+                SpoilMarkerId = spoiledPreparedBallot.Id,
+                SpoiledAt = spoiledPreparedBallot.SpoiledAt,
+            });
+            preparedBallots.Add(ElectionModelFactory.CreatePreparedBallotCommitmentRecord(
+                election.ElectionId,
+                voterId,
+                actorAddress,
+                acceptedBallot.PreparedBallotHash!,
+                election.BallotDefinitionVersion.Value,
+                election.BallotDefinitionHash!,
+                "sp04-proof",
+                openedAt.AddMinutes(3).AddSeconds(voterIndex),
+                preparedBallotId: finalPreparedId) with
+            {
+                State = ElectionPreparedBallotState.Cast,
+                AcceptedBallotId = acceptedBallot.Id,
+                CastAt = acceptedBallot.AcceptedAt,
+            });
+            ceremonies.Add(ElectionModelFactory.CreateVoterCeremonyRecord(
+                    election.ElectionId,
+                    voterId,
+                    actorAddress,
+                    election.BallotDefinitionVersion.Value,
+                    election.BallotDefinitionHash!,
+                    createdAt: openedAt.AddMinutes(1).AddSeconds(voterIndex)) with
+            {
+                Id = StableGuid($"{profile.CorpusProfileId}-voter-ceremony-{voterIndex}"),
+                PreparedPackageCount = 2,
+                SpoiledPackageCount = 1,
+                FinalState = ElectionVoterCeremonyFinalState.FinalCastAccepted,
+                LastUpdatedAt = acceptedBallot.AcceptedAt,
+            });
+        }
+
+        var rosterEntries = Enumerable.Range(1, RosteredVoterCount)
+            .Select(index => CreateRosterEntry(election.ElectionId, $"voter-{index}", $"actor-voter-{index}", request.ExportedAt!.Value))
+            .ToArray();
+        var participationRecords = Enumerable.Range(1, CountedVoterCount)
+            .Select(index => ElectionModelFactory.CreateParticipationRecord(
+                election.ElectionId,
+                $"voter-{index}",
+                ElectionParticipationStatus.CountedAsVoted,
+                recordedAt: openedAt.AddMinutes(4).AddSeconds(index)))
+            .ToArray();
+        var commitmentRegistrations = Enumerable.Range(1, CountedVoterCount)
+            .Select(index => ElectionModelFactory.CreateCommitmentRegistrationRecord(
+                election.ElectionId,
+                $"voter-{index}",
+                $"actor-voter-{index}",
+                $"{profile.CorpusProfileId}-commitment-{index}",
+                registeredAt: openedAt.AddMinutes(3).AddSeconds(index)))
+            .ToArray();
+        var checkoffConsumptions = Enumerable.Range(1, CountedVoterCount)
+            .Select(index => ElectionModelFactory.CreateCheckoffConsumptionRecord(
+                election.ElectionId,
+                $"voter-{index}",
+                consumedAt: openedAt.AddMinutes(4).AddSeconds(index)) with
+            {
+                Id = StableGuid($"{profile.CorpusProfileId}-checkoff-consumption-{index}"),
+            })
+            .ToArray();
+        var acceptedBallotArray = acceptedBallots.ToArray();
+        var publishedBallotArray = publishedBallots.ToArray();
+        var refreshedCloseArtifact = request.BoundaryArtifacts[0] with
+        {
+            AcceptedBallotCount = acceptedBallotArray.Length,
+            AcceptedBallotSetHash = VerificationCanonicalHash.ComputeAcceptedBallotInventoryHash(acceptedBallotArray),
+            PublishedBallotCount = publishedBallotArray.Length,
+            PublishedBallotStreamHash = VerificationCanonicalHash.ComputePublishedBallotStreamHash(publishedBallotArray),
+            FinalEncryptedTallyHash = HashBytes($"tally-{profile.CorpusProfileId}"),
+        };
+        var reportContent = $"{{\"ok\":true,\"corpusProfileId\":\"{profile.CorpusProfileId}\",\"rosteredVoterCount\":{RosteredVoterCount},\"countedVoterCount\":{CountedVoterCount},\"optionCount\":{election.Options.Count}}}";
+        var reportArtifact = request.ReportArtifacts[0] with
+        {
+            Content = reportContent,
+            ContentHash = HashBytes(reportContent),
+        };
+        var rosterCanonicalHash = ElectionEligibilityContracts.ComputeRosterCanonicalHash(rosterEntries);
+        var rosterEvidence = ElectionModelFactory.CreateRosterImportEvidence(
+            election.ElectionId,
+            rosterImportVersion: 1,
+            rosterSourceFileHash: HashHex($"source-roster-{profile.CorpusProfileId}"),
+            rosterCanonicalHash,
+            ElectionSp05ProfileIds.RosterCanonicalizationV1,
+            ElectionEligibilityContracts.RosterCanonicalizationVersionHash,
+            acceptedRowCount: rosterEntries.Length,
+            rejectedRowCount: 0,
+            invalidRowRejectionCount: 0,
+            duplicateIdRejectionCount: 0,
+            duplicateContactWarningCount: 0,
+            importedByActor: "owner-address",
+            importedAt: openedAt) with
+        {
+            RosterImportId = StableGuid($"{profile.CorpusProfileId}-roster-import-evidence"),
+        };
+
+        return request with
+        {
+            Election = election,
+            ReportArtifacts = [reportArtifact],
+            BoundaryArtifacts = [refreshedCloseArtifact],
+            AcceptedBallots = acceptedBallotArray,
+            PublishedBallots = publishedBallotArray,
+            RosterEntries = rosterEntries,
+            ParticipationRecords = participationRecords,
+            VoterCeremonyRecords = ceremonies.ToArray(),
+            PreparedBallotCommitments = preparedBallots.ToArray(),
+            SpoiledPreparedBallots = spoiledPreparedBallots.ToArray(),
+            RosterImportEvidences = [rosterEvidence],
+            CommitmentRegistrations = commitmentRegistrations,
+            CheckoffConsumptions = checkoffConsumptions,
+        };
+    }
+
+    private static ElectionVerificationPackageExportRequest WithTrusteeThresholdEvidence(
+        ElectionVerificationPackageExportRequest request,
+        SyntheticElectionProfile profile)
+    {
+        var baseTime = request.ExportedAt!.Value;
+        var closeArtifact = request.BoundaryArtifacts[0];
+        var trustees = CreateTrustees(profile.CorpusProfileId);
+        var ceremonyVersionId = StableGuid($"{profile.CorpusProfileId}-ceremony-version");
+        var ceremonySnapshot = ElectionModelFactory.CreateCeremonyBindingSnapshot(
+            ceremonyVersionId,
+            ceremonyVersionNumber: 1,
+            ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+            boundTrusteeCount: trustees.Count,
+            requiredApprovalCount: 3,
+            trustees,
+            tallyPublicKeyFingerprint: $"{profile.CorpusProfileId}-tally-public-key-fingerprint",
+            tallyPublicKey: [1, 2, 3, 4]);
+        var releaseEvidenceId = StableGuid($"{profile.CorpusProfileId}-finalization-release-evidence");
+        var session = ElectionModelFactory.CreateFinalizationSession(
+                request.Election,
+                closeArtifact.Id,
+                closeArtifact.AcceptedBallotSetHash!,
+                closeArtifact.FinalEncryptedTallyHash!,
+                ElectionFinalizationSessionPurpose.CloseCounting,
+                ceremonySnapshot,
+                requiredShareCount: 3,
+                eligibleTrustees: trustees,
+                createdByPublicAddress: request.Election.OwnerPublicAddress,
+                createdAt: baseTime.AddMinutes(-8)) with
+        {
+            Id = StableGuid($"{profile.CorpusProfileId}-finalization-session"),
+        };
+        session = session.MarkCompleted(releaseEvidenceId, baseTime.AddMinutes(-1));
+        var acceptedTrustees = trustees.Take(3).ToArray();
+        var releaseEvidence = ElectionModelFactory.CreateFinalizationReleaseEvidence(
+            session,
+            acceptedTrustees,
+            completedByPublicAddress: request.Election.OwnerPublicAddress,
+            completedAt: baseTime.AddMinutes(-1)) with
+        {
+            Id = releaseEvidenceId,
+        };
+        var shares = acceptedTrustees
+            .Select((trustee, index) => ElectionModelFactory.CreateAcceptedFinalizationShare(
+                    session.Id,
+                    request.Election.ElectionId,
+                    trustee.TrusteeUserAddress,
+                    trustee.TrusteeDisplayName,
+                    trustee.TrusteeUserAddress,
+                    index + 1,
+                    "share-v1",
+                    ElectionFinalizationTargetType.AggregateTally,
+                    session.CloseArtifactId,
+                    session.AcceptedBallotSetHash,
+                    session.FinalEncryptedTallyHash,
+                    session.TargetTallyId,
+                    ceremonyVersionId,
+                    ceremonySnapshot.TallyPublicKeyFingerprint,
+                    $"{profile.CorpusProfileId}-executor-encrypted-share-{index + 1}",
+                    executorKeyAlgorithm: "ecies-secp256k1-v1",
+                    submittedAt: baseTime.AddMinutes(-7).AddSeconds(index + 1)) with
+            {
+                Id = StableGuid($"{profile.CorpusProfileId}-finalization-share-{index + 1}"),
+            })
+            .ToArray();
+        var controlDomains = trustees
+            .Select((trustee, index) => new ElectionTrusteeControlDomainRecord(
+                StableGuid($"{profile.CorpusProfileId}-control-domain-{index + 1}"),
+                request.Election.ElectionId,
+                ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+                ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1Version,
+                ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+                ceremonyVersionId,
+                BuildTrusteeId(trustee.TrusteeUserAddress),
+                trustee.TrusteeUserAddress,
+                $"synthetic-person-ref-{index + 1}",
+                index == 0 ? ElectionTrusteeRole.OwnerTrustee : ElectionTrusteeRole.ExternalTrustee,
+                ElectionSp06ProfileIds.ManagedTrusteeAppV1,
+                HashHex($"{profile.CorpusProfileId}-custody-domain-{index + 1}"),
+                HashHex($"{profile.CorpusProfileId}-admin-domain-{index + 1}"),
+                LegalEntityRefHash: null,
+                HashHex($"{profile.CorpusProfileId}-public-key-commitment-{index + 1}"),
+                AcceptedAt: baseTime.AddMinutes(-26).AddSeconds(index + 1),
+                AcceptedBeforeOpen: true,
+                ElectionTrusteeBackupStatus.Registered,
+                ElectionTrusteeExceptionStatus.None,
+                ElectionTrusteeControlDomainEvidenceStatus.Accepted,
+                EvidenceFailureCode: null,
+                EvidenceFailureReason: null,
+                RecordedAt: baseTime.AddMinutes(-25).AddSeconds(index + 1),
+                RecordedByPublicAddress: request.Election.OwnerPublicAddress,
+                SourceTransactionId: null,
+                SourceBlockHeight: null,
+                SourceBlockId: null))
+            .ToArray();
+        var releaseArtifacts = shares
+            .Select((share, index) => new ElectionTrusteeReleaseArtifactRecord(
+                StableGuid($"{profile.CorpusProfileId}-release-artifact-{index + 1}"),
+                request.Election.ElectionId,
+                session.Id,
+                ElectionSp06ProfileIds.HighAssuranceIndependentTrusteesV1,
+                ElectionSelectableProfileCatalog.TrusteeProductionProfileId,
+                BuildTrusteeId(share.TrusteeUserAddress),
+                BuildTrusteePseudonym(share.TrusteeUserAddress),
+                ElectionTrusteeReleaseArtifactStatus.Accepted,
+                share.ShareMaterialHash,
+                HashHex($"{profile.CorpusProfileId}-release-artifact-hash-{index + 1}"),
+                FailureCode: null,
+                FailureReason: null,
+                session.CloseArtifactId,
+                session.AcceptedBallotSetHash,
+                session.FinalEncryptedTallyHash,
+                session.TargetTallyId,
+                ceremonyVersionId,
+                ceremonySnapshot.TallyPublicKeyFingerprint,
+                ExecutorSessionPublicKeyHash: HashHex($"{profile.CorpusProfileId}-executor-session-public-key"),
+                ExecutorKeyAlgorithm: "ecies-secp256k1-v1",
+                RecordedAt: baseTime.AddMinutes(-6).AddSeconds(index + 1)))
+            .ToArray();
+
+        return request with
+        {
+            FinalizationSessions = [session],
+            FinalizationShares = shares,
+            ReleaseEvidenceRecords = [releaseEvidence],
+            TrusteeControlDomainRecords = controlDomains,
+            TrusteeReleaseArtifacts = releaseArtifacts,
+        };
+    }
+
+    private static SyntheticElectionProfile ResolveProfile(string corpusProfileId)
+    {
+        var normalized = string.IsNullOrWhiteSpace(corpusProfileId)
+            ? "baseline_finalized"
+            : corpusProfileId.Trim();
+
+        return normalized switch
+        {
+            "baseline_finalized" => new SyntheticElectionProfile(
+                "baseline_finalized",
+                "Synthetic verifier corpus election",
+                "Synthetic public verifier corpus sample",
+                "synthetic-public-corpus"),
+            "larger_electorate" => new SyntheticElectionProfile(
+                "larger_electorate",
+                "Synthetic verifier corpus larger electorate election",
+                "Synthetic public verifier corpus sample with a larger roster and vote set",
+                "synthetic-public-corpus-larger-electorate"),
+            "low_turnout" => new SyntheticElectionProfile(
+                "low_turnout",
+                "Synthetic verifier corpus low turnout election",
+                "Synthetic public verifier corpus sample with more eligible voters than counted ballots",
+                "synthetic-public-corpus-low-turnout"),
+            "multi_option_single_winner" => new SyntheticElectionProfile(
+                "multi_option_single_winner",
+                "Synthetic verifier corpus single-winner election",
+                "Synthetic public verifier corpus sample with three non-blank ballot options",
+                "synthetic-public-corpus-single-winner"),
+            "trustee_threshold" => new SyntheticElectionProfile(
+                "trustee_threshold",
+                "Synthetic verifier corpus trustee-threshold election",
+                "Synthetic public verifier corpus sample with accepted trustee control-domain evidence",
+                "synthetic-public-corpus-trustee-threshold"),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(corpusProfileId),
+                corpusProfileId,
+                "Unknown verifier corpus synthetic election profile."),
+        };
+    }
+
+    private static IReadOnlyList<ElectionTrusteeReference> CreateTrustees(string corpusProfileId) =>
+    [
+        new($"{corpusProfileId}-trustee-1@example.test", "Trustee 1"),
+        new($"{corpusProfileId}-trustee-2@example.test", "Trustee 2"),
+        new($"{corpusProfileId}-trustee-3@example.test", "Trustee 3"),
+        new($"{corpusProfileId}-trustee-4@example.test", "Trustee 4"),
+        new($"{corpusProfileId}-trustee-5@example.test", "Trustee 5"),
+    ];
+
+    private static IReadOnlyList<ElectionOptionDefinition> CreateSingleWinnerOptions() =>
+    [
+        new ElectionOptionDefinition("alice", "Alice", "First option", 1, false),
+        new ElectionOptionDefinition("bob", "Bob", "Second option", 2, false),
+        new ElectionOptionDefinition("carol", "Carol", "Third option", 3, false),
+    ];
+
+    private static OutcomeRuleDefinition CreateSingleWinnerRule() =>
+        new(
+            OutcomeRuleKind.SingleWinner,
+            TemplateKey: "single-winner-plurality",
+            SeatCount: 1,
+            BlankVoteCountsForTurnout: true,
+            BlankVoteExcludedFromWinnerSelection: true,
+            BlankVoteExcludedFromThresholdDenominator: false,
+            TieResolutionRule: "tie_unresolved",
+            CalculationBasis: "highest_non_blank_votes");
+
     private static ElectionVerificationPackageExportRequest WithSyntheticSp07Evidence(
         ElectionVerificationPackageExportRequest request,
         DateTime baseTime)
@@ -745,6 +1182,18 @@ internal static class SyntheticElectionRequestFactory
             BlankVoteExcludedFromThresholdDenominator: true,
             TieResolutionRule: "reject-on-tie",
             CalculationBasis: "counted-votes");
+
+    private static string BuildTrusteeId(string trusteeUserAddress) =>
+        $"trustee-{HashHex(trusteeUserAddress)[..12]}";
+
+    private static string BuildTrusteePseudonym(string trusteeUserAddress) =>
+        $"trustee-ref-{HashHex(trusteeUserAddress)[..12]}";
+
+    private sealed record SyntheticElectionProfile(
+        string CorpusProfileId,
+        string Title,
+        string ShortDescription,
+        string ExternalReferenceCode);
 
     private static Guid StableGuid(string value)
     {
