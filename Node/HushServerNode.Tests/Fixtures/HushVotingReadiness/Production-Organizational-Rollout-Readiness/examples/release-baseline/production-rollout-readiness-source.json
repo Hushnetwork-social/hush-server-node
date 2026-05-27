@@ -1,0 +1,318 @@
+{
+  "schemaVersion": "production-rollout-readiness-source.v1",
+  "sourceId": "FEAT148-PRODUCTION-ROLLOUT-BASELINE-BLOCKED-001",
+  "featureId": "FEAT-148",
+  "acceptanceGates": [
+    "AT-RDY-001",
+    "AT-RDY-005",
+    "AT-RDY-006",
+    "AT-RDY-011",
+    "AT-RDY-012",
+    "AT-RDY-013",
+    "AT-RDY-014",
+    "AT-RDY-015",
+    "AT-RDY-017",
+    "AT-RDY-018"
+  ],
+  "status": "blocked",
+  "baselineRegister": {
+    "registerVersionId": "RDY-REG-v0.1.4",
+    "registerStatus": "AcceptedInternal",
+    "totalScore": 71,
+    "strongestAllowedClaim": "friendly_organization_pilot",
+    "productionBlocker": {
+      "blockerId": "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+      "severity": "red",
+      "status": "open"
+    },
+    "publicStateBlocker": {
+      "blockerId": "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+      "severity": "red",
+      "status": "open"
+    }
+  },
+  "rolloutProfile": {
+    "profileId": "private-organization-production-rollout-v1",
+    "organizationClass": "friendly_private_organization",
+    "electionClass": "binding_private_organizational_decision",
+    "participantCountBand": "small_1_to_250",
+    "bindingStatus": "customer_governance_binding_with_customer_authority",
+    "environmentClass": "production_like_required_but_not_yet_observed",
+    "deploymentProfile": "hush_saas_v1"
+  },
+  "scorePolicy": {
+    "currentTotalScore": 71,
+    "allowedWithLimitationsMinimum": 80,
+    "allowedMinimumRecommended": 85,
+    "candidateTotalScoreWhenAccepted": 71,
+    "directRegisterMutation": false,
+    "registerPromotionOwner": "FEAT-130"
+  },
+  "runEvidence": {
+    "status": "missing",
+    "claimImpact": "Production rollout remains blocked because no accepted production-like run evidence is available.",
+    "evidenceRefs": [],
+    "blockerIds": [
+      "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+      "FEAT148-PRODUCTION-LIKE-RUN-MISSING"
+    ]
+  },
+  "operationalEvidence": {
+    "status": "blocked",
+    "claimImpact": "Operational evidence exists for prior readiness packages but not yet for a production-like rollout run.",
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT133-OPS-EVIDENCE-ACCEPTED-001",
+        "featureSlice": "FEAT-133",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted_with_limitations",
+        "visibility": "restricted",
+        "publicRef": "hush-documents/PrivateServer_ElectronicVoting/Pilot-Evidence-Package/package/pilot-evidence-public-safe-summary.md",
+        "restrictedRef": "restricted-ref://feat133/ops-evidence-package",
+        "sha256Hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "freshness": "current",
+        "claimEffect": "Supports friendly pilot evidence only; production rollout still needs production-like operational run evidence."
+      }
+    ],
+    "blockerIds": [
+      "FEAT148-PRODUCTION-OPS-RUN-MISSING"
+    ],
+    "requiredCategories": [
+      "support",
+      "monitoring",
+      "backup_restore",
+      "incident_or_no_incident",
+      "operator_handoff",
+      "postmortem"
+    ]
+  },
+  "deploymentProofEvidence": {
+    "status": "accepted_with_limitations",
+    "claimImpact": "Runtime deployment binding evidence is available but has not yet been exercised across a production-like rollout window.",
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT143-RUNTIME-BINDING-ACCEPTED-001",
+        "featureSlice": "FEAT-143",
+        "acceptanceGate": "AT-RDY-017",
+        "status": "accepted",
+        "visibility": "public",
+        "publicRef": "hush-documents/PrivateServer_ElectronicVoting/Runtime-Deployment-Proof-Binding/package/runtime-deployment-proof-binding-ledger.json",
+        "restrictedRef": "restricted-ref://feat143/runtime-binding-ledger",
+        "sha256Hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "freshness": "current",
+        "claimEffect": "Required input for production rollout gate but not sufficient without production-like run evidence."
+      }
+    ],
+    "blockerIds": []
+  },
+  "webClientProofEvidence": {
+    "status": "accepted_with_limitations",
+    "claimImpact": "WebClient proof exposure exists, but production rollout must still record browser and stale-client limitations.",
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT144-WEBCLIENT-PROOF-ACCEPTED-001",
+        "featureSlice": "FEAT-144",
+        "acceptanceGate": "AT-RDY-018",
+        "status": "accepted_with_limitations",
+        "visibility": "public",
+        "publicRef": "hush-documents/PrivateServer_ElectronicVoting/HushWebClient-Deployment-Proof/package/webclient-proof-handshake-summary.json",
+        "restrictedRef": "restricted-ref://feat144/webclient-proof-handshake",
+        "sha256Hash": "3333333333333333333333333333333333333333333333333333333333333333",
+        "freshness": "current",
+        "claimEffect": "Required input with browser/cache limitations preserved."
+      }
+    ],
+    "blockerIds": [
+      "FEAT148-WEBCLIENT-PRODUCTION-VARIANCE-NOT-OBSERVED"
+    ],
+    "limitationIds": [
+      "browser_cache_variance",
+      "stale_client_detection_scope"
+    ]
+  },
+  "governedOutcomeEvidence": {
+    "status": "accepted_with_limitations",
+    "claimImpact": "Governed outcome and void evidence are accepted for prior gates, while failed-finalize continuity remains a production limitation.",
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT138-VOID-ACCEPTED-001",
+        "featureSlice": "FEAT-138",
+        "acceptanceGate": "AT-RDY-015",
+        "status": "accepted",
+        "visibility": "public",
+        "publicRef": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/package/void-public-safe-summary.md",
+        "restrictedRef": "restricted-ref://feat138/void-decision-package",
+        "sha256Hash": "4444444444444444444444444444444444444444444444444444444444444444",
+        "freshness": "current",
+        "claimEffect": "Supports void handling but does not remove production rollout limitations."
+      },
+      {
+        "evidenceId": "FEAT146-GOVERNED-OUTCOME-ACCEPTED-001",
+        "featureSlice": "FEAT-146",
+        "acceptanceGate": "AT-RDY-011",
+        "status": "accepted_with_limitations",
+        "visibility": "restricted",
+        "publicRef": "hush-documents/PrivateServer_ElectronicVoting/Governed-Outcome-Producer/package/governed-outcome-public-safe-summary.md",
+        "restrictedRef": "restricted-ref://feat146/governed-outcome-package",
+        "sha256Hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "freshness": "current",
+        "claimEffect": "Supports governed outcomes with failed-finalize residual carried as limitation."
+      }
+    ],
+    "blockerIds": [
+      "FEAT148-FEAT139-FAILED-FINALIZE-PRODUCTION-LIMITATION"
+    ]
+  },
+  "upstreamEvidence": [
+    {
+      "evidenceId": "FEAT133-OPS-EVIDENCE-ACCEPTED-001",
+      "featureSlice": "FEAT-133",
+      "acceptanceGate": "AT-RDY-006",
+      "status": "accepted_with_limitations",
+      "visibility": "restricted",
+      "publicRef": "hush-documents/PrivateServer_ElectronicVoting/Pilot-Evidence-Package/package/pilot-evidence-public-safe-summary.md",
+      "restrictedRef": "restricted-ref://feat133/ops-evidence-package",
+      "sha256Hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "freshness": "current",
+      "claimEffect": "Friendly-pilot operational evidence only."
+    },
+    {
+      "evidenceId": "FEAT141-PILOT-EVIDENCE-ACCEPTED-WITH-LIMITATIONS-001",
+      "featureSlice": "FEAT-141",
+      "acceptanceGate": "AT-RDY-013",
+      "status": "accepted_with_limitations",
+      "visibility": "restricted",
+      "publicRef": "hush-documents/PrivateServer_ElectronicVoting/Pilot-Evidence-Package/package/pilot-evidence-public-safe-summary.md",
+      "restrictedRef": "restricted-ref://feat141/pilot-evidence-package",
+      "sha256Hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "freshness": "current",
+      "claimEffect": "Supports friendly pilot readiness with limitations, not production rollout."
+    },
+    {
+      "evidenceId": "FEAT143-RUNTIME-BINDING-ACCEPTED-001",
+      "featureSlice": "FEAT-143",
+      "acceptanceGate": "AT-RDY-017",
+      "status": "accepted",
+      "visibility": "public",
+      "publicRef": "hush-documents/PrivateServer_ElectronicVoting/Runtime-Deployment-Proof-Binding/package/runtime-deployment-proof-binding-ledger.json",
+      "restrictedRef": "restricted-ref://feat143/runtime-binding-ledger",
+      "sha256Hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "freshness": "current",
+      "claimEffect": "Required production rollout input."
+    },
+    {
+      "evidenceId": "FEAT144-WEBCLIENT-PROOF-ACCEPTED-001",
+      "featureSlice": "FEAT-144",
+      "acceptanceGate": "AT-RDY-018",
+      "status": "accepted_with_limitations",
+      "visibility": "public",
+      "publicRef": "hush-documents/PrivateServer_ElectronicVoting/HushWebClient-Deployment-Proof/package/webclient-proof-handshake-summary.json",
+      "restrictedRef": "restricted-ref://feat144/webclient-proof-handshake",
+      "sha256Hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "freshness": "current",
+      "claimEffect": "Required production rollout input with client-observation limitations."
+    },
+    {
+      "evidenceId": "FEAT146-GOVERNED-OUTCOME-ACCEPTED-001",
+      "featureSlice": "FEAT-146",
+      "acceptanceGate": "AT-RDY-011",
+      "status": "accepted_with_limitations",
+      "visibility": "restricted",
+      "publicRef": "hush-documents/PrivateServer_ElectronicVoting/Governed-Outcome-Producer/package/governed-outcome-public-safe-summary.md",
+      "restrictedRef": "restricted-ref://feat146/governed-outcome-package",
+      "sha256Hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "freshness": "current",
+      "claimEffect": "Required governed-outcome input with failed-finalize limitation."
+    },
+    {
+      "evidenceId": "FEAT147-FRIENDLY-PILOT-PROMOTION-ACCEPTED-001",
+      "featureSlice": "FEAT-147",
+      "acceptanceGate": "AT-RDY-001",
+      "status": "accepted",
+      "visibility": "internal",
+      "publicRef": "hush-documents/PrivateServer_ElectronicVoting/Friendly-Pilot-Readiness-Promotion/package/feat147-public-safe-promotion-summary.md",
+      "restrictedRef": "restricted-ref://feat147/friendly-pilot-promotion-package",
+      "sha256Hash": "7777777777777777777777777777777777777777777777777777777777777777",
+      "freshness": "current",
+      "claimEffect": "Baseline for FEAT-148; production/public claims remain blocked."
+    }
+  ],
+  "claimPolicy": {
+    "productionClaimState": "blocked",
+    "publicStateClaimState": "blocked",
+    "allowedWithLimitationsWording": "",
+    "blockedWording": "Production organizational rollout is not claimed. HushVoting remains limited to controlled friendly-organization pilot use until accepted production-like run evidence, score threshold, operational proof, deployment proof, governed-outcome proof, and public-safe wording gates pass.",
+    "nonClaims": [
+      "Not public or state election readiness",
+      "Not legal sufficiency validation",
+      "Not independent certification",
+      "Not full AGM software validation"
+    ],
+    "forbiddenPublicClaims": [
+      "public election ready",
+      "state election certified",
+      "legally sufficient voting system",
+      "independently certified",
+      "complete AGM platform"
+    ]
+  },
+  "blockerDecisions": [
+    {
+      "blockerId": "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+      "currentSeverity": "red",
+      "currentStatus": "open",
+      "proposedSeverity": "red",
+      "proposedStatus": "open",
+      "decision": "keep_open",
+      "decisionReason": "Production-like run evidence is missing and score remains below the hard 80 threshold.",
+      "evidenceRefs": [
+        "FEAT141-PILOT-EVIDENCE-ACCEPTED-WITH-LIMITATIONS-001",
+        "FEAT147-FRIENDLY-PILOT-PROMOTION-ACCEPTED-001"
+      ],
+      "scoreImpact": {
+        "currentTotalScore": 71,
+        "proposedTotalScore": 71,
+        "scoreChangeAllowed": false
+      },
+      "claimImpact": "Production organizational rollout remains blocked.",
+      "residualRisk": "No accepted production-like run, production support, monitoring, backup/restore, incident, operator, and postmortem evidence exists yet."
+    },
+    {
+      "blockerId": "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+      "currentSeverity": "red",
+      "currentStatus": "open",
+      "proposedSeverity": "red",
+      "proposedStatus": "open",
+      "decision": "keep_policy_blocked",
+      "decisionReason": "Public/state election readiness is outside FEAT-148 and owned by FEAT-149.",
+      "evidenceRefs": [],
+      "scoreImpact": {
+        "currentTotalScore": 71,
+        "proposedTotalScore": 71,
+        "scoreChangeAllowed": false
+      },
+      "claimImpact": "Public/state election readiness remains blocked.",
+      "residualRisk": "Public legal, certification, transparency, accessibility, jurisdictional, and authority prerequisites remain unaccepted."
+    }
+  ],
+  "restrictedEvidenceRefs": [
+    {
+      "refId": "FEAT148-RESTRICTED-RUN-EVIDENCE-PLACEHOLDER",
+      "visibility": "restricted",
+      "restrictedRef": "restricted-ref://feat148/production-run-evidence-not-yet-available",
+      "sha256Hash": "8888888888888888888888888888888888888888888888888888888888888888",
+      "payloadCopied": false
+    }
+  ],
+  "publicArtifactSamples": [
+    {
+      "path": "production-rollout-public-safe-summary.md",
+      "content": "HushVoting is not claiming production organizational rollout readiness yet. Public/state election readiness, legal sufficiency, certification, and full AGM software claims remain outside this package."
+    }
+  ],
+  "signoff": {
+    "engineeringRole": "hush-readiness-engineering",
+    "operationsProductRole": "hush-readiness-operations-product",
+    "status": "blocked"
+  }
+}

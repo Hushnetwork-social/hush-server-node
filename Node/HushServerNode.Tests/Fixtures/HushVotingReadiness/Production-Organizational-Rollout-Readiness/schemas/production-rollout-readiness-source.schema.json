@@ -1,0 +1,590 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hush.network/schemas/hushvoting/production-rollout-readiness-source.schema.json",
+  "title": "HushVoting Production Organizational Rollout Readiness Source",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceId",
+    "featureId",
+    "acceptanceGates",
+    "status",
+    "baselineRegister",
+    "rolloutProfile",
+    "scorePolicy",
+    "runEvidence",
+    "operationalEvidence",
+    "deploymentProofEvidence",
+    "webClientProofEvidence",
+    "governedOutcomeEvidence",
+    "upstreamEvidence",
+    "claimPolicy",
+    "blockerDecisions",
+    "restrictedEvidenceRefs",
+    "publicArtifactSamples",
+    "signoff"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "production-rollout-readiness-source.v1"
+    },
+    "sourceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "featureId": {
+      "const": "FEAT-148"
+    },
+    "acceptanceGates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^AT-RDY-[0-9]{3}$"
+      }
+    },
+    "status": {
+      "enum": [
+        "blocked",
+        "allowed_with_limitations_candidate",
+        "accepted_with_limitations"
+      ]
+    },
+    "baselineRegister": {
+      "$ref": "#/$defs/baselineRegister"
+    },
+    "rolloutProfile": {
+      "$ref": "#/$defs/rolloutProfile"
+    },
+    "scorePolicy": {
+      "$ref": "#/$defs/scorePolicy"
+    },
+    "runEvidence": {
+      "$ref": "#/$defs/evidenceGroup"
+    },
+    "operationalEvidence": {
+      "$ref": "#/$defs/evidenceGroup"
+    },
+    "deploymentProofEvidence": {
+      "$ref": "#/$defs/evidenceGroup"
+    },
+    "webClientProofEvidence": {
+      "$ref": "#/$defs/evidenceGroup"
+    },
+    "governedOutcomeEvidence": {
+      "$ref": "#/$defs/evidenceGroup"
+    },
+    "upstreamEvidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/evidenceRef"
+      }
+    },
+    "claimPolicy": {
+      "$ref": "#/$defs/claimPolicy"
+    },
+    "blockerDecisions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/blockerDecision"
+      }
+    },
+    "restrictedEvidenceRefs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/restrictedEvidenceRef"
+      }
+    },
+    "publicArtifactSamples": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/publicArtifactSample"
+      }
+    },
+    "signoff": {
+      "$ref": "#/$defs/signoff"
+    }
+  },
+  "$defs": {
+    "baselineRegister": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registerVersionId",
+        "registerStatus",
+        "totalScore",
+        "strongestAllowedClaim",
+        "productionBlocker",
+        "publicStateBlocker"
+      ],
+      "properties": {
+        "registerVersionId": {
+          "const": "RDY-REG-v0.1.4"
+        },
+        "registerStatus": {
+          "const": "AcceptedInternal"
+        },
+        "totalScore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "strongestAllowedClaim": {
+          "const": "friendly_organization_pilot"
+        },
+        "productionBlocker": {
+          "$ref": "#/$defs/blockerState"
+        },
+        "publicStateBlocker": {
+          "$ref": "#/$defs/blockerState"
+        }
+      }
+    },
+    "blockerState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blockerId",
+        "severity",
+        "status"
+      ],
+      "properties": {
+        "blockerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "enum": [
+            "red",
+            "amber",
+            "green"
+          ]
+        },
+        "status": {
+          "enum": [
+            "open",
+            "allowed_with_limitations",
+            "resolved"
+          ]
+        }
+      }
+    },
+    "rolloutProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profileId",
+        "organizationClass",
+        "electionClass",
+        "participantCountBand",
+        "bindingStatus",
+        "environmentClass",
+        "deploymentProfile"
+      ],
+      "properties": {
+        "profileId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "organizationClass": {
+          "type": "string",
+          "minLength": 1
+        },
+        "electionClass": {
+          "type": "string",
+          "minLength": 1
+        },
+        "participantCountBand": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bindingStatus": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environmentClass": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deploymentProfile": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "scorePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "currentTotalScore",
+        "allowedWithLimitationsMinimum",
+        "allowedMinimumRecommended",
+        "candidateTotalScoreWhenAccepted",
+        "directRegisterMutation",
+        "registerPromotionOwner"
+      ],
+      "properties": {
+        "currentTotalScore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "allowedWithLimitationsMinimum": {
+          "const": 80
+        },
+        "allowedMinimumRecommended": {
+          "const": 85
+        },
+        "candidateTotalScoreWhenAccepted": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "directRegisterMutation": {
+          "const": false
+        },
+        "registerPromotionOwner": {
+          "const": "FEAT-130"
+        }
+      }
+    },
+    "evidenceGroup": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "status",
+        "claimImpact",
+        "evidenceRefs",
+        "blockerIds"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "accepted",
+            "accepted_with_limitations",
+            "observed",
+            "blocked",
+            "missing",
+            "stale",
+            "placeholder",
+            "private_only",
+            "mismatched",
+            "not_in_scope"
+          ]
+        },
+        "claimImpact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceId",
+        "featureSlice",
+        "acceptanceGate",
+        "status",
+        "visibility",
+        "publicRef",
+        "restrictedRef",
+        "sha256Hash",
+        "freshness",
+        "claimEffect"
+      ],
+      "properties": {
+        "evidenceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "featureSlice": {
+          "type": "string",
+          "pattern": "^FEAT-[0-9]{3}$"
+        },
+        "acceptanceGate": {
+          "type": "string",
+          "pattern": "^AT-RDY-[0-9]{3}$"
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "accepted_with_limitations",
+            "observed",
+            "blocked",
+            "missing",
+            "stale",
+            "placeholder",
+            "private_only",
+            "mismatched",
+            "not_in_scope"
+          ]
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "restricted",
+            "internal"
+          ]
+        },
+        "publicRef": {
+          "type": "string"
+        },
+        "restrictedRef": {
+          "type": "string"
+        },
+        "sha256Hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "freshness": {
+          "enum": [
+            "current",
+            "stale",
+            "superseded",
+            "blocked"
+          ]
+        },
+        "claimEffect": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "claimPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productionClaimState",
+        "publicStateClaimState",
+        "allowedWithLimitationsWording",
+        "blockedWording",
+        "nonClaims",
+        "forbiddenPublicClaims"
+      ],
+      "properties": {
+        "productionClaimState": {
+          "enum": [
+            "blocked",
+            "allowed_with_limitations_candidate"
+          ]
+        },
+        "publicStateClaimState": {
+          "const": "blocked"
+        },
+        "allowedWithLimitationsWording": {
+          "type": "string"
+        },
+        "blockedWording": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nonClaims": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbiddenPublicClaims": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "blockerDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blockerId",
+        "currentSeverity",
+        "currentStatus",
+        "proposedSeverity",
+        "proposedStatus",
+        "decision",
+        "decisionReason",
+        "evidenceRefs",
+        "scoreImpact",
+        "claimImpact",
+        "residualRisk"
+      ],
+      "properties": {
+        "blockerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "currentSeverity": {
+          "enum": [
+            "red",
+            "amber",
+            "green"
+          ]
+        },
+        "currentStatus": {
+          "enum": [
+            "open",
+            "allowed_with_limitations",
+            "resolved"
+          ]
+        },
+        "proposedSeverity": {
+          "enum": [
+            "red",
+            "amber",
+            "green"
+          ]
+        },
+        "proposedStatus": {
+          "enum": [
+            "open",
+            "allowed_with_limitations",
+            "resolved"
+          ]
+        },
+        "decision": {
+          "enum": [
+            "keep_open",
+            "propose_allowed_with_limitations",
+            "keep_policy_blocked"
+          ]
+        },
+        "decisionReason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scoreImpact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "currentTotalScore",
+            "proposedTotalScore",
+            "scoreChangeAllowed"
+          ],
+          "properties": {
+            "currentTotalScore": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "proposedTotalScore": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "scoreChangeAllowed": {
+              "type": "boolean"
+            }
+          }
+        },
+        "claimImpact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "residualRisk": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "restrictedEvidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "refId",
+        "visibility",
+        "restrictedRef",
+        "sha256Hash",
+        "payloadCopied"
+      ],
+      "properties": {
+        "refId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "visibility": {
+          "enum": [
+            "restricted",
+            "internal"
+          ]
+        },
+        "restrictedRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256Hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "payloadCopied": {
+          "const": false
+        }
+      }
+    },
+    "publicArtifactSample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "content"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "content": {
+          "type": "string"
+        }
+      }
+    },
+    "signoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engineeringRole",
+        "operationsProductRole",
+        "status"
+      ],
+      "properties": {
+        "engineeringRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operationsProductRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "accepted",
+            "accepted_with_limitations",
+            "blocked"
+          ]
+        }
+      }
+    }
+  }
+}
