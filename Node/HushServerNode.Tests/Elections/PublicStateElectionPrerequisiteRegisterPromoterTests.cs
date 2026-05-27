@@ -325,6 +325,138 @@ public sealed class PublicStateElectionPrerequisiteRegisterPromoterTests
     }
 
     [Fact]
+    public void ValidateOnly_DoesNotWritePackageArtifacts()
+    {
+        var packageRoot = CreateTempPackageRoot();
+        try
+        {
+            var result = new PublicStateElectionPrerequisitePromotionService().Promote(new(
+                CreatePathsWithOutput(packageRoot),
+                PublicStateElectionPrerequisitePromotionService.ModeValidateOnly,
+                null,
+                null,
+                FixedGeneratedAt,
+                false));
+
+            result.Mode.Should().Be(PublicStateElectionPrerequisitePromotionService.ModeValidateOnly);
+            result.Status.Should().Be("blocked");
+            result.WrittenFiles.Should().BeEmpty();
+            result.CheckedFiles.Should().BeEmpty();
+            Directory.Exists(packageRoot).Should().BeFalse();
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(packageRoot);
+        }
+    }
+
+    [Fact]
+    public void PackageMode_WritesExpectedArtifacts()
+    {
+        var packageRoot = CreateTempPackageRoot();
+        try
+        {
+            var result = new PublicStateElectionPrerequisitePromotionService().Promote(new(
+                CreatePathsWithOutput(packageRoot),
+                PublicStateElectionPrerequisitePromotionService.ModePackage,
+                null,
+                null,
+                FixedGeneratedAt,
+                false));
+
+            result.Mode.Should().Be(PublicStateElectionPrerequisitePromotionService.ModePackage);
+            result.Status.Should().Be("blocked");
+            result.WrittenFiles.Should().HaveCount(PublicStateElectionPrerequisiteArtifactGenerator.RequiredArtifactPaths.Length);
+            PublicStateElectionPrerequisiteArtifactGenerator.RequiredArtifactPaths
+                .Should()
+                .OnlyContain(relativePath => File.Exists(Path.Combine(packageRoot, relativePath)));
+
+            var hashValidation = PublicStateElectionPrerequisiteContracts.ReadJsonObject(
+                Path.Combine(packageRoot, PublicStateElectionPrerequisiteArtifactGenerator.PackageHashValidationPath),
+                PublicStateElectionPrerequisiteArtifactGenerator.PackageHashValidationPath);
+            hashValidation["generatedArtifactHashes"]!.AsArray().Count.Should().Be(
+                PublicStateElectionPrerequisiteArtifactGenerator.RequiredArtifactPaths.Length - 1);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(packageRoot);
+        }
+    }
+
+    [Fact]
+    public void CheckOnly_ValidatesExistingPackageWithoutWrites()
+    {
+        var packageRoot = CreateTempPackageRoot();
+        try
+        {
+            var paths = CreatePathsWithOutput(packageRoot);
+            new PublicStateElectionPrerequisitePromotionService().Promote(new(
+                paths,
+                PublicStateElectionPrerequisitePromotionService.ModePackage,
+                null,
+                null,
+                FixedGeneratedAt,
+                false));
+
+            var result = new PublicStateElectionPrerequisitePromotionService().Promote(new(
+                paths,
+                PublicStateElectionPrerequisitePromotionService.ModeCheckOnly,
+                null,
+                null,
+                FixedGeneratedAt,
+                false));
+
+            result.Mode.Should().Be(PublicStateElectionPrerequisitePromotionService.ModeCheckOnly);
+            result.Status.Should().Be("blocked");
+            result.WrittenFiles.Should().BeEmpty();
+            result.CheckedFiles.Should().HaveCount(PublicStateElectionPrerequisiteArtifactGenerator.RequiredArtifactPaths.Length);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(packageRoot);
+        }
+    }
+
+    [Fact]
+    public void CheckOnly_DetectsAlteredArtifact()
+    {
+        var packageRoot = CreateTempPackageRoot();
+        try
+        {
+            var paths = CreatePathsWithOutput(packageRoot);
+            new PublicStateElectionPrerequisitePromotionService().Promote(new(
+                paths,
+                PublicStateElectionPrerequisitePromotionService.ModePackage,
+                null,
+                null,
+                FixedGeneratedAt,
+                false));
+            File.AppendAllText(
+                Path.Combine(packageRoot, PublicStateElectionPrerequisiteArtifactGenerator.ReadinessFragmentPath),
+                "\n");
+
+            var action = () => new PublicStateElectionPrerequisitePromotionService().Promote(new(
+                paths,
+                PublicStateElectionPrerequisitePromotionService.ModeCheckOnly,
+                null,
+                null,
+                FixedGeneratedAt,
+                false));
+
+            var exception = action.Should()
+                .Throw<PublicStateElectionPrerequisitePromotionException>()
+                .Which;
+            exception.Details.Should().Contain(item => item.Contains(
+                PublicStateElectionPrerequisiteArtifactGenerator.ReadinessFragmentPath,
+                StringComparison.Ordinal));
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(packageRoot);
+        }
+    }
+
+    [Fact]
     public void NegativeFixtureCatalog_CoversRequiredFailureModes()
     {
         var paths = CreatePaths();
@@ -353,6 +485,20 @@ public sealed class PublicStateElectionPrerequisiteRegisterPromoterTests
 
     private static PublicStateElectionPrerequisitePromotionPaths CreatePaths() =>
         HushVotingReadinessTestArtifacts.CreatePublicStateElectionPrerequisitePaths();
+
+    private static PublicStateElectionPrerequisitePromotionPaths CreatePathsWithOutput(string outputRoot) =>
+        CreatePaths() with { OutputRoot = outputRoot };
+
+    private static string CreateTempPackageRoot() =>
+        Path.Combine(Path.GetTempPath(), $"feat149-public-state-{Guid.NewGuid():N}");
+
+    private static void DeleteDirectoryIfExists(string path)
+    {
+        if (Directory.Exists(path))
+        {
+            Directory.Delete(path, true);
+        }
+    }
 
     private static JsonObject LoadExample(string exampleFolder)
     {
