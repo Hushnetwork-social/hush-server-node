@@ -272,6 +272,14 @@ public sealed class ReadinessRegisterPromotionService
 
         EnsureCatalogAllowsPromotion(options.Paths.CatalogPath, registerVersionId, manifestHash, archiveHash);
         var feat147AuditPackage = Feat147PromotionAudit.TryGenerate(options.Paths, register, generatedAt);
+        var feat150CleanupPackage = Feat150CleanupAudit.TryGenerate(
+            options.Paths,
+            register,
+            generatedAt,
+            GetPromotedFileContent(promotedFiles, RegisterFileName),
+            GetPromotedFileContent(promotedFiles, ScorecardFileName),
+            GetPromotedFileContent(promotedFiles, RestrictedReviewerExtractFileName),
+            GetPromotedFileContent(promotedFiles, PublicSafeSummaryFileName));
 
         var versionOutputRoot = Path.Combine(options.Paths.OutputRoot, registerVersion);
         var writtenFiles = new List<string>();
@@ -291,6 +299,13 @@ public sealed class ReadinessRegisterPromotionService
                 checkErrors.AddRange(Feat147PromotionAudit.ValidateExistingArtifacts(
                     Feat147PromotionAudit.PackageRoot(options.Paths),
                     feat147AuditPackage.Artifacts));
+            }
+
+            if (feat150CleanupPackage is not null)
+            {
+                checkErrors.AddRange(Feat150CleanupAudit.ValidateExistingArtifacts(
+                    Feat150CleanupAudit.PackageRoot(options.Paths),
+                    feat150CleanupPackage.Artifacts));
             }
 
             if (checkErrors.Count > 0)
@@ -315,6 +330,14 @@ public sealed class ReadinessRegisterPromotionService
                 Feat147PromotionAudit.WriteArtifacts(
                     Feat147PromotionAudit.PackageRoot(options.Paths),
                     feat147AuditPackage.Artifacts,
+                    writtenFiles);
+            }
+
+            if (feat150CleanupPackage is not null)
+            {
+                Feat150CleanupAudit.WriteArtifacts(
+                    Feat150CleanupAudit.PackageRoot(options.Paths),
+                    feat150CleanupPackage.Artifacts,
                     writtenFiles);
             }
         }
@@ -1001,7 +1024,7 @@ public sealed class ReadinessRegisterPromotionService
         sb.AppendLine($"Stronger target threshold: {GetRequiredInt(score, "strongerTargetScore")}");
         sb.AppendLine($"Strongest claim allowed by v1 policy ceiling: {GetRequiredString(claimPolicy, "strongestAllowedV1Claim")}");
         sb.AppendLine($"Current strongest allowed claim: {GetCurrentStrongestAllowedClaim(register)}");
-        sb.AppendLine("Current go/no-go result: internal non-binding rehearsal is allowed with limitations; pilot and stronger claims are blocked.");
+        sb.AppendLine(GetScorecardGoNoGoResult(register));
         sb.AppendLine();
 
         sb.AppendLine("## Dimension Scores");
@@ -1323,6 +1346,21 @@ public sealed class ReadinessRegisterPromotionService
         sb.AppendLine();
         sb.AppendLine("Contact the HushVoting readiness owner for controlled reviewer access and current readiness package details.");
         return NormalizeLineEndings(sb.ToString());
+    }
+
+    private static string GetScorecardGoNoGoResult(JsonObject register)
+    {
+        return GetCurrentStrongestAllowedClaim(register) switch
+        {
+            "friendly_organization_pilot" =>
+                "Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout and public/state election readiness remain blocked.",
+            "internal_non_binding_rehearsal" =>
+                "Current go/no-go result: internal non-binding rehearsal is allowed with limitations; pilot and stronger claims are blocked.",
+            "internal_development" =>
+                "Current go/no-go result: internal development tracking is allowed; rehearsal and stronger readiness claims remain unavailable.",
+            _ =>
+                "Current go/no-go result: no readiness claim is currently allowed.",
+        };
     }
 
     private static void AppendGeneratedHeader(StringBuilder sb)
@@ -1651,6 +1689,9 @@ public sealed class ReadinessRegisterPromotionService
     private static byte[] EncodingWithoutBom(string value) => new UTF8Encoding(false).GetBytes(NormalizeLineEndings(value));
 
     private static string NormalizeLineEndings(string value) => value.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
+
+    private static string GetPromotedFileContent(IReadOnlyList<PromotedFile> promotedFiles, string relativePath) =>
+        Encoding.UTF8.GetString(promotedFiles.Single(file => file.RelativePath == relativePath).Bytes);
 
     private static string GetCurrentStrongestAllowedClaim(JsonObject register)
     {

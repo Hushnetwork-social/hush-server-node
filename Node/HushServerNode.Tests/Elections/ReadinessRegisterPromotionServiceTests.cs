@@ -124,6 +124,41 @@ public sealed class ReadinessRegisterPromotionServiceTests
     }
 
     [Fact]
+    public void Promote_WithFeat150Source_WritesCleanupPackageAndCheckOnlyVerifies()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        MutateRegisterForFeat150Cleanup(paths);
+        WriteFeat150CleanupSource(paths);
+        var service = new ReadinessRegisterPromotionService();
+
+        var result = service.Promote(CreateOptions(paths));
+
+        var cleanupRoot = GetFeat150CleanupPackageRoot(paths);
+        File.Exists(Path.Combine(cleanupRoot, "feat150-blocker-cleanup-decision-ledger.json")).Should().BeTrue();
+        File.Exists(Path.Combine(cleanupRoot, "feat150-generated-view-consistency-check.json")).Should().BeTrue();
+        File.Exists(Path.Combine(cleanupRoot, "feat150-public-safe-scan.json")).Should().BeTrue();
+        File.Exists(Path.Combine(cleanupRoot, "feat150-artifact-hash-audit.json")).Should().BeTrue();
+        var scorecard = File.ReadAllText(Path.Combine(result.VersionOutputRoot, ReadinessRegisterPromotionService.ScorecardFileName));
+        scorecard.Should().Contain("Current strongest allowed claim: friendly_organization_pilot");
+        scorecard.Should().Contain("Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout and public/state election readiness remain blocked.");
+        scorecard.Should().NotContain("Current go/no-go result: internal non-binding rehearsal is allowed with limitations; pilot and stronger claims are blocked.");
+
+        var checkOnly = service.Promote(CreateOptions(paths, checkOnly: true));
+        checkOnly.RegisterVersionId.Should().Be(CurrentRegisterVersionId);
+
+        File.AppendAllText(
+            Path.Combine(cleanupRoot, "feat150-cleanup-decision-summary.md"),
+            "tampered");
+
+        var act = () => service.Promote(CreateOptions(paths, checkOnly: true));
+
+        act.Should().Throw<ReadinessRegisterPromotionException>()
+            .Where(x => x.Details.Any(detail => detail.Contains("FEAT-150 cleanup artifact mismatch", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void Promote_WithScoreIncreaseFromObservedEvidence_FailsClosed()
     {
         var tempRoot = CreateWorkspace();
@@ -249,6 +284,23 @@ public sealed class ReadinessRegisterPromotionServiceTests
         scorecard.Should().Contain("RDY-EVID-AT-RDY-012-FEAT-140-001");
         scorecard.Should().Contain("RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-001");
         scorecard.Should().Contain("green | resolved | FEAT-131");
+    }
+
+    [Fact]
+    public void Promote_WithFriendlyPilotAllowed_DerivesScorecardGoNoGoFromClaimState()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        MutateRegisterForFriendlyPilotClaim(paths);
+
+        var result = new ReadinessRegisterPromotionService().Promote(CreateOptions(paths));
+        var scorecard = File.ReadAllText(Path.Combine(result.VersionOutputRoot, ReadinessRegisterPromotionService.ScorecardFileName));
+
+        result.StrongestAllowedClaim.Should().Be("friendly_organization_pilot");
+        scorecard.Should().Contain("Current strongest allowed claim: friendly_organization_pilot");
+        scorecard.Should().Contain("Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout and public/state election readiness remain blocked.");
+        scorecard.Should().NotContain("Current go/no-go result: internal non-binding rehearsal is allowed with limitations; pilot and stronger claims are blocked.");
     }
 
     [Fact]
@@ -397,6 +449,134 @@ public sealed class ReadinessRegisterPromotionServiceTests
         File.WriteAllText(sourcePath, source.ToJsonString(JsonOptions));
     }
 
+    private static void MutateRegisterForFriendlyPilotClaim(ReadinessRegisterPromotionPaths paths)
+    {
+        MutateRegister(paths, register =>
+        {
+            var friendlyClaim = FindClaim(register, "friendly_organization_pilot");
+            friendlyClaim["blockerSeverity"] = "amber";
+            friendlyClaim["status"] = "allowed_with_limitations";
+            friendlyClaim["allowedWording"] = "HushVoting may be used for controlled friendly-organization pilot planning when limitations remain explicit and private readiness review is available.";
+            friendlyClaim["limitationWording"] = "Friendly-pilot readiness is limited to controlled organizations and does not claim production rollout, public/state election readiness, independent validation, or legal sufficiency.";
+            friendlyClaim["blockerIds"] = new JsonArray();
+        });
+    }
+
+    private static void MutateRegisterForFeat150Cleanup(ReadinessRegisterPromotionPaths paths)
+    {
+        MutateRegister(paths, register =>
+        {
+            var internalClaim = FindClaim(register, "internal_non_binding_rehearsal");
+            internalClaim["blockerSeverity"] = "amber";
+            internalClaim["status"] = "allowed_with_limitations";
+            internalClaim["blockerIds"] = new JsonArray();
+
+            var friendlyClaim = FindClaim(register, "friendly_organization_pilot");
+            friendlyClaim["blockerSeverity"] = "amber";
+            friendlyClaim["status"] = "allowed_with_limitations";
+            friendlyClaim["allowedWording"] = "HushVoting may be used for controlled friendly-organization pilot planning when limitations remain explicit and private readiness review is available.";
+            friendlyClaim["limitationWording"] = "Friendly-pilot readiness is limited to controlled organizations and does not claim production rollout, public/state election readiness, independent validation, or legal sufficiency.";
+            friendlyClaim["blockerIds"] = new JsonArray();
+
+            var blocker = FindBlocker(register, "RDY-BLOCK-INTERNAL_NON_BINDING_REHEARSAL-001");
+            blocker["severity"] = "green";
+            blocker["status"] = "resolved";
+            blocker["featureId"] = "FEAT-150";
+            blocker["resolutionCriteria"] = "Resolved by FEAT-150 generated-view consistency evidence while the non-binding limitation remains visible.";
+        });
+    }
+
+    private static void WriteFeat150CleanupSource(ReadinessRegisterPromotionPaths paths)
+    {
+        var register = JsonNode.Parse(File.ReadAllText(paths.RegisterPath))!.AsObject();
+        var source = new JsonObject
+        {
+            ["schemaVersion"] = "feat150-cleanup-source.v1",
+            ["sourceId"] = "FEAT150-UNIT-TEST-CLEANUP-SOURCE",
+            ["generatedAt"] = FixedGeneratedAt.ToString("O"),
+            ["baselineRegister"] = new JsonObject
+            {
+                ["registerVersion"] = CurrentRegisterVersion,
+                ["registerVersionId"] = CurrentRegisterVersionId,
+                ["targetTotalScore"] = register["score"]!["total"]!.GetValue<int>(),
+                ["strongestAllowedClaim"] = "friendly_organization_pilot",
+            },
+            ["targetRegister"] = new JsonObject
+            {
+                ["registerVersion"] = register["registerVersion"]!.GetValue<string>(),
+                ["registerVersionId"] = register["registerVersionId"]!.GetValue<string>(),
+                ["targetTotalScore"] = register["score"]!["total"]!.GetValue<int>(),
+                ["strongestAllowedClaim"] = "friendly_organization_pilot",
+                ["publicationStatus"] = register["generatedViews"]!["publicSafePublicationStatus"]!.GetValue<string>(),
+            },
+            ["blockerDecision"] = new JsonObject
+            {
+                ["blockerId"] = "RDY-BLOCK-INTERNAL_NON_BINDING_REHEARSAL-001",
+                ["currentSeverity"] = "amber",
+                ["currentStatus"] = "open",
+                ["proposedSeverity"] = "green",
+                ["proposedStatus"] = "resolved",
+                ["featureSlice"] = "FEAT-150",
+                ["acceptanceGateIds"] = new JsonArray("AT-RDY-001"),
+                ["dimensionIds"] = new JsonArray("RDY-DIM-001"),
+                ["decision"] = "resolve",
+                ["decisionReason"] = "Unit-test FEAT-150 cleanup proves generated views preserve the non-binding limitation while removing the stale blocker.",
+                ["evidenceRefs"] = new JsonArray(
+                    new JsonObject
+                    {
+                        ["artifactId"] = "FEAT150-UNIT-SCORECARD",
+                        ["path"] = "readiness-scorecard.md",
+                        ["visibility"] = "restricted_reviewer",
+                    }),
+                ["scoreImpact"] = new JsonObject
+                {
+                    ["type"] = "none",
+                    ["previousScore"] = register["score"]!["total"]!.GetValue<int>(),
+                    ["acceptedScore"] = register["score"]!["total"]!.GetValue<int>(),
+                    ["reason"] = "Blocker cleanup only.",
+                },
+                ["claimImpact"] = "No claim expansion; internal rehearsal and friendly pilot remain limited.",
+                ["residualRisk"] = "Internal rehearsals must remain labelled non-binding.",
+                ["signoffs"] = CreateTwoHatSignoffs(),
+            },
+            ["generatedViewExpectations"] = new JsonObject
+            {
+                ["scorecardRequiredPhrases"] = new JsonArray(
+                    "Current strongest allowed claim: friendly_organization_pilot",
+                    "Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout and public/state election readiness remain blocked.",
+                    "internal_non_binding_rehearsal",
+                    "allowed_with_limitations"),
+                ["scorecardForbiddenPhrases"] = new JsonArray(
+                    "Current go/no-go result: internal non-binding rehearsal is allowed with limitations; pilot and stronger claims are blocked."),
+                ["restrictedRequiredPhrases"] = new JsonArray(
+                    "friendly_organization_pilot",
+                    "production_organizational_rollout"),
+                ["publicSafeRequiredPhrases"] = new JsonArray(
+                    "HushVoting may be discussed for controlled friendly-organization pilot use with explicit limitations.",
+                    "Production and public/state election readiness are not claimed in this version."),
+                ["publicSafeForbiddenPhrases"] = new JsonArray(
+                    "total score",
+                    "60/100",
+                    "71/100",
+                    "sha-256",
+                    "restricted_reviewer",
+                    "internal/"),
+            },
+        };
+
+        var sourcePath = Path.Combine(
+            paths.WorkspaceRoot,
+            "hush-memory-bank",
+            "Overview",
+            "HushVotingReadiness",
+            "Internal-Non-Binding-Rehearsal-Cleanup",
+            "examples",
+            "release-baseline",
+            "feat150-cleanup-source.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+        File.WriteAllText(sourcePath, source.ToJsonString(JsonOptions));
+    }
+
     private static string GetFeat147Decision(string blockerId, string severity, string status)
     {
         if (status == "resolved")
@@ -422,6 +602,24 @@ public sealed class ReadinessRegisterPromotionServiceTests
             "PrivateServer_ElectronicVoting",
             "Friendly-Pilot-Readiness-Promotion",
             "package");
+
+    private static string GetFeat150CleanupPackageRoot(ReadinessRegisterPromotionPaths paths) =>
+        Path.Combine(
+            paths.WorkspaceRoot,
+            "hush-documents",
+            "PrivateServer_ElectronicVoting",
+            "Internal-Non-Binding-Rehearsal-Cleanup",
+            "package");
+
+    private static JsonObject FindClaim(JsonObject register, string claimLevel) =>
+        register["claimLevels"]!.AsArray()
+            .Select(node => node!.AsObject())
+            .Single(claim => claim["claimLevel"]!.GetValue<string>() == claimLevel);
+
+    private static JsonObject FindBlocker(JsonObject register, string blockerId) =>
+        register["blockers"]!.AsArray()
+            .Select(node => node!.AsObject())
+            .Single(blocker => blocker["blockerId"]!.GetValue<string>() == blockerId);
 
     private static string ComputeSha256Hex(byte[] bytes) =>
         Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
