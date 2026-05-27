@@ -36,10 +36,11 @@ public sealed record ReadinessRegisterPromotionOptions(
     ReadinessRegisterPromotionPaths Paths,
     string RegisterId,
     string? Version,
-    string PublicationStatus,
+    string? PublicationStatus,
     bool ValidateOnly,
     bool Scaffold,
-    DateTimeOffset? GeneratedAt);
+    DateTimeOffset? GeneratedAt,
+    bool CheckOnly = false);
 
 public sealed record ReadinessRegisterPromotionResult(
     string RegisterVersion,
@@ -270,10 +271,36 @@ public sealed class ReadinessRegisterPromotionService
             "application/json"));
 
         EnsureCatalogAllowsPromotion(options.Paths.CatalogPath, registerVersionId, manifestHash, archiveHash);
+        var feat147AuditPackage = Feat147PromotionAudit.TryGenerate(options.Paths, register, generatedAt);
 
         var versionOutputRoot = Path.Combine(options.Paths.OutputRoot, registerVersion);
         var writtenFiles = new List<string>();
-        if (!options.ValidateOnly)
+        if (options.CheckOnly)
+        {
+            var checkErrors = ValidateExistingPromotedArtifacts(
+                options.Paths,
+                versionOutputRoot,
+                promotedFiles,
+                archiveFileName,
+                archiveBytes,
+                manifest,
+                manifestHash,
+                archiveHash);
+            if (feat147AuditPackage is not null)
+            {
+                checkErrors.AddRange(Feat147PromotionAudit.ValidateExistingArtifacts(
+                    Feat147PromotionAudit.PackageRoot(options.Paths),
+                    feat147AuditPackage.Artifacts));
+            }
+
+            if (checkErrors.Count > 0)
+            {
+                throw new ReadinessRegisterPromotionException(
+                    "Readiness register check-only validation failed.",
+                    checkErrors);
+            }
+        }
+        else if (!options.ValidateOnly)
         {
             WritePromotedArtifacts(
                 options.Paths,
@@ -283,6 +310,13 @@ public sealed class ReadinessRegisterPromotionService
                 archiveBytes,
                 manifest,
                 writtenFiles);
+            if (feat147AuditPackage is not null)
+            {
+                Feat147PromotionAudit.WriteArtifacts(
+                    Feat147PromotionAudit.PackageRoot(options.Paths),
+                    feat147AuditPackage.Artifacts,
+                    writtenFiles);
+            }
         }
 
         return new ReadinessRegisterPromotionResult(
@@ -1242,18 +1276,36 @@ public sealed class ReadinessRegisterPromotionService
     {
         var sb = new StringBuilder();
         var publicationStatus = GetRequiredString(GetRequiredObject(register, "generatedViews"), "publicSafePublicationStatus");
+        var strongestAllowedClaim = GetCurrentStrongestAllowedClaim(register);
         sb.AppendLine("## Current Public-Safe Status");
         sb.AppendLine();
         sb.AppendLine(publicationStatus);
         sb.AppendLine();
         sb.AppendLine("## Approved Public-Safe Claim Wording");
         sb.AppendLine();
-        sb.AppendLine("HushVoting is being prepared for internal non-binding rehearsal use only. Pilot, production, and public election readiness claims remain unavailable until the remaining readiness blockers are resolved and accepted.");
+        if (strongestAllowedClaim == "friendly_organization_pilot")
+        {
+            sb.AppendLine("HushVoting may be discussed for controlled friendly-organization pilot use with explicit limitations. It is not presented as production rollout software, public/state election software, legal sufficiency validation, or independent certification.");
+        }
+        else
+        {
+            sb.AppendLine("HushVoting is being prepared for internal non-binding rehearsal use only. Pilot, production, and public election readiness claims remain unavailable until the remaining readiness blockers are resolved and accepted.");
+        }
+
         sb.AppendLine();
         sb.AppendLine("## Known Limitations");
         sb.AppendLine();
-        sb.AppendLine("- Internal rehearsal use must be labelled non-binding.");
-        sb.AppendLine("- Pilot readiness remains blocked until the minimum confidence band and remaining pilot-critical evidence gates are satisfied.");
+        if (strongestAllowedClaim == "friendly_organization_pilot")
+        {
+            sb.AppendLine("- Friendly-organization pilot use must remain controlled, bounded, and privately reviewed.");
+            sb.AppendLine("- Broader operating history, deployment variance, failed-finalize coverage, accessibility/device breadth, and customer-specific governance remain limitations.");
+        }
+        else
+        {
+            sb.AppendLine("- Internal rehearsal use must be labelled non-binding.");
+            sb.AppendLine("- Pilot readiness remains blocked until the minimum confidence band and remaining pilot-critical evidence gates are satisfied.");
+        }
+
         sb.AppendLine("- Production and public/state election readiness are not claimed in this version.");
         sb.AppendLine();
         sb.AppendLine("## Non-Claims");
@@ -1505,6 +1557,70 @@ public sealed class ReadinessRegisterPromotionService
 
         File.WriteAllText(catalogPath, SerializeJson(catalog), new UTF8Encoding(false));
         writtenFiles.Add(catalogPath);
+    }
+
+    private static List<string> ValidateExistingPromotedArtifacts(
+        ReadinessRegisterPromotionPaths paths,
+        string versionOutputRoot,
+        IReadOnlyList<PromotedFile> files,
+        string archiveFileName,
+        byte[] archiveBytes,
+        JsonObject manifest,
+        string manifestHash,
+        string archiveHash)
+    {
+        var errors = new List<string>();
+        foreach (var file in files.OrderBy(x => x.RelativePath, StringComparer.Ordinal))
+        {
+            var path = Path.Combine(versionOutputRoot, file.RelativePath);
+            if (!File.Exists(path))
+            {
+                errors.Add($"Missing promoted artifact: {file.RelativePath}");
+                continue;
+            }
+
+            var actualBytes = File.ReadAllBytes(path);
+            if (!actualBytes.SequenceEqual(file.Bytes))
+            {
+                errors.Add($"Promoted artifact mismatch: {file.RelativePath}");
+            }
+        }
+
+        var archivePath = Path.Combine(versionOutputRoot, archiveFileName);
+        if (!File.Exists(archivePath))
+        {
+            errors.Add($"Missing promoted archive: {archiveFileName}");
+        }
+        else if (!File.ReadAllBytes(archivePath).SequenceEqual(archiveBytes))
+        {
+            errors.Add($"Promoted archive mismatch: {archiveFileName}");
+        }
+
+        if (!File.Exists(paths.CatalogPath))
+        {
+            errors.Add($"Missing readiness register catalog: {CatalogFileName}");
+        }
+        else
+        {
+            var catalog = ReadJsonObject(paths.CatalogPath, CatalogFileName);
+            var registerVersionId = GetRequiredString(manifest, "registerVersionId");
+            if (GetStringOrDefault(catalog, "currentRegisterVersionId") != registerVersionId)
+            {
+                errors.Add($"Catalog currentRegisterVersionId must be {registerVersionId}.");
+            }
+
+            if (GetStringOrDefault(catalog, "currentManifestHash") != manifestHash)
+            {
+                errors.Add($"Catalog currentManifestHash must be {manifestHash}.");
+            }
+
+            if (GetStringOrDefault(catalog, "currentArchiveHash") != archiveHash)
+            {
+                errors.Add($"Catalog currentArchiveHash must be {archiveHash}.");
+            }
+        }
+
+        return errors;
     }
 
     private static byte[] BuildDeterministicArchive(IReadOnlyList<PromotedFile> files)
