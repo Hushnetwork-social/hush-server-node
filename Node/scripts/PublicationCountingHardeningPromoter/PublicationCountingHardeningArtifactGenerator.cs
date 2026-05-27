@@ -330,10 +330,27 @@ public static class PublicationCountingHardeningArtifactGenerator
             ["producerFeature"] = PublicationCountingHardeningContracts.FeatureId,
             ["targetPackage"] = PublicationCountingHardeningContracts.ExpectedTargetPackagePath,
             ["consumers"] = PublicationCountingHardeningContracts.Clone(source["downstreamConsumers"]),
+            ["artifactRefs"] = new JsonArray(
+                HandoffArtifactRef(ManifestPath, "Package manifest and generated artifact hash inventory."),
+                HandoffArtifactRef(PackageVerifierReplaySummaryPath, "Current valid package verifier replay summary."),
+                HandoffArtifactRef(AcceptedToPublishedBindingSummaryPath, "Accepted-to-published binding evidence."),
+                HandoffArtifactRef(TallyReplayBindingSummaryPath, "Published counted set and tally replay binding evidence."),
+                HandoffArtifactRef(TamperStaleReplaySummaryPath, "Required stale and tamper failure matrix."),
+                HandoffArtifactRef(PackageHashCurrentnessSummaryPath, "Currentness binding for release, verifier, package, and expected-result refs."),
+                HandoffArtifactRef(NoSecretScanResultPath, "Generated public-safety/no-secret scan result."),
+                HandoffArtifactRef(ReadinessFragmentPath, "FEAT-156 consumable RDY-DIM-004 readiness fragment."),
+                HandoffArtifactRef(ScoreProposalPath, "FEAT-156 consumable RDY-DIM-004 7 to 8 score proposal.")),
             ["feat154ConsumerInstructions"] = "May cite this package as publication/counting hardening support only; production-like run evidence remains FEAT-154-owned.",
             ["feat155ConsumerInstructions"] = "May cite currentness and stale-failure policy only; failed-finalize continuity remains FEAT-155-owned.",
             ["feat156ConsumerInstructions"] = "May ingest the readiness fragment and score proposal after maintainer review; this package does not mutate the canonical register.",
             ["residualRisks"] = PublicationCountingHardeningContracts.Clone(source["residualRisks"]),
+        };
+
+    private static JsonObject HandoffArtifactRef(string path, string purpose) =>
+        new()
+        {
+            ["path"] = path,
+            ["purpose"] = purpose,
         };
 
     private static string BuildReadme(JsonObject source)
