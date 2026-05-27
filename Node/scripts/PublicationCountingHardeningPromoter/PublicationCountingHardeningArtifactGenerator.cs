@@ -54,21 +54,25 @@ public static class PublicationCountingHardeningArtifactGenerator
         var acceptedBinding = PublicationCountingBindingChecks.CheckAcceptedToPublished(paths, source);
         var tallyBinding = PublicationCountingBindingChecks.CheckTallyReplay(paths, source);
         var tamperStaleMatrix = PublicationCountingTamperStaleMatrix.Evaluate(source, acceptedBinding, tallyBinding);
+        var bindingAccepted = acceptedBinding.Passed && tallyBinding.Passed && tamperStaleMatrix.Passed;
         var readme = new PublicationCountingHardeningArtifact(ReadmePath, BuildReadme(source));
-        var artifacts = new List<PublicationCountingHardeningArtifact>
+        var validationArtifacts = new List<PublicationCountingHardeningArtifact>
         {
             JsonArtifact(PackageVerifierReplaySummaryPath, BuildPackageVerifierReplaySummary(paths, source, generatedAtText)),
             JsonArtifact(AcceptedToPublishedBindingSummaryPath, BuildBindingSummary(source, "publication-counting-accepted-to-published-binding-summary.v1", "acceptedToPublishedChecks", generatedAtText, acceptedBinding)),
             JsonArtifact(TallyReplayBindingSummaryPath, BuildBindingSummary(source, "publication-counting-tally-replay-binding-summary.v1", "tallyReplayChecks", generatedAtText, tallyBinding)),
             JsonArtifact(TamperStaleReplaySummaryPath, BuildTamperStaleReplaySummary(source, generatedAtText, tamperStaleMatrix)),
             JsonArtifact(PackageHashCurrentnessSummaryPath, BuildPackageHashCurrentnessSummary(source, generatedAtText)),
-            JsonArtifact(ReadinessFragmentPath, BuildReadinessFragment(source, generatedAtText)),
-            JsonArtifact(ScoreProposalPath, BuildScoreProposal(source, generatedAtText)),
+        };
+        var artifacts = new List<PublicationCountingHardeningArtifact>(validationArtifacts)
+        {
+            JsonArtifact(ReadinessFragmentPath, BuildReadinessFragment(source, generatedAtText, validationArtifacts, bindingAccepted)),
+            JsonArtifact(ScoreProposalPath, BuildScoreProposal(source, generatedAtText, validationArtifacts, bindingAccepted)),
             JsonArtifact(DownstreamHandoffPath, BuildDownstreamHandoff(source, generatedAtText)),
         };
         var publicSafetyScan = PublicationCountingPublicSafetyScan.Scan([readme, .. artifacts]);
         artifacts.Insert(5, JsonArtifact(NoSecretScanResultPath, BuildNoSecretScanResult(source, generatedAtText, publicSafetyScan)));
-        var status = acceptedBinding.Passed && tallyBinding.Passed && tamperStaleMatrix.Passed && publicSafetyScan.Passed
+        var status = bindingAccepted && publicSafetyScan.Passed
             ? "accepted"
             : "blocked";
 
@@ -254,7 +258,11 @@ public static class PublicationCountingHardeningArtifactGenerator
         };
     }
 
-    private static JsonObject BuildReadinessFragment(JsonObject source, string generatedAt)
+    private static JsonObject BuildReadinessFragment(
+        JsonObject source,
+        string generatedAt,
+        IReadOnlyList<PublicationCountingHardeningArtifact> validationArtifacts,
+        bool bindingAccepted)
     {
         var proposal = PublicationCountingHardeningContracts.RequireObject(source, "readinessProposal");
         return new JsonObject
@@ -263,31 +271,55 @@ public static class PublicationCountingHardeningArtifactGenerator
             ["generatedAt"] = generatedAt,
             ["producerFeature"] = PublicationCountingHardeningContracts.FeatureId,
             ["dimensionId"] = PublicationCountingHardeningContracts.TargetDimensionId,
-            ["status"] = "accepted",
+            ["status"] = bindingAccepted ? "accepted" : "blocked",
+            ["sourcePackageHash"] = PublicationCountingHardeningContracts.GetString(
+                PublicationCountingHardeningContracts.RequireObject(source, "packageRefs"),
+                "packageHash"),
             ["scoreEffect"] = new JsonObject
             {
                 ["proposedScoreFrom"] = PublicationCountingHardeningContracts.GetInt(proposal, "proposedScoreFrom"),
                 ["proposedScoreTo"] = PublicationCountingHardeningContracts.GetInt(proposal, "proposedScoreTo"),
-                ["scoreChangeAllowed"] = true,
+                ["scoreChangeAllowed"] = bindingAccepted,
                 ["doesNotMutateRegister"] = true,
             },
             ["evidenceRefs"] = new JsonArray(RequiredArtifactPaths
                 .Where(path => path != ReadinessFragmentPath)
                 .Select(path => JsonValue.Create(path))
                 .ToArray<JsonNode?>()),
+            ["evidenceArtifactHashes"] = ArtifactHashes(validationArtifacts),
             ["nonClaims"] = PublicationCountingHardeningContracts.Clone(proposal["nonClaims"]),
         };
     }
 
-    private static JsonObject BuildScoreProposal(JsonObject source, string generatedAt) =>
-        new()
+    private static JsonObject BuildScoreProposal(
+        JsonObject source,
+        string generatedAt,
+        IReadOnlyList<PublicationCountingHardeningArtifact> validationArtifacts,
+        bool bindingAccepted)
+    {
+        var packageRefs = PublicationCountingHardeningContracts.RequireObject(source, "packageRefs");
+        return new JsonObject
         {
             ["schemaVersion"] = "publication-counting-score-proposal.v1",
             ["generatedAt"] = generatedAt,
             ["producerFeature"] = PublicationCountingHardeningContracts.FeatureId,
+            ["status"] = bindingAccepted ? "accepted" : "blocked",
+            ["evidencePackagePath"] = PublicationCountingHardeningContracts.ExpectedTargetPackagePath,
+            ["sourcePackageHash"] = PublicationCountingHardeningContracts.GetString(packageRefs, "packageHash"),
+            ["evidenceArtifactHashes"] = ArtifactHashes(validationArtifacts),
             ["proposal"] = PublicationCountingHardeningContracts.Clone(source["readinessProposal"]),
             ["registerMutation"] = "not_performed",
         };
+    }
+
+    private static JsonArray ArtifactHashes(IReadOnlyList<PublicationCountingHardeningArtifact> artifacts) =>
+        new(artifacts
+            .Select(artifact => new JsonObject
+            {
+                ["path"] = artifact.RelativePath,
+                ["sha256Hash"] = "sha256:" + artifact.Sha256Hash,
+            })
+            .ToArray<JsonNode?>());
 
     private static JsonObject BuildDownstreamHandoff(JsonObject source, string generatedAt) =>
         new()

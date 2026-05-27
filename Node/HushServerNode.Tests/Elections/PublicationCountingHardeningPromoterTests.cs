@@ -76,6 +76,7 @@ public sealed class PublicationCountingHardeningPromoterTests
             ValidateOnly: false));
 
         first.WrittenFiles.Should().HaveCount(PublicationCountingHardeningArtifactGenerator.RequiredArtifactPaths.Length);
+        PublicationCountingReadinessOutputValidator.Validate(first.GeneratedPackage).Should().BeEmpty();
         first.GeneratedPackage.Artifacts.Select(artifact => (artifact.RelativePath, artifact.Sha256Hash, artifact.Content))
             .Should()
             .Equal(second.GeneratedPackage.Artifacts.Select(artifact => (artifact.RelativePath, artifact.Sha256Hash, artifact.Content)));
@@ -133,6 +134,33 @@ public sealed class PublicationCountingHardeningPromoterTests
 
         result.Status.Should().Be("fail");
         result.Findings.Should().Contain(finding => finding.SignalId == "shuffle_map_field");
+    }
+
+    [Fact]
+    public void ReadinessOutputs_MissingEvidenceRef_FailsValidation()
+    {
+        using var workspace = TempPublicationCountingWorkspace.Create();
+        var result = new PublicationCountingHardeningPromotionService().Promote(new(
+            workspace.Paths,
+            PublicationCountingHardeningPromotionService.ModeCheckOnly,
+            null,
+            null,
+            FixedGeneratedAt,
+            ValidateOnly: false));
+        var artifacts = result.GeneratedPackage.Artifacts.ToList();
+        var readinessIndex = artifacts.FindIndex(artifact => artifact.RelativePath == PublicationCountingHardeningArtifactGenerator.ReadinessFragmentPath);
+        var readiness = JsonNode.Parse(artifacts[readinessIndex].Content)!.AsObject();
+        var evidenceRefs = readiness["evidenceRefs"]!.AsArray();
+        var manifestRef = evidenceRefs.Single(item => item!.GetValue<string>() == PublicationCountingHardeningArtifactGenerator.ManifestPath);
+        evidenceRefs.Remove(manifestRef);
+        artifacts[readinessIndex] = new PublicationCountingHardeningArtifact(
+            PublicationCountingHardeningArtifactGenerator.ReadinessFragmentPath,
+            PublicationCountingHardeningContracts.CanonicalJson(readiness));
+        var mutated = result.GeneratedPackage with { Artifacts = artifacts };
+
+        var errors = PublicationCountingReadinessOutputValidator.Validate(mutated);
+
+        errors.Should().Contain(error => error.Contains("missing evidence ref", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -536,6 +564,10 @@ public sealed class PublicationCountingHardeningPromoterTests
             .GetValue<string>()
             .Should()
             .Be("blocked");
+        var scoreProposal = result.GeneratedPackage.Artifacts
+            .Single(artifact => artifact.RelativePath == PublicationCountingHardeningArtifactGenerator.ScoreProposalPath);
+        JsonNode.Parse(scoreProposal.Content)!.AsObject()["status"]!.GetValue<string>().Should().Be("blocked");
+        PublicationCountingReadinessOutputValidator.Validate(result.GeneratedPackage).Should().BeEmpty();
     }
 
     private sealed class TempPublicationCountingWorkspace : IDisposable
@@ -935,7 +967,9 @@ public sealed class PublicationCountingHardeningPromoterTests
                     ["doesNotMutateRegister"] = true,
                     ["promotionOwner"] = "FEAT-156 or later explicit FEAT-130 promotion",
                     ["requiredPassingChecks"] = Strings("AT-PUB-001-accepted-set-current", "AT-TALLY-001-count-reconciliation"),
-                    ["nonClaims"] = Strings("No production rollout claim"),
+                    ["nonClaims"] = Strings(
+                        "No production rollout claim",
+                        "No public or state election readiness claim"),
                 },
                 ["downstreamConsumers"] = Strings("FEAT-154", "FEAT-155", "FEAT-156"),
                 ["residualRisks"] = Strings("External crypto review remains pending."),
