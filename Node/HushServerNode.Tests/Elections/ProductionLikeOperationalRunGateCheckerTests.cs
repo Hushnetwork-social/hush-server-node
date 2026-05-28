@@ -104,9 +104,4 @@ public sealed class ProductionLikeOperationalRunGateCheckerTests
     public static IEnumerable<object[]> FixtureCases() =>
         LoadCases().Select(item => new object[] { item["caseId"]!.GetValue<string>() });
 
-    private static JsonObject LoadSourceForCategory(string category)
-    {
-        var fixtureCase = LoadCases().Single(item => item["category"]!.GetValue<string>() == category);
-        return LoadSourceForCase(fixtureCase);
-    }
 }

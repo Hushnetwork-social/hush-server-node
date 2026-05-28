@@ -56,6 +56,12 @@ internal static class ProductionLikeOperationalRunTestHelpers
         return source;
     }
 
+    public static JsonObject LoadSourceForCategory(string category)
+    {
+        var fixtureCase = LoadCases().Single(item => item["category"]!.GetValue<string>() == category);
+        return LoadSourceForCase(fixtureCase);
+    }
+
     public static JsonObject LoadMemoryBankJson(params string[] relativePath)
     {
         var fullPath = Path.Combine(new[] { FindWorkspaceRoot(), "hush-memory-bank" }.Concat(relativePath).ToArray());
