@@ -1,7 +1,7 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Xunit;
+using static HushServerNode.Tests.Elections.ProductionLikeOperationalRunTestHelpers;
 
 namespace HushServerNode.Tests.Elections;
 
@@ -163,72 +163,6 @@ public sealed class ProductionLikeOperationalRunFixtureTests
     {
         var category = fixtureCase["category"]!.GetValue<string>();
         return category is not "accepted" and not "accepted_with_limitations";
-    }
-
-    private static JsonObject LoadSchema() =>
-        LoadMemoryBankJson(
-            "Overview",
-            "HushVotingReadiness",
-            "Production-Like-Operational-Run",
-            "schemas",
-            "production-like-operational-run-source.schema.json");
-
-    private static JsonObject LoadBaseline() =>
-        LoadMemoryBankJson(
-            "Overview",
-            "HushVotingReadiness",
-            "Production-Like-Operational-Run",
-            "examples",
-            "release-baseline",
-            "production-like-operational-run-source.json");
-
-    private static JsonObject LoadCatalog() =>
-        LoadMemoryBankJson(
-            "Overview",
-            "HushVotingReadiness",
-            "Production-Like-Operational-Run",
-            "examples",
-            "fixture-catalog.json");
-
-    private static JsonObject[] LoadCases() =>
-        LoadCatalog()["cases"]!.AsArray().Select(item => item!.AsObject()).ToArray();
-
-    private static JsonObject LoadMemoryBankJson(params string[] relativePath)
-    {
-        var fullPath = Path.Combine(new[] { FindWorkspaceRoot(), "hush-memory-bank" }.Concat(relativePath).ToArray());
-        return JsonNode.Parse(File.ReadAllText(fullPath))!.AsObject();
-    }
-
-    private static string FindWorkspaceRoot([CallerFilePath] string sourceFilePath = "")
-    {
-        foreach (var startPath in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory(), sourceFilePath })
-        {
-            var root = FindWorkspaceRootFrom(startPath);
-            if (root is not null)
-            {
-                return root;
-            }
-        }
-
-        throw new DirectoryNotFoundException("Could not locate HushNetworkOrg workspace root.");
-    }
-
-    private static string? FindWorkspaceRootFrom(string startPath)
-    {
-        var directory = new DirectoryInfo(startPath);
-
-        while (directory is not null)
-        {
-            if (Directory.Exists(Path.Combine(directory.FullName, "hush-memory-bank")) &&
-                Directory.Exists(Path.Combine(directory.FullName, "hush-server-node")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        return null;
     }
 
     private static string[] GetStringArray(JsonObject schema, string name) =>

@@ -52,6 +52,7 @@
     <ProjectReference Include="..\scripts\GovernedOutcomeProducer\GovernedOutcomeProducer.csproj" />
     <ProjectReference Include="..\scripts\PilotEvidencePackagePromoter\PilotEvidencePackagePromoter.csproj" />
     <ProjectReference Include="..\scripts\ProductionRolloutReadinessPromoter\ProductionRolloutReadinessPromoter.csproj" />
+    <ProjectReference Include="..\scripts\ProductionLikeOperationalRunPromoter\ProductionLikeOperationalRunPromoter.csproj" />
     <ProjectReference Include="..\scripts\PublicStateElectionPrerequisiteRegisterPromoter\PublicStateElectionPrerequisiteRegisterPromoter.csproj" />
     <ProjectReference Include="..\scripts\PublicationCountingHardeningPromoter\PublicationCountingHardeningPromoter.csproj" />
   </ItemGroup>
