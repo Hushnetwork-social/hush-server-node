@@ -6,8 +6,11 @@ public sealed record ProductionLikeOperationalRunPromotionPaths(
     string SchemasRoot,
     string ExamplesRoot,
     string DefaultSourceInput,
-    string FixtureCatalogPath)
+    string FixtureCatalogPath,
+    string OutputRoot)
 {
+    public const string SourceFolder = "Production-Like-Operational-Run";
+    public const string OutputFolder = "Production-Like-Operational-Run-Evidence";
     public const string SourceFileName = "production-like-operational-run-source.json";
     public const string FixtureCatalogFileName = "fixture-catalog.json";
 
@@ -28,6 +31,11 @@ public sealed record ProductionLikeOperationalRunPromotionPaths(
             Path.Combine(sourceRoot, "schemas"),
             examplesRoot,
             Path.Combine(examplesRoot, "release-baseline", SourceFileName),
-            Path.Combine(examplesRoot, FixtureCatalogFileName));
+            Path.Combine(examplesRoot, FixtureCatalogFileName),
+            Path.Combine(
+                fullWorkspaceRoot,
+                "hush-documents",
+                "PrivateServer_ElectronicVoting",
+                OutputFolder));
     }
 }
