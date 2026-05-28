@@ -20,10 +20,17 @@ public static partial class ProductionLikeOperationalRunGateChecker
     public static readonly string[] ForbiddenPublicMaterialNeedles =
     [
         "voter identity",
+        "voter data",
+        "participant identity",
+        "ballot selection",
         "vote choice",
         "receipt secret",
         "trustee share",
         "private key",
+        "private url",
+        "local path",
+        "file://",
+        "/home/",
         "deployment secret",
         "database password",
         "operator contact",

@@ -23,15 +23,24 @@ public static partial class ProductionLikeOperationalRunArtifactGenerator
         builder.AppendLine($"Status: {packageStatus}");
         builder.AppendLine($"Profile: {ProductionLikeOperationalRunContracts.GetString(profile, "profileId")}");
         builder.AppendLine();
+        builder.AppendLine("## Reviewer Summary");
+        builder.AppendLine("- Evidence type: controlled production-like HushVoting operational run package.");
+        builder.Append("- Scope: ");
+        builder.AppendLine(ProductionLikeOperationalRunContracts.GetString(profile, "scope"));
+        builder.AppendLine("- Register effect: score proposal input only; no direct readiness-register mutation.");
+        builder.AppendLine("- Reviewer use: FEAT-156 may consume this package when promotion evidence is evaluated.");
+        builder.AppendLine();
         builder.AppendLine(scoreAllowed
             ? $"RDY-DIM-007 can be proposed from {ProductionLikeOperationalRunContracts.GetInt(register, "currentScore")} to {ProductionLikeOperationalRunContracts.GetInt(register, "targetScore")} through FEAT-156 review."
             : $"No RDY-DIM-007 score movement is proposed while this package is {packageStatus}.");
         builder.AppendLine();
-        builder.AppendLine("## Limits");
-        builder.AppendLine("- This package does not approve organizational rollout.");
-        builder.AppendLine("- This package does not approve public or state use.");
-        builder.AppendLine("- Failed-finalize continuity remains owned by FEAT-155.");
-        builder.AppendLine("- One controlled run does not prove repeated operating history.");
+        builder.AppendLine("## Non-Claims");
+        builder.AppendLine("- This package does not claim production rollout readiness.");
+        builder.AppendLine("- This package does not claim public/state election readiness.");
+        builder.AppendLine("- This package does not claim legal sufficiency.");
+        builder.AppendLine("- This package does not claim certification or external validation.");
+        builder.AppendLine("- This package does not claim failed-finalize continuity completion; FEAT-155 owns that proof.");
+        builder.AppendLine("- This package does not prove repeated operating history or customer-site equivalence.");
         builder.AppendLine();
         builder.AppendLine("## Diagnostics");
         foreach (var blocker in gate.Blockers)
@@ -52,12 +61,13 @@ public static partial class ProductionLikeOperationalRunArtifactGenerator
     {
         var refs = CollectRestrictedRefs(source);
         var builder = new StringBuilder();
-        builder.AppendLine("# Restricted Production-Like Operational Run Evidence Index");
+        builder.AppendLine("# Restricted Reviewer Index");
         builder.AppendLine();
         builder.AppendLine($"Generated: {ProductionLikeOperationalRunContracts.FormatTimestamp(generatedAt)}");
         builder.AppendLine($"Source: {ProductionLikeOperationalRunContracts.GetString(source, "sourceId")}");
         builder.AppendLine();
-        builder.AppendLine("Payload policy: this index stores references and hashes only. Payload bodies are not copied.");
+        builder.AppendLine("Payload policy: this restricted reviewer index stores references and hashes only. Payload bodies are not copied.");
+        builder.AppendLine("Reviewer use: resolve path refs in the restricted evidence store and compare hashes before review.");
         builder.AppendLine();
         builder.AppendLine("| Ref | Visibility | Path Ref | Hash | Payload Copied |");
         builder.AppendLine("|-----|------------|----------|------|----------------|");
@@ -105,7 +115,10 @@ public static partial class ProductionLikeOperationalRunArtifactGenerator
         builder.AppendLine("## Boundaries");
         builder.AppendLine("- Public-safe markdown contains only bounded summaries.");
         builder.AppendLine("- Restricted evidence is referenced by identifier, path, and hash.");
-        builder.AppendLine("- Organizational rollout and public/state claims remain outside this package.");
+        builder.AppendLine("- This package does not claim production rollout readiness.");
+        builder.AppendLine("- This package does not claim public/state election readiness.");
+        builder.AppendLine("- This package does not claim legal sufficiency, certification, or external validation.");
+        builder.AppendLine("- This package does not claim failed-finalize continuity completion.");
         builder.AppendLine();
         builder.AppendLine("## Gate Result");
         builder.AppendLine($"Gate status: {gate.Status}");
