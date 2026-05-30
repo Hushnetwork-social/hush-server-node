@@ -19,6 +19,11 @@ public static class VerificationPackageFileNames
     public const string VoidPackageManifest = "void-package-manifest.json";
     public const string VoidPackageArchive = "void-package.zip";
 
+    public const string FailedFinalizePublicStatus = "failed-finalize-public-status.json";
+    public const string FailedFinalizeVerifierResult = "failed-finalize-verifier-result.json";
+    public const string FailedFinalizePackageManifest = "failed-finalize-package-manifest.json";
+    public const string RestrictedFailedFinalizeEvidenceIndex = "restricted/failed-finalize-restricted-evidence-index.json";
+
     public const string ReportPackageDirectory = "artifacts/report-package";
     public const string ElectionRecordDirectory = "artifacts/election-record";
     public const string RestrictedDirectory = "artifacts/restricted";

@@ -102,4 +102,68 @@ public static partial class ElectionModelFactory
             sourceBlockHeight,
             sourceBlockId);
     }
+
+    public static ElectionGovernedOutcomeDecisionRecord CreateFailedFinalizeContinuityDecision(
+        ElectionRecord election,
+        string actorPublicAddress,
+        string authorityRole,
+        string authoritySource,
+        string feat140HandoffRef,
+        string feat140HandoffHash,
+        string authorityDecisionRef,
+        string authorityDecisionHash,
+        string governanceRuleRef,
+        Guid closeArtifactId,
+        string publicSummary,
+        IReadOnlyList<string>? missingFinalizeEvidenceRefs = null,
+        IReadOnlyList<string>? continuityIncidentEvidenceRefs = null,
+        IReadOnlyList<string>? availableTrusteeAcknowledgementRefs = null,
+        IReadOnlyList<Guid>? keyLostTrusteeDecisionIds = null,
+        Guid? tallyReadyArtifactId = null,
+        string? remedyRuleRef = null,
+        DateTime? decidedAtUtc = null,
+        DateTime? recordedAtUtc = null,
+        Guid? sourceTransactionId = null,
+        long? sourceBlockHeight = null,
+        Guid? sourceBlockId = null,
+        Guid? preassignedDecisionId = null)
+    {
+        ArgumentNullException.ThrowIfNull(election);
+
+        return new ElectionGovernedOutcomeDecisionRecord(
+            preassignedDecisionId ?? Guid.NewGuid(),
+            election.ElectionId,
+            ElectionGovernedOutcomeDecisionType.RecordFailedFinalizeContinuity,
+            ElectionOutcomeStatus.FailedToFinalize,
+            CleanFinalization: false,
+            ElectionGovernedOutcomeFinalizationMode.FailedFinalization,
+            election.LifecycleState,
+            ElectionLifecycleState.Closed,
+            NormalizeRequiredText(actorPublicAddress, nameof(actorPublicAddress)),
+            NormalizeRequiredText(authorityRole, nameof(authorityRole)),
+            NormalizeRequiredText(authoritySource, nameof(authoritySource)),
+            NormalizeRequiredText(feat140HandoffRef, nameof(feat140HandoffRef)),
+            NormalizeRequiredText(feat140HandoffHash, nameof(feat140HandoffHash)),
+            NormalizeRequiredText(authorityDecisionRef, nameof(authorityDecisionRef)),
+            NormalizeRequiredText(authorityDecisionHash, nameof(authorityDecisionHash)),
+            NormalizeRequiredText(governanceRuleRef, nameof(governanceRuleRef)),
+            null,
+            NormalizeOptionalText(remedyRuleRef),
+            closeArtifactId,
+            tallyReadyArtifactId,
+            null,
+            null,
+            null,
+            null,
+            missingFinalizeEvidenceRefs ?? Array.Empty<string>(),
+            continuityIncidentEvidenceRefs ?? Array.Empty<string>(),
+            availableTrusteeAcknowledgementRefs ?? Array.Empty<string>(),
+            keyLostTrusteeDecisionIds ?? Array.Empty<Guid>(),
+            NormalizeRequiredText(publicSummary, nameof(publicSummary)),
+            decidedAtUtc ?? DateTime.UtcNow,
+            recordedAtUtc ?? DateTime.UtcNow,
+            sourceTransactionId,
+            sourceBlockHeight,
+            sourceBlockId);
+    }
 }
