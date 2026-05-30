@@ -2666,10 +2666,10 @@ namespace HushServerNode.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb");
 
-                    b.Property<Guid>("OfficialResultArtifactId")
+                    b.Property<Guid?>("OfficialResultArtifactId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("OfficialResultSourceArtifactId")
+                    b.Property<Guid?>("OfficialResultSourceArtifactId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("OutcomeStatus")
@@ -2703,10 +2703,10 @@ namespace HushServerNode.Migrations
                     b.Property<Guid?>("SourceTransactionId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("TallyReadyArtifactId")
+                    b.Property<Guid?>("TallyReadyArtifactId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("UnofficialResultArtifactId")
+                    b.Property<Guid?>("UnofficialResultArtifactId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");

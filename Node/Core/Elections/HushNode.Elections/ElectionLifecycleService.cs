@@ -2673,6 +2673,187 @@ public class ElectionLifecycleService : IElectionLifecycleService
         return result;
     }
 
+    public async Task<ElectionCommandResult> RecordFailedFinalizeContinuityDecisionAsync(
+        RecordFailedFinalizeContinuityDecisionRequest request)
+    {
+        var validationErrors = ValidateRecordFailedFinalizeContinuityDecisionRequest(request);
+        if (validationErrors.Count > 0)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Failed-finalize continuity decision request is incomplete.",
+                validationErrors);
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateWritable(IsolationLevel.Serializable);
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var election = await repository.GetElectionForUpdateAsync(request.ElectionId);
+
+        if (election is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotFound,
+                $"Election {request.ElectionId} was not found.");
+        }
+
+        if (!string.Equals(election.OwnerPublicAddress, request.ActorPublicAddress, StringComparison.Ordinal))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Forbidden,
+                "Only the owner can record a failed-finalize continuity decision in FEAT-155 v1.");
+        }
+
+        if (!string.Equals(request.AuthorityRole, ElectionGovernedOutcomeConstants.ElectionOwnerAuthorityRole, StringComparison.Ordinal))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotSupported,
+                "FEAT-155 v1 only supports ElectionOwner failed-finalize authority.");
+        }
+
+        if (!string.Equals(request.AuthoritySource, ElectionGovernedOutcomeConstants.Feat140AuthoritySource, StringComparison.Ordinal))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.NotSupported,
+                "FEAT-155 v1 only supports FEAT-140 failed-finalize authority source.");
+        }
+
+        if (election.LifecycleState != ElectionLifecycleState.Closed)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.InvalidState,
+                "Failed-finalize continuity decisions are only allowed from the closed state.");
+        }
+
+        if (election.CloseArtifactId != request.ExpectedCloseArtifactId)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Failed-finalize continuity request does not match the election's current close artifact.");
+        }
+
+        var expectedTallyReadyArtifactId = NormalizeOptionalGuidReference(request.ExpectedTallyReadyArtifactId);
+        if (expectedTallyReadyArtifactId.HasValue &&
+            election.TallyReadyArtifactId != expectedTallyReadyArtifactId)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Failed-finalize continuity request does not match the election's current tally-ready artifact.");
+        }
+
+        if (await repository.GetLatestGovernedOutcomeDecisionAsync(election.ElectionId) is not null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "A governed outcome decision already exists for this election.");
+        }
+
+        if (election.OfficialResultArtifactId.HasValue ||
+            await repository.GetResultArtifactAsync(election.ElectionId, ElectionResultArtifactKind.Official) is not null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "The official result artifact already exists for this election.");
+        }
+
+        var boundaryArtifacts = await repository.GetBoundaryArtifactsAsync(election.ElectionId);
+        var closeArtifact = boundaryArtifacts.FirstOrDefault(x =>
+            x.Id == request.ExpectedCloseArtifactId &&
+            x.ArtifactType == ElectionBoundaryArtifactType.Close);
+        if (closeArtifact is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Failed-finalize continuity requires the exact close boundary artifact to exist.");
+        }
+
+        if (expectedTallyReadyArtifactId.HasValue &&
+            !boundaryArtifacts.Any(x =>
+                x.Id == expectedTallyReadyArtifactId.Value &&
+                x.ArtifactType == ElectionBoundaryArtifactType.TallyReady))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.DependencyBlocked,
+                "Failed-finalize continuity requires the exact tally-ready boundary artifact when one is referenced.");
+        }
+
+        if (election.FinalizeArtifactId.HasValue ||
+            boundaryArtifacts.Any(x => x.ArtifactType == ElectionBoundaryArtifactType.Finalize))
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "A finalize boundary artifact already exists for this election.");
+        }
+
+        if (await repository.GetSealedReportPackageAsync(election.ElectionId) is not null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.Conflict,
+                "A sealed report package already exists for this election.");
+        }
+
+        var keyLostDecisionIds = NormalizeGuidReferences(request.KeyLostTrusteeDecisionIds);
+        var keyLostDecisions = new List<ElectionTrusteeContinuityDecisionRecord>();
+        foreach (var keyLostDecisionId in keyLostDecisionIds)
+        {
+            var keyLostDecision = await repository.GetTrusteeContinuityDecisionAsync(keyLostDecisionId);
+            if (keyLostDecision is null ||
+                keyLostDecision.ElectionId != election.ElectionId ||
+                keyLostDecision.ContinuityStatus != ElectionTrusteeContinuityStatus.KeyLost)
+            {
+                return ElectionCommandResult.Failure(
+                    ElectionCommandErrorCode.DependencyBlocked,
+                    $"KeyLost trustee continuity decision {keyLostDecisionId} was not found for this election.");
+            }
+
+            keyLostDecisions.Add(keyLostDecision);
+        }
+
+        var recordedAt = DateTime.UtcNow;
+        var decision = ElectionModelFactory.CreateFailedFinalizeContinuityDecision(
+            election,
+            request.ActorPublicAddress,
+            request.AuthorityRole,
+            request.AuthoritySource,
+            request.Feat140HandoffRef,
+            request.Feat140HandoffHash,
+            request.AuthorityDecisionRef,
+            request.AuthorityDecisionHash,
+            request.GovernanceRuleRef,
+            closeArtifact.Id,
+            request.PublicSummary,
+            request.MissingFinalizeEvidenceRefs,
+            request.ContinuityIncidentEvidenceRefs,
+            request.AvailableTrusteeAcknowledgementRefs,
+            keyLostDecisions.Select(x => x.Id).ToArray(),
+            expectedTallyReadyArtifactId,
+            request.RemedyRuleRef,
+            recordedAt,
+            recordedAt,
+            request.SourceTransactionId,
+            request.SourceBlockHeight,
+            request.SourceBlockId);
+
+        if (!decision.HasFailedFinalizeContinuityEvidence)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Failed-finalize continuity requires missing-finalize or continuity evidence.");
+        }
+
+        var updatedElection = election with
+        {
+            LastUpdatedAt = recordedAt,
+        };
+
+        await repository.SaveGovernedOutcomeDecisionAsync(decision);
+        await repository.SaveElectionAsync(updatedElection);
+        await unitOfWork.CommitAsync();
+
+        return ElectionCommandResult.Success(
+            updatedElection,
+            governedOutcomeDecision: decision);
+    }
+
     public async Task<ElectionCommandResult> RecordKeyLostTrusteeContinuityDecisionAsync(
         RecordKeyLostTrusteeContinuityDecisionRequest request)
     {
@@ -8557,6 +8738,69 @@ public class ElectionLifecycleService : IElectionLifecycleService
         return errors;
     }
 
+    private static IReadOnlyList<string> ValidateRecordFailedFinalizeContinuityDecisionRequest(
+        RecordFailedFinalizeContinuityDecisionRequest request)
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(request.ActorPublicAddress))
+        {
+            errors.Add("actor_public_address_required");
+        }
+
+        if (request.ExpectedCloseArtifactId == Guid.Empty)
+        {
+            errors.Add("expected_close_artifact_id_required");
+        }
+
+        if (request.ExpectedTallyReadyArtifactId == Guid.Empty)
+        {
+            errors.Add("expected_tally_ready_artifact_id_invalid");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.AuthorityRole))
+        {
+            errors.Add("authority_role_required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.AuthoritySource))
+        {
+            errors.Add("authority_source_required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Feat140HandoffRef))
+        {
+            errors.Add("feat140_handoff_ref_required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Feat140HandoffHash))
+        {
+            errors.Add("feat140_handoff_hash_required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.AuthorityDecisionRef))
+        {
+            errors.Add("authority_decision_ref_required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.AuthorityDecisionHash))
+        {
+            errors.Add("authority_decision_hash_required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.GovernanceRuleRef))
+        {
+            errors.Add("governance_rule_ref_required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.PublicSummary))
+        {
+            errors.Add("public_summary_required");
+        }
+
+        return errors;
+    }
+
     private static IReadOnlyList<string> ValidateAcceptFixedUnofficialResultWithAnomalyRequest(
         AcceptFixedUnofficialResultWithAnomalyRequest request)
     {
@@ -8632,6 +8876,11 @@ public class ElectionLifecycleService : IElectionLifecycleService
                 .Where(x => x != Guid.Empty)
                 .Distinct()
                 .ToArray();
+
+    private static Guid? NormalizeOptionalGuidReference(Guid? reference) =>
+        reference is null || reference == Guid.Empty
+            ? null
+            : reference;
 
     private static AbnormalFinalizationReportPackageEvidenceInput BuildAbnormalFinalizationEvidenceInput(
         ElectionGovernedOutcomeDecisionRecord decision)

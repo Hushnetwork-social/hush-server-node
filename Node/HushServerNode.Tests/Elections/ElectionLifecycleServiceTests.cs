@@ -5929,6 +5929,168 @@ public class ElectionLifecycleServiceTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-155")]
+    public async Task RecordFailedFinalizeContinuityDecisionAsync_WithAcceptedEvidence_PersistsFailedFinalizeDecision()
+    {
+        var store = new ElectionStore();
+        var setup = SeedClosedElectionForFailedFinalize(store);
+        var service = CreateService(store);
+        var keyLostDecision = ElectionModelFactory.CreateKeyLostTrusteeContinuityDecision(
+            setup.Election.ElectionId,
+            "trustee-a",
+            "Alice",
+            "governance:decision:key-lost",
+            "continuity-decision-hash",
+            "governance-rule:trustee-continuity-v1",
+            ["incident:key-lost:1"],
+            "owner-address");
+        store.TrusteeContinuityDecisions.Add(keyLostDecision);
+
+        var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
+            CreateRecordFailedFinalizeContinuityDecisionRequest(setup, keyLostDecision.Id));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Election!.LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+        result.Election.OfficialResultArtifactId.Should().BeNull();
+        result.Election.FinalizeArtifactId.Should().BeNull();
+        result.GovernedOutcomeDecision.Should().NotBeNull();
+        result.GovernedOutcomeDecision!.DecisionType.Should()
+            .Be(ElectionGovernedOutcomeDecisionType.RecordFailedFinalizeContinuity);
+        result.GovernedOutcomeDecision.OutcomeStatus.Should().Be(ElectionOutcomeStatus.FailedToFinalize);
+        result.GovernedOutcomeDecision.CleanFinalization.Should().BeFalse();
+        result.GovernedOutcomeDecision.FinalizationMode.Should().Be(ElectionGovernedOutcomeFinalizationMode.FailedFinalization);
+        result.GovernedOutcomeDecision.CloseArtifactId.Should().Be(setup.CloseArtifact.Id);
+        result.GovernedOutcomeDecision.OfficialResultArtifactId.Should().BeNull();
+        result.GovernedOutcomeDecision.FinalizeArtifactId.Should().BeNull();
+        result.GovernedOutcomeDecision.KeyLostTrusteeDecisionIds.Should().Equal(keyLostDecision.Id);
+
+        store.GovernedOutcomeDecisions.Should().ContainSingle();
+        store.ResultArtifacts.Should().BeEmpty();
+        store.BoundaryArtifacts.Should().NotContain(x => x.ArtifactType == ElectionBoundaryArtifactType.Finalize);
+        store.ReportPackages.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-155")]
+    public async Task RecordFailedFinalizeContinuityDecisionAsync_WithUnauthorizedActor_ReturnsForbidden()
+    {
+        var store = new ElectionStore();
+        var setup = SeedClosedElectionForFailedFinalize(store);
+        var service = CreateService(store);
+
+        var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
+            CreateRecordFailedFinalizeContinuityDecisionRequest(setup, actorPublicAddress: "other-address"));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.Forbidden);
+        store.GovernedOutcomeDecisions.Should().BeEmpty();
+        store.Elections[setup.Election.ElectionId].LifecycleState.Should().Be(ElectionLifecycleState.Closed);
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-155")]
+    public async Task RecordFailedFinalizeContinuityDecisionAsync_WithoutFailedFinalizeEvidence_ReturnsValidationFailed()
+    {
+        var store = new ElectionStore();
+        var setup = SeedClosedElectionForFailedFinalize(store);
+        var service = CreateService(store);
+
+        var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
+            CreateRecordFailedFinalizeContinuityDecisionRequest(
+                setup,
+                missingFinalizeEvidenceRefs: [],
+                continuityIncidentEvidenceRefs: [],
+                availableTrusteeAcknowledgementRefs: []));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.ValidationFailed);
+        store.GovernedOutcomeDecisions.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-155")]
+    public async Task RecordFailedFinalizeContinuityDecisionAsync_WhenDecisionAlreadyExists_ReturnsConflict()
+    {
+        var store = new ElectionStore();
+        var setup = SeedClosedElectionForFailedFinalize(store);
+        var service = CreateService(store);
+        store.GovernedOutcomeDecisions.Add(ElectionModelFactory.CreateFailedFinalizeContinuityDecision(
+            setup.Election,
+            "owner-address",
+            ElectionGovernedOutcomeConstants.ElectionOwnerAuthorityRole,
+            ElectionGovernedOutcomeConstants.Feat140AuthoritySource,
+            "feat140:handoff",
+            "feat140-hash",
+            "governance:decision:failed-finalize",
+            "authority-hash",
+            "governance-rule:failed-finalize-v1",
+            setup.CloseArtifact.Id,
+            "Clean finalization could not be verified.",
+            missingFinalizeEvidenceRefs: ["missing:clean-finalization-proof"]));
+
+        var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
+            CreateRecordFailedFinalizeContinuityDecisionRequest(setup));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+        store.GovernedOutcomeDecisions.Should().ContainSingle();
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-155")]
+    public async Task RecordFailedFinalizeContinuityDecisionAsync_FromFinalizedElection_ReturnsInvalidState()
+    {
+        var store = new ElectionStore();
+        var setup = SeedClosedElectionForFailedFinalize(store, ElectionLifecycleState.Finalized);
+        var service = CreateService(store);
+
+        var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
+            CreateRecordFailedFinalizeContinuityDecisionRequest(setup));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.InvalidState);
+        store.GovernedOutcomeDecisions.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-155")]
+    public async Task RecordFailedFinalizeContinuityDecisionAsync_WithOfficialResultConflict_ReturnsConflict()
+    {
+        var store = new ElectionStore();
+        var setup = SeedClosedElectionForFailedFinalize(store);
+        store.Elections[setup.Election.ElectionId] = setup.Election with
+        {
+            OfficialResultArtifactId = Guid.NewGuid(),
+        };
+        var service = CreateService(store);
+
+        var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
+            CreateRecordFailedFinalizeContinuityDecisionRequest(setup));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+        store.GovernedOutcomeDecisions.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-155")]
+    public async Task RecordFailedFinalizeContinuityDecisionAsync_WithSealedReportPackage_ReturnsConflict()
+    {
+        var store = new ElectionStore();
+        var setup = SeedClosedElectionForFailedFinalize(store);
+        var sealedPackage = CreateSealedFailedFinalizeReportPackage(setup.Election, setup.CloseArtifact.Id);
+        store.ReportPackages[sealedPackage.Id] = sealedPackage;
+        var service = CreateService(store);
+
+        var result = await service.RecordFailedFinalizeContinuityDecisionAsync(
+            CreateRecordFailedFinalizeContinuityDecisionRequest(setup));
+
+        result.IsSuccess.Should().BeFalse();
+        result.ErrorCode.Should().Be(ElectionCommandErrorCode.Conflict);
+        store.GovernedOutcomeDecisions.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task FinalizeElectionAsync_AfterCatalogUpdate_UsesSealedProtocolPackageBindingInReportPackage()
     {
         var store = new ElectionStore();
@@ -6376,6 +6538,70 @@ public class ElectionLifecycleServiceTests
             closeResult.EligibilitySnapshot);
     }
 
+    private static FailedFinalizeClosedElectionContext SeedClosedElectionForFailedFinalize(
+        ElectionStore store,
+        ElectionLifecycleState lifecycleState = ElectionLifecycleState.Closed)
+    {
+        var now = DateTime.UtcNow;
+        var closedElection = CreateTrusteeElection(requiredApprovalCount: 1) with
+        {
+            LifecycleState = ElectionLifecycleState.Closed,
+            ClosedAt = now,
+            LastUpdatedAt = now,
+        };
+        var closeArtifact = ElectionModelFactory.CreateBoundaryArtifact(
+            ElectionBoundaryArtifactType.Close,
+            closedElection,
+            recordedByPublicAddress: "owner-address",
+            recordedAt: now,
+            acceptedBallotCount: 0,
+            acceptedBallotSetHash: Encoding.UTF8.GetBytes("feat155-accepted-ballot-set"),
+            publishedBallotCount: 0,
+            publishedBallotStreamHash: Encoding.UTF8.GetBytes("feat155-published-ballot-stream"),
+            finalEncryptedTallyHash: Encoding.UTF8.GetBytes("feat155-final-encrypted-tally"));
+        var storedElection = closedElection with
+        {
+            LifecycleState = lifecycleState,
+            CloseArtifactId = closeArtifact.Id,
+        };
+
+        store.Elections[storedElection.ElectionId] = storedElection;
+        store.BoundaryArtifacts.Add(closeArtifact);
+
+        return new FailedFinalizeClosedElectionContext(storedElection, closeArtifact);
+    }
+
+    private static ElectionReportPackageRecord CreateSealedFailedFinalizeReportPackage(
+        ElectionRecord election,
+        Guid closeArtifactId)
+    {
+        var now = DateTime.UtcNow;
+        return new ElectionReportPackageRecord(
+            Guid.NewGuid(),
+            election.ElectionId,
+            AttemptNumber: 1,
+            PreviousAttemptId: null,
+            FinalizationSessionId: null,
+            TallyReadyArtifactId: null,
+            UnofficialResultArtifactId: null,
+            OfficialResultArtifactId: null,
+            FinalizeArtifactId: null,
+            CloseBoundaryArtifactId: closeArtifactId,
+            CloseEligibilitySnapshotId: null,
+            FinalizationReleaseEvidenceId: null,
+            ElectionReportPackageStatus.Sealed,
+            FrozenEvidenceHash: Encoding.UTF8.GetBytes("feat155-frozen-evidence"),
+            FrozenEvidenceFingerprint: "feat155-frozen-evidence",
+            PackageHash: Encoding.UTF8.GetBytes("feat155-package-hash"),
+            ArtifactCount: 1,
+            FailureCode: null,
+            FailureReason: null,
+            AttemptedAt: now,
+            SealedAt: now,
+            AttemptedByPublicAddress: "owner-address",
+            PackageKind: ElectionReportPackageKind.FailedFinalize);
+    }
+
     private static AcceptFixedUnofficialResultWithAnomalyRequest CreateAcceptFixedUnofficialResultWithAnomalyRequest(
         AdminFinalizeReadyContext setup,
         Guid? keyLostDecisionId = null,
@@ -6405,6 +6631,34 @@ public class ElectionLifecycleServiceTests
             RemedyRuleRef: "remedy-rule:key-lost-v1",
             SourceTransactionId: Guid.NewGuid(),
             SourceBlockHeight: 146,
+            SourceBlockId: Guid.NewGuid());
+
+    private static RecordFailedFinalizeContinuityDecisionRequest CreateRecordFailedFinalizeContinuityDecisionRequest(
+        FailedFinalizeClosedElectionContext setup,
+        Guid? keyLostDecisionId = null,
+        string actorPublicAddress = "owner-address",
+        IReadOnlyList<string>? missingFinalizeEvidenceRefs = null,
+        IReadOnlyList<string>? continuityIncidentEvidenceRefs = null,
+        IReadOnlyList<string>? availableTrusteeAcknowledgementRefs = null,
+        string? authoritySource = null) =>
+        new(
+            setup.Election.ElectionId,
+            actorPublicAddress,
+            setup.CloseArtifact.Id,
+            "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-feat155-handoff.json",
+            "1551401551401551401551401551401551401551401551401551401551401551",
+            "governance:decision:failed-finalize",
+            "authority-decision-hash",
+            "governance-rule:failed-finalize-continuity-v1",
+            "Clean finalization could not be verified. No official result is produced.",
+            missingFinalizeEvidenceRefs ?? ["missing:clean-finalization-proof"],
+            continuityIncidentEvidenceRefs ?? ["incident:failed-finalize:1"],
+            availableTrusteeAcknowledgementRefs ?? ["ack:available-trustee:1"],
+            keyLostDecisionId.HasValue ? [keyLostDecisionId.Value] : [],
+            AuthoritySource: authoritySource ?? ElectionGovernedOutcomeConstants.Feat140AuthoritySource,
+            RemedyRuleRef: "remedy-rule:customer-owned-remedy-v1",
+            SourceTransactionId: Guid.NewGuid(),
+            SourceBlockHeight: 155,
             SourceBlockId: Guid.NewGuid());
 
     private static RecordKeyLostTrusteeContinuityDecisionRequest CreateRecordKeyLostTrusteeContinuityDecisionRequest(
@@ -8284,6 +8538,10 @@ public class ElectionLifecycleServiceTests
         byte[] FinalEncryptedTallyHash,
         ElectionEligibilitySnapshotRecord CloseEligibilitySnapshot);
 
+    private sealed record FailedFinalizeClosedElectionContext(
+        ElectionRecord Election,
+        ElectionBoundaryArtifactRecord CloseArtifact);
+
     private sealed class FakeElectionResultCryptoService(
         IReadOnlyList<int> decodedCounts,
         byte[] finalEncryptedTallyHash) : IElectionResultCryptoService
@@ -9610,6 +9868,16 @@ public class ElectionLifecycleServiceTests
                         x.ElectionId == electionId &&
                         x.Status != ElectionReportPackageStatus.SupersededByVoid)
                     .OrderByDescending(x => x.AttemptedAt)
+                    .ThenByDescending(x => x.AttemptNumber)
+                    .FirstOrDefault());
+
+        public Task<ElectionReportPackageRecord?> GetSealedReportPackageAsync(ElectionId electionId) =>
+            Task.FromResult(
+                store.ReportPackages.Values
+                    .Where(x =>
+                        x.ElectionId == electionId &&
+                        x.Status == ElectionReportPackageStatus.Sealed)
+                    .OrderByDescending(x => x.SealedAt ?? x.AttemptedAt)
                     .ThenByDescending(x => x.AttemptNumber)
                     .FirstOrDefault());
 
