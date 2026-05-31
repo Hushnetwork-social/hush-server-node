@@ -206,6 +206,8 @@ public class EncryptedElectionEnvelopeContentHandler(
                 IsValidFinalizeElectionAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.RecordKeyLostTrusteeContinuityDecision =>
                 IsValidRecordKeyLostTrusteeContinuityDecisionAction(decryptedEnvelope, signatory),
+            EncryptedElectionEnvelopeActionTypes.RecordFailedFinalizeContinuityDecision =>
+                IsValidRecordFailedFinalizeContinuityDecisionAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.AcceptFixedUnofficialResultWithAnomaly =>
                 IsValidAcceptFixedUnofficialResultWithAnomalyAction(decryptedEnvelope, signatory),
             EncryptedElectionEnvelopeActionTypes.VoidElection =>
@@ -1393,6 +1395,123 @@ public class EncryptedElectionEnvelopeContentHandler(
             new SignatureInfo(signatory, decryptedEnvelope.Transaction.UserSignature!.Signature));
 
         return _finalizeElectionContentHandler.ValidateAndSign(signedTransaction) is not null;
+    }
+
+    private bool IsValidRecordFailedFinalizeContinuityDecisionAction(
+        DecryptedElectionEnvelope<SignedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope,
+        string signatory)
+    {
+        var transactionId = decryptedEnvelope.Transaction.TransactionId.Value;
+        var action = decryptedEnvelope.DeserializeAction<RecordFailedFinalizeContinuityDecisionActionPayload>();
+        if (action is null ||
+            !HasMatchingActor(signatory, action.ActorPublicAddress) ||
+            action.ExpectedCloseArtifactId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(action.Feat140HandoffRef) ||
+            string.IsNullOrWhiteSpace(action.Feat140HandoffHash) ||
+            string.IsNullOrWhiteSpace(action.AuthorityDecisionRef) ||
+            string.IsNullOrWhiteSpace(action.AuthorityDecisionHash) ||
+            string.IsNullOrWhiteSpace(action.GovernanceRuleRef) ||
+            string.IsNullOrWhiteSpace(action.PublicSummary))
+        {
+            return false;
+        }
+
+        if (!string.Equals(
+                action.Feat140HandoffHash.Trim(),
+                ElectionGovernedOutcomeConstants.Feat146AcceptedFeat140HandoffHash,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "failed_finalize_feat140_handoff_hash_mismatch",
+                "FEAT-140 governance-boundary handoff hash does not match the accepted FEAT-155 input.");
+        }
+
+        if (!string.Equals(action.AuthorityRole, ElectionGovernedOutcomeConstants.ElectionOwnerAuthorityRole, StringComparison.Ordinal))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "failed_finalize_authority_role_unsupported",
+                "FEAT-155 v1 only supports ElectionOwner failed-finalize authority.");
+        }
+
+        if (!string.Equals(action.AuthoritySource, ElectionGovernedOutcomeConstants.Feat140AuthoritySource, StringComparison.Ordinal))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "failed_finalize_authority_source_unsupported",
+                "FEAT-155 v1 only supports FEAT-140 failed-finalize authority source.");
+        }
+
+        var hasFailedFinalizeEvidence =
+            action.MissingFinalizeEvidenceRefs?.Any(x => !string.IsNullOrWhiteSpace(x)) == true ||
+            action.ContinuityIncidentEvidenceRefs?.Any(x => !string.IsNullOrWhiteSpace(x)) == true ||
+            action.KeyLostTrusteeDecisionIds?.Any(x => x != Guid.Empty) == true;
+        if (!hasFailedFinalizeEvidence)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "failed_finalize_evidence_missing",
+                "Failed-finalize continuity requires missing-finalize or continuity evidence.");
+        }
+
+        using var unitOfWork = _unitOfWorkProvider.CreateReadOnly();
+        var repository = unitOfWork.GetRepository<IElectionsRepository>();
+        var electionId = decryptedEnvelope.Transaction.Payload.ElectionId;
+        var election = repository.GetElectionAsync(electionId).GetAwaiter().GetResult();
+        if (election is null ||
+            election.LifecycleState != ElectionLifecycleState.Closed ||
+            !string.Equals(election.OwnerPublicAddress, signatory, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var expectedTallyReadyArtifactId =
+            action.ExpectedTallyReadyArtifactId == Guid.Empty ? null : action.ExpectedTallyReadyArtifactId;
+        if (election.CloseArtifactId != action.ExpectedCloseArtifactId ||
+            (expectedTallyReadyArtifactId.HasValue && election.TallyReadyArtifactId != expectedTallyReadyArtifactId))
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "failed_finalize_artifact_mismatch",
+                "Failed-finalize continuity request does not match the current close or tally-ready artifacts.");
+        }
+
+        if (repository.GetLatestGovernedOutcomeDecisionAsync(electionId).GetAwaiter().GetResult() is not null ||
+            election.OfficialResultArtifactId.HasValue ||
+            election.FinalizeArtifactId.HasValue ||
+            repository.GetResultArtifactAsync(electionId, ElectionResultArtifactKind.Official).GetAwaiter().GetResult() is not null)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "failed_finalize_duplicate_or_finalized",
+                "A governed outcome decision, official result, or finalize artifact already exists for this election.");
+        }
+
+        var sealedReportPackage = repository.GetSealedReportPackageAsync(electionId).GetAwaiter().GetResult();
+        if (sealedReportPackage is not null)
+        {
+            return RejectWithValidationFailure(
+                transactionId,
+                "failed_finalize_sealed_report_exists",
+                "A sealed report package already exists for this election.");
+        }
+
+        foreach (var keyLostDecisionId in (action.KeyLostTrusteeDecisionIds ?? Array.Empty<Guid>()).Where(x => x != Guid.Empty).Distinct())
+        {
+            var keyLostDecision = repository.GetTrusteeContinuityDecisionAsync(keyLostDecisionId).GetAwaiter().GetResult();
+            if (keyLostDecision is null ||
+                keyLostDecision.ElectionId != electionId ||
+                keyLostDecision.ContinuityStatus != ElectionTrusteeContinuityStatus.KeyLost)
+            {
+                return RejectWithValidationFailure(
+                    transactionId,
+                    "failed_finalize_key_lost_decision_missing",
+                    "Referenced KeyLost trustee continuity decision was not found for this election.");
+            }
+        }
+
+        return true;
     }
 
     private bool IsValidAcceptFixedUnofficialResultWithAnomalyAction(

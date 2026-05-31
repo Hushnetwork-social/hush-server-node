@@ -302,6 +302,141 @@ public sealed class ElectionReportPackageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "FEAT-155")]
+    [Trait("Category", "HV-INT-FEAT-155")]
+    [Trait("Category", "TwinTest")]
+    [Trait("Category", "NON_E2E")]
+    public async Task RecordFailedFinalizeContinuity_WithClosedTallyReadyElection_PreservesClosedStateAndCanVoid()
+    {
+        var client = await StartClientAsync();
+        var context = await CreateClosedElectionReadyForFinalizeAsync(
+            client,
+            "FEAT-155 Failed-Finalize Continuity",
+            castSubmissionIdempotencyKey: "feat155-failed-finalize-cast-001");
+        var electionId = new ElectionId(Guid.Parse(context.ElectionId));
+        var tallyReadyElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+
+        var failedFinalizeSubmitResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.RecordFailedFinalizeContinuityDecision(
+                TestIdentities.Alice,
+                electionId,
+                Guid.Parse(tallyReadyElection.Election.CloseArtifactId),
+                "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-feat155-handoff.json",
+                ElectionGovernedOutcomeConstants.Feat146AcceptedFeat140HandoffHash,
+                "governance:decision:failed-finalize:feat155-integration",
+                "f155000000000000000000000000000000000000000000000000000000000001",
+                "governance-rule:failed-finalize-continuity-v1",
+                "The owner recorded failed-finalize continuity because clean finalization could not complete.",
+                missingFinalizeEvidenceRefs: ["missing-finalize:feat155-integration"],
+                continuityIncidentEvidenceRefs: ["continuity:feat155-integration"],
+                availableTrusteeAcknowledgementRefs: ["trustee-ack:feat155-integration"],
+                expectedTallyReadyArtifactId: Guid.Parse(tallyReadyElection.Election.TallyReadyArtifactId),
+                remedyRuleRef: "governance-rule:recovery-or-void-v1"));
+        failedFinalizeSubmitResponse.Successfull.Should().BeTrue(failedFinalizeSubmitResponse.Message);
+
+        var afterFailedFinalize = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        afterFailedFinalize.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Closed);
+        afterFailedFinalize.Election.OfficialResultArtifactId.Should().BeNullOrWhiteSpace();
+        afterFailedFinalize.Election.FinalizeArtifactId.Should().BeNullOrWhiteSpace();
+
+        Guid governedOutcomeDecisionId;
+        await using (var scope = _node!.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<HushNodeDbContext>();
+            var governedDecision = await dbContext.Set<ElectionGovernedOutcomeDecisionRecord>()
+                .SingleAsync(x => x.ElectionId == electionId);
+
+            governedOutcomeDecisionId = governedDecision.Id;
+            governedDecision.DecisionType.Should().Be(ElectionGovernedOutcomeDecisionType.RecordFailedFinalizeContinuity);
+            governedDecision.OutcomeStatus.Should().Be(ElectionOutcomeStatus.FailedToFinalize);
+            governedDecision.CleanFinalization.Should().BeFalse();
+            governedDecision.FinalizationMode.Should().Be(ElectionGovernedOutcomeFinalizationMode.FailedFinalization);
+            governedDecision.OfficialResultArtifactId.Should().BeNull();
+            governedDecision.FinalizeArtifactId.Should().BeNull();
+            governedDecision.HasFailedFinalizeContinuityEvidence.Should().BeTrue();
+
+            var sealedPackageExists = await dbContext.Set<ElectionReportPackageRecord>()
+                .AnyAsync(x =>
+                    x.ElectionId == electionId &&
+                    x.Status == ElectionReportPackageStatus.Sealed);
+            sealedPackageExists.Should().BeFalse();
+        }
+
+        var voidEvidenceReference = ElectionModelFactory.CreateVoidEvidenceReference(
+            ElectionVoidEvidenceReferenceKind.ExternalGovernance,
+            "governed-outcome:failed-finalize-continuity",
+            externalReference: $"governed-outcome:{governedOutcomeDecisionId:N}",
+            referenceHash: "sha256:feat155-failed-finalize-continuity");
+        var voidSubmitResponse = await SubmitBlockchainTransactionAsync(
+            TestTransactionFactory.VoidElection(
+                TestIdentities.Alice,
+                electionId,
+                "ElectionOwner voided this election after failed-finalize continuity confirmed no clean final result.",
+                [voidEvidenceReference]));
+        voidSubmitResponse.Successfull.Should().BeTrue(voidSubmitResponse.Message);
+
+        var voidedElection = await ReloadElectionAsync(client, context.ElectionId, TestIdentities.Alice);
+        voidedElection.Election.LifecycleState.Should().Be(ElectionLifecycleStateProto.Voided);
+        voidedElection.Election.OfficialResultArtifactId.Should().BeNullOrWhiteSpace();
+        voidedElection.Election.FinalizeArtifactId.Should().BeNullOrWhiteSpace();
+
+        var ownerResult = await GetElectionResultViewAsync(client, context.ElectionId, TestIdentities.Alice);
+        ownerResult.Success.Should().BeTrue(ownerResult.ErrorMessage);
+        ownerResult.LatestReportPackage.Should().NotBeNull();
+        ownerResult.LatestReportPackage!.PackageKind.Should().Be(ElectionReportPackageKindProto.ReportPackageVoid);
+        ownerResult.VisibleReportArtifacts.Should().Contain(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactMachineVoidPublicStatus);
+        ownerResult.VisibleReportArtifacts.Should().NotContain(x =>
+            x.ArtifactKind == ElectionReportArtifactKindProto.ReportArtifactHumanResultReport);
+        ownerResult.VerificationPackageStatus.Should().NotBeNull();
+        ownerResult.VerificationPackageStatus!.Status.Should().Be(
+            ElectionVerificationPackageStatusProto.VerificationPackageVoided);
+
+        var publicExport = await ExportElectionVerificationPackageAsync(
+            client,
+            context.ElectionId,
+            TestIdentities.Alice,
+            ElectionVerificationPackageViewProto.VerificationPackagePublicAnonymous);
+        publicExport.Success.Should().BeTrue(publicExport.ErrorMessage);
+        publicExport.Files.Select(x => x.RelativePath).Should().Contain([
+            VerificationPackageFileNames.VoidDecision,
+            VerificationPackageFileNames.PublicVoidSummary,
+            VerificationPackageFileNames.VoidPublicStatus,
+        ]);
+        publicExport.Files.Select(x => x.RelativePath).Should().NotContain([
+            VerificationPackageFileNames.AcceptedBallotSet,
+            VerificationPackageFileNames.PublishedBallotStream,
+            VerificationPackageFileNames.RestrictedHistoricalUnofficialResult,
+        ]);
+
+        using var voidDecision = ParsePackageJson(publicExport, VerificationPackageFileNames.VoidDecision);
+        var publicEvidenceReference = voidDecision.RootElement
+            .GetProperty("evidenceReferences")
+            .EnumerateArray()
+            .Should()
+            .ContainSingle(x =>
+                x.GetProperty("referenceKind").GetString() == ElectionVoidEvidenceReferenceKind.ExternalGovernance.ToString() &&
+                x.GetProperty("referenceId").GetString() == "governed-outcome:failed-finalize-continuity")
+            .Subject;
+        publicEvidenceReference.GetProperty("referenceHash").GetString()
+            .Should()
+            .Be("sha256:feat155-failed-finalize-continuity");
+
+        using var packageDirectory = new TemporaryPackageDirectory();
+        WriteVerificationPackageToDirectory(publicExport, packageDirectory.PackagePath);
+        var verifierOutputPath = Path.Combine(packageDirectory.PackagePath, "verifier-output-local");
+        var verification = await new HushVotingPackageVerifier().VerifyAsync(new(
+            packageDirectory.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1,
+            verifierOutputPath));
+
+        verification.ExitCode.Should().Be(VerificationExitCodes.Pass, DescribeFailures(verification));
+        verification.Output.Results.Should().Contain(x =>
+            x.ResultCode == VerificationResultCodes.ElectionVoided &&
+            x.Status == VerificationCheckStatus.Warn);
+    }
+
+    [Fact]
     [Trait("Category", "FEAT-143")]
     [Trait("Category", "FEAT-144")]
     [Trait("Category", "HV-INT-FEAT-143")]

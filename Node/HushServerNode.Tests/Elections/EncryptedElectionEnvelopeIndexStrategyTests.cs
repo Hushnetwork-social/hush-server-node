@@ -194,6 +194,68 @@ public class EncryptedElectionEnvelopeIndexStrategyTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-155")]
+    public async Task HandleAsync_WithRecordFailedFinalizeContinuityEnvelope_ForwardsFailedFinalizeRequest()
+    {
+        var electionId = ElectionId.NewElectionId;
+        var transaction = CreateValidatedTransaction(electionId);
+        var closeArtifactId = Guid.NewGuid();
+        var tallyReadyArtifactId = Guid.NewGuid();
+        var keyLostDecisionId = Guid.NewGuid();
+        var action = new RecordFailedFinalizeContinuityDecisionActionPayload(
+            "owner-address",
+            closeArtifactId,
+            "feat-140-handoff.json",
+            ElectionGovernedOutcomeConstants.Feat146AcceptedFeat140HandoffHash,
+            "governance:decision:failed-finalize",
+            "f155000000000000000000000000000000000000000000000000000000000001",
+            "governance-rule:failed-finalize-continuity-v1",
+            "The owner recorded failed-finalize continuity because finalization could not complete.",
+            MissingFinalizeEvidenceRefs: ["missing-finalize:record-1"],
+            ContinuityIncidentEvidenceRefs: ["continuity:record-1"],
+            AvailableTrusteeAcknowledgementRefs: ["trustee-ack:available-1"],
+            KeyLostTrusteeDecisionIds: [keyLostDecisionId],
+            ExpectedTallyReadyArtifactId: tallyReadyArtifactId,
+            RemedyRuleRef: "governance-rule:recovery-or-void-v1");
+        var election = CreateElection(electionId) with { LifecycleState = ElectionLifecycleState.Closed };
+        RecordFailedFinalizeContinuityDecisionRequest? capturedRequest = null;
+
+        var lifecycleService = new Mock<IElectionLifecycleService>();
+        lifecycleService
+            .Setup(x => x.RecordFailedFinalizeContinuityDecisionAsync(It.IsAny<RecordFailedFinalizeContinuityDecisionRequest>()))
+            .Callback<RecordFailedFinalizeContinuityDecisionRequest>(request => capturedRequest = request)
+            .ReturnsAsync(ElectionCommandResult.Success(election));
+
+        var sut = CreateIndexStrategy(
+            transaction,
+            EncryptedElectionEnvelopeActionTypes.RecordFailedFinalizeContinuityDecision,
+            action,
+            lifecycleService.Object);
+
+        await sut.HandleAsync(transaction);
+
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.ElectionId.Should().Be(electionId);
+        capturedRequest.ActorPublicAddress.Should().Be("owner-address");
+        capturedRequest.ExpectedCloseArtifactId.Should().Be(closeArtifactId);
+        capturedRequest.ExpectedTallyReadyArtifactId.Should().Be(tallyReadyArtifactId);
+        capturedRequest.Feat140HandoffRef.Should().Be(action.Feat140HandoffRef);
+        capturedRequest.Feat140HandoffHash.Should().Be(action.Feat140HandoffHash);
+        capturedRequest.AuthorityDecisionRef.Should().Be(action.AuthorityDecisionRef);
+        capturedRequest.AuthorityDecisionHash.Should().Be(action.AuthorityDecisionHash);
+        capturedRequest.GovernanceRuleRef.Should().Be(action.GovernanceRuleRef);
+        capturedRequest.PublicSummary.Should().Be(action.PublicSummary);
+        capturedRequest.MissingFinalizeEvidenceRefs.Should().ContainSingle("missing-finalize:record-1");
+        capturedRequest.ContinuityIncidentEvidenceRefs.Should().ContainSingle("continuity:record-1");
+        capturedRequest.AvailableTrusteeAcknowledgementRefs.Should().ContainSingle("trustee-ack:available-1");
+        capturedRequest.KeyLostTrusteeDecisionIds.Should().ContainSingle(x => x == keyLostDecisionId);
+        capturedRequest.RemedyRuleRef.Should().Be(action.RemedyRuleRef);
+        capturedRequest.SourceTransactionId.Should().Be(transaction.TransactionId.Value);
+        capturedRequest.SourceBlockHeight.Should().Be(42);
+        capturedRequest.SourceBlockId.Should().Be(TestBlockId.Value);
+    }
+
+    [Fact]
     [Trait("Category", "FEAT-138")]
     public async Task HandleAsync_WithRetryVoidPublicationEnvelope_ForwardsRetryRequest()
     {

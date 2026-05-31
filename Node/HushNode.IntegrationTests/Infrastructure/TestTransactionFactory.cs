@@ -958,6 +958,44 @@ internal static class TestTransactionFactory
         return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
     }
 
+    public static string RecordFailedFinalizeContinuityDecision(
+        TestIdentity owner,
+        ElectionId electionId,
+        Guid expectedCloseArtifactId,
+        string feat140HandoffRef,
+        string feat140HandoffHash,
+        string authorityDecisionRef,
+        string authorityDecisionHash,
+        string governanceRuleRef,
+        string publicSummary,
+        IReadOnlyList<string>? missingFinalizeEvidenceRefs = null,
+        IReadOnlyList<string>? continuityIncidentEvidenceRefs = null,
+        IReadOnlyList<string>? availableTrusteeAcknowledgementRefs = null,
+        IReadOnlyList<Guid>? keyLostTrusteeDecisionIds = null,
+        Guid? expectedTallyReadyArtifactId = null,
+        string? remedyRuleRef = null)
+    {
+        var actionEnvelope = new EncryptedElectionActionEnvelope(
+            EncryptedElectionEnvelopeActionTypes.RecordFailedFinalizeContinuityDecision,
+            JsonSerializer.SerializeToElement(new RecordFailedFinalizeContinuityDecisionActionPayload(
+                owner.PublicSigningAddress,
+                expectedCloseArtifactId,
+                feat140HandoffRef,
+                feat140HandoffHash,
+                authorityDecisionRef,
+                authorityDecisionHash,
+                governanceRuleRef,
+                publicSummary,
+                missingFinalizeEvidenceRefs,
+                continuityIncidentEvidenceRefs,
+                availableTrusteeAcknowledgementRefs,
+                keyLostTrusteeDecisionIds,
+                expectedTallyReadyArtifactId,
+                RemedyRuleRef: remedyRuleRef)));
+
+        return CreateEncryptedElectionEnvelopeTransaction(owner, electionId, actionEnvelope);
+    }
+
     public static string AcceptFixedUnofficialResultWithAnomaly(
         TestIdentity owner,
         ElectionId electionId,

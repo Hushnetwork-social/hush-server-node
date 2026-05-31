@@ -81,6 +81,8 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 await HandleFinalizeElectionAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.RecordKeyLostTrusteeContinuityDecision =>
                 await HandleRecordKeyLostTrusteeContinuityDecisionAsync(decryptedEnvelope),
+            EncryptedElectionEnvelopeActionTypes.RecordFailedFinalizeContinuityDecision =>
+                await HandleRecordFailedFinalizeContinuityDecisionAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.AcceptFixedUnofficialResultWithAnomaly =>
                 await HandleAcceptFixedUnofficialResultWithAnomalyAsync(decryptedEnvelope),
             EncryptedElectionEnvelopeActionTypes.VoidElection =>
@@ -764,6 +766,41 @@ public class EncryptedElectionEnvelopeIndexStrategy(
                 AuthorityRole: action.AuthorityRole,
                 AuthoritySource: action.AuthoritySource,
                 FinalityRuleRef: action.FinalityRuleRef,
+                RemedyRuleRef: action.RemedyRuleRef,
+                SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
+                SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
+                SourceBlockId: _blockchainCache.CurrentBlockId.Value));
+    }
+
+    private async Task<ElectionCommandResult> HandleRecordFailedFinalizeContinuityDecisionAsync(
+        DecryptedElectionEnvelope<ValidatedTransaction<EncryptedElectionEnvelopePayload>> decryptedEnvelope)
+    {
+        var action = decryptedEnvelope.DeserializeAction<RecordFailedFinalizeContinuityDecisionActionPayload>();
+        if (action is null)
+        {
+            return ElectionCommandResult.Failure(
+                ElectionCommandErrorCode.ValidationFailed,
+                "Record failed-finalize continuity decision action payload could not be deserialized.");
+        }
+
+        return await _electionLifecycleService.RecordFailedFinalizeContinuityDecisionAsync(
+            new RecordFailedFinalizeContinuityDecisionRequest(
+                ElectionId: decryptedEnvelope.Transaction.Payload.ElectionId,
+                ActorPublicAddress: action.ActorPublicAddress,
+                ExpectedCloseArtifactId: action.ExpectedCloseArtifactId,
+                Feat140HandoffRef: action.Feat140HandoffRef,
+                Feat140HandoffHash: action.Feat140HandoffHash,
+                AuthorityDecisionRef: action.AuthorityDecisionRef,
+                AuthorityDecisionHash: action.AuthorityDecisionHash,
+                GovernanceRuleRef: action.GovernanceRuleRef,
+                PublicSummary: action.PublicSummary,
+                MissingFinalizeEvidenceRefs: action.MissingFinalizeEvidenceRefs,
+                ContinuityIncidentEvidenceRefs: action.ContinuityIncidentEvidenceRefs,
+                AvailableTrusteeAcknowledgementRefs: action.AvailableTrusteeAcknowledgementRefs,
+                KeyLostTrusteeDecisionIds: action.KeyLostTrusteeDecisionIds,
+                ExpectedTallyReadyArtifactId: action.ExpectedTallyReadyArtifactId,
+                AuthorityRole: action.AuthorityRole,
+                AuthoritySource: action.AuthoritySource,
                 RemedyRuleRef: action.RemedyRuleRef,
                 SourceTransactionId: decryptedEnvelope.Transaction.TransactionId.Value,
                 SourceBlockHeight: _blockchainCache.LastBlockIndex.Value,
