@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace FailedFinalizeContinuityRehearsalPromoter;
@@ -9,6 +12,7 @@ public static class FailedFinalizeContinuityContracts
     public const string CurrentRegisterId = "RDY-REG-v0.1.5";
     public const string DimensionId = "RDY-DIM-009";
     public const string PromotionOwner = "FEAT-156";
+    public const string CanonicalizationVersion = "hush-json-canonical-v1";
 
     private static readonly string[] RequiredSourceProperties =
     [
@@ -36,6 +40,51 @@ public static class FailedFinalizeContinuityContracts
         var node = JsonNode.Parse(File.ReadAllText(path));
         return node as JsonObject ??
             throw new InvalidOperationException($"{path} is not a JSON object.");
+    }
+
+    public static JsonObject LoadSource(FailedFinalizeContinuityPromotionPaths paths, string? sourceInput = null)
+    {
+        var sourcePath = string.IsNullOrWhiteSpace(sourceInput)
+            ? paths.DefaultSourceInput
+            : sourceInput;
+        var fullPath = Path.IsPathRooted(sourcePath)
+            ? sourcePath
+            : Path.Combine(paths.WorkspaceRoot, sourcePath);
+
+        return ReadJsonObject(Path.GetFullPath(fullPath));
+    }
+
+    public static IReadOnlyList<string> ValidateSchemaSet(string schemasRoot)
+    {
+        var errors = new List<string>();
+        if (!Directory.Exists(schemasRoot))
+        {
+            return [$"Schema root does not exist: {schemasRoot}"];
+        }
+
+        var schemaFiles = Directory.GetFiles(schemasRoot, "*.schema.json", SearchOption.TopDirectoryOnly);
+        if (schemaFiles.Length == 0)
+        {
+            errors.Add($"No schema files were found in {schemasRoot}.");
+        }
+
+        foreach (var schemaFile in schemaFiles.OrderBy(path => path, StringComparer.Ordinal))
+        {
+            try
+            {
+                var schema = ReadJsonObject(schemaFile);
+                if (!schema.ContainsKey("$schema") || !schema.ContainsKey("title"))
+                {
+                    errors.Add($"{schemaFile} is missing $schema or title.");
+                }
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException or IOException)
+            {
+                errors.Add($"{schemaFile} is not a readable JSON schema: {ex.Message}");
+            }
+        }
+
+        return errors;
     }
 
     public static IReadOnlyList<string> ValidateSource(JsonObject source)
@@ -157,6 +206,42 @@ public static class FailedFinalizeContinuityContracts
         value is null ||
         !value.TryGetPropertyValue(property, out var node) ||
         node is null;
+
+    public static JsonNode? Clone(JsonNode? value) =>
+        value?.DeepClone();
+
+    public static JsonArray ToJsonArray(IEnumerable<string> values) =>
+        new(values.Select(value => JsonValue.Create(value)).ToArray<JsonNode?>());
+
+    public static string CanonicalJson(JsonNode node) =>
+        node.ToJsonString(new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            WriteIndented = true,
+        }) + Environment.NewLine;
+
+    public static string NormalizeLineEndings(string value) =>
+        value.Replace("\r\n", "\n").Replace("\r", "\n");
+
+    public static string Sha256Hex(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(NormalizeLineEndings(value)));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    public static string FormatTimestamp(DateTimeOffset value) =>
+        value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+
+    public static void EnsurePathUnder(string root, string candidate, string label)
+    {
+        var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var fullCandidate = Path.GetFullPath(candidate);
+        if (!fullCandidate.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new FailedFinalizeContinuityPromotionException(
+                "FEAT-155 failed-finalize continuity path validation failed.",
+                [$"{label} resolves outside expected root: {fullCandidate}"]);
+        }
+    }
 
     private static void ValidateBaselineRegister(JsonObject source, List<string> errors)
     {
