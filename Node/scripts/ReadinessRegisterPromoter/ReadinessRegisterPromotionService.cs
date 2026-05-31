@@ -472,7 +472,7 @@ public sealed class ReadinessRegisterPromotionService
 
         if (claimPolicy is not null)
         {
-            ValidateClaimPolicy(claimPolicy, errors);
+            ValidateClaimPolicy(register, claimPolicy, errors);
         }
 
         if (dimensions is not null)
@@ -516,9 +516,11 @@ public sealed class ReadinessRegisterPromotionService
                     "not_for_publication",
                     "not_ready_for_public_claim",
                     "pilot_only_with_limitations",
+                    "production_rollout_with_limitations",
                     "public_claim_blocked",
                 },
                 errors);
+            ValidateProductionRolloutBoundary(register, errors);
         }
 
         if (signoffPolicy is not null)
@@ -565,7 +567,7 @@ public sealed class ReadinessRegisterPromotionService
         }
     }
 
-    private static void ValidateClaimPolicy(JsonObject claimPolicy, List<string> errors)
+    private static void ValidateClaimPolicy(JsonObject register, JsonObject claimPolicy, List<string> errors)
     {
         if (GetIntOrDefault(claimPolicy, "minimumConfidenceScore") != 70)
         {
@@ -577,7 +579,18 @@ public sealed class ReadinessRegisterPromotionService
             errors.Add("claimPolicy.strongerTargetScore must be 80.");
         }
 
-        RequireFixed(claimPolicy, "strongestAllowedV1Claim", "friendly_organization_pilot", errors);
+        var strongestAllowedV1Claim = GetStringOrDefault(claimPolicy, "strongestAllowedV1Claim");
+        if (strongestAllowedV1Claim is not ("friendly_organization_pilot" or "production_organizational_rollout"))
+        {
+            errors.Add("claimPolicy.strongestAllowedV1Claim must be friendly_organization_pilot or production_organizational_rollout.");
+        }
+
+        if (strongestAllowedV1Claim == "production_organizational_rollout" &&
+            GetStringOrDefault(register, "registerVersion") != "v0.1.6")
+        {
+            errors.Add("production_organizational_rollout policy ceiling is only valid for RDY-REG-v0.1.6.");
+        }
+
         if (claimPolicy["publicScoreAllowed"]?.GetValue<bool>() != false)
         {
             errors.Add("claimPolicy.publicScoreAllowed must be false.");
@@ -593,6 +606,102 @@ public sealed class ReadinessRegisterPromotionService
             {
                 errors.Add("claimPolicy.numericScoreVisibility must include internal and restricted_reviewer only.");
             }
+        }
+    }
+
+    private static void ValidateProductionRolloutBoundary(JsonObject register, List<string> errors)
+    {
+        var generatedViews = GetRequiredObject(register, "generatedViews");
+        var publicationStatus = GetStringOrDefault(generatedViews, "publicSafePublicationStatus");
+        var claimPolicy = GetRequiredObject(register, "claimPolicy");
+        var policyCeiling = GetStringOrDefault(claimPolicy, "strongestAllowedV1Claim");
+        var strongestAllowedClaim = GetCurrentStrongestAllowedClaim(register);
+        var productionMode =
+            publicationStatus == "production_rollout_with_limitations" ||
+            policyCeiling == "production_organizational_rollout" ||
+            strongestAllowedClaim == "production_organizational_rollout";
+
+        if (!productionMode)
+        {
+            return;
+        }
+
+        if (publicationStatus != "production_rollout_with_limitations")
+        {
+            errors.Add("production_organizational_rollout requires publicSafePublicationStatus production_rollout_with_limitations.");
+        }
+
+        if (policyCeiling != "production_organizational_rollout")
+        {
+            errors.Add("production_rollout_with_limitations requires claimPolicy.strongestAllowedV1Claim production_organizational_rollout.");
+        }
+
+        if (GetStringOrDefault(register, "registerVersion") != "v0.1.6")
+        {
+            errors.Add("production_rollout_with_limitations is only valid for RDY-REG-v0.1.6.");
+        }
+
+        var total = GetIntOrDefault(GetRequiredObject(register, "score"), "total");
+        if (total < 80)
+        {
+            errors.Add("production_rollout_with_limitations requires score.total to be at least 80.");
+        }
+
+        var productionClaim = FindClaimLevel(register, "production_organizational_rollout");
+        if (productionClaim is null)
+        {
+            errors.Add("production_organizational_rollout claim level is required.");
+        }
+        else
+        {
+            if (GetStringOrDefault(productionClaim, "blockerSeverity") != "amber" ||
+                GetStringOrDefault(productionClaim, "status") != "allowed_with_limitations")
+            {
+                errors.Add("production_organizational_rollout must be amber and allowed_with_limitations.");
+            }
+
+            if (string.IsNullOrWhiteSpace(GetStringOrDefault(productionClaim, "limitationWording")))
+            {
+                errors.Add("production_organizational_rollout must include limitation wording.");
+            }
+
+            if (GetStringOrDefault(productionClaim, "blockerSeverity") == "green" ||
+                GetStringOrDefault(productionClaim, "status") == "allowed")
+            {
+                errors.Add("production_organizational_rollout cannot be green or unqualified allowed in FEAT-156.");
+            }
+        }
+
+        var friendlyClaim = FindClaimLevel(register, "friendly_organization_pilot");
+        if (friendlyClaim is null ||
+            GetStringOrDefault(friendlyClaim, "blockerSeverity") != "amber" ||
+            GetStringOrDefault(friendlyClaim, "status") != "allowed_with_limitations")
+        {
+            errors.Add("friendly_organization_pilot must remain amber allowed_with_limitations under production rollout promotion.");
+        }
+
+        var publicStateClaim = FindClaimLevel(register, "public_or_state_election");
+        if (publicStateClaim is null ||
+            GetStringOrDefault(publicStateClaim, "blockerSeverity") != "red" ||
+            GetStringOrDefault(publicStateClaim, "status") != "blocked")
+        {
+            errors.Add("public_or_state_election must remain red and blocked.");
+        }
+
+        var productionBlocker = FindBlocker(register, "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001");
+        if (productionBlocker is null ||
+            GetStringOrDefault(productionBlocker, "severity") != "amber" ||
+            GetStringOrDefault(productionBlocker, "status") != "open")
+        {
+            errors.Add("RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001 must be amber/open for limited production rollout.");
+        }
+
+        var publicStateBlocker = FindBlocker(register, "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001");
+        if (publicStateBlocker is null ||
+            GetStringOrDefault(publicStateBlocker, "severity") != "red" ||
+            GetStringOrDefault(publicStateBlocker, "status") != "open")
+        {
+            errors.Add("RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001 must remain red/open.");
         }
     }
 
@@ -1306,7 +1415,11 @@ public sealed class ReadinessRegisterPromotionService
         sb.AppendLine();
         sb.AppendLine("## Approved Public-Safe Claim Wording");
         sb.AppendLine();
-        if (strongestAllowedClaim == "friendly_organization_pilot")
+        if (strongestAllowedClaim == "production_organizational_rollout")
+        {
+            sb.AppendLine("HushVoting may be discussed for limited organizational rollout with explicit limitations. It is not presented as public or state election readiness, customer authority approval, external certification, or a complete meeting-management product.");
+        }
+        else if (strongestAllowedClaim == "friendly_organization_pilot")
         {
             sb.AppendLine("HushVoting may be discussed for controlled friendly-organization pilot use with explicit limitations. It is not presented as production rollout software, public/state election software, legal sufficiency validation, or independent certification.");
         }
@@ -1318,7 +1431,12 @@ public sealed class ReadinessRegisterPromotionService
         sb.AppendLine();
         sb.AppendLine("## Known Limitations");
         sb.AppendLine();
-        if (strongestAllowedClaim == "friendly_organization_pilot")
+        if (strongestAllowedClaim == "production_organizational_rollout")
+        {
+            sb.AppendLine("- Limited organizational rollout use must keep residual risks, customer-owned governance responsibilities, and external prerequisites visible.");
+            sb.AppendLine("- Repeated operating history, customer-site variance, public/state prerequisites, customer authority review, and external validation remain limitations.");
+        }
+        else if (strongestAllowedClaim == "friendly_organization_pilot")
         {
             sb.AppendLine("- Friendly-organization pilot use must remain controlled, bounded, and privately reviewed.");
             sb.AppendLine("- Broader operating history, deployment variance, failed-finalize coverage, accessibility/device breadth, and customer-specific governance remain limitations.");
@@ -1329,11 +1447,18 @@ public sealed class ReadinessRegisterPromotionService
             sb.AppendLine("- Pilot readiness remains blocked until the minimum confidence band and remaining pilot-critical evidence gates are satisfied.");
         }
 
-        sb.AppendLine("- Production and public/state election readiness are not claimed in this version.");
+        if (strongestAllowedClaim == "production_organizational_rollout")
+        {
+            sb.AppendLine("- Public or state election readiness is not claimed in this version.");
+        }
+        else
+        {
+            sb.AppendLine("- Production and public/state election readiness are not claimed in this version.");
+        }
         sb.AppendLine();
         sb.AppendLine("## Non-Claims");
         sb.AppendLine();
-        sb.AppendLine("- This summary is not certification, legal approval, public election authorization, or independent validation.");
+        sb.AppendLine("- This summary does not certify deployment, authorize public elections, or validate customer governance obligations.");
         sb.AppendLine("- This summary does not publish private readiness scoring or restricted evidence.");
         sb.AppendLine();
         sb.AppendLine("## Public-Safe Evidence Categories");
@@ -1352,6 +1477,8 @@ public sealed class ReadinessRegisterPromotionService
     {
         return GetCurrentStrongestAllowedClaim(register) switch
         {
+            "production_organizational_rollout" =>
+                "Current go/no-go result: limited organizational rollout is allowed with limitations; public/state election readiness remains blocked.",
             "friendly_organization_pilot" =>
                 "Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout and public/state election readiness remain blocked.",
             "internal_non_binding_rehearsal" =>
@@ -1411,6 +1538,16 @@ public sealed class ReadinessRegisterPromotionService
 
     private static string JoinArray(JsonObject item, string propertyName) =>
         string.Join(", ", GetRequiredArray(item, propertyName).Select(x => x?.GetValue<string>()).Where(x => !string.IsNullOrWhiteSpace(x)));
+
+    private static JsonObject? FindClaimLevel(JsonObject register, string claimLevel) =>
+        GetRequiredArray(register, "claimLevels")
+            .Select(node => node?.AsObject())
+            .FirstOrDefault(claim => claim is not null && GetStringOrDefault(claim, "claimLevel") == claimLevel);
+
+    private static JsonObject? FindBlocker(JsonObject register, string blockerId) =>
+        GetRequiredArray(register, "blockers")
+            .Select(node => node?.AsObject())
+            .FirstOrDefault(blocker => blocker is not null && GetStringOrDefault(blocker, "blockerId") == blockerId);
 
     private static void ValidateGeneratedViews(IReadOnlyList<PromotedFile> promotedFiles, List<string> errors)
     {

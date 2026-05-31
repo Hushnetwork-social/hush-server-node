@@ -304,6 +304,73 @@ public sealed class ReadinessRegisterPromotionServiceTests
     }
 
     [Fact]
+    public void Promote_WithProductionRolloutLimitedRegister_DerivesProductionClaim()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        MutateRegisterForProductionRolloutLimitedClaim(paths);
+
+        var result = new ReadinessRegisterPromotionService().Promote(CreateOptions(
+            paths,
+            publicationStatus: null,
+            version: null));
+        var scorecard = File.ReadAllText(Path.Combine(result.VersionOutputRoot, ReadinessRegisterPromotionService.ScorecardFileName));
+        var publicSummary = File.ReadAllText(Path.Combine(result.VersionOutputRoot, ReadinessRegisterPromotionService.PublicSafeSummaryFileName));
+
+        result.RegisterVersion.Should().Be("v0.1.6");
+        result.RegisterVersionId.Should().Be("RDY-REG-v0.1.6");
+        result.TotalScore.Should().Be(80);
+        result.PublicationStatus.Should().Be("production_rollout_with_limitations");
+        result.StrongestAllowedClaim.Should().Be("production_organizational_rollout");
+        scorecard.Should().Contain("Current strongest allowed claim: production_organizational_rollout");
+        scorecard.Should().Contain("limited organizational rollout is allowed with limitations; public/state election readiness remains blocked.");
+        publicSummary.Should().Contain("limited organizational rollout with explicit limitations");
+        publicSummary.ToLowerInvariant().Should().NotContain("total score");
+    }
+
+    [Fact]
+    public void Promote_WithProductionRolloutScoreBelow80_FailsClosed()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        MutateRegisterForProductionRolloutLimitedClaim(paths, totalScore: 79);
+
+        var act = () => new ReadinessRegisterPromotionService().Promote(CreateOptions(
+            paths,
+            publicationStatus: null,
+            version: null));
+
+        act.Should().Throw<ReadinessRegisterPromotionException>()
+            .Where(x => x.Details.Any(detail => detail.Contains("production_rollout_with_limitations requires score.total to be at least 80", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Promote_WithPublicStateAllowedInProductionRegister_FailsClosed()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        MutateRegisterForProductionRolloutLimitedClaim(paths);
+        MutateRegister(paths, register =>
+        {
+            var publicStateClaim = FindClaim(register, "public_or_state_election");
+            publicStateClaim["blockerSeverity"] = "amber";
+            publicStateClaim["status"] = "allowed_with_limitations";
+            publicStateClaim["limitationWording"] = "Invalid test unlock.";
+        });
+
+        var act = () => new ReadinessRegisterPromotionService().Promote(CreateOptions(
+            paths,
+            publicationStatus: null,
+            version: null));
+
+        act.Should().Throw<ReadinessRegisterPromotionException>()
+            .Where(x => x.Details.Any(detail => detail.Contains("public_or_state_election must remain red and blocked", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void Promote_WithRedClaimAllowedWithLimitations_FailsClosed()
     {
         var tempRoot = CreateWorkspace();
@@ -338,11 +405,12 @@ public sealed class ReadinessRegisterPromotionServiceTests
         ReadinessRegisterPromotionPaths paths,
         bool validateOnly = false,
         bool checkOnly = false,
-        string? publicationStatus = "not_for_publication") =>
+        string? publicationStatus = "not_for_publication",
+        string? version = CurrentRegisterVersion) =>
         new(
             paths,
             "hushvoting-readiness-register",
-            CurrentRegisterVersion,
+            version,
             publicationStatus,
             validateOnly,
             Scaffold: false,
@@ -486,6 +554,64 @@ public sealed class ReadinessRegisterPromotionServiceTests
         });
     }
 
+    private static void MutateRegisterForProductionRolloutLimitedClaim(
+        ReadinessRegisterPromotionPaths paths,
+        int totalScore = 80)
+    {
+        MutateRegister(paths, register =>
+        {
+            register["registerVersion"] = "v0.1.6";
+            register["registerVersionId"] = "RDY-REG-v0.1.6";
+            register["sourceCommit"] = "feat-156-production-limited-unit-test";
+            register["score"]!.AsObject()["total"] = totalScore;
+            register["generatedViews"]!.AsObject()["publicSafePublicationStatus"] = "production_rollout_with_limitations";
+            register["claimPolicy"]!.AsObject()["strongestAllowedV1Claim"] = "production_organizational_rollout";
+
+            foreach (var dimension in register["dimensions"]!.AsArray().Select(node => node!.AsObject()))
+            {
+                dimension["currentScore"] = 8;
+            }
+
+            if (totalScore < 80)
+            {
+                FindDimension(register, "RDY-DIM-010")["currentScore"] = 7;
+            }
+
+            var friendlyClaim = FindClaim(register, "friendly_organization_pilot");
+            friendlyClaim["blockerSeverity"] = "amber";
+            friendlyClaim["status"] = "allowed_with_limitations";
+            friendlyClaim["allowedWording"] = "HushVoting may be used for controlled friendly-organization pilot planning when limitations remain explicit and private readiness review is available.";
+            friendlyClaim["limitationWording"] = "Friendly-pilot readiness remains limited below production rollout and does not claim public/state election readiness, independent validation, or legal sufficiency.";
+            friendlyClaim["blockerIds"] = new JsonArray();
+
+            var productionClaim = FindClaim(register, "production_organizational_rollout");
+            productionClaim["blockerSeverity"] = "amber";
+            productionClaim["status"] = "allowed_with_limitations";
+            productionClaim["allowedWording"] = "HushVoting may support limited organizational rollout only when residual limits, customer-owned governance responsibilities, and public/state blockers remain visible.";
+            productionClaim["limitationWording"] = "Production rollout remains limited and does not claim public/state election readiness, customer authority approval, external certification, or complete meeting operations readiness.";
+            productionClaim["blockedWording"] = "";
+            productionClaim["publicSafeStatus"] = "production_rollout_with_limitations";
+            productionClaim["blockerIds"] = new JsonArray("RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001");
+
+            var publicStateClaim = FindClaim(register, "public_or_state_election");
+            publicStateClaim["blockerSeverity"] = "red";
+            publicStateClaim["status"] = "blocked";
+            publicStateClaim["blockedWording"] = "Public or state election readiness remains blocked and requires external authority prerequisites outside this promotion.";
+            publicStateClaim["blockerIds"] = new JsonArray("RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001");
+
+            var productionBlocker = FindBlocker(register, "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001");
+            productionBlocker["severity"] = "amber";
+            productionBlocker["status"] = "open";
+            productionBlocker["featureId"] = "FEAT-156";
+            productionBlocker["resolutionCriteria"] = "Limited production rollout remains amber until repeated operating history, customer-site variance evidence, independent validation, and legal/governance prerequisites are accepted.";
+
+            var publicStateBlocker = FindBlocker(register, "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001");
+            publicStateBlocker["severity"] = "red";
+            publicStateBlocker["status"] = "open";
+            publicStateBlocker["resolutionCriteria"] = "Public or state election readiness requires external authority, jurisdiction, certification, transparency, accessibility, procurement, and dispute-remedy prerequisites.";
+        });
+    }
+
     private static void WriteFeat150CleanupSource(ReadinessRegisterPromotionPaths paths)
     {
         var register = JsonNode.Parse(File.ReadAllText(paths.RegisterPath))!.AsObject();
@@ -615,6 +741,11 @@ public sealed class ReadinessRegisterPromotionServiceTests
         register["claimLevels"]!.AsArray()
             .Select(node => node!.AsObject())
             .Single(claim => claim["claimLevel"]!.GetValue<string>() == claimLevel);
+
+    private static JsonObject FindDimension(JsonObject register, string dimensionId) =>
+        register["dimensions"]!.AsArray()
+            .Select(node => node!.AsObject())
+            .Single(dimension => dimension["dimensionId"]!.GetValue<string>() == dimensionId);
 
     private static JsonObject FindBlocker(JsonObject register, string blockerId) =>
         register["blockers"]!.AsArray()
