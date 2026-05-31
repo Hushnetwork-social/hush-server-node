@@ -94,6 +94,52 @@ public record AbnormalFinalizationEvidenceArtifactRecord(
     string PublicSummary,
     DateTime DecidedAtUtc);
 
+public record FailedFinalizePublicStatusArtifactRecord(
+    string SchemaId,
+    string ElectionId,
+    string OutcomeStatus,
+    string PackageStatus,
+    string PublicSummary,
+    string PublicHash,
+    bool ContainsRestrictedDetails,
+    DateTime PublishedAt);
+
+public record FailedFinalizeVerifierResultArtifactRecord(
+    string SchemaId,
+    string ElectionId,
+    string ResultCode,
+    string OutcomeStatus,
+    bool CleanFinalization,
+    string FinalizationMode,
+    bool OfficialResultArtifactPresent,
+    bool CleanFinalPackagePresent,
+    bool FinalizeBoundaryArtifactPresent,
+    IReadOnlyList<string> MissingFinalizeEvidenceRefs,
+    IReadOnlyList<string> ContinuityEvidenceRefs,
+    IReadOnlyList<string> AvailableTrusteeAcknowledgementRefs,
+    string PublicSummary,
+    DateTime VerifiedAt);
+
+public record FailedFinalizePackageManifestRecord(
+    string SchemaId,
+    string PackageId,
+    string ElectionId,
+    string Status,
+    string OutcomeStatus,
+    string VerifierResultCode,
+    string PackageHashCanonicalization,
+    string PackageHash,
+    DateTime CreatedAt,
+    IReadOnlyList<FailedFinalizePackageManifestEntryRecord> Entries);
+
+public record FailedFinalizePackageManifestEntryRecord(
+    string Path,
+    string Sha256Hash,
+    string MediaType,
+    string AccessScope,
+    string ArtifactKind,
+    string Format);
+
 public record RestrictedRosterCheckoffArtifactRecord(
     string ElectionId,
     IReadOnlyList<RestrictedRosterCheckoffEntryRecord> Entries);

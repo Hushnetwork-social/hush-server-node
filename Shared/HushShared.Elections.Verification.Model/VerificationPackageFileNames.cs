@@ -120,5 +120,17 @@ public static class VerificationPackageFileNames
         RestrictedVoidEvidenceIndex,
         RestrictedHistoricalUnofficialResult,
     ];
+
+    public static IReadOnlyList<string> FailedFinalizePublicFiles { get; } =
+    [
+        FailedFinalizePublicStatus,
+        FailedFinalizeVerifierResult,
+        FailedFinalizePackageManifest,
+    ];
+
+    public static IReadOnlyList<string> FailedFinalizeRestrictedFiles { get; } =
+    [
+        RestrictedFailedFinalizeEvidenceIndex,
+    ];
 }
 
