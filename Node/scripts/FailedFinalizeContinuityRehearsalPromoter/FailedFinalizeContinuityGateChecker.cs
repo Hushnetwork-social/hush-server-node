@@ -23,20 +23,6 @@ public static class FailedFinalizeContinuityGateChecker
     public const string PackageValidationBlocker = "FEAT155-PACKAGE-VALIDATION-BLOCKED";
     public const string DownstreamHandoffBlocker = "FEAT155-DOWNSTREAM-HANDOFF-BLOCKED";
 
-    private static readonly string[] ForbiddenPublicMaterialNeedles =
-    [
-        "private key",
-        "vote choice",
-        "voter address",
-        "trustee secret",
-        "trustee share",
-        "local path",
-        "support transcript",
-        "file://",
-        "localhost",
-        "c:\\",
-    ];
-
     public static FailedFinalizeContinuityGateEvaluation Evaluate(JsonObject source)
     {
         var validationErrors = FailedFinalizeContinuityContracts.ValidateSource(source);
@@ -219,7 +205,7 @@ public static class FailedFinalizeContinuityGateChecker
         foreach (var sample in samples.OfType<JsonObject>())
         {
             var content = FailedFinalizeContinuityContracts.GetString(sample, "content");
-            if (ForbiddenPublicMaterialNeedles.Any(needle => content.Contains(needle, StringComparison.OrdinalIgnoreCase)))
+            if (!FailedFinalizeContinuityReviewerOutputGenerator.ScanPublicText(content).Passed)
             {
                 AddBlocker(blockers, diagnostics, PublicSafetyBlocker);
             }

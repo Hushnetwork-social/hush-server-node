@@ -111,6 +111,65 @@ public sealed class FailedFinalizeContinuityGateCheckerTests
         evaluation.Blockers.Should().Contain(FailedFinalizeContinuityGateChecker.PublicSafetyBlocker);
     }
 
+    [Fact]
+    public void ReviewerOutputs_PublicSummaryContainsRequiredNonClaimsAndNoRestrictedMaterial()
+    {
+        var source = LoadBaseline();
+
+        var outputs = FailedFinalizeContinuityReviewerOutputGenerator.Generate(
+            source,
+            changedFiles:
+            [
+                "hush-server-node/Node/scripts/FailedFinalizeContinuityRehearsalPromoter/FailedFinalizeContinuityReviewerOutputs.cs",
+                "hush-memory-bank/Features/03_IN_PROGRESS/FEAT-155-failed-finalize-continuity-rehearsal/FeatureTasks.md",
+            ]);
+
+        outputs.PublicSafetyScan.Passed.Should().BeTrue();
+        outputs.PublicSafeSummary.Should().Contain("No valid official result exists");
+        outputs.PublicSafeSummary.Should().Contain("Legal remedy sufficiency is not claimed");
+        outputs.PublicSafeSummary.Should().Contain("Production organizational rollout readiness is not claimed");
+        outputs.PublicSafeSummary.Should().NotContain("trustee secret");
+        outputs.PublicSafeSummary.Should().NotContain("vote choice");
+        outputs.NoUiBoundary.Status.Should().Be("confirmed");
+        outputs.NoUiBoundary.HasUiChanges.Should().BeFalse();
+
+        var restrictedIndex = JsonSerializer.Deserialize<FailedFinalizeRestrictedEvidenceIndexRecord>(
+            outputs.RestrictedEvidenceIndexJson,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        restrictedIndex.Visibility.Should().Be("restricted_owner_auditor");
+        restrictedIndex.Entries.Should().ContainSingle(entry =>
+            entry.EvidenceId == "FEAT155-RESTRICTED-CONTINUITY-INDEX" &&
+            entry.Purpose.Length > 0 &&
+            entry.Visibility == "restricted_owner_auditor" &&
+            entry.Sha256Hash.Length > 0);
+    }
+
+    [Fact]
+    public void ReviewerOutputs_PublicSafetyScanRejectsRestrictedMaterial()
+    {
+        var scan = FailedFinalizeContinuityReviewerOutputGenerator.ScanPublicText(
+            "Public status leaked a trustee secret and voter address.");
+
+        scan.Passed.Should().BeFalse();
+        scan.Findings.Should().Contain(x => x.Contains("trustee secret", StringComparison.OrdinalIgnoreCase));
+        scan.Findings.Should().Contain(x => x.Contains("voter address", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void NoUiBoundaryChecker_BlocksHushWebClientChangesWithoutDesign()
+    {
+        var evaluation = FailedFinalizeContinuityReviewerOutputGenerator.EvaluateNoUiBoundary(
+            [
+                "hush-web-client/src/app/elections/failed-finalize/page.tsx",
+                "hush-server-node/Node/scripts/FailedFinalizeContinuityRehearsalPromoter/FailedFinalizeContinuityReviewerOutputs.cs",
+            ]);
+
+        evaluation.Status.Should().Be("blocked");
+        evaluation.HasUiChanges.Should().BeTrue();
+        evaluation.ChangedUiFiles.Should().ContainSingle(path =>
+            path == "hush-web-client/src/app/elections/failed-finalize/page.tsx");
+    }
+
     private static JsonObject LoadBaseline() =>
         FailedFinalizeContinuityContracts.ReadJsonObject(
             Path.Combine(SourceRoot, "failed-finalize-continuity-source.json"));
