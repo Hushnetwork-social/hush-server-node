@@ -33,6 +33,11 @@ public static class VerificationResultCodes
     public const string AbnormalFinalizationEvidenceMissing = "abnormal_finalization_evidence_missing";
     public const string AbnormalFinalizationEvidenceInvalid = "abnormal_finalization_evidence_invalid";
     public const string AbnormalFinalizationClaimMismatch = "abnormal_finalization_claim_mismatch";
+    public const string FailedFinalizeContinuityValid = "failed_finalize_continuity_valid";
+    public const string FailedFinalizeEvidenceMissing = "failed_finalize_evidence_missing";
+    public const string FailedFinalizeEvidenceInvalid = "failed_finalize_evidence_invalid";
+    public const string FailedFinalizeClaimMismatch = "failed_finalize_claim_mismatch";
+    public const string FailedFinalizeCleanResultConflict = "failed_finalize_clean_result_conflict";
     public const string ProtocolPackageDraftPrivate = "protocol_package_draft_private";
     public const string AcceptedBallotInventoryHashMismatch = "accepted_ballot_inventory_hash_mismatch";
     public const string AcceptedBallotDuplicateNullifier = "accepted_ballot_duplicate_nullifier";

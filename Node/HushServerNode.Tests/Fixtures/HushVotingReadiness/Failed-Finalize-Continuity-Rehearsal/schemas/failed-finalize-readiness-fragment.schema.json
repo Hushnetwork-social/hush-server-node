@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hush.network/schemas/hushvoting/failed-finalize-readiness-fragment.schema.json",
+  "title": "HushVoting Failed-Finalize Readiness Fragment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "featureId",
+    "dimensionId",
+    "status",
+    "claimId",
+    "acceptanceGate",
+    "scoreEffect",
+    "blockersCleared",
+    "residualRisks",
+    "evidenceRefs",
+    "doesNotMutateRegister"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "failed-finalize-readiness-fragment.v1"
+    },
+    "featureId": {
+      "const": "FEAT-155"
+    },
+    "dimensionId": {
+      "const": "RDY-DIM-009"
+    },
+    "status": {
+      "enum": [
+        "accepted",
+        "blocked"
+      ]
+    },
+    "claimId": {
+      "const": "failed_finalize_continuity_rehearsal"
+    },
+    "acceptanceGate": {
+      "const": "AT-RDY-015"
+    },
+    "scoreEffect": {
+      "type": "object"
+    },
+    "blockersCleared": {
+      "type": "array"
+    },
+    "residualRisks": {
+      "type": "array"
+    },
+    "evidenceRefs": {
+      "type": "array"
+    },
+    "doesNotMutateRegister": {
+      "const": true
+    }
+  }
+}

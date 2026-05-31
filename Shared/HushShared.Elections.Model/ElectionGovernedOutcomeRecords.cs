@@ -30,10 +30,10 @@ public record ElectionGovernedOutcomeDecisionRecord(
     string? FinalityRuleRef,
     string? RemedyRuleRef,
     Guid CloseArtifactId,
-    Guid TallyReadyArtifactId,
-    Guid UnofficialResultArtifactId,
-    Guid OfficialResultArtifactId,
-    Guid OfficialResultSourceArtifactId,
+    Guid? TallyReadyArtifactId,
+    Guid? UnofficialResultArtifactId,
+    Guid? OfficialResultArtifactId,
+    Guid? OfficialResultSourceArtifactId,
     Guid? FinalizeArtifactId,
     IReadOnlyList<string> MissingFinalizeEvidenceRefs,
     IReadOnlyList<string> ContinuityIncidentEvidenceRefs,
@@ -79,20 +79,20 @@ public record ElectionGovernedOutcomeDecisionRecord(
     public Guid CloseArtifactId { get; init; } =
         RequireGuid(CloseArtifactId, nameof(CloseArtifactId));
 
-    public Guid TallyReadyArtifactId { get; init; } =
-        RequireGuid(TallyReadyArtifactId, nameof(TallyReadyArtifactId));
+    public Guid? TallyReadyArtifactId { get; init; } =
+        ValidateTallyReadyArtifactId(DecisionType, TallyReadyArtifactId);
 
-    public Guid UnofficialResultArtifactId { get; init; } =
-        RequireGuid(UnofficialResultArtifactId, nameof(UnofficialResultArtifactId));
+    public Guid? UnofficialResultArtifactId { get; init; } =
+        ValidateResultArtifactId(DecisionType, UnofficialResultArtifactId, nameof(UnofficialResultArtifactId));
 
-    public Guid OfficialResultArtifactId { get; init; } =
-        RequireGuid(OfficialResultArtifactId, nameof(OfficialResultArtifactId));
+    public Guid? OfficialResultArtifactId { get; init; } =
+        ValidateResultArtifactId(DecisionType, OfficialResultArtifactId, nameof(OfficialResultArtifactId));
 
-    public Guid OfficialResultSourceArtifactId { get; init; } =
-        RequireGuid(OfficialResultSourceArtifactId, nameof(OfficialResultSourceArtifactId));
+    public Guid? OfficialResultSourceArtifactId { get; init; } =
+        ValidateResultArtifactId(DecisionType, OfficialResultSourceArtifactId, nameof(OfficialResultSourceArtifactId));
 
     public Guid? FinalizeArtifactId { get; init; } =
-        FinalizeArtifactId == Guid.Empty ? null : FinalizeArtifactId;
+        ValidateFinalizeArtifactId(DecisionType, FinalizeArtifactId);
 
     public IReadOnlyList<string> MissingFinalizeEvidenceRefs { get; init; } =
         NormalizeReferenceList(MissingFinalizeEvidenceRefs);
@@ -132,9 +132,15 @@ public record ElectionGovernedOutcomeDecisionRecord(
         ContinuityIncidentEvidenceRefs.Count > 0 ||
         KeyLostTrusteeDecisionIds.Count > 0;
 
+    public bool HasFailedFinalizeContinuityEvidence =>
+        OutcomeStatus == ElectionOutcomeStatus.FailedToFinalize &&
+        HasAbnormalOutcomeEvidence;
+
     private static ElectionGovernedOutcomeDecisionType ValidateDecisionType(
         ElectionGovernedOutcomeDecisionType decisionType) =>
-        decisionType == ElectionGovernedOutcomeDecisionType.AcceptFixedUnofficialResultWithAnomaly
+        decisionType is
+            ElectionGovernedOutcomeDecisionType.AcceptFixedUnofficialResultWithAnomaly or
+            ElectionGovernedOutcomeDecisionType.RecordFailedFinalizeContinuity
             ? decisionType
             : throw new ArgumentOutOfRangeException(nameof(DecisionType), "Unsupported governed outcome decision type.");
 
@@ -147,6 +153,14 @@ public record ElectionGovernedOutcomeDecisionRecord(
         {
             throw new ArgumentException(
                 "Accepting a fixed unofficial result with anomaly must produce finalized-with-anomaly outcome status.",
+                nameof(OutcomeStatus));
+        }
+
+        if (decisionType == ElectionGovernedOutcomeDecisionType.RecordFailedFinalizeContinuity &&
+            outcomeStatus != ElectionOutcomeStatus.FailedToFinalize)
+        {
+            throw new ArgumentException(
+                "Recording failed-finalize continuity must produce failed-to-finalize outcome status.",
                 nameof(OutcomeStatus));
         }
 
@@ -165,6 +179,14 @@ public record ElectionGovernedOutcomeDecisionRecord(
                 nameof(CleanFinalization));
         }
 
+        if (decisionType == ElectionGovernedOutcomeDecisionType.RecordFailedFinalizeContinuity &&
+            cleanFinalization)
+        {
+            throw new ArgumentException(
+                "Failed-finalize governed outcome decisions cannot claim clean finalization.",
+                nameof(CleanFinalization));
+        }
+
         return cleanFinalization;
     }
 
@@ -177,6 +199,14 @@ public record ElectionGovernedOutcomeDecisionRecord(
         {
             throw new ArgumentException(
                 "Accepting a fixed unofficial result with anomaly must use abnormal finalization mode.",
+                nameof(FinalizationMode));
+        }
+
+        if (decisionType == ElectionGovernedOutcomeDecisionType.RecordFailedFinalizeContinuity &&
+            finalizationMode != ElectionGovernedOutcomeFinalizationMode.FailedFinalization)
+        {
+            throw new ArgumentException(
+                "Recording failed-finalize continuity must use failed-finalization mode.",
                 nameof(FinalizationMode));
         }
 
@@ -195,6 +225,14 @@ public record ElectionGovernedOutcomeDecisionRecord(
                 nameof(PreviousLifecycleState));
         }
 
+        if (decisionType == ElectionGovernedOutcomeDecisionType.RecordFailedFinalizeContinuity &&
+            previousLifecycleState != ElectionLifecycleState.Closed)
+        {
+            throw new ArgumentException(
+                "Failed-finalize continuity decisions can only start from a closed election.",
+                nameof(PreviousLifecycleState));
+        }
+
         return previousLifecycleState;
     }
 
@@ -210,6 +248,14 @@ public record ElectionGovernedOutcomeDecisionRecord(
                 nameof(ResultingLifecycleState));
         }
 
+        if (decisionType == ElectionGovernedOutcomeDecisionType.RecordFailedFinalizeContinuity &&
+            resultingLifecycleState != ElectionLifecycleState.Closed)
+        {
+            throw new ArgumentException(
+                "Failed-finalize continuity decisions must keep the lifecycle result as Closed.",
+                nameof(ResultingLifecycleState));
+        }
+
         return resultingLifecycleState;
     }
 
@@ -217,6 +263,60 @@ public record ElectionGovernedOutcomeDecisionRecord(
         value == Guid.Empty
             ? throw new ArgumentException("Value is required.", paramName)
             : value;
+
+    private static Guid? ValidateTallyReadyArtifactId(
+        ElectionGovernedOutcomeDecisionType decisionType,
+        Guid? value)
+    {
+        var normalized = NormalizeOptionalGuid(value);
+        if (decisionType == ElectionGovernedOutcomeDecisionType.AcceptFixedUnofficialResultWithAnomaly)
+        {
+            return normalized ?? throw new ArgumentException("Value is required.", nameof(TallyReadyArtifactId));
+        }
+
+        return normalized;
+    }
+
+    private static Guid? ValidateResultArtifactId(
+        ElectionGovernedOutcomeDecisionType decisionType,
+        Guid? value,
+        string paramName)
+    {
+        var normalized = NormalizeOptionalGuid(value);
+        if (decisionType == ElectionGovernedOutcomeDecisionType.AcceptFixedUnofficialResultWithAnomaly)
+        {
+            return normalized ?? throw new ArgumentException("Value is required.", paramName);
+        }
+
+        if (decisionType == ElectionGovernedOutcomeDecisionType.RecordFailedFinalizeContinuity &&
+            normalized.HasValue)
+        {
+            throw new ArgumentException(
+                "Failed-finalize governed outcome decisions cannot contain result artifact references.",
+                paramName);
+        }
+
+        return normalized;
+    }
+
+    private static Guid? ValidateFinalizeArtifactId(
+        ElectionGovernedOutcomeDecisionType decisionType,
+        Guid? value)
+    {
+        var normalized = NormalizeOptionalGuid(value);
+        if (decisionType == ElectionGovernedOutcomeDecisionType.RecordFailedFinalizeContinuity &&
+            normalized.HasValue)
+        {
+            throw new ArgumentException(
+                "Failed-finalize governed outcome decisions cannot contain finalize boundary artifact references.",
+                nameof(FinalizeArtifactId));
+        }
+
+        return normalized;
+    }
+
+    private static Guid? NormalizeOptionalGuid(Guid? value) =>
+        value is null || value == Guid.Empty ? null : value;
 
     private static IReadOnlyList<string> NormalizeReferenceList(IReadOnlyList<string>? values) =>
         values is null

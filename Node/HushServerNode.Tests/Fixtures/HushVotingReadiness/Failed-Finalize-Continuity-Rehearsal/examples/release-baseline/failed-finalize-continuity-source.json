@@ -1,0 +1,141 @@
+{
+  "schemaVersion": "failed-finalize-continuity-source.v1",
+  "sourceId": "FAILED-FINALIZE-CONTINUITY-FEAT-155-RELEASE-BASELINE",
+  "featureId": "FEAT-155",
+  "status": "accepted",
+  "generatedAt": "2026-05-31T00:00:00Z",
+  "baselineRegister": {
+    "registerVersionId": "RDY-REG-v0.1.5",
+    "registerStatus": "AcceptedInternal",
+    "dimensionId": "RDY-DIM-009",
+    "currentScore": 6,
+    "targetScore": 8,
+    "strongestAllowedClaim": "friendly_organization_pilot"
+  },
+  "productionLikeRunContext": {
+    "sourceFeature": "FEAT-154",
+    "sourcePackageRef": "hush-documents/PrivateServer_ElectronicVoting/Production-Like-Operational-Run-Evidence/package/production-like-operational-run-handoff.json",
+    "sourcePackageHash": "76ad000000000000000000000000000000000000000000000000000000000000",
+    "contextOnly": true
+  },
+  "governedOutcome": {
+    "decisionType": "record_failed_finalize_continuity",
+    "outcomeStatus": "failed_to_finalize",
+    "cleanFinalization": false,
+    "finalizationMode": "failed_finalization",
+    "previousLifecycleState": "Closed",
+    "resultingLifecycleState": "Closed",
+    "authorityRole": "ElectionOwner",
+    "authoritySource": "FEAT-140",
+    "feat140HandoffRef": "hush-documents/PrivateServer_ElectronicVoting/Legal-Governance-Boundary/package/legal-governance-boundary-feat155-handoff.json",
+    "feat140HandoffHash": "1551401551401551401551401551401551401551401551401551401551401551",
+    "authorityDecisionRef": "governance-authority-decision:feat155-release-baseline",
+    "authorityDecisionHash": "1550011550011550011550011550011550011550011550011550011550011550",
+    "governanceRuleRef": "governance-rule:failed-finalize-continuity-v1",
+    "remedyRuleRef": "governance-rule:customer-owned-remedy-v1",
+    "closeBoundaryRef": "election-boundary:close:feat155-release-baseline",
+    "tallyReadyBoundaryRef": null,
+    "officialResultRef": null,
+    "finalizeBoundaryRef": null,
+    "missingFinalizeEvidenceRefs": [
+      "missing:verifiable-clean-finalization-proof"
+    ],
+    "continuityEvidenceRefs": [
+      "continuity-incident:failed-finalize:feat155-release-baseline"
+    ],
+    "availableTrusteeAcknowledgementRefs": [
+      "trustee-continuity-ack:feat155-release-baseline"
+    ],
+    "optionalVoidContinuation": {
+      "usesFeat138": true,
+      "voidContinuationRecorded": true,
+      "voidPackageRef": "hush-documents/PrivateServer_ElectronicVoting/Void-Decision-Publication-Replacement/package/void-downstream-handoff.json"
+    },
+    "publicSummary": "Clean finalization could not be verified. No official result is produced by this failed-finalize continuity package."
+  },
+  "noCleanResult": {
+    "officialResultArtifactPresent": false,
+    "cleanFinalPackagePresent": false,
+    "finalizeBoundaryArtifactPresent": false,
+    "verifierResultCode": "failed_finalize_continuity_valid"
+  },
+  "publicSafeStatus": {
+    "artifactRef": "public/failed-finalize-status.json",
+    "outcomeStatus": "failed_to_finalize",
+    "packageStatus": "accepted",
+    "publicHash": "1550021550021550021550021550021550021550021550021550021550021550",
+    "containsRestrictedDetails": false
+  },
+  "restrictedEvidenceRefs": [
+    {
+      "evidenceId": "FEAT155-RESTRICTED-CONTINUITY-INDEX",
+      "path": "restricted/failed-finalize-restricted-evidence-index.json",
+      "sha256Hash": "1550031550031550031550031550031550031550031550031550031550031550"
+    }
+  ],
+  "packageValidation": {
+    "status": "accepted",
+    "canonicalizationVersion": "hush-json-canonical-v1",
+    "publicSafetyScan": "passed",
+    "packageHashValidation": "passed",
+    "blockedBy": []
+  },
+  "readinessProposal": {
+    "schemaVersion": "failed-finalize-score-proposal.v1",
+    "featureId": "FEAT-155",
+    "dimensionId": "RDY-DIM-009",
+    "status": "accepted",
+    "proposedScoreFrom": 6,
+    "proposedScoreTo": 8,
+    "scoreChangeAllowed": true,
+    "directRegisterMutation": false,
+    "promotionOwner": "FEAT-156",
+    "blockedBy": []
+  },
+  "downstreamHandoff": {
+    "schemaVersion": "failed-finalize-downstream-handoff.v1",
+    "featureId": "FEAT-155",
+    "status": "accepted",
+    "sourcePackageId": "FAILED-FINALIZE-CONTINUITY-FEAT-155-RELEASE-BASELINE",
+    "sourcePackageHash": "1550041550041550041550041550041550041550041550041550041550041550",
+    "consumers": [
+      "FEAT-148",
+      "FEAT-156"
+    ],
+    "registerPromotionOwner": "FEAT-156",
+    "directRegisterMutation": false,
+    "blockerEffect": {
+      "blockersCleared": [
+        "FEAT139-GOVERNED-FAILED-FINALIZE-MISSING",
+        "RDY-BLOCK-FRIENDLY_ORGANIZATION_PILOT-FAILED-FINALIZE-001"
+      ],
+      "blockersStillOpen": [
+        "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+        "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001"
+      ]
+    },
+    "residualRisks": [
+      "One continuity rehearsal is not repeated operating history.",
+      "Legal sufficiency remains customer-owned."
+    ],
+    "publicSafety": {
+      "publicArtifactContainsRestrictedDetails": false,
+      "restrictedEvidenceIndexAvailable": true
+    }
+  },
+  "publicArtifactSamples": [
+    {
+      "path": "public/failed-finalize-status.json",
+      "content": "Public status: failed_to_finalize. No official result was produced. Continuity package hash 1550041550041550041550041550041550041550041550041550041550041550."
+    }
+  ],
+  "residualRisks": [
+    "This package proves a controlled failed-finalize continuity path, not legal remedy sufficiency.",
+    "Production rollout promotion remains FEAT-156 scope."
+  ],
+  "signoff": {
+    "signedBy": "FEAT-155-autonomous-implementation",
+    "signedAt": "2026-05-31T00:00:00Z",
+    "acceptedFor": "internal_readiness"
+  }
+}

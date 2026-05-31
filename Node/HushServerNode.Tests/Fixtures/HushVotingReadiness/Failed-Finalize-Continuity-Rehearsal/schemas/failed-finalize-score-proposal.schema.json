@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hush.network/schemas/hushvoting/failed-finalize-score-proposal.schema.json",
+  "title": "HushVoting Failed-Finalize Score Proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "featureId",
+    "dimensionId",
+    "status",
+    "proposedScoreFrom",
+    "proposedScoreTo",
+    "scoreChangeAllowed",
+    "directRegisterMutation",
+    "promotionOwner",
+    "blockedBy"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "failed-finalize-score-proposal.v1"
+    },
+    "featureId": {
+      "const": "FEAT-155"
+    },
+    "dimensionId": {
+      "const": "RDY-DIM-009"
+    },
+    "status": {
+      "enum": [
+        "accepted",
+        "blocked"
+      ]
+    },
+    "proposedScoreFrom": {
+      "const": 6
+    },
+    "proposedScoreTo": {
+      "type": "integer",
+      "minimum": 6,
+      "maximum": 8
+    },
+    "scoreChangeAllowed": {
+      "type": "boolean"
+    },
+    "directRegisterMutation": {
+      "const": false
+    },
+    "promotionOwner": {
+      "const": "FEAT-156"
+    },
+    "blockedBy": {
+      "type": "array"
+    }
+  }
+}

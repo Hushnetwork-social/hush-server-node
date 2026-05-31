@@ -61,6 +61,9 @@ public interface IElectionLifecycleService
 
     Task<ElectionCommandResult> FinalizeElectionAsync(FinalizeElectionRequest request);
 
+    Task<ElectionCommandResult> RecordFailedFinalizeContinuityDecisionAsync(
+        RecordFailedFinalizeContinuityDecisionRequest request);
+
     Task<ElectionCommandResult> RecordKeyLostTrusteeContinuityDecisionAsync(
         RecordKeyLostTrusteeContinuityDecisionRequest request);
 
@@ -288,6 +291,28 @@ public record FinalizeElectionRequest(
     string ActorPublicAddress,
     byte[]? AcceptedBallotSetHash = null,
     byte[]? FinalEncryptedTallyHash = null,
+    Guid? SourceTransactionId = null,
+    long? SourceBlockHeight = null,
+    Guid? SourceBlockId = null);
+
+public record RecordFailedFinalizeContinuityDecisionRequest(
+    ElectionId ElectionId,
+    string ActorPublicAddress,
+    Guid ExpectedCloseArtifactId,
+    string Feat140HandoffRef,
+    string Feat140HandoffHash,
+    string AuthorityDecisionRef,
+    string AuthorityDecisionHash,
+    string GovernanceRuleRef,
+    string PublicSummary,
+    IReadOnlyList<string>? MissingFinalizeEvidenceRefs = null,
+    IReadOnlyList<string>? ContinuityIncidentEvidenceRefs = null,
+    IReadOnlyList<string>? AvailableTrusteeAcknowledgementRefs = null,
+    IReadOnlyList<Guid>? KeyLostTrusteeDecisionIds = null,
+    Guid? ExpectedTallyReadyArtifactId = null,
+    string AuthorityRole = ElectionGovernedOutcomeConstants.ElectionOwnerAuthorityRole,
+    string AuthoritySource = ElectionGovernedOutcomeConstants.Feat140AuthoritySource,
+    string? RemedyRuleRef = null,
     Guid? SourceTransactionId = null,
     long? SourceBlockHeight = null,
     Guid? SourceBlockId = null);

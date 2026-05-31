@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hush.network/schemas/hushvoting/failed-finalize-downstream-handoff.schema.json",
+  "title": "HushVoting Failed-Finalize Downstream Handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "featureId",
+    "status",
+    "sourcePackageId",
+    "sourcePackageHash",
+    "consumers",
+    "registerPromotionOwner",
+    "directRegisterMutation",
+    "blockerEffect",
+    "residualRisks",
+    "publicSafety"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "failed-finalize-downstream-handoff.v1"
+    },
+    "featureId": {
+      "const": "FEAT-155"
+    },
+    "status": {
+      "enum": [
+        "accepted",
+        "blocked"
+      ]
+    },
+    "sourcePackageId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sourcePackageHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "consumers": {
+      "type": "array",
+      "minItems": 2
+    },
+    "registerPromotionOwner": {
+      "const": "FEAT-156"
+    },
+    "directRegisterMutation": {
+      "const": false
+    },
+    "blockerEffect": {
+      "type": "object"
+    },
+    "residualRisks": {
+      "type": "array"
+    },
+    "publicSafety": {
+      "type": "object"
+    }
+  }
+}

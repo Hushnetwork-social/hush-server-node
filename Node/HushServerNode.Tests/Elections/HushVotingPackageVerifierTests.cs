@@ -90,6 +90,71 @@ public class HushVotingPackageVerifierTests
     }
 
     [Fact]
+    [Trait("Category", "FEAT-155")]
+    public async Task Verify_FailedFinalizePackage_ShouldReturnFailedFinalizeWarningWithoutClaimingCleanFinalization()
+    {
+        using var package = new TemporaryPackageDirectory();
+        await WriteFailedFinalizePackageArtifactsAsync(package.PackagePath);
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1));
+
+        result.ExitCode.Should().Be(0);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Warn);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == FailedFinalizeVerificationIds.ManifestValidCheckCode &&
+            x.ResultCode == VerificationResultCodes.PackageManifestValid &&
+            x.Status == VerificationCheckStatus.Pass);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == FailedFinalizeVerificationIds.NoCleanResultCheckCode &&
+            x.ResultCode == VerificationResultCodes.FailedFinalizeContinuityValid &&
+            x.Status == VerificationCheckStatus.Warn);
+        result.Output.Results.Should().NotContain(x =>
+            x.ResultCode == VerificationResultCodes.AbnormalFinalizationEvidenceValid);
+
+        var status = await ReadPackageArtifactAsync<FailedFinalizePublicStatusArtifactRecord>(
+            package.PackagePath,
+            VerificationPackageFileNames.FailedFinalizePublicStatus);
+        status.OutcomeStatus.Should().Be(FailedFinalizeVerificationIds.OutcomeStatusFailedToFinalize);
+        status.ContainsRestrictedDetails.Should().BeFalse();
+
+        var verifierResult = await ReadPackageArtifactAsync<FailedFinalizeVerifierResultArtifactRecord>(
+            package.PackagePath,
+            VerificationPackageFileNames.FailedFinalizeVerifierResult);
+        verifierResult.CleanFinalization.Should().BeFalse();
+        verifierResult.FinalizationMode.Should().Be(FailedFinalizeVerificationIds.FinalizationModeFailedFinalization);
+        verifierResult.OfficialResultArtifactPresent.Should().BeFalse();
+        verifierResult.CleanFinalPackagePresent.Should().BeFalse();
+        verifierResult.FinalizeBoundaryArtifactPresent.Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Category", "FEAT-155")]
+    public async Task Verify_FailedFinalizePackage_WithCleanResultConflict_ShouldFail()
+    {
+        using var package = new TemporaryPackageDirectory();
+        await WriteFailedFinalizePackageArtifactsAsync(
+            package.PackagePath,
+            verifierResult => verifierResult with
+            {
+                CleanFinalization = true,
+                OfficialResultArtifactPresent = true,
+            });
+
+        var result = await new HushVotingPackageVerifier().VerifyAsync(new(
+            package.PackagePath,
+            VerificationProfileIds.PublicAnonymousV1));
+
+        result.ExitCode.Should().Be(1);
+        result.Output.OverallStatus.Should().Be(VerificationOverallStatus.Fail);
+        result.Output.Results.Should().Contain(x =>
+            x.CheckCode == FailedFinalizeVerificationIds.NoCleanResultCheckCode &&
+            x.ResultCode == VerificationResultCodes.FailedFinalizeCleanResultConflict &&
+            x.Status == VerificationCheckStatus.Fail);
+    }
+
+    [Fact]
     [Trait("Category", "FEAT-139")]
     public async Task Verify_AbnormalFinalizationPackage_ShouldWarnWithoutClaimingCleanFinalization()
     {
@@ -2542,6 +2607,98 @@ public class HushVotingPackageVerifierTests
                 await File.WriteAllTextAsync(filePath, artifact.Content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             }
         }
+    }
+
+    private static async Task WriteFailedFinalizePackageArtifactsAsync(
+        string packagePath,
+        Func<FailedFinalizeVerifierResultArtifactRecord, FailedFinalizeVerifierResultArtifactRecord>? configureVerifier = null,
+        Func<FailedFinalizePublicStatusArtifactRecord, FailedFinalizePublicStatusArtifactRecord>? configureStatus = null)
+    {
+        const string electionId = "11111111-1111-1111-1111-111111111155";
+        var status = new FailedFinalizePublicStatusArtifactRecord(
+            SchemaId: FailedFinalizeVerificationIds.PublicStatusSchemaId,
+            ElectionId: electionId,
+            OutcomeStatus: FailedFinalizeVerificationIds.OutcomeStatusFailedToFinalize,
+            PackageStatus: FailedFinalizeVerificationIds.PackageStatusAccepted,
+            PublicSummary: "Finalization failed before an official result could be produced. Continuity evidence is available for recovery or void continuation.",
+            PublicHash: "sha256:public-status-placeholder",
+            ContainsRestrictedDetails: false,
+            PublishedAt: DateTime.UnixEpoch.AddHours(155));
+        status = configureStatus?.Invoke(status) ?? status;
+
+        var verifierResult = new FailedFinalizeVerifierResultArtifactRecord(
+            SchemaId: FailedFinalizeVerificationIds.VerifierResultSchemaId,
+            ElectionId: electionId,
+            ResultCode: VerificationResultCodes.FailedFinalizeContinuityValid,
+            OutcomeStatus: FailedFinalizeVerificationIds.OutcomeStatusFailedToFinalize,
+            CleanFinalization: false,
+            FinalizationMode: FailedFinalizeVerificationIds.FinalizationModeFailedFinalization,
+            OfficialResultArtifactPresent: false,
+            CleanFinalPackagePresent: false,
+            FinalizeBoundaryArtifactPresent: false,
+            MissingFinalizeEvidenceRefs:
+            [
+                "trustee-decision:key-lost:00000000-0000-0000-0000-000000000155",
+            ],
+            ContinuityEvidenceRefs:
+            [
+                "continuity-record:failed-finalize-rehearsal",
+            ],
+            AvailableTrusteeAcknowledgementRefs:
+            [
+                "trustee-ack:available-trustee-01",
+            ],
+            PublicSummary: "The verifier confirms a failed-finalize outcome with no clean final result claim.",
+            VerifiedAt: DateTime.UnixEpoch.AddHours(155).AddMinutes(1));
+        verifierResult = configureVerifier?.Invoke(verifierResult) ?? verifierResult;
+
+        await WritePackageArtifactAsync(packagePath, VerificationPackageFileNames.FailedFinalizePublicStatus, status);
+        await WritePackageArtifactAsync(packagePath, VerificationPackageFileNames.FailedFinalizeVerifierResult, verifierResult);
+
+        var entries = new[]
+        {
+            await CreateFailedFinalizeManifestEntryAsync(
+                packagePath,
+                VerificationPackageFileNames.FailedFinalizePublicStatus,
+                artifactKind: "failed_finalize_public_status"),
+            await CreateFailedFinalizeManifestEntryAsync(
+                packagePath,
+                VerificationPackageFileNames.FailedFinalizeVerifierResult,
+                artifactKind: "failed_finalize_verifier_result"),
+        };
+        var packageHash = VerificationCanonicalHash.ComputeSha256LowerHex(string.Join(
+            '\n',
+            entries
+                .OrderBy(x => x.Path, StringComparer.Ordinal)
+                .Select(x => $"{x.Path}|{x.Sha256Hash}")));
+        var manifest = new FailedFinalizePackageManifestRecord(
+            SchemaId: FailedFinalizeVerificationIds.PackageManifestSchemaId,
+            PackageId: "failed-finalize-package-0001",
+            ElectionId: electionId,
+            Status: FailedFinalizeVerificationIds.PackageStatusAccepted,
+            OutcomeStatus: FailedFinalizeVerificationIds.OutcomeStatusFailedToFinalize,
+            VerifierResultCode: VerificationResultCodes.FailedFinalizeContinuityValid,
+            PackageHashCanonicalization: "manifest-entry-path-sha256-v1",
+            PackageHash: $"sha256:{packageHash}",
+            CreatedAt: DateTime.UnixEpoch.AddHours(155).AddMinutes(2),
+            Entries: entries);
+
+        await WritePackageArtifactAsync(packagePath, VerificationPackageFileNames.FailedFinalizePackageManifest, manifest);
+    }
+
+    private static async Task<FailedFinalizePackageManifestEntryRecord> CreateFailedFinalizeManifestEntryAsync(
+        string packagePath,
+        string relativePath,
+        string artifactKind)
+    {
+        var bytes = await File.ReadAllBytesAsync(ResolvePackagePath(packagePath, relativePath));
+        return new FailedFinalizePackageManifestEntryRecord(
+            relativePath,
+            $"sha256:{VerificationCanonicalHash.ComputeManifestFileSha256(bytes)}",
+            MediaType: "application/json",
+            AccessScope: "public",
+            artifactKind,
+            Format: "json");
     }
 
     private sealed class FakeSp07PackagePublicProofVerifier(bool passed) : ISp07PackagePublicProofVerifier

@@ -309,6 +309,7 @@ public enum ElectionReportPackageKind
 {
     FinalResult = 0,
     Void = 1,
+    FailedFinalize = 2,
 }
 
 public enum ElectionOutcomeStatus
@@ -323,6 +324,7 @@ public enum ElectionOutcomeStatus
 public enum ElectionGovernedOutcomeDecisionType
 {
     AcceptFixedUnofficialResultWithAnomaly = 0,
+    RecordFailedFinalizeContinuity = 1,
 }
 
 public enum ElectionGovernedOutcomeFinalizationMode
@@ -330,6 +332,7 @@ public enum ElectionGovernedOutcomeFinalizationMode
     None = 0,
     CleanFinalization = 1,
     AbnormalFinalization = 2,
+    FailedFinalization = 3,
 }
 
 public enum ElectionTrusteeContinuityStatus

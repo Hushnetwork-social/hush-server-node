@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hush.network/schemas/hushvoting/failed-finalize-continuity-source.schema.json",
+  "title": "HushVoting Failed-Finalize Continuity Source",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceId",
+    "featureId",
+    "status",
+    "generatedAt",
+    "baselineRegister",
+    "productionLikeRunContext",
+    "governedOutcome",
+    "noCleanResult",
+    "publicSafeStatus",
+    "restrictedEvidenceRefs",
+    "packageValidation",
+    "readinessProposal",
+    "downstreamHandoff",
+    "publicArtifactSamples",
+    "residualRisks",
+    "signoff"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "failed-finalize-continuity-source.v1"
+    },
+    "sourceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "featureId": {
+      "const": "FEAT-155"
+    },
+    "status": {
+      "enum": [
+        "accepted",
+        "blocked",
+        "accepted_with_limitations"
+      ]
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "baselineRegister": {
+      "type": "object"
+    },
+    "productionLikeRunContext": {
+      "type": "object"
+    },
+    "governedOutcome": {
+      "type": "object"
+    },
+    "noCleanResult": {
+      "type": "object"
+    },
+    "publicSafeStatus": {
+      "type": "object"
+    },
+    "restrictedEvidenceRefs": {
+      "type": "array",
+      "minItems": 1
+    },
+    "packageValidation": {
+      "type": "object"
+    },
+    "readinessProposal": {
+      "type": "object"
+    },
+    "downstreamHandoff": {
+      "type": "object"
+    },
+    "publicArtifactSamples": {
+      "type": "array"
+    },
+    "residualRisks": {
+      "type": "array",
+      "minItems": 1
+    },
+    "signoff": {
+      "type": "object"
+    }
+  }
+}

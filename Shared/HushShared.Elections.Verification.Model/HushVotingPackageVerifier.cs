@@ -67,6 +67,11 @@ public sealed partial class HushVotingPackageVerifier
             return await VerifyVoidPackageAsync(request, cancellationToken);
         }
 
+        if (File.Exists(ResolvePackagePath(request.PackagePath, VerificationPackageFileNames.FailedFinalizePackageManifest)))
+        {
+            return await VerifyFailedFinalizePackageAsync(request, cancellationToken);
+        }
+
         try
         {
             var manifest = await ReadJsonAsync<AuditPackageManifestRecord>(
