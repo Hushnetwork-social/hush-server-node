@@ -430,11 +430,18 @@ public sealed class VerifierCorpusPromotionService
 
     private static Dictionary<string, string> EnumerateComparableFiles(string root) =>
         Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
-            .Where(path => !Path.GetRelativePath(root, path).Replace('\\', '/').StartsWith(".git/", StringComparison.Ordinal))
+            .Where(path => !IsCheckOnlyIgnoredPath(Path.GetRelativePath(root, path).Replace('\\', '/')))
             .ToDictionary(
                 path => Path.GetRelativePath(root, path).Replace('\\', '/'),
                 path => path,
                 StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsCheckOnlyIgnoredPath(string relativePath) =>
+        relativePath.StartsWith(".git/", StringComparison.Ordinal) ||
+        relativePath.Contains("/validation/ci-verifier-output/", StringComparison.Ordinal) ||
+        relativePath.EndsWith("/validation/ci-verifier-run-manifest.json", StringComparison.Ordinal) ||
+        relativePath.EndsWith("/validation/ci-verifier-output-summary.json", StringComparison.Ordinal) ||
+        relativePath.EndsWith("/validation/ci-verifier-output-summary.md", StringComparison.Ordinal);
 
     private static string Sha256File(string path) =>
         $"sha256:{Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant()}";
