@@ -10,6 +10,7 @@
     "profileId",
     "expectedOverallStatus",
     "expectedExitCode",
+    "expectedPrimaryResultCode",
     "requiredResultCodes",
     "requiredCheckStatuses",
     "ignoredFields",
@@ -23,6 +24,7 @@
     "profileId": { "type": "string", "const": "public_anonymous_v1" },
     "expectedOverallStatus": { "type": "string", "enum": [ "pass", "warn", "fail", "notAvailable" ] },
     "expectedExitCode": { "type": "integer", "minimum": 0, "maximum": 4 },
+    "expectedPrimaryResultCode": { "type": "string", "minLength": 1 },
     "requiredResultCodes": { "type": "array", "minItems": 1, "items": { "type": "string" } },
     "requiredCheckStatuses": {
       "type": "object",

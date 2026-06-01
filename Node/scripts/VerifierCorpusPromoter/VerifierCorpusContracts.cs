@@ -46,8 +46,20 @@ public static class VerifierCorpusContracts
         "corpus-manifest.schema.json",
         "fixture-manifest.schema.json",
         "expected-result.schema.json",
+        "verifier-corpus-ci-run-manifest.schema.json",
         "verifier-corpus-readiness-fragment.schema.json",
         "verifier-corpus-downstream-handoff.schema.json",
+    ];
+
+    public static readonly string[] PublicForbiddenMaterialCategories =
+    [
+        "private_key",
+        "cloud_secret",
+        "provider_kms_identifier",
+        "voter_private_data",
+        "restricted_operational_data",
+        "unsupported_claim",
+        "ip_address",
     ];
 
     public static readonly string[] RequiredFixtureIds =
@@ -229,6 +241,51 @@ public static class VerifierCorpusContracts
         return errors;
     }
 
+    public static IReadOnlyList<string> ValidateAudit95CorpusManifest(JsonObject manifest)
+    {
+        var errors = ValidateCorpusManifest(manifest).ToList();
+        ValidateStringValue(manifest, "corpusVersion", ["v0.3.0"], errors, VerifierCorpusPromotionPaths.CorpusManifestFileName);
+        ValidateImmutableRepositoryRef(manifest["publicRepositoryRef"], "publicRepositoryRef", errors);
+
+        var verifier = RequireObject(manifest, "verifier", errors, VerifierCorpusPromotionPaths.CorpusManifestFileName);
+        if (verifier is not null)
+        {
+            ValidateImmutableRepositoryRef(verifier["sourceRef"], "verifier.sourceRef", errors);
+            ValidateSha256Node(verifier["binaryRelease"], "verifier.binaryRelease", errors);
+        }
+
+        var ciReplay = RequireObject(manifest, "ciReplay", errors, VerifierCorpusPromotionPaths.CorpusManifestFileName);
+        if (ciReplay is not null)
+        {
+            foreach (var propertyName in new[]
+                     {
+                         "workflowName",
+                         "workflowPath",
+                         "workflowRunId",
+                         "workflowRunAttempt",
+                         "runManifestRef",
+                         "outputSummaryRef",
+                         "corpusRepositoryRef",
+                         "verifierSourceRef",
+                         "verifierHash",
+                     })
+            {
+                if (!ciReplay.ContainsKey(propertyName))
+                {
+                    errors.Add($"ciReplay.{propertyName} is required.");
+                }
+            }
+
+            ValidateImmutableRepositoryRef(ciReplay["corpusRepositoryRef"], "ciReplay.corpusRepositoryRef", errors);
+            ValidateImmutableRepositoryRef(ciReplay["verifierSourceRef"], "ciReplay.verifierSourceRef", errors);
+            ValidateSha256String(ciReplay, "verifierHash", errors, "ciReplay");
+            RequireNonEmpty(ciReplay, "workflowRunId", errors, "ciReplay");
+            RequirePositiveInt(ciReplay, "workflowRunAttempt", errors, "ciReplay");
+        }
+
+        return errors;
+    }
+
     public static IReadOnlyList<string> ValidateFixtureManifest(JsonObject fixture, string label)
     {
         var errors = ValidateJsonRequired(fixture, label, RequiredPropertiesForSchema("fixture-manifest.schema.json")).ToList();
@@ -254,15 +311,28 @@ public static class VerifierCorpusContracts
         var errors = ValidateJsonRequired(expectedResult, label, RequiredPropertiesForSchema("expected-result.schema.json")).ToList();
         ValidateStringValue(expectedResult, "profileId", [PublicProfileId], errors, label);
         ValidateStringValue(expectedResult, "expectedOverallStatus", ValidOverallStatuses, errors, label);
+        ValidateStringValue(expectedResult, "expectedPrimaryResultCode", ValidResultCodes.Value, errors, label);
 
         if (expectedResult["requiredResultCodes"] is JsonArray resultCodes)
         {
+            var containsPrimary = false;
             foreach (var code in resultCodes.OfType<JsonValue>().Select(value => value.GetValue<string>()))
             {
                 if (!ValidResultCodes.Value.Contains(code))
                 {
                     errors.Add($"{label}.requiredResultCodes contains unsupported verifier result code '{code}'.");
                 }
+
+                if (TryGetString(expectedResult["expectedPrimaryResultCode"], out var expectedPrimaryResultCode) &&
+                    string.Equals(expectedPrimaryResultCode, code, StringComparison.Ordinal))
+                {
+                    containsPrimary = true;
+                }
+            }
+
+            if (TryGetString(expectedResult["expectedPrimaryResultCode"], out _) && !containsPrimary)
+            {
+                errors.Add($"{label}.requiredResultCodes must include expectedPrimaryResultCode.");
             }
         }
         else
@@ -316,6 +386,131 @@ public static class VerifierCorpusContracts
         ]).ToList();
         RequireArray(forbiddenMaterialList, "terms", errors, "public-forbidden-material.json", minItems: 1);
         RequireArray(forbiddenMaterialList, "regexes", errors, "public-forbidden-material.json");
+        return errors;
+    }
+
+    public static IReadOnlyList<string> ValidateCiRunManifest(JsonObject manifest)
+    {
+        var errors = ValidateJsonRequired(manifest, "verifier-corpus-ci-run-manifest.json", RequiredPropertiesForSchema("verifier-corpus-ci-run-manifest.schema.json")).ToList();
+        ValidateImmutableRepositoryRef(manifest["corpusRepositoryRef"], "corpusRepositoryRef", errors);
+        ValidateImmutableRepositoryRef(manifest["verifierSourceRef"], "verifierSourceRef", errors);
+        ValidateSha256String(manifest, "corpusManifestHash", errors, "verifier-corpus-ci-run-manifest.json");
+        ValidateSha256String(manifest, "verifierHash", errors, "verifier-corpus-ci-run-manifest.json");
+        RequireNonEmpty(manifest, "workflowRunId", errors, "verifier-corpus-ci-run-manifest.json");
+        RequirePositiveInt(manifest, "workflowRunAttempt", errors, "verifier-corpus-ci-run-manifest.json");
+
+        if (manifest["fixtures"] is JsonArray fixtures && fixtures.Count > 0)
+        {
+            for (var i = 0; i < fixtures.Count; i++)
+            {
+                if (fixtures[i] is not JsonObject fixture)
+                {
+                    errors.Add($"fixtures[{i}] must be an object.");
+                    continue;
+                }
+
+                var label = $"fixtures[{GetStringOrDefault(fixture, "fixtureId") ?? "unknown"}]";
+                foreach (var propertyName in new[]
+                         {
+                             "fixtureId",
+                             "expectedExitCode",
+                             "observedExitCode",
+                             "expectedPrimaryResultCode",
+                             "observedPrimaryResultCode",
+                             "normalizedOutputHash",
+                             "status",
+                         })
+                {
+                    if (!fixture.ContainsKey(propertyName))
+                    {
+                        errors.Add($"{label}.{propertyName} is required.");
+                    }
+                }
+
+                ValidateStringValue(fixture, "expectedPrimaryResultCode", ValidResultCodes.Value, errors, label);
+                ValidateStringValue(fixture, "observedPrimaryResultCode", ValidResultCodes.Value, errors, label);
+                ValidateSha256String(fixture, "normalizedOutputHash", errors, label);
+            }
+        }
+        else
+        {
+            errors.Add("verifier-corpus-ci-run-manifest.json.fixtures is required and must be a non-empty array.");
+        }
+
+        return errors;
+    }
+
+    public static IReadOnlyList<string> ValidateAudit95ScoreProposal(JsonObject proposal)
+    {
+        var errors = ValidateJsonRequired(proposal, "verifier-corpus-audit95-score-proposal.json", [
+            "schemaVersion",
+            "proposalId",
+            "producerFeature",
+            "dimensionId",
+            "proposedScoreFrom",
+            "proposedScoreTo",
+            "status",
+            "doesNotMutateRegister",
+            "evidenceRefs",
+        ]).ToList();
+        ValidateStringValue(proposal, "dimensionId", ["RDY-DIM-002"], errors, "verifier-corpus-audit95-score-proposal.json");
+
+        if (!TryGetInt(proposal, "proposedScoreFrom", out var from) || from != 8)
+        {
+            errors.Add("verifier-corpus-audit95-score-proposal.json.proposedScoreFrom must be 8.");
+        }
+
+        if (!TryGetInt(proposal, "proposedScoreTo", out var to) || to != 10)
+        {
+            errors.Add("verifier-corpus-audit95-score-proposal.json.proposedScoreTo must be 10.");
+        }
+
+        if (proposal["doesNotMutateRegister"] is not JsonValue mutationValue ||
+            !mutationValue.TryGetValue<bool>(out var doesNotMutate) ||
+            !doesNotMutate)
+        {
+            errors.Add("verifier-corpus-audit95-score-proposal.json.doesNotMutateRegister must be true.");
+        }
+
+        if (proposal["evidenceRefs"] is not JsonArray evidenceRefs || evidenceRefs.Count == 0)
+        {
+            errors.Add("verifier-corpus-audit95-score-proposal.json.evidenceRefs is required and must be a non-empty array.");
+        }
+
+        return errors;
+    }
+
+    public static IReadOnlyList<string> ValidateNoSecretScanResult(JsonObject scanResult)
+    {
+        var errors = ValidateJsonRequired(scanResult, "verifier-corpus-no-secret-scan-result.json", [
+            "schemaVersion",
+            "status",
+            "forbiddenCategories",
+            "unexpectedFindingCount",
+            "expectedTamperFindingCount",
+            "findings",
+        ]).ToList();
+        ValidateStringValue(scanResult, "status", ["pass", "blocked", "pending"], errors, "verifier-corpus-no-secret-scan-result.json");
+
+        if (scanResult["forbiddenCategories"] is JsonArray categories)
+        {
+            var actualCategories = categories
+                .OfType<JsonValue>()
+                .Select(value => value.GetValue<string>())
+                .ToHashSet(StringComparer.Ordinal);
+            foreach (var category in PublicForbiddenMaterialCategories)
+            {
+                if (!actualCategories.Contains(category))
+                {
+                    errors.Add($"verifier-corpus-no-secret-scan-result.json.forbiddenCategories must include {category}.");
+                }
+            }
+        }
+        else
+        {
+            errors.Add("verifier-corpus-no-secret-scan-result.json.forbiddenCategories is required and must be an array.");
+        }
+
         return errors;
     }
 
@@ -402,12 +597,31 @@ public static class VerifierCorpusContracts
                 "profileId",
                 "expectedOverallStatus",
                 "expectedExitCode",
+                "expectedPrimaryResultCode",
                 "requiredResultCodes",
                 "requiredCheckStatuses",
                 "ignoredFields",
                 "stableOutputExcerpt",
                 "normalizedOutputHash",
                 "outputRef",
+            ],
+            "verifier-corpus-ci-run-manifest.schema.json" =>
+            [
+                "schemaVersion",
+                "corpusRepository",
+                "corpusRepositoryRef",
+                "corpusVersion",
+                "corpusManifestHash",
+                "verifierRepository",
+                "verifierSourceRef",
+                "verifierHash",
+                "workflowName",
+                "workflowPath",
+                "workflowRunId",
+                "workflowRunAttempt",
+                "runStatus",
+                "generatedAt",
+                "fixtures",
             ],
             "verifier-corpus-readiness-fragment.schema.json" =>
             [
@@ -503,6 +717,120 @@ public static class VerifierCorpusContracts
 
         errors.Add($"{label}.{propertyName} is required and must be an object.");
         return null;
+    }
+
+    private static void ValidateImmutableRepositoryRef(JsonNode? value, string label, List<string> errors)
+    {
+        if (value is JsonValue jsonValue && TryGetString(jsonValue, out var refValue))
+        {
+            ValidateImmutableRefValue(refValue, label, errors);
+            return;
+        }
+
+        if (value is not JsonObject obj)
+        {
+            errors.Add($"{label} is required and must be an immutable commit or tag ref.");
+            return;
+        }
+
+        var refType = GetStringOrDefault(obj, "refType");
+        var immutable = obj["immutable"] is JsonValue immutableValue &&
+            immutableValue.TryGetValue<bool>(out var immutableFlag) &&
+            immutableFlag;
+        if (!string.Equals(refType, "commit", StringComparison.Ordinal) &&
+            !string.Equals(refType, "tag_immutable", StringComparison.Ordinal))
+        {
+            errors.Add($"{label}.refType must be commit or tag_immutable.");
+        }
+
+        if (!immutable)
+        {
+            errors.Add($"{label}.immutable must be true.");
+        }
+
+        ValidateImmutableRefValue(GetStringOrDefault(obj, "value"), $"{label}.value", errors);
+    }
+
+    private static void ValidateImmutableRefValue(string? value, string label, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            errors.Add($"{label} is required.");
+            return;
+        }
+
+        var normalized = value.Trim();
+        if (string.Equals(normalized, "local-generated", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "local-working-tree", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "main", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "master", StringComparison.OrdinalIgnoreCase) ||
+            normalized.StartsWith("file:", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains('\\') ||
+            Path.IsPathRooted(normalized))
+        {
+            errors.Add($"{label} must be an immutable public commit SHA or immutable tag, not '{normalized}'.");
+            return;
+        }
+
+        if (!IsShaLike(normalized) && !IsTagLike(normalized))
+        {
+            errors.Add($"{label} must be a 40-character commit SHA or immutable tag ref.");
+        }
+    }
+
+    private static bool IsShaLike(string value) =>
+        value.Length == 40 && value.All(Uri.IsHexDigit);
+
+    private static bool IsTagLike(string value) =>
+        value.StartsWith("refs/tags/", StringComparison.Ordinal) ||
+        value.StartsWith("tags/", StringComparison.Ordinal) ||
+        value.StartsWith("v", StringComparison.OrdinalIgnoreCase);
+
+    private static void ValidateSha256Node(JsonNode? value, string label, List<string> errors)
+    {
+        if (value is JsonValue jsonValue && TryGetString(jsonValue, out var hash))
+        {
+            ValidateSha256Value(hash, label, errors);
+            return;
+        }
+
+        if (value is JsonObject obj)
+        {
+            ValidateSha256Value(GetStringOrDefault(obj, "binaryHash") ?? GetStringOrDefault(obj, "sha256Hash"), $"{label}.binaryHash", errors);
+            return;
+        }
+
+        errors.Add($"{label} is required and must include a sha256 verifier hash.");
+    }
+
+    private static void ValidateSha256String(JsonObject obj, string propertyName, List<string> errors, string label)
+    {
+        ValidateSha256Value(GetStringOrDefault(obj, propertyName), $"{label}.{propertyName}", errors);
+    }
+
+    private static void ValidateSha256Value(string? value, string label, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            errors.Add($"{label} is required.");
+            return;
+        }
+
+        var hash = value.Trim();
+        if (!hash.StartsWith("sha256:", StringComparison.Ordinal) ||
+            hash.Length != "sha256:".Length + 64 ||
+            !hash["sha256:".Length..].All(Uri.IsHexDigit))
+        {
+            errors.Add($"{label} must be a sha256 hash.");
+        }
+    }
+
+    private static void RequirePositiveInt(JsonObject value, string propertyName, List<string> errors, string label)
+    {
+        if (!TryGetInt(value, propertyName, out var intValue) || intValue <= 0)
+        {
+            errors.Add($"{label}.{propertyName} must be a positive integer.");
+        }
     }
 
     private static JsonArray? RequireArray(JsonObject value, string propertyName, List<string> errors, string label, int minItems = 0)

@@ -4,6 +4,7 @@
   "profileId": "public_anonymous_v1",
   "expectedOverallStatus": "pass",
   "expectedExitCode": 0,
+  "expectedPrimaryResultCode": "package_structure_valid",
   "requiredResultCodes": [
     "package_structure_valid",
     "package_manifest_valid"

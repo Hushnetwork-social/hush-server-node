@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hushnetwork.social/schemas/hushvoting/verifier-corpus/verifier-corpus-ci-run-manifest.schema.json",
+  "title": "HushVoting Public Verifier Corpus CI Run Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "corpusRepository",
+    "corpusRepositoryRef",
+    "corpusVersion",
+    "corpusManifestHash",
+    "verifierRepository",
+    "verifierSourceRef",
+    "verifierHash",
+    "workflowName",
+    "workflowPath",
+    "workflowRunId",
+    "workflowRunAttempt",
+    "runStatus",
+    "generatedAt",
+    "fixtures"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "verifier-corpus-ci-run-manifest.v1" },
+    "corpusRepository": { "type": "string", "format": "uri" },
+    "corpusRepositoryRef": { "type": [ "string", "object" ] },
+    "corpusVersion": { "type": "string", "const": "v0.3.0" },
+    "corpusManifestHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "verifierRepository": { "type": "string", "format": "uri" },
+    "verifierSourceRef": { "type": [ "string", "object" ] },
+    "verifierHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "workflowName": { "type": "string", "minLength": 1 },
+    "workflowPath": { "type": "string", "pattern": "^\\.github/workflows/.+\\.yml$" },
+    "workflowRunId": { "type": "string", "minLength": 1 },
+    "workflowRunAttempt": { "type": "integer", "minimum": 1 },
+    "runStatus": { "type": "string", "enum": [ "accepted", "blocked", "failed" ] },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "fixtures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "fixtureId",
+          "expectedExitCode",
+          "observedExitCode",
+          "expectedPrimaryResultCode",
+          "observedPrimaryResultCode",
+          "normalizedOutputHash",
+          "status"
+        ],
+        "properties": {
+          "fixtureId": { "type": "string", "minLength": 1 },
+          "expectedExitCode": { "type": "integer", "minimum": 0, "maximum": 4 },
+          "observedExitCode": { "type": "integer", "minimum": 0, "maximum": 4 },
+          "expectedPrimaryResultCode": { "type": "string", "minLength": 1 },
+          "observedPrimaryResultCode": { "type": "string", "minLength": 1 },
+          "normalizedOutputHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "status": { "type": "string", "enum": [ "matched", "mismatch" ] }
+        }
+      }
+    }
+  }
+}

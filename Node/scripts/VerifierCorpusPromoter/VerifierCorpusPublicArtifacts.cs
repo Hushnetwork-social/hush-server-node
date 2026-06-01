@@ -480,10 +480,22 @@ public sealed partial class VerifierCorpusGenerator
             ["unexpectedFindingCount"] = findings.Count(x => !x.ExpectedTamperFixture),
             ["expectedTamperFindingCount"] = findings.Count(x => x.ExpectedTamperFixture),
             ["findingCount"] = findings.Count,
+            ["forbiddenCategories"] = BuildForbiddenCategories(),
             ["scanBoundary"] = "All generated public corpus files except this scan report and .git metadata.",
             ["expectedTamperPolicy"] = "SP-10 tamper fixtures may contain synthetic forbidden markers only to prove the verifier fails closed.",
             ["findings"] = findingArray,
         };
+    }
+
+    private static JsonArray BuildForbiddenCategories()
+    {
+        var categories = new JsonArray();
+        foreach (var category in VerifierCorpusContracts.PublicForbiddenMaterialCategories)
+        {
+            categories.Add(category);
+        }
+
+        return categories;
     }
 
     private static JsonObject BuildCorpusManifest(

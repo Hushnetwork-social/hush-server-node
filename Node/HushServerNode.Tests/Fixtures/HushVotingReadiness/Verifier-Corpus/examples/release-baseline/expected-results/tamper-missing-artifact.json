@@ -4,6 +4,7 @@
   "profileId": "public_anonymous_v1",
   "expectedOverallStatus": "fail",
   "expectedExitCode": 1,
+  "expectedPrimaryResultCode": "package_manifest_missing_artifact",
   "requiredResultCodes": [
     "package_manifest_missing_artifact"
   ],

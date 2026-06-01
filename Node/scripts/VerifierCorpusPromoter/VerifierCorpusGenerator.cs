@@ -317,6 +317,7 @@ public sealed partial class VerifierCorpusGenerator
             ["profileId"] = spec.ProfileId,
             ["expectedOverallStatus"] = ToJsonEnumString(verification.Output.OverallStatus),
             ["expectedExitCode"] = verification.ExitCode,
+            ["expectedPrimaryResultCode"] = spec.ExpectedResultCode,
             ["requiredResultCodes"] = new JsonArray(spec.ExpectedResultCode),
             ["requiredCheckStatuses"] = requiredStatuses,
             ["ignoredFields"] = new JsonArray("verifiedAt", "outputPath", "absolutePackagePath"),
