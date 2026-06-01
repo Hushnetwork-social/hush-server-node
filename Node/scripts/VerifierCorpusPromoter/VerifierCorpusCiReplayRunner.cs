@@ -53,6 +53,7 @@ public sealed class VerifierCorpusCiReplayRunner
     public const string ManifestRelativePath = "validation/ci-verifier-run-manifest.json";
     public const string SummaryJsonRelativePath = "validation/ci-verifier-output-summary.json";
     public const string SummaryMarkdownRelativePath = "validation/ci-verifier-output-summary.md";
+    public const string PublicReviewerHandoffRelativePath = "validation/ci-public-reviewer-handoff.json";
 
     public async Task<VerifierCorpusCiReplayResult> ReplayAsync(
         VerifierCorpusCiReplayOptions options,
@@ -161,6 +162,11 @@ public sealed class VerifierCorpusCiReplayRunner
         await WriteTextLfAsync(
             Path.Combine(corpusRoot, ToLocalPath(SummaryMarkdownRelativePath)),
             BuildSummaryMarkdown(runStatus, publicSafetyStatus, results, publicScanFindings),
+            cancellationToken);
+        await WriteJsonAsync(
+            corpusRoot,
+            PublicReviewerHandoffRelativePath,
+            BuildPublicReviewerHandoff(options, corpusRoot, manifest, results, publicScanFindings, publicSafetyStatus, runStatus),
             cancellationToken);
 
         return new VerifierCorpusCiReplayResult(
@@ -278,6 +284,110 @@ public sealed class VerifierCorpusCiReplayRunner
             ["fixtures"] = fixtures,
         };
     }
+
+    private static JsonObject BuildPublicReviewerHandoff(
+        VerifierCorpusCiReplayOptions options,
+        string corpusRoot,
+        JsonObject manifest,
+        IReadOnlyList<VerifierCorpusCiFixtureReplayResult> results,
+        IReadOnlyList<VerifierCorpusScanFinding> publicScanFindings,
+        string publicSafetyStatus,
+        string runStatus) =>
+        new()
+        {
+            ["schemaVersion"] = "verifier-corpus-ci-public-reviewer-handoff.v1",
+            ["handoffId"] = $"FEAT-158-{options.CorpusVersion}-public-reviewer-handoff",
+            ["producerFeature"] = "FEAT-158",
+            ["corpusVersion"] = options.CorpusVersion,
+            ["publicCorpus"] = new JsonObject
+            {
+                ["repository"] = options.CorpusRepository,
+                ["repositoryRef"] = options.CorpusRepositoryRef,
+                ["manifestRef"] = "corpus-manifest.json",
+                ["manifestHash"] = manifest["corpusManifestHash"]?.GetValue<string>() ?? Sha256File(Path.Combine(corpusRoot, "corpus-manifest.json")),
+                ["fixtureIndexRef"] = "fixtures/fixture-index.json",
+                ["fixtureIndexHash"] = Sha256File(Path.Combine(corpusRoot, "fixtures", "fixture-index.json")),
+            },
+            ["verifier"] = new JsonObject
+            {
+                ["repository"] = options.VerifierRepository,
+                ["sourceRef"] = options.VerifierSourceRef,
+                ["hash"] = options.VerifierHash,
+            },
+            ["workflow"] = new JsonObject
+            {
+                ["name"] = options.WorkflowName,
+                ["path"] = options.WorkflowPath,
+                ["runId"] = options.WorkflowRunId,
+                ["runAttempt"] = options.WorkflowRunAttempt,
+                ["generatedAt"] = options.GeneratedAt.UtcDateTime.ToString("O"),
+            },
+            ["replayEvidence"] = new JsonObject
+            {
+                ["runStatus"] = runStatus,
+                ["publicSafetyStatus"] = publicSafetyStatus,
+                ["fixtureCount"] = results.Count,
+                ["matchedFixtureCount"] = results.Count(x => x.MismatchReasons.Count == 0),
+                ["mismatchCount"] = results.Count(x => x.MismatchReasons.Count > 0),
+                ["unexpectedPublicFindingCount"] = publicScanFindings.Count(x => !x.ExpectedTamperFixture),
+                ["runManifestRef"] = ManifestRelativePath,
+                ["outputSummaryJsonRef"] = SummaryJsonRelativePath,
+                ["outputSummaryMarkdownRef"] = SummaryMarkdownRelativePath,
+            },
+            ["cleanMachineReplay"] = new JsonObject
+            {
+                ["publicInstructionsRef"] = "README.md",
+                ["publicWorkflowRef"] = options.WorkflowPath,
+                ["privateRepositoriesRequired"] = false,
+                ["backendRequired"] = false,
+                ["databaseRequired"] = false,
+                ["cloudAccountRequired"] = false,
+                ["localChainRequired"] = false,
+            },
+            ["downstreamOwners"] = BuildDownstreamOwners(),
+            ["outOfScope"] = new JsonArray
+            {
+                "external audit signoff",
+                "legal sufficiency",
+                "certification",
+                "public or state election authority approval",
+            },
+            ["restrictedPackage"] = new JsonObject
+            {
+                ["requiredForPublicCi"] = false,
+                ["copiedIntoPublicCorpus"] = false,
+                ["status"] = "not_produced_for_public_replay",
+            },
+            ["publicBoundaryStatement"] = "Synthetic public verifier corpus only. The CI replay proves fixture replay and public-safe packaging; it does not claim authority approval, legal sufficiency, certification, or real customer operation.",
+        };
+
+    private static JsonArray BuildDownstreamOwners() =>
+    [
+        new JsonObject
+        {
+            ["featureId"] = "FEAT-159",
+            ["responsibility"] = "Cross-device receipt and inclusion verification channels beyond package-bound file replay.",
+            ["residualRisk"] = "Physical QR, camera, compact code, browser, and mobile channel evidence remains outside this corpus.",
+        },
+        new JsonObject
+        {
+            ["featureId"] = "FEAT-160",
+            ["responsibility"] = "Repeated deterministic publication and counting replay across multiple election profiles.",
+            ["residualRisk"] = "This corpus provides sample package expectations, not repeated runtime publication/counting ceremony evidence.",
+        },
+        new JsonObject
+        {
+            ["featureId"] = "FEAT-163",
+            ["responsibility"] = "Second operational run and repeated trusted deployment confidence evidence.",
+            ["residualRisk"] = "This corpus is synthetic replay evidence and does not prove operating history.",
+        },
+        new JsonObject
+        {
+            ["featureId"] = "FEAT-166",
+            ["responsibility"] = "Governance/customer handoff packaging for external review readiness.",
+            ["residualRisk"] = "This handoff is public verifier evidence only; customer governance package ownership remains downstream.",
+        },
+    ];
 
     private static string BuildSummaryMarkdown(
         string runStatus,

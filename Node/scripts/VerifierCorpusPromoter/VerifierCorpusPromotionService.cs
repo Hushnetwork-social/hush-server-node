@@ -441,7 +441,8 @@ public sealed class VerifierCorpusPromotionService
         relativePath.Contains("/validation/ci-verifier-output/", StringComparison.Ordinal) ||
         relativePath.EndsWith("/validation/ci-verifier-run-manifest.json", StringComparison.Ordinal) ||
         relativePath.EndsWith("/validation/ci-verifier-output-summary.json", StringComparison.Ordinal) ||
-        relativePath.EndsWith("/validation/ci-verifier-output-summary.md", StringComparison.Ordinal);
+        relativePath.EndsWith("/validation/ci-verifier-output-summary.md", StringComparison.Ordinal) ||
+        relativePath.EndsWith("/validation/ci-public-reviewer-handoff.json", StringComparison.Ordinal);
 
     private static string Sha256File(string path) =>
         $"sha256:{Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant()}";

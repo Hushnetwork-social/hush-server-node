@@ -226,6 +226,15 @@ public sealed class VerifierCorpusGenerationTests
             ["corpusProfileId"]!.GetValue<string>().Should().Be("internal_rehearsal_metadata");
         ReadPackageArtifact("sample-good-binding-style-metadata", "profile-marker.json")
             ["corpusProfileId"]!.GetValue<string>().Should().Be("binding_style_metadata");
+        var handoff = ReadJson("handoff/verifier-corpus-downstream-handoff.json", workspace.Root);
+        handoff["producerFeature"]!.GetValue<string>().Should().Be("FEAT-158");
+        handoff["feat159ConsumerInstructions"].Should().NotBeNull();
+        handoff["feat160ConsumerInstructions"].Should().NotBeNull();
+        handoff["feat163ConsumerInstructions"].Should().NotBeNull();
+        handoff["feat166ConsumerInstructions"].Should().NotBeNull();
+        (await File.ReadAllTextAsync(Path.Combine(workspace.Root, "release-delta-report.md")))
+            .Should()
+            .Contain("RDY-DIM-002 8 -> 10");
 
         JsonObject ReadPackageArtifact(string fixtureId, string artifactPath) =>
             ReadJson($"packages/{fixtureId}/{artifactPath}", workspace.Root);
@@ -260,6 +269,14 @@ public sealed class VerifierCorpusGenerationTests
         File.Exists(Path.Combine(workspace.Root, VerifierCorpusCiReplayRunner.SummaryMarkdownRelativePath.Replace('/', Path.DirectorySeparatorChar)))
             .Should()
             .BeTrue();
+        var reviewerHandoff = ReadJson(VerifierCorpusCiReplayRunner.PublicReviewerHandoffRelativePath, workspace.Root);
+        reviewerHandoff["producerFeature"]!.GetValue<string>().Should().Be("FEAT-158");
+        reviewerHandoff["replayEvidence"]!["fixtureCount"]!.GetValue<int>().Should().Be(result.FixtureCount);
+        reviewerHandoff["cleanMachineReplay"]!["privateRepositoriesRequired"]!.GetValue<bool>().Should().BeFalse();
+        reviewerHandoff["downstreamOwners"]!.AsArray()
+            .Select(x => x!.AsObject()["featureId"]!.GetValue<string>())
+            .Should()
+            .Contain(["FEAT-159", "FEAT-160", "FEAT-163", "FEAT-166"]);
     }
 
     [Fact]

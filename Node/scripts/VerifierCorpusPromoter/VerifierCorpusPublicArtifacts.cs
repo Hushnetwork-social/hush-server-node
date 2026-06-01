@@ -599,7 +599,7 @@ public sealed partial class VerifierCorpusGenerator
             {
                 ["path"] = "validation/stale-version-drift-check.json",
                 ["fixtureCount"] = fixtures.Count(x => string.Equals(x.CorpusProfileId, "stale_version_drift", StringComparison.Ordinal)),
-                ["status"] = IsRefreshRelease(options) ? "accepted" : "not_applicable",
+                ["status"] = IsRefreshRelease(options) || IsAudit95Release(options) ? "accepted" : "not_applicable",
             },
             ["noSecretScan"] = new JsonObject
             {
@@ -708,18 +708,22 @@ public sealed partial class VerifierCorpusGenerator
             },
         };
 
-        if (IsRefreshRelease(options))
+        if (IsRefreshRelease(options) || IsAudit95Release(options))
         {
             evidenceRefs.Add(new JsonObject
             {
                 ["path"] = "validation/stale-version-drift-check.json",
                 ["status"] = driftFixtureCount > 0 ? "accepted" : "blocked",
             });
-            evidenceRefs.Add(new JsonObject
+            if (IsRefreshRelease(options))
             {
-                ["path"] = "readiness/verifier-corpus-refresh-score-proposal.json",
-                ["status"] = status,
-            });
+                evidenceRefs.Add(new JsonObject
+                {
+                    ["path"] = "readiness/verifier-corpus-refresh-score-proposal.json",
+                    ["status"] = status,
+                });
+            }
+
             checkResults.Add(new JsonObject
             {
                 ["checkId"] = "good-sample-breadth",
@@ -738,9 +742,7 @@ public sealed partial class VerifierCorpusGenerator
         {
             ["schemaVersion"] = "verifier-corpus-readiness-fragment.v1",
             ["fragmentId"] = $"AT-RDY-007-{options.CorpusVersion}",
-            ["featureSlice"] = IsRefreshRelease(options)
-                ? "verifier-corpus-breadth-release-refresh"
-                : "public-verifier-sample-and-tamper-corpus",
+            ["featureSlice"] = ResolveFeatureSlice(options),
             ["sourceGap"] = "Verifier/sample/tamper corpus",
             ["acceptanceGate"] = VerifierCorpusContracts.AcceptanceGate,
             ["dimensionId"] = "RDY-DIM-002",
@@ -748,14 +750,10 @@ public sealed partial class VerifierCorpusGenerator
             ["checkResults"] = checkResults,
             ["status"] = status,
             ["visibility"] = "public",
-            ["claimEffect"] = IsRefreshRelease(options)
-                ? "Candidate evidence for RDY-DIM-002 6 -> 8 only; register promotion remains owned by FEAT-156 or a later FEAT-130 promotion."
-                : "Candidate evidence for the readiness register only; register promotion remains owned by FEAT-130.",
+            ["claimEffect"] = ResolveClaimEffect(options),
             ["residualRisk"] = "Synthetic corpus does not prove operating history, customer election delivery, cross-device receipt import, production rollout, failed-finalize continuity, or external review.",
             ["doesNotMutateRegister"] = true,
-            ["promotionInstructions"] = IsRefreshRelease(options)
-                ? "FEAT-156 may consume this fragment and score proposal after maintainer review of v0.2.0 public corpus output and hashes."
-                : "FEAT-130 may ingest this fragment after maintainer review of the public corpus output and hashes.",
+            ["promotionInstructions"] = ResolvePromotionInstructions(options),
             ["supersessionRules"] = BuildSupersessionRules(),
         };
     }
@@ -842,10 +840,8 @@ public sealed partial class VerifierCorpusGenerator
         return new JsonObject
         {
             ["schemaVersion"] = "verifier-corpus-downstream-handoff.v1",
-            ["handoffId"] = IsRefreshRelease(options)
-                ? $"FEAT-151-{options.CorpusVersion}-handoff"
-                : $"FEAT-135-{options.CorpusVersion}-handoff",
-            ["producerFeature"] = IsRefreshRelease(options) ? "FEAT-151" : "FEAT-135",
+            ["handoffId"] = $"{ResolveProducerFeature(options)}-{options.CorpusVersion}-handoff",
+            ["producerFeature"] = ResolveProducerFeature(options),
             ["corpusVersion"] = options.CorpusVersion,
             ["publicRepositoryRef"] = options.PublicRepositoryRef,
             ["manifestHash"] = manifestHash,
@@ -906,8 +902,30 @@ public sealed partial class VerifierCorpusGenerator
                 ["registerPromotionImplementedHere"] = false,
                 ["scoreProposalRef"] = IsRefreshRelease(options)
                     ? "readiness/verifier-corpus-refresh-score-proposal.json"
-                    : "not_applicable",
+                    : IsAudit95Release(options)
+                        ? "not_generated_until_final_readiness_phase"
+                        : "not_applicable",
                 ["reuseInstruction"] = "FEAT-156 may ingest the readiness fragment and score proposal after maintainer review; this handoff does not mutate the canonical readiness register.",
+            },
+            ["feat159ConsumerInstructions"] = new JsonObject
+            {
+                ["receiptChannelImplementedHere"] = false,
+                ["reuseInstruction"] = "FEAT-159 owns physical QR/camera, compact-code, browser, and mobile receipt-channel coverage beyond this package-bound file replay.",
+            },
+            ["feat160ConsumerInstructions"] = new JsonObject
+            {
+                ["publicationCountingRuntimeReplayImplementedHere"] = false,
+                ["reuseInstruction"] = "FEAT-160 may cite fixture result-code expectations, but repeated runtime publication/counting replay across election profiles remains its responsibility.",
+            },
+            ["feat163ConsumerInstructions"] = new JsonObject
+            {
+                ["secondOperationalRunImplementedHere"] = false,
+                ["reuseInstruction"] = "FEAT-163 owns repeated operational-run confidence evidence. This corpus provides synthetic verifier replay evidence only.",
+            },
+            ["feat166ConsumerInstructions"] = new JsonObject
+            {
+                ["governanceCustomerHandoffImplementedHere"] = false,
+                ["reuseInstruction"] = "FEAT-166 owns governance/customer handoff packaging for external review readiness and may reference this public verifier corpus evidence.",
             },
             ["residualRisk"] = "Does not replace pilot ceremony evidence, real deployment observation, external validation, or legal/regulatory approval.",
         };
@@ -936,6 +954,37 @@ public sealed partial class VerifierCorpusGenerator
     private static bool IsRefreshRelease(VerifierCorpusGenerationOptions options) =>
         string.Equals(options.CorpusVersion, "v0.2.0", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsAudit95Release(VerifierCorpusGenerationOptions options) =>
+        string.Equals(options.CorpusVersion, "v0.3.0", StringComparison.OrdinalIgnoreCase);
+
+    private static string ResolveProducerFeature(VerifierCorpusGenerationOptions options) =>
+        IsAudit95Release(options)
+            ? "FEAT-158"
+            : IsRefreshRelease(options)
+                ? "FEAT-151"
+                : "FEAT-135";
+
+    private static string ResolveFeatureSlice(VerifierCorpusGenerationOptions options) =>
+        IsAudit95Release(options)
+            ? "verifier-corpus-audit95-ci-replay"
+            : IsRefreshRelease(options)
+                ? "verifier-corpus-breadth-release-refresh"
+                : "public-verifier-sample-and-tamper-corpus";
+
+    private static string ResolveClaimEffect(VerifierCorpusGenerationOptions options) =>
+        IsAudit95Release(options)
+            ? "Candidate evidence for RDY-DIM-002 8 -> 10 only after CI replay and final readiness proposal pass; register promotion remains owned by FEAT-130/FEAT-156 policy."
+            : IsRefreshRelease(options)
+                ? "Candidate evidence for RDY-DIM-002 6 -> 8 only; register promotion remains owned by FEAT-156 or a later FEAT-130 promotion."
+                : "Candidate evidence for the readiness register only; register promotion remains owned by FEAT-130.";
+
+    private static string ResolvePromotionInstructions(VerifierCorpusGenerationOptions options) =>
+        IsAudit95Release(options)
+            ? "FEAT-130/FEAT-156 may consume this fragment after maintainer review of v0.3.0 public corpus output, CI replay evidence, and final audit95 score proposal."
+            : IsRefreshRelease(options)
+                ? "FEAT-156 may consume this fragment and score proposal after maintainer review of v0.2.0 public corpus output and hashes."
+                : "FEAT-130 may ingest this fragment after maintainer review of the public corpus output and hashes.";
+
     private static string ReadinessFragmentPath(VerifierCorpusGenerationOptions options) =>
         IsRefreshRelease(options)
             ? "readiness/verifier-corpus-refresh-readiness-fragment.json"
@@ -960,8 +1009,8 @@ public sealed partial class VerifierCorpusGenerator
 
         Corpus family: `{{options.CorpusFamily}}`
         Target release: `{{options.CorpusVersion}}`
-        Baseline release: `hushvoting-v1/v0.1.0`
-        Producer feature: `{{(IsRefreshRelease(options) ? "FEAT-151" : "FEAT-135")}}`
+        Baseline release: `{{(IsAudit95Release(options) ? "hushvoting-v1/v0.2.0" : "hushvoting-v1/v0.1.0")}}`
+        Producer feature: `{{ResolveProducerFeature(options)}}`
         Manifest hash: `{{manifestHash}}`
 
         ## Baseline Kept
@@ -978,13 +1027,23 @@ public sealed partial class VerifierCorpusGenerator
 
         ## Score Boundary
 
-        This release can support a future `RDY-DIM-002 6 -> 8` proposal when all validation files pass. It does not mutate the readiness register and does not claim production rollout, public/state election readiness, legal sufficiency, failed-finalize continuity, or external validation.
+        {{ResolveReleaseDeltaScoreBoundary(options)}}
 
         ## Downstream Owners
 
-        FEAT-152 owns receipt-channel matrix evidence, FEAT-153 owns publication/counting runtime hardening, FEAT-154 owns production-like operational run evidence, FEAT-155 owns failed-finalize continuity rehearsal, and FEAT-156 owns final readiness-register promotion.
+        {{ResolveReleaseDeltaDownstreamOwners(options)}}
         """;
     }
+
+    private static string ResolveReleaseDeltaScoreBoundary(VerifierCorpusGenerationOptions options) =>
+        IsAudit95Release(options)
+            ? "This release can support a future `RDY-DIM-002 8 -> 10` audit95 proposal after CI replay and final readiness proposal evidence pass. It does not mutate the readiness register and does not claim production rollout, public/state election readiness, legal sufficiency, certification, or external validation."
+            : "This release can support a future `RDY-DIM-002 6 -> 8` proposal when all validation files pass. It does not mutate the readiness register and does not claim production rollout, public/state election readiness, legal sufficiency, failed-finalize continuity, or external validation.";
+
+    private static string ResolveReleaseDeltaDownstreamOwners(VerifierCorpusGenerationOptions options) =>
+        IsAudit95Release(options)
+            ? "FEAT-159 owns cross-device receipt-channel coverage, FEAT-160 owns repeated publication/counting replay, FEAT-163 owns repeated operational-run confidence evidence, and FEAT-166 owns governance/customer handoff packaging for external review readiness."
+            : "FEAT-152 owns receipt-channel matrix evidence, FEAT-153 owns publication/counting runtime hardening, FEAT-154 owns production-like operational run evidence, FEAT-155 owns failed-finalize continuity rehearsal, and FEAT-156 owns final readiness-register promotion.";
 
     private static string BuildReadme(VerifierCorpusGenerationOptions options, string manifestHash) =>
         $$"""
