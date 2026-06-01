@@ -379,6 +379,26 @@ public sealed class VerifierCorpusGenerationTests
     }
 
     [Fact]
+    public async Task PublicScanner_ExpectedCiReplayTamperOutput_ShouldRemainExpected()
+    {
+        using var workspace = TempCorpusWorkspace.Create();
+        var outputPath = Path.Combine(
+            workspace.Root,
+            "validation",
+            "ci-verifier-output",
+            "tamper-sp10-public-safe-forbidden-material",
+            "VerifierOutput.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        await File.WriteAllTextAsync(outputPath, "{\"message\":\"aws_secret_access_key\"}");
+
+        var findings = VerifierCorpusGenerator.ScanPublicOutput(workspace.Root);
+
+        findings.Should().ContainSingle(x =>
+            x.Category == "cloud_secret" &&
+            x.ExpectedTamperFixture);
+    }
+
+    [Fact]
     public async Task Promotion_ValidateOnly_ShouldNotWritePublicRoot()
     {
         using var workspace = TempVerifierCorpusPromotionWorkspace.Create();

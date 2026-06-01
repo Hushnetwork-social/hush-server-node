@@ -1215,7 +1215,8 @@ public sealed partial class VerifierCorpusGenerator
 
     private static bool IsExpectedTamperFinding(string relativePath) =>
         relativePath.StartsWith("packages/tamper-sp10-", StringComparison.Ordinal) ||
-        relativePath.StartsWith("validation/verifier-output/tamper-sp10-", StringComparison.Ordinal);
+        relativePath.StartsWith("validation/verifier-output/tamper-sp10-", StringComparison.Ordinal) ||
+        relativePath.StartsWith("validation/ci-verifier-output/tamper-sp10-", StringComparison.Ordinal);
 
     private static async Task<string> WriteJsonAsync(
         string outputRoot,
