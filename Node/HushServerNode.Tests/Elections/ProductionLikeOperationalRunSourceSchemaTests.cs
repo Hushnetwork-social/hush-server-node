@@ -159,8 +159,7 @@ public sealed class ProductionLikeOperationalRunSourceSchemaTests
 
         while (directory is not null)
         {
-            if (Directory.Exists(Path.Combine(directory.FullName, "hush-memory-bank")) &&
-                Directory.Exists(Path.Combine(directory.FullName, "hush-server-node")))
+            if (IsWorkspaceRoot(directory.FullName))
             {
                 return directory.FullName;
             }
@@ -170,6 +169,11 @@ public sealed class ProductionLikeOperationalRunSourceSchemaTests
 
         return null;
     }
+
+    private static bool IsWorkspaceRoot(string path) =>
+        Directory.Exists(Path.Combine(path, "hush-memory-bank")) &&
+        (Directory.Exists(Path.Combine(path, "hush-server-node")) ||
+            Directory.Exists(Path.Combine(path, "Node")));
 
     private static JsonObject GetDefinition(JsonObject schema, string name) =>
         schema["$defs"]!.AsObject()[name]!.AsObject();

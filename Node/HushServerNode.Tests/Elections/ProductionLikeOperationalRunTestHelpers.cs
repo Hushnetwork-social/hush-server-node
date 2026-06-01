@@ -112,8 +112,7 @@ internal static class ProductionLikeOperationalRunTestHelpers
 
         while (directory is not null)
         {
-            if (Directory.Exists(Path.Combine(directory.FullName, "hush-memory-bank")) &&
-                Directory.Exists(Path.Combine(directory.FullName, "hush-server-node")))
+            if (IsWorkspaceRoot(directory.FullName))
             {
                 return directory.FullName;
             }
@@ -123,4 +122,9 @@ internal static class ProductionLikeOperationalRunTestHelpers
 
         return null;
     }
+
+    private static bool IsWorkspaceRoot(string path) =>
+        Directory.Exists(Path.Combine(path, "hush-memory-bank")) &&
+        (Directory.Exists(Path.Combine(path, "hush-server-node")) ||
+            Directory.Exists(Path.Combine(path, "Node")));
 }

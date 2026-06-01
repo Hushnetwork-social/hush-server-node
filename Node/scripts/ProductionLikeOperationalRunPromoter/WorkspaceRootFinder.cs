@@ -26,6 +26,7 @@ public static class WorkspaceRootFinder
 
     private static bool IsWorkspaceRoot(string path) =>
         Directory.Exists(Path.Combine(path, "hush-memory-bank")) &&
-        Directory.Exists(Path.Combine(path, "hush-server-node")) &&
-        Directory.Exists(Path.Combine(path, "hush-documents"));
+        Directory.Exists(Path.Combine(path, "hush-documents")) &&
+        (Directory.Exists(Path.Combine(path, "hush-server-node")) ||
+            Directory.Exists(Path.Combine(path, "Node")));
 }
