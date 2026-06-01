@@ -267,7 +267,16 @@ public static class InternalAudit95ProtocolTraceabilityContracts
 
     private static void ValidateBaselineRegister(JsonObject baseline, List<string> errors)
     {
-        RequireValue(baseline, "registerVersionId", BaselineRegisterVersionId, errors);
+        var registerVersionId = GetString(baseline, "registerVersionId");
+        if (string.Equals(registerVersionId, DriftCheckRegisterVersionId, StringComparison.Ordinal))
+        {
+            errors.Add($"FEAT157_DRIFT_SOURCE_USED_AS_BASELINE: registerVersionId must be {BaselineRegisterVersionId}; observed {registerVersionId}.");
+        }
+        else if (!string.Equals(registerVersionId, BaselineRegisterVersionId, StringComparison.Ordinal))
+        {
+            errors.Add($"registerVersionId must be {BaselineRegisterVersionId}; observed {registerVersionId}.");
+        }
+
         RequireValue(baseline, "registerVersion", "v0.1.7", errors);
         RequireValue(baseline, "status", "AcceptedInternal", errors);
         RequireValue(baseline, "authoritativeSourceArtifactId", "RDY-REG-v0.1.7-MANIFEST", errors);

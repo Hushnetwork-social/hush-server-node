@@ -200,6 +200,22 @@ public sealed class InternalAudit95ProtocolTraceabilityPromoterTests
     }
 
     [Fact]
+    public void Source_UsingDriftRegisterAsBaseline_IsRejected()
+    {
+        // Arrange
+        var paths = CreateWorkspace();
+        var source = InternalAudit95ProtocolTraceabilityContracts.LoadSource(paths);
+        source["baselineRegister"]!.AsObject()["registerVersionId"] =
+            InternalAudit95ProtocolTraceabilityContracts.DriftCheckRegisterVersionId;
+
+        // Act
+        var errors = InternalAudit95ProtocolTraceabilityContracts.ValidateSource(source);
+
+        // Assert
+        errors.Should().Contain(error => error.Contains("FEAT157_DRIFT_SOURCE_USED_AS_BASELINE", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Source_WithoutTraceRequirements_IsRejected()
     {
         // Arrange
