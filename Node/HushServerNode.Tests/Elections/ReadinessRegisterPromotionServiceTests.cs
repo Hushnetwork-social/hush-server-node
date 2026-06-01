@@ -330,6 +330,134 @@ public sealed class ReadinessRegisterPromotionServiceTests
     }
 
     [Fact]
+    public void Promote_WithFeat156Source_AppliesProductionRolloutRegisterPromotion()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        MutateRegisterForFeat156Baseline(paths);
+        WriteCompletedFeatureFoldersForFeat156(paths);
+        WriteFeat156PromotionSource(paths);
+        var service = new ReadinessRegisterPromotionService();
+
+        var options = new ReadinessRegisterPromotionOptions(
+            paths,
+            "hushvoting-readiness-register",
+            "v0.1.6",
+            "production_rollout_with_limitations",
+            ValidateOnly: false,
+            Scaffold: false,
+            GeneratedAt: null);
+        var result = service.Promote(options);
+        var promotedRegister = JsonNode.Parse(File.ReadAllText(Path.Combine(
+            result.VersionOutputRoot,
+            ReadinessRegisterPromotionService.RegisterFileName)))!.AsObject();
+        var scorecard = File.ReadAllText(Path.Combine(result.VersionOutputRoot, ReadinessRegisterPromotionService.ScorecardFileName));
+        var reviewerRoot = GetFeat156ReviewerPackageRoot(paths);
+        var publicSafeSummary = File.ReadAllText(Path.Combine(reviewerRoot, "feat156-public-safe-summary.md"));
+        var restrictedIndex = JsonNode.Parse(File.ReadAllText(Path.Combine(reviewerRoot, "feat156-restricted-reviewer-index.json")))!.AsObject();
+        var forbiddenScan = JsonNode.Parse(File.ReadAllText(Path.Combine(reviewerRoot, "feat156-forbidden-material-scan.json")))!.AsObject();
+        var noUiNote = File.ReadAllText(Path.Combine(reviewerRoot, "feat156-no-ui-boundary-note.md"));
+
+        result.RegisterVersionId.Should().Be("RDY-REG-v0.1.6");
+        result.GeneratedAt.Should().Be(new DateTimeOffset(2026, 5, 31, 12, 0, 0, TimeSpan.Zero));
+        result.TotalScore.Should().Be(80);
+        result.StrongestAllowedClaim.Should().Be("production_organizational_rollout");
+        FindDimension(promotedRegister, "RDY-DIM-002")["currentScore"]!.GetValue<int>().Should().Be(8);
+        FindDimension(promotedRegister, "RDY-DIM-010")["currentScore"]!.GetValue<int>().Should().Be(8);
+        promotedRegister["evidenceItems"]!.AsArray()
+            .Select(node => node!.AsObject()["evidenceId"]!.GetValue<string>())
+            .Should()
+            .Contain("RDY-EVID-AT-RDY-013-FEAT-156-001");
+        promotedRegister["scoreChanges"]!.AsArray()
+            .Select(node => node!.AsObject()["scoreChangeId"]!.GetValue<string>())
+            .Should()
+            .Contain("RDY-SCORE-20260531-006");
+        scorecard.Should().Contain("RDY-SCORE-20260531-006");
+        scorecard.Should().Contain("production_organizational_rollout");
+        File.Exists(Path.Combine(reviewerRoot, "feat156-production-rollout-decision-ledger.json")).Should().BeTrue();
+        File.Exists(Path.Combine(reviewerRoot, "feat156-promotion-source-snapshot.json")).Should().BeTrue();
+        File.Exists(Path.Combine(reviewerRoot, "feat156-artifact-hash-audit.json")).Should().BeTrue();
+        File.Exists(Path.Combine(reviewerRoot, "feat156-package-manifest.json")).Should().BeTrue();
+        publicSafeSummary.Should().Contain(result.ManifestHash);
+        publicSafeSummary.Should().Contain(result.ArchiveHash);
+        publicSafeSummary.Should().Contain("limited organizational rollout readiness");
+        publicSafeSummary.ToLowerInvariant().Should().NotContain("total score");
+        publicSafeSummary.Should().NotContain("restricted_reviewer");
+        publicSafeSummary.Should().NotContain("legal sufficiency");
+        publicSafeSummary.Should().NotContain("independent certification");
+        publicSafeSummary.Should().NotContain("full AGM");
+        restrictedIndex["rawEvidenceInlined"]!.GetValue<bool>().Should().BeFalse();
+        restrictedIndex["payloadInliningAllowed"]!.GetValue<bool>().Should().BeFalse();
+        restrictedIndex["evidenceIndex"]!.AsArray().Should().HaveCount(6);
+        restrictedIndex["evidenceIndex"]!.AsArray()
+            .Select(node => node!.AsObject()["featureId"]!.GetValue<string>())
+            .Should()
+            .Contain("FEAT-156");
+        forbiddenScan["status"]!.GetValue<string>().Should().Be("passed");
+        noUiNote.Should().Contain("No HushWebClient route or component is required");
+
+        service.Promote(options with { CheckOnly = true }).RegisterVersionId.Should().Be("RDY-REG-v0.1.6");
+    }
+
+    [Fact]
+    public void Promote_WithFeat156ReviewerArtifactTampered_CheckOnlyFailsClosed()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        MutateRegisterForFeat156Baseline(paths);
+        WriteCompletedFeatureFoldersForFeat156(paths);
+        WriteFeat156PromotionSource(paths);
+        var service = new ReadinessRegisterPromotionService();
+        var options = new ReadinessRegisterPromotionOptions(
+            paths,
+            "hushvoting-readiness-register",
+            "v0.1.6",
+            "production_rollout_with_limitations",
+            ValidateOnly: false,
+            Scaffold: false,
+            GeneratedAt: null);
+        service.Promote(options);
+
+        File.AppendAllText(
+            Path.Combine(GetFeat156ReviewerPackageRoot(paths), "feat156-public-safe-summary.md"),
+            "tampered");
+
+        var act = () => service.Promote(options with { CheckOnly = true });
+
+        act.Should().Throw<ReadinessRegisterPromotionException>()
+            .Where(x => x.Details.Any(detail => detail.Contains("FEAT-156 reviewer output artifact mismatch", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Promote_WithFeat156ForbiddenPublicSafeNeedle_FailsClosed()
+    {
+        var tempRoot = CreateWorkspace();
+        var paths = ReadinessRegisterPromotionPaths.FromWorkspaceRoot(tempRoot);
+        CopyBaselineSources(paths);
+        MutateRegisterForFeat156Baseline(paths);
+        WriteCompletedFeatureFoldersForFeat156(paths);
+        WriteFeat156PromotionSource(paths, extraForbiddenClaimNeedle: "limited organizational rollout readiness");
+
+        var act = () => new ReadinessRegisterPromotionService().Promote(new ReadinessRegisterPromotionOptions(
+            paths,
+            "hushvoting-readiness-register",
+            "v0.1.6",
+            "production_rollout_with_limitations",
+            ValidateOnly: false,
+            Scaffold: false,
+            GeneratedAt: null));
+
+        act.Should().Throw<ReadinessRegisterPromotionException>()
+            .Where(x =>
+                x.Message.Contains("FEAT-156 reviewer output validation failed", StringComparison.Ordinal) &&
+                x.Details.Any(detail =>
+                    detail.Contains("feat156-public-safe-summary.md", StringComparison.Ordinal) &&
+                    detail.Contains("limited organizational rollout readiness", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void Promote_WithProductionRolloutScoreBelow80_FailsClosed()
     {
         var tempRoot = CreateWorkspace();
@@ -612,6 +740,316 @@ public sealed class ReadinessRegisterPromotionServiceTests
         });
     }
 
+    private static void MutateRegisterForFeat156Baseline(ReadinessRegisterPromotionPaths paths)
+    {
+        MutateRegister(paths, register =>
+        {
+            register["registerVersion"] = "v0.1.5";
+            register["registerVersionId"] = "RDY-REG-v0.1.5";
+            register["sourceCommit"] = "feat-156-unit-test-baseline";
+            register["score"]!.AsObject()["total"] = 71;
+            register["generatedViews"]!.AsObject()["publicSafePublicationStatus"] = "pilot_only_with_limitations";
+            register["claimPolicy"]!.AsObject()["strongestAllowedV1Claim"] = "friendly_organization_pilot";
+            register["claimPolicy"]!.AsObject()["alwaysBlockedV1Claims"] = new JsonArray(
+                "production_organizational_rollout",
+                "public_or_state_election");
+
+            var scores = new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                ["RDY-DIM-001"] = 8,
+                ["RDY-DIM-002"] = 6,
+                ["RDY-DIM-003"] = 7,
+                ["RDY-DIM-004"] = 7,
+                ["RDY-DIM-005"] = 8,
+                ["RDY-DIM-006"] = 8,
+                ["RDY-DIM-007"] = 6,
+                ["RDY-DIM-008"] = 8,
+                ["RDY-DIM-009"] = 6,
+                ["RDY-DIM-010"] = 7,
+            };
+            foreach (var dimension in register["dimensions"]!.AsArray().Select(node => node!.AsObject()))
+            {
+                dimension["currentScore"] = scores[dimension["dimensionId"]!.GetValue<string>()];
+            }
+
+            var friendlyClaim = FindClaim(register, "friendly_organization_pilot");
+            friendlyClaim["blockerSeverity"] = "amber";
+            friendlyClaim["status"] = "allowed_with_limitations";
+            friendlyClaim["allowedWording"] = "HushVoting may be used for controlled friendly-organization pilot planning when limitations remain explicit and private readiness review is available.";
+            friendlyClaim["limitationWording"] = "Friendly-pilot readiness is limited to controlled organizations and does not claim production rollout, public/state election readiness, independent validation, or legal sufficiency.";
+            friendlyClaim["blockerIds"] = new JsonArray();
+
+            var productionClaim = FindClaim(register, "production_organizational_rollout");
+            productionClaim["blockerSeverity"] = "red";
+            productionClaim["status"] = "blocked";
+            productionClaim["allowedWording"] = "";
+            productionClaim["limitationWording"] = "";
+            productionClaim["blockedWording"] = "Production organizational rollout is blocked by the v1 claim policy.";
+            productionClaim["publicSafeStatus"] = "public_claim_blocked";
+            productionClaim["blockerIds"] = new JsonArray("RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001");
+
+            var publicStateClaim = FindClaim(register, "public_or_state_election");
+            publicStateClaim["blockerSeverity"] = "red";
+            publicStateClaim["status"] = "blocked";
+            publicStateClaim["allowedWording"] = "";
+            publicStateClaim["limitationWording"] = "";
+            publicStateClaim["blockedWording"] = "Public or state election readiness is blocked by the v1 claim policy.";
+            publicStateClaim["publicSafeStatus"] = "public_claim_blocked";
+            publicStateClaim["blockerIds"] = new JsonArray("RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001");
+
+            var productionBlocker = FindBlocker(register, "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001");
+            productionBlocker["severity"] = "red";
+            productionBlocker["status"] = "open";
+            productionBlocker["featureId"] = "FEAT-130";
+            productionBlocker["limitationWording"] = "";
+            productionBlocker["resolutionCriteria"] = "A later readiness register version explicitly supersedes the v1 claim policy with accepted evidence.";
+
+            var publicStateBlocker = FindBlocker(register, "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001");
+            publicStateBlocker["severity"] = "red";
+            publicStateBlocker["status"] = "open";
+            publicStateBlocker["featureId"] = "FEAT-130";
+            publicStateBlocker["limitationWording"] = "";
+            publicStateBlocker["resolutionCriteria"] = "A later readiness register version explicitly supersedes the v1 claim policy with accepted evidence and external prerequisites.";
+        });
+    }
+
+    private static void WriteCompletedFeatureFoldersForFeat156(ReadinessRegisterPromotionPaths paths)
+    {
+        var completedRoot = Path.Combine(paths.WorkspaceRoot, "hush-memory-bank", "Features", "04_COMPLETED");
+        foreach (var featureId in new[] { "FEAT-151", "FEAT-152", "FEAT-153", "FEAT-154", "FEAT-155" })
+        {
+            Directory.CreateDirectory(Path.Combine(completedRoot, $"{featureId}-unit-test-completed"));
+        }
+    }
+
+    private static void WriteFeat156PromotionSource(
+        ReadinessRegisterPromotionPaths paths,
+        string? extraForbiddenClaimNeedle = null)
+    {
+        var forbiddenClaimNeedles = new JsonArray(
+            "production green",
+            "public/state election ready",
+            "legal sufficiency",
+            "independent certification",
+            "full AGM management software",
+            "government election ready",
+            "legally binding AGM platform");
+        if (!string.IsNullOrWhiteSpace(extraForbiddenClaimNeedle))
+        {
+            forbiddenClaimNeedles.Add(extraForbiddenClaimNeedle);
+        }
+
+        var source = new JsonObject
+        {
+            ["schemaVersion"] = "production-rollout-promotion-source.v1",
+            ["sourceId"] = "FEAT156-UNIT-TEST-PROMOTION-SOURCE",
+            ["featureId"] = "FEAT-156",
+            ["status"] = "accepted",
+            ["generatedAt"] = "2026-05-31T12:00:00Z",
+            ["baselineRegister"] = new JsonObject
+            {
+                ["registerVersionId"] = "RDY-REG-v0.1.5",
+                ["registerVersion"] = "v0.1.5",
+                ["status"] = "AcceptedInternal",
+                ["totalScore"] = 71,
+                ["strongestAllowedClaim"] = "friendly_organization_pilot",
+                ["publicationStatus"] = "pilot_only_with_limitations",
+            },
+            ["targetRegister"] = new JsonObject
+            {
+                ["registerVersionId"] = "RDY-REG-v0.1.6",
+                ["registerVersion"] = "v0.1.6",
+                ["status"] = "AcceptedInternal",
+                ["totalScore"] = 80,
+                ["strongestAllowedClaim"] = "production_organizational_rollout",
+                ["publicationStatus"] = "production_rollout_with_limitations",
+                ["productionClaim"] = new JsonObject
+                {
+                    ["claimLevel"] = "production_organizational_rollout",
+                    ["severity"] = "amber",
+                    ["status"] = "allowed_with_limitations",
+                    ["publicSafeStatus"] = "production_rollout_with_limitations",
+                    ["wording"] = "HushVoting may support limited organizational rollout only when promoted evidence, residual limits, customer-owned governance responsibilities, and public or state blockers remain visible.",
+                },
+                ["publicStateClaim"] = new JsonObject
+                {
+                    ["claimLevel"] = "public_or_state_election",
+                    ["severity"] = "red",
+                    ["status"] = "blocked",
+                    ["publicSafeStatus"] = "public_claim_blocked",
+                    ["wording"] = "Public or state election readiness remains blocked and requires external authority, jurisdiction, certification, transparency, accessibility, procurement, and dispute-remedy prerequisites outside this promotion.",
+                },
+            },
+            ["scoreModel"] = new JsonObject
+            {
+                ["baselineTotal"] = 71,
+                ["acceptedInputDelta"] = 8,
+                ["feat156Delta"] = 1,
+                ["targetTotal"] = 80,
+                ["minimumProductionLimitedScore"] = 80,
+                ["scoreCannotBypassBlockers"] = true,
+            },
+            ["scoreMovements"] = new JsonArray(
+                CreateFeat156Movement("FEAT-151", "RDY-DIM-002", 6, 8, 2, "accepted", "AT-RDY-007", "Verifier/sample/tamper corpus", "RDY-EVID-AT-RDY-007-FEAT-151-001", "FEAT151-CORPUS-MANIFEST", "bd6d7d179368fbb7a13811d2fea497ad68306efd949a8178778ca2890554a48c"),
+                CreateFeat156Movement("FEAT-152", "RDY-DIM-003", 7, 8, 1, "accepted", "AT-RDY-008", "Cross-device receipt/inclusion verification", "RDY-EVID-AT-RDY-008-FEAT-152-001", "FEAT152-RECEIPT-CHANNEL-MANIFEST", "d9b09012846bab1d07b7082c88fdd70c206160b0b31dd38a9655e440d5ec2c64"),
+                CreateFeat156Movement("FEAT-153", "RDY-DIM-004", 7, 8, 1, "accepted", "AT-RDY-001", "Protocol/evidence architecture", "RDY-EVID-AT-RDY-001-FEAT-153-001", "FEAT153-PUBLICATION-COUNTING-MANIFEST", "9ae9c5a78d14c4417b8283e6ba996f08e567d5776c540c27bfdfdcebb8742ca3"),
+                CreateFeat156Movement("FEAT-154", "RDY-DIM-007", 6, 8, 2, "accepted", "AT-RDY-006", "Operational readiness package", "RDY-EVID-AT-RDY-006-FEAT-154-001", "FEAT154-PRODUCTION-LIKE-RUN-MANIFEST", "62b2c9afb605bb6e0d26876629b7df122b7da566df37f536b4790a9398ecb410"),
+                CreateFeat156Movement("FEAT-155", "RDY-DIM-009", 6, 8, 2, "accepted", "AT-RDY-011", "Dispute/continuity readiness", "RDY-EVID-AT-RDY-011-FEAT-155-001", "FEAT155-FAILED-FINALIZE-MANIFEST", "9ca42435559bbcc5b91ce99428a100e14d1637f60e0947eff21d869f8b36037b"),
+                CreateFeat156Movement("FEAT-156", "RDY-DIM-010", 7, 8, 1, "accepted_with_limitations", "AT-RDY-013", "Controlled pilot evidence", "RDY-EVID-AT-RDY-013-FEAT-156-001", "FEAT156-PROMOTION-CONTRACT", "867cb50db400715fb444fd6e2d7e15763e6d84bc054b36c00bda3ddbaadf51ec")),
+            ["policyBaselines"] = new JsonArray(
+                new JsonObject { ["featureId"] = "FEAT-148" },
+                new JsonObject { ["featureId"] = "FEAT-149" }),
+            ["evidenceLifecyclePolicy"] = new JsonObject
+            {
+                ["requiredCompletedFeatures"] = new JsonArray("FEAT-151", "FEAT-152", "FEAT-153", "FEAT-154", "FEAT-155"),
+                ["freshnessRequired"] = "current",
+                ["tamperCheckRequired"] = true,
+                ["placeholderInputsBlock"] = true,
+            },
+            ["blockerDecisions"] = new JsonArray(
+                new JsonObject
+                {
+                    ["blockerId"] = "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+                    ["claimLevel"] = "production_organizational_rollout",
+                    ["targetSeverity"] = "amber",
+                    ["targetStatus"] = "allowed_with_limitations",
+                    ["decision"] = "allow_with_limitations",
+                    ["limitationWording"] = "Allowed only for limited organizational rollout with visible residual risks and customer-owned governance responsibilities.",
+                    ["residualRisk"] = "Repeated operating history, customer-site variance, independent validation, and legal sufficiency remain unproven.",
+                },
+                new JsonObject
+                {
+                    ["blockerId"] = "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+                    ["claimLevel"] = "public_or_state_election",
+                    ["targetSeverity"] = "red",
+                    ["targetStatus"] = "open",
+                    ["decision"] = "keep_policy_blocked",
+                    ["limitationWording"] = "No public or state election readiness is claimed by this register.",
+                    ["residualRisk"] = "Jurisdiction, authority approval, certification, public accessibility, procurement, transparency, and dispute-remedy prerequisites remain outside this promotion.",
+                }),
+            ["claimPolicy"] = new JsonObject
+            {
+                ["productionGreenForbidden"] = true,
+                ["publicStateUnlockForbidden"] = true,
+                ["legalSufficiencyForbidden"] = true,
+                ["independentCertificationForbidden"] = true,
+                ["fullAgmProductClaimForbidden"] = true,
+            },
+            ["publicSafeOutputRules"] = new JsonObject
+            {
+                ["allowedPublicFields"] = new JsonArray(
+                    "registerId",
+                    "registerVersionId",
+                    "publicationStatus",
+                    "publicSafeStatus",
+                    "manifestHash",
+                    "archiveHash",
+                    "limitationWording"),
+                ["allowedPublicPhrases"] = new JsonArray(
+                    "limited organizational rollout readiness",
+                    "not legal approval",
+                    "customer-owned governance responsibilities remain visible"),
+                ["forbiddenMaterialNeedles"] = new JsonArray(
+                    "C:\\myWork\\HushNetworkOrg",
+                    "hush-documents/PrivateServer_ElectronicVoting/",
+                    "restricted-evidence/",
+                    "restricted_reviewer",
+                    "raw evidence",
+                    "raw log",
+                    "voter identity",
+                    "ballot choice",
+                    "KMS key",
+                    "credential",
+                    "support case",
+                    "database connection"),
+                ["forbiddenClaimNeedles"] = forbiddenClaimNeedles,
+                ["numericScorePublicDisclosure"] = false,
+            },
+            ["restrictedReviewerRules"] = new JsonObject
+            {
+                ["payloadInliningAllowed"] = false,
+                ["allowedRefTypes"] = new JsonArray(
+                    "path",
+                    "sha256",
+                    "manifest_entry",
+                    "source_id",
+                    "feature_id",
+                    "acceptance_gate"),
+                ["rawEvidenceCopied"] = false,
+            },
+            ["signoff"] = new JsonObject
+            {
+                ["engineeringRole"] = "engineering-owner",
+                ["operationsProductRole"] = "operations-product-owner",
+                ["status"] = "accepted",
+                ["samePersonTwoHatAllowed"] = true,
+            },
+            ["residualRisks"] = new JsonArray(
+                "RDY-REG-v0.1.6 can support limited organizational rollout only with visible limitations.",
+                "External authority election use remains outside this promotion.",
+                "Customer governance and regulatory approval remain customer-owned.",
+                "One production-like run plus one continuity rehearsal does not prove repeated production operating history.",
+                "Public-safe outputs must not expose internal score details, source payloads, private paths, or overclaim wording."),
+        };
+
+        var sourcePath = Path.Combine(
+            paths.WorkspaceRoot,
+            "hush-memory-bank",
+            "Overview",
+            "HushVotingReadiness",
+            "Production-Rollout-Promotion-Register",
+            "examples",
+            "release-baseline",
+            "production-rollout-promotion-source.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+        File.WriteAllText(sourcePath, source.ToJsonString(JsonOptions));
+    }
+
+    private static JsonObject CreateFeat156Movement(
+        string featureId,
+        string dimensionId,
+        int previousScore,
+        int acceptedScore,
+        int delta,
+        string status,
+        string acceptanceGateId,
+        string sourceGapRow,
+        string evidenceId,
+        string artifactId,
+        string sha256Hash) =>
+        new()
+        {
+            ["movementId"] = $"FEAT156-SCORE-{dimensionId}-{featureId}",
+            ["featureId"] = featureId,
+            ["dimensionId"] = dimensionId,
+            ["previousScore"] = previousScore,
+            ["acceptedScore"] = acceptedScore,
+            ["delta"] = delta,
+            ["status"] = status,
+            ["freshness"] = "current",
+            ["directRegisterMutation"] = false,
+            ["registerPromotionOwner"] = "FEAT-156",
+            ["acceptanceGateIds"] = new JsonArray(acceptanceGateId),
+            ["sourceGapRows"] = new JsonArray(sourceGapRow),
+            ["evidenceIds"] = new JsonArray(evidenceId),
+            ["artifactRefs"] = new JsonArray(
+                new JsonObject
+                {
+                    ["artifactId"] = artifactId,
+                    ["path"] = $"unit-test/{featureId}/{artifactId}.json",
+                    ["sha256Hash"] = sha256Hash,
+                    ["hashBasis"] = "file_sha256",
+                    ["visibility"] = featureId is "FEAT-151" or "FEAT-152" or "FEAT-153" ? "public" : "restricted",
+                }),
+            ["claimEffect"] = $"Raises {dimensionId} evidence to {acceptedScore} for FEAT-156 production-limited promotion.",
+            ["residualRisk"] = $"{featureId} residual risk remains visible after promotion.",
+            ["signoff"] = new JsonObject
+            {
+                ["sourceFeatureCompleted"] = featureId != "FEAT-156",
+                ["acceptedForPromotion"] = true,
+            },
+        };
+
     private static void WriteFeat150CleanupSource(ReadinessRegisterPromotionPaths paths)
     {
         var register = JsonNode.Parse(File.ReadAllText(paths.RegisterPath))!.AsObject();
@@ -735,6 +1173,14 @@ public sealed class ReadinessRegisterPromotionServiceTests
             "hush-documents",
             "PrivateServer_ElectronicVoting",
             "Internal-Non-Binding-Rehearsal-Cleanup",
+            "package");
+
+    private static string GetFeat156ReviewerPackageRoot(ReadinessRegisterPromotionPaths paths) =>
+        Path.Combine(
+            paths.WorkspaceRoot,
+            "hush-documents",
+            "PrivateServer_ElectronicVoting",
+            "Production-Rollout-Promotion-Register",
             "package");
 
     private static JsonObject FindClaim(JsonObject register, string claimLevel) =>

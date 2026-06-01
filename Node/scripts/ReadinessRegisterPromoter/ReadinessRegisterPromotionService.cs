@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace ReadinessRegisterPromoter;
 
@@ -74,6 +75,10 @@ public sealed class ReadinessRegisterPromotionService
     public const string ManifestFileName = "readiness-register-manifest.json";
     public const string CatalogFileName = "readiness-register-catalog.json";
     public const string ArchivePrefix = "HushVoting-Readiness-Register";
+
+    private const string Feat156TargetVersion = "v0.1.6";
+    private const string Feat156TargetPublicationStatus = "production_rollout_with_limitations";
+    private const string Feat156PromotionSourceFileName = "production-rollout-promotion-source.json";
 
     private static readonly Regex VersionPattern = new("^v[0-9]+\\.[0-9]+\\.[0-9]+$", RegexOptions.Compiled);
     private static readonly Regex RegisterVersionIdPattern = new("^RDY-REG-v[0-9]+\\.[0-9]+\\.[0-9]+$", RegexOptions.Compiled);
@@ -197,6 +202,7 @@ public sealed class ReadinessRegisterPromotionService
         var schema = ReadJsonObject(options.Paths.SchemaPath, SchemaFileName);
         var register = ReadJsonObject(options.Paths.RegisterPath, RegisterFileName);
         var example = ReadJsonObject(options.Paths.ExamplePath, ExampleFileName);
+        var feat156Promotion = TryApplyFeat156ProductionRolloutPromotion(register, options);
         ApplyCommandOverrides(register, options);
 
         var validationErrors = new List<string>();
@@ -210,7 +216,7 @@ public sealed class ReadinessRegisterPromotionService
                 validationErrors);
         }
 
-        var generatedAt = options.GeneratedAt ?? DateTimeOffset.UtcNow;
+        var generatedAt = options.GeneratedAt ?? feat156Promotion?.GeneratedAt ?? DateTimeOffset.UtcNow;
         var registerVersion = GetRequiredString(register, "registerVersion");
         var registerVersionId = GetRequiredString(register, "registerVersionId");
         var status = GetRequiredString(register, "status");
@@ -280,6 +286,12 @@ public sealed class ReadinessRegisterPromotionService
             GetPromotedFileContent(promotedFiles, ScorecardFileName),
             GetPromotedFileContent(promotedFiles, RestrictedReviewerExtractFileName),
             GetPromotedFileContent(promotedFiles, PublicSafeSummaryFileName));
+        var feat156ReviewerOutputPackage = Feat156ReviewerOutputs.TryGenerate(
+            options.Paths,
+            register,
+            generatedAt,
+            manifestHash,
+            archiveHash);
 
         var versionOutputRoot = Path.Combine(options.Paths.OutputRoot, registerVersion);
         var writtenFiles = new List<string>();
@@ -306,6 +318,13 @@ public sealed class ReadinessRegisterPromotionService
                 checkErrors.AddRange(Feat150CleanupAudit.ValidateExistingArtifacts(
                     Feat150CleanupAudit.PackageRoot(options.Paths),
                     feat150CleanupPackage.Artifacts));
+            }
+
+            if (feat156ReviewerOutputPackage is not null)
+            {
+                checkErrors.AddRange(Feat156ReviewerOutputs.ValidateExistingArtifacts(
+                    Feat156ReviewerOutputs.PackageRoot(options.Paths),
+                    feat156ReviewerOutputPackage.Artifacts));
             }
 
             if (checkErrors.Count > 0)
@@ -338,6 +357,14 @@ public sealed class ReadinessRegisterPromotionService
                 Feat150CleanupAudit.WriteArtifacts(
                     Feat150CleanupAudit.PackageRoot(options.Paths),
                     feat150CleanupPackage.Artifacts,
+                    writtenFiles);
+            }
+
+            if (feat156ReviewerOutputPackage is not null)
+            {
+                Feat156ReviewerOutputs.WriteArtifacts(
+                    Feat156ReviewerOutputs.PackageRoot(options.Paths),
+                    feat156ReviewerOutputPackage.Artifacts,
                     writtenFiles);
             }
         }
@@ -405,6 +432,515 @@ public sealed class ReadinessRegisterPromotionService
                 $"Could not read {displayName}.",
                 [$"{path}: {ex.Message}"]);
         }
+    }
+
+    private static Feat156PromotionApplication? TryApplyFeat156ProductionRolloutPromotion(
+        JsonObject register,
+        ReadinessRegisterPromotionOptions options)
+    {
+        if (!IsFeat156ProductionRolloutRequest(options))
+        {
+            return null;
+        }
+
+        var sourcePath = Path.Combine(
+            options.Paths.WorkspaceRoot,
+            "hush-memory-bank",
+            "Overview",
+            "HushVotingReadiness",
+            "Production-Rollout-Promotion-Register",
+            "examples",
+            "release-baseline",
+            Feat156PromotionSourceFileName);
+        if (!File.Exists(sourcePath))
+        {
+            throw new ReadinessRegisterPromotionException(
+                "FEAT-156 production rollout promotion source is required.",
+                [Path.GetRelativePath(options.Paths.WorkspaceRoot, sourcePath)]);
+        }
+
+        var source = ReadJsonObject(sourcePath, Feat156PromotionSourceFileName);
+        var sourceValidation = new Feat156PromotionSourceValidator().Validate(source, options.Paths.WorkspaceRoot);
+        if (!sourceValidation.IsValid)
+        {
+            throw new ReadinessRegisterPromotionException(
+                "FEAT-156 production rollout promotion source failed validation.",
+                sourceValidation.Errors);
+        }
+
+        var baselineErrors = ValidateFeat156Baseline(register, source);
+        if (baselineErrors.Count > 0)
+        {
+            throw new ReadinessRegisterPromotionException(
+                "FEAT-156 production rollout promotion source does not match the current baseline register.",
+                baselineErrors);
+        }
+
+        var generatedAt = ParseRequiredTimestamp(source, "generatedAt");
+        ApplyFeat156ProductionRolloutPromotionSource(register, source, generatedAt, sourceValidation.RecalculatedScore, options.Paths.WorkspaceRoot);
+        return new Feat156PromotionApplication(generatedAt);
+    }
+
+    private static bool IsFeat156ProductionRolloutRequest(ReadinessRegisterPromotionOptions options) =>
+        string.Equals(options.Version, Feat156TargetVersion, StringComparison.Ordinal) &&
+        string.Equals(options.PublicationStatus, Feat156TargetPublicationStatus, StringComparison.Ordinal);
+
+    private static List<string> ValidateFeat156Baseline(JsonObject register, JsonObject source)
+    {
+        var errors = new List<string>();
+        var baseline = GetRequiredObject(source, "baselineRegister");
+        var score = GetRequiredObject(register, "score");
+
+        AddMismatch(
+            errors,
+            "registerVersionId",
+            GetStringOrDefault(baseline, "registerVersionId"),
+            GetStringOrDefault(register, "registerVersionId"));
+        AddMismatch(
+            errors,
+            "registerVersion",
+            GetStringOrDefault(baseline, "registerVersion"),
+            GetStringOrDefault(register, "registerVersion"));
+        AddMismatch(
+            errors,
+            "status",
+            GetStringOrDefault(baseline, "status"),
+            GetStringOrDefault(register, "status"));
+        AddMismatch(
+            errors,
+            "score.total",
+            GetIntOrDefault(baseline, "totalScore").ToString(CultureInfo.InvariantCulture),
+            GetIntOrDefault(score, "total").ToString(CultureInfo.InvariantCulture));
+        AddMismatch(
+            errors,
+            "strongestAllowedClaim",
+            GetStringOrDefault(baseline, "strongestAllowedClaim"),
+            GetCurrentStrongestAllowedClaim(register));
+
+        return errors;
+    }
+
+    private static void AddMismatch(List<string> errors, string field, string expected, string actual)
+    {
+        if (!string.Equals(expected, actual, StringComparison.Ordinal))
+        {
+            errors.Add($"{field} must be {expected}; found {actual}.");
+        }
+    }
+
+    private static void ApplyFeat156ProductionRolloutPromotionSource(
+        JsonObject register,
+        JsonObject source,
+        DateTimeOffset generatedAt,
+        int recalculatedScore,
+        string workspaceRoot)
+    {
+        var target = GetRequiredObject(source, "targetRegister");
+        register["registerVersion"] = GetRequiredString(target, "registerVersion");
+        register["registerVersionId"] = GetRequiredString(target, "registerVersionId");
+        register["status"] = GetRequiredString(target, "status");
+        register["promotedAt"] = generatedAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        register["sourceCommit"] = GetRequiredString(source, "sourceId");
+
+        var score = GetRequiredObject(register, "score");
+        score["total"] = recalculatedScore;
+
+        var claimPolicy = GetRequiredObject(register, "claimPolicy");
+        claimPolicy["strongestAllowedV1Claim"] = GetRequiredString(target, "strongestAllowedClaim");
+        RemoveAlwaysBlockedClaim(claimPolicy, "production_organizational_rollout");
+
+        GetRequiredObject(register, "generatedViews")["publicSafePublicationStatus"] =
+            GetRequiredString(target, "publicationStatus");
+
+        var scoreMovements = GetRequiredArray(source, "scoreMovements")
+            .Select(node => node!.AsObject())
+            .ToArray();
+        ApplyFeat156DimensionMovements(register, scoreMovements);
+        ApplyFeat156ClaimDecisions(register, source);
+        ApplyFeat156BlockerDecisions(register, source);
+        EnsureFeat156EvidenceItems(register, scoreMovements, generatedAt, workspaceRoot);
+        EnsureFeat156ScoreChanges(register, scoreMovements, generatedAt, GetIntOrDefault(GetRequiredObject(source, "scoreModel"), "baselineTotal"));
+    }
+
+    private static void RemoveAlwaysBlockedClaim(JsonObject claimPolicy, string claimLevel)
+    {
+        if (claimPolicy["alwaysBlockedV1Claims"] is not JsonArray alwaysBlocked)
+        {
+            return;
+        }
+
+        var remaining = alwaysBlocked
+            .Select(node => node?.GetValue<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value) && value != claimLevel)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var replacement = new JsonArray();
+        foreach (var value in remaining)
+        {
+            replacement.Add(value);
+        }
+
+        claimPolicy["alwaysBlockedV1Claims"] = replacement;
+    }
+
+    private static void ApplyFeat156DimensionMovements(JsonObject register, IReadOnlyList<JsonObject> scoreMovements)
+    {
+        foreach (var movement in scoreMovements)
+        {
+            var dimensionId = GetRequiredString(movement, "dimensionId");
+            var dimension = FindDimension(register, dimensionId)
+                ?? throw new ReadinessRegisterPromotionException(
+                    "FEAT-156 promotion source references an unknown score dimension.",
+                    [dimensionId]);
+            var expectedPreviousScore = GetRequiredInt(movement, "previousScore");
+            var actualPreviousScore = GetRequiredInt(dimension, "currentScore");
+            if (actualPreviousScore != expectedPreviousScore)
+            {
+                throw new ReadinessRegisterPromotionException(
+                    "FEAT-156 promotion source score movement does not match the current dimension score.",
+                    [$"{dimensionId} expected {expectedPreviousScore}; found {actualPreviousScore}."]);
+            }
+
+            dimension["currentScore"] = GetRequiredInt(movement, "acceptedScore");
+            AddUniqueStrings(GetRequiredArray(dimension, "evidenceIds"), GetReadinessEvidenceIds(movement));
+            AddUniqueStrings(GetRequiredArray(dimension, "acceptanceGateIds"), GetStringArray(movement, "acceptanceGateIds"));
+            AddUniqueStrings(GetRequiredArray(dimension, "sourceGapRows"), GetStringArray(movement, "sourceGapRows"));
+            dimension["residualRisk"] = GetRequiredString(movement, "residualRisk");
+            dimension["scoreRationale"] = $"{GetRequiredString(movement, "featureId")} accepted FEAT-156 promotion movement: {GetRequiredString(movement, "claimEffect")}";
+        }
+    }
+
+    private static void ApplyFeat156ClaimDecisions(JsonObject register, JsonObject source)
+    {
+        var target = GetRequiredObject(source, "targetRegister");
+        var productionClaimSource = GetRequiredObject(target, "productionClaim");
+        var publicStateClaimSource = GetRequiredObject(target, "publicStateClaim");
+        var productionDecision = FindSourceBlockerDecision(source, "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001")
+            ?? throw new ReadinessRegisterPromotionException("FEAT-156 source is missing production blocker decision.", []);
+
+        var productionClaim = FindClaimLevel(register, "production_organizational_rollout")
+            ?? throw new ReadinessRegisterPromotionException("FEAT-156 production claim level is missing.", []);
+        productionClaim["blockerSeverity"] = GetRequiredString(productionClaimSource, "severity");
+        productionClaim["status"] = GetRequiredString(productionClaimSource, "status");
+        productionClaim["allowedWording"] = GetRequiredString(productionClaimSource, "wording");
+        productionClaim["limitationWording"] = GetRequiredString(productionDecision, "limitationWording");
+        productionClaim["blockedWording"] = "";
+        productionClaim["publicSafeStatus"] = GetRequiredString(productionClaimSource, "publicSafeStatus");
+        productionClaim["blockerIds"] = new JsonArray("RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001");
+
+        var publicStateClaim = FindClaimLevel(register, "public_or_state_election")
+            ?? throw new ReadinessRegisterPromotionException("FEAT-156 public/state claim level is missing.", []);
+        publicStateClaim["blockerSeverity"] = GetRequiredString(publicStateClaimSource, "severity");
+        publicStateClaim["status"] = GetRequiredString(publicStateClaimSource, "status");
+        publicStateClaim["allowedWording"] = "";
+        publicStateClaim["limitationWording"] = "";
+        publicStateClaim["blockedWording"] = GetRequiredString(publicStateClaimSource, "wording");
+        publicStateClaim["publicSafeStatus"] = GetRequiredString(publicStateClaimSource, "publicSafeStatus");
+        publicStateClaim["blockerIds"] = new JsonArray("RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001");
+    }
+
+    private static void ApplyFeat156BlockerDecisions(JsonObject register, JsonObject source)
+    {
+        foreach (var decision in GetRequiredArray(source, "blockerDecisions").Select(node => node!.AsObject()))
+        {
+            var blockerId = GetRequiredString(decision, "blockerId");
+            var blocker = FindBlocker(register, blockerId);
+            if (blocker is null)
+            {
+                continue;
+            }
+
+            blocker["severity"] = GetRequiredString(decision, "targetSeverity");
+            var targetStatus = GetRequiredString(decision, "targetStatus");
+            blocker["status"] = targetStatus == "allowed_with_limitations" ? "open" : targetStatus;
+            blocker["limitationWording"] = GetRequiredString(decision, "limitationWording");
+            blocker["resolutionCriteria"] = GetRequiredString(decision, "residualRisk");
+            if (blockerId == "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001")
+            {
+                blocker["featureId"] = "FEAT-156";
+            }
+        }
+    }
+
+    private static void EnsureFeat156EvidenceItems(
+        JsonObject register,
+        IReadOnlyList<JsonObject> scoreMovements,
+        DateTimeOffset generatedAt,
+        string workspaceRoot)
+    {
+        var evidenceItems = GetRequiredArray(register, "evidenceItems");
+        var existingEvidenceIds = evidenceItems
+            .Select(node => node?.AsObject())
+            .Where(node => node is not null)
+            .Select(node => GetStringOrDefault(node!, "evidenceId"))
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var movement in scoreMovements)
+        {
+            foreach (var evidenceId in GetReadinessEvidenceIds(movement))
+            {
+                if (existingEvidenceIds.Contains(evidenceId))
+                {
+                    continue;
+                }
+
+                evidenceItems.Add(BuildFeat156EvidenceItem(movement, evidenceId, generatedAt, workspaceRoot));
+                existingEvidenceIds.Add(evidenceId);
+            }
+        }
+    }
+
+    private static JsonObject BuildFeat156EvidenceItem(
+        JsonObject movement,
+        string evidenceId,
+        DateTimeOffset generatedAt,
+        string workspaceRoot)
+    {
+        var featureId = GetRequiredString(movement, "featureId");
+        var dimensionId = GetRequiredString(movement, "dimensionId");
+        var sourceGapRow = GetStringArray(movement, "sourceGapRows").FirstOrDefault() ?? "Production rollout promotion";
+        return new JsonObject
+        {
+            ["evidenceId"] = evidenceId,
+            ["parentEpic"] = "EPIC-015",
+            ["featureId"] = featureId,
+            ["sourceGapRow"] = sourceGapRow,
+            ["acceptanceGateIds"] = CloneStringArray(GetRequiredArray(movement, "acceptanceGateIds")),
+            ["dimensionIds"] = new JsonArray(dimensionId),
+            ["electionScope"] = "not_election_specific",
+            ["releaseScope"] = "production-rollout-promotion-v0.1.6",
+            ["visibility"] = "restricted_reviewer",
+            ["status"] = "accepted",
+            ["producedAt"] = generatedAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
+            ["owner"] = "HushVoting readiness owner",
+            ["artifactRefs"] = BuildFeat156EvidenceArtifactRefs(movement, workspaceRoot),
+            ["checkResults"] = new JsonArray(
+                new JsonObject
+                {
+                    ["checkId"] = $"CHK-FEAT156-{dimensionId}",
+                    ["status"] = "pass",
+                    ["summary"] = GetRequiredString(movement, "claimEffect"),
+                    ["detailsRef"] = GetRequiredString(movement, "movementId"),
+                }),
+            ["freshness"] = new JsonObject
+            {
+                ["state"] = "current",
+                ["invalidationRule"] = "Event-based invalidation when the FEAT-156 production rollout promotion source or any referenced source feature evidence changes.",
+                ["staleReason"] = "",
+                ["timeSensitive"] = false,
+            },
+            ["residualRisk"] = GetRequiredString(movement, "residualRisk"),
+            ["claimEffect"] = "score_increase",
+            ["signoffs"] = CreateFeat156Signoffs(featureId, dimensionId, generatedAt),
+            ["relatedExceptionIds"] = new JsonArray(),
+            ["relatedBlockerIds"] = GetFeat156RelatedBlockers(dimensionId),
+        };
+    }
+
+    private static JsonArray BuildFeat156EvidenceArtifactRefs(JsonObject movement, string workspaceRoot)
+    {
+        var result = new JsonArray();
+        foreach (var artifactRef in GetRequiredArray(movement, "artifactRefs").Select(node => node!.AsObject()))
+        {
+            var relativePath = GetStringOrDefault(artifactRef, "path");
+            var fullPath = string.IsNullOrWhiteSpace(relativePath)
+                ? string.Empty
+                : Path.Combine(workspaceRoot, relativePath);
+            result.Add(new JsonObject
+            {
+                ["artifactId"] = GetRequiredString(artifactRef, "artifactId"),
+                ["relativePath"] = relativePath,
+                ["hashAlgorithm"] = "SHA-256",
+                ["sha256Hash"] = NormalizeSha256(GetRequiredString(artifactRef, "sha256Hash")),
+                ["mediaType"] = GuessMediaType(relativePath),
+                ["sizeBytes"] = GetArtifactSizeBytes(fullPath),
+                ["visibility"] = "restricted_reviewer",
+            });
+        }
+
+        return result;
+    }
+
+    private static void EnsureFeat156ScoreChanges(
+        JsonObject register,
+        IReadOnlyList<JsonObject> scoreMovements,
+        DateTimeOffset generatedAt,
+        int baselineTotal)
+    {
+        var scoreChanges = GetRequiredArray(register, "scoreChanges");
+        var existingScoreChangeIds = scoreChanges
+            .Select(node => node?.AsObject())
+            .Where(node => node is not null)
+            .Select(node => GetStringOrDefault(node!, "scoreChangeId"))
+            .ToHashSet(StringComparer.Ordinal);
+        var runningTotal = baselineTotal;
+        var index = 1;
+        foreach (var movement in scoreMovements)
+        {
+            var scoreChangeId = $"RDY-SCORE-20260531-{index:000}";
+            var delta = GetRequiredInt(movement, "delta");
+            if (!existingScoreChangeIds.Contains(scoreChangeId))
+            {
+                scoreChanges.Add(BuildFeat156ScoreChange(movement, scoreChangeId, generatedAt, runningTotal, runningTotal + delta));
+                existingScoreChangeIds.Add(scoreChangeId);
+            }
+
+            runningTotal += delta;
+            index++;
+        }
+    }
+
+    private static JsonObject BuildFeat156ScoreChange(
+        JsonObject movement,
+        string scoreChangeId,
+        DateTimeOffset generatedAt,
+        int previousTotal,
+        int acceptedTotal)
+    {
+        var dimensionId = GetRequiredString(movement, "dimensionId");
+        var featureId = GetRequiredString(movement, "featureId");
+        var acceptedScore = GetRequiredInt(movement, "acceptedScore");
+        return new JsonObject
+        {
+            ["scoreChangeId"] = scoreChangeId,
+            ["dimensionId"] = dimensionId,
+            ["direction"] = "increase",
+            ["previousScore"] = GetRequiredInt(movement, "previousScore"),
+            ["proposedScore"] = acceptedScore,
+            ["acceptedScore"] = acceptedScore,
+            ["evidenceIds"] = ToJsonArray(GetReadinessEvidenceIds(movement)),
+            ["sourceGapRow"] = GetStringArray(movement, "sourceGapRows").FirstOrDefault() ?? "Production rollout promotion",
+            ["acceptanceGateIds"] = CloneStringArray(GetRequiredArray(movement, "acceptanceGateIds")),
+            ["blockerImpactBefore"] = GetFeat156RelatedBlockers(dimensionId),
+            ["blockerImpactAfter"] = GetFeat156RelatedBlockers(dimensionId),
+            ["claimImpact"] = GetRequiredString(movement, "claimEffect"),
+            ["reason"] = $"{featureId} accepted evidence is consumed by FEAT-156 to promote RDY-REG-v0.1.6 with production rollout limitations.",
+            ["generatedDiff"] = $"{dimensionId} currentScore {GetRequiredInt(movement, "previousScore")} -> {acceptedScore}; total score {previousTotal} -> {acceptedTotal}.",
+            ["signoffs"] = CreateFeat156Signoffs(featureId, dimensionId, generatedAt),
+        };
+    }
+
+    private static JsonObject CreateFeat156Signoffs(string featureId, string dimensionId, DateTimeOffset generatedAt)
+    {
+        var signedAt = generatedAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        var basis = $"Accepted {featureId} evidence for FEAT-156 {dimensionId} production rollout limited promotion.";
+        return new JsonObject
+        {
+            ["engineering"] = new JsonObject
+            {
+                ["role"] = "engineering",
+                ["signerId"] = "paulo-aboim-pinto",
+                ["signerName"] = "Paulo Aboim Pinto",
+                ["signedAt"] = signedAt,
+                ["basis"] = basis,
+                ["samePersonTwoHat"] = true,
+            },
+            ["operationsProduct"] = new JsonObject
+            {
+                ["role"] = "operations_product",
+                ["signerId"] = "paulo-aboim-pinto",
+                ["signerName"] = "Paulo Aboim Pinto",
+                ["signedAt"] = signedAt,
+                ["basis"] = basis,
+                ["samePersonTwoHat"] = true,
+            },
+        };
+    }
+
+    private static JsonArray GetFeat156RelatedBlockers(string dimensionId)
+    {
+        var blockers = new JsonArray("RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001");
+        if (dimensionId == "RDY-DIM-010")
+        {
+            blockers.Add("RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001");
+        }
+
+        return blockers;
+    }
+
+    private static JsonObject? FindSourceBlockerDecision(JsonObject source, string blockerId) =>
+        GetRequiredArray(source, "blockerDecisions")
+            .Select(node => node!.AsObject())
+            .FirstOrDefault(decision => GetStringOrDefault(decision, "blockerId") == blockerId);
+
+    private static IReadOnlyList<string> GetReadinessEvidenceIds(JsonObject movement) =>
+        GetStringArray(movement, "evidenceIds")
+            .Where(evidenceId => EvidenceIdPattern.IsMatch(evidenceId))
+            .ToArray();
+
+    private static IReadOnlyList<string> GetStringArray(JsonObject item, string propertyName) =>
+        item[propertyName] is JsonArray array
+            ? array
+                .Select(node => node?.GetValue<string>())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value!)
+                .ToArray()
+            : [];
+
+    private static JsonArray ToJsonArray(IEnumerable<string> values)
+    {
+        var result = new JsonArray();
+        foreach (var value in values)
+        {
+            result.Add(value);
+        }
+
+        return result;
+    }
+
+    private static JsonArray CloneStringArray(JsonArray source) => ToJsonArray(
+        source
+            .Select(node => node?.GetValue<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!));
+
+    private static void AddUniqueStrings(JsonArray target, IEnumerable<string> values)
+    {
+        var existing = target
+            .Select(node => node?.GetValue<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var value in values)
+        {
+            if (existing.Add(value))
+            {
+                target.Add(value);
+            }
+        }
+    }
+
+    private static DateTimeOffset ParseRequiredTimestamp(JsonObject item, string propertyName)
+    {
+        var value = GetRequiredString(item, propertyName);
+        return DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal);
+    }
+
+    private static string NormalizeSha256(string value) =>
+        value.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase)
+            ? value["sha256:".Length..].ToLowerInvariant()
+            : value.ToLowerInvariant();
+
+    private static string GuessMediaType(string relativePath)
+    {
+        return Path.GetExtension(relativePath).ToLowerInvariant() switch
+        {
+            ".json" => "application/json",
+            ".md" => "text/markdown",
+            ".txt" => "text/plain",
+            ".csv" => "text/csv",
+            _ => "application/octet-stream",
+        };
+    }
+
+    private static int GetArtifactSizeBytes(string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath) || !File.Exists(fullPath))
+        {
+            return 0;
+        }
+
+        var length = new FileInfo(fullPath).Length;
+        return length > int.MaxValue ? int.MaxValue : (int)length;
     }
 
     private static void ApplyCommandOverrides(JsonObject register, ReadinessRegisterPromotionOptions options)
@@ -1544,6 +2080,11 @@ public sealed class ReadinessRegisterPromotionService
             .Select(node => node?.AsObject())
             .FirstOrDefault(claim => claim is not null && GetStringOrDefault(claim, "claimLevel") == claimLevel);
 
+    private static JsonObject? FindDimension(JsonObject register, string dimensionId) =>
+        GetRequiredArray(register, "dimensions")
+            .Select(node => node?.AsObject())
+            .FirstOrDefault(dimension => dimension is not null && GetStringOrDefault(dimension, "dimensionId") == dimensionId);
+
     private static JsonObject? FindBlocker(JsonObject register, string blockerId) =>
         GetRequiredArray(register, "blockers")
             .Select(node => node?.AsObject())
@@ -1956,6 +2497,8 @@ public sealed class ReadinessRegisterPromotionService
 
     private static bool GetBoolOrDefault(JsonObject item, string propertyName) =>
         item[propertyName] is JsonValue value && value.TryGetValue<bool>(out var result) && result;
+
+    private sealed record Feat156PromotionApplication(DateTimeOffset GeneratedAt);
 
     private sealed record PromotedFile(
         string RelativePath,
