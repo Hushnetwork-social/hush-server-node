@@ -17,3 +17,29 @@ Feature: HushVoting Receipt Verifier
         And the public user runs receipt verification
         Then the FEAT-136 receipt verifier should show a verified included result
         And the FEAT-136 receipt verifier should not show forbidden private voting data
+
+    @HV-E2E-FEAT-159 @PR
+    Scenario: Public verifier resolves a package-bound compact code in fresh desktop context
+        Given the FEAT-159 compact-code receipt and finalized package ZIP are prepared for the browser
+        When the public user opens the receipt verifier
+        And the public user selects compact-code receipt verification
+        And the public user imports the FEAT-159 compact code and package ZIP
+        And the public user runs receipt verification
+        Then the FEAT-159 compact-code verifier should show a verified included result
+        And the FEAT-159 receipt verifier should not show forbidden private voting data
+
+    @HV-E2E-FEAT-159 @PR
+    Scenario: Public verifier fails closed for an unknown package-bound compact code
+        Given the FEAT-159 unknown compact code and finalized package ZIP are prepared for the browser
+        When the public user opens the receipt verifier
+        And the public user selects compact-code receipt verification
+        And the public user imports the FEAT-159 compact code and package ZIP
+        And the public user runs receipt verification
+        Then the FEAT-159 compact-code verifier should show a not-found result
+        And the FEAT-159 receipt verifier should not show forbidden private voting data
+
+    @HV-E2E-FEAT-159 @PR
+    Scenario: Public verifier keeps FEAT-159 receipt source modes visible in mobile viewport
+        Given the public receipt verifier browser viewport is mobile sized
+        When the public user opens the receipt verifier
+        Then the FEAT-159 receipt source modes should be visible

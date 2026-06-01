@@ -153,6 +153,146 @@ namespace HushNode.IntegrationTests.Features.E2E
             this.ScenarioCleanup();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Public verifier resolves a package-bound compact code in fresh desktop context")]
+        [Xunit.TraitAttribute("FeatureTitle", "HushVoting Receipt Verifier")]
+        [Xunit.TraitAttribute("Description", "Public verifier resolves a package-bound compact code in fresh desktop context")]
+        [Xunit.TraitAttribute("Category", "HV-E2E-FEAT-159")]
+        [Xunit.TraitAttribute("Category", "PR")]
+        public void PublicVerifierResolvesAPackage_BoundCompactCodeInFreshDesktopContext()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "HV-E2E-FEAT-159",
+                    "PR"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Public verifier resolves a package-bound compact code in fresh desktop context", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 22
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 23
+        testRunner.Given("the FEAT-159 compact-code receipt and finalized package ZIP are prepared for the " +
+                        "browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 24
+        testRunner.When("the public user opens the receipt verifier", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 25
+        testRunner.And("the public user selects compact-code receipt verification", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 26
+        testRunner.And("the public user imports the FEAT-159 compact code and package ZIP", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 27
+        testRunner.And("the public user runs receipt verification", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 28
+        testRunner.Then("the FEAT-159 compact-code verifier should show a verified included result", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 29
+        testRunner.And("the FEAT-159 receipt verifier should not show forbidden private voting data", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Public verifier fails closed for an unknown package-bound compact code")]
+        [Xunit.TraitAttribute("FeatureTitle", "HushVoting Receipt Verifier")]
+        [Xunit.TraitAttribute("Description", "Public verifier fails closed for an unknown package-bound compact code")]
+        [Xunit.TraitAttribute("Category", "HV-E2E-FEAT-159")]
+        [Xunit.TraitAttribute("Category", "PR")]
+        public void PublicVerifierFailsClosedForAnUnknownPackage_BoundCompactCode()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "HV-E2E-FEAT-159",
+                    "PR"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Public verifier fails closed for an unknown package-bound compact code", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 32
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 33
+        testRunner.Given("the FEAT-159 unknown compact code and finalized package ZIP are prepared for the " +
+                        "browser", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 34
+        testRunner.When("the public user opens the receipt verifier", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 35
+        testRunner.And("the public user selects compact-code receipt verification", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 36
+        testRunner.And("the public user imports the FEAT-159 compact code and package ZIP", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 37
+        testRunner.And("the public user runs receipt verification", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+#line 38
+        testRunner.Then("the FEAT-159 compact-code verifier should show a not-found result", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+#line 39
+        testRunner.And("the FEAT-159 receipt verifier should not show forbidden private voting data", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "And ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
+        [Xunit.SkippableFactAttribute(DisplayName="Public verifier keeps FEAT-159 receipt source modes visible in mobile viewport")]
+        [Xunit.TraitAttribute("FeatureTitle", "HushVoting Receipt Verifier")]
+        [Xunit.TraitAttribute("Description", "Public verifier keeps FEAT-159 receipt source modes visible in mobile viewport")]
+        [Xunit.TraitAttribute("Category", "HV-E2E-FEAT-159")]
+        [Xunit.TraitAttribute("Category", "PR")]
+        public void PublicVerifierKeepsFEAT_159ReceiptSourceModesVisibleInMobileViewport()
+        {
+            string[] tagsOfScenario = new string[] {
+                    "HV-E2E-FEAT-159",
+                    "PR"};
+            System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new System.Collections.Specialized.OrderedDictionary();
+            TechTalk.SpecFlow.ScenarioInfo scenarioInfo = new TechTalk.SpecFlow.ScenarioInfo("Public verifier keeps FEAT-159 receipt source modes visible in mobile viewport", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 42
+    this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((TagHelper.ContainsIgnoreTag(tagsOfScenario) || TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                this.ScenarioStart();
+#line 7
+    this.FeatureBackground();
+#line hidden
+#line 43
+        testRunner.Given("the public receipt verifier browser viewport is mobile sized", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Given ");
+#line hidden
+#line 44
+        testRunner.When("the public user opens the receipt verifier", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "When ");
+#line hidden
+#line 45
+        testRunner.Then("the FEAT-159 receipt source modes should be visible", ((string)(null)), ((TechTalk.SpecFlow.Table)(null)), "Then ");
+#line hidden
+            }
+            this.ScenarioCleanup();
+        }
+        
         [System.CodeDom.Compiler.GeneratedCodeAttribute("TechTalk.SpecFlow", "3.9.0.0")]
         [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : System.IDisposable

@@ -17,6 +17,7 @@ internal sealed class HushVotingReceiptVerifierE2ESteps : BrowserStepsBase
 {
     private const string ReceiptKey = "FEAT136ReceiptJson";
     private const string PackageKey = "FEAT136PackageZipBytes";
+    private const string CompactCodeKey = "FEAT159CompactCode";
     private const string ElectionId = "13e6fa69-1d53-4968-8b1c-397333458253";
     private const string PackageId = "HushElectionPackage-13e6fa69-1d53-4968-8b1c-397333458253";
     private const string VerifierProfileId = "public_anonymous_v1";
@@ -46,6 +47,40 @@ internal sealed class HushVotingReceiptVerifierE2ESteps : BrowserStepsBase
         ScenarioContext[PackageKey] = package.ZipBytes;
 
         Console.WriteLine("[E2E HushVoting FEAT-136] Receipt and finalized package ZIP prepared");
+    }
+
+    [Given(@"the FEAT-159 compact-code receipt and finalized package ZIP are prepared for the browser")]
+    public void GivenTheFeat159CompactCodeReceiptAndFinalizedPackageZipArePreparedForTheBrowser()
+    {
+        var package = BuildFinalizedPackageZip();
+        var compactCode = ComputeCompactReceiptCode(package.PackageHash, ReceiptCommitment, PreparedBallotHash);
+
+        ScenarioContext[CompactCodeKey] = compactCode;
+        ScenarioContext[PackageKey] = package.ZipBytes;
+
+        Console.WriteLine("[E2E HushVoting FEAT-159] Compact code and finalized package ZIP prepared");
+    }
+
+    [Given(@"the FEAT-159 unknown compact code and finalized package ZIP are prepared for the browser")]
+    public void GivenTheFeat159UnknownCompactCodeAndFinalizedPackageZipArePreparedForTheBrowser()
+    {
+        var package = BuildFinalizedPackageZip();
+        var compactCode = ComputeUnknownCompactReceiptCode(package.PackageHash);
+
+        ScenarioContext[CompactCodeKey] = compactCode;
+        ScenarioContext[PackageKey] = package.ZipBytes;
+
+        Console.WriteLine("[E2E HushVoting FEAT-159] Unknown compact code and finalized package ZIP prepared");
+    }
+
+    [Given(@"the public receipt verifier browser viewport is mobile sized")]
+    public async Task GivenThePublicReceiptVerifierBrowserViewportIsMobileSized()
+    {
+        var page = await GetOrCreatePageAsync();
+
+        await page.SetViewportSizeAsync(390, 844);
+
+        Console.WriteLine("[E2E HushVoting FEAT-159] Mobile viewport configured");
     }
 
     [When(@"the public user opens the receipt verifier")]
@@ -99,6 +134,40 @@ internal sealed class HushVotingReceiptVerifierE2ESteps : BrowserStepsBase
         Console.WriteLine("[E2E HushVoting FEAT-136] Receipt and package files imported");
     }
 
+    [When(@"the public user selects compact-code receipt verification")]
+    public async Task WhenThePublicUserSelectsCompactCodeReceiptVerification()
+    {
+        var page = await GetOrCreatePageAsync();
+
+        await page.GetByTestId("receipt-verifier-source-mode-compact_code").ClickAsync();
+        await Assertions.Expect(page.GetByTestId("receipt-verifier-compact-code-input")).ToBeVisibleAsync(
+            new LocatorAssertionsToBeVisibleOptions { Timeout = 15000 });
+
+        Console.WriteLine("[E2E HushVoting FEAT-159] Compact-code source mode selected");
+    }
+
+    [When(@"the public user imports the FEAT-159 compact code and package ZIP")]
+    public async Task WhenThePublicUserImportsTheFeat159CompactCodeAndPackageZip()
+    {
+        var page = await GetOrCreatePageAsync();
+        var compactCode = ScenarioContext.Get<string>(CompactCodeKey);
+        var packageZipBytes = ScenarioContext.Get<byte[]>(PackageKey);
+
+        await page.GetByTestId("receipt-verifier-compact-code-input").FillAsync(compactCode);
+        await page.Locator("input[data-testid='receipt-verifier-package-input']").SetInputFilesAsync(
+            new FilePayload
+            {
+                Name = "finalized-public-package.zip",
+                MimeType = "application/zip",
+                Buffer = packageZipBytes,
+            });
+
+        await Assertions.Expect(page.GetByTestId("receipt-verifier-submit")).ToBeEnabledAsync(
+            new LocatorAssertionsToBeEnabledOptions { Timeout = 15000 });
+
+        Console.WriteLine("[E2E HushVoting FEAT-159] Compact code and package ZIP imported");
+    }
+
     [When(@"the public user runs receipt verification")]
     public async Task WhenThePublicUserRunsReceiptVerification()
     {
@@ -127,8 +196,73 @@ internal sealed class HushVotingReceiptVerifierE2ESteps : BrowserStepsBase
         Console.WriteLine("[E2E HushVoting FEAT-136] Verified included result is visible");
     }
 
+    [Then(@"the FEAT-159 compact-code verifier should show a verified included result")]
+    public async Task ThenTheFeat159CompactCodeVerifierShouldShowAVerifiedIncludedResult()
+    {
+        var page = await GetOrCreatePageAsync();
+        var result = page.GetByTestId("receipt-verifier-result-verified_included");
+
+        await Assertions.Expect(result).ToBeVisibleAsync(
+            new LocatorAssertionsToBeVisibleOptions { Timeout = 30000 });
+        await Assertions.Expect(result).ToContainTextAsync(
+            "Receipt included",
+            new LocatorAssertionsToContainTextOptions { Timeout = 15000 });
+        await Assertions.Expect(result).ToContainTextAsync(
+            "Compact code",
+            new LocatorAssertionsToContainTextOptions { Timeout = 15000 });
+
+        Console.WriteLine("[E2E HushVoting FEAT-159] Compact-code verified included result is visible");
+    }
+
+    [Then(@"the FEAT-159 compact-code verifier should show a not-found result")]
+    public async Task ThenTheFeat159CompactCodeVerifierShouldShowANotFoundResult()
+    {
+        var page = await GetOrCreatePageAsync();
+        var result = page.GetByTestId("receipt-verifier-result-not_found");
+
+        await Assertions.Expect(result).ToBeVisibleAsync(
+            new LocatorAssertionsToBeVisibleOptions { Timeout = 30000 });
+        await Assertions.Expect(result).ToContainTextAsync(
+            "compact_code_not_found",
+            new LocatorAssertionsToContainTextOptions { Timeout = 15000 });
+
+        Console.WriteLine("[E2E HushVoting FEAT-159] Compact-code not-found result is visible");
+    }
+
+    [Then(@"the FEAT-159 receipt source modes should be visible")]
+    public async Task ThenTheFeat159ReceiptSourceModesShouldBeVisible()
+    {
+        var page = await GetOrCreatePageAsync();
+
+        foreach (var sourceMode in new[]
+        {
+            "file",
+            "camera_qr",
+            "qr_paste",
+            "compact_code",
+            "manual_payload",
+        })
+        {
+            await Assertions.Expect(page.GetByTestId($"receipt-verifier-source-mode-{sourceMode}")).ToBeVisibleAsync(
+                new LocatorAssertionsToBeVisibleOptions { Timeout = 15000 });
+        }
+
+        Console.WriteLine("[E2E HushVoting FEAT-159] Receipt source modes are visible");
+    }
+
     [Then(@"the FEAT-136 receipt verifier should not show forbidden private voting data")]
     public async Task ThenTheFeat136ReceiptVerifierShouldNotShowForbiddenPrivateVotingData()
+    {
+        await AssertForbiddenPrivateVotingDataNotVisibleAsync("FEAT-136");
+    }
+
+    [Then(@"the FEAT-159 receipt verifier should not show forbidden private voting data")]
+    public async Task ThenTheFeat159ReceiptVerifierShouldNotShowForbiddenPrivateVotingData()
+    {
+        await AssertForbiddenPrivateVotingDataNotVisibleAsync("FEAT-159");
+    }
+
+    private async Task AssertForbiddenPrivateVotingDataNotVisibleAsync(string featureLabel)
     {
         var page = await GetOrCreatePageAsync();
         var bodyText = await page.Locator("body").InnerTextAsync();
@@ -141,12 +275,18 @@ internal sealed class HushVotingReceiptVerifierE2ESteps : BrowserStepsBase
             "private-audit-feat-136",
             "kms-key-feat-136",
             "cast-randomness-feat-136",
+            "candidate-choice-feat-159",
+            "organization-voter-feat-159",
+            "receipt-secret-feat-159",
+            "private-audit-feat-159",
+            "kms-key-feat-159",
+            "cast-randomness-feat-159",
         })
         {
             bodyText.Should().NotContain(forbiddenValue);
         }
 
-        Console.WriteLine("[E2E HushVoting FEAT-136] Forbidden private voting data is not visible");
+        Console.WriteLine($"[E2E HushVoting {featureLabel}] Forbidden private voting data is not visible");
     }
 
     private static string BuildReceiptJson(string packageHash)
@@ -174,6 +314,92 @@ internal sealed class HushVotingReceiptVerifierE2ESteps : BrowserStepsBase
                 exporterVersion = "feat-136-e2e-fixture",
             },
         }, JsonOptions);
+    }
+
+    private static string ComputeCompactReceiptCode(
+        string packageHash,
+        string receiptCommitment,
+        string preparedBallotHash)
+    {
+        var packageHint = Base32Sha256(new[]
+        {
+            "HushVoting.CompactReceipt.Package.v1",
+            PackageId,
+            packageHash,
+            VerifierProfileId,
+            ElectionId,
+        })[..5];
+
+        var proofCode = Base32Sha256(new[]
+        {
+            "HushVoting.CompactReceipt.Proof.v1",
+            PackageId,
+            packageHash,
+            VerifierProfileId,
+            ElectionId,
+            receiptCommitment,
+            ReceiptCommitmentScheme,
+            preparedBallotHash,
+        })[..12];
+
+        return FormatCompactReceiptCode($"{packageHint}{proofCode}");
+    }
+
+    private static string ComputeUnknownCompactReceiptCode(string packageHash)
+    {
+        var packageHint = Base32Sha256(new[]
+        {
+            "HushVoting.CompactReceipt.Package.v1",
+            PackageId,
+            packageHash,
+            VerifierProfileId,
+            ElectionId,
+        })[..5];
+
+        return FormatCompactReceiptCode($"{packageHint}AAAAAAAAAAAA");
+    }
+
+    private static string FormatCompactReceiptCode(string raw)
+    {
+        return string.Join(
+            "-",
+            "HVC1",
+            raw[..5],
+            raw.Substring(5, 4),
+            raw.Substring(9, 4),
+            raw[13..]);
+    }
+
+    private static string Base32Sha256(IEnumerable<string> parts)
+    {
+        return Base32Encode(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("|", parts))));
+    }
+
+    private static string Base32Encode(byte[] bytes)
+    {
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        var output = new StringBuilder();
+        var buffer = 0;
+        var bitsLeft = 0;
+
+        foreach (var value in bytes)
+        {
+            buffer = (buffer << 8) | value;
+            bitsLeft += 8;
+
+            while (bitsLeft >= 5)
+            {
+                output.Append(alphabet[(buffer >> (bitsLeft - 5)) & 31]);
+                bitsLeft -= 5;
+            }
+        }
+
+        if (bitsLeft > 0)
+        {
+            output.Append(alphabet[(buffer << (5 - bitsLeft)) & 31]);
+        }
+
+        return output.ToString();
     }
 
     private static (byte[] ZipBytes, string PackageHash) BuildFinalizedPackageZip()
