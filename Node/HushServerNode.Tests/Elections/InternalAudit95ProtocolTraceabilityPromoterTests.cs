@@ -53,15 +53,105 @@ public sealed class InternalAudit95ProtocolTraceabilityPromoterTests
         var inventory = ReadArtifactJson(package, InternalAudit95ProtocolTraceabilityArtifactGenerator.ArtifactInventoryPath);
         var stale = ReadArtifactJson(package, InternalAudit95ProtocolTraceabilityArtifactGenerator.StaleReferenceValidationPath);
         var orphan = ReadArtifactJson(package, InternalAudit95ProtocolTraceabilityArtifactGenerator.OrphanArtifactReportPath);
+        var scoreProposal = ReadArtifactJson(package, InternalAudit95ProtocolTraceabilityArtifactGenerator.ScoreProposalPath);
+        var readinessFragment = ReadArtifactJson(package, InternalAudit95ProtocolTraceabilityArtifactGenerator.ReadinessFragmentPath);
+        var manifest = ReadArtifactJson(package, InternalAudit95ProtocolTraceabilityArtifactGenerator.PackageManifestPath);
+        var publicSummary = ReadArtifactText(package, InternalAudit95ProtocolTraceabilityArtifactGenerator.PublicSafeSummaryPath);
 
         // Assert
         package.Status.Should().Be("accepted_candidate");
+        package.Artifacts.Select(artifact => artifact.RelativePath)
+            .Should().BeEquivalentTo(InternalAudit95ProtocolTraceabilityArtifactGenerator.RequiredArtifactPaths);
         trace["rows"]!.AsArray().Count.Should().BeGreaterThan(0);
         inventory["entries"]!.AsArray()
             .OfType<JsonObject>()
             .Should().Contain(item => item["artifactId"]!.GetValue<string>() == "RDY-REG-v0.1.7-MANIFEST");
         stale["status"]!.GetValue<string>().Should().Be("passed");
         orphan["status"]!.GetValue<string>().Should().Be("passed");
+        scoreProposal["directRegisterMutation"]!.GetValue<bool>().Should().BeFalse();
+        scoreProposal["status"]!.GetValue<string>().Should().Be("accepted_candidate");
+        readinessFragment["scoreProposalRef"]!.GetValue<string>()
+            .Should().Be(InternalAudit95ProtocolTraceabilityArtifactGenerator.ScoreProposalPath);
+        manifest["entries"]!.AsArray().Count.Should().Be(package.Artifacts.Count - 1);
+        manifest["sha256Hash"]!.GetValue<string>().Should().StartWith("sha256:");
+        publicSummary.Should().Contain("release-bound internal traceability evidence");
+    }
+
+    [Fact]
+    public void PackageMode_WritesAllArtifacts_AndCheckOnlyPasses()
+    {
+        // Arrange
+        var paths = CreateWorkspace();
+        var outputRoot = Path.Combine(paths.WorkspaceRoot, "package-output");
+        var service = new InternalAudit95ProtocolTraceabilityService();
+
+        // Act
+        var packageResult = service.Promote(new(
+            paths,
+            InternalAudit95ProtocolTraceabilityService.ModePackage,
+            SourceInput: null,
+            outputRoot,
+            DateTimeOffset.Parse("2026-06-01T12:00:00Z"),
+            ValidateOnly: false));
+        var checkResult = service.Promote(new(
+            paths,
+            InternalAudit95ProtocolTraceabilityService.ModeCheckOnly,
+            SourceInput: null,
+            outputRoot,
+            DateTimeOffset.Parse("2026-06-01T12:00:00Z"),
+            ValidateOnly: false));
+
+        // Assert
+        packageResult.Status.Should().Be("accepted_candidate");
+        packageResult.WrittenFiles.Should().HaveCount(InternalAudit95ProtocolTraceabilityArtifactGenerator.RequiredArtifactPaths.Length);
+        checkResult.CheckedFiles.Should().HaveCount(InternalAudit95ProtocolTraceabilityArtifactGenerator.RequiredArtifactPaths.Length);
+    }
+
+    [Fact]
+    public void PublicSafeSummary_DoesNotContainForbiddenNeedles()
+    {
+        // Arrange
+        var paths = CreateWorkspace();
+        var source = InternalAudit95ProtocolTraceabilityContracts.LoadSource(paths);
+
+        // Act
+        var package = InternalAudit95ProtocolTraceabilityArtifactGenerator.Generate(
+            paths,
+            generatedAt: DateTimeOffset.Parse("2026-06-01T12:00:00Z"));
+        var summary = ReadArtifactText(package, InternalAudit95ProtocolTraceabilityArtifactGenerator.PublicSafeSummaryPath);
+        var publicSafeRules = source["publicSafeOutputRules"]!.AsObject();
+        var forbidden = publicSafeRules["forbiddenMaterialNeedles"]!.AsArray()
+            .Concat(publicSafeRules["forbiddenClaimNeedles"]!.AsArray())
+            .Select(node => node!.GetValue<string>())
+            .ToArray();
+
+        // Assert
+        foreach (var needle in forbidden)
+        {
+            summary.Should().NotContain(needle, $"public-safe summaries must not contain {needle}");
+        }
+
+        InternalAudit95ProtocolTraceabilityContracts
+            .ValidatePublicSafeContent(summary, publicSafeRules)
+            .Should()
+            .BeEmpty();
+    }
+
+    [Fact]
+    public void PublicSafeSummary_WithForbiddenMaterial_IsRejected()
+    {
+        // Arrange
+        var paths = CreateWorkspace();
+        var source = InternalAudit95ProtocolTraceabilityContracts.LoadSource(paths);
+        var publicSafeRules = source["publicSafeOutputRules"]!.AsObject();
+
+        // Act
+        var errors = InternalAudit95ProtocolTraceabilityContracts.ValidatePublicSafeContent(
+            "This public note leaks a credential.",
+            publicSafeRules);
+
+        // Assert
+        errors.Should().Contain(error => error.Contains("FEAT157_PUBLIC_SAFE_FORBIDDEN_MATERIAL", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -277,7 +367,12 @@ public sealed class InternalAudit95ProtocolTraceabilityPromoterTests
                 TraceRequirement(
                     "TR-FEAT157-RDY-DIM-001-BASELINE",
                     ["RDY-REG-v0.1.7-MANIFEST", "MEMORY-BANK-OVERVIEW-RDY-REG-v0.1.5"],
-                    ["FEAT157-STALE-REFERENCE-VALIDATION", "FEAT157-AUDITOR-TRACE-MATRIX"]),
+                    [
+                        "FEAT157-STALE-REFERENCE-VALIDATION",
+                        "FEAT157-ORPHAN-ARTIFACT-REPORT",
+                        "FEAT157-READINESS-FRAGMENT",
+                        "FEAT157-SCORE-PROPOSAL",
+                    ]),
                 TraceRequirement(
                     "TR-FEAT157-PROTOCOL-PROOF-PACKAGE",
                     ["PROTOCOL-OMEGA-v1.2.0-MANIFEST"],
@@ -285,13 +380,23 @@ public sealed class InternalAudit95ProtocolTraceabilityPromoterTests
                 TraceRequirement(
                     "TR-FEAT157-SUPPORTING-EVIDENCE",
                     ["DEPLOYMENT-PROOF-CATALOG", "VERIFIER-CORPUS-v0.2.0-MANIFEST"],
-                    ["FEAT157-AUDITOR-TRACE-MATRIX", "FEAT157-ORPHAN-ARTIFACT-REPORT"])),
+                    ["FEAT157-AUDITOR-TRACE-MATRIX", "FEAT157-DOWNSTREAM-HANDOFF"]),
+                TraceRequirement(
+                    "TR-FEAT157-DOWNSTREAM-HANDOFF",
+                    ["RDY-REG-v0.1.7-MANIFEST", "PROTOCOL-OMEGA-v1.2.0-MANIFEST"],
+                    ["FEAT157-DOWNSTREAM-HANDOFF", "FEAT157-PACKAGE-MANIFEST"])),
             ["generatedArtifactContracts"] = new JsonArray(
                 GeneratedContract("FEAT157-SOURCE-SNAPSHOT", "feat157-traceability-source-snapshot.json", "supporting"),
-                GeneratedContract("FEAT157-AUDITOR-TRACE-MATRIX", "feat157-auditor-trace-matrix.json", "score-bearing"),
-                GeneratedContract("FEAT157-ARTIFACT-INVENTORY", "feat157-artifact-inventory.json", "score-bearing"),
-                GeneratedContract("FEAT157-STALE-REFERENCE-VALIDATION", "feat157-stale-reference-validation.json", "score-bearing"),
-                GeneratedContract("FEAT157-ORPHAN-ARTIFACT-REPORT", "feat157-orphan-artifact-report.json", "score-bearing")),
+                GeneratedContract("FEAT157-AUDITOR-TRACE-MATRIX", "feat157-auditor-trace-matrix.json", "score-bearing", visibility: "restricted"),
+                GeneratedContract("FEAT157-ARTIFACT-INVENTORY", "feat157-artifact-inventory.json", "score-bearing", visibility: "restricted"),
+                GeneratedContract("FEAT157-STALE-REFERENCE-VALIDATION", "feat157-stale-reference-validation.json", "score-bearing", visibility: "restricted"),
+                GeneratedContract("FEAT157-ORPHAN-ARTIFACT-REPORT", "feat157-orphan-artifact-report.json", "score-bearing", visibility: "restricted"),
+                GeneratedContract("FEAT157-SCORE-PROPOSAL", "feat157-score-proposal.json", "score-bearing"),
+                GeneratedContract("FEAT157-READINESS-FRAGMENT", "feat157-readiness-fragment.json", "score-bearing"),
+                GeneratedContract("FEAT157-PUBLIC-SAFE-SUMMARY", "feat157-public-safe-summary.md", "public-safe-summary", artifactType: "markdown", visibility: "public_safe"),
+                GeneratedContract("FEAT157-RESTRICTED-REVIEWER-INDEX", "feat157-restricted-reviewer-index.json", "restricted-reviewer", visibility: "restricted"),
+                GeneratedContract("FEAT157-DOWNSTREAM-HANDOFF", "feat157-downstream-handoff.json", "supporting"),
+                GeneratedContract("FEAT157-PACKAGE-MANIFEST", "feat157-package-manifest.json", "score-bearing", visibility: "restricted")),
             ["validationRules"] = new JsonArray(
                 new JsonObject
                 {
@@ -305,7 +410,7 @@ public sealed class InternalAudit95ProtocolTraceabilityPromoterTests
             {
                 ["allowedPublicPhrases"] = new JsonArray("release-bound internal traceability evidence"),
                 ["forbiddenMaterialNeedles"] = new JsonArray("C:\\myWork\\HushNetworkOrg", "credential"),
-                ["forbiddenClaimNeedles"] = new JsonArray("certified", "public/state election ready"),
+                ["forbiddenClaimNeedles"] = new JsonArray("certified", "public/state election ready", "legal sufficiency"),
                 ["numericScorePublicDisclosure"] = false,
             },
             ["restrictedReviewerRules"] = new JsonObject
@@ -377,13 +482,18 @@ public sealed class InternalAudit95ProtocolTraceabilityPromoterTests
             ["residualRiskRequired"] = true,
         };
 
-    private static JsonObject GeneratedContract(string artifactId, string fileName, string classification) =>
+    private static JsonObject GeneratedContract(
+        string artifactId,
+        string fileName,
+        string classification,
+        string artifactType = "json",
+        string visibility = "internal") =>
         new()
         {
             ["artifactId"] = artifactId,
             ["fileName"] = fileName,
-            ["artifactType"] = "json",
-            ["visibility"] = "internal",
+            ["artifactType"] = artifactType,
+            ["visibility"] = visibility,
             ["classification"] = classification,
             ["requiredForManifest"] = true,
             ["requiredFields"] = new JsonArray("artifactId"),
@@ -407,6 +517,9 @@ public sealed class InternalAudit95ProtocolTraceabilityPromoterTests
         return JsonNode.Parse(artifact.Content)?.AsObject() ??
             throw new InvalidOperationException($"Artifact {relativePath} is not a JSON object.");
     }
+
+    private static string ReadArtifactText(InternalAudit95ProtocolTraceabilityGeneratedPackage package, string relativePath) =>
+        package.Artifacts.Single(item => item.RelativePath == relativePath).Content;
 
     private static void WriteMinimalSchema(string path)
     {

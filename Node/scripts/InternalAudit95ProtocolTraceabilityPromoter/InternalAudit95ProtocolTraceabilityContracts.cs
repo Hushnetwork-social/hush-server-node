@@ -250,6 +250,21 @@ public static class InternalAudit95ProtocolTraceabilityContracts
             ? value["sha256:".Length..].ToLowerInvariant()
             : value.ToLowerInvariant();
 
+    public static IReadOnlyList<string> ValidatePublicSafeContent(string content, JsonObject publicSafeOutputRules)
+    {
+        var errors = new List<string>();
+        foreach (var needle in GetStringArray(publicSafeOutputRules, "forbiddenMaterialNeedles")
+            .Concat(GetStringArray(publicSafeOutputRules, "forbiddenClaimNeedles")))
+        {
+            if (content.Contains(needle, StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add($"FEAT157_PUBLIC_SAFE_FORBIDDEN_MATERIAL: public-safe output contains forbidden material '{needle}'.");
+            }
+        }
+
+        return errors;
+    }
+
     private static void ValidateBaselineRegister(JsonObject baseline, List<string> errors)
     {
         RequireValue(baseline, "registerVersionId", BaselineRegisterVersionId, errors);

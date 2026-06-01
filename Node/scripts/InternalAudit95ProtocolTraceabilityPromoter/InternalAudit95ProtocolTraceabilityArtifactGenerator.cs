@@ -10,11 +10,23 @@ public static class InternalAudit95ProtocolTraceabilityArtifactGenerator
     public const string ArtifactInventoryPath = "feat157-artifact-inventory.json";
     public const string StaleReferenceValidationPath = "feat157-stale-reference-validation.json";
     public const string OrphanArtifactReportPath = "feat157-orphan-artifact-report.json";
+    public const string ScoreProposalPath = "feat157-score-proposal.json";
+    public const string ReadinessFragmentPath = "feat157-readiness-fragment.json";
+    public const string PublicSafeSummaryPath = "feat157-public-safe-summary.md";
+    public const string RestrictedReviewerIndexPath = "feat157-restricted-reviewer-index.json";
+    public const string DownstreamHandoffPath = "feat157-downstream-handoff.json";
+    public const string PackageManifestPath = "feat157-package-manifest.json";
 
     public static readonly string[] RequiredArtifactPaths =
     [
         ArtifactInventoryPath,
+        DownstreamHandoffPath,
         OrphanArtifactReportPath,
+        PackageManifestPath,
+        PublicSafeSummaryPath,
+        ReadinessFragmentPath,
+        RestrictedReviewerIndexPath,
+        ScoreProposalPath,
         SourceSnapshotPath,
         StaleReferenceValidationPath,
         TraceMatrixPath,
@@ -36,21 +48,70 @@ public static class InternalAudit95ProtocolTraceabilityArtifactGenerator
 
         var effectiveGeneratedAt = generatedAt ?? DateTimeOffset.UtcNow;
         var traceMatrix = BuildTraceMatrix(source, effectiveGeneratedAt);
-        var inventory = BuildArtifactInventory(source, effectiveGeneratedAt);
         var staleValidation = BuildStaleReferenceValidation(source, paths.WorkspaceRoot, effectiveGeneratedAt);
         var orphanReport = BuildOrphanArtifactReport(source, effectiveGeneratedAt);
         var blockers = CollectBlockers(staleValidation, orphanReport);
         var diagnostics = CollectDiagnostics(staleValidation, orphanReport);
         var packageStatus = blockers.Count == 0 ? "accepted_candidate" : "blocked";
 
-        var artifacts = new[]
+        var preliminaryArtifacts = new[]
         {
             JsonArtifact(SourceSnapshotPath, BuildSourceSnapshot(source, effectiveGeneratedAt)),
             JsonArtifact(TraceMatrixPath, traceMatrix),
-            JsonArtifact(ArtifactInventoryPath, inventory),
             JsonArtifact(StaleReferenceValidationPath, staleValidation),
             JsonArtifact(OrphanArtifactReportPath, orphanReport),
+            JsonArtifact(
+                ScoreProposalPath,
+                InternalAudit95ProtocolTraceabilityScoreProjection.BuildScoreProposal(
+                    source,
+                    packageStatus,
+                    blockers,
+                    diagnostics,
+                    effectiveGeneratedAt)),
+            JsonArtifact(
+                ReadinessFragmentPath,
+                InternalAudit95ProtocolTraceabilityScoreProjection.BuildReadinessFragment(
+                    source,
+                    packageStatus,
+                    blockers,
+                    effectiveGeneratedAt)),
+            TextArtifact(
+                PublicSafeSummaryPath,
+                InternalAudit95ProtocolTraceabilityReviewerProjection.BuildPublicSafeSummary(
+                    source,
+                    packageStatus,
+                    blockers,
+                    effectiveGeneratedAt)),
+            JsonArtifact(
+                RestrictedReviewerIndexPath,
+                InternalAudit95ProtocolTraceabilityReviewerProjection.BuildRestrictedReviewerIndex(
+                    source,
+                    effectiveGeneratedAt)),
+            JsonArtifact(
+                DownstreamHandoffPath,
+                InternalAudit95ProtocolTraceabilityReviewerProjection.BuildDownstreamHandoff(
+                    source,
+                    effectiveGeneratedAt)),
         }
+            .OrderBy(artifact => artifact.RelativePath, StringComparer.Ordinal)
+            .ToArray();
+        var inventoryArtifact = JsonArtifact(
+            ArtifactInventoryPath,
+            BuildArtifactInventory(source, effectiveGeneratedAt, preliminaryArtifacts));
+        var packageArtifacts = preliminaryArtifacts
+            .Append(inventoryArtifact)
+            .OrderBy(artifact => artifact.RelativePath, StringComparer.Ordinal)
+            .ToArray();
+        var manifestArtifact = JsonArtifact(
+            PackageManifestPath,
+            InternalAudit95ProtocolTraceabilityPackageManifestBuilder.BuildPackageManifest(
+                source,
+                packageStatus,
+                blockers,
+                packageArtifacts,
+                effectiveGeneratedAt));
+        var artifacts = packageArtifacts
+            .Append(manifestArtifact)
             .OrderBy(artifact => artifact.RelativePath, StringComparer.Ordinal)
             .ToArray();
 
@@ -116,8 +177,14 @@ public static class InternalAudit95ProtocolTraceabilityArtifactGenerator
         };
     }
 
-    private static JsonObject BuildArtifactInventory(JsonObject source, DateTimeOffset generatedAt)
+    private static JsonObject BuildArtifactInventory(
+        JsonObject source,
+        DateTimeOffset generatedAt,
+        IReadOnlyList<InternalAudit95ProtocolTraceabilityGeneratedArtifact> generatedArtifacts)
     {
+        var generatedByPath = generatedArtifacts.ToDictionary(
+            artifact => artifact.RelativePath,
+            StringComparer.Ordinal);
         var sourceEntries = InternalAudit95ProtocolTraceabilityContracts.RequireArray(source, "sourceArtifacts")
             .OfType<JsonObject>()
             .Select(item => new JsonObject
@@ -136,7 +203,9 @@ public static class InternalAudit95ProtocolTraceabilityArtifactGenerator
             {
                 ["artifactId"] = InternalAudit95ProtocolTraceabilityContracts.GetString(item, "artifactId"),
                 ["path"] = InternalAudit95ProtocolTraceabilityContracts.GetString(item, "fileName"),
-                ["sha256Hash"] = "pending-generated",
+                ["sha256Hash"] = ResolveGeneratedHash(
+                    generatedByPath,
+                    InternalAudit95ProtocolTraceabilityContracts.GetString(item, "fileName")),
                 ["visibility"] = InternalAudit95ProtocolTraceabilityContracts.GetString(item, "visibility"),
                 ["classification"] = InternalAudit95ProtocolTraceabilityContracts.GetString(item, "classification"),
                 ["releaseScope"] = InternalAudit95ProtocolTraceabilityContracts.GetString(source, "packageAnchor"),
@@ -153,6 +222,13 @@ public static class InternalAudit95ProtocolTraceabilityArtifactGenerator
                 .ToArray<JsonNode?>()),
         };
     }
+
+    private static string ResolveGeneratedHash(
+        IReadOnlyDictionary<string, InternalAudit95ProtocolTraceabilityGeneratedArtifact> generatedByPath,
+        string relativePath) =>
+        generatedByPath.TryGetValue(relativePath, out var artifact)
+            ? $"sha256:{artifact.Sha256Hash}"
+            : "generated-later-in-package-manifest";
 
     private static JsonObject BuildStaleReferenceValidation(JsonObject source, string workspaceRoot, DateTimeOffset generatedAt)
     {
