@@ -54,6 +54,8 @@ public sealed class VerifierCorpusCiReplayRunner
     public const string SummaryJsonRelativePath = "validation/ci-verifier-output-summary.json";
     public const string SummaryMarkdownRelativePath = "validation/ci-verifier-output-summary.md";
     public const string PublicReviewerHandoffRelativePath = "validation/ci-public-reviewer-handoff.json";
+    public const string Audit95ReadinessFragmentRelativePath = "readiness/verifier-corpus-audit95-readiness-fragment.json";
+    public const string Audit95ScoreProposalRelativePath = "readiness/verifier-corpus-audit95-score-proposal.json";
 
     public async Task<VerifierCorpusCiReplayResult> ReplayAsync(
         VerifierCorpusCiReplayOptions options,
@@ -168,6 +170,19 @@ public sealed class VerifierCorpusCiReplayRunner
             PublicReviewerHandoffRelativePath,
             BuildPublicReviewerHandoff(options, corpusRoot, manifest, results, publicScanFindings, publicSafetyStatus, runStatus),
             cancellationToken);
+        if (IsAudit95Replay(options))
+        {
+            await WriteJsonAsync(
+                corpusRoot,
+                Audit95ReadinessFragmentRelativePath,
+                BuildAudit95ReadinessFragment(options, corpusRoot, manifest, results, publicScanFindings, publicSafetyStatus, runStatus),
+                cancellationToken);
+            await WriteJsonAsync(
+                corpusRoot,
+                Audit95ScoreProposalRelativePath,
+                BuildAudit95ScoreProposal(options, corpusRoot, manifest, results, publicScanFindings, publicSafetyStatus, runStatus),
+                cancellationToken);
+        }
 
         return new VerifierCorpusCiReplayResult(
             corpusRoot,
@@ -360,6 +375,144 @@ public sealed class VerifierCorpusCiReplayRunner
             },
             ["publicBoundaryStatement"] = "Synthetic public verifier corpus only. The CI replay proves fixture replay and public-safe packaging; it does not claim authority approval, legal sufficiency, certification, or real customer operation.",
         };
+
+    private static JsonObject BuildAudit95ReadinessFragment(
+        VerifierCorpusCiReplayOptions options,
+        string corpusRoot,
+        JsonObject manifest,
+        IReadOnlyList<VerifierCorpusCiFixtureReplayResult> results,
+        IReadOnlyList<VerifierCorpusScanFinding> publicScanFindings,
+        string publicSafetyStatus,
+        string runStatus)
+    {
+        var accepted = IsAcceptedAudit95Replay(results, publicScanFindings, publicSafetyStatus, runStatus);
+
+        return new JsonObject
+        {
+            ["schemaVersion"] = "verifier-corpus-audit95-readiness-fragment.v1",
+            ["fragmentId"] = $"AT-RDY-007-{options.CorpusVersion}-audit95",
+            ["producerFeature"] = "FEAT-158",
+            ["dimensionId"] = "RDY-DIM-002",
+            ["targetBlocker"] = "RDY-BLOCK-INTERNAL_AUDIT_95_DIM002-001",
+            ["status"] = accepted ? "accepted_candidate" : "blocked",
+            ["visibility"] = "public",
+            ["doesNotMutateRegister"] = true,
+            ["evidenceRefs"] = BuildAudit95EvidenceRefs(corpusRoot, manifest),
+            ["checkResults"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["checkId"] = "ci-replay-accepted",
+                    ["status"] = runStatus == "accepted" ? "pass" : "fail",
+                    ["runStatus"] = runStatus,
+                },
+                new JsonObject
+                {
+                    ["checkId"] = "fixture-output-match",
+                    ["status"] = results.All(x => x.MismatchReasons.Count == 0) ? "pass" : "fail",
+                    ["fixtureCount"] = results.Count,
+                    ["matchedFixtureCount"] = results.Count(x => x.MismatchReasons.Count == 0),
+                },
+                new JsonObject
+                {
+                    ["checkId"] = "public-safe",
+                    ["status"] = publicSafetyStatus == "pass" && publicScanFindings.All(x => x.ExpectedTamperFixture) ? "pass" : "fail",
+                    ["unexpectedFindingCount"] = publicScanFindings.Count(x => !x.ExpectedTamperFixture),
+                },
+            },
+            ["claimEffect"] = "Proposal-only candidate evidence for RDY-DIM-002 8 -> 10 and RDY-BLOCK-INTERNAL_AUDIT_95_DIM002-001 resolution. Canonical readiness register mutation remains disabled.",
+            ["residualRisk"] = "Does not prove external audit signoff, legal sufficiency, certification, public/state election readiness, or real customer operation.",
+            ["promotionInstructions"] = "FEAT-130 or the readiness promoter may consume this fragment only after maintainer review of the public corpus release, CI run manifest, and public reviewer handoff.",
+        };
+    }
+
+    private static JsonObject BuildAudit95ScoreProposal(
+        VerifierCorpusCiReplayOptions options,
+        string corpusRoot,
+        JsonObject manifest,
+        IReadOnlyList<VerifierCorpusCiFixtureReplayResult> results,
+        IReadOnlyList<VerifierCorpusScanFinding> publicScanFindings,
+        string publicSafetyStatus,
+        string runStatus)
+    {
+        var accepted = IsAcceptedAudit95Replay(results, publicScanFindings, publicSafetyStatus, runStatus);
+
+        return new JsonObject
+        {
+            ["schemaVersion"] = "verifier-corpus-audit95-score-proposal.v1",
+            ["proposalId"] = $"RDY-DIM-002-{options.CorpusVersion}-audit95-score-proposal",
+            ["producerFeature"] = "FEAT-158",
+            ["dimensionId"] = "RDY-DIM-002",
+            ["proposedScoreFrom"] = 8,
+            ["proposedScoreTo"] = 10,
+            ["status"] = accepted ? "accepted_candidate" : "blocked",
+            ["doesNotMutateRegister"] = true,
+            ["generatedAt"] = options.GeneratedAt.UtcDateTime.ToString("O"),
+            ["targetBlocker"] = new JsonObject
+            {
+                ["blockerId"] = "RDY-BLOCK-INTERNAL_AUDIT_95_DIM002-001",
+                ["currentStatus"] = "amber/open",
+                ["proposedStatus"] = accepted ? "green/resolved" : "amber/open",
+                ["resolutionRationale"] = "Audit95 verifier corpus replay is public-ref-bound, deterministic, public-safe, and covers the expected sample/tamper matrix.",
+            },
+            ["evidenceRefs"] = BuildAudit95EvidenceRefs(corpusRoot, manifest),
+            ["scoreMovementRationale"] = new JsonObject
+            {
+                ["baselineEvidence"] = "FEAT-151 v0.2.0 established RDY-DIM-002 score-to-8 verifier corpus breadth.",
+                ["audit95Evidence"] = $"FEAT-158 v0.3.0 replays {results.Count} fixtures in CI with {results.Count(x => x.MismatchReasons.Count == 0)} matched outputs and {publicScanFindings.Count(x => !x.ExpectedTamperFixture)} unexpected public-safety findings.",
+                ["remainingLimits"] = "This proposal does not claim external audit signoff, legal sufficiency, certification, public/state election readiness, or real customer operation.",
+            },
+            ["promotionOwner"] = "FEAT-130 readiness promotion or later explicit readiness-register promotion flow",
+        };
+    }
+
+    private static JsonArray BuildAudit95EvidenceRefs(string corpusRoot, JsonObject manifest) =>
+    [
+        new JsonObject
+        {
+            ["path"] = "corpus-manifest.json",
+            ["sha256Hash"] = manifest["corpusManifestHash"]?.GetValue<string>() ?? Sha256File(Path.Combine(corpusRoot, "corpus-manifest.json")),
+        },
+        new JsonObject
+        {
+            ["path"] = "fixtures/fixture-index.json",
+            ["sha256Hash"] = Sha256File(Path.Combine(corpusRoot, "fixtures", "fixture-index.json")),
+        },
+        new JsonObject
+        {
+            ["path"] = ManifestRelativePath,
+            ["status"] = manifest["runStatus"]?.GetValue<string>() ?? "unknown",
+        },
+        new JsonObject
+        {
+            ["path"] = SummaryJsonRelativePath,
+            ["status"] = manifest["runStatus"]?.GetValue<string>() ?? "unknown",
+        },
+        new JsonObject
+        {
+            ["path"] = PublicReviewerHandoffRelativePath,
+            ["status"] = manifest["runStatus"]?.GetValue<string>() ?? "unknown",
+        },
+        new JsonObject
+        {
+            ["path"] = "validation/no-secret-scan-result.json",
+            ["status"] = manifest["publicSafetyStatus"]?.GetValue<string>() ?? "unknown",
+        },
+    ];
+
+    private static bool IsAcceptedAudit95Replay(
+        IReadOnlyList<VerifierCorpusCiFixtureReplayResult> results,
+        IReadOnlyList<VerifierCorpusScanFinding> publicScanFindings,
+        string publicSafetyStatus,
+        string runStatus) =>
+        string.Equals(runStatus, "accepted", StringComparison.Ordinal) &&
+        string.Equals(publicSafetyStatus, "pass", StringComparison.Ordinal) &&
+        results.Count > 0 &&
+        results.All(x => x.MismatchReasons.Count == 0) &&
+        publicScanFindings.All(x => x.ExpectedTamperFixture);
+
+    private static bool IsAudit95Replay(VerifierCorpusCiReplayOptions options) =>
+        string.Equals(options.CorpusVersion, "v0.3.0", StringComparison.OrdinalIgnoreCase);
 
     private static JsonArray BuildDownstreamOwners() =>
     [

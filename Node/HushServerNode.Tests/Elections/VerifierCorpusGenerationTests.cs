@@ -277,6 +277,14 @@ public sealed class VerifierCorpusGenerationTests
             .Select(x => x!.AsObject()["featureId"]!.GetValue<string>())
             .Should()
             .Contain(["FEAT-159", "FEAT-160", "FEAT-163", "FEAT-166"]);
+        var readinessFragment = ReadJson(VerifierCorpusCiReplayRunner.Audit95ReadinessFragmentRelativePath, workspace.Root);
+        readinessFragment["targetBlocker"]!.GetValue<string>().Should().Be("RDY-BLOCK-INTERNAL_AUDIT_95_DIM002-001");
+        readinessFragment["doesNotMutateRegister"]!.GetValue<bool>().Should().BeTrue();
+        var scoreProposal = ReadJson(VerifierCorpusCiReplayRunner.Audit95ScoreProposalRelativePath, workspace.Root);
+        VerifierCorpusContracts.ValidateAudit95ScoreProposal(scoreProposal).Should().BeEmpty();
+        scoreProposal["proposedScoreFrom"]!.GetValue<int>().Should().Be(8);
+        scoreProposal["proposedScoreTo"]!.GetValue<int>().Should().Be(10);
+        scoreProposal["targetBlocker"]!["proposedStatus"]!.GetValue<string>().Should().Be("green/resolved");
     }
 
     [Fact]
@@ -299,6 +307,10 @@ public sealed class VerifierCorpusGenerationTests
         result.MismatchCount.Should().Be(1);
         result.Fixtures.Single(x => x.FixtureId == VerifierCorpusGenerator.GoodSampleFixtureId)
             .MismatchReasons.Should().Contain(x => x.Contains("normalized-output-hash", StringComparison.Ordinal));
+        ReadJson(VerifierCorpusCiReplayRunner.Audit95ScoreProposalRelativePath, workspace.Root)
+            ["status"]!.GetValue<string>()
+            .Should()
+            .Be("blocked");
     }
 
     [Fact]
