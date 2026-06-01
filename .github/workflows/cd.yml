@@ -40,20 +40,6 @@ jobs:
         repository: Hushnetwork-social/hush-web-client
         path: hush-web-client
 
-    - name: Checkout Hush Memory Bank for readiness fixtures
-      uses: actions/checkout@v5
-      with:
-        repository: Hushnetwork-social/hush-memory-bank
-        ref: master
-        path: hush-memory-bank
-
-    - name: Checkout Hush Documents for readiness output roots
-      uses: actions/checkout@v5
-      with:
-        repository: Hushnetwork-social/hush-documents
-        ref: master
-        path: hush-documents
-
     - name: Setup Node.js for crypto fixture generator
       uses: actions/setup-node@v6
       with:

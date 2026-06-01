@@ -1,0 +1,206 @@
+{
+  "schemaVersion": "production-like-operational-run-fixture-catalog.v1",
+  "featureId": "FEAT-154",
+  "purpose": "Fixture catalog for FEAT-154 production-like operational run evidence. Negative cases are mutation descriptors that Phase 3 applies to the release-baseline source for focused gate-checker tests.",
+  "baselineSource": "Overview/HushVotingReadiness/Production-Like-Operational-Run/examples/release-baseline/production-like-operational-run-source.json",
+  "cases": [
+    {
+      "caseId": "FEAT154-BASELINE-ACCEPTED-001",
+      "category": "accepted",
+      "sourcePath": "Overview/HushVotingReadiness/Production-Like-Operational-Run/examples/release-baseline/production-like-operational-run-source.json",
+      "expectedStatus": "accepted",
+      "expectedDiagnostics": [],
+      "claimImpact": "Complete controlled production-like operational run source can feed the later FEAT-156 score proposal."
+    },
+    {
+      "caseId": "FEAT154-LIMITED-ACCEPTED-WITH-LIMITATIONS-001",
+      "category": "accepted_with_limitations",
+      "mutationPath": "status",
+      "invalidValue": "accepted_with_limitations",
+      "expectedStatus": "accepted_with_limitations",
+      "expectedDiagnostics": [
+        "FEAT154-ONE-RUN-ONLY-LIMITATION"
+      ],
+      "claimImpact": "A controlled run can be useful evidence while still preserving one-run and rollout limitations."
+    },
+    {
+      "caseId": "FEAT154-NEG-LOCAL-ONLY-001",
+      "category": "local_only",
+      "mutationPath": "runProfile.localOnly",
+      "invalidValue": true,
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-RUN-PROFILE-LOCAL-ONLY"
+      ],
+      "claimImpact": "A local developer run cannot support the production-like operational score proposal."
+    },
+    {
+      "caseId": "FEAT154-NEG-PRIVATE-CHAIN-ONLY-001",
+      "category": "private_chain_only",
+      "mutationPath": "runProfile.privateChainOnly",
+      "invalidValue": true,
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-RUN-PROFILE-PRIVATE-CHAIN-ONLY"
+      ],
+      "claimImpact": "A private-chain-only run cannot support production-like operational readiness."
+    },
+    {
+      "caseId": "FEAT154-NEG-MISSING-DEPLOYMENT-PROOF-001",
+      "category": "missing_deployment_proof",
+      "mutationPath": "deploymentProof.evidenceRefs",
+      "invalidValue": [],
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-DEPLOYMENT-PROOF-MISSING"
+      ],
+      "claimImpact": "Missing active server or WebClient deployment proof blocks the run package."
+    },
+    {
+      "caseId": "FEAT154-NEG-MISSING-WEBCLIENT-PROOF-001",
+      "category": "missing_webclient_proof",
+      "mutationPath": "webClientObservation.observedHandshakeRefs",
+      "invalidValue": [],
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-WEBCLIENT-PROOF-MISSING"
+      ],
+      "claimImpact": "Missing observed WebClient proof handshake blocks the run package."
+    },
+    {
+      "caseId": "FEAT154-NEG-MISSING-RUNTIME-BINDING-001",
+      "category": "missing_runtime_binding",
+      "mutationPath": "runtimeBinding.ledgerRefs",
+      "invalidValue": [],
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-RUNTIME-BINDING-MISSING"
+      ],
+      "claimImpact": "Missing runtime binding ledger refs blocks the run package."
+    },
+    {
+      "caseId": "FEAT154-NEG-STALE-SECURITY-EVIDENCE-001",
+      "category": "stale_security_evidence",
+      "mutationPath": "securitySupportFreshness.freshness",
+      "invalidValue": "stale",
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-SECURITY-FRESHNESS-STALE"
+      ],
+      "claimImpact": "Stale security/dependency/support evidence cannot support the score proposal."
+    },
+    {
+      "caseId": "FEAT154-NEG-MISSING-MONITORING-001",
+      "category": "missing_monitoring",
+      "mutationPath": "monitoring.evidenceRefs",
+      "invalidValue": [],
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-MONITORING-MISSING"
+      ],
+      "claimImpact": "Missing monitoring and alerting evidence blocks production-like operational acceptance."
+    },
+    {
+      "caseId": "FEAT154-NEG-MISSING-SUPPORT-001",
+      "category": "missing_support",
+      "mutationPath": "support.evidenceRefs",
+      "invalidValue": [],
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-SUPPORT-MISSING"
+      ],
+      "claimImpact": "Missing support path evidence blocks production-like operational acceptance."
+    },
+    {
+      "caseId": "FEAT154-NEG-MISSING-BACKUP-RESTORE-001",
+      "category": "missing_backup_restore",
+      "mutationPath": "backupRestore.evidenceRefs",
+      "invalidValue": [],
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-BACKUP-RESTORE-MISSING"
+      ],
+      "claimImpact": "Missing backup/restore evidence blocks the run unless a same-profile exception is accepted."
+    },
+    {
+      "caseId": "FEAT154-NEG-MISSING-INCIDENT-DECLARATION-001",
+      "category": "missing_incident_declaration",
+      "mutationPath": "incidentDeclaration.evidenceRefs",
+      "invalidValue": [],
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-INCIDENT-DECLARATION-MISSING"
+      ],
+      "claimImpact": "The run must include incident or no-incident evidence."
+    },
+    {
+      "caseId": "FEAT154-NEG-MISSING-OPERATOR-HANDOFF-001",
+      "category": "missing_operator_handoff",
+      "mutationPath": "operatorHandoff.evidenceRefs",
+      "invalidValue": [],
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-OPERATOR-HANDOFF-MISSING"
+      ],
+      "claimImpact": "Missing operator handoff evidence blocks operational acceptance."
+    },
+    {
+      "caseId": "FEAT154-NEG-MISSING-POSTMORTEM-001",
+      "category": "missing_postmortem",
+      "mutationPath": "postmortem.evidenceRefs",
+      "invalidValue": [],
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-POSTMORTEM-MISSING"
+      ],
+      "claimImpact": "A postmortem is required even when no incident is declared."
+    },
+    {
+      "caseId": "FEAT154-NEG-PLACEHOLDER-EVIDENCE-001",
+      "category": "placeholder_evidence",
+      "mutationPath": "deploymentProof.status",
+      "invalidValue": "placeholder",
+      "expectedStatus": "development_placeholder",
+      "expectedDiagnostics": [
+        "FEAT154-PLACEHOLDER-EVIDENCE-BLOCKS-SCORE"
+      ],
+      "claimImpact": "Placeholder evidence can define package shape but cannot support score movement."
+    },
+    {
+      "caseId": "FEAT154-NEG-DIRECT-REGISTER-MUTATION-001",
+      "category": "direct_register_mutation",
+      "mutationPath": "readinessProposal.directRegisterMutation",
+      "invalidValue": true,
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-REGISTER-MUTATION-FORBIDDEN"
+      ],
+      "claimImpact": "FEAT-154 must not directly mutate the readiness register."
+    },
+    {
+      "caseId": "FEAT154-NEG-PUBLIC-SAFE-FORBIDDEN-MATERIAL-001",
+      "category": "public_safe_forbidden_material",
+      "mutationPath": "publicSafety.expectedFindingCountInGeneratedPublicOutputs",
+      "invalidValue": 1,
+      "expectedStatus": "blocked",
+      "expectedDiagnostics": [
+        "FEAT154-PUBLIC-SAFE-FORBIDDEN-MATERIAL"
+      ],
+      "claimImpact": "Generated public outputs must not contain restricted details, local paths, raw logs, or overclaims."
+    }
+  ],
+  "forbiddenPublicMaterialNeedles": [
+    "voter identity",
+    "vote choice",
+    "receipt secret",
+    "trustee share",
+    "private key",
+    "deployment secret",
+    "database password",
+    "operator contact",
+    "support case data",
+    "raw log",
+    "localhost",
+    "c:\\"
+  ]
+}

@@ -1,0 +1,1327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hush.network/schemas/hushvoting/production-like-operational-run-source.schema.json",
+  "title": "HushVoting Production-Like Operational Run Source",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceId",
+    "featureId",
+    "acceptanceGates",
+    "status",
+    "generatedAt",
+    "baselineRegister",
+    "runProfile",
+    "dataScope",
+    "deploymentProof",
+    "runtimeBinding",
+    "webClientObservation",
+    "operationalEvidence",
+    "securitySupportFreshness",
+    "pilotLineage",
+    "productionRolloutGateSource",
+    "monitoring",
+    "support",
+    "backupRestore",
+    "incidentDeclaration",
+    "operatorHandoff",
+    "postmortem",
+    "publicSafety",
+    "restrictedEvidenceRefs",
+    "readinessProposal",
+    "downstreamHandoff",
+    "signoff",
+    "residualRisks"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "production-like-operational-run-source.v1"
+    },
+    "sourceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "featureId": {
+      "const": "FEAT-154"
+    },
+    "acceptanceGates": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "string",
+        "pattern": "^AT-RDY-[0-9]{3}$"
+      }
+    },
+    "status": {
+      "enum": [
+        "accepted",
+        "accepted_with_limitations",
+        "blocked",
+        "development_placeholder"
+      ]
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "baselineRegister": {
+      "$ref": "#/$defs/baselineRegister"
+    },
+    "runProfile": {
+      "$ref": "#/$defs/runProfile"
+    },
+    "dataScope": {
+      "$ref": "#/$defs/dataScope"
+    },
+    "deploymentProof": {
+      "$ref": "#/$defs/deploymentProof"
+    },
+    "runtimeBinding": {
+      "$ref": "#/$defs/runtimeBinding"
+    },
+    "webClientObservation": {
+      "$ref": "#/$defs/webClientObservation"
+    },
+    "operationalEvidence": {
+      "$ref": "#/$defs/operationalEvidence"
+    },
+    "securitySupportFreshness": {
+      "$ref": "#/$defs/securitySupportFreshness"
+    },
+    "pilotLineage": {
+      "$ref": "#/$defs/pilotLineage"
+    },
+    "productionRolloutGateSource": {
+      "$ref": "#/$defs/evidenceGroup"
+    },
+    "publicationCountingHardening": {
+      "$ref": "#/$defs/evidenceGroup"
+    },
+    "monitoring": {
+      "$ref": "#/$defs/monitoring"
+    },
+    "support": {
+      "$ref": "#/$defs/supportEvidence"
+    },
+    "backupRestore": {
+      "$ref": "#/$defs/backupRestore"
+    },
+    "incidentDeclaration": {
+      "$ref": "#/$defs/incidentDeclaration"
+    },
+    "operatorHandoff": {
+      "$ref": "#/$defs/operatorHandoff"
+    },
+    "postmortem": {
+      "$ref": "#/$defs/postmortem"
+    },
+    "publicSafety": {
+      "$ref": "#/$defs/publicSafety"
+    },
+    "restrictedEvidenceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/restrictedEvidenceRef"
+      }
+    },
+    "readinessProposal": {
+      "$ref": "#/$defs/readinessProposal"
+    },
+    "downstreamHandoff": {
+      "$ref": "#/$defs/downstreamHandoff"
+    },
+    "signoff": {
+      "$ref": "#/$defs/signoff"
+    },
+    "residualRisks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "baselineRegister": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registerVersionId",
+        "registerStatus",
+        "totalScore",
+        "dimensionId",
+        "currentScore",
+        "targetScore",
+        "strongestAllowedClaim"
+      ],
+      "properties": {
+        "registerVersionId": {
+          "const": "RDY-REG-v0.1.5"
+        },
+        "registerStatus": {
+          "const": "AcceptedInternal"
+        },
+        "totalScore": {
+          "const": 71
+        },
+        "dimensionId": {
+          "const": "RDY-DIM-007"
+        },
+        "currentScore": {
+          "const": 6
+        },
+        "targetScore": {
+          "const": 8
+        },
+        "strongestAllowedClaim": {
+          "const": "friendly_organization_pilot"
+        }
+      }
+    },
+    "runProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "profileId",
+        "environmentClass",
+        "deploymentProfile",
+        "scope",
+        "startedAt",
+        "endedAt",
+        "runOwnerRole",
+        "operatorRole",
+        "reviewerRole",
+        "claimLevel",
+        "localOnly",
+        "privateChainOnly",
+        "uncontrolledProduction",
+        "syntheticOrNonConfidentialData"
+      ],
+      "properties": {
+        "runId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profileId": {
+          "const": "controlled-hush-managed-staging-aws-like-v1"
+        },
+        "environmentClass": {
+          "const": "controlled_hush_managed_staging_aws_like"
+        },
+        "deploymentProfile": {
+          "const": "hush_saas_v1"
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "endedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "runOwnerRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operatorRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviewerRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "claimLevel": {
+          "enum": [
+            "friendly_organization_pilot",
+            "production_organizational_rollout_candidate"
+          ]
+        },
+        "localOnly": {
+          "const": false
+        },
+        "privateChainOnly": {
+          "const": false
+        },
+        "uncontrolledProduction": {
+          "const": false
+        },
+        "syntheticOrNonConfidentialData": {
+          "const": true
+        }
+      }
+    },
+    "dataScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "participantDataClass",
+        "electionDataClass",
+        "containsRealVoterPersonalData",
+        "containsVoteChoiceData",
+        "publicSafeScopeSummary"
+      ],
+      "properties": {
+        "participantDataClass": {
+          "enum": [
+            "synthetic",
+            "internal_consented",
+            "non_confidential_rehearsal"
+          ]
+        },
+        "electionDataClass": {
+          "enum": [
+            "synthetic",
+            "non_confidential"
+          ]
+        },
+        "containsRealVoterPersonalData": {
+          "const": false
+        },
+        "containsVoteChoiceData": {
+          "const": false
+        },
+        "publicSafeScopeSummary": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deploymentProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "deploymentProofSetId",
+        "serverComponentProof",
+        "webClientComponentProof",
+        "classificationStatus",
+        "evidenceRefs",
+        "blockerIds"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "deploymentProofSetId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "serverComponentProof": {
+          "$ref": "#/$defs/componentProofRef"
+        },
+        "webClientComponentProof": {
+          "$ref": "#/$defs/componentProofRef"
+        },
+        "classificationStatus": {
+          "enum": [
+            "accepted",
+            "accepted_with_limitations",
+            "blocked",
+            "unknown_pending_classification"
+          ]
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "componentProofRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component",
+        "proofId",
+        "status",
+        "sourceRef",
+        "artifactHash"
+      ],
+      "properties": {
+        "component": {
+          "enum": [
+            "hush-server-node",
+            "hush-web-client"
+          ]
+        },
+        "proofId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifactHash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "runtimeBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "claimImpact",
+        "ledgerRefs",
+        "lifecycleCheckpoints",
+        "evidenceRefs",
+        "blockerIds",
+        "diagnostics"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "claimImpact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ledgerRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/runtimeLedgerRef"
+          }
+        },
+        "lifecycleCheckpoints": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "deployment_proof_loaded",
+              "election_created",
+              "election_opened",
+              "voting_observed",
+              "finalization_observed",
+              "publication_or_export_observed",
+              "run_closed"
+            ]
+          }
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "runtimeLedgerRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ledgerId",
+        "checkpointId",
+        "sourceRef",
+        "sha256Hash",
+        "status"
+      ],
+      "properties": {
+        "ledgerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checkpointId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256Hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        }
+      }
+    },
+    "webClientObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "claimImpact",
+        "observedHandshakeRefs",
+        "browserEvidenceBoundary",
+        "evidenceRefs",
+        "blockerIds",
+        "diagnostics"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "claimImpact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observedHandshakeRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "browserEvidenceBoundary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "operationalEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "claimImpact",
+        "opsSourceStatus",
+        "opsCheckIds",
+        "evidenceRefs",
+        "blockerIds",
+        "diagnostics"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "claimImpact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "opsSourceStatus": {
+          "enum": [
+            "accepted",
+            "accepted_with_warnings",
+            "blocked",
+            "missing"
+          ]
+        },
+        "opsCheckIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^OPS-[0-9]{3}$"
+          }
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "pilotLineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "claimImpact",
+        "lineageOnly",
+        "evidenceRefs",
+        "blockerIds",
+        "diagnostics"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "claimImpact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lineageOnly": {
+          "const": true
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "claimImpact",
+        "windowStart",
+        "windowEnd",
+        "monitoringEvidenceRefs",
+        "alertingEvidenceRefs",
+        "evidenceRefs",
+        "blockerIds",
+        "diagnostics"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "claimImpact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "windowStart": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "windowEnd": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "monitoringEvidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "alertingEvidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "supportEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "claimImpact",
+        "supportRouteStatus",
+        "operatorEscalationCovered",
+        "evidenceRefs",
+        "blockerIds",
+        "diagnostics"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "claimImpact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "supportRouteStatus": {
+          "enum": [
+            "accepted",
+            "accepted_with_limitations",
+            "blocked",
+            "missing"
+          ]
+        },
+        "operatorEscalationCovered": {
+          "type": "boolean"
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "operatorHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "claimImpact",
+        "handoffStatus",
+        "acceptedByRole",
+        "acceptedAt",
+        "evidenceRefs",
+        "blockerIds",
+        "diagnostics"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "claimImpact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "handoffStatus": {
+          "enum": [
+            "accepted",
+            "accepted_with_limitations",
+            "blocked",
+            "missing"
+          ]
+        },
+        "acceptedByRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "acceptedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "securitySupportFreshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "packageId",
+        "packageVersion",
+        "freshness",
+        "scanDate",
+        "validThrough",
+        "openCriticalFindings",
+        "openHighFindings",
+        "exceptions",
+        "evidenceRefs",
+        "blockerIds"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "packageId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packageVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "freshness": {
+          "enum": [
+            "current",
+            "stale",
+            "superseded",
+            "blocked"
+          ]
+        },
+        "scanDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "validThrough": {
+          "type": "string",
+          "format": "date"
+        },
+        "openCriticalFindings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "openHighFindings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exceptions": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "backupRestore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "sameProfileRestoreAccepted",
+        "runSpecificRestoreAccepted",
+        "exceptionAccepted",
+        "evidenceRefs",
+        "blockerIds",
+        "residualRisk"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "sameProfileRestoreAccepted": {
+          "type": "boolean"
+        },
+        "runSpecificRestoreAccepted": {
+          "type": "boolean"
+        },
+        "exceptionAccepted": {
+          "type": "boolean"
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "residualRisk": {
+          "type": "string"
+        }
+      }
+    },
+    "incidentDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "incidentState",
+        "declarationAt",
+        "declarationRole",
+        "publicSafeStatement",
+        "evidenceRefs",
+        "blockerIds"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "incidentState": {
+          "enum": [
+            "incident_recorded",
+            "no_incident_declared"
+          ]
+        },
+        "declarationAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "declarationRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "publicSafeStatement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "postmortem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "completedAt",
+        "reviewerRole",
+        "noIncidentStillReviewed",
+        "followUpCount",
+        "unresolvedCriticalFollowUps",
+        "evidenceRefs",
+        "blockerIds"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reviewerRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "noIncidentStillReviewed": {
+          "const": true
+        },
+        "followUpCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unresolvedCriticalFollowUps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "publicSafety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "visibility",
+        "forbiddenMaterialCategories",
+        "forbiddenClaimCategories",
+        "forbiddenMaterialScanPolicy",
+        "publicOutputPolicy",
+        "publicOutputs",
+        "expectedFindingCountInGeneratedPublicOutputs"
+      ],
+      "properties": {
+        "visibility": {
+          "const": "public_safe"
+        },
+        "forbiddenMaterialCategories": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "restricted_infrastructure",
+              "keys_or_credentials",
+              "operator_contacts",
+              "support_case_data",
+              "voter_data",
+              "vote_choice_data",
+              "raw_logs",
+              "private_urls",
+              "local_absolute_paths"
+            ]
+          }
+        },
+        "forbiddenClaimCategories": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "production_rollout_green",
+              "public_state_election_ready",
+              "legal_sufficiency",
+              "independent_certification",
+              "failed_finalize_continuity_complete"
+            ]
+          }
+        },
+        "publicOutputPolicy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "forbiddenMaterialScanPolicy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "publicOutputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/publicOutputRef"
+          }
+        },
+        "expectedFindingCountInGeneratedPublicOutputs": {
+          "const": 0
+        }
+      }
+    },
+    "publicOutputRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outputId",
+        "pathRef",
+        "sha256Hash"
+      ],
+      "properties": {
+        "outputId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pathRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256Hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "readinessProposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dimensionId",
+        "proposedScoreFrom",
+        "proposedScoreTo",
+        "doesNotMutateRegister",
+        "directRegisterMutation",
+        "promotionOwner",
+        "scoreChangeRequiresPromotion",
+        "residualRiskSummary"
+      ],
+      "properties": {
+        "dimensionId": {
+          "const": "RDY-DIM-007"
+        },
+        "proposedScoreFrom": {
+          "const": 6
+        },
+        "proposedScoreTo": {
+          "const": 8
+        },
+        "doesNotMutateRegister": {
+          "const": true
+        },
+        "directRegisterMutation": {
+          "const": false
+        },
+        "promotionOwner": {
+          "const": "FEAT-156"
+        },
+        "scoreChangeRequiresPromotion": {
+          "const": true
+        },
+        "residualRiskSummary": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "downstreamHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "properties": {
+            "targetFeatures": {
+              "contains": {
+                "const": "FEAT-148"
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "targetFeatures": {
+              "contains": {
+                "const": "FEAT-155"
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "targetFeatures": {
+              "contains": {
+                "const": "FEAT-156"
+              }
+            }
+          }
+        }
+      ],
+      "required": [
+        "targetFeatures",
+        "productionRolloutInput",
+        "continuityRunContext",
+        "promotionRegisterInput"
+      ],
+      "properties": {
+        "targetFeatures": {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "FEAT-148",
+              "FEAT-155",
+              "FEAT-156"
+            ]
+          }
+        },
+        "productionRolloutInput": {
+          "$ref": "#/$defs/evidenceGroup"
+        },
+        "continuityRunContext": {
+          "$ref": "#/$defs/evidenceGroup"
+        },
+        "promotionRegisterInput": {
+          "$ref": "#/$defs/evidenceGroup"
+        }
+      }
+    },
+    "signoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engineeringOwnerRole",
+        "operationsOwnerRole",
+        "productOwnerRole",
+        "acceptedAt"
+      ],
+      "properties": {
+        "engineeringOwnerRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operationsOwnerRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "productOwnerRole": {
+          "type": "string",
+          "minLength": 1
+        },
+        "acceptedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "evidenceGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "claimImpact",
+        "evidenceRefs",
+        "blockerIds",
+        "diagnostics"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "claimImpact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          }
+        },
+        "blockerIds": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceId",
+        "featureSlice",
+        "acceptanceGate",
+        "status",
+        "visibility",
+        "freshness",
+        "publicRef",
+        "restrictedRef",
+        "sha256Hash",
+        "claimEffect"
+      ],
+      "properties": {
+        "evidenceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "featureSlice": {
+          "type": "string",
+          "pattern": "^FEAT-[0-9]{3}$"
+        },
+        "acceptanceGate": {
+          "type": "string",
+          "pattern": "^AT-RDY-[0-9]{3}$"
+        },
+        "status": {
+          "$ref": "#/$defs/evidenceStatus"
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "restricted",
+            "internal"
+          ]
+        },
+        "freshness": {
+          "enum": [
+            "current",
+            "stale",
+            "superseded",
+            "blocked"
+          ]
+        },
+        "publicRef": {
+          "type": "string"
+        },
+        "restrictedRef": {
+          "type": "string"
+        },
+        "sha256Hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "claimEffect": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "restrictedEvidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "refId",
+        "pathRef",
+        "sha256Hash",
+        "payloadCopied",
+        "visibility"
+      ],
+      "properties": {
+        "refId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pathRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256Hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "payloadCopied": {
+          "const": false
+        },
+        "visibility": {
+          "enum": [
+            "restricted",
+            "internal"
+          ]
+        }
+      }
+    },
+    "evidenceStatus": {
+      "enum": [
+        "accepted",
+        "accepted_with_limitations",
+        "blocked",
+        "missing",
+        "placeholder",
+        "private_only",
+        "mismatched",
+        "stale",
+        "superseded"
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^(sha256:)?[a-fA-F0-9]{64}$"
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

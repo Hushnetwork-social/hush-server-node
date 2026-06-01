@@ -51,13 +51,12 @@ public sealed class ProductionLikeOperationalRunFixtureTests
     public void FixtureCatalog_LoadsEveryCaseWithStableExpectations()
     {
         var catalog = LoadCatalog();
-        var workspaceRoot = FindWorkspaceRoot();
 
         catalog["schemaVersion"]!.GetValue<string>().Should().Be("production-like-operational-run-fixture-catalog.v1");
         catalog["featureId"]!.GetValue<string>().Should().Be("FEAT-154");
 
         var baselineSource = catalog["baselineSource"]!.GetValue<string>();
-        File.Exists(Path.Combine(workspaceRoot, "hush-memory-bank", baselineSource)).Should().BeTrue();
+        SourceRelativeFileExists(baselineSource).Should().BeTrue();
 
         var cases = catalog["cases"]!.AsArray().Select(item => item!.AsObject()).ToArray();
         cases.Should().HaveCountGreaterThan(10);

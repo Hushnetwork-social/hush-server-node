@@ -7,6 +7,22 @@ namespace HushServerNode.Tests.Elections;
 
 public sealed class ProductionLikeOperationalRunSourceSchemaTests
 {
+    private static readonly string[] SourceRootRelativePath =
+    [
+        "Overview",
+        "HushVotingReadiness",
+        "Production-Like-Operational-Run"
+    ];
+
+    private static readonly string[] FixtureRootRelativePath =
+    [
+        "Node",
+        "HushServerNode.Tests",
+        "Elections",
+        "TestFixtures",
+        "Production-Like-Operational-Run"
+    ];
+
     private static readonly string[] MandatorySections =
     [
         "baselineRegister",
@@ -128,11 +144,7 @@ public sealed class ProductionLikeOperationalRunSourceSchemaTests
     private static JsonObject LoadSchema([CallerFilePath] string sourceFilePath = "")
     {
         var schemaPath = Path.Combine(
-            FindWorkspaceRoot(sourceFilePath),
-            "hush-memory-bank",
-            "Overview",
-            "HushVotingReadiness",
-            "Production-Like-Operational-Run",
+            ResolveSourceRoot(FindWorkspaceRoot(sourceFilePath)),
             "schemas",
             "production-like-operational-run-source.schema.json");
 
@@ -171,9 +183,22 @@ public sealed class ProductionLikeOperationalRunSourceSchemaTests
     }
 
     private static bool IsWorkspaceRoot(string path) =>
-        Directory.Exists(Path.Combine(path, "hush-memory-bank")) &&
-        (Directory.Exists(Path.Combine(path, "hush-server-node")) ||
-            Directory.Exists(Path.Combine(path, "Node")));
+        Directory.Exists(GetMemoryBankSourceRoot(path)) ||
+        Directory.Exists(GetVendoredFixtureSourceRoot(path));
+
+    private static string ResolveSourceRoot(string workspaceRoot)
+    {
+        var memoryBankRoot = GetMemoryBankSourceRoot(workspaceRoot);
+        return Directory.Exists(memoryBankRoot)
+            ? memoryBankRoot
+            : GetVendoredFixtureSourceRoot(workspaceRoot);
+    }
+
+    private static string GetMemoryBankSourceRoot(string workspaceRoot) =>
+        Path.Combine(new[] { workspaceRoot, "hush-memory-bank" }.Concat(SourceRootRelativePath).ToArray());
+
+    private static string GetVendoredFixtureSourceRoot(string workspaceRoot) =>
+        Path.Combine(new[] { workspaceRoot }.Concat(FixtureRootRelativePath).ToArray());
 
     private static JsonObject GetDefinition(JsonObject schema, string name) =>
         schema["$defs"]!.AsObject()[name]!.AsObject();

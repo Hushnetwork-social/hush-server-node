@@ -6,8 +6,43 @@ namespace HushServerNode.Tests.Elections;
 
 internal static class ProductionLikeOperationalRunTestHelpers
 {
-    public static ProductionLikeOperationalRunPromotionPaths CreatePaths([CallerFilePath] string sourceFilePath = "") =>
-        ProductionLikeOperationalRunPromotionPaths.FromWorkspaceRoot(FindWorkspaceRoot(sourceFilePath));
+    private static readonly string[] SourceRootRelativePath =
+    [
+        "Overview",
+        "HushVotingReadiness",
+        "Production-Like-Operational-Run"
+    ];
+
+    private static readonly string[] FixtureRootRelativePath =
+    [
+        "Node",
+        "HushServerNode.Tests",
+        "Elections",
+        "TestFixtures",
+        "Production-Like-Operational-Run"
+    ];
+
+    public static ProductionLikeOperationalRunPromotionPaths CreatePaths([CallerFilePath] string sourceFilePath = "")
+    {
+        var workspaceRoot = FindWorkspaceRoot(sourceFilePath);
+        var paths = ProductionLikeOperationalRunPromotionPaths.FromWorkspaceRoot(workspaceRoot);
+        var sourceRoot = ResolveSourceRoot(workspaceRoot);
+        var examplesRoot = Path.Combine(sourceRoot, "examples");
+
+        return paths with
+        {
+            SourceRoot = sourceRoot,
+            SchemasRoot = Path.Combine(sourceRoot, "schemas"),
+            ExamplesRoot = examplesRoot,
+            DefaultSourceInput = Path.Combine(
+                examplesRoot,
+                "release-baseline",
+                ProductionLikeOperationalRunPromotionPaths.SourceFileName),
+            FixtureCatalogPath = Path.Combine(
+                examplesRoot,
+                ProductionLikeOperationalRunPromotionPaths.FixtureCatalogFileName)
+        };
+    }
 
     public static JsonObject LoadSchema() =>
         LoadMemoryBankJson(
@@ -64,7 +99,8 @@ internal static class ProductionLikeOperationalRunTestHelpers
 
     public static JsonObject LoadMemoryBankJson(params string[] relativePath)
     {
-        var fullPath = Path.Combine(new[] { FindWorkspaceRoot(), "hush-memory-bank" }.Concat(relativePath).ToArray());
+        var workspaceRoot = FindWorkspaceRoot();
+        var fullPath = Path.Combine(new[] { ResolveSourceRoot(workspaceRoot) }.Concat(relativePath.Skip(3)).ToArray());
         return JsonNode.Parse(File.ReadAllText(fullPath))!.AsObject();
     }
 
@@ -72,6 +108,14 @@ internal static class ProductionLikeOperationalRunTestHelpers
     {
         var parts = relativePath.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
         return LoadMemoryBankJson(parts);
+    }
+
+    public static bool SourceRelativeFileExists(string relativePath)
+    {
+        var parts = relativePath.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
+        var workspaceRoot = FindWorkspaceRoot();
+        var fullPath = Path.Combine(new[] { ResolveSourceRoot(workspaceRoot) }.Concat(parts.Skip(3)).ToArray());
+        return File.Exists(fullPath);
     }
 
     public static string FindWorkspaceRoot([CallerFilePath] string sourceFilePath = "")
@@ -124,7 +168,20 @@ internal static class ProductionLikeOperationalRunTestHelpers
     }
 
     private static bool IsWorkspaceRoot(string path) =>
-        Directory.Exists(Path.Combine(path, "hush-memory-bank")) &&
-        (Directory.Exists(Path.Combine(path, "hush-server-node")) ||
-            Directory.Exists(Path.Combine(path, "Node")));
+        Directory.Exists(GetMemoryBankSourceRoot(path)) ||
+        Directory.Exists(GetVendoredFixtureSourceRoot(path));
+
+    private static string ResolveSourceRoot(string workspaceRoot)
+    {
+        var memoryBankRoot = GetMemoryBankSourceRoot(workspaceRoot);
+        return Directory.Exists(memoryBankRoot)
+            ? memoryBankRoot
+            : GetVendoredFixtureSourceRoot(workspaceRoot);
+    }
+
+    private static string GetMemoryBankSourceRoot(string workspaceRoot) =>
+        Path.Combine(new[] { workspaceRoot, "hush-memory-bank" }.Concat(SourceRootRelativePath).ToArray());
+
+    private static string GetVendoredFixtureSourceRoot(string workspaceRoot) =>
+        Path.Combine(new[] { workspaceRoot }.Concat(FixtureRootRelativePath).ToArray());
 }

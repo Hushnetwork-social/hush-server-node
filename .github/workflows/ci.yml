@@ -29,20 +29,6 @@ jobs:
         ref: master
         path: hush-web-client
 
-    - name: Checkout hush-memory-bank
-      uses: actions/checkout@v5
-      with:
-        repository: Hushnetwork-social/hush-memory-bank
-        ref: master
-        path: hush-memory-bank
-
-    - name: Checkout hush-documents
-      uses: actions/checkout@v5
-      with:
-        repository: Hushnetwork-social/hush-documents
-        ref: master
-        path: hush-documents
-
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:

@@ -1,0 +1,594 @@
+{
+  "schemaVersion": "production-like-operational-run-source.v1",
+  "sourceId": "FEAT154-PRODUCTION-LIKE-RUN-20260528-BASELINE",
+  "featureId": "FEAT-154",
+  "acceptanceGates": [
+    "AT-RDY-005",
+    "AT-RDY-006",
+    "AT-RDY-013",
+    "AT-RDY-014",
+    "AT-RDY-017",
+    "AT-RDY-018"
+  ],
+  "status": "accepted",
+  "generatedAt": "2026-05-28T00:00:00Z",
+  "baselineRegister": {
+    "registerVersionId": "RDY-REG-v0.1.5",
+    "registerStatus": "AcceptedInternal",
+    "totalScore": 71,
+    "dimensionId": "RDY-DIM-007",
+    "currentScore": 6,
+    "targetScore": 8,
+    "strongestAllowedClaim": "friendly_organization_pilot"
+  },
+  "runProfile": {
+    "runId": "FEAT154-RUN-20260528-CONTROLLED-STAGING",
+    "profileId": "controlled-hush-managed-staging-aws-like-v1",
+    "environmentClass": "controlled_hush_managed_staging_aws_like",
+    "deploymentProfile": "hush_saas_v1",
+    "scope": "Controlled production-like HushVoting operational run using synthetic or non-confidential election data.",
+    "startedAt": "2026-05-28T09:00:00Z",
+    "endedAt": "2026-05-28T10:30:00Z",
+    "runOwnerRole": "engineering-owner",
+    "operatorRole": "operations-operator",
+    "reviewerRole": "readiness-reviewer",
+    "claimLevel": "friendly_organization_pilot",
+    "localOnly": false,
+    "privateChainOnly": false,
+    "uncontrolledProduction": false,
+    "syntheticOrNonConfidentialData": true
+  },
+  "dataScope": {
+    "participantDataClass": "synthetic",
+    "electionDataClass": "synthetic",
+    "containsRealVoterPersonalData": false,
+    "containsVoteChoiceData": false,
+    "publicSafeScopeSummary": "Synthetic election and participant data only; no real participant identity or ballot-selection payloads are included."
+  },
+  "deploymentProof": {
+    "status": "accepted",
+    "deploymentProofSetId": "FEAT132-DEPLOYMENT-PROOF-SET-20260528",
+    "serverComponentProof": {
+      "component": "hush-server-node",
+      "proofId": "FEAT132-HUSH-SERVER-NODE-PROOF",
+      "status": "accepted",
+      "sourceRef": "restricted-evidence/feat-132/hush-server-node-component-proof.json",
+      "artifactHash": "3D30FD9DE955E8C6455E3739463424A0A5F78F0AF483D7E933BA619E9DD43E62"
+    },
+    "webClientComponentProof": {
+      "component": "hush-web-client",
+      "proofId": "FEAT132-HUSH-WEB-CLIENT-PROOF",
+      "status": "accepted",
+      "sourceRef": "restricted-evidence/feat-132/hush-web-client-component-proof.json",
+      "artifactHash": "E377476FC33D09E1629533167416F8BC83B5134E549D86E9883FAFCFF5D4017F"
+    },
+    "classificationStatus": "accepted",
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT132-DEPLOYMENT-PROOF-SET",
+        "featureSlice": "FEAT-132",
+        "acceptanceGate": "AT-RDY-005",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "FEAT132 deployment proof set accepted for controlled run binding.",
+        "restrictedRef": "restricted-evidence/feat-132/deployment-proof-set.json",
+        "sha256Hash": "B1286EA3915DE22BB8F273B0CA8C1703F31F667292EE0E910C082021443EDEEA",
+        "claimEffect": "Binds active server and WebClient proof refs to the run."
+      }
+    ],
+    "blockerIds": []
+  },
+  "runtimeBinding": {
+    "status": "accepted",
+    "claimImpact": "Runtime proof binding ledger covers the selected run lifecycle.",
+    "ledgerRefs": [
+      {
+        "ledgerId": "FEAT143-RUNTIME-BINDING-LEDGER",
+        "checkpointId": "FEAT154-RUN-LIFECYCLE-BINDING",
+        "sourceRef": "restricted-evidence/feat-143/runtime-binding-ledger.json",
+        "sha256Hash": "7CCA7B2E764D59EF9993192E34554A0C6C2D193BDFC395455C698B2BCA3A3198",
+        "status": "accepted"
+      }
+    ],
+    "lifecycleCheckpoints": [
+      "deployment_proof_loaded",
+      "election_created",
+      "election_opened",
+      "voting_observed",
+      "finalization_observed",
+      "publication_or_export_observed",
+      "run_closed"
+    ],
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT143-RUNTIME-BINDING-LEDGER",
+        "featureSlice": "FEAT-143",
+        "acceptanceGate": "AT-RDY-017",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Runtime binding ledger accepted for run lifecycle coverage.",
+        "restrictedRef": "restricted-evidence/feat-143/runtime-binding-ledger.json",
+        "sha256Hash": "7CCA7B2E764D59EF9993192E34554A0C6C2D193BDFC395455C698B2BCA3A3198",
+        "claimEffect": "Prevents unbound deployment proof from being counted."
+      }
+    ],
+    "blockerIds": [],
+    "diagnostics": []
+  },
+  "webClientObservation": {
+    "status": "accepted",
+    "claimImpact": "Observed WebClient proof handshake evidence is present for the controlled run.",
+    "observedHandshakeRefs": [
+      {
+        "evidenceId": "FEAT144-WEBCLIENT-OBSERVED-PROOF-HANDSHAKE",
+        "featureSlice": "FEAT-144",
+        "acceptanceGate": "AT-RDY-018",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Observed WebClient proof handshake accepted.",
+        "restrictedRef": "restricted-evidence/feat-144/webclient-observed-proof-handshake.json",
+        "sha256Hash": "E377476FC33D09E1629533167416F8BC83B5134E549D86E9883FAFCFF5D4017F",
+        "claimEffect": "Confirms browser-delivered proof metadata was observed during the run."
+      }
+    ],
+    "browserEvidenceBoundary": "Browser evidence is referenced by restricted path/hash only; no local browser profile, account, or operator personal data is included.",
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT144-WEBCLIENT-OBSERVED-PROOF-HANDSHAKE",
+        "featureSlice": "FEAT-144",
+        "acceptanceGate": "AT-RDY-018",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Observed WebClient proof handshake accepted.",
+        "restrictedRef": "restricted-evidence/feat-144/webclient-observed-proof-handshake.json",
+        "sha256Hash": "E377476FC33D09E1629533167416F8BC83B5134E549D86E9883FAFCFF5D4017F",
+        "claimEffect": "Blocks score movement if WebClient proof observation is missing."
+      }
+    ],
+    "blockerIds": [],
+    "diagnostics": []
+  },
+  "operationalEvidence": {
+    "status": "accepted",
+    "claimImpact": "OPS source status and checks are present, with FEAT-154 stricter gates applied later by the semantic checker.",
+    "opsSourceStatus": "accepted",
+    "opsCheckIds": [
+      "OPS-001",
+      "OPS-002",
+      "OPS-003",
+      "OPS-004",
+      "OPS-005",
+      "OPS-006",
+      "OPS-007",
+      "OPS-008"
+    ],
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT133-OPERATIONAL-RUN-PACKAGE",
+        "featureSlice": "FEAT-133",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Operational evidence package accepted as source input.",
+        "restrictedRef": "restricted-evidence/feat-133/operational-run-package.json",
+        "sha256Hash": "33DA39192C32F510E4D7B068B5726271A953D4F22C342274D1400E85DDE93EF8",
+        "claimEffect": "Provides OPS check vocabulary and source refs for FEAT-154."
+      },
+      {
+        "evidenceId": "FEAT133-OPERATIONAL-CHECKS",
+        "featureSlice": "FEAT-133",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Operational checks accepted as source input.",
+        "restrictedRef": "restricted-evidence/feat-133/operational-checks.json",
+        "sha256Hash": "C420C0DE395885E1EA6048389B6F3B2652A940F72545C1B880B839C3EF1096E1",
+        "claimEffect": "Supports stricter FEAT-154 operational gate evaluation."
+      }
+    ],
+    "blockerIds": [],
+    "diagnostics": []
+  },
+  "securitySupportFreshness": {
+    "status": "accepted",
+    "packageId": "FEAT134-SECURITY-DEPENDENCY-SUPPORT-PACKAGE",
+    "packageVersion": "2026-05-28",
+    "freshness": "current",
+    "scanDate": "2026-05-28",
+    "validThrough": "2026-06-27",
+    "openCriticalFindings": 0,
+    "openHighFindings": 0,
+    "exceptions": [],
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT134-SECURITY-SUPPORT-FRESHNESS",
+        "featureSlice": "FEAT-134",
+        "acceptanceGate": "AT-RDY-014",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Security and support freshness package accepted.",
+        "restrictedRef": "restricted-evidence/feat-134/security-support-package.json",
+        "sha256Hash": "D4C4CB04CF77B3457FB07DD5A79E8940A10EBAA3836BB4D4CBD560AC6DBB2778",
+        "claimEffect": "Blocks run acceptance if vulnerability or support evidence is stale."
+      }
+    ],
+    "blockerIds": []
+  },
+  "pilotLineage": {
+    "status": "accepted_with_limitations",
+    "claimImpact": "Pilot package shape is reused as lineage only and cannot prove production-like readiness by itself.",
+    "lineageOnly": true,
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT141-PILOT-EVIDENCE-PACKAGE",
+        "featureSlice": "FEAT-141",
+        "acceptanceGate": "AT-RDY-013",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Pilot package accepted as lineage only.",
+        "restrictedRef": "restricted-evidence/feat-141/pilot-evidence-package.json",
+        "sha256Hash": "D08A34A750F53AD738337C27CA56126E912FDBD6575A5F891FB2BB6823BFDDB2",
+        "claimEffect": "Provides rehearsal lineage but does not replace production-like operational evidence."
+      }
+    ],
+    "blockerIds": [],
+    "diagnostics": [
+      "FEAT154-PILOT-LINEAGE-ONLY"
+    ]
+  },
+  "productionRolloutGateSource": {
+    "status": "accepted_with_limitations",
+    "claimImpact": "FEAT-148 consumes this package as a production rollout input but remains policy-bound by FEAT-156 and other blockers.",
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT148-PRODUCTION-ROLLOUT-PACKAGE",
+        "featureSlice": "FEAT-148",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted_with_limitations",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Production rollout readiness gate source accepted with limitations.",
+        "restrictedRef": "restricted-evidence/feat-148/production-rollout-package.json",
+        "sha256Hash": "73BE1C0B85C23D3B8CBE39D155D70451B76B56EFE0D8E784AD0A5D8EC42FA448",
+        "claimEffect": "Carries FEAT-154 result forward without directly unlocking production rollout."
+      }
+    ],
+    "blockerIds": [],
+    "diagnostics": [
+      "FEAT154-PRODUCTION-ROLLOUT-NOT-DIRECTLY-UNLOCKED"
+    ]
+  },
+  "publicationCountingHardening": {
+    "status": "accepted",
+    "claimImpact": "Publication/counting hardening source is present when the run includes package or export verification.",
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT153-PUBLICATION-COUNTING-HARDENING",
+        "featureSlice": "FEAT-153",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Publication and counting hardening source accepted.",
+        "restrictedRef": "restricted-evidence/feat-153/publication-counting-source.json",
+        "sha256Hash": "770AA1B6065870288AF6EB8AB35752F5CCE448A48C586BFBE421E36005CE8006",
+        "claimEffect": "Supports package/export verification coverage when included in the run."
+      }
+    ],
+    "blockerIds": [],
+    "diagnostics": []
+  },
+  "monitoring": {
+    "status": "accepted",
+    "claimImpact": "Monitoring and alerting evidence covers the run window.",
+    "windowStart": "2026-05-28T09:00:00Z",
+    "windowEnd": "2026-05-28T10:30:00Z",
+    "monitoringEvidenceRefs": [
+      {
+        "evidenceId": "FEAT154-MONITORING-WINDOW",
+        "featureSlice": "FEAT-154",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Monitoring window evidence accepted.",
+        "restrictedRef": "restricted-evidence/feat-154/monitoring-window-summary.json",
+        "sha256Hash": "A111111111111111111111111111111111111111111111111111111111111111",
+        "claimEffect": "Blocks production-like run acceptance if monitoring is missing."
+      }
+    ],
+    "alertingEvidenceRefs": [
+      {
+        "evidenceId": "FEAT154-ALERTING-COVERAGE",
+        "featureSlice": "FEAT-154",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Alerting coverage evidence accepted.",
+        "restrictedRef": "restricted-evidence/feat-154/alerting-coverage-summary.json",
+        "sha256Hash": "A222222222222222222222222222222222222222222222222222222222222222",
+        "claimEffect": "Confirms alerting coverage during the controlled run window."
+      }
+    ],
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT154-MONITORING-ALERTING-SUMMARY",
+        "featureSlice": "FEAT-154",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Monitoring and alerting summary accepted.",
+        "restrictedRef": "restricted-evidence/feat-154/monitoring-alerting-summary.json",
+        "sha256Hash": "A333333333333333333333333333333333333333333333333333333333333333",
+        "claimEffect": "Carries monitoring and alerting gate evidence."
+      }
+    ],
+    "blockerIds": [],
+    "diagnostics": []
+  },
+  "support": {
+    "status": "accepted",
+    "claimImpact": "Support route and operator escalation coverage are present.",
+    "supportRouteStatus": "accepted",
+    "operatorEscalationCovered": true,
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT154-SUPPORT-ROUTE",
+        "featureSlice": "FEAT-154",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Support route evidence accepted.",
+        "restrictedRef": "restricted-evidence/feat-154/support-route-summary.json",
+        "sha256Hash": "A444444444444444444444444444444444444444444444444444444444444444",
+        "claimEffect": "Blocks production-like run acceptance if support evidence is missing."
+      }
+    ],
+    "blockerIds": [],
+    "diagnostics": []
+  },
+  "backupRestore": {
+    "status": "accepted",
+    "sameProfileRestoreAccepted": true,
+    "runSpecificRestoreAccepted": true,
+    "exceptionAccepted": false,
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT154-BACKUP-RESTORE-SUMMARY",
+        "featureSlice": "FEAT-154",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Backup and restore evidence accepted.",
+        "restrictedRef": "restricted-evidence/feat-154/backup-restore-summary.json",
+        "sha256Hash": "A555555555555555555555555555555555555555555555555555555555555555",
+        "claimEffect": "Blocks production-like run acceptance if backup/restore evidence is missing without accepted exception."
+      }
+    ],
+    "blockerIds": [],
+    "residualRisk": "One controlled restore check does not prove repeated customer-site restore history."
+  },
+  "incidentDeclaration": {
+    "status": "accepted",
+    "incidentState": "no_incident_declared",
+    "declarationAt": "2026-05-28T10:45:00Z",
+    "declarationRole": "operations-operator",
+    "publicSafeStatement": "No incident was declared for the controlled run; no restricted operational details are included.",
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT154-NO-INCIDENT-DECLARATION",
+        "featureSlice": "FEAT-154",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "No-incident declaration accepted.",
+        "restrictedRef": "restricted-evidence/feat-154/no-incident-declaration.json",
+        "sha256Hash": "A666666666666666666666666666666666666666666666666666666666666666",
+        "claimEffect": "Blocks production-like run acceptance if incident/no-incident evidence is missing."
+      }
+    ],
+    "blockerIds": []
+  },
+  "operatorHandoff": {
+    "status": "accepted",
+    "claimImpact": "Operator handoff was accepted by role for the controlled run.",
+    "handoffStatus": "accepted",
+    "acceptedByRole": "readiness-reviewer",
+    "acceptedAt": "2026-05-28T10:50:00Z",
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT154-OPERATOR-HANDOFF",
+        "featureSlice": "FEAT-154",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Operator handoff evidence accepted.",
+        "restrictedRef": "restricted-evidence/feat-154/operator-handoff-summary.json",
+        "sha256Hash": "A777777777777777777777777777777777777777777777777777777777777777",
+        "claimEffect": "Blocks production-like run acceptance if operator handoff evidence is missing."
+      }
+    ],
+    "blockerIds": [],
+    "diagnostics": []
+  },
+  "postmortem": {
+    "status": "accepted",
+    "completedAt": "2026-05-28T11:00:00Z",
+    "reviewerRole": "readiness-reviewer",
+    "noIncidentStillReviewed": true,
+    "followUpCount": 1,
+    "unresolvedCriticalFollowUps": 0,
+    "evidenceRefs": [
+      {
+        "evidenceId": "FEAT154-POSTMORTEM-SUMMARY",
+        "featureSlice": "FEAT-154",
+        "acceptanceGate": "AT-RDY-006",
+        "status": "accepted",
+        "visibility": "restricted",
+        "freshness": "current",
+        "publicRef": "Postmortem evidence accepted.",
+        "restrictedRef": "restricted-evidence/feat-154/postmortem-summary.json",
+        "sha256Hash": "A888888888888888888888888888888888888888888888888888888888888888",
+        "claimEffect": "Blocks production-like run acceptance if postmortem evidence is missing."
+      }
+    ],
+    "blockerIds": []
+  },
+  "publicSafety": {
+    "visibility": "public_safe",
+    "forbiddenMaterialCategories": [
+      "restricted_infrastructure",
+      "keys_or_credentials",
+      "operator_contacts",
+      "support_case_data",
+      "voter_data",
+      "vote_choice_data",
+      "raw_logs",
+      "private_urls",
+      "local_absolute_paths"
+    ],
+    "forbiddenClaimCategories": [
+      "production_rollout_green",
+      "public_state_election_ready",
+      "legal_sufficiency",
+      "independent_certification",
+      "failed_finalize_continuity_complete"
+    ],
+    "forbiddenMaterialScanPolicy": "Generated public outputs must contain only source ids, hashes, bounded summaries, and residual limits.",
+    "publicOutputPolicy": "Public output may state that a controlled production-like operational run package exists; it must not claim production rollout, public/state election readiness, legal sufficiency, or failed-finalize continuity.",
+    "publicOutputs": [
+      {
+        "outputId": "FEAT154-PUBLIC-SAFE-SUMMARY",
+        "pathRef": "public-safe-production-like-operational-run-summary.md",
+        "sha256Hash": "A999999999999999999999999999999999999999999999999999999999999999"
+      }
+    ],
+    "expectedFindingCountInGeneratedPublicOutputs": 0
+  },
+  "restrictedEvidenceRefs": [
+    {
+      "refId": "FEAT154-RUN-RESTRICTED-INDEX",
+      "pathRef": "restricted-production-like-operational-run-evidence-index.md",
+      "sha256Hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "payloadCopied": false,
+      "visibility": "restricted"
+    },
+    {
+      "refId": "FEAT154-RUN-PACKAGE",
+      "pathRef": "production-like-operational-run-package.json",
+      "sha256Hash": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "payloadCopied": false,
+      "visibility": "restricted"
+    }
+  ],
+  "readinessProposal": {
+    "dimensionId": "RDY-DIM-007",
+    "proposedScoreFrom": 6,
+    "proposedScoreTo": 8,
+    "doesNotMutateRegister": true,
+    "directRegisterMutation": false,
+    "promotionOwner": "FEAT-156",
+    "scoreChangeRequiresPromotion": true,
+    "residualRiskSummary": "The score proposal can be consumed by FEAT-156 only; one controlled run does not remove production rollout, public/state, repeated operating history, or failed-finalize continuity limits."
+  },
+  "downstreamHandoff": {
+    "targetFeatures": [
+      "FEAT-148",
+      "FEAT-155",
+      "FEAT-156"
+    ],
+    "productionRolloutInput": {
+      "status": "accepted_with_limitations",
+      "claimImpact": "Feeds FEAT-148 but cannot bypass FEAT-156 promotion or remaining policy blockers.",
+      "evidenceRefs": [
+        {
+          "evidenceId": "FEAT154-FEAT148-HANDOFF",
+          "featureSlice": "FEAT-154",
+          "acceptanceGate": "AT-RDY-006",
+          "status": "accepted_with_limitations",
+          "visibility": "restricted",
+          "freshness": "current",
+          "publicRef": "FEAT-148 handoff available with limitations.",
+          "restrictedRef": "handoff/production-like-operational-run-downstream-handoff.json",
+          "sha256Hash": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "claimEffect": "Provides production rollout gate input."
+        }
+      ],
+      "blockerIds": [],
+      "diagnostics": [
+        "FEAT154-FEAT156-PROMOTION-REQUIRED"
+      ]
+    },
+    "continuityRunContext": {
+      "status": "accepted_with_limitations",
+      "claimImpact": "Feeds FEAT-155 with run context but does not prove failed-finalize continuity.",
+      "evidenceRefs": [
+        {
+          "evidenceId": "FEAT154-FEAT155-HANDOFF",
+          "featureSlice": "FEAT-154",
+          "acceptanceGate": "AT-RDY-006",
+          "status": "accepted_with_limitations",
+          "visibility": "restricted",
+          "freshness": "current",
+          "publicRef": "FEAT-155 run context available.",
+          "restrictedRef": "handoff/production-like-operational-run-downstream-handoff.json",
+          "sha256Hash": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "claimEffect": "Provides continuity rehearsal context only."
+        }
+      ],
+      "blockerIds": [],
+      "diagnostics": [
+        "FEAT154-FEAT155-CONTINUITY-STILL-REQUIRED"
+      ]
+    },
+    "promotionRegisterInput": {
+      "status": "accepted_with_limitations",
+      "claimImpact": "Feeds FEAT-156 score proposal and residual limits.",
+      "evidenceRefs": [
+        {
+          "evidenceId": "FEAT154-FEAT156-HANDOFF",
+          "featureSlice": "FEAT-154",
+          "acceptanceGate": "AT-RDY-006",
+          "status": "accepted_with_limitations",
+          "visibility": "restricted",
+          "freshness": "current",
+          "publicRef": "FEAT-156 score proposal input available.",
+          "restrictedRef": "readiness/production-like-operational-run-score-proposal.json",
+          "sha256Hash": "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+          "claimEffect": "Enables later promotion review without direct register mutation."
+        }
+      ],
+      "blockerIds": [],
+      "diagnostics": [
+        "FEAT154-REGISTER-MUTATION-FORBIDDEN"
+      ]
+    }
+  },
+  "signoff": {
+    "engineeringOwnerRole": "engineering-owner",
+    "operationsOwnerRole": "operations-owner",
+    "productOwnerRole": "product-owner",
+    "acceptedAt": "2026-05-28T11:10:00Z"
+  },
+  "residualRisks": [
+    "One controlled run does not prove repeated operating history.",
+    "Customer-site variance remains outside the v1 evidence boundary.",
+    "Production organizational rollout remains subject to FEAT-156 promotion.",
+    "Public or state election readiness remains out of scope.",
+    "Failed-finalize continuity remains owned by FEAT-155."
+  ]
+}
