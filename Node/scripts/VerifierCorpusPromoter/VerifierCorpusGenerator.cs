@@ -109,6 +109,20 @@ public sealed partial class VerifierCorpusGenerator
         new("tamper-corpus-index-drift", "stale_version_drift", "Corpus index drift is represented as profile/package mismatch.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.VerifierProfilePackageMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
     ];
 
+    private static readonly FixtureSpec[] Audit95OnlyFixtureSpecs =
+    [
+        new("sample-good-binding-style-metadata", "binding_style_metadata", "Synthetic good sample with binding-election metadata, no legal sufficiency claim, and deterministic public evidence.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageStructureValid, VerificationCheckStatus.Pass, VerificationOverallStatus.Pass, VerificationExitCodes.Pass, SecondaryFailuresAllowed: false),
+        new("sample-good-internal-rehearsal-metadata", "internal_rehearsal_metadata", "Synthetic good sample labelled as internal non-binding rehearsal evidence without customer or public-election claims.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageStructureValid, VerificationCheckStatus.Pass, VerificationOverallStatus.Pass, VerificationExitCodes.Pass, SecondaryFailuresAllowed: false),
+        new("sample-good-production-rollout-simulation", "production_rollout_simulation", "Synthetic good sample with production-rollout simulation metadata that remains inside the internal audit boundary.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageStructureValid, VerificationCheckStatus.Pass, VerificationOverallStatus.Pass, VerificationExitCodes.Pass, SecondaryFailuresAllowed: false),
+        new("tamper-stale-corpus-public-ref", "stale_version_drift", "Mutable public corpus reference must block audit-95 release confidence.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.ReleaseIntegrityMutableArtifactReference, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
+        new("tamper-wrong-package-version", "stale_version_drift", "Wrong Protocol Omega package version binding must block audit-95 release confidence.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.ReleaseIntegrityCircuitOrPackageHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
+        new("tamper-altered-tally-replay", "audit95_publication_counting", "Altered tally replay must fail against the publication/counting binding checks.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PublicationProofTallyReplayMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
+        new("tamper-sp04-altered-receipt-commitment", "audit95_receipt_inclusion", "Altered receipt commitment must fail against the receipt inclusion binding checks.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.ChallengeSpoilReceiptMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
+        new("tamper-verifier-output-mismatch", "audit95_verifier_output_binding", "Verifier-output mismatch is represented as result-binding drift without manifest refresh.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.PackageManifestArtifactHashMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
+        new("tamper-fixture-index-drift", "stale_version_drift", "Fixture index drift is represented as verifier profile/package mismatch.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.VerifierProfilePackageMismatch, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
+        new("tamper-sp10-public-safe-forbidden-material", "audit95_public_boundary", "Synthetic public-safe forbidden marker must fail the public material boundary checks.", VerificationProfileIds.PublicAnonymousV1, VerificationResultCodes.OperationalSecurityForbiddenMaterial, VerificationCheckStatus.Fail, VerificationOverallStatus.Fail, VerificationExitCodes.Fail),
+    ];
+
     public async Task<VerifierCorpusGenerationResult> GenerateAsync(
         VerifierCorpusGenerationOptions options,
         CancellationToken cancellationToken = default)
@@ -208,10 +222,23 @@ public sealed partial class VerifierCorpusGenerator
     public static IReadOnlyList<string> RefreshFixtureIds() =>
         ResolveFixtureSpecs("v0.2.0").Select(x => x.FixtureId).ToArray();
 
-    private static FixtureSpec[] ResolveFixtureSpecs(string corpusVersion) =>
-        string.Equals(corpusVersion, "v0.2.0", StringComparison.OrdinalIgnoreCase)
-            ? LegacyFixtureSpecs.Concat(RefreshOnlyFixtureSpecs).ToArray()
-            : LegacyFixtureSpecs;
+    public static IReadOnlyList<string> Audit95FixtureIds() =>
+        ResolveFixtureSpecs("v0.3.0").Select(x => x.FixtureId).ToArray();
+
+    private static FixtureSpec[] ResolveFixtureSpecs(string corpusVersion)
+    {
+        if (string.Equals(corpusVersion, "v0.2.0", StringComparison.OrdinalIgnoreCase))
+        {
+            return LegacyFixtureSpecs.Concat(RefreshOnlyFixtureSpecs).ToArray();
+        }
+
+        if (string.Equals(corpusVersion, "v0.3.0", StringComparison.OrdinalIgnoreCase))
+        {
+            return LegacyFixtureSpecs.Concat(RefreshOnlyFixtureSpecs).Concat(Audit95OnlyFixtureSpecs).ToArray();
+        }
+
+        return LegacyFixtureSpecs;
+    }
 
     private static bool IsGoodSampleFixture(string fixtureId) =>
         string.Equals(fixtureId, GoodSampleFixtureId, StringComparison.Ordinal) ||
@@ -493,6 +520,12 @@ public sealed partial class VerifierCorpusGenerator
                 await RefreshPackageRootManifestsAsync(packagePath, cancellationToken);
                 return;
 
+            case "tamper-stale-corpus-public-ref":
+                await MutateJsonArtifactAsync(packagePath, VerificationPackageFileNames.Sp08ReleaseManifest, root =>
+                    root["components"]!.AsArray()[0]!.AsObject()["immutableReference"] = "latest", cancellationToken);
+                await RefreshSp08ReleaseIntegrityHashAsync(packagePath, cancellationToken);
+                return;
+
             case "tamper-stale-verifier-source-ref":
                 await MutateJsonArtifactAsync(packagePath, VerificationPackageFileNames.Sp08ReleaseManifest, root =>
                     root["components"]!.AsArray()[2]!.AsObject()["artifactDigest"] = "missing-sha256-prefix", cancellationToken);
@@ -511,11 +544,29 @@ public sealed partial class VerifierCorpusGenerator
                 await RefreshPackageRootManifestsAsync(packagePath, cancellationToken);
                 return;
 
+            case "tamper-wrong-package-version":
+                await MutateJsonArtifactAsync(packagePath, VerificationPackageFileNames.Sp08ReleaseIntegrity, root =>
+                    root["protocolPackageManifestHash"] = new string('e', 64), cancellationToken);
+                await RefreshPackageRootManifestsAsync(packagePath, cancellationToken);
+                return;
+
             case "tamper-package-schema-version-drift":
                 await WriteTextLfAsync(
                     ResolvePackagePath(packagePath, VerificationPackageFileNames.VerifierInputManifest),
                     "{",
                     cancellationToken);
+                return;
+
+            case "tamper-altered-tally-replay":
+                await MutateJsonArtifactAsync(packagePath, VerificationPackageFileNames.TallyReplay, root =>
+                    root["acceptedBallotSetHash"] = new string('0', 64), cancellationToken);
+                await RefreshPackageRootManifestsAsync(packagePath, cancellationToken);
+                return;
+
+            case "tamper-sp04-altered-receipt-commitment":
+                await MutateJsonArrayArtifactAsync(packagePath, VerificationPackageFileNames.Sp04ReceiptCommitments, root =>
+                    root[0]!.AsObject()["receiptCommitment"] = "tampered-receipt-commitment", cancellationToken);
+                await RefreshPackageRootManifestsAsync(packagePath, cancellationToken);
                 return;
 
             case "tamper-expected-result-drift":
@@ -524,8 +575,23 @@ public sealed partial class VerifierCorpusGenerator
                 return;
 
             case "tamper-corpus-index-drift":
+            case "tamper-fixture-index-drift":
                 await MutateJsonArtifactAsync(packagePath, VerificationPackageFileNames.VerifierProfile, root =>
                     root["profileId"] = VerificationProfileIds.RestrictedOwnerAuditorV1, cancellationToken);
+                await RefreshPackageRootManifestsAsync(packagePath, cancellationToken);
+                return;
+
+            case "tamper-verifier-output-mismatch":
+                await MutateJsonArtifactAsync(packagePath, VerificationPackageFileNames.ResultBinding, root =>
+                    root["verifierOutputMismatchMarker"] = "normalized verifier output no longer matches fixture expected-result binding", cancellationToken);
+                return;
+
+            case "tamper-sp10-public-safe-forbidden-material":
+                await MutateJsonArtifactAsync(packagePath, VerificationPackageFileNames.Sp10OperationalSecuritySummary, root =>
+                {
+                    root["primaryIssue"] = "Synthetic public-safe forbidden marker aws_secret_access_key appears in public summary.";
+                    root["publicPrivacyBoundary"] = new JsonArray("kmsKeyArn");
+                }, cancellationToken);
                 await RefreshPackageRootManifestsAsync(packagePath, cancellationToken);
                 return;
 
@@ -576,6 +642,19 @@ public sealed partial class VerifierCorpusGenerator
         var path = ResolvePackagePath(packagePath, relativePath);
         var root = JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken))?.AsObject() ??
             throw new InvalidOperationException($"Package artifact '{relativePath}' is not a JSON object.");
+        mutate(root);
+        await WriteTextLfAsync(path, root.ToJsonString(JsonOptions), cancellationToken);
+    }
+
+    private static async Task MutateJsonArrayArtifactAsync(
+        string packagePath,
+        string relativePath,
+        Action<JsonArray> mutate,
+        CancellationToken cancellationToken)
+    {
+        var path = ResolvePackagePath(packagePath, relativePath);
+        var root = JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken))?.AsArray() ??
+            throw new InvalidOperationException($"Package artifact '{relativePath}' is not a JSON array.");
         mutate(root);
         await WriteTextLfAsync(path, root.ToJsonString(JsonOptions), cancellationToken);
     }

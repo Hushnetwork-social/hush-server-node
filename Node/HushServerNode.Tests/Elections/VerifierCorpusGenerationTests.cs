@@ -153,6 +153,85 @@ public sealed class VerifierCorpusGenerationTests
     }
 
     [Fact]
+    public async Task Generate_Audit95Release_ShouldAddMatrixGoodSamplesAndTamperFixtures()
+    {
+        using var workspace = TempCorpusWorkspace.Create();
+
+        var result = await GenerateAudit95Async(workspace.Root);
+
+        result.Fixtures.Select(x => x.FixtureId)
+            .Should()
+            .BeEquivalentTo(VerifierCorpusGenerator.Audit95FixtureIds());
+        result.NoSecretScanStatus.Should().Be("pass");
+        result.ScanFindings.Should().OnlyContain(x => x.ExpectedTamperFixture);
+
+        var goodSamples = result.Fixtures
+            .Where(x => x.FixtureId.StartsWith("sample-good-", StringComparison.Ordinal))
+            .ToArray();
+        goodSamples
+            .Should()
+            .HaveCount(8)
+            .And.OnlyContain(x =>
+                x.ExpectedOverallStatus == VerificationOverallStatus.Pass &&
+                x.ExpectedExitCode == VerificationExitCodes.Pass &&
+                x.ExpectedPrimaryResultCode == VerificationResultCodes.PackageStructureValid);
+        goodSamples.Select(x => x.PackageHash)
+            .Should()
+            .OnlyHaveUniqueItems("audit-95 good samples must cover separate election/package shapes");
+
+        result.Fixtures.Select(x => x.FixtureId)
+            .Should()
+            .Contain([
+                "sample-good-binding-style-metadata",
+                "sample-good-internal-rehearsal-metadata",
+                "sample-good-production-rollout-simulation",
+                "tamper-stale-corpus-public-ref",
+                "tamper-wrong-package-version",
+                "tamper-altered-tally-replay",
+                "tamper-sp04-altered-receipt-commitment",
+                "tamper-verifier-output-mismatch",
+                "tamper-fixture-index-drift",
+                "tamper-expected-result-drift",
+                "tamper-unsupported-live-dependency",
+                "tamper-sp10-public-safe-forbidden-material",
+            ]);
+
+        result.Fixtures.Where(x => !x.FixtureId.StartsWith("sample-good-", StringComparison.Ordinal))
+            .Should()
+            .OnlyContain(x => x.ExpectedOverallStatus != VerificationOverallStatus.Pass);
+        result.Fixtures.Single(x => x.FixtureId == "tamper-altered-tally-replay")
+            .ExpectedPrimaryResultCode.Should().Be(VerificationResultCodes.PublicationProofTallyReplayMismatch);
+        result.Fixtures.Single(x => x.FixtureId == "tamper-sp04-altered-receipt-commitment")
+            .ExpectedPrimaryResultCode.Should().Be(VerificationResultCodes.ChallengeSpoilReceiptMismatch);
+        result.Fixtures.Single(x => x.FixtureId == "tamper-sp10-public-safe-forbidden-material")
+            .ExpectedPrimaryResultCode.Should().Be(VerificationResultCodes.OperationalSecurityForbiddenMaterial);
+
+        foreach (var fixture in result.Fixtures)
+        {
+            var expectedResultPath = Path.Combine(workspace.Root, "expected-results", $"{fixture.FixtureId}.json");
+            File.Exists(expectedResultPath).Should().BeTrue(fixture.FixtureId);
+            var expected = JsonNode.Parse(await File.ReadAllTextAsync(expectedResultPath))!.AsObject();
+            expected["expectedPrimaryResultCode"]!.GetValue<string>().Should().Be(fixture.ExpectedPrimaryResultCode);
+            expected["requiredResultCodes"]!.AsArray()
+                .Select(x => x!.GetValue<string>())
+                .Should()
+                .Contain(fixture.ExpectedPrimaryResultCode, fixture.FixtureId);
+            expected["normalizedOutputHash"]!.GetValue<string>().Should().StartWith("sha256:");
+            File.Exists(Path.Combine(workspace.Root, "validation", "verifier-output", fixture.FixtureId, "VerifierOutput.json"))
+                .Should()
+                .BeTrue(fixture.FixtureId);
+        }
+
+        ReadPackageArtifact("sample-good-internal-rehearsal-metadata", "profile-marker.json")
+            ["corpusProfileId"]!.GetValue<string>().Should().Be("internal_rehearsal_metadata");
+        ReadPackageArtifact("sample-good-binding-style-metadata", "profile-marker.json")
+            ["corpusProfileId"]!.GetValue<string>().Should().Be("binding_style_metadata");
+
+        JsonObject ReadPackageArtifact(string fixtureId, string artifactPath) =>
+            ReadJson($"packages/{fixtureId}/{artifactPath}", workspace.Root);
+    }
+
+    [Fact]
     public async Task Generate_PlatformReplayFlags_ShouldFlowToValidationSummaryAndHandoff()
     {
         using var workspace = TempCorpusWorkspace.Create();
@@ -330,6 +409,12 @@ public sealed class VerifierCorpusGenerationTests
         new VerifierCorpusGenerator().GenerateAsync(new VerifierCorpusGenerationOptions(
             root,
             "v0.2.0",
+            FixedGeneratedAt));
+
+    private static Task<VerifierCorpusGenerationResult> GenerateAudit95Async(string root) =>
+        new VerifierCorpusGenerator().GenerateAsync(new VerifierCorpusGenerationOptions(
+            root,
+            "v0.3.0",
             FixedGeneratedAt));
 
     private static JsonObject ReadJson(string relativePath, string root) =>

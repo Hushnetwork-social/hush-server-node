@@ -1063,9 +1063,20 @@ public sealed partial class VerifierCorpusGenerator
         }
 
         if (fixtureId.StartsWith("tamper-stale-", StringComparison.Ordinal) ||
-            fixtureId.Contains("-drift", StringComparison.Ordinal))
+            fixtureId.Contains("-drift", StringComparison.Ordinal) ||
+            fixtureId is "tamper-wrong-package-version")
         {
             return "stale_version_drift";
+        }
+
+        if (fixtureId is "tamper-altered-tally-replay")
+        {
+            return "sp07_publication_counting";
+        }
+
+        if (fixtureId is "tamper-verifier-output-mismatch")
+        {
+            return "verifier_output_binding";
         }
 
         if (fixtureId is "tamper-missing-artifact" or "tamper-artifact-hash" or "tamper-malformed-package-json")
@@ -1138,12 +1149,19 @@ public sealed partial class VerifierCorpusGenerator
             "tamper-sp08-circuit-key-hash-mismatch" => VerificationPackageFileNames.Sp08ReleaseManifest,
             "tamper-sp10-forbidden-leak" => VerificationPackageFileNames.Sp10OperationalSecuritySummary,
             "tamper-sp10-kms-public-value-leak" => VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+            "tamper-sp10-public-safe-forbidden-material" => VerificationPackageFileNames.Sp10OperationalSecuritySummary,
+            "tamper-stale-corpus-public-ref" => VerificationPackageFileNames.Sp08ReleaseManifest,
             "tamper-stale-verifier-source-ref" => VerificationPackageFileNames.Sp08ReleaseManifest,
             "tamper-stale-verifier-binary-hash" => VerificationPackageFileNames.Sp08ReleaseManifest,
             "tamper-stale-protocol-package-version" => VerificationPackageFileNames.Sp08ReleaseIntegrity,
+            "tamper-wrong-package-version" => VerificationPackageFileNames.Sp08ReleaseIntegrity,
             "tamper-package-schema-version-drift" => VerificationPackageFileNames.VerifierInputManifest,
+            "tamper-altered-tally-replay" => VerificationPackageFileNames.TallyReplay,
+            "tamper-sp04-altered-receipt-commitment" => VerificationPackageFileNames.Sp04ReceiptCommitments,
             "tamper-expected-result-drift" => VerificationPackageFileNames.ResultBinding,
             "tamper-corpus-index-drift" => VerificationPackageFileNames.VerifierProfile,
+            "tamper-fixture-index-drift" => VerificationPackageFileNames.VerifierProfile,
+            "tamper-verifier-output-mismatch" => VerificationPackageFileNames.ResultBinding,
             _ => "unknown",
         };
 
@@ -1174,12 +1192,19 @@ public sealed partial class VerifierCorpusGenerator
             "tamper-sp08-circuit-key-hash-mismatch" => "Breaks circuit and key digest shape.",
             "tamper-sp10-forbidden-leak" => "Adds synthetic forbidden public operational wording and boundary markers.",
             "tamper-sp10-kms-public-value-leak" => "Adds a synthetic public KMS-style value marker.",
+            "tamper-sp10-public-safe-forbidden-material" => "Adds synthetic public-safe forbidden material markers to prove public scanning and SP-10 checks fail closed.",
+            "tamper-stale-corpus-public-ref" => "Changes a release component to a mutable public reference.",
             "tamper-stale-verifier-source-ref" => "Breaks the bound verifier source component digest to simulate stale verifier-source drift.",
             "tamper-stale-verifier-binary-hash" => "Breaks the bound verifier component source reference to simulate stale verifier-binary drift.",
             "tamper-stale-protocol-package-version" => "Breaks the Protocol Omega package manifest binding.",
+            "tamper-wrong-package-version" => "Breaks the Protocol Omega package version binding with a wrong digest.",
             "tamper-package-schema-version-drift" => "Corrupts the verifier input manifest to simulate unaccepted package schema drift.",
+            "tamper-altered-tally-replay" => "Changes the SP-07 tally replay binding while preserving package manifest hashes.",
+            "tamper-sp04-altered-receipt-commitment" => "Changes one public receipt commitment while preserving package manifest hashes.",
             "tamper-expected-result-drift" => "Changes result-binding bytes so the expected output no longer matches observed package content.",
             "tamper-corpus-index-drift" => "Changes the verifier profile binding to simulate corpus index/profile drift.",
+            "tamper-fixture-index-drift" => "Changes the verifier profile binding to simulate fixture-index/profile drift.",
+            "tamper-verifier-output-mismatch" => "Changes result-binding bytes without refreshing package manifests to simulate verifier-output binding mismatch.",
             _ => "Synthetic tamper mutation.",
         };
 

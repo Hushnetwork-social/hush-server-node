@@ -469,6 +469,44 @@ internal static class SyntheticElectionRequestFactory
                     RosteredVoterCount: 5,
                     CountedVoterCount: 3),
                 profile),
+            "binding_style_metadata" => WithVotingShape(
+                request with
+                {
+                    Election = request.Election with
+                    {
+                        BindingStatus = ElectionBindingStatus.Binding,
+                        ReviewWindowPolicy = ReviewWindowPolicy.NoReviewWindow,
+                    },
+                },
+                profile,
+                RosteredVoterCount: 5,
+                CountedVoterCount: 3),
+            "internal_rehearsal_metadata" => WithVotingShape(
+                request with
+                {
+                    Election = request.Election with
+                    {
+                        BindingStatus = ElectionBindingStatus.NonBinding,
+                        SelectedProfileId = ElectionSelectableProfileCatalog.AdminOnlyDevProfileId,
+                        SelectedProfileDevOnly = true,
+                    },
+                },
+                profile,
+                RosteredVoterCount: 4,
+                CountedVoterCount: 2),
+            "production_rollout_simulation" => WithVotingShape(
+                request with
+                {
+                    Election = request.Election with
+                    {
+                        BindingStatus = ElectionBindingStatus.Binding,
+                        GovernanceMode = ElectionGovernanceMode.AdminOnly,
+                        ReviewWindowPolicy = ReviewWindowPolicy.NoReviewWindow,
+                    },
+                },
+                profile,
+                RosteredVoterCount: 7,
+                CountedVoterCount: 5),
             _ => throw new InvalidOperationException($"Unsupported synthetic verifier corpus profile '{profile.CorpusProfileId}'."),
         };
 
@@ -829,6 +867,21 @@ internal static class SyntheticElectionRequestFactory
                 "Synthetic verifier corpus trustee-threshold election",
                 "Synthetic public verifier corpus sample with accepted trustee control-domain evidence",
                 "synthetic-public-corpus-trustee-threshold"),
+            "binding_style_metadata" => new SyntheticElectionProfile(
+                "binding_style_metadata",
+                "Synthetic verifier corpus binding-style election",
+                "Synthetic public verifier corpus sample with binding metadata for internal audit replay",
+                "synthetic-public-corpus-binding-style"),
+            "internal_rehearsal_metadata" => new SyntheticElectionProfile(
+                "internal_rehearsal_metadata",
+                "Synthetic verifier corpus internal rehearsal election",
+                "Synthetic non-binding rehearsal sample for internal audit replay only",
+                "synthetic-public-corpus-internal-rehearsal"),
+            "production_rollout_simulation" => new SyntheticElectionProfile(
+                "production_rollout_simulation",
+                "Synthetic verifier corpus rollout simulation election",
+                "Synthetic production-rollout simulation sample for internal audit replay only",
+                "synthetic-public-corpus-rollout-simulation"),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(corpusProfileId),
                 corpusProfileId,
