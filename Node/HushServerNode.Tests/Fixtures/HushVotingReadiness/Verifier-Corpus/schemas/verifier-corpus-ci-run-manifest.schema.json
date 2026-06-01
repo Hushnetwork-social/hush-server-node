@@ -18,6 +18,11 @@
     "workflowRunId",
     "workflowRunAttempt",
     "runStatus",
+    "publicSafetyStatus",
+    "fixtureCount",
+    "matchedFixtureCount",
+    "mismatchCount",
+    "unexpectedPublicFindingCount",
     "generatedAt",
     "fixtures"
   ],
@@ -35,6 +40,12 @@
     "workflowRunId": { "type": "string", "minLength": 1 },
     "workflowRunAttempt": { "type": "integer", "minimum": 1 },
     "runStatus": { "type": "string", "enum": [ "accepted", "blocked", "failed" ] },
+    "publicSafetyStatus": { "type": "string", "enum": [ "pass", "blocked" ] },
+    "fixtureCount": { "type": "integer", "minimum": 1 },
+    "matchedFixtureCount": { "type": "integer", "minimum": 0 },
+    "mismatchCount": { "type": "integer", "minimum": 0 },
+    "unexpectedPublicFindingCount": { "type": "integer", "minimum": 0 },
+    "expectedTamperFindingCount": { "type": "integer", "minimum": 0 },
     "generatedAt": { "type": "string", "format": "date-time" },
     "fixtures": {
       "type": "array",
@@ -56,8 +67,26 @@
           "observedExitCode": { "type": "integer", "minimum": 0, "maximum": 4 },
           "expectedPrimaryResultCode": { "type": "string", "minLength": 1 },
           "observedPrimaryResultCode": { "type": "string", "minLength": 1 },
+          "expectedNormalizedOutputHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
           "normalizedOutputHash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
-          "status": { "type": "string", "enum": [ "matched", "mismatch" ] }
+          "outputRef": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "enum": [ "matched", "mismatch" ] },
+          "mismatchReasons": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "unexpectedPublicFindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [ "relativePath", "category", "evidence" ],
+        "properties": {
+          "relativePath": { "type": "string", "minLength": 1 },
+          "category": { "type": "string", "minLength": 1 },
+          "evidence": { "type": "string", "minLength": 1 }
         }
       }
     }

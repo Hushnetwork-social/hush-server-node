@@ -361,7 +361,7 @@ public sealed partial class VerifierCorpusGenerator
         };
     }
 
-    private static JsonObject NormalizeVerifierOutput(VerifierOutputRecord output)
+    internal static JsonObject NormalizeVerifierOutput(VerifierOutputRecord output)
     {
         var results = new JsonArray();
         foreach (var result in output.Results.OrderBy(x => x.CheckCode, StringComparer.Ordinal).ThenBy(x => x.ResultCode, StringComparer.Ordinal))
@@ -773,13 +773,13 @@ public sealed partial class VerifierCorpusGenerator
     private static string NormalizeLineEndings(string content) =>
         content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
 
-    private static string Sha256Text(string content) =>
+    internal static string Sha256Text(string content) =>
         Sha256Bytes(Encoding.UTF8.GetBytes(content));
 
     private static string Sha256Bytes(byte[] bytes) =>
         $"sha256:{Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()}";
 
-    private static string ToJsonEnumString<T>(T value)
+    internal static string ToJsonEnumString<T>(T value)
         where T : struct, Enum =>
         JsonSerializer.Serialize(value, JsonOptions).Trim('"');
 

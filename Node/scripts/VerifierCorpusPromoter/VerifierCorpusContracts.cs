@@ -398,9 +398,22 @@ public static class VerifierCorpusContracts
         ValidateSha256String(manifest, "verifierHash", errors, "verifier-corpus-ci-run-manifest.json");
         RequireNonEmpty(manifest, "workflowRunId", errors, "verifier-corpus-ci-run-manifest.json");
         RequirePositiveInt(manifest, "workflowRunAttempt", errors, "verifier-corpus-ci-run-manifest.json");
+        RequirePositiveInt(manifest, "fixtureCount", errors, "verifier-corpus-ci-run-manifest.json");
+        RequireNonNegativeInt(manifest, "matchedFixtureCount", errors, "verifier-corpus-ci-run-manifest.json");
+        RequireNonNegativeInt(manifest, "mismatchCount", errors, "verifier-corpus-ci-run-manifest.json");
+        RequireNonNegativeInt(manifest, "unexpectedPublicFindingCount", errors, "verifier-corpus-ci-run-manifest.json");
+        ValidateStringValue(manifest, "runStatus", ["accepted", "blocked", "failed"], errors, "verifier-corpus-ci-run-manifest.json");
+        ValidateStringValue(manifest, "publicSafetyStatus", ["pass", "blocked"], errors, "verifier-corpus-ci-run-manifest.json");
 
         if (manifest["fixtures"] is JsonArray fixtures && fixtures.Count > 0)
         {
+            if (TryGetInt(manifest, "fixtureCount", out var fixtureCount) && fixtureCount != fixtures.Count)
+            {
+                errors.Add($"verifier-corpus-ci-run-manifest.json.fixtureCount must match fixtures count {fixtures.Count}.");
+            }
+
+            var matchedCount = 0;
+            var mismatchCount = 0;
             for (var i = 0; i < fixtures.Count; i++)
             {
                 if (fixtures[i] is not JsonObject fixture)
@@ -430,6 +443,25 @@ public static class VerifierCorpusContracts
                 ValidateStringValue(fixture, "expectedPrimaryResultCode", ValidResultCodes.Value, errors, label);
                 ValidateStringValue(fixture, "observedPrimaryResultCode", ValidResultCodes.Value, errors, label);
                 ValidateSha256String(fixture, "normalizedOutputHash", errors, label);
+                ValidateStringValue(fixture, "status", ["matched", "mismatch"], errors, label);
+                if (string.Equals(GetStringOrDefault(fixture, "status"), "matched", StringComparison.Ordinal))
+                {
+                    matchedCount++;
+                }
+                else if (string.Equals(GetStringOrDefault(fixture, "status"), "mismatch", StringComparison.Ordinal))
+                {
+                    mismatchCount++;
+                }
+            }
+
+            if (TryGetInt(manifest, "matchedFixtureCount", out var expectedMatchedCount) && expectedMatchedCount != matchedCount)
+            {
+                errors.Add($"verifier-corpus-ci-run-manifest.json.matchedFixtureCount must match matched fixture count {matchedCount}.");
+            }
+
+            if (TryGetInt(manifest, "mismatchCount", out var expectedMismatchCount) && expectedMismatchCount != mismatchCount)
+            {
+                errors.Add($"verifier-corpus-ci-run-manifest.json.mismatchCount must match mismatch fixture count {mismatchCount}.");
             }
         }
         else
@@ -620,6 +652,11 @@ public static class VerifierCorpusContracts
                 "workflowRunId",
                 "workflowRunAttempt",
                 "runStatus",
+                "publicSafetyStatus",
+                "fixtureCount",
+                "matchedFixtureCount",
+                "mismatchCount",
+                "unexpectedPublicFindingCount",
                 "generatedAt",
                 "fixtures",
             ],
@@ -830,6 +867,14 @@ public static class VerifierCorpusContracts
         if (!TryGetInt(value, propertyName, out var intValue) || intValue <= 0)
         {
             errors.Add($"{label}.{propertyName} must be a positive integer.");
+        }
+    }
+
+    private static void RequireNonNegativeInt(JsonObject value, string propertyName, List<string> errors, string label)
+    {
+        if (!TryGetInt(value, propertyName, out var intValue) || intValue < 0)
+        {
+            errors.Add($"{label}.{propertyName} must be a non-negative integer.");
         }
     }
 

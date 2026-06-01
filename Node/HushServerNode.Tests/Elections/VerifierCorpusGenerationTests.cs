@@ -232,6 +232,80 @@ public sealed class VerifierCorpusGenerationTests
     }
 
     [Fact]
+    public async Task CiReplay_Audit95Release_ShouldProduceManifestSummaryAndMatchAllFixtures()
+    {
+        using var workspace = TempCorpusWorkspace.Create();
+        await GenerateAudit95Async(workspace.Root);
+
+        var result = await ReplayAudit95Async(workspace.Root);
+
+        result.Passed.Should().BeTrue(string.Join("; ", result.ContractErrors));
+        result.RunStatus.Should().Be("accepted");
+        result.PublicSafetyStatus.Should().Be("pass");
+        result.FixtureCount.Should().Be(VerifierCorpusGenerator.Audit95FixtureIds().Count);
+        result.MatchedFixtureCount.Should().Be(result.FixtureCount);
+        result.MismatchCount.Should().Be(0);
+
+        var manifest = ReadJson(VerifierCorpusCiReplayRunner.ManifestRelativePath, workspace.Root);
+        VerifierCorpusContracts.ValidateCiRunManifest(manifest).Should().BeEmpty();
+        manifest["fixtureCount"]!.GetValue<int>().Should().Be(result.FixtureCount);
+        manifest["mismatchCount"]!.GetValue<int>().Should().Be(0);
+        manifest["fixtures"]!.AsArray()
+            .Select(x => x!.AsObject()["status"]!.GetValue<string>())
+            .Should()
+            .OnlyContain(x => x == "matched");
+        File.Exists(Path.Combine(workspace.Root, VerifierCorpusCiReplayRunner.SummaryJsonRelativePath.Replace('/', Path.DirectorySeparatorChar)))
+            .Should()
+            .BeTrue();
+        File.Exists(Path.Combine(workspace.Root, VerifierCorpusCiReplayRunner.SummaryMarkdownRelativePath.Replace('/', Path.DirectorySeparatorChar)))
+            .Should()
+            .BeTrue();
+    }
+
+    [Fact]
+    public async Task CiReplay_StaleExpectedOutputHash_ShouldFailWithMismatch()
+    {
+        using var workspace = TempCorpusWorkspace.Create();
+        await GenerateAudit95Async(workspace.Root);
+        var expectedResultPath = Path.Combine(
+            workspace.Root,
+            "expected-results",
+            $"{VerifierCorpusGenerator.GoodSampleFixtureId}.json");
+        var expectedResult = JsonNode.Parse(await File.ReadAllTextAsync(expectedResultPath))!.AsObject();
+        expectedResult["normalizedOutputHash"] = "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        await File.WriteAllTextAsync(expectedResultPath, VerifierCorpusGenerator.CanonicalJson(expectedResult));
+
+        var result = await ReplayAudit95Async(workspace.Root);
+
+        result.Passed.Should().BeFalse();
+        result.RunStatus.Should().Be("failed");
+        result.MismatchCount.Should().Be(1);
+        result.Fixtures.Single(x => x.FixtureId == VerifierCorpusGenerator.GoodSampleFixtureId)
+            .MismatchReasons.Should().Contain(x => x.Contains("normalized-output-hash", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CiReplay_UnexpectedForbiddenPublicMaterial_ShouldBlockRun()
+    {
+        using var workspace = TempCorpusWorkspace.Create();
+        await GenerateAudit95Async(workspace.Root);
+        await File.AppendAllTextAsync(
+            Path.Combine(workspace.Root, "README.md"),
+            "\nSynthetic regression marker: token=secret-value\n");
+
+        var result = await ReplayAudit95Async(workspace.Root);
+
+        result.Passed.Should().BeFalse();
+        result.RunStatus.Should().Be("blocked");
+        result.PublicSafetyStatus.Should().Be("blocked");
+        result.UnexpectedPublicFindingCount.Should().BeGreaterThan(0);
+        ReadJson(VerifierCorpusCiReplayRunner.ManifestRelativePath, workspace.Root)
+            ["unexpectedPublicFindingCount"]!.GetValue<int>()
+            .Should()
+            .Be(result.UnexpectedPublicFindingCount);
+    }
+
+    [Fact]
     public async Task Generate_PlatformReplayFlags_ShouldFlowToValidationSummaryAndHandoff()
     {
         using var workspace = TempCorpusWorkspace.Create();
@@ -416,6 +490,16 @@ public sealed class VerifierCorpusGenerationTests
             root,
             "v0.3.0",
             FixedGeneratedAt));
+
+    private static Task<VerifierCorpusCiReplayResult> ReplayAudit95Async(string root) =>
+        new VerifierCorpusCiReplayRunner().ReplayAsync(new VerifierCorpusCiReplayOptions(
+            root,
+            FixedGeneratedAt,
+            CorpusRepositoryRef: "1111111111111111111111111111111111111111",
+            VerifierSourceRef: "2222222222222222222222222222222222222222",
+            VerifierHash: "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            WorkflowName: "test-verifier-corpus-ci",
+            WorkflowRunId: "test-run"));
 
     private static JsonObject ReadJson(string relativePath, string root) =>
         JsonNode.Parse(File.ReadAllText(Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar))))!.AsObject();
