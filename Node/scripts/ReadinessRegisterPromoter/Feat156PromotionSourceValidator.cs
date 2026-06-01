@@ -102,12 +102,29 @@ public sealed class Feat156PromotionSourceValidator
         var target = GetObject(source, "targetRegister", errors);
         if (target is not null)
         {
-            RequireValue(target, "registerVersionId", TargetVersionId, errors);
-            RequireValue(target, "registerVersion", TargetVersion, errors);
+            var targetVersion = GetString(target, "registerVersion");
+            var internalAudit95Target = targetVersion == InternalAudit95ReadinessPlan.TargetVersion;
+            var expectedTargetVersionId = internalAudit95Target
+                ? $"RDY-REG-{InternalAudit95ReadinessPlan.TargetVersion}"
+                : TargetVersionId;
+            RequireValue(target, "registerVersionId", expectedTargetVersionId, errors);
+            if (targetVersion is not (TargetVersion or InternalAudit95ReadinessPlan.TargetVersion))
+            {
+                errors.Add($"registerVersion must be {TargetVersion} or {InternalAudit95ReadinessPlan.TargetVersion}.");
+            }
+
             RequireValue(target, "status", "AcceptedInternal", errors);
             RequireIntValue(target, "totalScore", TargetTotal, errors);
-            RequireValue(target, "strongestAllowedClaim", "production_organizational_rollout", errors);
-            RequireValue(target, "publicationStatus", "production_rollout_with_limitations", errors);
+            RequireValue(
+                target,
+                "strongestAllowedClaim",
+                internalAudit95Target ? "friendly_organization_pilot" : "production_organizational_rollout",
+                errors);
+            RequireValue(
+                target,
+                "publicationStatus",
+                internalAudit95Target ? InternalAudit95ReadinessPlan.PublicationStatus : "production_rollout_with_limitations",
+                errors);
         }
 
         var scoreModel = GetObject(source, "scoreModel", errors);
@@ -117,7 +134,16 @@ public sealed class Feat156PromotionSourceValidator
             RequireIntValue(scoreModel, "acceptedInputDelta", 8, errors);
             RequireIntValue(scoreModel, "feat156Delta", 1, errors);
             RequireIntValue(scoreModel, "targetTotal", TargetTotal, errors);
-            RequireIntValue(scoreModel, "minimumProductionLimitedScore", TargetTotal, errors);
+            var internalAuditTargetScore = GetInt(scoreModel, "internalAuditTargetScore");
+            if (internalAuditTargetScore > 0)
+            {
+                RequireIntValue(scoreModel, "internalAuditTargetScore", InternalAudit95ReadinessPlan.TargetScore, errors);
+            }
+            else
+            {
+                RequireIntValue(scoreModel, "minimumProductionLimitedScore", TargetTotal, errors);
+            }
+
             RequireBoolValue(scoreModel, "scoreCannotBypassBlockers", true, errors);
         }
     }
@@ -458,7 +484,18 @@ public sealed class Feat156PromotionSourceValidator
         RequireValue(productionClaim, "claimLevel", "production_organizational_rollout", errors);
         var severity = GetString(productionClaim, "severity");
         var status = GetString(productionClaim, "status");
-        if (severity != "amber" || status != "allowed_with_limitations")
+        var scoreModel = GetObject(source, "scoreModel", errors);
+        var internalAudit95Target = scoreModel is not null &&
+            GetInt(scoreModel, "internalAuditTargetScore") == InternalAudit95ReadinessPlan.TargetScore;
+
+        if (internalAudit95Target)
+        {
+            if (severity != "amber" || status != "future_gated")
+            {
+                errors.Add("production rollout must be amber and future_gated until the internal audit 95 target is reached.");
+            }
+        }
+        else if (severity != "amber" || status != "allowed_with_limitations")
         {
             errors.Add("production rollout must be amber and allowed_with_limitations.");
         }
@@ -480,9 +517,9 @@ public sealed class Feat156PromotionSourceValidator
         }
         else
         {
-            RequireValue(productionDecision, "targetSeverity", "amber", errors);
-            RequireValue(productionDecision, "targetStatus", "allowed_with_limitations", errors);
-            RequireValue(productionDecision, "decision", "allow_with_limitations", errors);
+            RequireValue(productionDecision, "targetSeverity", internalAudit95Target ? "red" : "amber", errors);
+            RequireValue(productionDecision, "targetStatus", internalAudit95Target ? "superseded" : "allowed_with_limitations", errors);
+            RequireValue(productionDecision, "decision", internalAudit95Target ? "replace_with_internal_audit_95_plan" : "allow_with_limitations", errors);
         }
 
         return $"{severity}/{status}";
@@ -500,7 +537,17 @@ public sealed class Feat156PromotionSourceValidator
         RequireValue(publicStateClaim, "claimLevel", "public_or_state_election", errors);
         var severity = GetString(publicStateClaim, "severity");
         var status = GetString(publicStateClaim, "status");
-        if (severity != "red" || status != "blocked")
+        var scoreModel = GetObject(source, "scoreModel", errors);
+        var internalAudit95Target = scoreModel is not null &&
+            GetInt(scoreModel, "internalAuditTargetScore") == InternalAudit95ReadinessPlan.TargetScore;
+        if (internalAudit95Target)
+        {
+            if (severity != "amber" || status != "external_boundary")
+            {
+                errors.Add("public or state election claim must be amber and external_boundary for the internal audit 95 report.");
+            }
+        }
+        else if (severity != "red" || status != "blocked")
         {
             errors.Add("public or state election claim must remain red and blocked.");
         }
@@ -513,8 +560,8 @@ public sealed class Feat156PromotionSourceValidator
         else
         {
             RequireValue(publicStateDecision, "targetSeverity", "red", errors);
-            RequireValue(publicStateDecision, "targetStatus", "open", errors);
-            RequireValue(publicStateDecision, "decision", "keep_policy_blocked", errors);
+            RequireValue(publicStateDecision, "targetStatus", internalAudit95Target ? "superseded" : "open", errors);
+            RequireValue(publicStateDecision, "decision", internalAudit95Target ? "move_to_downstream_report" : "keep_policy_blocked", errors);
         }
 
         return $"{severity}/{status}";

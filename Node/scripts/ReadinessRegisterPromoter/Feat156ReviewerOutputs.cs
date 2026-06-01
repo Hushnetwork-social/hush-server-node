@@ -27,10 +27,6 @@ internal static class Feat156ReviewerOutputs
     public const string ReviewerOutputValidationPath = "feat156-reviewer-output-validation.json";
     public const string PackageManifestPath = "feat156-package-manifest.json";
 
-    private const string TargetRegisterVersion = "v0.1.6";
-    private const string TargetRegisterVersionId = "RDY-REG-v0.1.6";
-    private const string TargetPublicationStatus = "production_rollout_with_limitations";
-
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -201,9 +197,6 @@ internal static class Feat156ReviewerOutputs
         var target = RequireObject(source, "targetRegister", errors);
         if (target is not null)
         {
-            RequireValue(target, "registerVersion", TargetRegisterVersion, errors);
-            RequireValue(target, "registerVersionId", TargetRegisterVersionId, errors);
-            RequireValue(target, "publicationStatus", TargetPublicationStatus, errors);
             if (GetString(target, "registerVersion") != GetString(promotedRegister, "registerVersion"))
             {
                 errors.Add("targetRegister.registerVersion must match promoted register version.");
@@ -223,14 +216,16 @@ internal static class Feat156ReviewerOutputs
         }
 
         var generatedViews = ObjectOrEmpty(promotedRegister, "generatedViews");
-        if (GetString(generatedViews, "publicSafePublicationStatus") != TargetPublicationStatus)
+        var targetPublicationStatus = GetString(ObjectOrEmpty(source, "targetRegister"), "publicationStatus");
+        if (GetString(generatedViews, "publicSafePublicationStatus") != targetPublicationStatus)
         {
-            errors.Add($"promoted register publication status must be {TargetPublicationStatus}.");
+            errors.Add($"promoted register publication status must be {targetPublicationStatus}.");
         }
 
-        if (GetStrongestAllowedClaim(promotedRegister) != "production_organizational_rollout")
+        var targetStrongestAllowedClaim = GetString(ObjectOrEmpty(source, "targetRegister"), "strongestAllowedClaim");
+        if (GetStrongestAllowedClaim(promotedRegister) != targetStrongestAllowedClaim)
         {
-            errors.Add("promoted register strongest allowed claim must be production_organizational_rollout.");
+            errors.Add($"promoted register strongest allowed claim must be {targetStrongestAllowedClaim}.");
         }
 
         var rules = ObjectOrEmpty(source, "restrictedReviewerRules");
@@ -342,11 +337,26 @@ internal static class Feat156ReviewerOutputs
         sb.AppendLine();
         sb.AppendLine("## Current Public-Safe Status");
         sb.AppendLine();
-        sb.AppendLine("HushVoting may be discussed for limited organizational rollout readiness with explicit limitations. The promoted register keeps residual risks and customer-owned governance responsibilities visible.");
+        if (GetString(ObjectOrEmpty(source, "targetRegister"), "publicationStatus") == InternalAudit95ReadinessPlan.PublicationStatus)
+        {
+            sb.AppendLine("HushVoting may be discussed for controlled friendly-organization pilot planning with explicit limitations. The promoted register now separates Hush-owned internal audit hardening from downstream external validation prerequisites.");
+        }
+        else
+        {
+            sb.AppendLine("HushVoting may be discussed for limited organizational rollout readiness with explicit limitations. The promoted register keeps residual risks and customer-owned governance responsibilities visible.");
+        }
         sb.AppendLine();
         sb.AppendLine("## Known Limitations");
         sb.AppendLine();
-        sb.AppendLine("- The promotion supports controlled organizational rollout planning only.");
+        if (GetString(ObjectOrEmpty(source, "targetRegister"), "publicationStatus") == InternalAudit95ReadinessPlan.PublicationStatus)
+        {
+            sb.AppendLine("- The current internal audit score is below the Hush-owned 95+ target and production organizational rollout is not claimed by this register.");
+            sb.AppendLine("- Hush-owned hardening tasks remain visible in the restricted readiness register.");
+        }
+        else
+        {
+            sb.AppendLine("- The promotion supports controlled organizational rollout planning only.");
+        }
         sb.AppendLine("- Higher external-authority election uses remain outside this technical readiness promotion.");
         sb.AppendLine("- Customer governance, dispute remedies, regulatory approval, repeated operating history, and third-party review remain outside the promoted evidence.");
         sb.AppendLine();
@@ -451,8 +461,8 @@ internal static class Feat156ReviewerOutputs
         AddCheck(
             checks,
             "register-target-matches",
-            GetString(promotedRegister, "registerVersionId") == TargetRegisterVersionId &&
-                GetString(ObjectOrEmpty(promotedRegister, "generatedViews"), "publicSafePublicationStatus") == TargetPublicationStatus,
+            GetString(promotedRegister, "registerVersionId") == GetString(ObjectOrEmpty(source, "targetRegister"), "registerVersionId") &&
+                GetString(ObjectOrEmpty(promotedRegister, "generatedViews"), "publicSafePublicationStatus") == GetString(ObjectOrEmpty(source, "targetRegister"), "publicationStatus"),
             "Promoted register identity and publication status match FEAT-156 target.");
         AddCheck(
             checks,

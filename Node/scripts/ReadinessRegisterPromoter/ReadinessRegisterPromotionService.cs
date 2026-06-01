@@ -483,7 +483,9 @@ public sealed class ReadinessRegisterPromotionService
 
     private static bool IsFeat156ProductionRolloutRequest(ReadinessRegisterPromotionOptions options) =>
         string.Equals(options.Version, Feat156TargetVersion, StringComparison.Ordinal) &&
-        string.Equals(options.PublicationStatus, Feat156TargetPublicationStatus, StringComparison.Ordinal);
+        string.Equals(options.PublicationStatus, Feat156TargetPublicationStatus, StringComparison.Ordinal) ||
+        string.Equals(options.Version, InternalAudit95ReadinessPlan.TargetVersion, StringComparison.Ordinal) &&
+        string.Equals(options.PublicationStatus, InternalAudit95ReadinessPlan.PublicationStatus, StringComparison.Ordinal);
 
     private static List<string> ValidateFeat156Baseline(JsonObject register, JsonObject source)
     {
@@ -544,10 +546,29 @@ public sealed class ReadinessRegisterPromotionService
 
         var score = GetRequiredObject(register, "score");
         score["total"] = recalculatedScore;
+        var scoreModel = GetRequiredObject(source, "scoreModel");
+        var internalAuditTargetScore = GetIntOrDefault(scoreModel, "internalAuditTargetScore");
+        if (internalAuditTargetScore > 0)
+        {
+            score["strongerTargetScore"] = internalAuditTargetScore;
+        }
 
         var claimPolicy = GetRequiredObject(register, "claimPolicy");
         claimPolicy["strongestAllowedV1Claim"] = GetRequiredString(target, "strongestAllowedClaim");
-        RemoveAlwaysBlockedClaim(claimPolicy, "production_organizational_rollout");
+        if (internalAuditTargetScore > 0)
+        {
+            claimPolicy["strongerTargetScore"] = internalAuditTargetScore;
+        }
+
+        if (GetRequiredString(target, "strongestAllowedClaim") == "production_organizational_rollout")
+        {
+            RemoveAlwaysBlockedClaim(claimPolicy, "production_organizational_rollout");
+        }
+        else
+        {
+            AddAlwaysBlockedClaim(claimPolicy, "production_organizational_rollout");
+            AddAlwaysBlockedClaim(claimPolicy, "public_or_state_election");
+        }
 
         GetRequiredObject(register, "generatedViews")["publicSafePublicationStatus"] =
             GetRequiredString(target, "publicationStatus");
@@ -560,6 +581,10 @@ public sealed class ReadinessRegisterPromotionService
         ApplyFeat156BlockerDecisions(register, source);
         EnsureFeat156EvidenceItems(register, scoreMovements, generatedAt, workspaceRoot);
         EnsureFeat156ScoreChanges(register, scoreMovements, generatedAt, GetIntOrDefault(GetRequiredObject(source, "scoreModel"), "baselineTotal"));
+        if (internalAuditTargetScore >= InternalAudit95ReadinessPlan.TargetScore)
+        {
+            ApplyInternalAudit95Targets(register);
+        }
     }
 
     private static void RemoveAlwaysBlockedClaim(JsonObject claimPolicy, string claimLevel)
@@ -581,6 +606,24 @@ public sealed class ReadinessRegisterPromotionService
         }
 
         claimPolicy["alwaysBlockedV1Claims"] = replacement;
+    }
+
+    private static void AddAlwaysBlockedClaim(JsonObject claimPolicy, string claimLevel)
+    {
+        if (claimPolicy["alwaysBlockedV1Claims"] is not JsonArray alwaysBlocked)
+        {
+            claimPolicy["alwaysBlockedV1Claims"] = new JsonArray(claimLevel);
+            return;
+        }
+
+        var existing = alwaysBlocked
+            .Select(node => node?.GetValue<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToHashSet(StringComparer.Ordinal);
+        if (!existing.Contains(claimLevel))
+        {
+            alwaysBlocked.Add(claimLevel);
+        }
     }
 
     private static void ApplyFeat156DimensionMovements(JsonObject register, IReadOnlyList<JsonObject> scoreMovements)
@@ -621,23 +664,32 @@ public sealed class ReadinessRegisterPromotionService
         var productionClaim = FindClaimLevel(register, "production_organizational_rollout")
             ?? throw new ReadinessRegisterPromotionException("FEAT-156 production claim level is missing.", []);
         productionClaim["blockerSeverity"] = GetRequiredString(productionClaimSource, "severity");
-        productionClaim["status"] = GetRequiredString(productionClaimSource, "status");
-        productionClaim["allowedWording"] = GetRequiredString(productionClaimSource, "wording");
-        productionClaim["limitationWording"] = GetRequiredString(productionDecision, "limitationWording");
-        productionClaim["blockedWording"] = "";
+        var productionStatus = GetRequiredString(productionClaimSource, "status");
+        var productionWording = GetRequiredString(productionClaimSource, "wording");
+        productionClaim["status"] = productionStatus;
+        productionClaim["allowedWording"] = IsAllowedClaimStatus(productionStatus) ? productionWording : "";
+        productionClaim["limitationWording"] = productionStatus == "future_gated"
+            ? productionWording
+            : GetRequiredString(productionDecision, "limitationWording");
+        productionClaim["blockedWording"] = productionStatus == "blocked" ? productionWording : "";
         productionClaim["publicSafeStatus"] = GetRequiredString(productionClaimSource, "publicSafeStatus");
         productionClaim["blockerIds"] = new JsonArray("RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001");
 
         var publicStateClaim = FindClaimLevel(register, "public_or_state_election")
             ?? throw new ReadinessRegisterPromotionException("FEAT-156 public/state claim level is missing.", []);
+        var publicStateStatus = GetRequiredString(publicStateClaimSource, "status");
+        var publicStateWording = GetRequiredString(publicStateClaimSource, "wording");
         publicStateClaim["blockerSeverity"] = GetRequiredString(publicStateClaimSource, "severity");
-        publicStateClaim["status"] = GetRequiredString(publicStateClaimSource, "status");
-        publicStateClaim["allowedWording"] = "";
-        publicStateClaim["limitationWording"] = "";
-        publicStateClaim["blockedWording"] = GetRequiredString(publicStateClaimSource, "wording");
+        publicStateClaim["status"] = publicStateStatus;
+        publicStateClaim["allowedWording"] = IsAllowedClaimStatus(publicStateStatus) ? publicStateWording : "";
+        publicStateClaim["limitationWording"] = publicStateStatus == "external_boundary" ? publicStateWording : "";
+        publicStateClaim["blockedWording"] = publicStateStatus == "blocked" ? publicStateWording : "";
         publicStateClaim["publicSafeStatus"] = GetRequiredString(publicStateClaimSource, "publicSafeStatus");
         publicStateClaim["blockerIds"] = new JsonArray("RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001");
     }
+
+    private static bool IsAllowedClaimStatus(string status) =>
+        status is "allowed" or "allowed_with_limitations";
 
     private static void ApplyFeat156BlockerDecisions(JsonObject register, JsonObject source)
     {
@@ -658,6 +710,20 @@ public sealed class ReadinessRegisterPromotionService
             if (blockerId == "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001")
             {
                 blocker["featureId"] = "FEAT-156";
+                if (targetStatus == "open")
+                {
+                    blocker["description"] = "Production organizational rollout remains blocked until the Hush-owned internal audit target reaches 95+ and the hardening work items are accepted.";
+                }
+                else if (targetStatus == "superseded")
+                {
+                    blocker["description"] = "Superseded by the Hush-owned internal audit 95+ hardening plan; production claim status is now driven by the dimension-level hardening blockers.";
+                }
+            }
+
+            if (blockerId == "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001" && targetStatus == "superseded")
+            {
+                blocker["description"] = "Public/state election readiness is outside the Hush-owned internal audit report and is tracked as a downstream external-prerequisite boundary.";
+                blocker["featureId"] = "FEAT-149";
             }
         }
     }
@@ -858,6 +924,65 @@ public sealed class ReadinessRegisterPromotionService
         return blockers;
     }
 
+    private static void ApplyInternalAudit95Targets(JsonObject register)
+    {
+        var blockers = GetRequiredArray(register, "blockers");
+        var existingBlockerIds = blockers
+            .Select(node => node?.AsObject())
+            .Where(node => node is not null)
+            .Select(node => GetStringOrDefault(node!, "blockerId"))
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var task in InternalAudit95ReadinessPlan.Tasks)
+        {
+            var dimension = FindDimension(register, task.DimensionId)
+                ?? throw new ReadinessRegisterPromotionException(
+                    "Internal audit 95 target references an unknown readiness dimension.",
+                    [task.DimensionId]);
+
+            dimension["targetScoreBeforeReviewPilot"] = task.TargetScore;
+            var dimensionBlockerIds = GetRequiredArray(dimension, "blockerIds");
+            RemoveStrings(
+                dimensionBlockerIds,
+                new[]
+                {
+                    "RDY-BLOCK-PRODUCTION_ORGANIZATIONAL_ROLLOUT-001",
+                    "RDY-BLOCK-PUBLIC_OR_STATE_ELECTION-001",
+                });
+            AddUniqueStrings(dimensionBlockerIds, new[] { task.BlockerId });
+
+            if (!existingBlockerIds.Contains(task.BlockerId))
+            {
+                blockers.Add(new JsonObject
+                {
+                    ["blockerId"] = task.BlockerId,
+                    ["claimLevel"] = "production_organizational_rollout",
+                    ["severity"] = "amber",
+                    ["status"] = "open",
+                    ["description"] = task.Description,
+                    ["featureId"] = task.FeatureId,
+                    ["acceptanceGateIds"] = CloneStringArray(GetRequiredArray(dimension, "acceptanceGateIds")),
+                    ["dimensionIds"] = new JsonArray(task.DimensionId),
+                    ["limitationWording"] = "Hush-owned internal audit hardening task required before the 95+ target can be claimed.",
+                    ["resolutionCriteria"] = task.ResolutionCriteria,
+                });
+                existingBlockerIds.Add(task.BlockerId);
+            }
+        }
+
+        var productionClaim = FindClaimLevel(register, "production_organizational_rollout");
+        if (productionClaim is not null)
+        {
+            productionClaim["blockerIds"] = ToJsonArray(InternalAudit95ReadinessPlan.Tasks.Select(task => task.BlockerId));
+        }
+
+        var publicStateClaim = FindClaimLevel(register, "public_or_state_election");
+        if (publicStateClaim is not null)
+        {
+            publicStateClaim["blockerIds"] = new JsonArray();
+        }
+    }
+
     private static JsonObject? FindSourceBlockerDecision(JsonObject source, string blockerId) =>
         GetRequiredArray(source, "blockerDecisions")
             .Select(node => node!.AsObject())
@@ -905,6 +1030,19 @@ public sealed class ReadinessRegisterPromotionService
             if (existing.Add(value))
             {
                 target.Add(value);
+            }
+        }
+    }
+
+    private static void RemoveStrings(JsonArray target, IEnumerable<string> values)
+    {
+        var valuesToRemove = values.ToHashSet(StringComparer.Ordinal);
+        for (var index = target.Count - 1; index >= 0; index--)
+        {
+            var value = target[index]?.GetValue<string>();
+            if (!string.IsNullOrWhiteSpace(value) && valuesToRemove.Contains(value))
+            {
+                target.RemoveAt(index);
             }
         }
     }
@@ -1110,9 +1248,10 @@ public sealed class ReadinessRegisterPromotionService
             errors.Add("claimPolicy.minimumConfidenceScore must be 70.");
         }
 
-        if (GetIntOrDefault(claimPolicy, "strongerTargetScore") != 80)
+        var strongerTargetScore = GetIntOrDefault(claimPolicy, "strongerTargetScore");
+        if (strongerTargetScore is not (80 or InternalAudit95ReadinessPlan.TargetScore))
         {
-            errors.Add("claimPolicy.strongerTargetScore must be 80.");
+            errors.Add("claimPolicy.strongerTargetScore must be 80 or 95.");
         }
 
         var strongestAllowedV1Claim = GetStringOrDefault(claimPolicy, "strongestAllowedV1Claim");
@@ -1328,7 +1467,15 @@ public sealed class ReadinessRegisterPromotionService
                 errors.Add($"{claimLevel}.blockerSeverity must be green, amber, or red.");
             }
 
-            if (!new[] { "allowed", "allowed_with_limitations", "blocked", "downgraded" }.Contains(status, StringComparer.Ordinal))
+            if (!new[]
+                {
+                    "allowed",
+                    "allowed_with_limitations",
+                    "blocked",
+                    "future_gated",
+                    "external_boundary",
+                    "downgraded",
+                }.Contains(status, StringComparer.Ordinal))
             {
                 errors.Add($"{claimLevel}.status is invalid.");
             }
@@ -1710,7 +1857,23 @@ public sealed class ReadinessRegisterPromotionService
         sb.AppendLine();
         sb.AppendLine("## Active Blockers");
         AppendTableHeader(sb, "Blocker ID", "Claim Level", "Severity", "Status", "Feature", "Gates", "Resolution Criteria");
-        foreach (var blocker in GetRequiredArray(register, "blockers").Select(x => x!.AsObject()))
+        foreach (var blocker in GetRequiredArray(register, "blockers").Select(x => x!.AsObject()).Where(x => GetRequiredString(x, "status") == "open"))
+        {
+            AppendTableRow(
+                sb,
+                GetRequiredString(blocker, "blockerId"),
+                GetRequiredString(blocker, "claimLevel"),
+                GetRequiredString(blocker, "severity"),
+                GetRequiredString(blocker, "status"),
+                GetRequiredString(blocker, "featureId"),
+                JoinArray(blocker, "acceptanceGateIds"),
+                GetRequiredString(blocker, "resolutionCriteria"));
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("## Resolved And Superseded Blockers");
+        AppendTableHeader(sb, "Blocker ID", "Claim Level", "Severity", "Status", "Feature", "Gates", "Resolution Criteria");
+        foreach (var blocker in GetRequiredArray(register, "blockers").Select(x => x!.AsObject()).Where(x => GetRequiredString(x, "status") != "open"))
         {
             AppendTableRow(
                 sb,
@@ -1975,7 +2138,7 @@ public sealed class ReadinessRegisterPromotionService
         else if (strongestAllowedClaim == "friendly_organization_pilot")
         {
             sb.AppendLine("- Friendly-organization pilot use must remain controlled, bounded, and privately reviewed.");
-            sb.AppendLine("- Broader operating history, deployment variance, failed-finalize coverage, accessibility/device breadth, and customer-specific governance remain limitations.");
+            sb.AppendLine("- Hush-owned 95+ hardening, rehearsal evidence, binding-election proof generation, and proof-verification evidence remain future execution gates.");
         }
         else
         {
@@ -1989,7 +2152,8 @@ public sealed class ReadinessRegisterPromotionService
         }
         else
         {
-            sb.AppendLine("- Production and public/state election readiness are not claimed in this version.");
+            sb.AppendLine("- Production rollout is a future execution gate after Hush-owned 95+ hardening is complete.");
+            sb.AppendLine("- Public/state election readiness is an external boundary outside this internal audit report.");
         }
         sb.AppendLine();
         sb.AppendLine("## Non-Claims");
@@ -2014,9 +2178,9 @@ public sealed class ReadinessRegisterPromotionService
         return GetCurrentStrongestAllowedClaim(register) switch
         {
             "production_organizational_rollout" =>
-                "Current go/no-go result: limited organizational rollout is allowed with limitations; public/state election readiness remains blocked.",
+                "Current go/no-go result: limited organizational rollout is allowed with limitations; public/state election readiness remains an external boundary.",
             "friendly_organization_pilot" =>
-                "Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout and public/state election readiness remain blocked.",
+                "Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout is future-gated by the 95+ hardening plan and public/state election readiness remains an external boundary.",
             "internal_non_binding_rehearsal" =>
                 "Current go/no-go result: internal non-binding rehearsal is allowed with limitations; pilot and stronger claims are blocked.",
             "internal_development" =>

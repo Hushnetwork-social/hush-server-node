@@ -142,7 +142,7 @@ public sealed class ReadinessRegisterPromotionServiceTests
         File.Exists(Path.Combine(cleanupRoot, "feat150-artifact-hash-audit.json")).Should().BeTrue();
         var scorecard = File.ReadAllText(Path.Combine(result.VersionOutputRoot, ReadinessRegisterPromotionService.ScorecardFileName));
         scorecard.Should().Contain("Current strongest allowed claim: friendly_organization_pilot");
-        scorecard.Should().Contain("Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout and public/state election readiness remain blocked.");
+        scorecard.Should().Contain("Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout is future-gated by the 95+ hardening plan and public/state election readiness remains an external boundary.");
         scorecard.Should().NotContain("Current go/no-go result: internal non-binding rehearsal is allowed with limitations; pilot and stronger claims are blocked.");
 
         var checkOnly = service.Promote(CreateOptions(paths, checkOnly: true));
@@ -299,7 +299,7 @@ public sealed class ReadinessRegisterPromotionServiceTests
 
         result.StrongestAllowedClaim.Should().Be("friendly_organization_pilot");
         scorecard.Should().Contain("Current strongest allowed claim: friendly_organization_pilot");
-        scorecard.Should().Contain("Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout and public/state election readiness remain blocked.");
+        scorecard.Should().Contain("Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout is future-gated by the 95+ hardening plan and public/state election readiness remains an external boundary.");
         scorecard.Should().NotContain("Current go/no-go result: internal non-binding rehearsal is allowed with limitations; pilot and stronger claims are blocked.");
     }
 
@@ -324,7 +324,7 @@ public sealed class ReadinessRegisterPromotionServiceTests
         result.PublicationStatus.Should().Be("production_rollout_with_limitations");
         result.StrongestAllowedClaim.Should().Be("production_organizational_rollout");
         scorecard.Should().Contain("Current strongest allowed claim: production_organizational_rollout");
-        scorecard.Should().Contain("limited organizational rollout is allowed with limitations; public/state election readiness remains blocked.");
+        scorecard.Should().Contain("limited organizational rollout is allowed with limitations; public/state election readiness remains an external boundary.");
         publicSummary.Should().Contain("limited organizational rollout with explicit limitations");
         publicSummary.ToLowerInvariant().Should().NotContain("total score");
     }
@@ -1107,7 +1107,7 @@ public sealed class ReadinessRegisterPromotionServiceTests
             {
                 ["scorecardRequiredPhrases"] = new JsonArray(
                     "Current strongest allowed claim: friendly_organization_pilot",
-                    "Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout and public/state election readiness remain blocked.",
+                    "Current go/no-go result: controlled friendly-organization pilot planning is allowed with limitations; production rollout is future-gated by the 95+ hardening plan and public/state election readiness remains an external boundary.",
                     "internal_non_binding_rehearsal",
                     "allowed_with_limitations"),
                 ["scorecardForbiddenPhrases"] = new JsonArray(
@@ -1117,7 +1117,8 @@ public sealed class ReadinessRegisterPromotionServiceTests
                     "production_organizational_rollout"),
                 ["publicSafeRequiredPhrases"] = new JsonArray(
                     "HushVoting may be discussed for controlled friendly-organization pilot use with explicit limitations.",
-                    "Production and public/state election readiness are not claimed in this version."),
+                    "Production rollout is a future execution gate after Hush-owned 95+ hardening is complete.",
+                    "Public/state election readiness is an external boundary outside this internal audit report."),
                 ["publicSafeForbiddenPhrases"] = new JsonArray(
                     "total score",
                     "60/100",
