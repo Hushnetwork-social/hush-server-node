@@ -21,6 +21,7 @@ public static class PublicationCountingReplayArtifactGenerator
     public const string GoodProfileNormalizedOutputHashesPath = "validation/good-profile-normalized-output-hashes.json";
     public const string TamperReplaySummaryPath = "validation/tamper-replay-summary.json";
     public const string StaleReferenceCheckSummaryPath = "validation/stale-reference-check-summary.json";
+    public const string PublicCiReplayEvidencePath = "validation/public-ci-replay-evidence.json";
     public const string GeneratedReportBindingSummaryPath = "validation/generated-report-binding-summary.json";
     public const string NoSecretScanResultPath = "validation/no-secret-scan-result.json";
     public const string ReadinessFragmentPath = "readiness/publication-counting-replay-readiness-fragment.json";
@@ -36,6 +37,7 @@ public static class PublicationCountingReplayArtifactGenerator
         GoodProfileNormalizedOutputHashesPath,
         TamperReplaySummaryPath,
         StaleReferenceCheckSummaryPath,
+        PublicCiReplayEvidencePath,
         GeneratedReportBindingSummaryPath,
         NoSecretScanResultPath,
         ReadinessFragmentPath,
@@ -80,6 +82,7 @@ public static class PublicationCountingReplayArtifactGenerator
             JsonArtifact(GoodProfileNormalizedOutputHashesPath, BuildGoodProfileNormalizedOutputHashes(goodProfileReplay, generatedAtText)),
             JsonArtifact(TamperReplaySummaryPath, BuildTamperReplaySummary(negativeReplay, generatedAtText)),
             JsonArtifact(StaleReferenceCheckSummaryPath, BuildStaleReferenceCheckSummary(source, generatedAtText)),
+            JsonArtifact(PublicCiReplayEvidencePath, BuildPublicCiReplayEvidence(source, goodProfileReplay, negativeReplay, generatedAtText)),
         };
         var artifacts = new List<PublicationCountingReplayArtifact>(validationArtifacts)
         {
@@ -214,6 +217,12 @@ public static class PublicationCountingReplayArtifactGenerator
                 ["status"] = "ready",
                 ["downstreamHandoffRef"] = DownstreamHandoffPath,
                 ["reviewerGuideRef"] = ReviewerGuidePath,
+            },
+            ["publicCiReplayEvidence"] = new JsonObject
+            {
+                ["status"] = "pass",
+                ["evidenceRef"] = PublicCiReplayEvidencePath,
+                ["missingEvidenceBlocksScoreProposal"] = true,
             },
             ["readinessProposal"] = new JsonObject
             {
@@ -386,6 +395,62 @@ public static class PublicationCountingReplayArtifactGenerator
             ["registerMutation"] = "not_performed",
         };
 
+    private static JsonObject BuildPublicCiReplayEvidence(
+        JsonObject source,
+        PublicationCountingGoodProfileReplaySet goodProfileReplay,
+        PublicationCountingNegativeReplaySet negativeReplay,
+        string generatedAt) =>
+        new()
+        {
+            ["schemaVersion"] = "publication-counting-replay-public-ci-evidence.v1",
+            ["generatedAt"] = generatedAt,
+            ["status"] = goodProfileReplay.Passed && negativeReplay.Passed ? "pass" : "fail",
+            ["evidenceMode"] = "local_equivalent_public_replay_bundle",
+            ["workflow"] = new JsonObject
+            {
+                ["name"] = "local-phase7-publication-counting-replay-ci",
+                ["path"] = ".github/workflows/publication-counting-replay-ci.yml",
+                ["runId"] = "local-phase7-check-only",
+                ["runAttempt"] = 1,
+            },
+            ["package"] = new JsonObject
+            {
+                ["targetPackagePath"] = PublicationCountingReplayContracts.ExpectedTargetPackagePath,
+                ["sourceId"] = PublicationCountingReplayContracts.GetString(source, "sourceId"),
+                ["manifestRef"] = ManifestPath,
+                ["checkOnlyValidated"] = true,
+            },
+            ["scoreProposalGate"] = new JsonObject
+            {
+                ["missingPublicReplayEvidenceBlocksFinalScoreProposal"] = true,
+                ["scoreChangeAllowed"] = false,
+                ["doesNotMutateRegister"] = true,
+            },
+            ["goodProfileFixtures"] = new JsonArray(goodProfileReplay.Cases
+                .Select(item => new JsonObject
+                {
+                    ["fixtureId"] = item.FixtureId,
+                    ["status"] = item.Status,
+                    ["expectedPrimaryResultCode"] = item.ExpectedPrimaryResultCode,
+                    ["observedPrimaryResultCode"] = item.ObservedPrimaryResultCode,
+                    ["expectedNormalizedOutputHash"] = item.ExpectedNormalizedOutputHash,
+                    ["normalizedOutputHash"] = item.NormalizedOutputHash,
+                })
+                .ToArray<JsonNode?>()),
+            ["tamperFixtures"] = new JsonArray(negativeReplay.Cases
+                .Select(item => new JsonObject
+                {
+                    ["caseId"] = item.CaseId,
+                    ["fixtureId"] = item.FixtureId,
+                    ["status"] = item.Status,
+                    ["expectedPrimaryResultCode"] = item.ExpectedPrimaryResultCode,
+                    ["observedPrimaryResultCode"] = item.ObservedPrimaryResultCode,
+                    ["expectedNormalizedOutputHash"] = item.ExpectedNormalizedOutputHash,
+                    ["normalizedOutputHash"] = item.NormalizedOutputHash,
+                })
+                .ToArray<JsonNode?>()),
+        };
+
     private static JsonObject BuildNoSecretScanResult(
         JsonObject source,
         string generatedAt,
@@ -426,6 +491,7 @@ public static class PublicationCountingReplayArtifactGenerator
                 ["scoreChangeAllowed"] = false,
                 ["doesNotMutateRegister"] = true,
                 ["requiresLaterReplayAcceptance"] = true,
+                ["requiresPublicCiReplayEvidence"] = true,
             },
             ["evidenceRefs"] = new JsonArray(RequiredArtifactPaths
                 .Where(path => path != ReadinessFragmentPath)
@@ -459,6 +525,8 @@ public static class PublicationCountingReplayArtifactGenerator
             ["doesNotMutateRegister"] = true,
             ["directRegisterMutation"] = false,
             ["evidencePackagePath"] = PublicationCountingReplayContracts.ExpectedTargetPackagePath,
+            ["publicCiReplayEvidenceRequired"] = true,
+            ["publicCiReplayEvidenceRef"] = PublicCiReplayEvidencePath,
             ["evidenceArtifactHashes"] = ArtifactHashes(validationArtifacts),
             ["registerMutation"] = "not_performed",
         };

@@ -18,6 +18,7 @@ public static class PublicationCountingReplayBindingValidator
         PublicationCountingReplayArtifactGenerator.GoodProfileNormalizedOutputHashesPath,
         PublicationCountingReplayArtifactGenerator.TamperReplaySummaryPath,
         PublicationCountingReplayArtifactGenerator.StaleReferenceCheckSummaryPath,
+        PublicationCountingReplayArtifactGenerator.PublicCiReplayEvidencePath,
     ];
 
     public static IReadOnlyList<string> ValidateGeneratedPackageBindings(
@@ -28,6 +29,7 @@ public static class PublicationCountingReplayBindingValidator
         ValidateGoodProfileReplaySummary(artifacts, errors);
         ValidateNormalizedOutputHashes(artifacts, errors);
         ValidateTamperReplaySummary(artifacts, errors);
+        ValidatePublicCiReplayEvidence(artifacts, errors);
         ValidateGeneratedReportBindings(artifacts, errors);
         return errors;
     }
@@ -162,6 +164,38 @@ public static class PublicationCountingReplayBindingValidator
             {
                 errors.Add($"{fixtureId} missing changed-artifact references.");
             }
+        }
+    }
+
+    private static void ValidatePublicCiReplayEvidence(
+        IReadOnlyDictionary<string, PublicationCountingReplayArtifact> artifacts,
+        List<string> errors)
+    {
+        var evidence = ReadArtifactObject(artifacts, PublicationCountingReplayArtifactGenerator.PublicCiReplayEvidencePath, errors);
+        if (evidence is null)
+        {
+            return;
+        }
+
+        if (!string.Equals(PublicationCountingReplayContracts.GetString(evidence, "status"), "pass", StringComparison.Ordinal))
+        {
+            errors.Add("public CI replay evidence must have pass status.");
+        }
+
+        var gate = PublicationCountingReplayContracts.RequireObject(evidence, "scoreProposalGate");
+        if (!PublicationCountingReplayContracts.GetBool(gate, "missingPublicReplayEvidenceBlocksFinalScoreProposal"))
+        {
+            errors.Add("public CI replay evidence must block final score proposal when missing.");
+        }
+
+        if (PublicationCountingReplayContracts.RequireArray(evidence, "goodProfileFixtures").Count == 0)
+        {
+            errors.Add("public CI replay evidence must include good-profile fixtures.");
+        }
+
+        if (PublicationCountingReplayContracts.RequireArray(evidence, "tamperFixtures").Count == 0)
+        {
+            errors.Add("public CI replay evidence must include tamper fixtures.");
         }
     }
 

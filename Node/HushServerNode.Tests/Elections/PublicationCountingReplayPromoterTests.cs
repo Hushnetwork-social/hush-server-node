@@ -139,6 +139,10 @@ public sealed class PublicationCountingReplayPromoterTests
         manifest["reviewerHandoff"]!.AsObject()["reviewerGuideRef"]!.GetValue<string>()
             .Should()
             .Be(PublicationCountingReplayArtifactGenerator.ReviewerGuidePath);
+        manifest["publicCiReplayEvidence"]!.AsObject()["status"]!.GetValue<string>().Should().Be("pass");
+        manifest["publicCiReplayEvidence"]!.AsObject()["evidenceRef"]!.GetValue<string>()
+            .Should()
+            .Be(PublicationCountingReplayArtifactGenerator.PublicCiReplayEvidencePath);
         manifest["entries"]!.AsArray().Count.Should().Be(PublicationCountingReplayArtifactGenerator.RequiredArtifactPaths.Length - 1);
 
         var goodReplay = PublicationCountingReplayContracts.ReadJsonObject(
@@ -162,9 +166,22 @@ public sealed class PublicationCountingReplayPromoterTests
             .Select(item => item!.GetValue<string>())
             .Should()
             .Contain(["package-hash", "tally-output", "package-verifier-output", "runtime-verifier-output", "generated-report"]);
+        bindingSummary["boundArtifacts"]!.AsArray()
+            .OfType<JsonObject>()
+            .Select(item => PublicationCountingReplayContracts.GetString(item, "path"))
+            .Should()
+            .Contain(PublicationCountingReplayArtifactGenerator.PublicCiReplayEvidencePath);
         PublicationCountingReplayBindingValidator.ValidateGeneratedPackageBindings(first.GeneratedPackage)
             .Should()
             .BeEmpty();
+
+        var publicCiEvidence = PublicationCountingReplayContracts.ReadJsonObject(
+            Path.Combine(workspace.DefaultOutputPackageRoot, PublicationCountingReplayArtifactGenerator.PublicCiReplayEvidencePath),
+            "public CI replay evidence");
+        publicCiEvidence["status"]!.GetValue<string>().Should().Be("pass");
+        publicCiEvidence["scoreProposalGate"]!.AsObject()["missingPublicReplayEvidenceBlocksFinalScoreProposal"]!.GetValue<bool>().Should().BeTrue();
+        publicCiEvidence["goodProfileFixtures"]!.AsArray().Should().HaveCount(PublicationCountingReplayContracts.RequiredGoodProfileIds.Length);
+        publicCiEvidence["tamperFixtures"]!.AsArray().Should().HaveCount(workspace.LoadSource()["negativeMatrix"]!.AsArray().Count);
 
         var readme = File.ReadAllText(Path.Combine(workspace.DefaultOutputPackageRoot, PublicationCountingReplayArtifactGenerator.ReadmePath));
         readme.Should().Contain("Phase 6");
@@ -317,6 +334,30 @@ public sealed class PublicationCountingReplayPromoterTests
         PublicationCountingReplayBindingValidator.ValidateGeneratedPackageBindings(broken)
             .Should()
             .Contain(error => error.Contains("normalizedOutputHash", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BindingValidation_PublicCiEvidenceWithoutScoreGate_Fails()
+    {
+        using var workspace = TempPublicationCountingReplayWorkspace.Create();
+        var generated = CreateService().Promote(new(
+            workspace.Paths,
+            PublicationCountingReplayPromotionService.ModeValidateOnly,
+            null,
+            workspace.OutputRoot,
+            FixedGeneratedAt,
+            ValidateOnly: false)).GeneratedPackage;
+        var publicCiEvidence = GeneratedArtifactObject(generated, PublicationCountingReplayArtifactGenerator.PublicCiReplayEvidencePath);
+        publicCiEvidence["scoreProposalGate"]!.AsObject()["missingPublicReplayEvidenceBlocksFinalScoreProposal"] = false;
+
+        var broken = ReplaceGeneratedArtifact(
+            generated,
+            PublicationCountingReplayArtifactGenerator.PublicCiReplayEvidencePath,
+            publicCiEvidence);
+
+        PublicationCountingReplayBindingValidator.ValidateGeneratedPackageBindings(broken)
+            .Should()
+            .Contain(error => error.Contains("public CI replay evidence", StringComparison.Ordinal));
     }
 
     [Fact]
