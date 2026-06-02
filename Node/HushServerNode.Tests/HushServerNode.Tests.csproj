@@ -58,6 +58,7 @@
     <ProjectReference Include="..\scripts\PublicationCountingHardeningPromoter\PublicationCountingHardeningPromoter.csproj" />
     <ProjectReference Include="..\scripts\InternalAudit95ProtocolTraceabilityPromoter\InternalAudit95ProtocolTraceabilityPromoter.csproj" />
     <ProjectReference Include="..\scripts\PublicationCountingReplayPromoter\PublicationCountingReplayPromoter.csproj" />
+    <ProjectReference Include="..\scripts\KmsCustodyRehearsalPromoter\KmsCustodyRehearsalPromoter.csproj" />
   </ItemGroup>
 
   <ItemGroup>
