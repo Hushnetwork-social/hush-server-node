@@ -41,6 +41,16 @@ public static class PublicationCountingReplayContracts
         "tamper-trustee-release-threshold-not-met",
     ];
 
+    public static readonly string[] RequiredDownstreamConsumerIds =
+    [
+        "FEAT-161",
+        "FEAT-162",
+        "FEAT-163",
+        "FEAT-164",
+        "FEAT-165",
+        "FEAT-166",
+    ];
+
     private static readonly string[] ForbiddenMaterialCategories =
     [
         "shuffle_maps",
@@ -564,6 +574,17 @@ public static class PublicationCountingReplayContracts
         if (consumers.Length == 0)
         {
             errors.Add("FEAT160_DOWNSTREAM_CONSUMER_MISSING: downstreamConsumers must not be empty.");
+        }
+
+        var consumerIds = consumers
+            .Select(consumer => GetString(consumer, "featureId"))
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var requiredConsumerId in RequiredDownstreamConsumerIds)
+        {
+            if (!consumerIds.Contains(requiredConsumerId))
+            {
+                errors.Add($"FEAT160_DOWNSTREAM_CONSUMER_MISSING: downstreamConsumers missing {requiredConsumerId}.");
+            }
         }
 
         foreach (var consumer in consumers)

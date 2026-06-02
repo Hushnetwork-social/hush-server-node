@@ -131,6 +131,14 @@ public sealed class PublicationCountingReplayPromoterTests
         manifest["replaySummary"]!.AsObject()["status"]!.GetValue<string>().Should().Be("pass");
         manifest["tamperSummary"]!.AsObject()["evidenceMode"]!.GetValue<string>().Should().Be("verifier_tamper_replay");
         manifest["tamperSummary"]!.AsObject()["status"]!.GetValue<string>().Should().Be("pass");
+        manifest["currentnessSummary"]!.AsObject()["status"]!.GetValue<string>().Should().Be("source_validated");
+        manifest["currentnessSummary"]!.AsObject()["summaryRef"]!.GetValue<string>()
+            .Should()
+            .Be(PublicationCountingReplayArtifactGenerator.StaleReferenceCheckSummaryPath);
+        manifest["reviewerHandoff"]!.AsObject()["status"]!.GetValue<string>().Should().Be("ready");
+        manifest["reviewerHandoff"]!.AsObject()["reviewerGuideRef"]!.GetValue<string>()
+            .Should()
+            .Be(PublicationCountingReplayArtifactGenerator.ReviewerGuidePath);
         manifest["entries"]!.AsArray().Count.Should().Be(PublicationCountingReplayArtifactGenerator.RequiredArtifactPaths.Length - 1);
 
         var goodReplay = PublicationCountingReplayContracts.ReadJsonObject(
@@ -157,6 +165,21 @@ public sealed class PublicationCountingReplayPromoterTests
         PublicationCountingReplayBindingValidator.ValidateGeneratedPackageBindings(first.GeneratedPackage)
             .Should()
             .BeEmpty();
+
+        var readme = File.ReadAllText(Path.Combine(workspace.DefaultOutputPackageRoot, PublicationCountingReplayArtifactGenerator.ReadmePath));
+        readme.Should().Contain("Phase 6");
+        readme.Should().NotContain("later phases still need reviewer handoff");
+
+        var reviewerGuide = File.ReadAllText(Path.Combine(workspace.DefaultOutputPackageRoot, PublicationCountingReplayArtifactGenerator.ReviewerGuidePath.Replace('/', Path.DirectorySeparatorChar)));
+        reviewerGuide.Should().Contain("--mode check-only");
+        reviewerGuide.Should().Contain("FEAT-161");
+        reviewerGuide.Should().Contain("FEAT-166");
+
+        var downstreamHandoff = PublicationCountingReplayContracts.ReadJsonObject(
+            Path.Combine(workspace.DefaultOutputPackageRoot, PublicationCountingReplayArtifactGenerator.DownstreamHandoffPath),
+            "downstream handoff");
+        downstreamHandoff["reviewerGuideRef"]!.GetValue<string>().Should().Be(PublicationCountingReplayArtifactGenerator.ReviewerGuidePath);
+        downstreamHandoff["consumerInstructions"]!.GetValue<string>().Should().Contain("FEAT-161 through FEAT-166");
     }
 
     [Fact]
@@ -434,6 +457,24 @@ public sealed class PublicationCountingReplayPromoterTests
         var errors = PublicationCountingReplayContracts.ValidateSource(source);
 
         errors.Should().Contain(error => error.Contains("FEAT160_NEGATIVE_CASE_MISSING", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SourceValidation_MissingRequiredDownstreamConsumer_IsRejected()
+    {
+        using var workspace = TempPublicationCountingReplayWorkspace.Create();
+        var source = workspace.LoadSource();
+        var consumers = source["downstreamConsumers"]!.AsArray();
+        var index = consumers
+            .Select((node, itemIndex) => (node, itemIndex))
+            .First(item => item.node!.AsObject()["featureId"]!.GetValue<string>() == "FEAT-161")
+            .itemIndex;
+        consumers.RemoveAt(index);
+
+        var errors = PublicationCountingReplayContracts.ValidateSource(source);
+
+        errors.Should().Contain(error => error.Contains("FEAT160_DOWNSTREAM_CONSUMER_MISSING", StringComparison.Ordinal) &&
+            error.Contains("FEAT-161", StringComparison.Ordinal));
     }
 
     private static PublicationCountingReplayPromotionService CreateService() =>
@@ -863,13 +904,15 @@ public sealed class PublicationCountingReplayPromoterTests
                     ["doesNotMutateRegister"] = true,
                     ["targetBlockerId"] = PublicationCountingReplayContracts.TargetBlockerId,
                 },
-                ["downstreamConsumers"] = new JsonArray(new JsonObject
-                {
-                    ["featureId"] = "FEAT-166",
-                    ["allowedUse"] = "Consume candidate replay metadata.",
-                    ["forbiddenClaim"] = "No production, public-state, legal, or certification claim.",
-                }),
-                ["residualRisks"] = Strings("Later FEAT-160 phases must replace skeleton evidence with replay-run evidence."),
+                ["downstreamConsumers"] = new JsonArray(PublicationCountingReplayContracts.RequiredDownstreamConsumerIds
+                    .Select(featureId => new JsonObject
+                    {
+                        ["featureId"] = featureId,
+                        ["allowedUse"] = "Consume candidate replay metadata within feature-specific scope.",
+                        ["forbiddenClaim"] = "No production, public-state, legal, or certification claim.",
+                    })
+                    .ToArray<JsonNode?>()),
+                ["residualRisks"] = Strings("Final FEAT-160 check-only and CI acceptance remain separate Phase 7 gates."),
             };
         }
 

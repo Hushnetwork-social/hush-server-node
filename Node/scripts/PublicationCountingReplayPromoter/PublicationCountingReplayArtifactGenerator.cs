@@ -26,6 +26,7 @@ public static class PublicationCountingReplayArtifactGenerator
     public const string ReadinessFragmentPath = "readiness/publication-counting-replay-readiness-fragment.json";
     public const string ScoreProposalPath = "readiness/publication-counting-replay-score-proposal.json";
     public const string DownstreamHandoffPath = "handoff/publication-counting-replay-downstream-handoff.json";
+    public const string ReviewerGuidePath = "handoff/reviewer-guide.md";
 
     public static readonly string[] RequiredArtifactPaths =
     [
@@ -40,6 +41,7 @@ public static class PublicationCountingReplayArtifactGenerator
         ReadinessFragmentPath,
         ScoreProposalPath,
         DownstreamHandoffPath,
+        ReviewerGuidePath,
     ];
 
     public static PublicationCountingReplayGeneratedPackage Generate(
@@ -85,6 +87,7 @@ public static class PublicationCountingReplayArtifactGenerator
             JsonArtifact(ReadinessFragmentPath, BuildReadinessFragment(source, generatedAtText, validationArtifacts)),
             JsonArtifact(ScoreProposalPath, BuildScoreProposal(source, generatedAtText, validationArtifacts)),
             JsonArtifact(DownstreamHandoffPath, BuildDownstreamHandoff(source, generatedAtText)),
+            new(ReviewerGuidePath, BuildReviewerGuide(source)),
         };
         var noSecretScan = ScanGeneratedArtifacts([readme, .. artifacts]);
         artifacts.Insert(5, JsonArtifact(NoSecretScanResultPath, BuildNoSecretScanResult(source, generatedAtText, noSecretScan)));
@@ -191,6 +194,26 @@ public static class PublicationCountingReplayArtifactGenerator
                 ["status"] = "pass",
                 ["unexpectedFindingCount"] = 0,
                 ["scanResultRef"] = NoSecretScanResultPath,
+            },
+            ["currentnessSummary"] = new JsonObject
+            {
+                ["status"] = "source_validated",
+                ["summaryRef"] = StaleReferenceCheckSummaryPath,
+                ["checks"] = new JsonArray(
+                    "readiness-register",
+                    "feat153-hardening-package",
+                    "feat158-public-corpus",
+                    "verifier-source",
+                    "verifier-binary",
+                    "protocol-package",
+                    "fixture-index",
+                    "expected-results"),
+            },
+            ["reviewerHandoff"] = new JsonObject
+            {
+                ["status"] = "ready",
+                ["downstreamHandoffRef"] = DownstreamHandoffPath,
+                ["reviewerGuideRef"] = ReviewerGuidePath,
             },
             ["readinessProposal"] = new JsonObject
             {
@@ -449,10 +472,64 @@ public static class PublicationCountingReplayArtifactGenerator
             ["generatedAt"] = generatedAt,
             ["producerFeature"] = PublicationCountingReplayContracts.FeatureId,
             ["targetPackage"] = PublicationCountingReplayContracts.ExpectedTargetPackagePath,
+            ["reviewerGuideRef"] = ReviewerGuidePath,
             ["consumers"] = PublicationCountingReplayContracts.Clone(source["downstreamConsumers"]),
             ["residualRisks"] = PublicationCountingReplayContracts.Clone(source["residualRisks"]),
-            ["consumerInstructions"] = "FEAT-166 may consume this candidate package only after later FEAT-160 phases add tamper replay, reviewer handoff, and check-only acceptance evidence.",
+            ["consumerInstructions"] = "FEAT-161 through FEAT-166 may cite this candidate package as public-safe publication/counting replay evidence after their own scope-specific checks pass. Canonical readiness mutation remains owned by the later internal-audit-95 promotion pass.",
         };
+
+    private static string BuildReviewerGuide(JsonObject source)
+    {
+        var sourceId = PublicationCountingReplayContracts.GetString(source, "sourceId");
+        var consumers = PublicationCountingReplayContracts.RequireArray(source, "downstreamConsumers")
+            .OfType<JsonObject>()
+            .Select(consumer => PublicationCountingReplayContracts.GetString(consumer, "featureId"))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        var lines = new List<string>
+        {
+            "# Publication/Counting Replay Reviewer Guide",
+            "",
+            $"Source: {sourceId}",
+            $"Package: {PublicationCountingReplayContracts.ExpectedTargetPackagePath}",
+            "",
+            "## Reviewer Commands",
+            "",
+            "Run these from the HushNetworkOrg workspace root after cloning the public corpus and server repositories at the recorded refs.",
+            "",
+            "```powershell",
+            "dotnet build .\\hush-server-node\\Node\\scripts\\PublicationCountingReplayPromoter\\PublicationCountingReplayPromoter.csproj --no-restore --verbosity minimal",
+            ".\\hush-server-node\\Node\\scripts\\promote-publication-counting-replay.ps1 --validate-only --workspace-root <workspace-root>",
+            ".\\hush-server-node\\Node\\scripts\\promote-publication-counting-replay.ps1 --mode package --workspace-root <workspace-root>",
+            ".\\hush-server-node\\Node\\scripts\\promote-publication-counting-replay.ps1 --mode check-only --workspace-root <workspace-root>",
+            "```",
+            "",
+            "## Review Scope",
+            "",
+            "Confirm that the good-profile replay summary is pass, the tamper replay summary is pass, generated report hashes are manifest-bound, stale/currentness refs match, and the no-secret scan has zero unexpected findings.",
+            "The package proposes RDY-DIM-004 movement from 8 to 10 only; it does not mutate the canonical readiness register.",
+            "",
+            "## Downstream Consumers",
+            "",
+        };
+
+        lines.AddRange(consumers.Select(consumer => $"- {consumer}"));
+        lines.AddRange(new[]
+        {
+            "",
+            "## Non-Claims",
+            "",
+            "- No production rollout execution claim.",
+            "- No public or state election readiness claim.",
+            "- No legal sufficiency, certification, procurement, accessibility, transparency, or dispute-remedy claim.",
+            "- No replacement for FEAT-117 SP-07 proof construction.",
+            "",
+        });
+
+        return string.Join("\n", lines);
+    }
 
     private static JsonArray BuildUpstreamRefs(JsonObject source)
     {
@@ -498,8 +575,8 @@ public static class PublicationCountingReplayArtifactGenerator
             $"Register baseline: {PublicationCountingReplayContracts.GetString(baseline, "registerVersionId")}",
             $"Score proposal: {PublicationCountingReplayContracts.TargetDimensionId} 8 to 10",
             "",
-            "This Phase 5 package is a public-safe replay-binding candidate for FEAT-160 replay hardening.",
-            "It executes and binds the required good-profile verifier replay matrix and required tamper/mismatch matrix while later phases still need reviewer handoff and final check-only acceptance evidence.",
+            "This Phase 6 package is a public-safe replay-binding and reviewer-handoff candidate for FEAT-160 replay hardening.",
+            "It executes and binds the required good-profile verifier replay matrix and required tamper/mismatch matrix, records currentness checks, and includes public reviewer handoff instructions.",
             "It does not mutate the readiness register and does not claim production rollout, public/state election readiness, legal sufficiency, certification, or external crypto-review completion.",
             "",
         ]);
