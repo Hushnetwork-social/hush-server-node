@@ -57,6 +57,7 @@
     <ProjectReference Include="..\scripts\PublicStateElectionPrerequisiteRegisterPromoter\PublicStateElectionPrerequisiteRegisterPromoter.csproj" />
     <ProjectReference Include="..\scripts\PublicationCountingHardeningPromoter\PublicationCountingHardeningPromoter.csproj" />
     <ProjectReference Include="..\scripts\InternalAudit95ProtocolTraceabilityPromoter\InternalAudit95ProtocolTraceabilityPromoter.csproj" />
+    <ProjectReference Include="..\scripts\PublicationCountingReplayPromoter\PublicationCountingReplayPromoter.csproj" />
   </ItemGroup>
 
   <ItemGroup>
