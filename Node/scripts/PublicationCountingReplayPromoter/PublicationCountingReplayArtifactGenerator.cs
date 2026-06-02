@@ -46,22 +46,32 @@ public static class PublicationCountingReplayArtifactGenerator
         PublicationCountingReplayPromotionPaths paths,
         string? sourceInput = null,
         string? outputRoot = null,
-        DateTimeOffset? generatedAt = null)
+        DateTimeOffset? generatedAt = null,
+        IPublicationCountingReplayProfileRunner? profileRunner = null)
     {
         var source = PublicationCountingReplayContracts.ValidateForPromotion(paths, sourceInput);
+        var goodProfileReplay = (profileRunner ?? new PublicationCountingReplayProfileRunner())
+            .ReplayGoodProfiles(paths, source);
+        if (!goodProfileReplay.Passed)
+        {
+            throw new PublicationCountingReplayPromotionException(
+                "FEAT-160 required good-profile replay failed.",
+                goodProfileReplay.BlockingReasons);
+        }
+
         var packageRoot = ResolvePackageRoot(paths, source, outputRoot);
         var generatedAtText = ResolveGeneratedAt(source, generatedAt);
         var readme = new PublicationCountingReplayArtifact(ReadmePath, BuildReadme(source));
         var validationArtifacts = new List<PublicationCountingReplayArtifact>
         {
-            JsonArtifact(GoodProfileReplaySummaryPath, BuildGoodProfileReplaySummary(source, generatedAtText)),
-            JsonArtifact(GoodProfileNormalizedOutputHashesPath, BuildGoodProfileNormalizedOutputHashes(source, generatedAtText)),
+            JsonArtifact(GoodProfileReplaySummaryPath, BuildGoodProfileReplaySummary(goodProfileReplay, generatedAtText)),
+            JsonArtifact(GoodProfileNormalizedOutputHashesPath, BuildGoodProfileNormalizedOutputHashes(goodProfileReplay, generatedAtText)),
             JsonArtifact(TamperReplaySummaryPath, BuildTamperReplaySummary(source, generatedAtText)),
             JsonArtifact(StaleReferenceCheckSummaryPath, BuildStaleReferenceCheckSummary(source, generatedAtText)),
         };
         var artifacts = new List<PublicationCountingReplayArtifact>(validationArtifacts)
         {
-            JsonArtifact(GeneratedReportBindingSummaryPath, BuildGeneratedReportBindingSummary(generatedAtText, validationArtifacts)),
+            JsonArtifact(GeneratedReportBindingSummaryPath, BuildGeneratedReportBindingSummary(generatedAtText, validationArtifacts, goodProfileReplay)),
             JsonArtifact(ReadinessFragmentPath, BuildReadinessFragment(source, generatedAtText, validationArtifacts)),
             JsonArtifact(ScoreProposalPath, BuildScoreProposal(source, generatedAtText, validationArtifacts)),
             JsonArtifact(DownstreamHandoffPath, BuildDownstreamHandoff(source, generatedAtText)),
@@ -69,7 +79,16 @@ public static class PublicationCountingReplayArtifactGenerator
         var noSecretScan = ScanGeneratedArtifacts([readme, .. artifacts]);
         artifacts.Insert(5, JsonArtifact(NoSecretScanResultPath, BuildNoSecretScanResult(source, generatedAtText, noSecretScan)));
         artifacts.Insert(0, readme);
-        artifacts.Insert(1, JsonArtifact(ManifestPath, BuildManifest(source, generatedAtText, artifacts)));
+        artifacts.Insert(1, JsonArtifact(ManifestPath, BuildManifest(source, generatedAtText, artifacts, goodProfileReplay)));
+
+        var bindingErrors = PublicationCountingReplayBindingValidator.ValidateGeneratedPackageBindings(
+            new PublicationCountingReplayGeneratedPackage("candidate", packageRoot, source, artifacts));
+        if (bindingErrors.Count > 0)
+        {
+            throw new PublicationCountingReplayPromotionException(
+                "FEAT-160 generated replay package binding validation failed.",
+                bindingErrors);
+        }
 
         return new PublicationCountingReplayGeneratedPackage("candidate", packageRoot, source, artifacts);
     }
@@ -113,7 +132,8 @@ public static class PublicationCountingReplayArtifactGenerator
     private static JsonObject BuildManifest(
         JsonObject source,
         string generatedAt,
-        IReadOnlyList<PublicationCountingReplayArtifact> artifacts)
+        IReadOnlyList<PublicationCountingReplayArtifact> artifacts,
+        PublicationCountingGoodProfileReplaySet goodProfileReplay)
     {
         var baseline = PublicationCountingReplayContracts.RequireObject(source, "baselineRegister");
         var readinessOutput = PublicationCountingReplayContracts.RequireObject(source, "readinessOutput");
@@ -139,12 +159,12 @@ public static class PublicationCountingReplayArtifactGenerator
             ["upstreamRefs"] = BuildUpstreamRefs(source),
             ["replaySummary"] = new JsonObject
             {
-                ["status"] = "pass",
-                ["caseCount"] = CountGoodProfiles(source),
-                ["passedCount"] = CountGoodProfiles(source),
-                ["failedCount"] = 0,
+                ["status"] = goodProfileReplay.Status,
+                ["caseCount"] = goodProfileReplay.CaseCount,
+                ["passedCount"] = goodProfileReplay.PassCount,
+                ["failedCount"] = goodProfileReplay.FailCount,
                 ["summaryRef"] = GoodProfileReplaySummaryPath,
-                ["evidenceMode"] = "source_validation_skeleton",
+                ["evidenceMode"] = "verifier_replay",
             },
             ["tamperSummary"] = new JsonObject
             {
@@ -184,42 +204,63 @@ public static class PublicationCountingReplayArtifactGenerator
         };
     }
 
-    private static JsonObject BuildGoodProfileReplaySummary(JsonObject source, string generatedAt) =>
+    private static JsonObject BuildGoodProfileReplaySummary(
+        PublicationCountingGoodProfileReplaySet replay,
+        string generatedAt) =>
         new()
         {
             ["schemaVersion"] = "publication-counting-good-profile-replay-summary.v1",
             ["generatedAt"] = generatedAt,
-            ["status"] = "source_validated",
-            ["evidenceMode"] = "source_validation_skeleton",
-            ["caseCount"] = CountGoodProfiles(source),
-            ["passCount"] = CountGoodProfiles(source),
-            ["cases"] = new JsonArray(GoodProfiles(source)
-                .Select(profile => new JsonObject
+            ["status"] = replay.Status,
+            ["evidenceMode"] = "verifier_replay",
+            ["caseCount"] = replay.CaseCount,
+            ["passCount"] = replay.PassCount,
+            ["failCount"] = replay.FailCount,
+            ["blockingReasons"] = Strings(replay.BlockingReasons),
+            ["cases"] = new JsonArray(replay.Cases
+                .Select(item => new JsonObject
                 {
-                    ["fixtureId"] = PublicationCountingReplayContracts.GetString(profile, "fixtureId"),
-                    ["status"] = "source_validated",
-                    ["packagePath"] = PublicationCountingReplayContracts.GetString(profile, "packagePath"),
-                    ["packageHash"] = PublicationCountingReplayContracts.GetString(profile, "packageHash"),
-                    ["expectedResultRef"] = PublicationCountingReplayContracts.GetString(profile, "expectedResultRef"),
-                    ["expectedOverallStatus"] = PublicationCountingReplayContracts.GetString(profile, "expectedOverallStatus"),
-                    ["expectedExitCode"] = PublicationCountingReplayContracts.GetInt(profile, "expectedExitCode"),
-                    ["expectedPrimaryResultCode"] = PublicationCountingReplayContracts.GetString(profile, "expectedPrimaryResultCode"),
-                    ["normalizedOutputHash"] = PublicationCountingReplayContracts.GetString(profile, "normalizedOutputHash"),
+                    ["fixtureId"] = item.FixtureId,
+                    ["status"] = item.Status,
+                    ["profileId"] = item.ProfileId,
+                    ["packagePath"] = item.PackagePath,
+                    ["packageHash"] = item.PackageHash,
+                    ["observedPackageHash"] = item.ObservedPackageHash,
+                    ["localDirectoryHash"] = item.LocalDirectoryHash,
+                    ["packageHashStatus"] = item.PackageHashStatus,
+                    ["expectedResultRef"] = item.ExpectedResultRef,
+                    ["expectedOverallStatus"] = item.ExpectedOverallStatus,
+                    ["observedOverallStatus"] = item.ObservedOverallStatus,
+                    ["expectedExitCode"] = item.ExpectedExitCode,
+                    ["observedExitCode"] = item.ObservedExitCode,
+                    ["expectedPrimaryResultCode"] = item.ExpectedPrimaryResultCode,
+                    ["observedPrimaryResultCode"] = item.ObservedPrimaryResultCode,
+                    ["expectedNormalizedOutputHash"] = item.ExpectedNormalizedOutputHash,
+                    ["normalizedOutputHash"] = item.NormalizedOutputHash,
+                    ["normalizedOutputHashStatus"] = item.NormalizedOutputHashStatus,
+                    ["artifactBindings"] = ArtifactBindings(item.ArtifactBindings),
+                    ["warningsAffectingAuditConfidence"] = Strings(item.WarningsAffectingAuditConfidence),
+                    ["mismatchReasons"] = Strings(item.MismatchReasons),
                 })
                 .ToArray<JsonNode?>()),
         };
 
-    private static JsonObject BuildGoodProfileNormalizedOutputHashes(JsonObject source, string generatedAt) =>
+    private static JsonObject BuildGoodProfileNormalizedOutputHashes(
+        PublicationCountingGoodProfileReplaySet replay,
+        string generatedAt) =>
         new()
         {
             ["schemaVersion"] = "publication-counting-good-profile-normalized-output-hashes.v1",
             ["generatedAt"] = generatedAt,
-            ["status"] = "source_validated",
-            ["hashes"] = new JsonArray(GoodProfiles(source)
-                .Select(profile => new JsonObject
+            ["status"] = replay.Status,
+            ["hashes"] = new JsonArray(replay.Cases
+                .Select(item => new JsonObject
                 {
-                    ["fixtureId"] = PublicationCountingReplayContracts.GetString(profile, "fixtureId"),
-                    ["normalizedOutputHash"] = PublicationCountingReplayContracts.GetString(profile, "normalizedOutputHash"),
+                    ["fixtureId"] = item.FixtureId,
+                    ["profileId"] = item.ProfileId,
+                    ["expectedNormalizedOutputHash"] = item.ExpectedNormalizedOutputHash,
+                    ["normalizedOutputHash"] = item.NormalizedOutputHash,
+                    ["status"] = item.NormalizedOutputHashStatus,
                 })
                 .ToArray<JsonNode?>()),
         };
@@ -264,12 +305,27 @@ public static class PublicationCountingReplayArtifactGenerator
 
     private static JsonObject BuildGeneratedReportBindingSummary(
         string generatedAt,
-        IReadOnlyList<PublicationCountingReplayArtifact> validationArtifacts) =>
+        IReadOnlyList<PublicationCountingReplayArtifact> validationArtifacts,
+        PublicationCountingGoodProfileReplaySet goodProfileReplay) =>
         new()
         {
             ["schemaVersion"] = "publication-counting-generated-report-binding-summary.v1",
             ["generatedAt"] = generatedAt,
             ["status"] = "candidate",
+            ["requiredBindingTypes"] = new JsonArray(
+                "package-hash",
+                "tally-output",
+                "package-verifier-output",
+                "runtime-verifier-output",
+                "generated-report"),
+            ["profileBindings"] = new JsonArray(goodProfileReplay.Cases
+                .Select(item => new JsonObject
+                {
+                    ["fixtureId"] = item.FixtureId,
+                    ["status"] = item.Status,
+                    ["bindings"] = ArtifactBindings(item.ArtifactBindings),
+                })
+                .ToArray<JsonNode?>()),
             ["boundArtifacts"] = new JsonArray(validationArtifacts
                 .Select(artifact => new JsonObject
                 {
@@ -368,7 +424,7 @@ public static class PublicationCountingReplayArtifactGenerator
             ["targetPackage"] = PublicationCountingReplayContracts.ExpectedTargetPackagePath,
             ["consumers"] = PublicationCountingReplayContracts.Clone(source["downstreamConsumers"]),
             ["residualRisks"] = PublicationCountingReplayContracts.Clone(source["residualRisks"]),
-            ["consumerInstructions"] = "FEAT-166 may consume this candidate package only after later FEAT-160 phases replace source-validation skeletons with replay-run evidence.",
+            ["consumerInstructions"] = "FEAT-166 may consume this candidate package only after later FEAT-160 phases add tamper replay, reviewer handoff, and check-only acceptance evidence.",
         };
 
     private static JsonArray BuildUpstreamRefs(JsonObject source)
@@ -415,8 +471,8 @@ public static class PublicationCountingReplayArtifactGenerator
             $"Register baseline: {PublicationCountingReplayContracts.GetString(baseline, "registerVersionId")}",
             $"Score proposal: {PublicationCountingReplayContracts.TargetDimensionId} 8 to 10",
             "",
-            "This Phase 3 package is a public-safe source-validation skeleton for FEAT-160 replay hardening.",
-            "It binds the replay matrix, upstream package refs, and safety boundaries before later phases produce full replay-run evidence.",
+            "This Phase 4 package is a public-safe replay-binding candidate for FEAT-160 replay hardening.",
+            "It executes and binds the required good-profile verifier replay matrix while later phases still need to replace tamper skeleton evidence with replay-run evidence.",
             "It does not mutate the readiness register and does not claim production rollout, public/state election readiness, legal sufficiency, certification, or external crypto-review completion.",
             "",
         ]);
@@ -463,6 +519,19 @@ public static class PublicationCountingReplayArtifactGenerator
     private static int CountGoodProfiles(JsonObject source) => GoodProfiles(source).Count();
 
     private static int CountNegativeCases(JsonObject source) => NegativeCases(source).Count();
+
+    private static JsonArray ArtifactBindings(IReadOnlyList<PublicationCountingReplayArtifactBinding> bindings) =>
+        new(bindings
+            .Select(binding => new JsonObject
+            {
+                ["bindingType"] = binding.BindingType,
+                ["path"] = binding.Path,
+                ["sha256Hash"] = binding.Sha256Hash,
+            })
+            .ToArray<JsonNode?>());
+
+    private static JsonArray Strings(IEnumerable<string> values) =>
+        new(values.Select(value => JsonValue.Create(value)).ToArray<JsonNode?>());
 
     private const string ScoreProposalSuffixForFeat153 = "readiness/publication-counting-score-proposal.json";
     private const string ReadinessFragmentSuffixForFeat153 = "readiness/publication-counting-readiness-fragment.json";

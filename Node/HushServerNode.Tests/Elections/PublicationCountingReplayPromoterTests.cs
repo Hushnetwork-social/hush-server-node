@@ -41,7 +41,7 @@ public sealed class PublicationCountingReplayPromoterTests
     {
         using var workspace = TempPublicationCountingReplayWorkspace.Create();
 
-        var result = new PublicationCountingReplayPromotionService().Promote(new(
+        var result = CreateService().Promote(new(
             workspace.Paths,
             PublicationCountingReplayPromotionService.ModeValidateOnly,
             null,
@@ -60,7 +60,7 @@ public sealed class PublicationCountingReplayPromoterTests
     {
         using var workspace = TempPublicationCountingReplayWorkspace.Create();
 
-        var act = () => new PublicationCountingReplayPromotionService().Promote(new(
+        var act = () => CreateService().Promote(new(
             workspace.Paths,
             PublicationCountingReplayPromotionService.ModeCheckOnly,
             null,
@@ -78,7 +78,7 @@ public sealed class PublicationCountingReplayPromoterTests
         using var workspace = TempPublicationCountingReplayWorkspace.Create();
         var outsideRoot = Path.Combine(Path.GetTempPath(), "feat160-outside-" + Guid.NewGuid().ToString("N"));
 
-        var act = () => new PublicationCountingReplayPromotionService().Promote(new(
+        var act = () => CreateService().Promote(new(
             workspace.Paths,
             PublicationCountingReplayPromotionService.ModePackage,
             null,
@@ -91,10 +91,10 @@ public sealed class PublicationCountingReplayPromoterTests
     }
 
     [Fact]
-    public void Promotion_PackageMode_WritesDeterministicSkeletonArtifacts()
+    public void Promotion_PackageMode_WritesDeterministicReplayBindingArtifacts()
     {
         using var workspace = TempPublicationCountingReplayWorkspace.Create();
-        var service = new PublicationCountingReplayPromotionService();
+        var service = CreateService();
 
         var first = service.Promote(new(
             workspace.Paths,
@@ -127,14 +127,34 @@ public sealed class PublicationCountingReplayPromoterTests
             Path.Combine(workspace.DefaultOutputPackageRoot, PublicationCountingReplayArtifactGenerator.ManifestPath),
             "generated manifest");
         manifest["readinessProposal"]!.AsObject()["status"]!.GetValue<string>().Should().Be("candidate");
+        manifest["replaySummary"]!.AsObject()["evidenceMode"]!.GetValue<string>().Should().Be("verifier_replay");
+        manifest["replaySummary"]!.AsObject()["status"]!.GetValue<string>().Should().Be("pass");
         manifest["entries"]!.AsArray().Count.Should().Be(PublicationCountingReplayArtifactGenerator.RequiredArtifactPaths.Length - 1);
+
+        var goodReplay = PublicationCountingReplayContracts.ReadJsonObject(
+            Path.Combine(workspace.DefaultOutputPackageRoot, PublicationCountingReplayArtifactGenerator.GoodProfileReplaySummaryPath),
+            "good replay summary");
+        goodReplay["status"]!.GetValue<string>().Should().Be("pass");
+        goodReplay["evidenceMode"]!.GetValue<string>().Should().Be("verifier_replay");
+        goodReplay["cases"]!.AsArray().Should().HaveCount(PublicationCountingReplayContracts.RequiredGoodProfileIds.Length);
+
+        var bindingSummary = PublicationCountingReplayContracts.ReadJsonObject(
+            Path.Combine(workspace.DefaultOutputPackageRoot, PublicationCountingReplayArtifactGenerator.GeneratedReportBindingSummaryPath),
+            "generated binding summary");
+        bindingSummary["requiredBindingTypes"]!.AsArray()
+            .Select(item => item!.GetValue<string>())
+            .Should()
+            .Contain(["package-hash", "tally-output", "package-verifier-output", "runtime-verifier-output", "generated-report"]);
+        PublicationCountingReplayBindingValidator.ValidateGeneratedPackageBindings(first.GeneratedPackage)
+            .Should()
+            .BeEmpty();
     }
 
     [Fact]
     public void Promotion_CheckOnly_DetectsExistingPackageDrift()
     {
         using var workspace = TempPublicationCountingReplayWorkspace.Create();
-        var service = new PublicationCountingReplayPromotionService();
+        var service = CreateService();
         service.Promote(new(
             workspace.Paths,
             PublicationCountingReplayPromotionService.ModePackage,
@@ -158,6 +178,67 @@ public sealed class PublicationCountingReplayPromoterTests
             .Which.Details.Should().Contain(error => error.Contains(PublicationCountingReplayArtifactGenerator.ReadmePath, StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("package-hash")]
+    [InlineData("tally-output")]
+    [InlineData("package-verifier-output")]
+    [InlineData("runtime-verifier-output")]
+    public void BindingValidation_MissingCaseBinding_Fails(string bindingType)
+    {
+        using var workspace = TempPublicationCountingReplayWorkspace.Create();
+        var generated = CreateService().Promote(new(
+            workspace.Paths,
+            PublicationCountingReplayPromotionService.ModeValidateOnly,
+            null,
+            workspace.OutputRoot,
+            FixedGeneratedAt,
+            ValidateOnly: false)).GeneratedPackage;
+        var replaySummary = GeneratedArtifactObject(generated, PublicationCountingReplayArtifactGenerator.GoodProfileReplaySummaryPath);
+        var firstCase = replaySummary["cases"]!.AsArray()[0]!.AsObject();
+        var bindings = firstCase["artifactBindings"]!.AsArray();
+        for (var index = bindings.Count - 1; index >= 0; index--)
+        {
+            if (bindings[index] is JsonObject binding &&
+                string.Equals(PublicationCountingReplayContracts.GetString(binding, "bindingType"), bindingType, StringComparison.Ordinal))
+            {
+                bindings.RemoveAt(index);
+            }
+        }
+
+        var broken = ReplaceGeneratedArtifact(
+            generated,
+            PublicationCountingReplayArtifactGenerator.GoodProfileReplaySummaryPath,
+            replaySummary);
+
+        PublicationCountingReplayBindingValidator.ValidateGeneratedPackageBindings(broken)
+            .Should()
+            .Contain(error => error.Contains(bindingType, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BindingValidation_MissingGeneratedReportBinding_Fails()
+    {
+        using var workspace = TempPublicationCountingReplayWorkspace.Create();
+        var generated = CreateService().Promote(new(
+            workspace.Paths,
+            PublicationCountingReplayPromotionService.ModeValidateOnly,
+            null,
+            workspace.OutputRoot,
+            FixedGeneratedAt,
+            ValidateOnly: false)).GeneratedPackage;
+        var bindingSummary = GeneratedArtifactObject(generated, PublicationCountingReplayArtifactGenerator.GeneratedReportBindingSummaryPath);
+        bindingSummary["boundArtifacts"] = new JsonArray();
+
+        var broken = ReplaceGeneratedArtifact(
+            generated,
+            PublicationCountingReplayArtifactGenerator.GeneratedReportBindingSummaryPath,
+            bindingSummary);
+
+        PublicationCountingReplayBindingValidator.ValidateGeneratedPackageBindings(broken)
+            .Should()
+            .Contain(error => error.Contains(PublicationCountingReplayArtifactGenerator.GoodProfileReplaySummaryPath, StringComparison.Ordinal));
+    }
+
     [Fact]
     public void SourceValidation_StaleReadinessBaseline_IsRejected()
     {
@@ -179,7 +260,7 @@ public sealed class PublicationCountingReplayPromoterTests
             "sha256:0000000000000000000000000000000000000000000000000000000000000000";
         var sourceInput = await workspace.WriteSourceAsync(source, "stale-feat153-source.json");
 
-        var act = () => new PublicationCountingReplayPromotionService().Promote(new(
+        var act = () => CreateService().Promote(new(
             workspace.Paths,
             PublicationCountingReplayPromotionService.ModePackage,
             sourceInput,
@@ -200,7 +281,7 @@ public sealed class PublicationCountingReplayPromoterTests
             "sha256:0000000000000000000000000000000000000000000000000000000000000000";
         var sourceInput = await workspace.WriteSourceAsync(source, "stale-feat158-source.json");
 
-        var act = () => new PublicationCountingReplayPromotionService().Promote(new(
+        var act = () => CreateService().Promote(new(
             workspace.Paths,
             PublicationCountingReplayPromotionService.ModePackage,
             sourceInput,
@@ -264,6 +345,85 @@ public sealed class PublicationCountingReplayPromoterTests
         var errors = PublicationCountingReplayContracts.ValidateSource(source);
 
         errors.Should().Contain(error => error.Contains("FEAT160_TRUSTEE_NEGATIVE_CASE_MISSING", StringComparison.Ordinal));
+    }
+
+    private static PublicationCountingReplayPromotionService CreateService() =>
+        new(new FakeGoodProfileReplayRunner());
+
+    private static JsonObject GeneratedArtifactObject(
+        PublicationCountingReplayGeneratedPackage generated,
+        string relativePath)
+    {
+        var artifact = generated.Artifacts.Single(item => item.RelativePath == relativePath);
+        return JsonNode.Parse(artifact.Content)!.AsObject();
+    }
+
+    private static PublicationCountingReplayGeneratedPackage ReplaceGeneratedArtifact(
+        PublicationCountingReplayGeneratedPackage generated,
+        string relativePath,
+        JsonObject replacement)
+    {
+        var artifacts = generated.Artifacts
+            .Select(item => item.RelativePath == relativePath
+                ? new PublicationCountingReplayArtifact(relativePath, PublicationCountingReplayContracts.CanonicalJson(replacement))
+                : item)
+            .ToArray();
+        return generated with { Artifacts = artifacts };
+    }
+
+    private sealed class FakeGoodProfileReplayRunner : IPublicationCountingReplayProfileRunner
+    {
+        public PublicationCountingGoodProfileReplaySet ReplayGoodProfiles(
+            PublicationCountingReplayPromotionPaths paths,
+            JsonObject source)
+        {
+            var cases = PublicationCountingReplayContracts.RequireArray(
+                    PublicationCountingReplayContracts.RequireObject(source, "replayMatrix"),
+                    "goodProfiles")
+                .OfType<JsonObject>()
+                .Select(BuildCase)
+                .ToArray();
+            return new PublicationCountingGoodProfileReplaySet("pass", cases, []);
+        }
+
+        private static PublicationCountingGoodProfileReplayCase BuildCase(JsonObject profile)
+        {
+            var fixtureId = PublicationCountingReplayContracts.GetString(profile, "fixtureId");
+            var packageHash = PublicationCountingReplayContracts.GetString(profile, "packageHash");
+            var normalizedOutputHash = PublicationCountingReplayContracts.GetString(profile, "normalizedOutputHash");
+            return new PublicationCountingGoodProfileReplayCase(
+                fixtureId,
+                "matched",
+                "public_anonymous_v1",
+                PublicationCountingReplayContracts.GetString(profile, "packagePath"),
+                packageHash,
+                packageHash,
+                packageHash,
+                "matched",
+                PublicationCountingReplayContracts.GetString(profile, "expectedResultRef"),
+                PublicationCountingReplayContracts.GetString(profile, "expectedOverallStatus"),
+                PublicationCountingReplayContracts.GetString(profile, "expectedOverallStatus"),
+                PublicationCountingReplayContracts.GetInt(profile, "expectedExitCode"),
+                PublicationCountingReplayContracts.GetInt(profile, "expectedExitCode"),
+                PublicationCountingReplayContracts.GetString(profile, "expectedPrimaryResultCode"),
+                PublicationCountingReplayContracts.GetString(profile, "expectedPrimaryResultCode"),
+                normalizedOutputHash,
+                normalizedOutputHash,
+                "matched",
+                [
+                    new("package-hash", ".", packageHash),
+                    new("tally-output", "artifacts/election-record/tally-replay.json", HashFor(fixtureId + "-tally")),
+                    new("package-verifier-output", "artifacts/election-record/publication-proof-verifier-output.json", HashFor(fixtureId + "-publication-verifier-output")),
+                    new("package-verifier-output", "artifacts/election-record/trustee-verifier-output.json", HashFor(fixtureId + "-trustee-verifier-output")),
+                    new("runtime-verifier-output", "normalized-verifier-output", normalizedOutputHash),
+                    new("result-binding", "artifacts/election-record/result-binding.json", HashFor(fixtureId + "-result-binding")),
+                ],
+                [],
+                []);
+        }
+
+        private static string HashFor(string value) =>
+            "sha256:" + PublicationCountingReplayContracts.Sha256Hex(value);
     }
 
     private sealed class TempPublicationCountingReplayWorkspace : IDisposable

@@ -22,6 +22,14 @@ public sealed class PublicationCountingReplayPromotionService
     public const string ModePackage = "package";
     public const string ModeValidateOnly = "validate-only";
 
+    private readonly IPublicationCountingReplayProfileRunner _profileRunner;
+
+    public PublicationCountingReplayPromotionService(
+        IPublicationCountingReplayProfileRunner? profileRunner = null)
+    {
+        _profileRunner = profileRunner ?? new PublicationCountingReplayProfileRunner();
+    }
+
     public PublicationCountingReplayPromotionResult Promote(PublicationCountingReplayPromotionOptions options)
     {
         var mode = ResolveMode(options);
@@ -29,7 +37,8 @@ public sealed class PublicationCountingReplayPromotionService
             options.Paths,
             options.SourceInput,
             options.OutputRoot,
-            options.GeneratedAt);
+            options.GeneratedAt,
+            _profileRunner);
 
         return mode switch
         {
@@ -119,4 +128,3 @@ public sealed class PublicationCountingReplayPromotionService
         IReadOnlyList<string> checkedFiles) =>
         new(mode, generated.Status, generated.PackageRoot, writtenFiles, checkedFiles, generated);
 }
-
