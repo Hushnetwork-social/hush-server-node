@@ -27,6 +27,7 @@ public static class PublicationCountingReplayBindingValidator
         var artifacts = generated.Artifacts.ToDictionary(item => item.RelativePath, StringComparer.Ordinal);
         ValidateGoodProfileReplaySummary(artifacts, errors);
         ValidateNormalizedOutputHashes(artifacts, errors);
+        ValidateTamperReplaySummary(artifacts, errors);
         ValidateGeneratedReportBindings(artifacts, errors);
         return errors;
     }
@@ -128,6 +129,42 @@ public static class PublicationCountingReplayBindingValidator
         }
     }
 
+    private static void ValidateTamperReplaySummary(
+        IReadOnlyDictionary<string, PublicationCountingReplayArtifact> artifacts,
+        List<string> errors)
+    {
+        var summary = ReadArtifactObject(artifacts, PublicationCountingReplayArtifactGenerator.TamperReplaySummaryPath, errors);
+        if (summary is null)
+        {
+            return;
+        }
+
+        if (!string.Equals(PublicationCountingReplayContracts.GetString(summary, "status"), "pass", StringComparison.Ordinal))
+        {
+            errors.Add("tamper replay summary must have pass status.");
+        }
+
+        foreach (var item in PublicationCountingReplayContracts.RequireArray(summary, "cases").OfType<JsonObject>())
+        {
+            var fixtureId = PublicationCountingReplayContracts.GetString(item, "fixtureId");
+            RequireNonEmpty(item, "expectedPrimaryResultCode", $"{fixtureId}.expectedPrimaryResultCode", errors);
+            RequireNonEmpty(item, "observedPrimaryResultCode", $"{fixtureId}.observedPrimaryResultCode", errors);
+            RequireNonEmpty(item, "changedArtifactOrCondition", $"{fixtureId}.changedArtifactOrCondition", errors);
+            RequireSha256(item, "packageHash", $"{fixtureId}.packageHash", errors);
+            RequireSha256(item, "expectedNormalizedOutputHash", $"{fixtureId}.expectedNormalizedOutputHash", errors);
+            RequireSha256(item, "normalizedOutputHash", $"{fixtureId}.normalizedOutputHash", errors);
+            if (!PublicationCountingReplayContracts.GetBool(item, "blocksScoreMovement"))
+            {
+                errors.Add($"{fixtureId}.blocksScoreMovement must be true.");
+            }
+
+            if (PublicationCountingReplayContracts.RequireArray(item, "changedArtifactRefs").Count == 0)
+            {
+                errors.Add($"{fixtureId} missing changed-artifact references.");
+            }
+        }
+    }
+
     private static JsonObject? ReadArtifactObject(
         IReadOnlyDictionary<string, PublicationCountingReplayArtifact> artifacts,
         string relativePath,
@@ -161,6 +198,18 @@ public static class PublicationCountingReplayBindingValidator
             observed["sha256:".Length..].Any(character => !Uri.IsHexDigit(character)))
         {
             errors.Add($"{label} must be a sha256:<64 hex> value.");
+        }
+    }
+
+    private static void RequireNonEmpty(
+        JsonObject value,
+        string property,
+        string label,
+        List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(PublicationCountingReplayContracts.GetString(value, property)))
+        {
+            errors.Add($"{label} must not be empty.");
         }
     }
 }

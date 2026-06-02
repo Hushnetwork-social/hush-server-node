@@ -129,6 +129,8 @@ public sealed class PublicationCountingReplayPromoterTests
         manifest["readinessProposal"]!.AsObject()["status"]!.GetValue<string>().Should().Be("candidate");
         manifest["replaySummary"]!.AsObject()["evidenceMode"]!.GetValue<string>().Should().Be("verifier_replay");
         manifest["replaySummary"]!.AsObject()["status"]!.GetValue<string>().Should().Be("pass");
+        manifest["tamperSummary"]!.AsObject()["evidenceMode"]!.GetValue<string>().Should().Be("verifier_tamper_replay");
+        manifest["tamperSummary"]!.AsObject()["status"]!.GetValue<string>().Should().Be("pass");
         manifest["entries"]!.AsArray().Count.Should().Be(PublicationCountingReplayArtifactGenerator.RequiredArtifactPaths.Length - 1);
 
         var goodReplay = PublicationCountingReplayContracts.ReadJsonObject(
@@ -137,6 +139,13 @@ public sealed class PublicationCountingReplayPromoterTests
         goodReplay["status"]!.GetValue<string>().Should().Be("pass");
         goodReplay["evidenceMode"]!.GetValue<string>().Should().Be("verifier_replay");
         goodReplay["cases"]!.AsArray().Should().HaveCount(PublicationCountingReplayContracts.RequiredGoodProfileIds.Length);
+
+        var tamperReplay = PublicationCountingReplayContracts.ReadJsonObject(
+            Path.Combine(workspace.DefaultOutputPackageRoot, PublicationCountingReplayArtifactGenerator.TamperReplaySummaryPath),
+            "tamper replay summary");
+        tamperReplay["status"]!.GetValue<string>().Should().Be("pass");
+        tamperReplay["evidenceMode"]!.GetValue<string>().Should().Be("verifier_tamper_replay");
+        tamperReplay["cases"]!.AsArray().Should().HaveCount(workspace.LoadSource()["negativeMatrix"]!.AsArray().Count);
 
         var bindingSummary = PublicationCountingReplayContracts.ReadJsonObject(
             Path.Combine(workspace.DefaultOutputPackageRoot, PublicationCountingReplayArtifactGenerator.GeneratedReportBindingSummaryPath),
@@ -240,6 +249,74 @@ public sealed class PublicationCountingReplayPromoterTests
     }
 
     [Fact]
+    public void BindingValidation_MissingTamperChangedArtifactReference_Fails()
+    {
+        using var workspace = TempPublicationCountingReplayWorkspace.Create();
+        var generated = CreateService().Promote(new(
+            workspace.Paths,
+            PublicationCountingReplayPromotionService.ModeValidateOnly,
+            null,
+            workspace.OutputRoot,
+            FixedGeneratedAt,
+            ValidateOnly: false)).GeneratedPackage;
+        var tamperSummary = GeneratedArtifactObject(generated, PublicationCountingReplayArtifactGenerator.TamperReplaySummaryPath);
+        tamperSummary["cases"]!.AsArray()[0]!.AsObject()["changedArtifactRefs"] = new JsonArray();
+
+        var broken = ReplaceGeneratedArtifact(
+            generated,
+            PublicationCountingReplayArtifactGenerator.TamperReplaySummaryPath,
+            tamperSummary);
+
+        PublicationCountingReplayBindingValidator.ValidateGeneratedPackageBindings(broken)
+            .Should()
+            .Contain(error => error.Contains("changed-artifact", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BindingValidation_MissingTamperNormalizedOutputHash_Fails()
+    {
+        using var workspace = TempPublicationCountingReplayWorkspace.Create();
+        var generated = CreateService().Promote(new(
+            workspace.Paths,
+            PublicationCountingReplayPromotionService.ModeValidateOnly,
+            null,
+            workspace.OutputRoot,
+            FixedGeneratedAt,
+            ValidateOnly: false)).GeneratedPackage;
+        var tamperSummary = GeneratedArtifactObject(generated, PublicationCountingReplayArtifactGenerator.TamperReplaySummaryPath);
+        tamperSummary["cases"]!.AsArray()[0]!.AsObject()["normalizedOutputHash"] = "";
+
+        var broken = ReplaceGeneratedArtifact(
+            generated,
+            PublicationCountingReplayArtifactGenerator.TamperReplaySummaryPath,
+            tamperSummary);
+
+        PublicationCountingReplayBindingValidator.ValidateGeneratedPackageBindings(broken)
+            .Should()
+            .Contain(error => error.Contains("normalizedOutputHash", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Promotion_TamperReplayMismatch_BlocksPromotion()
+    {
+        using var workspace = TempPublicationCountingReplayWorkspace.Create();
+        var service = new PublicationCountingReplayPromotionService(
+            new FakeGoodProfileReplayRunner(),
+            new FailingNegativeReplayRunner());
+
+        var act = () => service.Promote(new(
+            workspace.Paths,
+            PublicationCountingReplayPromotionService.ModeValidateOnly,
+            null,
+            workspace.OutputRoot,
+            FixedGeneratedAt,
+            ValidateOnly: false));
+
+        act.Should().Throw<PublicationCountingReplayPromotionException>()
+            .Which.Details.Should().Contain(error => error.Contains("unexpectedly passed", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void SourceValidation_StaleReadinessBaseline_IsRejected()
     {
         using var workspace = TempPublicationCountingReplayWorkspace.Create();
@@ -331,7 +408,19 @@ public sealed class PublicationCountingReplayPromoterTests
     }
 
     [Fact]
-    public void SourceValidation_MissingTrusteeReleaseNegativeCase_IsRejected()
+    public void SourceValidation_MissingNegativeExpectedResultCode_IsRejected()
+    {
+        using var workspace = TempPublicationCountingReplayWorkspace.Create();
+        var source = workspace.LoadSource();
+        source["negativeMatrix"]!.AsArray()[0]!.AsObject()["expectedPrimaryResultCode"] = "";
+
+        var errors = PublicationCountingReplayContracts.ValidateSource(source);
+
+        errors.Should().Contain(error => error.Contains("expectedPrimaryResultCode", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SourceValidation_MissingRequiredNegativeCase_IsRejected()
     {
         using var workspace = TempPublicationCountingReplayWorkspace.Create();
         var source = workspace.LoadSource();
@@ -344,11 +433,11 @@ public sealed class PublicationCountingReplayPromoterTests
 
         var errors = PublicationCountingReplayContracts.ValidateSource(source);
 
-        errors.Should().Contain(error => error.Contains("FEAT160_TRUSTEE_NEGATIVE_CASE_MISSING", StringComparison.Ordinal));
+        errors.Should().Contain(error => error.Contains("FEAT160_NEGATIVE_CASE_MISSING", StringComparison.Ordinal));
     }
 
     private static PublicationCountingReplayPromotionService CreateService() =>
-        new(new FakeGoodProfileReplayRunner());
+        new(new FakeGoodProfileReplayRunner(), new FakeNegativeReplayRunner());
 
     private static JsonObject GeneratedArtifactObject(
         PublicationCountingReplayGeneratedPackage generated,
@@ -420,6 +509,92 @@ public sealed class PublicationCountingReplayPromoterTests
                 ],
                 [],
                 []);
+        }
+
+        private static string HashFor(string value) =>
+            "sha256:" + PublicationCountingReplayContracts.Sha256Hex(value);
+    }
+
+    private sealed class FakeNegativeReplayRunner : IPublicationCountingReplayNegativeRunner
+    {
+        public PublicationCountingNegativeReplaySet ReplayNegativeCases(
+            PublicationCountingReplayPromotionPaths paths,
+            JsonObject source)
+        {
+            var cases = PublicationCountingReplayContracts.RequireArray(source, "negativeMatrix")
+                .OfType<JsonObject>()
+                .Select(BuildCase)
+                .ToArray();
+            return new PublicationCountingNegativeReplaySet("pass", cases, []);
+        }
+
+        private static PublicationCountingNegativeReplayCase BuildCase(JsonObject item)
+        {
+            var fixtureId = PublicationCountingReplayContracts.GetString(item, "fixtureId");
+            var normalizedOutputHash = HashFor(fixtureId + "-negative-output");
+            return new PublicationCountingNegativeReplayCase(
+                PublicationCountingReplayContracts.GetString(item, "caseId"),
+                fixtureId,
+                PublicationCountingReplayContracts.GetString(item, "source"),
+                PublicationCountingReplayContracts.GetString(item, "coverageArea"),
+                "matched",
+                "public_anonymous_v1",
+                "fake:" + fixtureId,
+                HashFor(fixtureId + "-package"),
+                PublicationCountingReplayContracts.GetString(item, "changedArtifactOrCondition"),
+                ["artifacts/election-record/" + fixtureId + ".json"],
+                "expected-results/" + fixtureId + ".json",
+                PublicationCountingReplayContracts.GetString(item, "expectedOverallStatus"),
+                PublicationCountingReplayContracts.GetString(item, "expectedOverallStatus"),
+                PublicationCountingReplayContracts.GetInt(item, "expectedExitCode"),
+                PublicationCountingReplayContracts.GetInt(item, "expectedExitCode"),
+                PublicationCountingReplayContracts.GetString(item, "expectedPrimaryResultCode"),
+                PublicationCountingReplayContracts.GetString(item, "expectedPrimaryResultCode"),
+                normalizedOutputHash,
+                normalizedOutputHash,
+                "matched",
+                PublicationCountingReplayContracts.GetBool(item, "blocksScoreMovement"),
+                []);
+        }
+
+        private static string HashFor(string value) =>
+            "sha256:" + PublicationCountingReplayContracts.Sha256Hex(value);
+    }
+
+    private sealed class FailingNegativeReplayRunner : IPublicationCountingReplayNegativeRunner
+    {
+        public PublicationCountingNegativeReplaySet ReplayNegativeCases(
+            PublicationCountingReplayPromotionPaths paths,
+            JsonObject source)
+        {
+            var mismatch = new PublicationCountingNegativeReplayCase(
+                "NEG-ACCEPTED-SET-HASH",
+                "tamper-accepted-set-hash",
+                "existing_v0.3.0",
+                "accepted_set",
+                "mismatch",
+                "public_anonymous_v1",
+                "fake:tamper-accepted-set-hash",
+                HashFor("tamper-accepted-set-hash-package"),
+                "test condition",
+                ["artifacts/election-record/accepted-ballot-set.json"],
+                "expected-results/tamper-accepted-set-hash.json",
+                "fail",
+                "pass",
+                1,
+                0,
+                "accepted_ballot_inventory_hash_mismatch",
+                "package_structure_valid",
+                HashFor("tamper-accepted-set-hash-negative-output"),
+                HashFor("tamper-accepted-set-hash-pass-output"),
+                "mismatch",
+                true,
+                ["negative tamper case unexpectedly passed"]);
+
+            return new PublicationCountingNegativeReplaySet(
+                "blocked",
+                [mismatch],
+                ["tamper-accepted-set-hash: negative tamper case unexpectedly passed"]);
         }
 
         private static string HashFor(string value) =>
@@ -566,11 +741,11 @@ public sealed class PublicationCountingReplayPromoterTests
 
             foreach (var negative in ExistingNegativeCaseSeeds())
             {
-                fixtures.Add(FixtureIndexEntry(negative.FixtureId, "tamper", "packages/" + negative.FixtureId, HashFor(negative.FixtureId + "-package"), "expected-results/" + negative.FixtureId + ".json", negative.ExpectedCode, "fail", 1));
+                fixtures.Add(FixtureIndexEntry(negative.FixtureId, "tamper", "packages/" + negative.FixtureId, HashFor(negative.FixtureId + "-package"), "expected-results/" + negative.FixtureId + ".json", negative.ExpectedCode, negative.ExpectedOverallStatus, negative.ExpectedExitCode));
                 WriteJson(Path.Combine(root, "expected-results", negative.FixtureId + ".json"), new JsonObject
                 {
-                    ["expectedOverallStatus"] = "fail",
-                    ["expectedExitCode"] = 1,
+                    ["expectedOverallStatus"] = negative.ExpectedOverallStatus,
+                    ["expectedExitCode"] = negative.ExpectedExitCode,
                 });
             }
 
@@ -745,8 +920,8 @@ public sealed class PublicationCountingReplayPromoterTests
                 ["coverageArea"] = seed.CoverageArea,
                 ["changedArtifactOrCondition"] = "test condition",
                 ["expectedPrimaryResultCode"] = seed.ExpectedCode,
-                ["expectedOverallStatus"] = "fail",
-                ["expectedExitCode"] = 1,
+                ["expectedOverallStatus"] = seed.ExpectedOverallStatus,
+                ["expectedExitCode"] = seed.ExpectedExitCode,
                 ["blocksScoreMovement"] = true,
             };
 
@@ -762,6 +937,8 @@ public sealed class PublicationCountingReplayPromoterTests
         private static IReadOnlyList<NegativeCaseSeed> ExistingNegativeCaseSeeds() =>
         [
             new("NEG-ACCEPTED-SET-HASH", "tamper-accepted-set-hash", "existing_v0.3.0", "accepted_set", "accepted_ballot_inventory_hash_mismatch"),
+            new("NEG-PACKAGE-MISSING-ARTIFACT", "tamper-missing-artifact", "existing_v0.3.0", "package_structure", "package_manifest_missing_artifact"),
+            new("NEG-PACKAGE-MALFORMED-JSON", "tamper-malformed-package-json", "existing_v0.3.0", "package_structure", "package_unparseable", "notAvailable", 2),
         ];
 
         private static IReadOnlyList<NegativeCaseSeed> Feat160NegativeCaseSeeds() =>
@@ -793,6 +970,8 @@ public sealed class PublicationCountingReplayPromoterTests
             string FixtureId,
             string Source,
             string CoverageArea,
-            string ExpectedCode);
+            string ExpectedCode,
+            string ExpectedOverallStatus = "fail",
+            int ExpectedExitCode = 1);
     }
 }

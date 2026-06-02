@@ -33,8 +33,10 @@ public static class PublicationCountingReplayContracts
         "sample-good-trustee-threshold",
     ];
 
-    public static readonly string[] RequiredFeat160NegativeFixtureIds =
+    public static readonly string[] RequiredNegativeFixtureIds =
     [
+        "tamper-missing-artifact",
+        "tamper-malformed-package-json",
         "tamper-trustee-release-wrong-target",
         "tamper-trustee-release-threshold-not-met",
     ];
@@ -448,11 +450,11 @@ public static class PublicationCountingReplayContracts
         var fixtureIds = cases
             .Select(item => GetString(item, "fixtureId"))
             .ToHashSet(StringComparer.Ordinal);
-        foreach (var requiredId in RequiredFeat160NegativeFixtureIds)
+        foreach (var requiredId in RequiredNegativeFixtureIds)
         {
             if (!fixtureIds.Contains(requiredId))
             {
-                errors.Add($"FEAT160_TRUSTEE_NEGATIVE_CASE_MISSING: negativeMatrix missing {requiredId}.");
+                errors.Add($"FEAT160_NEGATIVE_CASE_MISSING: negativeMatrix missing {requiredId}.");
             }
         }
 
@@ -461,11 +463,31 @@ public static class PublicationCountingReplayContracts
             RequireNonEmpty(item, "caseId", errors);
             RequireNonEmpty(item, "fixtureId", errors);
             RequireNonEmpty(item, "coverageArea", errors);
+            RequireNonEmpty(item, "changedArtifactOrCondition", errors);
             RequireNonEmpty(item, "expectedPrimaryResultCode", errors);
-            RequireValue(item, "expectedOverallStatus", "fail", errors);
-            RequireValue(item, "expectedExitCode", 1, errors);
+            ValidateNegativeExpectedOutcome(item, errors);
             RequireValue(item, "blocksScoreMovement", true, errors);
         }
+    }
+
+    private static void ValidateNegativeExpectedOutcome(JsonObject item, List<string> errors)
+    {
+        var fixtureId = GetString(item, "fixtureId");
+        var expectedStatus = GetString(item, "expectedOverallStatus");
+        var expectedExitCode = GetInt(item, "expectedExitCode", int.MinValue);
+        if (string.Equals(expectedStatus, "fail", StringComparison.Ordinal) && expectedExitCode == 1)
+        {
+            return;
+        }
+
+        if (string.Equals(fixtureId, "tamper-malformed-package-json", StringComparison.Ordinal) &&
+            string.Equals(expectedStatus, "notAvailable", StringComparison.Ordinal) &&
+            expectedExitCode == 2)
+        {
+            return;
+        }
+
+        errors.Add($"FEAT160_NEGATIVE_EXPECTED_OUTCOME_INVALID: {fixtureId} must expect fail/1, except tamper-malformed-package-json which must expect notAvailable/2.");
     }
 
     private static void ValidatePackageLayout(JsonObject source, List<string> errors)
@@ -902,4 +924,3 @@ public static class PublicationCountingReplayContracts
             ? string.Empty
             : code + ": ";
 }
-

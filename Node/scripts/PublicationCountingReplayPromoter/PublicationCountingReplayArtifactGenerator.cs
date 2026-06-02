@@ -47,7 +47,8 @@ public static class PublicationCountingReplayArtifactGenerator
         string? sourceInput = null,
         string? outputRoot = null,
         DateTimeOffset? generatedAt = null,
-        IPublicationCountingReplayProfileRunner? profileRunner = null)
+        IPublicationCountingReplayProfileRunner? profileRunner = null,
+        IPublicationCountingReplayNegativeRunner? negativeRunner = null)
     {
         var source = PublicationCountingReplayContracts.ValidateForPromotion(paths, sourceInput);
         var goodProfileReplay = (profileRunner ?? new PublicationCountingReplayProfileRunner())
@@ -59,6 +60,15 @@ public static class PublicationCountingReplayArtifactGenerator
                 goodProfileReplay.BlockingReasons);
         }
 
+        var negativeReplay = (negativeRunner ?? new PublicationCountingReplayNegativeRunner())
+            .ReplayNegativeCases(paths, source);
+        if (!negativeReplay.Passed)
+        {
+            throw new PublicationCountingReplayPromotionException(
+                "FEAT-160 required tamper replay failed.",
+                negativeReplay.BlockingReasons);
+        }
+
         var packageRoot = ResolvePackageRoot(paths, source, outputRoot);
         var generatedAtText = ResolveGeneratedAt(source, generatedAt);
         var readme = new PublicationCountingReplayArtifact(ReadmePath, BuildReadme(source));
@@ -66,7 +76,7 @@ public static class PublicationCountingReplayArtifactGenerator
         {
             JsonArtifact(GoodProfileReplaySummaryPath, BuildGoodProfileReplaySummary(goodProfileReplay, generatedAtText)),
             JsonArtifact(GoodProfileNormalizedOutputHashesPath, BuildGoodProfileNormalizedOutputHashes(goodProfileReplay, generatedAtText)),
-            JsonArtifact(TamperReplaySummaryPath, BuildTamperReplaySummary(source, generatedAtText)),
+            JsonArtifact(TamperReplaySummaryPath, BuildTamperReplaySummary(negativeReplay, generatedAtText)),
             JsonArtifact(StaleReferenceCheckSummaryPath, BuildStaleReferenceCheckSummary(source, generatedAtText)),
         };
         var artifacts = new List<PublicationCountingReplayArtifact>(validationArtifacts)
@@ -79,7 +89,7 @@ public static class PublicationCountingReplayArtifactGenerator
         var noSecretScan = ScanGeneratedArtifacts([readme, .. artifacts]);
         artifacts.Insert(5, JsonArtifact(NoSecretScanResultPath, BuildNoSecretScanResult(source, generatedAtText, noSecretScan)));
         artifacts.Insert(0, readme);
-        artifacts.Insert(1, JsonArtifact(ManifestPath, BuildManifest(source, generatedAtText, artifacts, goodProfileReplay)));
+        artifacts.Insert(1, JsonArtifact(ManifestPath, BuildManifest(source, generatedAtText, artifacts, goodProfileReplay, negativeReplay)));
 
         var bindingErrors = PublicationCountingReplayBindingValidator.ValidateGeneratedPackageBindings(
             new PublicationCountingReplayGeneratedPackage("candidate", packageRoot, source, artifacts));
@@ -133,7 +143,8 @@ public static class PublicationCountingReplayArtifactGenerator
         JsonObject source,
         string generatedAt,
         IReadOnlyList<PublicationCountingReplayArtifact> artifacts,
-        PublicationCountingGoodProfileReplaySet goodProfileReplay)
+        PublicationCountingGoodProfileReplaySet goodProfileReplay,
+        PublicationCountingNegativeReplaySet negativeReplay)
     {
         var baseline = PublicationCountingReplayContracts.RequireObject(source, "baselineRegister");
         var readinessOutput = PublicationCountingReplayContracts.RequireObject(source, "readinessOutput");
@@ -168,12 +179,12 @@ public static class PublicationCountingReplayArtifactGenerator
             },
             ["tamperSummary"] = new JsonObject
             {
-                ["status"] = "pass",
-                ["caseCount"] = CountNegativeCases(source),
-                ["passedCount"] = CountNegativeCases(source),
-                ["failedCount"] = 0,
+                ["status"] = negativeReplay.Status,
+                ["caseCount"] = negativeReplay.CaseCount,
+                ["passedCount"] = negativeReplay.PassCount,
+                ["failedCount"] = negativeReplay.FailCount,
                 ["summaryRef"] = TamperReplaySummaryPath,
-                ["evidenceMode"] = "source_validation_skeleton",
+                ["evidenceMode"] = "verifier_tamper_replay",
             },
             ["publicSafety"] = new JsonObject
             {
@@ -265,28 +276,44 @@ public static class PublicationCountingReplayArtifactGenerator
                 .ToArray<JsonNode?>()),
         };
 
-    private static JsonObject BuildTamperReplaySummary(JsonObject source, string generatedAt) =>
+    private static JsonObject BuildTamperReplaySummary(
+        PublicationCountingNegativeReplaySet replay,
+        string generatedAt) =>
         new()
         {
             ["schemaVersion"] = "publication-counting-tamper-replay-summary.v1",
             ["generatedAt"] = generatedAt,
-            ["status"] = "source_validated",
-            ["evidenceMode"] = "source_validation_skeleton",
-            ["caseCount"] = CountNegativeCases(source),
-            ["cases"] = new JsonArray(NegativeCases(source)
+            ["status"] = replay.Status,
+            ["evidenceMode"] = "verifier_tamper_replay",
+            ["caseCount"] = replay.CaseCount,
+            ["passCount"] = replay.PassCount,
+            ["failCount"] = replay.FailCount,
+            ["blockingReasons"] = Strings(replay.BlockingReasons),
+            ["cases"] = new JsonArray(replay.Cases
                 .Select(item => new JsonObject
                 {
-                    ["caseId"] = PublicationCountingReplayContracts.GetString(item, "caseId"),
-                    ["fixtureId"] = PublicationCountingReplayContracts.GetString(item, "fixtureId"),
-                    ["source"] = PublicationCountingReplayContracts.GetString(item, "source"),
-                    ["coverageArea"] = PublicationCountingReplayContracts.GetString(item, "coverageArea"),
-                    ["status"] = PublicationCountingReplayContracts.GetString(item, "source") == "feat160_required"
-                        ? "required_by_feat160"
-                        : "source_validated",
-                    ["expectedPrimaryResultCode"] = PublicationCountingReplayContracts.GetString(item, "expectedPrimaryResultCode"),
-                    ["expectedOverallStatus"] = PublicationCountingReplayContracts.GetString(item, "expectedOverallStatus"),
-                    ["expectedExitCode"] = PublicationCountingReplayContracts.GetInt(item, "expectedExitCode"),
-                    ["blocksScoreMovement"] = true,
+                    ["caseId"] = item.CaseId,
+                    ["fixtureId"] = item.FixtureId,
+                    ["source"] = item.Source,
+                    ["coverageArea"] = item.CoverageArea,
+                    ["status"] = item.Status,
+                    ["profileId"] = item.ProfileId,
+                    ["packagePath"] = item.PackagePath,
+                    ["packageHash"] = item.PackageHash,
+                    ["changedArtifactOrCondition"] = item.ChangedArtifactOrCondition,
+                    ["changedArtifactRefs"] = Strings(item.ChangedArtifactRefs),
+                    ["expectedResultRef"] = item.ExpectedResultRef,
+                    ["expectedPrimaryResultCode"] = item.ExpectedPrimaryResultCode,
+                    ["observedPrimaryResultCode"] = item.ObservedPrimaryResultCode,
+                    ["expectedOverallStatus"] = item.ExpectedOverallStatus,
+                    ["observedOverallStatus"] = item.ObservedOverallStatus,
+                    ["expectedExitCode"] = item.ExpectedExitCode,
+                    ["observedExitCode"] = item.ObservedExitCode,
+                    ["expectedNormalizedOutputHash"] = item.ExpectedNormalizedOutputHash,
+                    ["normalizedOutputHash"] = item.NormalizedOutputHash,
+                    ["normalizedOutputHashStatus"] = item.NormalizedOutputHashStatus,
+                    ["blocksScoreMovement"] = item.BlocksScoreMovement,
+                    ["mismatchReasons"] = Strings(item.MismatchReasons),
                 })
                 .ToArray<JsonNode?>()),
         };
@@ -471,8 +498,8 @@ public static class PublicationCountingReplayArtifactGenerator
             $"Register baseline: {PublicationCountingReplayContracts.GetString(baseline, "registerVersionId")}",
             $"Score proposal: {PublicationCountingReplayContracts.TargetDimensionId} 8 to 10",
             "",
-            "This Phase 4 package is a public-safe replay-binding candidate for FEAT-160 replay hardening.",
-            "It executes and binds the required good-profile verifier replay matrix while later phases still need to replace tamper skeleton evidence with replay-run evidence.",
+            "This Phase 5 package is a public-safe replay-binding candidate for FEAT-160 replay hardening.",
+            "It executes and binds the required good-profile verifier replay matrix and required tamper/mismatch matrix while later phases still need reviewer handoff and final check-only acceptance evidence.",
             "It does not mutate the readiness register and does not claim production rollout, public/state election readiness, legal sufficiency, certification, or external crypto-review completion.",
             "",
         ]);

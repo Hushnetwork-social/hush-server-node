@@ -23,11 +23,14 @@ public sealed class PublicationCountingReplayPromotionService
     public const string ModeValidateOnly = "validate-only";
 
     private readonly IPublicationCountingReplayProfileRunner _profileRunner;
+    private readonly IPublicationCountingReplayNegativeRunner _negativeRunner;
 
     public PublicationCountingReplayPromotionService(
-        IPublicationCountingReplayProfileRunner? profileRunner = null)
+        IPublicationCountingReplayProfileRunner? profileRunner = null,
+        IPublicationCountingReplayNegativeRunner? negativeRunner = null)
     {
         _profileRunner = profileRunner ?? new PublicationCountingReplayProfileRunner();
+        _negativeRunner = negativeRunner ?? new PublicationCountingReplayNegativeRunner();
     }
 
     public PublicationCountingReplayPromotionResult Promote(PublicationCountingReplayPromotionOptions options)
@@ -38,7 +41,8 @@ public sealed class PublicationCountingReplayPromotionService
             options.SourceInput,
             options.OutputRoot,
             options.GeneratedAt,
-            _profileRunner);
+            _profileRunner,
+            _negativeRunner);
 
         return mode switch
         {
