@@ -63,6 +63,7 @@
     <ProjectReference Include="..\scripts\SecondProductionLikeOperationalRunPromoter\SecondProductionLikeOperationalRunPromoter.csproj" />
     <ProjectReference Include="..\scripts\RetentionLogPrivacyRecurringScanPromoter\RetentionLogPrivacyRecurringScanPromoter.csproj" />
     <ProjectReference Include="..\scripts\DisputeContinuityMatrixPromoter\DisputeContinuityMatrixPromoter.csproj" />
+    <ProjectReference Include="..\scripts\GovernanceCustomerHandoffPromoter\GovernanceCustomerHandoffPromoter.csproj" />
   </ItemGroup>
 
   <ItemGroup>
