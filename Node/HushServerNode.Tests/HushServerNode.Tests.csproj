@@ -61,6 +61,7 @@
     <ProjectReference Include="..\scripts\KmsCustodyRehearsalPromoter\KmsCustodyRehearsalPromoter.csproj" />
     <ProjectReference Include="..\scripts\DeploymentRollbackRehearsalPromoter\DeploymentRollbackRehearsalPromoter.csproj" />
     <ProjectReference Include="..\scripts\SecondProductionLikeOperationalRunPromoter\SecondProductionLikeOperationalRunPromoter.csproj" />
+    <ProjectReference Include="..\scripts\RetentionLogPrivacyRecurringScanPromoter\RetentionLogPrivacyRecurringScanPromoter.csproj" />
   </ItemGroup>
 
   <ItemGroup>
