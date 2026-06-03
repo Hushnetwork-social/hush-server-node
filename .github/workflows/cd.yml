@@ -40,6 +40,20 @@ jobs:
         repository: Hushnetwork-social/hush-web-client
         path: hush-web-client
 
+    - name: Checkout Governance-Customer-Handoff
+      uses: actions/checkout@v5
+      with:
+        repository: Hushnetwork-social/Governance-Customer-Handoff
+        ref: main
+        path: Governance-Customer-Handoff
+
+    - name: Checkout Dispute-Continuity-Matrix
+      uses: actions/checkout@v5
+      with:
+        repository: Hushnetwork-social/Dispute-Continuity-Matrix
+        ref: main
+        path: Dispute-Continuity-Matrix
+
     - name: Setup Node.js for crypto fixture generator
       uses: actions/setup-node@v6
       with:

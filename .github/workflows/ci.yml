@@ -36,6 +36,13 @@ jobs:
         ref: main
         path: Dispute-Continuity-Matrix
 
+    - name: Checkout Governance-Customer-Handoff
+      uses: actions/checkout@v5
+      with:
+        repository: Hushnetwork-social/Governance-Customer-Handoff
+        ref: main
+        path: Governance-Customer-Handoff
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
