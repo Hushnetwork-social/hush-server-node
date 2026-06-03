@@ -62,6 +62,7 @@
     <ProjectReference Include="..\scripts\DeploymentRollbackRehearsalPromoter\DeploymentRollbackRehearsalPromoter.csproj" />
     <ProjectReference Include="..\scripts\SecondProductionLikeOperationalRunPromoter\SecondProductionLikeOperationalRunPromoter.csproj" />
     <ProjectReference Include="..\scripts\RetentionLogPrivacyRecurringScanPromoter\RetentionLogPrivacyRecurringScanPromoter.csproj" />
+    <ProjectReference Include="..\scripts\DisputeContinuityMatrixPromoter\DisputeContinuityMatrixPromoter.csproj" />
   </ItemGroup>
 
   <ItemGroup>
