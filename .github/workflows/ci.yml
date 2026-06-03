@@ -29,6 +29,13 @@ jobs:
         ref: master
         path: hush-web-client
 
+    - name: Checkout Dispute-Continuity-Matrix
+      uses: actions/checkout@v5
+      with:
+        repository: Hushnetwork-social/Dispute-Continuity-Matrix
+        ref: main
+        path: Dispute-Continuity-Matrix
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
